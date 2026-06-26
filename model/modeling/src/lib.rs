@@ -1,6 +1,6 @@
 //! Step-based PDMA v0 conceptual model.
 //!
-//! The crate intentionally models only the first linear copy vertical slice:
+//! The crate intentionally starts with memory-to-memory copy vertical slices:
 //! driver submission, command ring, doorbell/runnable queue, scheduler lowering,
 //! deterministic copy execution, completion publication, and driver polling.
 
@@ -15,7 +15,7 @@ pub mod rings;
 pub mod scheduler;
 
 pub use completion::{CompletionRecord, CompletionStatus};
-pub use desc::{CopyRequest, ExternalCommand, ScheduledCopy};
+pub use desc::{CopyRequest, ExternalCommand, ScheduledCopy, StridedCopyRequest};
 pub use device::{PdmaDevice, RunSummary};
 pub use driver::Driver;
 pub use ids::{BufferId, CommandId, CompletionRingId, QueueId};

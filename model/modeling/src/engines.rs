@@ -10,9 +10,11 @@ pub struct CopyEngine;
 
 impl CopyEngine {
     /// Executes a scheduled copy through checked memory operations.
-    pub fn execute(memory: &mut Memory, work: ScheduledCopy) -> ModelResult<()> {
-        let request = work.request();
-        let bytes = memory.read_checked(request.src(), 0, request.len())?;
-        memory.write_checked(request.dst(), 0, &bytes)
+    pub fn execute(memory: &mut Memory, work: &ScheduledCopy) -> ModelResult<()> {
+        for chunk in work.chunks() {
+            let bytes = memory.read_checked(chunk.src(), chunk.src_offset(), chunk.len())?;
+            memory.write_checked(chunk.dst(), chunk.dst_offset(), &bytes)?;
+        }
+        Ok(())
     }
 }

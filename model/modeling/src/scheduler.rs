@@ -1,6 +1,7 @@
 //! Behavioral scheduler lowering for the first PDMA model slice.
 
-use crate::desc::{CopyCommand, ExternalCommand, ScheduledCopy};
+use crate::ModelResult;
+use crate::desc::{CopyChunk, CopyCommand, ExternalCommand, ScheduledCopy, StridedCopyCommand};
 
 /// Stateless behavioral scheduler for linear copy commands.
 #[derive(Debug, Default, Clone, Copy)]
@@ -8,22 +9,61 @@ pub struct Scheduler;
 
 impl Scheduler {
     /// Lowers one external command into internal scheduled work.
-    pub const fn lower(command: ExternalCommand) -> ScheduledCopy {
+    pub fn lower(command: ExternalCommand) -> ModelResult<ScheduledCopy> {
         match command {
             ExternalCommand::Copy(copy) => Self::lower_copy(copy),
+            ExternalCommand::StridedCopy(strided) => Self::lower_strided_copy(strided),
         }
     }
 
     /// Lowers one external copy command into one internal copy descriptor.
-    pub const fn lower_copy(command: CopyCommand) -> ScheduledCopy {
-        ScheduledCopy::new(command)
+    pub fn lower_copy(command: CopyCommand) -> ModelResult<ScheduledCopy> {
+        Ok(ScheduledCopy::new(
+            command.queue_id(),
+            command.command_id(),
+            command.completion_ring_id(),
+            vec![CopyChunk::new(
+                command.request().src(),
+                command.request().dst(),
+                0,
+                0,
+                command.request().len(),
+            )],
+        ))
+    }
+
+    /// Lowers one external strided copy command into row-level copy chunks.
+    pub fn lower_strided_copy(command: StridedCopyCommand) -> ModelResult<ScheduledCopy> {
+        let request = command.request();
+        let mut chunks = Vec::new();
+        for row in 0..request.rows() {
+            let src_offset = row
+                .checked_mul(request.src_stride())
+                .ok_or(crate::ModelError::RangeOverflow)?;
+            let dst_offset = row
+                .checked_mul(request.dst_stride())
+                .ok_or(crate::ModelError::RangeOverflow)?;
+            chunks.push(CopyChunk::new(
+                request.src(),
+                request.dst(),
+                src_offset,
+                dst_offset,
+                request.row_bytes(),
+            ));
+        }
+        Ok(ScheduledCopy::new(
+            command.queue_id(),
+            command.command_id(),
+            command.completion_ring_id(),
+            chunks,
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::Scheduler;
-    use crate::desc::{CopyCommand, CopyRequest};
+    use crate::desc::{CopyChunk, CopyCommand, CopyRequest};
     use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 
     #[test]
@@ -38,15 +78,21 @@ mod tests {
         );
 
         // When: the behavioral scheduler lowers the command.
-        let work = Scheduler::lower_copy(command);
+        let work = Scheduler::lower_copy(command).expect("copy lowering cannot fail");
 
         // Then: the internal work preserves routing and copy metadata.
-        assert_eq!(work.command().command_id(), CommandId::new(3));
-        assert_eq!(work.command().queue_id(), QueueId::new(4));
+        assert_eq!(work.command_id(), CommandId::new(3));
+        assert_eq!(work.queue_id(), QueueId::new(4));
+        assert_eq!(work.completion_ring_id(), CompletionRingId::new(5));
         assert_eq!(
-            work.command().completion_ring_id(),
-            CompletionRingId::new(5)
+            work.chunks(),
+            &[CopyChunk::new(
+                request.src(),
+                request.dst(),
+                0,
+                0,
+                request.len()
+            )]
         );
-        assert_eq!(work.request(), request);
     }
 }

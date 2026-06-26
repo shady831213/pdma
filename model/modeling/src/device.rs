@@ -111,19 +111,22 @@ impl PdmaDevice {
         let Some(command) = command else {
             return Ok(true);
         };
-        let work = Scheduler::lower(command);
-        CopyEngine::execute(&mut self.memory, work)?;
-        let copy = work.command();
-        let completion = CompletionRecord::new(
-            copy.queue_id(),
-            copy.command_id(),
-            CompletionStatus::Success,
-        );
-        self.completion_mut(copy.completion_ring_id())?
-            .push(completion)?;
-        if !self.queue(queue_id)?.command_ring.is_empty() {
+        let has_more_commands = !self.queue(queue_id)?.command_ring.is_empty();
+        let result = (|| {
+            let work = Scheduler::lower(command)?;
+            CopyEngine::execute(&mut self.memory, &work)?;
+            let completion = CompletionRecord::new(
+                work.queue_id(),
+                work.command_id(),
+                CompletionStatus::Success,
+            );
+            self.completion_mut(work.completion_ring_id())?
+                .push(completion)
+        })();
+        if has_more_commands {
             self.runnable.push(queue_id);
         }
+        result?;
         Ok(true)
     }
 

@@ -1,5 +1,6 @@
 //! External command descriptors and internal scheduled work descriptors.
 
+pub use crate::broadcast::{BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange};
 use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 
 /// SDK/driver-facing linear copy request.
@@ -100,12 +101,14 @@ impl CopyRequest {
 }
 
 /// Hardware-visible command descriptor emitted by the driver.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExternalCommand {
     /// Linear memory-to-memory copy.
     Copy(CopyCommand),
     /// 2D strided memory-to-memory copy.
     StridedCopy(StridedCopyCommand),
+    /// One source range copied to multiple destination ranges.
+    BroadcastCopy(BroadcastCopyCommand),
 }
 
 /// External linear copy command with queue and completion routing metadata.

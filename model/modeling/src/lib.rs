@@ -5,6 +5,7 @@
 //! deterministic copy execution, completion publication, and driver polling.
 
 pub mod arbitration;
+mod broadcast;
 pub mod completion;
 pub mod desc;
 pub mod device;

@@ -12,6 +12,7 @@ pub mod engines;
 pub mod event;
 pub mod ids;
 pub mod memory;
+pub mod queue;
 pub mod rings;
 pub mod scheduler;
 
@@ -22,6 +23,9 @@ pub use driver::Driver;
 pub use event::{EventErrorKind, EventRecord, MemoryFault};
 pub use ids::{BufferId, CommandId, CompletionRingId, QueueId};
 pub use memory::Memory;
+pub use queue::{
+    EventRouting, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, SoftwareOwnerId,
+};
 pub use rings::Ring;
 
 use core::fmt;

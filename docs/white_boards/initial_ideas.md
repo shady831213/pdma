@@ -267,7 +267,7 @@ The external ABI also defines ring control structures that the driver writes and
 - Command ring base, size, head pointer, and tail pointer.
 - Completion ring base, size, head pointer, and tail pointer.
 - Event ring base, size, head pointer, and tail pointer.
-- Doorbell register for notifying the scheduler that new commands are available.
+- Doorbell notification path for notifying the scheduler that new commands are available.
 
 ## Internal Hardware Data Structures
 
@@ -313,7 +313,8 @@ external memory visible to host software and PDMA
 PDMA register aperture
   +--------------------------------------------------------------+
   | capability registers                                          |
-  | queue base / size / producer / consumer registers             |
+  | queue directory base / format / status registers              |
+  | shared doorbell portal                                        |
   | doorbells                                                     |
   | interrupt mask / status                                       |
   | reset / debug / performance counter registers                 |
@@ -377,17 +378,69 @@ PDMA can generate an interrupt when a completion ring crosses a configured thres
 
 ## Multi-Queue Model
 
-PDMA should support multiple software-visible command queues. The baseline model borrows the scalable queue shape from NVMe-style submission/completion queues and the resource-binding idea from accelerator work-queue groups. A queue is a software submission context; a queue group is a hardware scheduling and resource allocation domain.
+PDMA should support multiple software-visible command queues. The baseline model borrows the scalable queue shape from NVMe-style submission/completion queues, virtio/RDMA-style memory-backed queues, and the resource-binding idea from accelerator work-queue groups. A queue is a software submission context; a queue group is a hardware scheduling and resource allocation domain.
+
+The preferred direction is memory-resident queue configuration. Software can provision many virtual queues by placing queue configuration entries and rings in external DMA-coherent memory. Hardware does not need a fixed register bank or SRAM context for every provisioned queue. Instead, hardware caches and schedules a bounded number of active queue contexts.
+
+This creates two different limits:
+
+- Provisioned queues: primarily limited by system memory, queue ID width, and ABI-defined queue directory size.
+- Active queues: limited by hardware queue context cache, scheduler state, outstanding command capacity, and engine resources.
+
+This is closer to NVMe/RDMA/virtio/GPU queue models than to device-resident work queues such as Intel DSA WQs.
+
+The primary reference pattern is RDMA/NIC-style memory-backed queue contexts with a hardware doorbell front-end and active context cache. NVMe provides a useful simpler reference for submission/completion queue identity and completion records. Virtio provides the useful rule that notification is a hint and memory-resident queue state is authoritative. DSA is mainly a contrast point for device-resident work queues and submission portals.
+
+### Queue directory
+
+The queue directory is a memory-resident table that maps `queue_id` to queue configuration. It is allocated and initialized by software, then exposed to PDMA through a directory base address and format version.
+
+```text
+queue directory in external DMA-coherent memory
+
+queue_id 0 -> QueueConfig 0
+queue_id 1 -> QueueConfig 1
+queue_id 2 -> QueueConfig 2
+...
+```
+
+A queue configuration entry should describe:
+
+- Queue enable state and version.
+- Queue group ID.
+- Command ring base, depth, entry size, and producer/consumer state.
+- Completion ring binding.
+- Event ring binding.
+- Priority and ordering mode.
+- Maximum outstanding commands or bytes for this queue.
+- Optional doorbell state or pending state.
+
+The hardware may fetch a queue configuration entry when a queue is first activated, when a doorbell references a queue not present in the hardware context cache, or when software requests a queue configuration refresh.
+
+### Active queue context cache
+
+Hardware should maintain a bounded active queue context cache. A cached queue context is a hardware-private copy of the memory-resident queue configuration plus transient scheduler state.
+
+```text
+memory-resident QueueConfig
+  -> descriptor fetcher / queue manager
+  -> active queue context cache
+  -> scheduler arbitration
+```
+
+The cache allows the architectural number of provisioned queues to scale with memory while keeping hardware resources bounded. Cache replacement policy is a hardware design choice, but the model should expose cache miss, refill, and eviction events because they affect latency and scheduling behavior.
 
 ### Queue set
 
-A queue set is the software-visible unit allocated by the driver or SDK. It contains:
+A queue set is the software-visible unit allocated by the driver or SDK. In the memory-resident model, a queue set is represented by one queue directory entry plus its associated rings. It contains:
 
 - One command ring.
 - One completion ring binding.
 - One event ring binding, usually shared at device or group scope.
-- One doorbell or doorbell slot.
+- One doorbell notification path, which may be a shared doorbell carrying `queue_id` rather than a per-queue MMIO register.
 - Queue identity fields such as `queue_id`, `group_id`, priority, ordering mode, and maximum outstanding commands.
+
+Each command queue should be single-producer/single-consumer in the baseline architecture: one software owner produces command entries, and PDMA consumes them. Different software clients should use different command queues or a higher-level software synchronization layer.
 
 The command ring and completion ring do not have to be one-to-one. PDMA should allow both simple and shared completion layouts:
 
@@ -440,7 +493,7 @@ The initial architecture should allow a command queue to belong to exactly one q
 
 ### Arbitration
 
-The scheduler coprocessor arbitrates command fetch across queues in the same group. Candidate policies include round-robin, weighted round-robin, strict priority, deficit round-robin, and credit-based scheduling.
+The scheduler coprocessor arbitrates command fetch across active queues in the same group. Candidate policies include round-robin, weighted round-robin, strict priority, deficit round-robin, and credit-based scheduling.
 
 The recommended baseline is:
 
@@ -451,6 +504,43 @@ The recommended baseline is:
 - Optional compute-resource credits so compute-heavy queues do not block pure-copy queues indefinitely.
 
 Arbitration should select which command descriptors are fetched and decoded. It should not require the data path to understand software queue policy. Once work is translated into internal execution descriptors, the engines see only ready work items and backpressure signals.
+
+### Doorbell and activation
+
+If queue count is memory-scaled, PDMA should avoid one MMIO doorbell register per queue. The baseline notification model should be a shared doorbell mechanism that carries at least `queue_id` and the new producer index, or a memory-resident doorbell queue consumed by hardware.
+
+The doorbell front-end should be a dedicated hardware block, not the scheduler coprocessor itself. Software writes a shared doorbell portal. The host interface decodes the write, creates a doorbell record, and feeds a doorbell FIFO, coalescer, or pending table. The queue manager consumes these records and presents runnable queues to the scheduler coprocessor.
+
+```text
+software writes command descriptors
+software updates QueueConfig producer index or ring producer index
+software sends doorbell(queue_id, producer_idx)
+hardware doorbell portal captures the notification
+hardware coalesces or records the pending queue
+hardware fetches QueueConfig on cache miss
+hardware marks queue active
+scheduler arbitrates active queues
+```
+
+This keeps the number of provisioned queues from being limited by register aperture size. The number of simultaneously active queues is still bounded by the active queue context cache and scheduler resources.
+
+Doorbell is a notification, not ownership transfer and not the only source of truth. The producer index stored in the memory-resident queue state remains authoritative. Multiple doorbells for the same queue can occur over time from the same producer if software appends more commands before hardware drains the queue. The doorbell front-end may coalesce same-queue notifications by keeping the latest producer index and avoiding duplicate active-queue-list entries.
+
+```text
+doorbell(q0, producer_idx=8)
+  -> mark q0 pending
+  -> cached producer for q0 = 8
+  -> insert q0 into active queue set
+
+doorbell(q0, producer_idx=16)
+  -> q0 already pending
+  -> cached producer for q0 = 16
+  -> do not insert q0 again
+```
+
+The software fast path should not read a hardware consumer register for every submission. Software pushes command entries, updates its producer state, and sends a doorbell. Ring-space accounting should use software shadow state updated by completions or events. If the command ring appears full, software may poll or process completion records to reclaim entries and then retry.
+
+The conservative v0 reclaim rule is: a command ring entry is reusable by software after the corresponding command completion is observed. Later designs may expose an earlier descriptor-consumed index, similar to NVMe SQ head reporting, if early command ring reclamation is needed.
 
 ### Event ring mapping
 
@@ -469,6 +559,7 @@ The generic Linux and DPDK paths should not expose every PDMA queue feature. The
 - Linux DMAengine can map one PDMA queue or queue group to one DMA channel provider context.
 - DPDK DMAdev can map a hardware command queue or queue group to one `dmadev`, with `vchan` used as a software transfer context rather than a guarantee of independent hardware execution.
 - The advanced SDK should expose queue set allocation, completion ring sharing, queue group selection, priority, ordering mode, and graph submission.
+- The advanced SDK should expose memory-backed queue provisioning and should distinguish provisioned queues from active queues.
 
 This keeps baseline compatibility simple while allowing the SDK to use the full multi-queue model.
 
@@ -597,6 +688,15 @@ The scheduler coprocessor can be a small programmable processor, a micro-sequenc
 
 PDMA supports an optional compute pipeline between the read and write engines. The compute pipeline is not required for every transfer. When it is bypassed, PDMA behaves as a conventional memory-to-memory DMA controller. When it is enabled, data from the read engine is steered into a compute execution unit, transformed, and then forwarded to the write engine.
 
+The v0 conceptual model should implement a small set of transfer operations to test scheduler lowering and composability:
+
+- Linear copy: `src -> dst`.
+- 2D strided copy: high-level shape/stride command lowered into row-level internal chunks.
+- Broadcast copy: one source copied to multiple destinations, initially modeled as repeated read/write work with room for future one-read fanout optimization.
+- Vector add: `src0 + src1 -> dst`, used to validate multi-source reads, compute input synchronization, and compute output backpressure.
+
+More complex operations such as 3D/high-dimensional transfers, general gather/scatter, tile reorder, transpose, and multi-stage reduce trees should be deferred until the v0 mechanisms are stable.
+
 The compute pipeline is intentionally abstract. It may be implemented as:
 
 - A general-purpose processor core running compute microcode.
@@ -613,11 +713,11 @@ The following components define the subsystem boundary. Implementations may merg
 
 ### Host interface and register block
 
-The host interface exposes configuration, status, capability discovery, queue base registers, queue size registers, doorbells, interrupt masks, reset controls, and debug state. It is the only register-level interface expected to be programmed directly by the driver.
+The host interface exposes configuration, status, capability discovery, queue directory base registers, shared doorbell portal, interrupt masks, reset controls, and debug state. It is the only register-level interface expected to be programmed directly by the driver.
 
 ### Command queue manager
 
-The command queue manager tracks command ring base addresses, producer and consumer indices, queue enable state, queue fullness, and doorbell events. It arbitrates command fetch requests from the scheduler coprocessor and prevents invalid ring consumption.
+The command queue manager consumes doorbell notifications, fetches memory-resident queue configuration entries, maintains the active queue context cache, tracks producer/consumer state for active queues, and presents runnable queues to the scheduler coprocessor.
 
 ### Descriptor fetcher
 
@@ -685,14 +785,16 @@ The SDK is the preferred interface for applications that need more than a simple
 
 The final deliverable is an internal subsystem-level IP package. The expected collateral includes:
 
-- Functional and performance models of the scheduler coprocessor, DMA engines, optional compute pipeline, completion unit, and event unit.
+- Functional model plus performance annotation support for the scheduler coprocessor, DMA engines, optional compute pipeline, completion unit, and event unit. The performance model is not cycle-accurate; it is intended to identify likely bottlenecks, hotspots, and component-level budget pressure under system-level constraints.
 - Subsystem-level verification environment, including directed tests, randomized tests, and a reference model for comparing hardware behavior against the architecture specification.
 - RTL implementation of all key hardware components.
 - Synthesis constraints and implementation collateral, including SDC files, floorplan guidance, and timing budgets.
 - Software driver and SDK source, including Linux DMAengine and DPDK DMAdev compatibility layers.
 - Architecture and integration documentation, including register descriptions, ring layouts, and command descriptor formats.
 
-The modeling level that is built first will be driven by the verification and software schedule. Candidates include a functional model for driver bring-up, a performance model for throughput analysis, and a verification reference model for scoreboarding.
+After the v0 conceptual model validates the core queue, scheduler, doorbell, data-path, completion, and performance-annotation mechanisms, the project should produce a spec-like architecture draft under `pdma/model/docs/pdma_arch_spec_v0.md`. That document should be closer to a real architecture specification than these white-board notes, while still allowing details such as exact descriptor byte layouts, register offsets, generated headers, and C ABI bindings to mature with the model.
+
+The modeling level that is built first will be driven by the verification and software schedule. Candidates include a functional model for driver bring-up, a performance-annotated model for bottleneck and budget exploration, and a verification reference model for scoreboarding.
 
 ## Deferred Decisions
 

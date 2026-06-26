@@ -1,7 +1,9 @@
 //! SDK/driver-like submission and completion polling model.
 
 use crate::completion::CompletionRecord;
-use crate::desc::{CopyCommand, CopyRequest, ExternalCommand};
+use crate::desc::{
+    CopyCommand, CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest,
+};
 use crate::device::PdmaDevice;
 use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 use crate::{ModelError, ModelResult};
@@ -67,12 +69,23 @@ impl Driver {
             return Err(ModelError::DriverQueueFull);
         }
         let command_id = CommandId::new(self.next_command);
-        self.next_command = self.next_command.saturating_add(1);
         let command = CopyCommand::new(command_id, self.queue_id, self.completion_ring_id, request);
-        device.submit_command(self.queue_id, ExternalCommand::Copy(command))?;
-        self.free_command_slots -= 1;
-        device.ring_doorbell(self.queue_id)?;
-        Ok(command_id)
+        self.submit_external_command(device, command_id, ExternalCommand::Copy(command))
+    }
+
+    /// Emits a strided copy descriptor to the command ring and rings the doorbell.
+    pub fn submit_strided_copy(
+        &mut self,
+        device: &mut PdmaDevice,
+        request: StridedCopyRequest,
+    ) -> ModelResult<CommandId> {
+        if self.free_command_slots == 0 {
+            return Err(ModelError::DriverQueueFull);
+        }
+        let command_id = CommandId::new(self.next_command);
+        let command =
+            StridedCopyCommand::new(command_id, self.queue_id, self.completion_ring_id, request);
+        self.submit_external_command(device, command_id, ExternalCommand::StridedCopy(command))
     }
 
     /// Polls one completion and reclaims one local command-ring slot if present.
@@ -95,6 +108,19 @@ impl Driver {
     /// Completion ring ID owned by this driver instance.
     pub const fn completion_ring_id(&self) -> CompletionRingId {
         self.completion_ring_id
+    }
+
+    fn submit_external_command(
+        &mut self,
+        device: &mut PdmaDevice,
+        command_id: CommandId,
+        command: ExternalCommand,
+    ) -> ModelResult<CommandId> {
+        self.next_command = self.next_command.saturating_add(1);
+        device.submit_command(self.queue_id, command)?;
+        self.free_command_slots -= 1;
+        device.ring_doorbell(self.queue_id)?;
+        Ok(command_id)
     }
 }
 

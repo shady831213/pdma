@@ -24,46 +24,45 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | Device step loop | Done | `device.rs`, `linear_copy.rs` | `step()` executes at most one command; `run_until_idle()` reports step budget exhaustion. |
 | Linear copy lowering | Done | `scheduler.rs`, `engines.rs`, `linear_copy.rs` | One external copy lowers to one internal chunk and one completion. |
 | 2D strided copy lowering | Done | `strided_copy.rs` | One external strided command lowers to row chunks and one completion; checked memory errors do not publish success. |
+| Event ring and recoverable error reporting | Done | `event.rs`, `error_event.rs` | Memory faults publish software-visible events, skip success completions, and keep later queued commands runnable. |
 
 ## Active Next Slice
 
-### Event Ring And Error Reporting
+### Queue Directory And Explicit Queue Configuration Objects
 
-Goal: make errors first-class software-visible records instead of only returning `ModelError` from the host-side test call.
+Goal: separate queue identity/configuration from the current implicit `Vec<QueueContext>` allocation path so queue ownership, depths, and completion/event bindings become explicit model objects.
 
 Expected behavior:
 
-- Device owns a device-level event ring.
-- Driver can poll event records independently from completions.
-- A memory fault during copy or strided copy publishes one event carrying at least queue ID, command ID, error kind, and offending buffer identity.
-- Recoverable command errors do not publish success completions.
-- Later queued commands on the same queue remain runnable after a recoverable command error.
+- Queue creation returns IDs derived from a queue directory entry, not from ad hoc vector position alone.
+- Queue configuration records command depth, completion depth, event routing, and software ownership.
+- Driver setup owns a queue configuration handle and uses it for submit, completion polling, and event polling.
+- Existing linear, strided, and error-event behavior remains unchanged.
 
 Likely files:
 
-- `model/modeling/src/event.rs`
+- `model/modeling/src/queue.rs`
 - `model/modeling/src/device.rs`
 - `model/modeling/src/driver.rs`
 - `model/modeling/src/lib.rs`
-- `model/modeling/tests/error_event.rs`
+- `model/modeling/tests/queue_config.rs`
 
 Success checks:
 
-- Scenario test proves bad strided copy emits an event and no success completion.
-- Scenario test proves a later good command still completes after the event-producing command fails.
-- Existing linear and strided copy tests continue to pass.
+- Scenario test proves two queues receive distinct queue IDs and completion bindings.
+- Scenario test proves queue depth is enforced through the explicit configuration.
+- Existing linear, strided, and error-event tests continue to pass.
 
 ## Planned Slices
 
-1. Event ring and recoverable error reporting.
-2. Queue directory and explicit queue configuration objects.
-3. Multi-queue arbitration with deterministic policy and starvation guard tests.
-4. Broadcast copy lowering to validate one-command fanout.
-5. Vector-add operation to validate multi-source reads and compute/write synchronization.
-6. Resource credit model for internal descriptors, read slots, write slots, compute slots, and completion/event pressure.
-7. Backpressure/stall annotation layer with scenario-level summaries.
-8. Trace sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
-9. Draft `model/docs/pdma_arch_spec_v0.md` after the model validates queue, scheduler, completion, event, and backpressure behavior.
+1. Queue directory and explicit queue configuration objects.
+2. Multi-queue arbitration with deterministic policy and starvation guard tests.
+3. Broadcast copy lowering to validate one-command fanout.
+4. Vector-add operation to validate multi-source reads and compute/write synchronization.
+5. Resource credit model for internal descriptors, read slots, write slots, compute slots, and completion/event pressure.
+6. Backpressure/stall annotation layer with scenario-level summaries.
+7. Trace sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
+8. Draft `model/docs/pdma_arch_spec_v0.md` after the model validates queue, scheduler, completion, event, and backpressure behavior.
 
 ## Deferred Until v0 Mechanisms Stabilize
 

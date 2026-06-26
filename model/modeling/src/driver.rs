@@ -2,7 +2,8 @@
 
 use crate::completion::CompletionRecord;
 use crate::desc::{
-    CopyCommand, CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest,
+    BroadcastCopyCommand, BroadcastCopyRequest, CopyCommand, CopyRequest, ExternalCommand,
+    StridedCopyCommand, StridedCopyRequest,
 };
 use crate::device::PdmaDevice;
 use crate::event::EventRecord;
@@ -107,6 +108,25 @@ impl Driver {
             request,
         );
         self.submit_external_command(device, command_id, ExternalCommand::StridedCopy(command))
+    }
+
+    /// Emits a broadcast copy descriptor to the command ring and rings the doorbell.
+    pub fn submit_broadcast_copy(
+        &mut self,
+        device: &mut PdmaDevice,
+        request: BroadcastCopyRequest,
+    ) -> ModelResult<CommandId> {
+        if self.free_command_slots == 0 {
+            return Err(ModelError::DriverQueueFull);
+        }
+        let command_id = CommandId::new(self.next_command);
+        let command = BroadcastCopyCommand::new(
+            command_id,
+            self.queue_config.queue_id(),
+            self.queue_config.completion_ring_id(),
+            request,
+        );
+        self.submit_external_command(device, command_id, ExternalCommand::BroadcastCopy(command))
     }
 
     /// Polls one completion and reclaims one local command-ring slot if present.

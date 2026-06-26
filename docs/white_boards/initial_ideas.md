@@ -28,6 +28,34 @@ PDMA deliberately does not define the overall SoC memory map, the external IOMMU
 - PDMA does not define a fixed set of compute operations beyond the possibility of vector computation. Specific compute operations are integration decisions.
 - PDMA does not mandate a single host operating system beyond baseline Linux and DPDK compatibility for generic DMA paths.
 
+## Reference And Rationale Map
+
+This section records why the main architecture decisions exist and which existing schemes influenced them. The references are patterns to learn from, not specifications that PDMA must copy directly. The shared source catalog is [PDMA Reference Index](../references/README.md).
+
+| PDMA decision | Reason | Reference pattern | Tradeoff or deferred consequence |
+| --- | --- | --- | --- |
+| Keep PDMA as a memory-to-memory subsystem IP rather than a full SoC/DPU. | The reusable deliverable is the data-movement block, software contract, verification model, and implementation collateral; SoC memory maps, CPUs, and isolation policy differ by integration. | [Linux DMAengine], [DPDK DMAdev], [Intel DSA]. | System-level security and memory-map policy must be documented as integration assumptions rather than hidden inside PDMA. |
+| Support Linux DMAengine and DPDK DMAdev as baseline compatibility layers. | These APIs cover common copy, fill, scatter-gather, interleaved, submit, completion, and channel/vchan concepts that generic software already understands. | [Linux DMAengine client], [Linux DMAengine provider], [DPDK DMAdev]. | Advanced task graphs and compute-assisted transfers need a PDMA SDK instead of being forced into generic DMA APIs. |
+| Split external command descriptors from internal execution descriptors. | A stable software ABI should not freeze scheduler microarchitecture, engine chunking, compute dispatch records, or future internal optimizations. | [Linux DMAengine provider], [Intel DSA], [NVMe]. | The model must verify translation correctness because software-visible commands and hardware-internal work are intentionally different. |
+| Put command, completion, and event rings in DMA-coherent external memory. | Host-owned rings scale better than per-queue register banks and match common device/driver producer-consumer contracts. | [NVMe], [virtio], [RDMA verbs]. | Coherency, ordering, and IOMMU mapping become explicit driver/integration responsibilities. |
+| Use memory-resident queue configuration plus a bounded active queue context cache. | Provisioned queues should scale with memory and queue IDs, while active hardware state stays bounded by scheduler and SRAM resources. | [RDMA verbs], [virtio], [NVMe]. | Cache refill, eviction, and miss latency become visible performance events that the model must later expose. |
+| Use a shared doorbell portal with `queue_id` and producer state instead of one MMIO doorbell per queue. | A shared portal prevents register aperture size from limiting queue count and allows hardware to coalesce same-queue notifications. | [virtio], [Intel DSA], [DPDK DMAdev]. | The doorbell is only a hint; memory-resident producer state remains authoritative and must be read consistently. |
+| Keep completion records separate from event records. | Normal completions are high-volume and latency-sensitive, while errors and asynchronous diagnostics are lower-volume and need richer fields. | [RDMA verbs], [Linux DMAengine client], [NVMe]. | Completion overflow and event overflow need different recovery policies. |
+| Use queue groups for resource binding and scheduling policy. | Groups give software and hardware a common unit for assigning queues to engine pools, priorities, and QoS budgets. | [Intel DSA], [DPDK IDXD PMD]. | Dynamic resource rebinding and exact fairness policy are deferred until workload requirements are clearer. |
+| Start with weighted round-robin plus strict-priority control queues. | Weighted service gives a simple fairness baseline, while strict-priority control/error queues avoid recovery work being starved by bulk copies. | [Intel DSA], [RDMA verbs], common NIC queue scheduling practice. | The exact arbitration algorithm, credit accounting, and starvation bounds remain deferred. |
+| Reclaim command ring entries after completion in v0. | Completion-based reclaim is conservative and easy to validate; it avoids adding a second descriptor-consumed progress path before the queue contract is stable. | [Linux DMAengine client], [RDMA verbs], [NVMe]. | Early descriptor reuse may need a later consumed-index mechanism if command ring pressure becomes a bottleneck. |
+
+### Reference Labels
+
+- [Linux DMAengine client]: Linux DMA Engine API Guide, https://docs.kernel.org/driver-api/dmaengine/client.html.
+- [Linux DMAengine provider]: Linux DMAengine controller documentation, https://docs.kernel.org/driver-api/dmaengine/provider.html.
+- [DPDK DMAdev]: DPDK Direct Memory Access Device Library, https://doc.dpdk.org/guides/prog_guide/dmadev.html.
+- [DPDK IDXD PMD]: DPDK IDXD DMA Device Driver, https://doc.dpdk.org/guides/dmadevs/idxd.html.
+- [NVMe]: NVM Express specifications overview and base specification set, https://nvmexpress.org/specifications/.
+- [virtio]: OASIS Virtual I/O Device specification v1.3, https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html.
+- [RDMA verbs]: NVIDIA RDMA Aware Programming User Manual, verb context operations, https://networking-docs.nvidia.com/rdmaawareprogramming/verb-context-operations.
+- [Intel DSA]: Intel Data Streaming Accelerator User Guide, https://cdrdv2-public.intel.com/759709/353216-004-intel-data-streaming-accelerator-user-guide.pdf.
+
 ## Architecture Overview
 
 PDMA is a programmable DMA framework rather than a fixed-function DMA controller. Software submits logical task graphs through a driver. The driver validates those graphs and writes command descriptors into command rings that the hardware can read. A scheduler coprocessor inside PDMA maintains execution state, expands or translates command descriptors into internal execution descriptors, and dispatches work to DMA read engines, optional compute pipelines, and DMA write engines. Completion and errors are reported back through a completion ring and an event queue.

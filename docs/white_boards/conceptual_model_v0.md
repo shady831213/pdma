@@ -46,6 +46,22 @@ The current v0 direction is:
 
 The modeling deliverable should eventually make queue/config/ring structures, descriptor layouts, register layouts, and generated headers precise. v0 only needs to establish their fields, ownership, and interaction strongly enough to guide discussion.
 
+### v0 Decision Rationale
+
+| v0 decision | Concrete reason | Reference pattern | Tradeoff or deferred consequence |
+| --- | --- | --- | --- |
+| Use Rust for the conceptual model. | The model needs strong typed IDs, ownership of rings and buffers, deterministic tests, and fast iteration without committing to RTL or C ABI layouts. | `etha_model` in [Reference Index](../references/README.md), Rust type-system practice. | Rust model types are not automatically the final driver ABI; generated C headers are deferred. |
+| Start with deterministic `step()` and `run_until_idle()` scenario tests. | Architecture discussions need reproducible state transitions and small failing scenarios before concurrency and timing effects are introduced. | `etha_model`, hardware functional-model practice. | Natural producer-consumer concurrency may be approximated until an async or timed model is added. |
+| Keep message-oriented component boundaries but avoid a real async runtime in v0. | Scheduler/engine interfaces should remain close to the eventual hardware partition, while the first model must stay easy to debug and test deterministically. | Linux DMAengine and DPDK DMAdev queue/descriptor flows in [Reference Index](../references/README.md). | Backpressure and timing interactions are modeled explicitly later rather than by runtime scheduling behavior. |
+| Model external memory, coherent rings, local scheduler storage, and data-path buffers as separate concepts. | Queue ownership, command visibility, completion visibility, and payload movement each have different correctness rules. | virtio, NVMe, and RDMA verbs in [Reference Index](../references/README.md). | The first model abstracts caches and SoC memory ordering; integration-specific coherency rules remain deferred. |
+| Make queue directory, queue config, rings, indices, and phase/wrap behavior concrete early. | Queue correctness bugs are interface bugs; they must be visible before adding compute, dependencies, or performance annotations. | virtio, NVMe, and RDMA verbs in [Reference Index](../references/README.md). | Byte-accurate descriptor and register layout can still remain abstract until the fields stabilize. |
+| Keep descriptor byte layout, register offsets, C ABI, and generated headers abstract in v0. | Freezing layout too early would turn exploratory model code into a compatibility burden before architecture behavior is validated. | `etha_model` and Linux DMAengine provider references in [Reference Index](../references/README.md). | A future spec draft must explicitly mark which layouts are stable before software integration can depend on them. |
+| Start performance work with bandwidth, backpressure, and stall annotations rather than cycle accuracy. | Early architecture questions are about likely bottlenecks and component budget pressure, not signoff timing. | Perfetto/Chrome trace references in [Reference Index](../references/README.md). | The model cannot predict RTL frequency, arbitration latency, or NoC timing until lower-level design data exists. |
+| Include bypass copy, transform, and vector-add-style compute choices. | These cover pure DMA, single-source compute, and multi-source synchronization without becoming a general tensor/dataflow framework. | Linux DMAengine memory-to-memory capabilities; Intel DSA as a data-movement accelerator contrast. | Exact final compute ISA, fixed-function operation set, and programmable-kernel model remain integration decisions. |
+| Use completion-based command ring reclamation first. | It is conservative, simple to prove in tests, and avoids adding a descriptor-consumed progress interface before the ring contract is stable. | Linux DMAengine client, RDMA verbs, and NVMe references in [Reference Index](../references/README.md). | Earlier descriptor reuse may require a consumed-index or SQ-head-like mechanism if command ring pressure becomes important. |
+| Model the scheduler as behavioral first and leave `terminus` for later. | The immediate question is scheduler responsibility and state, not instruction binary compatibility or firmware cycle cost. | `terminus` and `terminus_cosim` in [Reference Index](../references/README.md). | Firmware/ISA behavior, microcode cost, and co-simulation are deferred until the scheduler implementation style is chosen. |
+| Keep stable docs under `pdma/model/docs` only after model behavior is validated. | White-board decisions should not masquerade as a stable architecture contract before tests exercise them. | Spec-driven development practice, NVMe/virtio style separation between overview and normative structure. | A post-v0 `pdma_arch_spec_v0.md` must reconcile model behavior with eventual ABI/register definitions. |
+
 ## Reference Style
 
 The existing `etha_model` project is a useful reference because it demonstrates Rust hardware functional modeling with:
@@ -59,6 +75,8 @@ The existing `etha_model` project is a useful reference because it demonstrates 
 - Python trace analysis helpers.
 
 PDMA should borrow the useful ideas, but not copy the structure blindly. Some parts may be better expressed with more explicit async/event-driven modeling, stricter typed interfaces, and a cleaner separation between conceptual architecture objects and C ABI objects.
+
+The shared reference catalog for specs, codebases, and research leads lives in [PDMA Reference Index](../references/README.md). Inline references in this document should explain why a source matters for a decision rather than merely naming the source.
 
 ## Modeling Philosophy
 

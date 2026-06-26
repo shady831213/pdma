@@ -5,6 +5,7 @@ PDMA is an early-stage memory-to-memory programmable DMA subsystem concept. The 
 ## Documents
 
 - [Initial ideas](docs/white_boards/initial_ideas.md): early architecture notes, including software/hardware partitioning, memory layout, queue model, control/data path interaction, optional compute pipeline, and subsystem deliverables.
+- [Conceptual model v0 proposal](docs/white_boards/conceptual_model_v0.md): Rust-based modeling proposal for discussing component partitioning, interfaces, async versus step-based execution, tracing, and first scenario tests.
 
 ## Scope Snapshot
 

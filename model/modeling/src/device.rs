@@ -6,6 +6,7 @@ use crate::engines::{CopyEngine, EngineError};
 use crate::event::EventRecord;
 use crate::ids::{CompletionRingId, QueueId};
 use crate::memory::Memory;
+use crate::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use crate::rings::Ring;
 use crate::scheduler::Scheduler;
 use crate::{ModelError, ModelResult};
@@ -13,7 +14,7 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 struct QueueContext {
-    id: QueueId,
+    entry: QueueDirectoryEntry,
     command_ring: Ring<ExternalCommand>,
 }
 
@@ -28,6 +29,7 @@ pub struct RunSummary {
 #[derive(Debug, Clone)]
 pub struct PdmaDevice {
     memory: Memory,
+    queue_directory: Vec<QueueDirectoryEntry>,
     queues: Vec<QueueContext>,
     completions: Vec<Ring<CompletionRecord>>,
     event_ring: VecDeque<EventRecord>,
@@ -39,6 +41,7 @@ impl PdmaDevice {
     pub fn new() -> Self {
         Self {
             memory: Memory::default(),
+            queue_directory: Vec::new(),
             queues: Vec::new(),
             completions: Vec::new(),
             event_ring: VecDeque::new(),
@@ -72,20 +75,24 @@ impl PdmaDevice {
     }
 
     /// Provisions one command queue and one bound completion ring.
-    pub fn create_queue(
-        &mut self,
-        command_depth: usize,
-        completion_depth: usize,
-    ) -> ModelResult<(QueueId, CompletionRingId)> {
-        let queue_id = QueueId::new(self.queues.len());
+    pub fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+        let command_ring = Ring::with_capacity(config.command_depth())?;
+        let completion_ring = Ring::with_capacity(config.completion_depth())?;
+        let queue_id = QueueId::new(self.queue_directory.len());
         let completion_id = CompletionRingId::new(self.completions.len());
-        self.completions
-            .push(Ring::with_capacity(completion_depth)?);
+        let entry = QueueDirectoryEntry::new(queue_id, completion_id, config);
+        self.queue_directory.push(entry);
+        self.completions.push(completion_ring);
         self.queues.push(QueueContext {
-            id: queue_id,
-            command_ring: Ring::with_capacity(command_depth)?,
+            entry,
+            command_ring,
         });
-        Ok((queue_id, completion_id))
+        Ok(QueueConfigHandle::new(entry))
+    }
+
+    /// Returns one queue directory entry.
+    pub fn queue_directory_entry(&self, queue_id: QueueId) -> ModelResult<QueueDirectoryEntry> {
+        self.queue(queue_id).map(|queue| queue.entry)
     }
 
     /// Pushes a command into a queue's command ring.
@@ -201,14 +208,14 @@ impl PdmaDevice {
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {
         self.queues
             .iter()
-            .find(|queue| queue.id == id)
+            .find(|queue| queue.entry.queue_id() == id)
             .ok_or(ModelError::UnknownQueue(id))
     }
 
     fn queue_mut(&mut self, id: QueueId) -> ModelResult<&mut QueueContext> {
         self.queues
             .iter_mut()
-            .find(|queue| queue.id == id)
+            .find(|queue| queue.entry.queue_id() == id)
             .ok_or(ModelError::UnknownQueue(id))
     }
 

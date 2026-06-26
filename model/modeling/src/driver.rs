@@ -7,13 +7,13 @@ use crate::desc::{
 use crate::device::PdmaDevice;
 use crate::event::EventRecord;
 use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use crate::queue::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
 use crate::{ModelError, ModelResult};
 
 /// Software driver model owning queue setup and local ring-space accounting.
 #[derive(Debug, Clone)]
 pub struct Driver {
-    queue_id: QueueId,
-    completion_ring_id: CompletionRingId,
+    queue_config: QueueConfigHandle,
     next_command: usize,
     free_command_slots: usize,
 }
@@ -25,13 +25,24 @@ impl Driver {
         command_depth: usize,
         completion_depth: usize,
     ) -> ModelResult<Self> {
-        let (queue_id, completion_ring_id) =
-            device.create_queue(command_depth, completion_depth)?;
+        Self::setup_with_config(
+            device,
+            QueueConfig::new(
+                command_depth,
+                completion_depth,
+                EventRouting::QueueLocal,
+                SoftwareOwnerId::new(0),
+            ),
+        )
+    }
+
+    /// Sets up one command queue from an explicit queue configuration.
+    pub fn setup_with_config(device: &mut PdmaDevice, config: QueueConfig) -> ModelResult<Self> {
+        let queue_config = device.create_queue(config)?;
         Ok(Self {
-            queue_id,
-            completion_ring_id,
+            queue_config,
             next_command: 0,
-            free_command_slots: command_depth,
+            free_command_slots: config.command_depth(),
         })
     }
 
@@ -70,7 +81,12 @@ impl Driver {
             return Err(ModelError::DriverQueueFull);
         }
         let command_id = CommandId::new(self.next_command);
-        let command = CopyCommand::new(command_id, self.queue_id, self.completion_ring_id, request);
+        let command = CopyCommand::new(
+            command_id,
+            self.queue_config.queue_id(),
+            self.queue_config.completion_ring_id(),
+            request,
+        );
         self.submit_external_command(device, command_id, ExternalCommand::Copy(command))
     }
 
@@ -84,8 +100,12 @@ impl Driver {
             return Err(ModelError::DriverQueueFull);
         }
         let command_id = CommandId::new(self.next_command);
-        let command =
-            StridedCopyCommand::new(command_id, self.queue_id, self.completion_ring_id, request);
+        let command = StridedCopyCommand::new(
+            command_id,
+            self.queue_config.queue_id(),
+            self.queue_config.completion_ring_id(),
+            request,
+        );
         self.submit_external_command(device, command_id, ExternalCommand::StridedCopy(command))
     }
 
@@ -94,7 +114,7 @@ impl Driver {
         &mut self,
         device: &mut PdmaDevice,
     ) -> ModelResult<Option<CompletionRecord>> {
-        let completion = device.poll_completion(self.completion_ring_id)?;
+        let completion = device.poll_completion(self.queue_config.completion_ring_id())?;
         if completion.is_some() {
             self.free_command_slots = self.free_command_slots.saturating_add(1);
         }
@@ -103,7 +123,9 @@ impl Driver {
 
     /// Polls one event and reclaims one local command-ring slot if it belongs to this queue.
     pub fn poll_event(&mut self, device: &mut PdmaDevice) -> ModelResult<Option<EventRecord>> {
-        let event = device.poll_queue_event(self.queue_id)?;
+        let event = match self.queue_config.event_routing() {
+            EventRouting::QueueLocal => device.poll_queue_event(self.queue_config.queue_id())?,
+        };
         if event.is_some() {
             self.free_command_slots = self.free_command_slots.saturating_add(1);
         }
@@ -112,12 +134,17 @@ impl Driver {
 
     /// Queue ID owned by this driver instance.
     pub const fn queue_id(&self) -> QueueId {
-        self.queue_id
+        self.queue_config.queue_id()
     }
 
     /// Completion ring ID owned by this driver instance.
     pub const fn completion_ring_id(&self) -> CompletionRingId {
-        self.completion_ring_id
+        self.queue_config.completion_ring_id()
+    }
+
+    /// Queue configuration handle owned by this driver instance.
+    pub const fn queue_config_handle(&self) -> QueueConfigHandle {
+        self.queue_config
     }
 
     fn submit_external_command(
@@ -127,9 +154,9 @@ impl Driver {
         command: ExternalCommand,
     ) -> ModelResult<CommandId> {
         self.next_command = self.next_command.saturating_add(1);
-        device.submit_command(self.queue_id, command)?;
+        device.submit_command(self.queue_config.queue_id(), command)?;
         self.free_command_slots -= 1;
-        device.ring_doorbell(self.queue_id)?;
+        device.ring_doorbell(self.queue_config.queue_id())?;
         Ok(command_id)
     }
 }

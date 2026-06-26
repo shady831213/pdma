@@ -1,5 +1,6 @@
 //! PDMA device model with command queue, doorbell, scheduler, engine, and completion path.
 
+use crate::arbitration::{ArbitrationPolicy, QueueArbiter};
 use crate::completion::{CompletionRecord, CompletionStatus};
 use crate::desc::ExternalCommand;
 use crate::engines::{CopyEngine, EngineError};
@@ -34,6 +35,7 @@ pub struct PdmaDevice {
     completions: Vec<Ring<CompletionRecord>>,
     event_ring: VecDeque<EventRecord>,
     runnable: Vec<QueueId>,
+    arbiter: QueueArbiter,
 }
 
 impl PdmaDevice {
@@ -46,7 +48,21 @@ impl PdmaDevice {
             completions: Vec::new(),
             event_ring: VecDeque::new(),
             runnable: Vec::new(),
+            arbiter: QueueArbiter::default(),
         }
+    }
+
+    /// Creates an empty device using the requested arbitration policy.
+    pub fn with_arbitration_policy(policy: ArbitrationPolicy) -> Self {
+        Self {
+            arbiter: QueueArbiter::new(policy),
+            ..Self::new()
+        }
+    }
+
+    /// Returns the active queue arbitration policy.
+    pub const fn arbitration_policy(&self) -> ArbitrationPolicy {
+        self.arbiter.policy()
     }
 
     /// Allocates a device-visible memory buffer.
@@ -115,7 +131,7 @@ impl PdmaDevice {
 
     /// Advances the deterministic device model by at most one command.
     pub fn step(&mut self) -> ModelResult<bool> {
-        let Some(queue_id) = self.runnable.pop() else {
+        let Some(queue_id) = self.arbiter.select_next(&mut self.runnable) else {
             return Ok(false);
         };
         let command = self.queue_mut(queue_id)?.command_ring.pop();

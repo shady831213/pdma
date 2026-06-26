@@ -4,6 +4,7 @@
 //! driver submission, command ring, doorbell/runnable queue, scheduler lowering,
 //! deterministic copy execution, completion publication, and driver polling.
 
+pub mod arbitration;
 pub mod completion;
 pub mod desc;
 pub mod device;
@@ -16,6 +17,7 @@ pub mod queue;
 pub mod rings;
 pub mod scheduler;
 
+pub use arbitration::{ArbitrationPolicy, QueueArbiter};
 pub use completion::{CompletionRecord, CompletionStatus};
 pub use desc::{CopyRequest, ExternalCommand, ScheduledCopy, StridedCopyRequest};
 pub use device::{PdmaDevice, RunSummary};

@@ -1,20 +1,49 @@
 //! Deterministic read/write engine execution for scheduled copy work.
 
-use crate::ModelResult;
+use crate::ModelError;
 use crate::desc::ScheduledCopy;
+use crate::event::{EventErrorKind, MemoryFault};
 use crate::memory::Memory;
 
 /// Copy engine that performs one read followed by one write per scheduled item.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CopyEngine;
 
+/// Error returned by copy engine execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineError {
+    /// A memory access fault that should be reported through the event path.
+    Memory(MemoryFault),
+    /// A non-memory model error that should propagate directly.
+    Model(ModelError),
+}
+
 impl CopyEngine {
     /// Executes a scheduled copy through checked memory operations.
-    pub fn execute(memory: &mut Memory, work: &ScheduledCopy) -> ModelResult<()> {
+    pub fn execute(memory: &mut Memory, work: &ScheduledCopy) -> Result<(), EngineError> {
         for chunk in work.chunks() {
-            let bytes = memory.read_checked(chunk.src(), chunk.src_offset(), chunk.len())?;
-            memory.write_checked(chunk.dst(), chunk.dst_offset(), &bytes)?;
+            let bytes = memory
+                .read_checked(chunk.src(), chunk.src_offset(), chunk.len())
+                .map_err(|error| memory_fault(error, chunk.src()))?;
+            memory
+                .write_checked(chunk.dst(), chunk.dst_offset(), &bytes)
+                .map_err(|error| memory_fault(error, chunk.dst()))?;
         }
         Ok(())
     }
+}
+
+const fn memory_fault(error: ModelError, buffer: crate::ids::BufferId) -> EngineError {
+    let error_kind = match error {
+        ModelError::UnknownBuffer(_) => EventErrorKind::UnknownBuffer,
+        ModelError::OutOfBounds { len, end, .. } => EventErrorKind::OutOfBounds { len, end },
+        ModelError::RangeOverflow => EventErrorKind::RangeOverflow,
+        ModelError::ZeroCapacity
+        | ModelError::RingFull
+        | ModelError::UnknownQueue(_)
+        | ModelError::UnknownCompletionRing(_)
+        | ModelError::DriverQueueFull
+        | ModelError::StepBudgetExhausted { .. } => return EngineError::Model(error),
+    };
+    EngineError::Memory(MemoryFault::new(error, buffer, error_kind))
 }

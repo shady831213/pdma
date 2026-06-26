@@ -5,6 +5,7 @@ use crate::desc::{
     CopyCommand, CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest,
 };
 use crate::device::PdmaDevice;
+use crate::event::EventRecord;
 use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 use crate::{ModelError, ModelResult};
 
@@ -98,6 +99,15 @@ impl Driver {
             self.free_command_slots = self.free_command_slots.saturating_add(1);
         }
         Ok(completion)
+    }
+
+    /// Polls one event and reclaims one local command-ring slot if it belongs to this queue.
+    pub fn poll_event(&mut self, device: &mut PdmaDevice) -> ModelResult<Option<EventRecord>> {
+        let event = device.poll_queue_event(self.queue_id)?;
+        if event.is_some() {
+            self.free_command_slots = self.free_command_slots.saturating_add(1);
+        }
+        Ok(event)
     }
 
     /// Queue ID owned by this driver instance.

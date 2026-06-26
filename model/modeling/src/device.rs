@@ -2,12 +2,14 @@
 
 use crate::completion::{CompletionRecord, CompletionStatus};
 use crate::desc::ExternalCommand;
-use crate::engines::CopyEngine;
+use crate::engines::{CopyEngine, EngineError};
+use crate::event::EventRecord;
 use crate::ids::{CompletionRingId, QueueId};
 use crate::memory::Memory;
 use crate::rings::Ring;
 use crate::scheduler::Scheduler;
 use crate::{ModelError, ModelResult};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 struct QueueContext {
@@ -28,6 +30,7 @@ pub struct PdmaDevice {
     memory: Memory,
     queues: Vec<QueueContext>,
     completions: Vec<Ring<CompletionRecord>>,
+    event_ring: VecDeque<EventRecord>,
     runnable: Vec<QueueId>,
 }
 
@@ -38,6 +41,7 @@ impl PdmaDevice {
             memory: Memory::default(),
             queues: Vec::new(),
             completions: Vec::new(),
+            event_ring: VecDeque::new(),
             runnable: Vec::new(),
         }
     }
@@ -114,7 +118,21 @@ impl PdmaDevice {
         let has_more_commands = !self.queue(queue_id)?.command_ring.is_empty();
         let result = (|| {
             let work = Scheduler::lower(command)?;
-            CopyEngine::execute(&mut self.memory, &work)?;
+            if let Err(error) = CopyEngine::execute(&mut self.memory, &work) {
+                match error {
+                    EngineError::Memory(fault) => {
+                        let event = EventRecord::new(
+                            work.queue_id(),
+                            work.command_id(),
+                            fault.error_kind(),
+                            fault.buffer(),
+                        );
+                        self.event_ring.push_back(event);
+                        return Err(fault.source());
+                    }
+                    EngineError::Model(error) => return Err(error),
+                }
+            }
             let completion = CompletionRecord::new(
                 work.queue_id(),
                 work.command_id(),
@@ -152,6 +170,24 @@ impl PdmaDevice {
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
         Ok(self.completion_mut(completion_ring_id)?.pop())
+    }
+
+    /// Pops one event record for software polling.
+    pub fn poll_event(&mut self) -> ModelResult<Option<EventRecord>> {
+        Ok(self.event_ring.pop_front())
+    }
+
+    /// Pops one event record for a specific queue without consuming other queues' events.
+    pub fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
+        self.queue(queue_id)?;
+        let Some(index) = self
+            .event_ring
+            .iter()
+            .position(|event| event.queue_id() == queue_id)
+        else {
+            return Ok(None);
+        };
+        Ok(self.event_ring.remove(index))
     }
 
     fn has_work(&self) -> bool {

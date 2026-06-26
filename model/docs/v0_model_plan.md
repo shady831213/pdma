@@ -27,20 +27,21 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | Event ring and recoverable error reporting | Done | `event.rs`, `error_event.rs` | Memory faults publish software-visible events, skip success completions, and keep later queued commands runnable. |
 | Queue directory and explicit queue configuration objects | Done | `queue.rs`, `queue_config.rs` | Queue creation stores directory entries, driver owns config handles, and queue-local event polling preserves ownership. |
 | Multi-queue arbitration with deterministic policy | Done | `arbitration.rs`, `multi_queue.rs` | Default round-robin policy selects oldest runnable queues and prevents equal-priority queue starvation. |
+| Broadcast copy lowering | Done | `broadcast.rs`, `broadcast_copy.rs` | One command fans one source range out to multiple destination ranges with one completion or one memory-fault event. |
 
 ## Active Next Slice
 
-### Broadcast Copy Lowering
+### Vector-Add Operation
 
-Goal: validate one external command lowering into multiple destination writes while preserving the existing completion and error-reporting contract.
+Goal: validate a simple compute-assisted operation that reads two source ranges, combines them element-wise, and writes one destination range while preserving the existing completion and error-reporting contract.
 
 Expected behavior:
 
-- One broadcast copy command reads one source range and writes the same payload to multiple destination ranges.
-- The scheduler lowers one external broadcast command into internal copy work for every destination.
-- The command publishes one success completion only after all destination writes complete.
-- A failed destination write reports an event and does not publish success.
-- Existing linear, strided, event, queue-configuration, and arbitration behavior remains unchanged.
+- One vector-add command reads two equal-length source ranges and writes one destination range.
+- The model uses byte-wise wrapping addition for v0 unless a later slice introduces typed element widths.
+- The command publishes one success completion only after all reads and the destination write complete.
+- A failed source read or destination write reports an event and does not publish success.
+- Existing linear, strided, event, queue-configuration, arbitration, and broadcast behavior remains unchanged.
 
 Likely files:
 
@@ -48,22 +49,22 @@ Likely files:
 - `model/modeling/src/scheduler.rs`
 - `model/modeling/src/engines.rs`
 - `model/modeling/src/device.rs`
-- `model/modeling/tests/broadcast_copy.rs`
+- `model/modeling/src/driver.rs`
+- `model/modeling/tests/vector_add.rs`
 
 Success checks:
 
-- Scenario test proves one command copies the same source bytes to two or more destinations and reports one completion.
-- Scenario test proves an out-of-bounds destination reports an event and prevents success completion.
-- Existing linear, strided, error-event, queue-configuration, and arbitration tests continue to pass.
+- Scenario test proves one command adds two source byte ranges into one destination and reports one completion.
+- Scenario test proves a bad source or destination reports an event and prevents success completion.
+- Existing linear, strided, error-event, queue-configuration, arbitration, and broadcast tests continue to pass.
 
 ## Planned Slices
 
-1. Broadcast copy lowering to validate one-command fanout.
-2. Vector-add operation to validate multi-source reads and compute/write synchronization.
-3. Resource credit model for internal descriptors, read slots, write slots, compute slots, and completion/event pressure.
-4. Backpressure/stall annotation layer with scenario-level summaries.
-5. Trace sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
-6. Draft `model/docs/pdma_arch_spec_v0.md` after the model validates queue, scheduler, completion, event, and backpressure behavior.
+1. Vector-add operation to validate multi-source reads and compute/write synchronization.
+2. Resource credit model for internal descriptors, read slots, write slots, compute slots, and completion/event pressure.
+3. Backpressure/stall annotation layer with scenario-level summaries.
+4. Trace sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
+5. Draft `model/docs/pdma_arch_spec_v0.md` after the model validates queue, scheduler, completion, event, and backpressure behavior.
 
 ## Deferred Until v0 Mechanisms Stabilize
 

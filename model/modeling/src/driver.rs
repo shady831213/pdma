@@ -1,0 +1,129 @@
+//! SDK/driver-like submission and completion polling model.
+
+use crate::completion::CompletionRecord;
+use crate::desc::{CopyCommand, CopyRequest, ExternalCommand};
+use crate::device::PdmaDevice;
+use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use crate::{ModelError, ModelResult};
+
+/// Software driver model owning queue setup and local ring-space accounting.
+#[derive(Debug, Clone)]
+pub struct Driver {
+    queue_id: QueueId,
+    completion_ring_id: CompletionRingId,
+    next_command: usize,
+    free_command_slots: usize,
+}
+
+impl Driver {
+    /// Sets up one command queue and bound completion ring on the device.
+    pub fn setup(
+        device: &mut PdmaDevice,
+        command_depth: usize,
+        completion_depth: usize,
+    ) -> ModelResult<Self> {
+        let (queue_id, completion_ring_id) =
+            device.create_queue(command_depth, completion_depth)?;
+        Ok(Self {
+            queue_id,
+            completion_ring_id,
+            next_command: 0,
+            free_command_slots: command_depth,
+        })
+    }
+
+    /// Allocates a device-visible buffer.
+    pub fn allocate_buffer(&self, device: &mut PdmaDevice, len: usize) -> BufferId {
+        device.allocate_buffer(len)
+    }
+
+    /// Writes a complete buffer payload at offset zero.
+    pub fn write_buffer(
+        &self,
+        device: &mut PdmaDevice,
+        buffer: BufferId,
+        data: &[u8],
+    ) -> ModelResult<()> {
+        device.write_buffer(buffer, 0, data)
+    }
+
+    /// Reads a checked buffer payload at offset zero.
+    pub fn read_buffer(
+        &self,
+        device: &PdmaDevice,
+        buffer: BufferId,
+        len: usize,
+    ) -> ModelResult<Vec<u8>> {
+        device.read_buffer(buffer, 0, len)
+    }
+
+    /// Emits a copy descriptor to the command ring and rings the doorbell.
+    pub fn submit_copy(
+        &mut self,
+        device: &mut PdmaDevice,
+        request: CopyRequest,
+    ) -> ModelResult<CommandId> {
+        if self.free_command_slots == 0 {
+            return Err(ModelError::DriverQueueFull);
+        }
+        let command_id = CommandId::new(self.next_command);
+        self.next_command = self.next_command.saturating_add(1);
+        let command = CopyCommand::new(command_id, self.queue_id, self.completion_ring_id, request);
+        device.submit_command(self.queue_id, ExternalCommand::Copy(command))?;
+        self.free_command_slots -= 1;
+        device.ring_doorbell(self.queue_id)?;
+        Ok(command_id)
+    }
+
+    /// Polls one completion and reclaims one local command-ring slot if present.
+    pub fn poll_completion(
+        &mut self,
+        device: &mut PdmaDevice,
+    ) -> ModelResult<Option<CompletionRecord>> {
+        let completion = device.poll_completion(self.completion_ring_id)?;
+        if completion.is_some() {
+            self.free_command_slots = self.free_command_slots.saturating_add(1);
+        }
+        Ok(completion)
+    }
+
+    /// Queue ID owned by this driver instance.
+    pub const fn queue_id(&self) -> QueueId {
+        self.queue_id
+    }
+
+    /// Completion ring ID owned by this driver instance.
+    pub const fn completion_ring_id(&self) -> CompletionRingId {
+        self.completion_ring_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Driver;
+    use crate::ModelError;
+    use crate::desc::CopyRequest;
+    use crate::device::PdmaDevice;
+    use crate::ids::CommandId;
+
+    #[test]
+    fn submit_copy_writes_command_and_uses_local_shadow_slots() {
+        // Given: a driver with one command slot.
+        let mut device = PdmaDevice::new();
+        let mut driver = Driver::setup(&mut device, 1, 1).expect("queue setup is valid");
+        let src = driver.allocate_buffer(&mut device, 4);
+        let dst = driver.allocate_buffer(&mut device, 4);
+
+        // When: one copy is submitted.
+        let command_id = driver
+            .submit_copy(&mut device, CopyRequest::new(src, dst, 4))
+            .expect("first command has a free slot");
+
+        // Then: the command ID is assigned and a second submit is locally rejected.
+        assert_eq!(command_id, CommandId::new(0));
+        assert_eq!(
+            driver.submit_copy(&mut device, CopyRequest::new(src, dst, 4)),
+            Err(ModelError::DriverQueueFull)
+        );
+    }
+}

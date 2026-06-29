@@ -42,15 +42,15 @@ Ignore generated `model/modeling/target/` content.
 
 ## CURRENT STATE
 
-Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer.
+Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft.
 
-Active next slice: Trace Sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
+Active next slice: none. The executable v0 model is complete; ask before starting post-v0 work.
 
 ## CONVENTIONS
 
 - Keep v0 deterministic and step-based; do not add cycle timing.
 - Add failing scenario tests first, then minimum model behavior.
-- Preserve existing behavior for linear, strided, event, queue-config, arbitration, broadcast, vector-add, resource-credit, and stall-annotation slices.
+- Preserve existing behavior for linear, strided, event, queue-config, arbitration, broadcast, vector-add, resource-credit, stall-annotation, and trace-sink slices.
 - Keep operation descriptors conceptual; exact byte layout, register offsets, C ABI, and generated headers stay deferred.
 - Keep Rust files below 250 pure LOC; split by responsibility before growing `desc.rs` or `device.rs`.
 - Use English plain short commit messages matching recent history if the user asks to commit.

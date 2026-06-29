@@ -57,12 +57,9 @@ cargo doc --no-deps --document-private-items
 
 ## CURRENT NEXT SLICE
 
-Trace Sink:
+None. The executable v0 model and `model/docs/pdma_arch_spec_v0.md` draft are complete.
 
-- Emit Chrome/Perfetto-compatible JSON trace events for command lifecycles, completions, events, and stall annotations.
-- Keep a structured in-memory event log that scenario tests can inspect without timing assumptions.
-- Preserve existing linear, strided, event, queue-config, arbitration, broadcast, vector-add, resource-credit, and stall-annotation behavior when tracing is enabled or disabled.
-- Add `tests/trace_sink.rs` first.
+If continuing beyond v0, ask for the next scope before adding new behavior.
 
 ## DO NOT
 

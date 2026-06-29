@@ -70,6 +70,14 @@ impl<T> Ring<T> {
         item
     }
 
+    /// Returns the head item without consuming it.
+    pub fn front(&self) -> Option<&T> {
+        if self.is_empty() {
+            return None;
+        }
+        self.entries.get(self.head).and_then(Option::as_ref)
+    }
+
     fn wrap_next(&self, value: usize) -> usize {
         let next = value + 1;
         if next == self.capacity() { 0 } else { next }

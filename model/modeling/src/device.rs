@@ -1,17 +1,19 @@
 //! PDMA device model with command queue, doorbell, scheduler, engine, and completion path.
 
+mod retirement;
+
 use crate::arbitration::{ArbitrationPolicy, QueueArbiter};
-use crate::completion::{CompletionRecord, CompletionStatus};
+use crate::completion::CompletionRecord;
 use crate::desc::ExternalCommand;
-use crate::desc::ScheduledWork;
-use crate::engines::{CopyEngine, EngineError, VectorAddEngine};
 use crate::event::EventRecord;
 use crate::ids::{CompletionRingId, QueueId};
 use crate::memory::Memory;
 use crate::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
+use crate::resources::{ResourceConfig, ResourceDemand, ResourcePool};
 use crate::rings::Ring;
 use crate::scheduler::Scheduler;
 use crate::{ModelError, ModelResult};
+use retirement::PendingRetirement;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
@@ -37,6 +39,8 @@ pub struct PdmaDevice {
     event_ring: VecDeque<EventRecord>,
     runnable: Vec<QueueId>,
     arbiter: QueueArbiter,
+    resources: ResourcePool,
+    pending_retirement: Option<PendingRetirement>,
 }
 
 impl PdmaDevice {
@@ -50,6 +54,16 @@ impl PdmaDevice {
             event_ring: VecDeque::new(),
             runnable: Vec::new(),
             arbiter: QueueArbiter::default(),
+            resources: ResourcePool::new(ResourceConfig::default()),
+            pending_retirement: None,
+        }
+    }
+
+    /// Creates an empty device with the requested execution resource capacities.
+    pub fn with_resource_config(config: ResourceConfig) -> Self {
+        Self {
+            resources: ResourcePool::new(config),
+            ..Self::new()
         }
     }
 
@@ -132,44 +146,25 @@ impl PdmaDevice {
 
     /// Advances the deterministic device model by at most one command.
     pub fn step(&mut self) -> ModelResult<bool> {
+        if let Some(pending) = self.pending_retirement {
+            return self.retry_pending_retirement(pending);
+        }
         let Some(queue_id) = self.arbiter.select_next(&mut self.runnable) else {
             return Ok(false);
         };
-        let command = self.queue_mut(queue_id)?.command_ring.pop();
-        let Some(command) = command else {
+        let Some(command) = self.queue(queue_id)?.command_ring.front() else {
             return Ok(true);
         };
-        let has_more_commands = !self.queue(queue_id)?.command_ring.is_empty();
-        let result = (|| {
-            let work = Scheduler::lower(command)?;
-            if let Err(error) = self.execute_work(&work) {
-                match error {
-                    EngineError::Memory(fault) => {
-                        let event = EventRecord::new(
-                            work.queue_id(),
-                            work.command_id(),
-                            fault.error_kind(),
-                            fault.buffer(),
-                        );
-                        self.event_ring.push_back(event);
-                        return Err(fault.source());
-                    }
-                    EngineError::Model(error) => return Err(error),
-                }
-            }
-            let completion = CompletionRecord::new(
-                work.queue_id(),
-                work.command_id(),
-                CompletionStatus::Success,
-            );
-            self.completion_mut(work.completion_ring_id())?
-                .push(completion)
-        })();
-        if has_more_commands {
+        let work = Scheduler::lower(command.clone())?;
+        let demand = ResourceDemand::for_work(&work);
+        if !self.resources.has_available(demand) {
             self.runnable.push(queue_id);
+            return Ok(false);
         }
-        result?;
-        Ok(true)
+        self.resources.acquire(demand);
+        let result = self.retire_ready_work(queue_id, &work);
+        self.resources.release(demand);
+        result
     }
 
     /// Runs deterministic steps until idle or until the step budget expires.
@@ -177,7 +172,11 @@ impl PdmaDevice {
         let mut steps = 0;
         while steps < max_steps {
             if !self.step()? {
-                return Ok(RunSummary { steps });
+                return if self.has_work() {
+                    Err(ModelError::StepBudgetExhausted { max_steps })
+                } else {
+                    Ok(RunSummary { steps })
+                };
             }
             steps += 1;
         }
@@ -215,20 +214,12 @@ impl PdmaDevice {
     }
 
     fn has_work(&self) -> bool {
-        !self.runnable.is_empty()
+        self.pending_retirement.is_some()
+            || !self.runnable.is_empty()
             || self
                 .queues
                 .iter()
                 .any(|queue| !queue.command_ring.is_empty())
-    }
-
-    fn execute_work(&mut self, work: &ScheduledWork) -> Result<(), EngineError> {
-        match work {
-            ScheduledWork::Copy(copy) => CopyEngine::execute(&mut self.memory, copy),
-            ScheduledWork::VectorAdd(vector_add) => {
-                VectorAddEngine::execute(&mut self.memory, *vector_add)
-            }
-        }
     }
 
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {

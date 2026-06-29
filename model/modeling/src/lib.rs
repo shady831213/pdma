@@ -15,6 +15,7 @@ pub mod event;
 pub mod ids;
 pub mod memory;
 pub mod queue;
+pub mod resources;
 pub mod rings;
 pub mod scheduled;
 pub mod scheduler;
@@ -34,6 +35,7 @@ pub use memory::Memory;
 pub use queue::{
     EventRouting, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, SoftwareOwnerId,
 };
+pub use resources::ResourceConfig;
 pub use rings::Ring;
 
 use core::fmt;

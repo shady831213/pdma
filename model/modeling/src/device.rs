@@ -3,7 +3,8 @@
 use crate::arbitration::{ArbitrationPolicy, QueueArbiter};
 use crate::completion::{CompletionRecord, CompletionStatus};
 use crate::desc::ExternalCommand;
-use crate::engines::{CopyEngine, EngineError};
+use crate::desc::ScheduledWork;
+use crate::engines::{CopyEngine, EngineError, VectorAddEngine};
 use crate::event::EventRecord;
 use crate::ids::{CompletionRingId, QueueId};
 use crate::memory::Memory;
@@ -141,7 +142,7 @@ impl PdmaDevice {
         let has_more_commands = !self.queue(queue_id)?.command_ring.is_empty();
         let result = (|| {
             let work = Scheduler::lower(command)?;
-            if let Err(error) = CopyEngine::execute(&mut self.memory, &work) {
+            if let Err(error) = self.execute_work(&work) {
                 match error {
                     EngineError::Memory(fault) => {
                         let event = EventRecord::new(
@@ -219,6 +220,15 @@ impl PdmaDevice {
                 .queues
                 .iter()
                 .any(|queue| !queue.command_ring.is_empty())
+    }
+
+    fn execute_work(&mut self, work: &ScheduledWork) -> Result<(), EngineError> {
+        match work {
+            ScheduledWork::Copy(copy) => CopyEngine::execute(&mut self.memory, copy),
+            ScheduledWork::VectorAdd(vector_add) => {
+                VectorAddEngine::execute(&mut self.memory, *vector_add)
+            }
+        }
     }
 
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {

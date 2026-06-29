@@ -2,9 +2,10 @@
 
 use crate::ModelResult;
 use crate::desc::{
-    BroadcastCopyCommand, CopyChunk, CopyCommand, ExternalCommand, ScheduledCopy,
-    StridedCopyCommand,
+    BroadcastCopyCommand, CopyChunk, CopyCommand, ExternalCommand, ScheduledCopy, ScheduledWork,
+    StridedCopyCommand, VectorAddCommand,
 };
+use crate::vector_add::ScheduledVectorAdd;
 
 /// Stateless behavioral scheduler for linear copy commands.
 #[derive(Debug, Default, Clone, Copy)]
@@ -12,11 +13,18 @@ pub struct Scheduler;
 
 impl Scheduler {
     /// Lowers one external command into internal scheduled work.
-    pub fn lower(command: ExternalCommand) -> ModelResult<ScheduledCopy> {
+    pub fn lower(command: ExternalCommand) -> ModelResult<ScheduledWork> {
         match command {
-            ExternalCommand::Copy(copy) => Self::lower_copy(copy),
-            ExternalCommand::StridedCopy(strided) => Self::lower_strided_copy(strided),
-            ExternalCommand::BroadcastCopy(broadcast) => Self::lower_broadcast_copy(&broadcast),
+            ExternalCommand::Copy(copy) => Self::lower_copy(copy).map(ScheduledWork::Copy),
+            ExternalCommand::StridedCopy(strided) => {
+                Self::lower_strided_copy(strided).map(ScheduledWork::Copy)
+            }
+            ExternalCommand::BroadcastCopy(broadcast) => {
+                Self::lower_broadcast_copy(&broadcast).map(ScheduledWork::Copy)
+            }
+            ExternalCommand::VectorAdd(vector_add) => {
+                Ok(ScheduledWork::VectorAdd(Self::lower_vector_add(vector_add)))
+            }
         }
     }
 
@@ -85,6 +93,16 @@ impl Scheduler {
             command.completion_ring_id(),
             chunks,
         ))
+    }
+
+    /// Lowers one external vector-add command into internal vector-add work.
+    pub const fn lower_vector_add(command: VectorAddCommand) -> ScheduledVectorAdd {
+        ScheduledVectorAdd::new(
+            command.queue_id(),
+            command.command_id(),
+            command.completion_ring_id(),
+            command.request(),
+        )
     }
 }
 

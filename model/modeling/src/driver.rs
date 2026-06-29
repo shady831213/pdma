@@ -3,7 +3,7 @@
 use crate::completion::CompletionRecord;
 use crate::desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, CopyCommand, CopyRequest, ExternalCommand,
-    StridedCopyCommand, StridedCopyRequest,
+    StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
 };
 use crate::device::PdmaDevice;
 use crate::event::EventRecord;
@@ -127,6 +127,25 @@ impl Driver {
             request,
         );
         self.submit_external_command(device, command_id, ExternalCommand::BroadcastCopy(command))
+    }
+
+    /// Emits a vector-add descriptor to the command ring and rings the doorbell.
+    pub fn submit_vector_add(
+        &mut self,
+        device: &mut PdmaDevice,
+        request: VectorAddRequest,
+    ) -> ModelResult<CommandId> {
+        if self.free_command_slots == 0 {
+            return Err(ModelError::DriverQueueFull);
+        }
+        let command_id = CommandId::new(self.next_command);
+        let command = VectorAddCommand::new(
+            command_id,
+            self.queue_config.queue_id(),
+            self.queue_config.completion_ring_id(),
+            request,
+        );
+        self.submit_external_command(device, command_id, ExternalCommand::VectorAdd(command))
     }
 
     /// Polls one completion and reclaims one local command-ring slot if present.

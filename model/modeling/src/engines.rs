@@ -1,13 +1,17 @@
 //! Deterministic read/write engine execution for scheduled copy work.
 
 use crate::ModelError;
-use crate::desc::ScheduledCopy;
+use crate::desc::{ScheduledCopy, ScheduledVectorAdd};
 use crate::event::{EventErrorKind, MemoryFault};
 use crate::memory::Memory;
 
 /// Copy engine that performs one read followed by one write per scheduled item.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CopyEngine;
+
+/// Vector-add engine that performs two reads, byte-wise wrapping addition, then one write.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VectorAddEngine;
 
 /// Error returned by copy engine execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,7 +37,28 @@ impl CopyEngine {
     }
 }
 
-const fn memory_fault(error: ModelError, buffer: crate::ids::BufferId) -> EngineError {
+impl VectorAddEngine {
+    /// Executes a scheduled vector add through checked memory operations.
+    pub fn execute(memory: &mut Memory, work: ScheduledVectorAdd) -> Result<(), EngineError> {
+        let request = work.request();
+        let src_a = memory
+            .read_checked(request.src_a(), request.src_a_offset(), request.len())
+            .map_err(|error| memory_fault(error, request.src_a()))?;
+        let src_b = memory
+            .read_checked(request.src_b(), request.src_b_offset(), request.len())
+            .map_err(|error| memory_fault(error, request.src_b()))?;
+        let sum = src_a
+            .iter()
+            .zip(src_b.iter())
+            .map(|(left, right)| left.wrapping_add(*right))
+            .collect::<Vec<_>>();
+        memory
+            .write_checked(request.dst(), request.dst_offset(), &sum)
+            .map_err(|error| memory_fault(error, request.dst()))
+    }
+}
+
+pub(crate) const fn memory_fault(error: ModelError, buffer: crate::ids::BufferId) -> EngineError {
     let error_kind = match error {
         ModelError::UnknownBuffer(_) => EventErrorKind::UnknownBuffer,
         ModelError::OutOfBounds { len, end, .. } => EventErrorKind::OutOfBounds { len, end },

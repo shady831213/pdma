@@ -16,11 +16,16 @@ pub mod ids;
 pub mod memory;
 pub mod queue;
 pub mod rings;
+pub mod scheduled;
 pub mod scheduler;
+mod vector_add;
 
 pub use arbitration::{ArbitrationPolicy, QueueArbiter};
 pub use completion::{CompletionRecord, CompletionStatus};
-pub use desc::{CopyRequest, ExternalCommand, ScheduledCopy, StridedCopyRequest};
+pub use desc::{
+    CopyRequest, ExternalCommand, ScheduledCopy, StridedCopyRequest, VectorAddRequest,
+    VectorBufferRange,
+};
 pub use device::{PdmaDevice, RunSummary};
 pub use driver::Driver;
 pub use event::{EventErrorKind, EventRecord, MemoryFault};

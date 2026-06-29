@@ -85,6 +85,8 @@ impl PdmaDevice {
         if let Err(error) = self.execute_work(work) {
             return match error {
                 EngineError::Memory(fault) => {
+                    self.trace
+                        .execution_faulted(work, fault_detail(fault.error_kind()));
                     let event = EventRecord::new(
                         work.queue_id(),
                         work.command_id(),
@@ -100,6 +102,7 @@ impl PdmaDevice {
                 EngineError::Model(error) => Err(error),
             };
         }
+        self.trace.execution_succeeded(work);
         let completion = CompletionRecord::new(
             work.queue_id(),
             work.command_id(),
@@ -155,12 +158,15 @@ impl PdmaDevice {
                 .has_completion_publication_slot(occupied_completions)
         {
             self.pending_retirement = Some(pending);
+            self.trace
+                .stall(Some(record.queue_id()), "CompletionPublicationPressure");
             return Ok(StepStatus::Stalled(
                 StallReason::CompletionPublicationPressure,
             ));
         }
         self.completion_mut(completion_ring_id)?.push(record)?;
         self.pending_retirement = None;
+        self.trace.completion_published(record);
         Ok(StepStatus::Progressed)
     }
 
@@ -181,10 +187,13 @@ impl PdmaDevice {
             } else {
                 StallReason::EventPublicationPressure
             };
+            self.trace
+                .stall(Some(record.queue_id()), stall_detail(reason));
             return Ok(StepStatus::Stalled(reason));
         }
         self.event_ring.push_back(record);
         self.pending_retirement = None;
+        self.trace.event_published(record);
         Err(source)
     }
 
@@ -195,5 +204,22 @@ impl PdmaDevice {
                 VectorAddEngine::execute(&mut self.memory, *vector_add)
             }
         }
+    }
+}
+
+const fn fault_detail(error_kind: crate::event::EventErrorKind) -> &'static str {
+    match error_kind {
+        crate::event::EventErrorKind::UnknownBuffer => "Error UnknownBuffer",
+        crate::event::EventErrorKind::RangeOverflow => "Error RangeOverflow",
+        crate::event::EventErrorKind::OutOfBounds { len: _, end: _ } => "Error OutOfBounds",
+    }
+}
+
+const fn stall_detail(reason: StallReason) -> &'static str {
+    match reason {
+        StallReason::ExecutionResourcePressure => "ExecutionResourcePressure",
+        StallReason::CompletionPublicationPressure => "CompletionPublicationPressure",
+        StallReason::EventPublicationPressure => "EventPublicationPressure",
+        StallReason::FaultRetirementPendingRetry => "FaultRetirementPendingRetry",
     }
 }

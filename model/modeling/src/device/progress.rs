@@ -54,15 +54,19 @@ impl PdmaDevice {
             return self.retry_pending_retirement_with_status(pending);
         }
         let Some(queue_id) = self.arbiter.select_next(&mut self.runnable) else {
+            self.trace.idle();
             return Ok(StepStatus::Idle);
         };
         let Some(command) = self.queue(queue_id)?.command_ring.front() else {
             return Ok(StepStatus::Progressed);
         };
         let work = Scheduler::lower(command.clone())?;
+        self.trace.scheduled(&work);
         let demand = ResourceDemand::for_work(&work);
         if !self.resources.has_available(demand) {
             self.runnable.push(queue_id);
+            self.trace
+                .stall(Some(queue_id), "ExecutionResourcePressure");
             return Ok(StepStatus::Stalled(StallReason::ExecutionResourcePressure));
         }
         self.resources.acquire(demand);

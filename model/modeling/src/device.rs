@@ -12,6 +12,7 @@ use crate::memory::Memory;
 use crate::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use crate::resources::{ResourceConfig, ResourcePool};
 use crate::rings::Ring;
+use crate::trace::{TraceEvent, TraceOperation, TraceSink};
 use crate::{ModelError, ModelResult};
 pub use progress::{RunStatusSummary, RunSummary, StallReason, StepStatus};
 use retirement::PendingRetirement;
@@ -35,6 +36,7 @@ pub struct PdmaDevice {
     arbiter: QueueArbiter,
     resources: ResourcePool,
     pending_retirement: Option<PendingRetirement>,
+    trace: TraceSink,
 }
 
 impl PdmaDevice {
@@ -50,6 +52,7 @@ impl PdmaDevice {
             arbiter: QueueArbiter::default(),
             resources: ResourcePool::new(ResourceConfig::default()),
             pending_retirement: None,
+            trace: TraceSink::default(),
         }
     }
 
@@ -72,6 +75,31 @@ impl PdmaDevice {
     /// Returns the active queue arbitration policy.
     pub const fn arbitration_policy(&self) -> ArbitrationPolicy {
         self.arbiter.policy()
+    }
+
+    /// Enables deterministic trace event capture.
+    pub const fn enable_tracing(&mut self) -> &mut TraceSink {
+        self.trace.enable()
+    }
+
+    /// Disables deterministic trace event capture.
+    pub const fn disable_tracing(&mut self) {
+        self.trace.disable();
+    }
+
+    /// Clears all captured trace events.
+    pub fn clear_trace(&mut self) {
+        self.trace.clear();
+    }
+
+    /// Returns captured trace events in deterministic sequence order.
+    pub fn trace_events(&self) -> &[TraceEvent] {
+        self.trace.events()
+    }
+
+    /// Exports captured trace events as minimal Chrome/Perfetto JSON.
+    pub fn trace_json(&self) -> String {
+        self.trace.to_json()
     }
 
     /// Allocates a device-visible memory buffer.
@@ -126,7 +154,12 @@ impl PdmaDevice {
         queue_id: QueueId,
         command: ExternalCommand,
     ) -> ModelResult<()> {
-        self.queue_mut(queue_id)?.command_ring.push(command)
+        let operation = TraceOperation::from_external(&command);
+        let command_id = crate::trace::command_id(&command);
+        self.queue_mut(queue_id)?.command_ring.push(command)?;
+        self.trace
+            .command_submitted(queue_id, operation, command_id);
+        Ok(())
     }
 
     /// Captures a software doorbell and marks the queue runnable.
@@ -135,6 +168,7 @@ impl PdmaDevice {
         if !self.runnable.contains(&queue_id) {
             self.runnable.push(queue_id);
         }
+        self.trace.doorbell_runnable(queue_id);
         Ok(())
     }
 
@@ -143,12 +177,18 @@ impl PdmaDevice {
         &mut self,
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
-        Ok(self.completion_mut(completion_ring_id)?.pop())
+        let completion = self.completion_mut(completion_ring_id)?.pop();
+        if let Some(record) = completion {
+            self.trace.completion_polled(record);
+        }
+        Ok(completion)
     }
 
     /// Pops one event record for software polling.
     pub fn poll_event(&mut self) -> ModelResult<Option<EventRecord>> {
-        Ok(self.event_ring.pop_front())
+        let event = self.event_ring.pop_front();
+        self.trace.event_poll(None, event);
+        Ok(event)
     }
 
     /// Pops one event record for a specific queue without consuming other queues' events.
@@ -159,9 +199,12 @@ impl PdmaDevice {
             .iter()
             .position(|event| event.queue_id() == queue_id)
         else {
+            self.trace.event_poll(Some(queue_id), None);
             return Ok(None);
         };
-        Ok(self.event_ring.remove(index))
+        let event = self.event_ring.remove(index);
+        self.trace.event_poll(Some(queue_id), event);
+        Ok(event)
     }
 
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {

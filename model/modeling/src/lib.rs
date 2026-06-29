@@ -19,6 +19,7 @@ pub mod resources;
 pub mod rings;
 pub mod scheduled;
 pub mod scheduler;
+pub mod trace;
 mod vector_add;
 
 pub use arbitration::{ArbitrationPolicy, QueueArbiter};
@@ -37,6 +38,7 @@ pub use queue::{
 };
 pub use resources::ResourceConfig;
 pub use rings::Ring;
+pub use trace::{TraceEvent, TraceEventKind, TraceOperation, TraceSink};
 
 use core::fmt;
 

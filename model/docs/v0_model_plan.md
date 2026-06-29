@@ -30,38 +30,37 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | Broadcast copy lowering | Done | `broadcast.rs`, `broadcast_copy.rs` | One command fans one source range out to multiple destination ranges with one completion or one memory-fault event. |
 | Vector-add operation | Done | `vector_add.rs`, `scheduled.rs`, `tests/vector_add.rs` | One command reads two source ranges, performs byte-wise wrapping addition, writes one destination range, and preserves completion/event behavior. |
 | Resource credit model | Done | `resources.rs`, `device/retirement.rs`, `tests/resource_credits.rs` | Internal descriptor, read, write, compute, completion, and event publication pressure can stall deterministic progress without losing queued work or retirement order. |
+| Backpressure/Stall Annotation Layer | Done | `device/progress.rs`, `device/retirement.rs`, `tests/stall_annotations.rs` | Scenario-visible stall reasons distinguish idle, resource pressure, completion pressure, event pressure, and fault-related retirement behavior. |
 
 ## Active Next Slice
 
-### Backpressure/Stall Annotation Layer
+### Trace Sink
 
-Goal: expose why a deterministic step stalls so scenario tests and later traces can distinguish idle, resource pressure, completion pressure, event pressure, and fault-related retirement behavior.
+Goal: add an observable trace sink that emits Chrome/Perfetto-compatible JSON events and keeps a structured in-memory event log, so scenario tests and later visualization can inspect command lifecycles, completions, events, and stall reasons.
 
 Expected behavior:
 
-- `step()`/scenario-visible summaries can report whether no work was available or work stalled on a named pressure point.
-- Stall annotations distinguish execution resources from completion/event publication pressure.
-- Pending retirement and queued command ordering remain unchanged.
-- Existing linear, strided, event, queue-configuration, arbitration, broadcast, vector-add, and resource-credit behavior remains unchanged.
+- Trace events capture command submission, scheduling, execution, completion, event publication, and stall annotations.
+- Output format follows Chrome/Perfetto `Trace Event` JSON for compatibility with existing tools.
+- A structured event log is available to scenario tests without relying on timing or cycle counts.
+- Existing deterministic `step()` and `run_until_idle()` behavior remains unchanged when tracing is disabled or enabled.
 
 Likely files:
 
 - `model/modeling/src/device.rs`
-- `model/modeling/src/resources.rs`
-- `model/modeling/src/device/retirement.rs`
-- `model/modeling/tests/stall_annotations.rs`
+- `model/modeling/src/driver.rs`
+- `model/modeling/src/lib.rs`
 
 Success checks:
 
-- Scenario test proves each stall reason is observable without relying on cycle timing.
-- Scenario test proves idle and stalled states are distinguishable.
-- Existing linear, strided, error-event, queue-configuration, arbitration, broadcast, vector-add, and resource-credit tests continue to pass.
+- Scenario test proves trace events are emitted for a complete command lifecycle.
+- Scenario test proves idle, running, and stalled phases are distinguishable in the trace.
+- Existing linear, strided, error-event, queue-configuration, arbitration, broadcast, vector-add, resource-credit, and stall-annotation tests continue to pass.
 
 ## Planned Slices
 
-1. Backpressure/stall annotation layer with scenario-level summaries.
-2. Trace sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
-3. Draft `model/docs/pdma_arch_spec_v0.md` after the model validates queue, scheduler, completion, event, and backpressure behavior.
+1. Trace sink with Chrome/Perfetto-compatible JSON events plus a structured event log.
+2. Draft `model/docs/pdma_arch_spec_v0.md` after the model validates queue, scheduler, completion, event, backpressure, and trace behavior.
 
 ## Deferred Until v0 Mechanisms Stabilize
 

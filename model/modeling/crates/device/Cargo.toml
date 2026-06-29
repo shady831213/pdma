@@ -1,0 +1,15 @@
+[package]
+name = "pdma-model-device"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Hardware-behavior PDMA v0.5 device model"
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+pdma-model-contract = { path = "../contract" }
+
+[lints]
+workspace = true

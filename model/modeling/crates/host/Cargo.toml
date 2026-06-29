@@ -1,0 +1,16 @@
+[package]
+name = "pdma-model-host"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Host-side PDMA v0.5 software driver model"
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+pdma-model-contract = { path = "../contract" }
+pdma-model-device = { path = "../device" }
+
+[lints]
+workspace = true

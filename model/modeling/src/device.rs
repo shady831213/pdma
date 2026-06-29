@@ -1,5 +1,6 @@
 //! PDMA device model with command queue, doorbell, scheduler, engine, and completion path.
 
+mod progress;
 mod retirement;
 
 use crate::arbitration::{ArbitrationPolicy, QueueArbiter};
@@ -9,10 +10,10 @@ use crate::event::EventRecord;
 use crate::ids::{CompletionRingId, QueueId};
 use crate::memory::Memory;
 use crate::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
-use crate::resources::{ResourceConfig, ResourceDemand, ResourcePool};
+use crate::resources::{ResourceConfig, ResourcePool};
 use crate::rings::Ring;
-use crate::scheduler::Scheduler;
 use crate::{ModelError, ModelResult};
+pub use progress::{RunStatusSummary, RunSummary, StallReason, StepStatus};
 use retirement::PendingRetirement;
 use std::collections::VecDeque;
 
@@ -20,13 +21,6 @@ use std::collections::VecDeque;
 struct QueueContext {
     entry: QueueDirectoryEntry,
     command_ring: Ring<ExternalCommand>,
-}
-
-/// Summary returned by `run_until_idle`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RunSummary {
-    /// Number of device steps that changed state.
-    pub steps: usize,
 }
 
 /// Top-level deterministic PDMA device model.
@@ -144,49 +138,6 @@ impl PdmaDevice {
         Ok(())
     }
 
-    /// Advances the deterministic device model by at most one command.
-    pub fn step(&mut self) -> ModelResult<bool> {
-        if let Some(pending) = self.pending_retirement {
-            return self.retry_pending_retirement(pending);
-        }
-        let Some(queue_id) = self.arbiter.select_next(&mut self.runnable) else {
-            return Ok(false);
-        };
-        let Some(command) = self.queue(queue_id)?.command_ring.front() else {
-            return Ok(true);
-        };
-        let work = Scheduler::lower(command.clone())?;
-        let demand = ResourceDemand::for_work(&work);
-        if !self.resources.has_available(demand) {
-            self.runnable.push(queue_id);
-            return Ok(false);
-        }
-        self.resources.acquire(demand);
-        let result = self.retire_ready_work(queue_id, &work);
-        self.resources.release(demand);
-        result
-    }
-
-    /// Runs deterministic steps until idle or until the step budget expires.
-    pub fn run_until_idle(&mut self, max_steps: usize) -> ModelResult<RunSummary> {
-        let mut steps = 0;
-        while steps < max_steps {
-            if !self.step()? {
-                return if self.has_work() {
-                    Err(ModelError::StepBudgetExhausted { max_steps })
-                } else {
-                    Ok(RunSummary { steps })
-                };
-            }
-            steps += 1;
-        }
-        if self.has_work() {
-            Err(ModelError::StepBudgetExhausted { max_steps })
-        } else {
-            Ok(RunSummary { steps })
-        }
-    }
-
     /// Pops one completion record for software polling.
     pub fn poll_completion(
         &mut self,
@@ -211,15 +162,6 @@ impl PdmaDevice {
             return Ok(None);
         };
         Ok(self.event_ring.remove(index))
-    }
-
-    fn has_work(&self) -> bool {
-        self.pending_retirement.is_some()
-            || !self.runnable.is_empty()
-            || self
-                .queues
-                .iter()
-                .any(|queue| !queue.command_ring.is_empty())
     }
 
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {

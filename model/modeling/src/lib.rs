@@ -27,7 +27,7 @@ pub use desc::{
     CopyRequest, ExternalCommand, ScheduledCopy, StridedCopyRequest, VectorAddRequest,
     VectorBufferRange,
 };
-pub use device::{PdmaDevice, RunSummary};
+pub use device::{PdmaDevice, RunStatusSummary, RunSummary, StallReason, StepStatus};
 pub use driver::Driver;
 pub use event::{EventErrorKind, EventRecord, MemoryFault};
 pub use ids::{BufferId, CommandId, CompletionRingId, QueueId};

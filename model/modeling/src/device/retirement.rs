@@ -2,7 +2,7 @@ use crate::ModelError;
 use crate::ModelResult;
 use crate::completion::{CompletionRecord, CompletionStatus};
 use crate::desc::ScheduledWork;
-use crate::device::PdmaDevice;
+use crate::device::{PdmaDevice, StallReason, StepStatus};
 use crate::engines::{CopyEngine, EngineError, VectorAddEngine};
 use crate::event::EventRecord;
 use crate::ids::{CompletionRingId, QueueId};
@@ -50,11 +50,11 @@ impl PendingRetirement {
 }
 
 impl PdmaDevice {
-    pub(super) fn retire_ready_work(
+    pub(super) fn retire_ready_work_with_status(
         &mut self,
         queue_id: QueueId,
         work: &ScheduledWork,
-    ) -> ModelResult<bool> {
+    ) -> ModelResult<StepStatus> {
         let _retired = self.queue_mut(queue_id)?.command_ring.pop();
         let has_more_commands = !self.queue(queue_id)?.command_ring.is_empty();
         let result = self.build_retirement(queue_id, work);
@@ -64,11 +64,11 @@ impl PdmaDevice {
         result
     }
 
-    pub(super) fn retry_pending_retirement(
+    pub(super) fn retry_pending_retirement_with_status(
         &mut self,
         pending: PendingRetirement,
-    ) -> ModelResult<bool> {
-        let result = self.publish_retirement(pending);
+    ) -> ModelResult<StepStatus> {
+        let result = self.publish_retirement_retry(pending);
         if self.pending_retirement.is_none()
             && !self.queue(pending.queue_id())?.command_ring.is_empty()
         {
@@ -77,7 +77,11 @@ impl PdmaDevice {
         result
     }
 
-    fn build_retirement(&mut self, queue_id: QueueId, work: &ScheduledWork) -> ModelResult<bool> {
+    fn build_retirement(
+        &mut self,
+        queue_id: QueueId,
+        work: &ScheduledWork,
+    ) -> ModelResult<StepStatus> {
         if let Err(error) = self.execute_work(work) {
             return match error {
                 EngineError::Memory(fault) => {
@@ -108,18 +112,30 @@ impl PdmaDevice {
         ))
     }
 
-    fn publish_retirement(&mut self, pending: PendingRetirement) -> ModelResult<bool> {
+    fn publish_retirement(&mut self, pending: PendingRetirement) -> ModelResult<StepStatus> {
+        self.publish_retirement_with_retry_flag(pending, false)
+    }
+
+    fn publish_retirement_retry(&mut self, pending: PendingRetirement) -> ModelResult<StepStatus> {
+        self.publish_retirement_with_retry_flag(pending, true)
+    }
+
+    fn publish_retirement_with_retry_flag(
+        &mut self,
+        pending: PendingRetirement,
+        is_retry: bool,
+    ) -> ModelResult<StepStatus> {
         match pending {
             PendingRetirement::Completion {
-                queue_id: _,
+                queue_id: _queue_id,
                 completion_ring_id,
                 record,
             } => self.publish_completion(pending, completion_ring_id, record),
             PendingRetirement::Event {
-                queue_id: _,
+                queue_id: _queue_id,
                 record,
                 source,
-            } => self.publish_event(pending, record, source),
+            } => self.publish_event(pending, record, source, is_retry),
         }
     }
 
@@ -128,7 +144,7 @@ impl PdmaDevice {
         pending: PendingRetirement,
         completion_ring_id: CompletionRingId,
         record: CompletionRecord,
-    ) -> ModelResult<bool> {
+    ) -> ModelResult<StepStatus> {
         let (completion_ring_full, occupied_completions) = {
             let completion_ring = self.completion_mut(completion_ring_id)?;
             (completion_ring.is_full(), completion_ring.len())
@@ -139,11 +155,13 @@ impl PdmaDevice {
                 .has_completion_publication_slot(occupied_completions)
         {
             self.pending_retirement = Some(pending);
-            return Ok(false);
+            return Ok(StepStatus::Stalled(
+                StallReason::CompletionPublicationPressure,
+            ));
         }
         self.completion_mut(completion_ring_id)?.push(record)?;
         self.pending_retirement = None;
-        Ok(true)
+        Ok(StepStatus::Progressed)
     }
 
     fn publish_event(
@@ -151,13 +169,19 @@ impl PdmaDevice {
         pending: PendingRetirement,
         record: EventRecord,
         source: ModelError,
-    ) -> ModelResult<bool> {
+        is_retry: bool,
+    ) -> ModelResult<StepStatus> {
         if !self
             .resources
             .has_event_publication_slot(self.event_ring.len())
         {
             self.pending_retirement = Some(pending);
-            return Ok(false);
+            let reason = if is_retry {
+                StallReason::FaultRetirementPendingRetry
+            } else {
+                StallReason::EventPublicationPressure
+            };
+            return Ok(StepStatus::Stalled(reason));
         }
         self.event_ring.push_back(record);
         self.pending_retirement = None;

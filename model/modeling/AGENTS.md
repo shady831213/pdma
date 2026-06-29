@@ -1,39 +1,31 @@
-# PDMA MODELING CRATE
+# PDMA MODELING WORKSPACE
 
-Scope: Rust v0 conceptual model only.
+Scope: Rust v0.5 conceptual model workspace only.
 
 ## OVERVIEW
 
-`pdma-modeling` is a Rust 2024 library crate for deterministic, step-based PDMA behavior slices.
+`model/modeling` is a Rust 2024 workspace for deterministic, step-based PDMA behavior slices. The former flat `pdma-modeling` crate has been split into contract, device, host, and scenarios crates.
 
 ## STRUCTURE
 
 ```text
-src/
-├── lib.rs          # public API and ModelError
-├── device.rs       # step loop, runnable queues, completions/events
-├── driver.rs       # SDK-like setup/submit/poll surface
-├── scheduler.rs    # external command lowering
-├── engines.rs      # checked execution engines
-├── queue.rs        # queue config/directory metadata
-├── rings.rs        # bounded ring primitive
-├── desc.rs         # shared external command descriptors/re-exports
-├── scheduled.rs    # internal scheduled work descriptors
-├── broadcast.rs    # broadcast-specific descriptors
-└── vector_add.rs   # vector-add-specific descriptors
+crates/
+├── contract/   # shared host/device contract and DMA-visible object vocabulary
+├── device/     # hardware-behavior model, backing store, scheduler, engines, trace sink
+├── host/       # SDK/driver-like software model
+└── scenarios/  # system-level host/device/contract validation stories
 ```
 
-`Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the local lint and format contract.
+Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and format contract.
 
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
 | --- | --- | --- |
-| New operation API | `desc.rs` plus an operation module | Re-export from `desc.rs`; split bulky types into their own file. |
-| Queue/resource behavior | `device.rs`, `queue.rs`, `rings.rs` | Backpressure/stall and trace behavior should start here. |
-| Lowering changes | `scheduler.rs`, `scheduled.rs` | Use exhaustive `match` on owned enums. |
-| Engine behavior | `engines.rs`, `memory.rs` | Checked reads/writes only; map memory faults to events. |
-| Driver scenarios | `tests/*.rs` | Drive through `Driver` and `PdmaDevice`, not private internals. |
+| Shared contract | `crates/contract/src/` | No backing memory or device execution behavior. |
+| Device behavior | `crates/device/src/` | Device owns backing store, scheduler, engines, resources, and trace sink. |
+| Host software | `crates/host/src/` | Host owns `Driver` and local command-slot accounting. |
+| System scenarios | `crates/scenarios/tests/` | Drive through `Driver` and `PdmaDevice`, not private internals. |
 
 ## CONVENTIONS
 
@@ -49,20 +41,20 @@ src/
 ## VALIDATION
 
 ```bash
-cargo fmt --check
-cargo test
-cargo clippy --all-targets -- -D warnings
-cargo doc --no-deps --document-private-items
+cargo fmt --all -- --check
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo doc --workspace --no-deps --document-private-items
 ```
 
 ## CURRENT NEXT SLICE
 
-None. The executable v0 model and `model/docs/pdma_arch_spec_v0.md` draft are complete.
-
-If continuing beyond v0, ask for the next scope before adding new behavior.
+v0.5 boundary refactor: keep exactly four crates (`contract`, `device`, `host`, `scenarios`) and no transitional facade crate.
 
 ## DO NOT
 
 - Do not add exact descriptor byte layout, register offsets, C ABI, generated headers, or cycle timing.
 - Do not add `unsafe`, `unwrap`, `expect`, `panic`, `todo`, or indexing/slicing in production code.
 - Do not grow any Rust source beyond 250 pure LOC; split before adding behavior.
+- Do not put backing memory in contract; keep DMA-visible data structures separate from storage media.
+- Do not make device depend on host or scenarios.

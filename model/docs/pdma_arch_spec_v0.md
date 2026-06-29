@@ -27,7 +27,7 @@ The contract is deterministic: the same initial state, resource configuration, a
 
 ## Software/Driver Responsibility Boundary
 
-The driver model, implemented in `model/modeling/src/driver.rs`, owns the following responsibilities:
+The driver model, implemented in `model/modeling/crates/host/src/driver.rs` after the v0.5 workspace split, owns the following responsibilities:
 
 - Allocate device-visible buffers through `PdmaDevice::allocate_buffer` and fill source data through `write_buffer`.
 - Configure a queue with `Driver::setup` or `Driver::setup_with_config`, receiving a `QueueConfigHandle`.
@@ -41,7 +41,7 @@ The driver does not access the command ring directly, does not execute commands,
 
 ## Device Responsibility Boundary
 
-The device model, implemented in `model/modeling/src/device.rs`, owns the following responsibilities:
+The device model, implemented in `model/modeling/crates/device/src/device.rs` after the v0.5 workspace split, owns the following responsibilities:
 
 - Maintain device memory, the queue directory, command rings, completion rings, the shared event ring, the runnable queue list, the arbiter, the resource pool, and the trace sink.
 - Accept submissions through `submit_command`, emit a trace event, and queue the command on the correct command ring.
@@ -57,7 +57,7 @@ The device does not require an async runtime, does not expose wall-clock or cycl
 
 ## Queue Directory, Queue Configuration, Command Ring, Completion Ring, and Event Ring Ownership
 
-Queue directory entries (`QueueDirectoryEntry` in `model/modeling/src/queue.rs`) bind together:
+Queue directory entries (`QueueDirectoryEntry` in `model/modeling/crates/contract/src/queue.rs`) bind together:
 
 - A `QueueId` assigned by the device.
 - A bound `CompletionRingId`.
@@ -97,9 +97,9 @@ A memory fault produces one `EventRecord` with an `EventErrorKind`. If event pub
 
 ## External Command versus Internal Scheduled Work Boundary
 
-External commands live in `model/modeling/src/desc.rs` and represent the driver-visible descriptor surface. The `ExternalCommand` enum currently carries `Copy`, `StridedCopy`, `BroadcastCopy`, and `VectorAdd` variants, each with queue ID, completion ring ID, command ID, and request payload.
+External commands live in `model/modeling/crates/contract/src/desc.rs` and represent the driver-visible descriptor surface. The `ExternalCommand` enum currently carries `Copy`, `StridedCopy`, `BroadcastCopy`, and `VectorAdd` variants, each with queue ID, completion ring ID, command ID, and request payload.
 
-The scheduler (`model/modeling/src/scheduler.rs`) lowers each external command into internal scheduled work defined in `model/modeling/src/scheduled.rs`:
+The scheduler (`model/modeling/crates/device/src/scheduler.rs`) lowers each external command into internal scheduled work defined in `model/modeling/crates/device/src/scheduled.rs`:
 
 - Copy commands become `ScheduledWork::Copy(ScheduledCopy)`, which contains a vector of `CopyChunk` row descriptors.
 - Vector-add commands become `ScheduledWork::VectorAdd(ScheduledVectorAdd)`.
@@ -148,7 +148,7 @@ The copy and vector-add engines use checked memory reads and writes. Bounds viol
 
 ## Trace Sink Behavior and Chrome/Perfetto-Compatible Export
 
-The trace sink (`model/modeling/src/trace.rs` and submodules) captures deterministic in-memory events when enabled. `PdmaDevice` exposes `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
+The trace sink (`model/modeling/crates/device/src/trace.rs` and submodules) captures deterministic in-memory events when enabled. `PdmaDevice` exposes `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
 
 Hook points cover command submission, doorbell/runnable transitions, scheduling, execution success, execution faults, completion publication, event publication, completion polling, event polling, stalls, and idle steps. Public trace types include `TraceEvent`, `TraceEventKind`, `TraceOperation`, and `TraceSink`.
 
@@ -156,12 +156,12 @@ The JSON export is a minimal Chrome/Perfetto `Trace Event` JSON object containin
 
 ## Determinism and Validation Strategy
 
-Every validated slice is guarded by narrative scenario tests in `model/modeling/tests/`. The validation command set is:
+Every validated slice is guarded by narrative scenario tests in `model/modeling/crates/scenarios/tests/`. The validation command set is:
 
-- `cargo fmt --check`
-- `cargo test`
-- `cargo clippy --all-targets -- -D warnings`
-- `cargo doc --no-deps --document-private-items`
+- `cargo fmt --all -- --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo doc --workspace --no-deps --document-private-items`
 
 `PdmaDevice::step()` advances at most one command. `run_until_idle(max_steps)` repeats `step()` until no work remains or the budget is exhausted. Because the same inputs always produce the same sequence of arbitration decisions, resource acquisitions, completions, events, and trace ordinals, the model is deterministic and suitable for regression testing.
 

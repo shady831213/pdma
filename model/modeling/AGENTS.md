@@ -30,7 +30,7 @@ src/
 | Task | Location | Notes |
 | --- | --- | --- |
 | New operation API | `desc.rs` plus an operation module | Re-export from `desc.rs`; split bulky types into their own file. |
-| Queue/resource behavior | `device.rs`, `queue.rs`, `rings.rs` | Resource-credit slice should start here. |
+| Queue/resource behavior | `device.rs`, `queue.rs`, `rings.rs` | Backpressure/stall and trace behavior should start here. |
 | Lowering changes | `scheduler.rs`, `scheduled.rs` | Use exhaustive `match` on owned enums. |
 | Engine behavior | `engines.rs`, `memory.rs` | Checked reads/writes only; map memory faults to events. |
 | Driver scenarios | `tests/*.rs` | Drive through `Driver` and `PdmaDevice`, not private internals. |
@@ -57,12 +57,12 @@ cargo doc --no-deps --document-private-items
 
 ## CURRENT NEXT SLICE
 
-Resource Credit Model:
+Trace Sink:
 
-- Model capacities for internal descriptors, read slots, write slots, compute slots, and completion/event publication.
-- Show deterministic stall/proceed behavior when resources are unavailable/available.
-- Preserve existing linear, strided, event, queue-config, arbitration, broadcast, and vector-add behavior when capacities are sufficient.
-- Add `tests/resource_credits.rs` first.
+- Emit Chrome/Perfetto-compatible JSON trace events for command lifecycles, completions, events, and stall annotations.
+- Keep a structured in-memory event log that scenario tests can inspect without timing assumptions.
+- Preserve existing linear, strided, event, queue-config, arbitration, broadcast, vector-add, resource-credit, and stall-annotation behavior when tracing is enabled or disabled.
+- Add `tests/trace_sink.rs` first.
 
 ## DO NOT
 

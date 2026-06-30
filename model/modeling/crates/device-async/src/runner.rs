@@ -2,17 +2,19 @@
 
 mod state;
 mod types;
+mod worker;
 
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use pdma_model_device::{PdmaDevice, StepStatus};
+use pdma_model_device::PdmaDevice;
 use state::{RunnerShared, RunnerState, publish, snapshot, summary, wake};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 pub use types::{AsyncRunJoinError, AsyncRunSnapshot, AsyncRunSummary};
+use worker::run_worker;
 
 /// Cloneable host-facing handle for an async hardware runner.
 #[derive(Debug, Clone)]
@@ -218,88 +220,4 @@ impl AsyncDeviceHandle {
         publish(&self.shared, generation);
         result
     }
-}
-
-async fn run_worker(shared: Arc<RunnerShared>) {
-    while run_one(&shared).await {}
-}
-
-async fn run_one(shared: &RunnerShared) -> bool {
-    let outcome = {
-        let mut state = shared.state.lock().await;
-        if state.shutdown_requested {
-            return publish_and_continue(shared, state.generation, false);
-        }
-        match state.device.step_with_status() {
-            Ok(StepStatus::Progressed) => {
-                state.steps = state.steps.saturating_add(1);
-                state.generation = state.generation.saturating_add(1);
-                WorkerOutcome::Continue(state.generation)
-            }
-            Ok(StepStatus::Idle) => WorkerOutcome::Wait(wait_for_wake(shared, &mut state)),
-            Ok(StepStatus::Stalled(_)) => {
-                state.stalls = state.stalls.saturating_add(1);
-                WorkerOutcome::Wait(wait_for_wake(shared, &mut state))
-            }
-            Err(_) => {
-                state.errors = state.errors.saturating_add(1);
-                state.generation = state.generation.saturating_add(1);
-                WorkerOutcome::Continue(state.generation)
-            }
-        }
-    };
-    match outcome {
-        WorkerOutcome::Continue(generation) => publish_and_continue(shared, generation, true),
-        WorkerOutcome::Wait(wait) => {
-            publish(shared, wait.generation);
-            wait_for_generation_change(shared, wait).await;
-            true
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum WorkerOutcome {
-    Continue(usize),
-    Wait(WaitState),
-}
-
-#[derive(Debug, Clone, Copy)]
-struct WaitState {
-    generation: usize,
-    wake_generation: usize,
-}
-
-fn wait_for_wake(shared: &RunnerShared, state: &mut RunnerState) -> WaitState {
-    let wake_generation = state.wake_generation;
-    state.generation = state.generation.saturating_add(1);
-    publish(shared, state.generation);
-    WaitState {
-        generation: state.generation,
-        wake_generation,
-    }
-}
-
-async fn wait_for_generation_change(shared: &RunnerShared, wait: WaitState) {
-    let mut changes = shared.changed.subscribe();
-    loop {
-        let should_wait = {
-            let state = shared.state.lock().await;
-            state.wake_generation == wait.wake_generation && !state.shutdown_requested
-        };
-        if !should_wait {
-            return;
-        }
-        if *changes.borrow_and_update() != wait.generation {
-            continue;
-        }
-        if changes.changed().await.is_err() {
-            return;
-        }
-    }
-}
-
-fn publish_and_continue(shared: &RunnerShared, generation: usize, keep_running: bool) -> bool {
-    publish(shared, generation);
-    keep_running
 }

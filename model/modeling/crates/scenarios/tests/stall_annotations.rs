@@ -9,7 +9,7 @@ use pdma_model_host::Driver;
 
 fn setup(config: ResourceConfig) -> Result<(PdmaDevice, Driver), ModelError> {
     let mut device = PdmaDevice::with_resource_config(config);
-    let driver = Driver::setup(&mut device, 4, 4)?;
+    let driver = Driver::setup_on(&mut device, 4, 4)?;
     Ok((device, driver))
 }
 
@@ -30,11 +30,11 @@ fn execution_resource_pressure_reports_a_stall_reason() {
     // Given: a vector add that needs compute resources on a device with none available.
     let (mut device, mut driver) =
         setup(ResourceConfig::default().with_compute_slots(0)).expect("queue setup is valid");
-    let src_a = driver.allocate_buffer(&mut device, 8);
-    let src_b = driver.allocate_buffer(&mut device, 8);
-    let dst = driver.allocate_buffer(&mut device, 8);
+    let src_a = driver.allocate_buffer_on(&mut device, 8);
+    let src_b = driver.allocate_buffer_on(&mut device, 8);
+    let dst = driver.allocate_buffer_on(&mut device, 8);
     driver
-        .submit_vector_add(
+        .submit_vector_add_on(
             &mut device,
             VectorAddRequest::new(
                 VectorBufferRange::new(src_a, 0),
@@ -61,21 +61,21 @@ fn completion_publication_pressure_preserves_order_in_status_annotations() {
     let (mut device, mut driver) =
         setup(ResourceConfig::default().with_completion_publication_slots(1))
             .expect("queue setup is valid");
-    let src_a = driver.allocate_buffer(&mut device, 4);
-    let dst_a = driver.allocate_buffer(&mut device, 4);
-    let src_b = driver.allocate_buffer(&mut device, 4);
-    let dst_b = driver.allocate_buffer(&mut device, 4);
+    let src_a = driver.allocate_buffer_on(&mut device, 4);
+    let dst_a = driver.allocate_buffer_on(&mut device, 4);
+    let src_b = driver.allocate_buffer_on(&mut device, 4);
+    let dst_b = driver.allocate_buffer_on(&mut device, 4);
     driver
-        .write_buffer(&mut device, src_a, &[1, 2, 3, 4])
+        .write_buffer_on(&mut device, src_a, &[1, 2, 3, 4])
         .expect("source A write is in bounds");
     driver
-        .write_buffer(&mut device, src_b, &[5, 6, 7, 8])
+        .write_buffer_on(&mut device, src_b, &[5, 6, 7, 8])
         .expect("source B write is in bounds");
     driver
-        .submit_copy(&mut device, CopyRequest::new(src_a, dst_a, 4))
+        .submit_copy_on(&mut device, CopyRequest::new(src_a, dst_a, 4))
         .expect("first copy submission has ring space");
     driver
-        .submit_copy(&mut device, CopyRequest::new(src_b, dst_b, 4))
+        .submit_copy_on(&mut device, CopyRequest::new(src_b, dst_b, 4))
         .expect("second copy submission has ring space");
 
     // When: software steps once, then asks for a run-until-blocked summary.
@@ -98,15 +98,15 @@ fn event_publication_pressure_reports_new_fault_after_event_path_fills() {
     // Given: two faulting copies behind a one-deep event publication path.
     let (mut device, mut driver) = setup(ResourceConfig::default().with_event_publication_slots(1))
         .expect("queue setup is valid");
-    let bad_src_a = driver.allocate_buffer(&mut device, 4);
-    let bad_dst_a = driver.allocate_buffer(&mut device, 8);
-    let bad_src_b = driver.allocate_buffer(&mut device, 4);
-    let bad_dst_b = driver.allocate_buffer(&mut device, 8);
+    let bad_src_a = driver.allocate_buffer_on(&mut device, 4);
+    let bad_dst_a = driver.allocate_buffer_on(&mut device, 8);
+    let bad_src_b = driver.allocate_buffer_on(&mut device, 4);
+    let bad_dst_b = driver.allocate_buffer_on(&mut device, 8);
     driver
-        .submit_copy(&mut device, CopyRequest::new(bad_src_a, bad_dst_a, 8))
+        .submit_copy_on(&mut device, CopyRequest::new(bad_src_a, bad_dst_a, 8))
         .expect("first faulting copy has ring space");
     driver
-        .submit_copy(&mut device, CopyRequest::new(bad_src_b, bad_dst_b, 8))
+        .submit_copy_on(&mut device, CopyRequest::new(bad_src_b, bad_dst_b, 8))
         .expect("second faulting copy has ring space");
 
     // When: the first fault publishes its event, then the second fault reaches a full event path.
@@ -126,10 +126,10 @@ fn fault_retirement_pending_retry_reports_retry_stall_reason() {
     // Given: a faulting copy that cannot retire because the event path is full.
     let (mut device, mut driver) = setup(ResourceConfig::default().with_event_publication_slots(0))
         .expect("queue setup is valid");
-    let bad_src = driver.allocate_buffer(&mut device, 4);
-    let bad_dst = driver.allocate_buffer(&mut device, 8);
+    let bad_src = driver.allocate_buffer_on(&mut device, 4);
+    let bad_dst = driver.allocate_buffer_on(&mut device, 8);
     driver
-        .submit_copy(&mut device, CopyRequest::new(bad_src, bad_dst, 8))
+        .submit_copy_on(&mut device, CopyRequest::new(bad_src, bad_dst, 8))
         .expect("faulting copy has ring space");
 
     // When: software hits event pressure on the new fault and retries while it is still pending.
@@ -154,10 +154,10 @@ fn run_until_blocked_returns_terminal_status_without_losing_idle_errors() {
     // Given: a device with one copy that cannot acquire execution resources.
     let (mut device, mut driver) =
         setup(ResourceConfig::default().with_read_slots(0)).expect("queue setup is valid");
-    let src = driver.allocate_buffer(&mut device, 4);
-    let dst = driver.allocate_buffer(&mut device, 4);
+    let src = driver.allocate_buffer_on(&mut device, 4);
+    let dst = driver.allocate_buffer_on(&mut device, 4);
     driver
-        .submit_copy(&mut device, CopyRequest::new(src, dst, 4))
+        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
         .expect("copy submission has ring space");
 
     // When: software runs until blocked and then checks the legacy idle API.

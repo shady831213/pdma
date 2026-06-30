@@ -42,19 +42,19 @@ fn creates_distinct_directory_entries_and_completion_bindings_for_two_queues() {
 fn enforces_command_depth_from_explicit_queue_config() {
     // Given: a driver created from an explicit one-slot queue config.
     let mut device = PdmaDevice::new();
-    let mut driver = Driver::setup_with_config(
+    let mut driver = Driver::setup_with_config_on(
         &mut device,
         QueueConfig::new(1, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
     )
     .expect("queue config is valid");
-    let src = driver.allocate_buffer(&mut device, 1);
-    let dst = driver.allocate_buffer(&mut device, 1);
+    let src = driver.allocate_buffer_on(&mut device, 1);
+    let dst = driver.allocate_buffer_on(&mut device, 1);
 
     // When: software submits one command and tries to submit another before reclaim.
     let command_id = driver
-        .submit_copy(&mut device, CopyRequest::new(src, dst, 1))
+        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 1))
         .expect("first command has ring space");
-    let second_submit = driver.submit_copy(&mut device, CopyRequest::new(src, dst, 1));
+    let second_submit = driver.submit_copy_on(&mut device, CopyRequest::new(src, dst, 1));
 
     // Then: the explicit command depth is enforced and the handle records ownership.
     assert_eq!(command_id.raw(), 0);
@@ -71,22 +71,22 @@ fn enforces_command_depth_from_explicit_queue_config() {
 fn driver_uses_config_handle_for_queue_local_event_polling() {
     // Given: two drivers with explicit queue-local event routing.
     let mut device = PdmaDevice::new();
-    let mut driver_a = Driver::setup_with_config(
+    let mut driver_a = Driver::setup_with_config_on(
         &mut device,
         QueueConfig::new(1, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(1)),
     )
     .expect("first queue config is valid");
-    let mut driver_b = Driver::setup_with_config(
+    let mut driver_b = Driver::setup_with_config_on(
         &mut device,
         QueueConfig::new(1, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(2)),
     )
     .expect("second queue config is valid");
-    let bad_src = driver_a.allocate_buffer(&mut device, 4);
-    let bad_dst = driver_a.allocate_buffer(&mut device, 4);
-    let good_src = driver_b.allocate_buffer(&mut device, 1);
-    let good_dst = driver_b.allocate_buffer(&mut device, 1);
+    let bad_src = driver_a.allocate_buffer_on(&mut device, 4);
+    let bad_dst = driver_a.allocate_buffer_on(&mut device, 4);
+    let good_src = driver_b.allocate_buffer_on(&mut device, 1);
+    let good_dst = driver_b.allocate_buffer_on(&mut device, 1);
     driver_a
-        .submit_strided_copy(
+        .submit_strided_copy_on(
             &mut device,
             StridedCopyRequest::new(bad_src, bad_dst, 2, 4, 6, 4),
         )
@@ -98,10 +98,10 @@ fn driver_uses_config_handle_for_queue_local_event_polling() {
 
     // When: the non-owning driver polls events before the owning driver.
     let wrong_driver_event = driver_b
-        .poll_event(&mut device)
+        .poll_event_on(&mut device)
         .expect("event polling succeeds");
     let owner_event = driver_a
-        .poll_event(&mut device)
+        .poll_event_on(&mut device)
         .expect("event polling succeeds")
         .expect("owning queue event remains available");
 
@@ -110,16 +110,16 @@ fn driver_uses_config_handle_for_queue_local_event_polling() {
     assert_eq!(owner_event.queue_id(), driver_a.queue_id());
     assert!(
         driver_a
-            .submit_copy(&mut device, CopyRequest::new(bad_src, bad_dst, 1))
+            .submit_copy_on(&mut device, CopyRequest::new(bad_src, bad_dst, 1))
             .is_ok()
     );
     assert!(
         driver_b
-            .submit_copy(&mut device, CopyRequest::new(good_src, good_dst, 1))
+            .submit_copy_on(&mut device, CopyRequest::new(good_src, good_dst, 1))
             .is_ok()
     );
     assert_eq!(
-        driver_b.submit_copy(&mut device, CopyRequest::new(good_src, good_dst, 1)),
+        driver_b.submit_copy_on(&mut device, CopyRequest::new(good_src, good_dst, 1)),
         Err(ModelError::DriverQueueFull)
     );
 }

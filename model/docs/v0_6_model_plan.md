@@ -2,7 +2,7 @@
 
 ## Purpose
 
-v0.6 refactors the executable model toward an actor-style host/device interaction model. The sync implementation is the reference path. Async crates are blocked until the sync actor-style reference is complete and behavior-matched.
+v0.6 refactors the executable model toward an actor-style host/device interaction model. The sync implementation is the reference path. Async crates now advance in Phase 2 after the sync actor-style reference was locked.
 
 ## Phase 1: Sync Actor Reference
 
@@ -39,7 +39,7 @@ Phase 1 must not add Tokio, futures, async-std, smol, or any async runtime depen
 
 ## Phase 2: Parallel Async Crates
 
-Phase 2 is blocked until Phase 1 is complete and the sync reference behavior is locked. It may add parallel async crates such as:
+Phase 2 started after Phase 1 completed and the sync reference behavior was locked. It adds parallel async crates such as:
 
 ```text
 pdma-model-host-async
@@ -47,9 +47,9 @@ pdma-model-device-async
 pdma-model-scenarios-async
 ```
 
-Those crates should depend on the same shared contract vocabulary and behavior-match the sync reference scenarios. The difference should be execution shape only: software and hardware become futures that can be driven by `join!`, `block_on`, or spawned on a runtime.
+Those crates depend on the same shared contract vocabulary and behavior-match the sync reference scenarios incrementally. The difference should be execution shape only: software and hardware become futures that can be driven by `join!`, `block_on`, or spawned on a runtime.
 
-Async crates must not force async or runtime dependencies into the existing sync crates. Tokio is a reasonable default runtime candidate for phase 2, but Tokio is not part of phase 1. If the async version proves stable and covers the sync reference behavior, a later phase can decide whether to retire the sync implementation.
+Async crates must not force async or runtime dependencies into the existing sync crates. Tokio is the Phase 2 runtime for async crates only. The first async slice added the async workspace members, async hardware runner, async host linear-copy path, and async linear-copy E2E scenario. If the async version proves stable and covers the sync reference behavior, a later phase can decide whether to retire the sync implementation.
 
 ## Boundaries
 
@@ -61,6 +61,9 @@ The v0.5 workspace boundaries remain in force:
 | `pdma-model-device` | Sync hardware-behavior reference model and explicit hardware turns. No dependency on host or scenarios. |
 | `pdma-model-host` | Sync driver actor surface, `DevicePort`, local slot accounting, and legacy wrapper APIs. |
 | `pdma-model-scenarios` | Sync reference behavior scenarios that interleave software and hardware turns. |
+| `pdma-model-device-async` | Tokio-backed async hardware runner and async device handle. No dependency on host or scenarios. |
+| `pdma-model-host-async` | Async driver actor surface and async device-port boundary. |
+| `pdma-model-scenarios-async` | Async behavior-match scenarios against the sync reference. |
 
 ## Completion Criteria
 
@@ -72,4 +75,5 @@ The v0.5 workspace boundaries remain in force:
 - Completion publication pressure requires a software polling turn before hardware retires the next command.
 - Existing sync driver APIs remain available and behavior-preserving.
 - The sync workspace has no async/runtime dependency.
+- Phase 2 first slice: async crates exist, async linear-copy behavior matches the sync reference, and Tokio stays confined to async crates.
 - Full workspace format, test, clippy, and doc validation pass.

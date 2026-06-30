@@ -1,6 +1,6 @@
 # PDMA MODELING WORKSPACE
 
-Scope: Rust v0.6 sync actor reference workspace.
+Scope: Rust v0.6 sync actor reference and async parity workspace.
 
 ## OVERVIEW
 
@@ -10,10 +10,13 @@ Scope: Rust v0.6 sync actor reference workspace.
 
 ```text
 crates/
-├── contract/   # shared host/device contract and DMA-visible object vocabulary
-├── device/     # hardware-behavior model, backing store, scheduler, engines, trace sink
-├── host/       # SDK/driver-like software model
-└── scenarios/  # system-level host/device/contract validation stories
+├── contract/         # shared host/device contract and DMA-visible object vocabulary
+├── device/           # sync hardware-behavior reference model
+├── device-async/     # Tokio-backed async hardware runner and handle
+├── host/             # sync SDK/driver-like software model
+├── host-async/       # async SDK/driver-like software model
+├── scenarios/        # sync reference validation stories
+└── scenarios-async/  # async behavior-match validation stories
 ```
 
 Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and format contract.
@@ -50,7 +53,7 @@ cargo doc --workspace --no-deps --document-private-items
 
 ## CURRENT NEXT SLICE
 
-v0.6 sync actor reference: keep the four-crate boundary, finish the sync actor-style runner-backed reference, and defer async crates until sync behavior is locked.
+v0.6 Phase 2 async parity: keep the sync actor-style runner-backed reference locked, and extend async crates in small behavior-matching slices.
 
 ## DO NOT
 

@@ -3,7 +3,7 @@
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, CopyCommand, CopyRequest, ExternalCommand,
-    StridedCopyCommand, StridedCopyRequest,
+    StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
 };
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
@@ -131,6 +131,24 @@ impl AsyncDriver {
             request,
         );
         self.submit_external_command_on(device, command_id, ExternalCommand::BroadcastCopy(command))
+            .await
+    }
+
+    /// Emits a vector-add descriptor through an async device port and rings the doorbell.
+    pub async fn submit_vector_add_on(
+        &mut self,
+        device: &mut impl AsyncDevicePort,
+        request: VectorAddRequest,
+    ) -> ModelResult<CommandId> {
+        self.reserve_command_slot()?;
+        let command_id = CommandId::new(self.next_command);
+        let command = VectorAddCommand::new(
+            command_id,
+            self.queue_config.queue_id(),
+            self.queue_config.completion_ring_id(),
+            request,
+        );
+        self.submit_external_command_on(device, command_id, ExternalCommand::VectorAdd(command))
             .await
     }
 

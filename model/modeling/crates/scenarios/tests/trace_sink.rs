@@ -9,7 +9,7 @@ use pdma_model_host::Driver;
 
 fn setup(config: ResourceConfig) -> Result<(PdmaDevice, Driver), ModelError> {
     let mut device = PdmaDevice::with_resource_config(config);
-    let driver = Driver::setup(&mut device, 4, 4)?;
+    let driver = Driver::setup_on(&mut device, 4, 4)?;
     Ok((device, driver))
 }
 
@@ -41,21 +41,21 @@ fn trace_log_records_complete_copy_lifecycle() {
     assert_trace_api_types_exist();
     let (mut device, mut driver) =
         traced_setup(ResourceConfig::default()).expect("queue setup is valid");
-    let src = driver.allocate_buffer(&mut device, 4);
-    let dst = driver.allocate_buffer(&mut device, 4);
+    let src = driver.allocate_buffer_on(&mut device, 4);
+    let dst = driver.allocate_buffer_on(&mut device, 4);
     driver
-        .write_buffer(&mut device, src, &[1, 2, 3, 4])
+        .write_buffer_on(&mut device, src, &[1, 2, 3, 4])
         .expect("source write is in bounds");
 
     // When: the copy is submitted, executed, and its completion is polled.
     let command_id = driver
-        .submit_copy(&mut device, CopyRequest::new(src, dst, 4))
+        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
         .expect("copy submission has ring space");
     let summary = device
         .run_until_idle(1)
         .expect("one step completes one copy");
     let completion = driver
-        .poll_completion(&mut device)
+        .poll_completion_on(&mut device)
         .expect("completion ring exists")
         .expect("copy completion was published");
     let trace_events = device.trace_events();
@@ -95,7 +95,7 @@ fn trace_log_records_complete_copy_lifecycle() {
     assert!(trace_json.contains("Copy"));
     assert!(trace_json.contains("Success"));
     assert!(trace_json.contains(&format!("{}", command_id.raw())));
-    assert_eq!(driver.read_buffer(&device, dst, 4), Ok(vec![1, 2, 3, 4]));
+    assert_eq!(driver.read_buffer_on(&device, dst, 4), Ok(vec![1, 2, 3, 4]));
 }
 
 #[test]
@@ -103,19 +103,19 @@ fn chrome_trace_json_exports_complete_copy_lifecycle() {
     // Given: tracing is enabled for a copy with an explicit queue-local lifecycle.
     let (mut device, mut driver) =
         traced_setup(ResourceConfig::default()).expect("queue setup is valid");
-    let src = driver.allocate_buffer(&mut device, 4);
-    let dst = driver.allocate_buffer(&mut device, 4);
+    let src = driver.allocate_buffer_on(&mut device, 4);
+    let dst = driver.allocate_buffer_on(&mut device, 4);
     driver
-        .write_buffer(&mut device, src, &[9, 8, 7, 6])
+        .write_buffer_on(&mut device, src, &[9, 8, 7, 6])
         .expect("source write is in bounds");
 
     // When: software submits and retires the copy.
     let command_id = driver
-        .submit_copy(&mut device, CopyRequest::new(src, dst, 4))
+        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
         .expect("copy submission has ring space");
     let _ = device.run_until_idle(1).expect("copy retires successfully");
     let _ = driver
-        .poll_completion(&mut device)
+        .poll_completion_on(&mut device)
         .expect("completion ring exists")
         .expect("copy completion was published");
     let trace_json = device.trace_json();
@@ -133,19 +133,19 @@ fn trace_log_records_error_event_without_success_completion() {
     // Given: tracing is enabled for an out-of-bounds copy.
     let (mut device, mut driver) =
         traced_setup(ResourceConfig::default()).expect("queue setup is valid");
-    let src = driver.allocate_buffer(&mut device, 4);
-    let dst = driver.allocate_buffer(&mut device, 8);
+    let src = driver.allocate_buffer_on(&mut device, 4);
+    let dst = driver.allocate_buffer_on(&mut device, 8);
 
     // When: the invalid copy is executed.
     let command_id = driver
-        .submit_copy(&mut device, CopyRequest::new(src, dst, 8))
+        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 8))
         .expect("copy submission has ring space");
     let result = device.run_until_idle(1);
     let event = driver
-        .poll_event(&mut device)
+        .poll_event_on(&mut device)
         .expect("event ring exists")
         .expect("error event was published");
-    let completion_poll = driver.poll_completion(&mut device);
+    let completion_poll = driver.poll_completion_on(&mut device);
     let trace_events = device.trace_events();
     let trace_json = device.trace_json();
 
@@ -171,11 +171,11 @@ fn trace_log_records_stall_annotations_for_status_steps() {
     // Given: a traced device that cannot acquire compute resources.
     let (mut device, mut driver) = traced_setup(ResourceConfig::default().with_compute_slots(0))
         .expect("queue setup is valid");
-    let src_a = driver.allocate_buffer(&mut device, 8);
-    let src_b = driver.allocate_buffer(&mut device, 8);
-    let dst = driver.allocate_buffer(&mut device, 8);
+    let src_a = driver.allocate_buffer_on(&mut device, 8);
+    let src_b = driver.allocate_buffer_on(&mut device, 8);
+    let dst = driver.allocate_buffer_on(&mut device, 8);
     driver
-        .submit_vector_add(
+        .submit_vector_add_on(
             &mut device,
             VectorAddRequest::new(
                 VectorBufferRange::new(src_a, 0),
@@ -212,29 +212,29 @@ fn tracing_preserves_step_and_run_until_idle_behavior() {
     // Given: the same copy on a baseline device and a traced device.
     let (mut baseline_device, mut baseline_driver) =
         setup(ResourceConfig::default()).expect("queue setup is valid");
-    let baseline_src = baseline_driver.allocate_buffer(&mut baseline_device, 4);
-    let baseline_dst = baseline_driver.allocate_buffer(&mut baseline_device, 4);
+    let baseline_src = baseline_driver.allocate_buffer_on(&mut baseline_device, 4);
+    let baseline_dst = baseline_driver.allocate_buffer_on(&mut baseline_device, 4);
     baseline_driver
-        .write_buffer(&mut baseline_device, baseline_src, &[4, 3, 2, 1])
+        .write_buffer_on(&mut baseline_device, baseline_src, &[4, 3, 2, 1])
         .expect("source write is in bounds");
 
     let (mut traced_device, mut traced_driver) =
         traced_setup(ResourceConfig::default()).expect("queue setup is valid");
-    let traced_src = traced_driver.allocate_buffer(&mut traced_device, 4);
-    let traced_dst = traced_driver.allocate_buffer(&mut traced_device, 4);
+    let traced_src = traced_driver.allocate_buffer_on(&mut traced_device, 4);
+    let traced_dst = traced_driver.allocate_buffer_on(&mut traced_device, 4);
     traced_driver
-        .write_buffer(&mut traced_device, traced_src, &[4, 3, 2, 1])
+        .write_buffer_on(&mut traced_device, traced_src, &[4, 3, 2, 1])
         .expect("source write is in bounds");
 
     // When: both devices run the same scenario.
     baseline_driver
-        .submit_copy(
+        .submit_copy_on(
             &mut baseline_device,
             CopyRequest::new(baseline_src, baseline_dst, 4),
         )
         .expect("baseline copy submission has ring space");
     traced_driver
-        .submit_copy(
+        .submit_copy_on(
             &mut traced_device,
             CopyRequest::new(traced_src, traced_dst, 4),
         )
@@ -244,11 +244,11 @@ fn tracing_preserves_step_and_run_until_idle_behavior() {
         .run_until_idle(1)
         .expect("traced device still runs to idle");
     let baseline_completion = baseline_driver
-        .poll_completion(&mut baseline_device)
+        .poll_completion_on(&mut baseline_device)
         .expect("completion ring exists")
         .expect("baseline copy completion was published");
     let traced_completion = traced_driver
-        .poll_completion(&mut traced_device)
+        .poll_completion_on(&mut traced_device)
         .expect("completion ring exists")
         .expect("traced copy completion was published");
 
@@ -258,11 +258,11 @@ fn tracing_preserves_step_and_run_until_idle_behavior() {
     assert_eq!(baseline_completion.status(), CompletionStatus::Success);
     assert_eq!(traced_completion.status(), CompletionStatus::Success);
     assert_eq!(
-        baseline_driver.read_buffer(&baseline_device, baseline_dst, 4),
+        baseline_driver.read_buffer_on(&baseline_device, baseline_dst, 4),
         Ok(vec![4, 3, 2, 1])
     );
     assert_eq!(
-        traced_driver.read_buffer(&traced_device, traced_dst, 4),
+        traced_driver.read_buffer_on(&traced_device, traced_dst, 4),
         Ok(vec![4, 3, 2, 1])
     );
 }

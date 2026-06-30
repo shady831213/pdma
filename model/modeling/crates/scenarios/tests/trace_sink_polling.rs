@@ -16,16 +16,16 @@ fn assert_trace_json_shape(json: &str) {
 fn trace_log_records_polling_without_consuming_unrelated_queue_events() {
     // Given: two traced drivers where one queue faults and the other queue remains unrelated.
     let mut device = PdmaDevice::with_resource_config(ResourceConfig::default());
-    let mut driver_a = Driver::setup(&mut device, 1, 4).expect("first queue setup is valid");
-    let mut driver_b = Driver::setup(&mut device, 1, 4).expect("second queue setup is valid");
+    let mut driver_a = Driver::setup_on(&mut device, 1, 4).expect("first queue setup is valid");
+    let mut driver_b = Driver::setup_on(&mut device, 1, 4).expect("second queue setup is valid");
     let _ = device.enable_tracing();
     device.clear_trace();
-    let a_src = driver_a.allocate_buffer(&mut device, 4);
-    let a_dst = driver_a.allocate_buffer(&mut device, 8);
-    let b_src = driver_b.allocate_buffer(&mut device, 1);
-    let b_dst = driver_b.allocate_buffer(&mut device, 1);
+    let a_src = driver_a.allocate_buffer_on(&mut device, 4);
+    let a_dst = driver_a.allocate_buffer_on(&mut device, 8);
+    let b_src = driver_b.allocate_buffer_on(&mut device, 1);
+    let b_dst = driver_b.allocate_buffer_on(&mut device, 1);
     driver_a
-        .submit_copy(&mut device, CopyRequest::new(a_src, a_dst, 8))
+        .submit_copy_on(&mut device, CopyRequest::new(a_src, a_dst, 8))
         .expect("faulting copy has ring space");
 
     // When: the fault is published and an unrelated queue polls first.
@@ -33,13 +33,15 @@ fn trace_log_records_polling_without_consuming_unrelated_queue_events() {
         device.run_until_idle(1),
         Err(ModelError::OutOfBounds { .. })
     ));
-    let wrong_driver_event = driver_b.poll_event(&mut device).expect("event ring exists");
+    let wrong_driver_event = driver_b
+        .poll_event_on(&mut device)
+        .expect("event ring exists");
     let owner_event = driver_a
-        .poll_event(&mut device)
+        .poll_event_on(&mut device)
         .expect("event ring exists")
         .expect("owning driver can still poll its event");
     let submit_after_unrelated_poll =
-        driver_b.submit_copy(&mut device, CopyRequest::new(b_src, b_dst, 1));
+        driver_b.submit_copy_on(&mut device, CopyRequest::new(b_src, b_dst, 1));
     let trace_events = device.trace_events();
     let trace_json = device.trace_json();
 

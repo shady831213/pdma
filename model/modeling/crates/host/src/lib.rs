@@ -4,5 +4,7 @@
 //! slot accounting surface used to drive the conceptual device model.
 
 pub mod driver;
+pub mod port;
 
 pub use driver::Driver;
+pub use port::DevicePort;

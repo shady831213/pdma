@@ -1,0 +1,47 @@
+#![allow(missing_docs)]
+
+use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
+use pdma_model_device::PdmaDevice;
+use pdma_model_device_async::AsyncDeviceRunner;
+use pdma_model_host_async::AsyncDriver;
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
+    // Given: async runner handle, AsyncDriver, source/destination buffers, source write.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 5).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 5).await;
+    driver
+        .write_buffer_on(&mut handle, src, &[1, 2, 3, 4, 5])
+        .await
+        .expect("source write is in bounds");
+
+    // When: submit copy via AsyncDriver, wait for progress, poll completion, shutdown/join.
+    let command_id = driver
+        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 5))
+        .await
+        .expect("copy submission has ring space");
+    let snapshot = runner.wait_for_progress_after(0).await;
+    let completion = driver
+        .poll_completion_on(&mut handle)
+        .await
+        .expect("completion ring exists")
+        .expect("completion was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: completion command id/status match, snapshot/summary steps are 1, destination bytes equal source.
+    assert_eq!(completion.command_id(), command_id);
+    assert_eq!(completion.status(), CompletionStatus::Success);
+    assert_eq!(snapshot.steps, 1);
+    assert_eq!(summary.steps, 1);
+    assert_eq!(
+        driver.read_buffer_on(&handle, dst, 5).await,
+        Ok(vec![1, 2, 3, 4, 5])
+    );
+}

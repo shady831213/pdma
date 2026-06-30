@@ -1,15 +1,16 @@
 //! SDK/driver-like submission and completion polling model.
 
+mod actor;
+
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::{
-    BroadcastCopyCommand, BroadcastCopyRequest, CopyCommand, CopyRequest, ExternalCommand,
-    StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
+    BroadcastCopyRequest, CopyRequest, StridedCopyRequest, VectorAddRequest,
 };
-use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
-use pdma_model_contract::queue::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
-use pdma_model_device::device::PdmaDevice;
+use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_device::PdmaDevice;
 
 /// Software driver model owning queue setup and local ring-space accounting.
 #[derive(Debug, Clone)]
@@ -26,30 +27,17 @@ impl Driver {
         command_depth: usize,
         completion_depth: usize,
     ) -> ModelResult<Self> {
-        Self::setup_with_config(
-            device,
-            QueueConfig::new(
-                command_depth,
-                completion_depth,
-                EventRouting::QueueLocal,
-                SoftwareOwnerId::new(0),
-            ),
-        )
+        Self::setup_on(device, command_depth, completion_depth)
     }
 
     /// Sets up one command queue from an explicit queue configuration.
     pub fn setup_with_config(device: &mut PdmaDevice, config: QueueConfig) -> ModelResult<Self> {
-        let queue_config = device.create_queue(config)?;
-        Ok(Self {
-            queue_config,
-            next_command: 0,
-            free_command_slots: config.command_depth(),
-        })
+        Self::setup_with_config_on(device, config)
     }
 
     /// Allocates a device-visible buffer.
     pub fn allocate_buffer(&self, device: &mut PdmaDevice, len: usize) -> BufferId {
-        device.allocate_buffer(len)
+        self.allocate_buffer_on(device, len)
     }
 
     /// Writes a complete buffer payload at offset zero.
@@ -59,7 +47,7 @@ impl Driver {
         buffer: BufferId,
         data: &[u8],
     ) -> ModelResult<()> {
-        device.write_buffer(buffer, 0, data)
+        self.write_buffer_on(device, buffer, data)
     }
 
     /// Reads a checked buffer payload at offset zero.
@@ -69,7 +57,7 @@ impl Driver {
         buffer: BufferId,
         len: usize,
     ) -> ModelResult<Vec<u8>> {
-        device.read_buffer(buffer, 0, len)
+        self.read_buffer_on(device, buffer, len)
     }
 
     /// Emits a copy descriptor to the command ring and rings the doorbell.
@@ -78,17 +66,7 @@ impl Driver {
         device: &mut PdmaDevice,
         request: CopyRequest,
     ) -> ModelResult<CommandId> {
-        if self.free_command_slots == 0 {
-            return Err(ModelError::DriverQueueFull);
-        }
-        let command_id = CommandId::new(self.next_command);
-        let command = CopyCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command(device, command_id, ExternalCommand::Copy(command))
+        self.submit_copy_on(device, request)
     }
 
     /// Emits a strided copy descriptor to the command ring and rings the doorbell.
@@ -97,17 +75,7 @@ impl Driver {
         device: &mut PdmaDevice,
         request: StridedCopyRequest,
     ) -> ModelResult<CommandId> {
-        if self.free_command_slots == 0 {
-            return Err(ModelError::DriverQueueFull);
-        }
-        let command_id = CommandId::new(self.next_command);
-        let command = StridedCopyCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command(device, command_id, ExternalCommand::StridedCopy(command))
+        self.submit_strided_copy_on(device, request)
     }
 
     /// Emits a broadcast copy descriptor to the command ring and rings the doorbell.
@@ -116,17 +84,7 @@ impl Driver {
         device: &mut PdmaDevice,
         request: BroadcastCopyRequest,
     ) -> ModelResult<CommandId> {
-        if self.free_command_slots == 0 {
-            return Err(ModelError::DriverQueueFull);
-        }
-        let command_id = CommandId::new(self.next_command);
-        let command = BroadcastCopyCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command(device, command_id, ExternalCommand::BroadcastCopy(command))
+        self.submit_broadcast_copy_on(device, request)
     }
 
     /// Emits a vector-add descriptor to the command ring and rings the doorbell.
@@ -135,17 +93,7 @@ impl Driver {
         device: &mut PdmaDevice,
         request: VectorAddRequest,
     ) -> ModelResult<CommandId> {
-        if self.free_command_slots == 0 {
-            return Err(ModelError::DriverQueueFull);
-        }
-        let command_id = CommandId::new(self.next_command);
-        let command = VectorAddCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command(device, command_id, ExternalCommand::VectorAdd(command))
+        self.submit_vector_add_on(device, request)
     }
 
     /// Polls one completion and reclaims one local command-ring slot if present.
@@ -153,22 +101,12 @@ impl Driver {
         &mut self,
         device: &mut PdmaDevice,
     ) -> ModelResult<Option<CompletionRecord>> {
-        let completion = device.poll_completion(self.queue_config.completion_ring_id())?;
-        if completion.is_some() {
-            self.free_command_slots = self.free_command_slots.saturating_add(1);
-        }
-        Ok(completion)
+        self.poll_completion_on(device)
     }
 
     /// Polls one event and reclaims one local command-ring slot if present.
     pub fn poll_event(&mut self, device: &mut PdmaDevice) -> ModelResult<Option<EventRecord>> {
-        let event = match self.queue_config.event_routing() {
-            EventRouting::QueueLocal => device.poll_queue_event(self.queue_config.queue_id())?,
-        };
-        if event.is_some() {
-            self.free_command_slots = self.free_command_slots.saturating_add(1);
-        }
-        Ok(event)
+        self.poll_event_on(device)
     }
 
     /// Queue ID owned by this driver instance.
@@ -184,19 +122,6 @@ impl Driver {
     /// Queue configuration handle owned by this driver instance.
     pub const fn queue_config_handle(&self) -> QueueConfigHandle {
         self.queue_config
-    }
-
-    fn submit_external_command(
-        &mut self,
-        device: &mut PdmaDevice,
-        command_id: CommandId,
-        command: ExternalCommand,
-    ) -> ModelResult<CommandId> {
-        self.next_command = self.next_command.saturating_add(1);
-        device.submit_command(self.queue_config.queue_id(), command)?;
-        self.free_command_slots -= 1;
-        device.ring_doorbell(self.queue_config.queue_id())?;
-        Ok(command_id)
     }
 }
 

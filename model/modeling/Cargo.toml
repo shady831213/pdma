@@ -4,6 +4,9 @@ members = [
     "crates/device",
     "crates/host",
     "crates/scenarios",
+    "crates/device-async",
+    "crates/host-async",
+    "crates/scenarios-async",
 ]
 resolver = "3"
 

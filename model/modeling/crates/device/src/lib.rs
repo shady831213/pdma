@@ -10,6 +10,7 @@ pub mod engines;
 pub mod memory;
 pub mod resources;
 pub mod rings;
+pub mod runner;
 pub mod scheduled;
 pub mod scheduler;
 pub mod trace;
@@ -19,5 +20,8 @@ pub use arbitration::{ArbitrationPolicy, QueueArbiter};
 pub use device::{PdmaDevice, RunStatusSummary, RunSummary, StallReason, StepStatus};
 pub use memory::Memory;
 pub use rings::Ring;
+pub use runner::{
+    SyncDeviceHandle, SyncDeviceRunner, SyncRunJoinError, SyncRunSnapshot, SyncRunSummary,
+};
 pub use scheduled::{CopyChunk, ScheduledCopy, ScheduledWork};
 pub use trace::TraceSink;

@@ -6,7 +6,7 @@ use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use pdma_model_device::PdmaDevice;
+use pdma_model_device::{PdmaDevice, SyncDeviceHandle};
 
 /// Synchronous device-facing operations required by the host driver actor.
 ///
@@ -43,6 +43,43 @@ pub trait DevicePort {
 }
 
 impl DevicePort for PdmaDevice {
+    fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+        Self::create_queue(self, config)
+    }
+
+    fn allocate_buffer(&mut self, len: usize) -> BufferId {
+        Self::allocate_buffer(self, len)
+    }
+
+    fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
+        Self::write_buffer(self, id, offset, data)
+    }
+
+    fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
+        Self::read_buffer(self, id, offset, len)
+    }
+
+    fn submit_command(&mut self, queue_id: QueueId, command: ExternalCommand) -> ModelResult<()> {
+        Self::submit_command(self, queue_id, command)
+    }
+
+    fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
+        Self::ring_doorbell(self, queue_id)
+    }
+
+    fn poll_completion(
+        &mut self,
+        completion_ring_id: CompletionRingId,
+    ) -> ModelResult<Option<CompletionRecord>> {
+        Self::poll_completion(self, completion_ring_id)
+    }
+
+    fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
+        Self::poll_queue_event(self, queue_id)
+    }
+}
+
+impl DevicePort for SyncDeviceHandle {
     fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         Self::create_queue(self, config)
     }

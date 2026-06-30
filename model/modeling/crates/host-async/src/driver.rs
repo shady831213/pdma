@@ -1,7 +1,9 @@
 //! SDK/driver-like async submission and completion polling model.
 
 use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::{CopyCommand, CopyRequest, ExternalCommand};
+use pdma_model_contract::desc::{
+    CopyCommand, CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest,
+};
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
@@ -92,6 +94,24 @@ impl AsyncDriver {
             request,
         );
         self.submit_external_command_on(device, command_id, ExternalCommand::Copy(command))
+            .await
+    }
+
+    /// Emits a strided copy descriptor through an async device port and rings the doorbell.
+    pub async fn submit_strided_copy_on(
+        &mut self,
+        device: &mut impl AsyncDevicePort,
+        request: StridedCopyRequest,
+    ) -> ModelResult<CommandId> {
+        self.reserve_command_slot()?;
+        let command_id = CommandId::new(self.next_command);
+        let command = StridedCopyCommand::new(
+            command_id,
+            self.queue_config.queue_id(),
+            self.queue_config.completion_ring_id(),
+            request,
+        );
+        self.submit_external_command_on(device, command_id, ExternalCommand::StridedCopy(command))
             .await
     }
 

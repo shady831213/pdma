@@ -2,42 +2,44 @@
 
 ## Purpose
 
-v0.6 changes the executable model from a purely call-driven sync shape toward an
-actor-style host/device interaction model. The sync model remains the reference path in
-phase 1. A later phase may add parallel async crates that must match the sync-observed
-behavior before any replacement is considered.
+v0.6 refactors the executable model toward an actor-style host/device interaction model. The sync implementation is the reference path. Async crates are blocked until the sync actor-style reference is complete and behavior-matched.
 
 ## Phase 1: Sync Actor Reference
 
-Phase 1 keeps the current four-crate workspace and adds an actor-style software boundary
-without adding an async runtime. Host software acts through a synchronous `DevicePort`,
-while hardware still advances through explicit device turns such as `step()`,
-`step_with_status()`, `run_until_idle()`, and `run_until_blocked()`.
+Phase 1 keeps the existing four-crate workspace and adds an actor-style software boundary. It adds no async runtime. Host software acts through a synchronous `DevicePort`. Hardware runs in a dedicated `std::thread` forever loop with explicit shutdown, `join`, and error reporting.
 
-The goal is to make scenario code express software and hardware turns separately:
+Phase 1 is split into three slices.
 
-```text
-software submits through DevicePort
-software may poll before hardware progresses
-hardware takes one or more explicit turns
-software observes completions or events
-```
+### Phase 1A: DevicePort and Driver::*_on
 
-Phase 1 owns these changes:
+Add the sync software boundary and port-driven driver methods:
 
 - Add a sync `DevicePort` boundary in the host crate.
-- Add `Driver::*_on` methods that use the port instead of hard-coding the concrete device
-  type in the actor-facing API.
+- Add `Driver::*_on` methods that take the port instead of hard-coding the concrete device type in the actor-facing API.
 - Keep existing `Driver::*` methods as sync convenience wrappers for the current model.
-- Add scenario coverage for software/hardware interleaving and completion backpressure.
 
-Phase 1 must not add Tokio, futures, async-std, smol, channels, or runtime dependencies.
-It also must not introduce descriptor byte layout, register offsets, C ABI, generated
-headers, interrupt/reset modeling, IOMMU, cache coherency, or real OS integration.
+### Phase 1B: Sync Forever-Loop Hardware Runner
+
+Replace explicit per-scenario device turns with a background hardware runner that owns the device turn loop:
+
+- The runner lives in a `std::thread` forever loop.
+- The loop advances the device model and waits on a Condvar/channel/wake for progress or shutdown.
+- Shutdown is explicit: a stop signal breaks the loop, the thread joins, and errors are reported.
+- Tests wait on Condvar/channel/wake/progress signals; they must not use sleeps.
+
+### Phase 1C: Scenario Migration
+
+Migrate scenarios to the actor-style shape:
+
+- Scenarios submit through `DevicePort` and `Driver::*_on`.
+- Primary actor-reference scenarios wait on runner progress/error signals; direct `step()`, `run_until_idle()`, or `run_until_blocked()` calls remain only for explicit helper/status/trace/arbitration and step-budget behavior.
+- Add coverage for software/hardware interleaving, polling before completion, and completion backpressure.
+
+Phase 1 must not add Tokio, futures, async-std, smol, or any async runtime dependency to the existing sync crates. It also must not introduce descriptor byte layout, register offsets, C ABI, generated headers, interrupt/reset modeling, IOMMU, cache coherency, or real OS integration.
 
 ## Phase 2: Parallel Async Crates
 
-Phase 2 is intentionally separate from phase 1. It may add parallel async crates such as:
+Phase 2 is blocked until Phase 1 is complete and the sync reference behavior is locked. It may add parallel async crates such as:
 
 ```text
 pdma-model-host-async
@@ -45,14 +47,9 @@ pdma-model-device-async
 pdma-model-scenarios-async
 ```
 
-Those crates should depend on the same shared contract vocabulary and should behavior-match
-the sync reference scenarios. The difference should be execution shape only: software and
-hardware become futures that can be driven by `join!`, `block_on`, or spawned on a runtime.
+Those crates should depend on the same shared contract vocabulary and behavior-match the sync reference scenarios. The difference should be execution shape only: software and hardware become futures that can be driven by `join!`, `block_on`, or spawned on a runtime.
 
-Async crates must not force async or runtime dependencies into the existing sync crates.
-Tokio is a reasonable default runtime candidate for phase 2, but Tokio is not part of phase
-1. If the async version proves stable and covers the sync reference behavior, a later phase
-can decide whether to retire the sync implementation.
+Async crates must not force async or runtime dependencies into the existing sync crates. Tokio is a reasonable default runtime candidate for phase 2, but Tokio is not part of phase 1. If the async version proves stable and covers the sync reference behavior, a later phase can decide whether to retire the sync implementation.
 
 ## Boundaries
 
@@ -67,10 +64,12 @@ The v0.5 workspace boundaries remain in force:
 
 ## Completion Criteria
 
-- Actor-style scenarios use `Driver::*_on` and explicit device turns.
+- Phase 1A: `DevicePort` exists and `Driver::*_on` methods use it.
+- Phase 1B: A `std::thread` forever-loop hardware runner runs the device model, with explicit shutdown, join, and error reporting.
+- Phase 1C: Primary actor-style scenarios use `Driver::*_on` plus runner progress/error waits instead of explicit device turns.
+- Direct device-turn tests are limited to helper/status/trace/arbitration and step-budget behavior, and each remaining call site is intentional.
 - A software poll before hardware progress observes no completion.
-- Completion publication pressure requires a software polling turn before hardware retires
-  the next command.
+- Completion publication pressure requires a software polling turn before hardware retires the next command.
 - Existing sync driver APIs remain available and behavior-preserving.
 - The sync workspace has no async/runtime dependency.
 - Full workspace format, test, clippy, and doc validation pass.

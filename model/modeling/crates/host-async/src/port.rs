@@ -3,6 +3,7 @@
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
+use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_device_async::AsyncDeviceHandle;
@@ -49,6 +50,12 @@ pub trait AsyncDevicePort: Send + Sync {
         &mut self,
         completion_ring_id: CompletionRingId,
     ) -> impl Future<Output = ModelResult<Option<CompletionRecord>>> + Send;
+
+    /// Pops one event from a queue-local event path.
+    fn poll_queue_event(
+        &mut self,
+        queue_id: QueueId,
+    ) -> impl Future<Output = ModelResult<Option<EventRecord>>> + Send;
 }
 
 impl AsyncDevicePort for AsyncDeviceHandle {
@@ -85,5 +92,9 @@ impl AsyncDevicePort for AsyncDeviceHandle {
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
         Self::poll_completion(self, completion_ring_id).await
+    }
+
+    async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
+        Self::poll_queue_event(self, queue_id).await
     }
 }

@@ -7,6 +7,7 @@ mod worker;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
+use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_device::PdmaDevice;
@@ -185,6 +186,12 @@ impl AsyncDeviceHandle {
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
         self.with_device(|device| device.poll_completion(completion_ring_id))
+            .await
+    }
+
+    /// Pops one event for a queue-local event path.
+    pub async fn poll_queue_event(&self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
+        self.with_device(|device| device.poll_queue_event(queue_id))
             .await
     }
 

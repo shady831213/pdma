@@ -6,6 +6,7 @@ use pdma_model_contract::desc::{
     StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
 };
 use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
 
@@ -164,6 +165,24 @@ impl AsyncDriver {
             self.free_command_slots = self.free_command_slots.saturating_add(1);
         }
         Ok(completion)
+    }
+
+    /// Polls one event through an async device port and reclaims one local command slot.
+    pub async fn poll_event_on(
+        &mut self,
+        device: &mut impl AsyncDevicePort,
+    ) -> ModelResult<Option<EventRecord>> {
+        let event = match self.queue_config.event_routing() {
+            EventRouting::QueueLocal => {
+                device
+                    .poll_queue_event(self.queue_config.queue_id())
+                    .await?
+            }
+        };
+        if event.is_some() {
+            self.free_command_slots = self.free_command_slots.saturating_add(1);
+        }
+        Ok(event)
     }
 
     /// Queue ID owned by this driver instance.

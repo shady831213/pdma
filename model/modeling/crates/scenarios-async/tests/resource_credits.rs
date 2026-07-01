@@ -65,3 +65,52 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
     assert_eq!(second_completion.status(), CompletionStatus::Success);
     assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_event_publication_capacity_one_preserves_event_order_after_polling() {
+    // Given: two faulting async copies behind a one-slot event publication path.
+    let device =
+        PdmaDevice::with_resource_config(ResourceConfig::default().with_event_publication_slots(1));
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let bad_src_a = driver.allocate_buffer_on(&mut handle, 4).await;
+    let bad_dst_a = driver.allocate_buffer_on(&mut handle, 8).await;
+    let bad_src_b = driver.allocate_buffer_on(&mut handle, 4).await;
+    let bad_dst_b = driver.allocate_buffer_on(&mut handle, 8).await;
+
+    // When: software submits both invalid copies, fills event publication, then polls before retrying.
+    let first_command = driver
+        .submit_copy_on(&mut handle, CopyRequest::new(bad_src_a, bad_dst_a, 8))
+        .await
+        .expect("first faulting copy has ring space");
+    let second_command = driver
+        .submit_copy_on(&mut handle, CopyRequest::new(bad_src_b, bad_dst_b, 8))
+        .await
+        .expect("second faulting copy has ring space");
+    let first_snapshot = runner.wait_for_error_after(0).await;
+    let first_event = driver
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists")
+        .expect("first error event was published");
+    let second_snapshot = runner.wait_for_error_after(first_snapshot.errors).await;
+    let second_event = driver
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists")
+        .expect("second error event was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: error publication stays ordered across polling.
+    assert_eq!(first_snapshot.errors, 1);
+    assert_eq!(first_event.command_id(), first_command);
+    assert!(second_snapshot.stalls >= 1);
+    assert_eq!(second_snapshot.errors, 2);
+    assert_eq!(summary.errors, 2);
+    assert_eq!(second_event.command_id(), second_command);
+    assert_eq!(driver.poll_event_on(&mut handle).await, Ok(None));
+}

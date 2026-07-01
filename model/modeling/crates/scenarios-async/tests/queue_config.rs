@@ -1,12 +1,49 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{
-    EventRouting, ModelError, QueueConfig, SoftwareOwnerId,
+    EventRouting, ModelError, QueueConfig, QueueId, SoftwareOwnerId,
     desc::{CopyRequest, StridedCopyRequest},
 };
 use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
+    // Given: two explicit async queue configurations with different software owners.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let config_a = QueueConfig::new(2, 3, EventRouting::QueueLocal, SoftwareOwnerId::new(10));
+    let config_b = QueueConfig::new(4, 5, EventRouting::QueueLocal, SoftwareOwnerId::new(20));
+
+    // When: async drivers create both queues through the port-backed setup API.
+    let driver_a = AsyncDriver::setup_with_config_on(&mut handle, config_a)
+        .await
+        .expect("first queue config is valid");
+    let driver_b = AsyncDriver::setup_with_config_on(&mut handle, config_b)
+        .await
+        .expect("second queue config is valid");
+    runner.request_shutdown().await;
+    runner.join().await.expect("runner joins cleanly");
+
+    // Then: IDs and completion bindings come from stable queue handles.
+    let handle_a = driver_a.queue_config_handle();
+    let handle_b = driver_b.queue_config_handle();
+    assert_eq!(handle_a.queue_id(), QueueId::new(0));
+    assert_eq!(handle_b.queue_id(), QueueId::new(1));
+    assert_ne!(handle_a.completion_ring_id(), handle_b.completion_ring_id());
+    assert_eq!(
+        handle_a.directory_entry(),
+        driver_a.queue_config_handle().directory_entry()
+    );
+    assert_eq!(
+        handle_b.directory_entry(),
+        driver_b.queue_config_handle().directory_entry()
+    );
+    assert_eq!(handle_a.config(), config_a);
+    assert_eq!(handle_b.config(), config_b);
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_enforces_command_depth_from_explicit_queue_config() {

@@ -51,6 +51,70 @@ Those crates depend on the same shared contract vocabulary and behavior-match th
 
 Async crates must not force async or runtime dependencies into the existing sync crates. Tokio is the Phase 2 runtime for async crates only. The first async slice added the async workspace members, async hardware runner, async host linear-copy path, and async linear-copy E2E scenario. If the async version proves stable and covers the sync reference behavior, a later phase can decide whether to retire the sync implementation.
 
+### Phase 2 Architecture Correction: Async-Native Hardware
+
+The async crates are not intended to remain a Tokio wrapper around the sync `PdmaDevice` implementation. The sync crates stay as the deterministic reference, but async hardware behavior should become async-native and independent from the sync device crate.
+
+Target dependency shape:
+
+```text
+pdma-model-contract
+  shared IDs, descriptors, records, queue/resource configuration, and vocabulary
+
+pdma-model-device
+  sync deterministic hardware reference, explicit step/status APIs, sync runner
+
+pdma-model-device-async
+  async-native hardware actor/model, async queues, async backpressure, async events
+
+pdma-model-host
+  sync imperative driver over the sync DevicePort boundary
+
+pdma-model-host-async
+  imperative async driver client over AsyncDevicePort
+
+pdma-model-scenarios
+  sync reference scenarios
+
+pdma-model-scenarios-async
+  async system scenarios
+```
+
+`pdma-model-device-async` must not depend on `pdma-model-device` once the async-native rewrite begins. If sync and async implementations need shared pure logic, that logic should move to a neutral crate or remain in the contract crate only when it is truly shared vocabulary rather than backing-store, runner, or execution behavior.
+
+The async hardware model should own the async execution boundary. Stalls, backpressure, completion/event publication, interrupt-like notification, and eventual lower-level bus actions should be expressed as async hardware behavior rather than collapsed into a sync `step_with_status()` call behind a Tokio mutex.
+
+### Phase 2 Software Boundary
+
+Async software is still required, but it should remain an imperative driver client. Its `await` points belong at the hardware boundary, not in local bookkeeping.
+
+At the current conceptual queue-port layer, valid async boundary operations include queue creation, buffer access, command submission, doorbell ringing, completion polling, and event polling. Local command ID allocation, descriptor construction, queue-handle ownership, and software slot accounting remain ordinary command-style driver logic.
+
+In a later lower-level model, these await points should move down from semantic driver operations to bus-facing actions such as register reads/writes, DMA-visible memory reads/writes, interrupt waits, and interrupt acknowledgement. Higher-level driver operations like queue creation and command submission should then be implemented as imperative sequences composed from those lower-level async bus actions.
+
+### Phase 2 Scenario Shape
+
+Async scenarios are naturally async system stories. They should drive host software through awaitable hardware boundaries and observe asynchronous hardware outcomes. The scenarios should not merely wrap sync scenario logic in `await`; they should express the intended host/device interleaving at the active modeling layer.
+
+Until the async-native hardware split is complete, existing async scenario coverage documents behavior parity of the current transitional async facade. New Phase 2 work should prioritize replacing that facade with an async-native device implementation before adding more parity tests that depend on sync device internals.
+
+### Long-Term Async Boundary Goal
+
+The conceptual async queue-port boundary is an intermediate modeling layer. The long-term direction is a bus-level async boundary where the host driver performs awaitable register, DMA-memory, and interrupt operations, and higher-level driver methods are imperative sequences built from those operations.
+
+Long-term boundary examples:
+
+- `reg_write(offset, value).await`
+- `reg_read(offset).await`
+- `mem_write(range, bytes).await`
+- `mem_read(range).await`
+- `wait_irq().await`
+- `ack_irq(vector_or_status).await`
+
+At that level, operations such as queue creation, command submission, completion polling, and interrupt handling are no longer primitive port calls. They become driver procedures that prepare DMA-visible memory, program MMIO registers, ring doorbells, wait for interrupts, inspect status, read completion memory, and acknowledge interrupts.
+
+This is the point where device interrupts become naturally observable. A high-level `submit_copy().await` collapses descriptor writes, doorbell writes, hardware execution, completion publication, and interrupt assertion into one semantic operation. A bus-level boundary leaves space for the device actor to assert an interrupt between host actions, and for async scenarios to verify the host/device interleaving explicitly.
+
 ## Boundaries
 
 The v0.5 workspace boundaries remain in force:
@@ -61,9 +125,9 @@ The v0.5 workspace boundaries remain in force:
 | `pdma-model-device` | Sync hardware-behavior reference model and explicit hardware turns. No dependency on host or scenarios. |
 | `pdma-model-host` | Sync driver actor surface, `DevicePort`, local slot accounting, and legacy wrapper APIs. |
 | `pdma-model-scenarios` | Sync reference behavior scenarios that interleave software and hardware turns. |
-| `pdma-model-device-async` | Tokio-backed async hardware runner and async device handle. No dependency on host or scenarios. |
-| `pdma-model-host-async` | Async driver actor surface and async device-port boundary. |
-| `pdma-model-scenarios-async` | Async behavior-match scenarios against the sync reference. |
+| `pdma-model-device-async` | Async-native hardware actor/model and async device handle. No dependency on sync device, host, or scenarios. |
+| `pdma-model-host-async` | Imperative async driver client and async device-port boundary. No dependency on sync host. |
+| `pdma-model-scenarios-async` | Async system scenarios against the async-native hardware model and sync reference behavior. |
 
 ## Completion Criteria
 
@@ -76,4 +140,7 @@ The v0.5 workspace boundaries remain in force:
 - Existing sync driver APIs remain available and behavior-preserving.
 - The sync workspace has no async/runtime dependency.
 - Phase 2 first slice: async crates exist, async linear-copy behavior matches the sync reference, and Tokio stays confined to async crates.
+- Phase 2 architecture correction: async device behavior is async-native and no longer depends on the sync `pdma-model-device` implementation.
+- Phase 2 software boundary: host async APIs await only hardware-boundary operations while local driver bookkeeping remains imperative.
+- Phase 2 lower-level direction: future MMIO, DMA-memory, and interrupt modeling moves await points down to register, memory, and IRQ actions.
 - Full workspace format, test, clippy, and doc validation pass.

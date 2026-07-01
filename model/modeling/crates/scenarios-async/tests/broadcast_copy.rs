@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{
-    CompletionStatus,
+    CompletionStatus, EventErrorKind,
     desc::{BroadcastCopyRequest, BroadcastDestinationRange},
 };
 use pdma_model_device::PdmaDevice;
@@ -65,4 +65,58 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
         driver.read_buffer_on(&handle, dst_b, 8).await,
         Ok(vec![0, 0, 0, 2, 3, 4, 5, 0])
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_publishes_event_and_no_completion_when_broadcast_destination_write_fails() {
+    // Given: async runner handle, AsyncDriver, one valid destination, and one too-small destination.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let valid_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    let bad_dst = driver.allocate_buffer_on(&mut handle, 2).await;
+    driver
+        .write_buffer_on(&mut handle, src, &[9, 8, 7, 6])
+        .await
+        .expect("source write is in bounds");
+
+    // When: a broadcast command writes past the second destination.
+    let command_id = driver
+        .submit_broadcast_copy_on(
+            &mut handle,
+            BroadcastCopyRequest::new(
+                src,
+                0,
+                4,
+                vec![
+                    BroadcastDestinationRange::new(valid_dst, 0),
+                    BroadcastDestinationRange::new(bad_dst, 0),
+                ],
+            ),
+        )
+        .await
+        .expect("broadcast submission has ring space");
+    let snapshot = runner.wait_for_error_after(0).await;
+    let event = driver
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists")
+        .expect("broadcast fault event was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the original error is returned, one event is published, and no success completes.
+    assert_eq!(snapshot.errors, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(event.command_id(), command_id);
+    assert_eq!(event.buffer(), bad_dst);
+    assert_eq!(
+        event.error_kind(),
+        EventErrorKind::OutOfBounds { len: 2, end: 4 }
+    );
+    assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
 }

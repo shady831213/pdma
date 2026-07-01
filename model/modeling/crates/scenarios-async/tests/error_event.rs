@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{
-    CompletionStatus, EventErrorKind,
+    CompletionStatus, EventErrorKind, ModelError,
     desc::{CopyRequest, StridedCopyRequest},
 };
 use pdma_model_device::PdmaDevice;
@@ -46,6 +46,50 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
     );
     assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
     assert_eq!(driver.poll_event_on(&mut handle).await, Ok(None));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() {
+    // Given: async runner handle, AsyncDriver, and a one-slot queue with one invalid command.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+    driver
+        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
+        .await
+        .expect("first command has ring space");
+    assert_eq!(
+        driver
+            .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 1))
+            .await,
+        Err(ModelError::DriverQueueFull)
+    );
+
+    // When: the invalid command fails and the async driver polls its error event.
+    let snapshot = runner.wait_for_error_after(0).await;
+    let event = driver
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists")
+        .expect("error event was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the event reclaims the command slot for this driver.
+    assert_eq!(snapshot.errors, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(event.queue_id(), driver.queue_id());
+    assert!(
+        driver
+            .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 1))
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

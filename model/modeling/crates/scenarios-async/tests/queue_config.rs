@@ -11,8 +11,7 @@ use pdma_model_host_async::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
     // Given: two explicit async queue configurations with different software owners.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let config_a = QueueConfig::new(2, 3, EventRouting::QueueLocal, SoftwareOwnerId::new(10));
     let config_b = QueueConfig::new(4, 5, EventRouting::QueueLocal, SoftwareOwnerId::new(20));
@@ -48,8 +47,7 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
     // Given: an async driver created from an explicit one-slot queue config.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_with_config_on(
         &mut handle,

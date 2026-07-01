@@ -128,3 +128,59 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
     );
     assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_publishes_event_and_no_completion_when_vector_add_destination_write_fails() {
+    // Given: async runner handle, AsyncDriver, and a vector add whose destination write is too long.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src_a = driver.allocate_buffer_on(&mut handle, 8).await;
+    let src_b = driver.allocate_buffer_on(&mut handle, 8).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    driver
+        .write_buffer_on(&mut handle, src_a, &[0xD0, 0xD1, 9, 8, 7, 6, 0xD2, 0xD3])
+        .await
+        .expect("source A write is in bounds");
+    driver
+        .write_buffer_on(&mut handle, src_b, &[0xE0, 0xE1, 1, 2, 3, 4, 0xE2, 0xE3])
+        .await
+        .expect("source B write is in bounds");
+
+    // When: the vector add tries to write four bytes starting before the end of the destination.
+    let command_id = driver
+        .submit_vector_add_on(
+            &mut handle,
+            VectorAddRequest::new(
+                VectorBufferRange::new(src_a, 2),
+                VectorBufferRange::new(src_b, 2),
+                VectorBufferRange::new(dst, 1),
+                4,
+            ),
+        )
+        .await
+        .expect("vector-add submission has ring space");
+    let snapshot = runner.wait_for_error_after(0).await;
+    let event = driver
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists")
+        .expect("destination fault event was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the destination bounds event is published and no success completion appears.
+    assert_eq!(command_id.raw(), 0);
+    assert_eq!(snapshot.errors, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(event.command_id(), command_id);
+    assert_eq!(event.buffer(), dst);
+    assert_eq!(
+        event.error_kind(),
+        EventErrorKind::OutOfBounds { len: 4, end: 5 }
+    );
+    assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
+}

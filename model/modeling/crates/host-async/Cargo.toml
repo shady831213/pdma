@@ -13,7 +13,6 @@ pdma-model-contract = { path = "../contract" }
 pdma-model-device-async = { path = "../device-async" }
 
 [dev-dependencies]
-pdma-model-device = { path = "../device" }
 tokio = { version = "1.49", features = ["macros"] }
 
 [lints]

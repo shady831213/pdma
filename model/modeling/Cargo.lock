@@ -35,7 +35,6 @@ name = "pdma-model-host-async"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
- "pdma-model-device",
  "pdma-model-device-async",
  "tokio",
 ]

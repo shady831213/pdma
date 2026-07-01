@@ -6,14 +6,12 @@ use pdma_model_contract::{
     ids::CommandId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::{AsyncDeviceHandle, AsyncDeviceRunner};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retires_copy_after_handle_submission() {
-    // Given: a PdmaDevice, an async runner, an async handle, one queue, source/destination buffers, and a source write.
-    let device = PdmaDevice::new();
-    let runner: AsyncDeviceRunner = AsyncDeviceRunner::spawn(device);
+    // Given: a native async runner, an async handle, one queue, source/destination buffers, and a source write.
+    let runner: AsyncDeviceRunner = AsyncDeviceRunner::spawn_native();
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle
         .create_queue(QueueConfig::new(

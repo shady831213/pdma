@@ -1,5 +1,5 @@
 use super::{AsyncRunSnapshot, AsyncRunSummary};
-use pdma_model_device::PdmaDevice;
+use crate::runner::backend::RunnerBackend;
 use tokio::sync::{Mutex, watch};
 
 #[derive(Debug)]
@@ -10,7 +10,7 @@ pub(super) struct RunnerShared {
 
 #[derive(Debug)]
 pub(super) struct RunnerState {
-    pub(super) device: PdmaDevice,
+    pub(super) backend: RunnerBackend,
     pub(super) steps: usize,
     pub(super) errors: usize,
     pub(super) stalls: usize,
@@ -20,9 +20,9 @@ pub(super) struct RunnerState {
 }
 
 impl RunnerState {
-    pub(super) const fn new(device: PdmaDevice) -> Self {
+    pub(super) const fn new(backend: RunnerBackend) -> Self {
         Self {
-            device,
+            backend,
             steps: 0,
             errors: 0,
             stalls: 0,

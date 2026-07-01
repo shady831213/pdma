@@ -1,5 +1,5 @@
+use super::backend::BackendStepStatus;
 use super::state::{RunnerShared, RunnerState, publish};
-use pdma_model_device::StepStatus;
 use std::sync::Arc;
 
 pub(super) async fn run_worker(shared: Arc<RunnerShared>) {
@@ -12,14 +12,14 @@ async fn run_one(shared: &RunnerShared) -> bool {
         if state.shutdown_requested {
             return publish_and_continue(shared, state.generation, false);
         }
-        match state.device.step_with_status() {
-            Ok(StepStatus::Progressed) => {
+        match state.backend.step() {
+            Ok(BackendStepStatus::Progressed) => {
                 state.steps = state.steps.saturating_add(1);
                 state.generation = state.generation.saturating_add(1);
                 WorkerOutcome::Continue(state.generation)
             }
-            Ok(StepStatus::Idle) => WorkerOutcome::Wait(wait_for_wake(shared, &mut state)),
-            Ok(StepStatus::Stalled(_)) => {
+            Ok(BackendStepStatus::Idle) => WorkerOutcome::Wait(wait_for_wake(shared, &mut state)),
+            Ok(BackendStepStatus::Stalled) => {
                 state.stalls = state.stalls.saturating_add(1);
                 WorkerOutcome::Wait(wait_for_wake(shared, &mut state))
             }

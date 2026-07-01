@@ -1,9 +1,12 @@
 //! Tokio-backed asynchronous hardware runner.
 
+mod backend;
+mod native;
 mod state;
 mod types;
 mod worker;
 
+use backend::RunnerBackend;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
@@ -33,9 +36,18 @@ pub struct AsyncDeviceRunner {
 impl AsyncDeviceRunner {
     /// Spawns an async hardware runner that advances `device` until shutdown.
     pub fn spawn(device: PdmaDevice) -> Self {
+        Self::spawn_backend(RunnerBackend::legacy(device))
+    }
+
+    /// Spawns an async hardware runner backed by the native async linear-copy device slice.
+    pub fn spawn_native() -> Self {
+        Self::spawn_backend(RunnerBackend::native())
+    }
+
+    fn spawn_backend(backend: RunnerBackend) -> Self {
         let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
-            state: tokio::sync::Mutex::new(RunnerState::new(device)),
+            state: tokio::sync::Mutex::new(RunnerState::new(backend)),
             changed,
         });
         let worker_shared = Arc::clone(&shared);
@@ -128,14 +140,15 @@ impl AsyncDeviceHandle {
 
     /// Provisions one command queue and one bound completion ring.
     pub async fn create_queue(&self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        self.with_device(|device| device.create_queue(config)).await
+        self.with_backend(|backend| backend.create_queue(config))
+            .await
     }
 
     /// Allocates a device-visible memory buffer.
     pub async fn allocate_buffer(&self, len: usize) -> BufferId {
         let (id, generation) = {
             let mut state = self.shared.state.lock().await;
-            let id = state.device.allocate_buffer(len);
+            let id = state.backend.allocate_buffer(len);
             wake(&mut state);
             (id, state.generation)
         };
@@ -145,7 +158,7 @@ impl AsyncDeviceHandle {
 
     /// Writes bytes into a checked device buffer range.
     pub async fn write_buffer(&self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        self.with_device(|device| device.write_buffer(id, offset, data))
+        self.with_backend(|backend| backend.write_buffer(id, offset, data))
             .await
     }
 
@@ -160,7 +173,7 @@ impl AsyncDeviceHandle {
             .state
             .lock()
             .await
-            .device
+            .backend
             .read_buffer(id, offset, len)
     }
 
@@ -170,13 +183,13 @@ impl AsyncDeviceHandle {
         queue_id: QueueId,
         command: ExternalCommand,
     ) -> ModelResult<()> {
-        self.with_device(|device| device.submit_command(queue_id, command))
+        self.with_backend(|backend| backend.submit_command(queue_id, command))
             .await
     }
 
     /// Captures a software doorbell for one queue.
     pub async fn ring_doorbell(&self, queue_id: QueueId) -> ModelResult<()> {
-        self.with_device(|device| device.ring_doorbell(queue_id))
+        self.with_backend(|backend| backend.ring_doorbell(queue_id))
             .await
     }
 
@@ -185,13 +198,13 @@ impl AsyncDeviceHandle {
         &self,
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
-        self.with_device(|device| device.poll_completion(completion_ring_id))
+        self.with_backend(|backend| backend.poll_completion(completion_ring_id))
             .await
     }
 
     /// Pops one event for a queue-local event path.
     pub async fn poll_queue_event(&self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
-        self.with_device(|device| device.poll_queue_event(queue_id))
+        self.with_backend(|backend| backend.poll_queue_event(queue_id))
             .await
     }
 
@@ -214,13 +227,13 @@ impl AsyncDeviceHandle {
         }
     }
 
-    async fn with_device<T>(
+    async fn with_backend<T>(
         &self,
-        f: impl FnOnce(&mut PdmaDevice) -> ModelResult<T>,
+        f: impl FnOnce(&mut RunnerBackend) -> ModelResult<T>,
     ) -> ModelResult<T> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = f(&mut state.device);
+            let result = f(&mut state.backend);
             wake(&mut state);
             (result, state.generation)
         };

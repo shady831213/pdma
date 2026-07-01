@@ -93,6 +93,60 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn async_driver_event_polling_does_not_consume_another_queue_event() {
+    // Given: one async driver's queue has a pending memory fault event.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
+        .await
+        .expect("queue setup is valid");
+    let mut driver_b = AsyncDriver::setup_on(&mut handle, 1, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver_a.allocate_buffer_on(&mut handle, 4).await;
+    let dst = driver_a.allocate_buffer_on(&mut handle, 8).await;
+    let b_src = driver_b.allocate_buffer_on(&mut handle, 1).await;
+    let b_dst = driver_b.allocate_buffer_on(&mut handle, 1).await;
+    driver_a
+        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
+        .await
+        .expect("first driver command has ring space");
+    let snapshot = runner.wait_for_error_after(0).await;
+
+    // When: a different async driver polls the queue-local event path.
+    let wrong_driver_event = driver_b
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists");
+    let owner_event = driver_a
+        .poll_event_on(&mut handle)
+        .await
+        .expect("event ring exists")
+        .expect("owning driver can still poll its event");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the non-owning driver does not consume the event or reclaim its own slot.
+    assert_eq!(snapshot.errors, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(wrong_driver_event, None);
+    assert_eq!(owner_event.queue_id(), driver_a.queue_id());
+    assert!(
+        driver_b
+            .submit_copy_on(&mut handle, CopyRequest::new(b_src, b_dst, 1))
+            .await
+            .is_ok()
+    );
+    assert_eq!(
+        driver_b
+            .submit_copy_on(&mut handle, CopyRequest::new(b_src, b_dst, 1))
+            .await,
+        Err(ModelError::DriverQueueFull)
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_one_event_and_later_command_still_completes_after_bad_strided_copy()
 {
     // Given: async runner handle, AsyncDriver, and a bad strided copy before a valid linear copy.

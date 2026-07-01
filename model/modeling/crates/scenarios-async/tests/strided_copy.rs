@@ -58,3 +58,31 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     );
     assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buffer() {
+    // Given: async runner handle, AsyncDriver, and a strided copy whose second row is too long.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 8).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+    let request = StridedCopyRequest::new(src, dst, 2, 4, 6, 4);
+    driver
+        .submit_strided_copy_on(&mut handle, request)
+        .await
+        .expect("strided copy submission has ring space");
+
+    // When: the async runner executes the command.
+    let snapshot = runner.wait_for_error_after(0).await;
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: checked memory reports the failing row and no successful completion is published.
+    assert_eq!(snapshot.errors, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
+}

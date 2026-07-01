@@ -6,6 +6,45 @@ use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
+async fn async_runner_copy_stalls_without_read_slots() {
+    // Given: an async copy on a device with no read slots.
+    let device = PdmaDevice::with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    driver
+        .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
+        .await
+        .expect("source write is in bounds");
+    let mut snapshot = runner.snapshot().await;
+
+    // When: software submits the copy and the async runner tries to retire it.
+    let command_id = driver
+        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
+        .await
+        .expect("copy submission has ring space");
+    while snapshot.stalls == 0 {
+        snapshot = runner.wait_for_change_after(snapshot).await;
+    }
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the command stays pending because the read slot budget is empty.
+    assert_eq!(command_id.raw(), 0);
+    assert_eq!(snapshot.steps, 0);
+    assert_eq!(snapshot.errors, 0);
+    assert_eq!(snapshot.stalls, 1);
+    assert_eq!(summary.steps, 0);
+    assert_eq!(summary.errors, 0);
+    assert_eq!(summary.stalls, 1);
+    assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn async_runner_completion_publication_capacity_one_preserves_completion_order_after_polling()
 {
     // Given: two async copies queued behind a one-slot completion publication path.

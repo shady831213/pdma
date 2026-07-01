@@ -86,3 +86,58 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
     assert_eq!(summary.errors, 1);
     assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_work() {
+    // Given: a bad strided copy followed by a valid strided copy in the same async queue.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let bad_src = driver.allocate_buffer_on(&mut handle, 8).await;
+    let good_src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let bad_dst = driver.allocate_buffer_on(&mut handle, 8).await;
+    let good_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    driver
+        .write_buffer_on(&mut handle, good_src, &[0xA0, 0xA1, 0xA2, 0xA3])
+        .await
+        .expect("source write is in bounds");
+    driver
+        .submit_strided_copy_on(
+            &mut handle,
+            StridedCopyRequest::new(bad_src, bad_dst, 2, 4, 6, 4),
+        )
+        .await
+        .expect("bad command has ring space");
+    let good_command = driver
+        .submit_strided_copy_on(
+            &mut handle,
+            StridedCopyRequest::new(good_src, good_dst, 1, 4, 4, 4),
+        )
+        .await
+        .expect("good command has ring space");
+
+    // When: the first command fails and the async runner later completes the valid command.
+    let error_snapshot = runner.wait_for_error_after(0).await;
+    let progress_snapshot = runner.wait_for_progress_after(0).await;
+    let completion = driver
+        .poll_completion_on(&mut handle)
+        .await
+        .expect("completion ring exists")
+        .expect("good command completed");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the bad command reports its error, while the later command still completes.
+    assert_eq!(error_snapshot.errors, 1);
+    assert_eq!(progress_snapshot.steps, 1);
+    assert_eq!(summary.errors, 1);
+    assert_eq!(summary.steps, 1);
+    assert_eq!(completion.command_id(), good_command);
+    assert_eq!(
+        driver.read_buffer_on(&handle, good_dst, 4).await,
+        Ok(vec![0xA0, 0xA1, 0xA2, 0xA3])
+    );
+}

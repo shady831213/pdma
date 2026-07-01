@@ -60,3 +60,44 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
         Ok(vec![7, 8, 9, 10])
     );
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
+    // Given: an async runner and one completed command.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    driver
+        .write_buffer_on(&mut handle, src, &[1, 3, 5, 7])
+        .await
+        .expect("source write is in bounds");
+
+    // When: software submits a copy, waits once, and then shuts the async runner down.
+    let command_id = driver
+        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
+        .await
+        .expect("copy submission has ring space");
+    let snapshot = runner.wait_for_progress_after(0).await;
+    let completion = driver
+        .poll_completion_on(&mut handle)
+        .await
+        .expect("completion ring exists")
+        .expect("completion was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: shutdown produces a join summary after the successful copy.
+    assert_eq!(completion.command_id(), command_id);
+    assert_eq!(completion.status(), CompletionStatus::Success);
+    assert_eq!(snapshot.steps, 1);
+    assert_eq!(summary.steps, 1);
+    assert_eq!(
+        driver.read_buffer_on(&handle, dst, 4).await,
+        Ok(vec![1, 3, 5, 7])
+    );
+}

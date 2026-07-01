@@ -147,6 +147,46 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn async_runner_publishes_many_memory_fault_events_without_masking_original_error() {
+    // Given: more invalid async commands than the previous hidden event-ring depth.
+    let device = PdmaDevice::new();
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 65, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+    for _ in 0..65 {
+        driver
+            .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
+            .await
+            .expect("command ring has enough space");
+    }
+
+    // When: every invalid command is executed without polling events between failures.
+    let snapshot = runner.wait_for_error_after(64).await;
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: every fault kept its original error and produced a pollable event.
+    assert_eq!(snapshot.errors, 65);
+    assert_eq!(summary.errors, 65);
+    for _ in 0..65 {
+        let event = driver
+            .poll_event_on(&mut handle)
+            .await
+            .expect("event polling succeeds")
+            .expect("one event exists for each failed command");
+        assert_eq!(
+            event.error_kind(),
+            EventErrorKind::OutOfBounds { len: 4, end: 8 }
+        );
+    }
+    assert_eq!(driver.poll_event_on(&mut handle).await, Ok(None));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_one_event_and_later_command_still_completes_after_bad_strided_copy()
 {
     // Given: async runner handle, AsyncDriver, and a bad strided copy before a valid linear copy.

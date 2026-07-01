@@ -2,7 +2,10 @@
 
 use pdma_model_contract::{
     ResourceConfig,
-    desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
+    desc::{
+        BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, VectorAddRequest,
+        VectorBufferRange,
+    },
 };
 use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
@@ -37,6 +40,61 @@ async fn async_runner_copy_stalls_without_read_slots() {
     let summary = runner.join().await.expect("runner joins cleanly");
 
     // Then: the command stays pending because the read slot budget is empty.
+    assert_eq!(command_id.raw(), 0);
+    assert_eq!(snapshot.steps, 0);
+    assert_eq!(snapshot.errors, 0);
+    assert_eq!(snapshot.stalls, 1);
+    assert_eq!(summary.steps, 0);
+    assert_eq!(summary.errors, 0);
+    assert_eq!(summary.stalls, 1);
+    assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_credit() {
+    // Given: an async broadcast on a device with insufficient write and descriptor credit.
+    let device = PdmaDevice::with_resource_config(
+        ResourceConfig::default()
+            .with_write_slots(1)
+            .with_internal_descriptors(1),
+    );
+    let runner = AsyncDeviceRunner::spawn(device);
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut handle, 8).await;
+    let dst_a = driver.allocate_buffer_on(&mut handle, 8).await;
+    let dst_b = driver.allocate_buffer_on(&mut handle, 8).await;
+    driver
+        .write_buffer_on(&mut handle, src, &[0, 1, 2, 3, 4, 5, 6, 7])
+        .await
+        .expect("source write is in bounds");
+    let mut snapshot = runner.snapshot().await;
+
+    // When: software submits one broadcast command and the async runner tries to retire it.
+    let command_id = driver
+        .submit_broadcast_copy_on(
+            &mut handle,
+            BroadcastCopyRequest::new(
+                src,
+                2,
+                4,
+                vec![
+                    BroadcastDestinationRange::new(dst_a, 0),
+                    BroadcastDestinationRange::new(dst_b, 0),
+                ],
+            ),
+        )
+        .await
+        .expect("broadcast submission has ring space");
+    while snapshot.stalls == 0 {
+        snapshot = runner.wait_for_change_after(snapshot).await;
+    }
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: the command stays pending instead of retiring with too little credit.
     assert_eq!(command_id.raw(), 0);
     assert_eq!(snapshot.steps, 0);
     assert_eq!(snapshot.errors, 0);

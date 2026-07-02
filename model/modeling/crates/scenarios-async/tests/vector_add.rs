@@ -4,15 +4,13 @@ use pdma_model_contract::{
     CompletionStatus, EventErrorKind,
     desc::{VectorAddRequest, VectorBufferRange},
 };
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() {
     // Given: async runner handle, AsyncDriver, two source buffers, and sentinel destination bytes.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -84,8 +82,7 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b_read_fails() {
     // Given: async runner handle, AsyncDriver, and a vector add whose source B read is too long.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -132,8 +129,7 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_vector_add_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, and a vector add whose destination write is too long.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

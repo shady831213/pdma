@@ -1,3 +1,5 @@
+mod broadcast;
+mod copy;
 mod memory;
 mod ring;
 mod step;
@@ -26,7 +28,7 @@ pub(super) struct NativeDevice {
     completions: Vec<NativeRing<CompletionRecord>>,
     events: VecDeque<EventRecord>,
     runnable: VecDeque<QueueId>,
-    pending_completion: Option<step::PendingCompletion>,
+    pending_completion: Option<copy::PendingCompletion>,
 }
 
 impl NativeDevice {

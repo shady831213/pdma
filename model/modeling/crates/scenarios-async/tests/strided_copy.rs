@@ -1,15 +1,13 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, desc::StridedCopyRequest};
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     // Given: async runner handle, AsyncDriver, padded source rows, and sentinel destination bytes.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -62,8 +60,7 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buffer() {
     // Given: async runner handle, AsyncDriver, and a strided copy whose second row is too long.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -90,8 +87,7 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_work() {
     // Given: a bad strided copy followed by a valid strided copy in the same async queue.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -139,5 +135,76 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
     assert_eq!(
         driver.read_buffer_on(&handle, good_dst, 4).await,
         Ok(vec![0xA0, 0xA1, 0xA2, 0xA3])
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
+    // Given: two strided copies sharing a one-slot completion ring.
+    let runner = AsyncDeviceRunner::spawn_native();
+    let mut handle = runner.handle();
+    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 1)
+        .await
+        .expect("queue setup is valid");
+    let first_src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let first_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    let second_src = driver.allocate_buffer_on(&mut handle, 4).await;
+    let second_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    driver
+        .write_buffer_on(&mut handle, first_src, &[1, 2, 3, 4])
+        .await
+        .expect("first source write is in bounds");
+    driver
+        .write_buffer_on(&mut handle, second_src, &[5, 6, 7, 8])
+        .await
+        .expect("second source write is in bounds");
+    driver
+        .submit_strided_copy_on(
+            &mut handle,
+            StridedCopyRequest::new(first_src, first_dst, 1, 4, 4, 4),
+        )
+        .await
+        .expect("first command has ring space");
+    let second_command = driver
+        .submit_strided_copy_on(
+            &mut handle,
+            StridedCopyRequest::new(second_src, second_dst, 1, 4, 4, 4),
+        )
+        .await
+        .expect("second command has ring space");
+
+    // When: the second copy stalls on completion publication, then software mutates its source.
+    let first_snapshot = runner.wait_for_progress_after(0).await;
+    let stalled_snapshot = if first_snapshot.stalls == 0 {
+        runner.wait_for_change_after(first_snapshot).await
+    } else {
+        first_snapshot
+    };
+    driver
+        .write_buffer_on(&mut handle, second_src, &[9, 9, 9, 9])
+        .await
+        .expect("second source rewrite is in bounds");
+    let _first_completion = driver
+        .poll_completion_on(&mut handle)
+        .await
+        .expect("completion ring exists")
+        .expect("first completion was published");
+    let second_snapshot = runner.wait_for_progress_after(first_snapshot.steps).await;
+    let second_completion = driver
+        .poll_completion_on(&mut handle)
+        .await
+        .expect("completion ring exists")
+        .expect("second completion was published");
+    runner.request_shutdown().await;
+    let summary = runner.join().await.expect("runner joins cleanly");
+
+    // Then: completion retry publishes the already-executed copy instead of copying mutated bytes.
+    assert!(stalled_snapshot.stalls >= 1);
+    assert_eq!(second_snapshot.steps, 2);
+    assert_eq!(summary.steps, 2);
+    assert_eq!(second_completion.command_id(), second_command);
+    assert_eq!(
+        driver.read_buffer_on(&handle, second_dst, 4).await,
+        Ok(vec![5, 6, 7, 8])
     );
 }

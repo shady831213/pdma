@@ -26,6 +26,7 @@ pub(super) struct NativeDevice {
     completions: Vec<NativeRing<CompletionRecord>>,
     events: VecDeque<EventRecord>,
     runnable: VecDeque<QueueId>,
+    pending_completion: Option<step::PendingCompletion>,
 }
 
 impl NativeDevice {

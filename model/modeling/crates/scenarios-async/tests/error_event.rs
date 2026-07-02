@@ -11,8 +11,7 @@ use pdma_model_host_async::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_past_source() {
     // Given: async runner handle, AsyncDriver, and a linear copy whose source read is too long.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -51,8 +50,7 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() {
     // Given: async runner handle, AsyncDriver, and a one-slot queue with one invalid command.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -95,8 +93,7 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     // Given: one async driver's queue has a pending memory fault event.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -149,8 +146,7 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_many_memory_fault_events_without_masking_original_error() {
     // Given: more invalid async commands than the previous hidden event-ring depth.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 65, 4)
         .await

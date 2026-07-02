@@ -4,7 +4,6 @@ use pdma_model_contract::{
     CompletionStatus, EventErrorKind, ModelError,
     desc::{CopyRequest, StridedCopyRequest},
 };
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
@@ -186,8 +185,7 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
 async fn async_runner_publishes_one_event_and_later_command_still_completes_after_bad_strided_copy()
 {
     // Given: async runner handle, AsyncDriver, and a bad strided copy before a valid linear copy.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

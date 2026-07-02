@@ -4,7 +4,6 @@ use pdma_model_contract::{
     EventRouting, ModelError, QueueConfig, QueueId, SoftwareOwnerId,
     desc::{CopyRequest, StridedCopyRequest},
 };
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
@@ -83,8 +82,7 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
     // Given: two async drivers with explicit queue-local event routing.
-    let device = PdmaDevice::new();
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native();
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_with_config_on(
         &mut handle,

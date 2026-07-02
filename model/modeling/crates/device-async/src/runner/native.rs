@@ -3,6 +3,7 @@ mod copy;
 mod memory;
 mod ring;
 mod step;
+mod vector_add;
 
 use super::backend::BackendStepStatus;
 use memory::NativeMemory;

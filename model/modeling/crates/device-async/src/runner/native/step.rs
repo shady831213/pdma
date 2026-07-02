@@ -1,9 +1,10 @@
 use super::NativeDevice;
 use super::broadcast;
 use super::copy;
+use super::vector_add;
 use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::error::ModelResult;
 
 pub(super) fn step(device: &mut NativeDevice) -> ModelResult<BackendStepStatus> {
     if device.pending_completion.is_some() {
@@ -23,9 +24,8 @@ pub(super) fn step(device: &mut NativeDevice) -> ModelResult<BackendStepStatus> 
         ExternalCommand::BroadcastCopy(broadcast_command) => {
             broadcast::retire_broadcast_copy(device, queue_id, &broadcast_command)
         }
-        ExternalCommand::VectorAdd(_) => {
-            let _retired = device.queue_mut(queue_id)?.commands.pop();
-            Err(ModelError::StepBudgetExhausted { max_steps: 0 })
+        ExternalCommand::VectorAdd(vector_add) => {
+            vector_add::retire_vector_add(device, queue_id, vector_add)
         }
     }
 }

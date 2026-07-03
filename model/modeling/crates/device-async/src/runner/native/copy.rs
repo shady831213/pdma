@@ -1,25 +1,10 @@
 use super::NativeDevice;
+use super::retirement::validate_success_completion_route;
+use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::BackendStepStatus;
-use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
 use pdma_model_contract::desc::{CopyCommand, StridedCopyCommand};
 use pdma_model_contract::error::{ModelError, ModelResult};
-use pdma_model_contract::event::{EventErrorKind, EventRecord};
-use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct FaultRetirement {
-    pub(super) queue_id: QueueId,
-    pub(super) command_id: CommandId,
-    pub(super) buffer: BufferId,
-    pub(super) source: ModelError,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct SuccessRetirement {
-    pub(super) queue: QueueId,
-    pub(super) command: CommandId,
-    pub(super) completion_ring: CompletionRingId,
-}
+use pdma_model_contract::ids::{BufferId, QueueId};
 
 #[derive(Debug, Clone, Copy)]
 struct NativeCopyChunk {
@@ -29,8 +14,6 @@ struct NativeCopyChunk {
     dst_offset: usize,
     len: usize,
 }
-
-pub(super) type PendingCompletion = SuccessRetirement;
 
 pub(super) fn retire_copy(
     device: &mut NativeDevice,
@@ -52,6 +35,7 @@ pub(super) fn retire_copy(
             );
         }
     };
+    validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     if let Err(source) = device.memory.write_checked(request.dst(), 0, &bytes) {
         return publish_fault(
             device,
@@ -82,6 +66,7 @@ pub(super) fn retire_strided_copy(
         Ok(chunks) => chunks,
         Err(fault) => return publish_fault(device, fault),
     };
+    validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     for chunk in chunks {
         let bytes = match device
             .memory
@@ -157,81 +142,4 @@ fn strided_chunks(
         });
     }
     Ok(chunks)
-}
-
-pub(super) fn publish_completion(
-    device: &mut NativeDevice,
-    success: SuccessRetirement,
-) -> ModelResult<BackendStepStatus> {
-    let completion =
-        CompletionRecord::new(success.queue, success.command, CompletionStatus::Success);
-    if device.completion_mut(success.completion_ring)?.is_full() {
-        retire_command_without_requeue(device, success.queue)?;
-        device.pending_completion = Some(success);
-        return Ok(BackendStepStatus::Stalled);
-    }
-    device
-        .completion_mut(success.completion_ring)?
-        .push(completion)?;
-    retire_command(device, success.queue)?;
-    Ok(BackendStepStatus::Progressed)
-}
-
-pub(super) fn retry_pending_completion(
-    device: &mut NativeDevice,
-) -> ModelResult<BackendStepStatus> {
-    let Some(pending) = device.pending_completion else {
-        return Ok(BackendStepStatus::Idle);
-    };
-    let completion =
-        CompletionRecord::new(pending.queue, pending.command, CompletionStatus::Success);
-    if device.completion_mut(pending.completion_ring)?.is_full() {
-        return Ok(BackendStepStatus::Stalled);
-    }
-    device
-        .completion_mut(pending.completion_ring)?
-        .push(completion)?;
-    device.pending_completion = None;
-    if !device.queue(pending.queue)?.commands.is_empty() {
-        device.runnable.push_back(pending.queue);
-    }
-    Ok(BackendStepStatus::Progressed)
-}
-
-pub(super) fn publish_fault(
-    device: &mut NativeDevice,
-    fault: FaultRetirement,
-) -> ModelResult<BackendStepStatus> {
-    let event = EventRecord::new(
-        fault.queue_id,
-        fault.command_id,
-        event_error_kind(fault.source)?,
-        fault.buffer,
-    );
-    device.events.push_back(event);
-    retire_command(device, fault.queue_id)?;
-    Err(fault.source)
-}
-
-fn retire_command(device: &mut NativeDevice, queue_id: QueueId) -> ModelResult<()> {
-    retire_command_without_requeue(device, queue_id)?;
-    if !device.queue(queue_id)?.commands.is_empty() {
-        device.runnable.push_back(queue_id);
-    }
-    Ok(())
-}
-
-fn retire_command_without_requeue(device: &mut NativeDevice, queue_id: QueueId) -> ModelResult<()> {
-    let queue = device.queue_mut(queue_id)?;
-    let _retired = queue.commands.pop();
-    Ok(())
-}
-
-const fn event_error_kind(error: ModelError) -> ModelResult<EventErrorKind> {
-    match error {
-        ModelError::UnknownBuffer(_) => Ok(EventErrorKind::UnknownBuffer),
-        ModelError::RangeOverflow => Ok(EventErrorKind::RangeOverflow),
-        ModelError::OutOfBounds { len, end, .. } => Ok(EventErrorKind::OutOfBounds { len, end }),
-        _ => Err(error),
-    }
 }

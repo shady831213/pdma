@@ -7,13 +7,13 @@ mod types;
 mod worker;
 
 use backend::RunnerBackend;
+use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use pdma_model_device::PdmaDevice;
 use state::{RunnerShared, RunnerState, publish, snapshot, summary, wake};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -34,14 +34,18 @@ pub struct AsyncDeviceRunner {
 }
 
 impl AsyncDeviceRunner {
-    /// Spawns an async hardware runner that advances `device` until shutdown.
-    pub fn spawn(device: PdmaDevice) -> Self {
-        Self::spawn_backend(RunnerBackend::legacy(device))
-    }
-
     /// Spawns an async hardware runner backed by the native async linear-copy device slice.
     pub fn spawn_native() -> Self {
-        Self::spawn_backend(RunnerBackend::native())
+        Self::spawn_native_with_resource_config(ResourceConfig::default())
+    }
+
+    /// Spawns an async hardware runner backed by the native async device with `config` credits.
+    pub fn spawn_native_with_resource_config(config: ResourceConfig) -> Self {
+        if config == ResourceConfig::default() {
+            Self::spawn_backend(RunnerBackend::native())
+        } else {
+            Self::spawn_backend(RunnerBackend::native_with_resource_config(config))
+        }
     }
 
     fn spawn_backend(backend: RunnerBackend) -> Self {

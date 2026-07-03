@@ -1,12 +1,15 @@
 mod broadcast;
 mod copy;
 mod memory;
+mod resources;
+mod retirement;
 mod ring;
 mod step;
 mod vector_add;
 
 use super::backend::BackendStepStatus;
 use memory::NativeMemory;
+use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
@@ -22,19 +25,32 @@ struct QueueContext {
     commands: NativeRing<ExternalCommand>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct NativeDevice {
     memory: NativeMemory,
     queues: Vec<QueueContext>,
     completions: Vec<NativeRing<CompletionRecord>>,
     events: VecDeque<EventRecord>,
     runnable: VecDeque<QueueId>,
-    pending_completion: Option<copy::PendingCompletion>,
+    pending_retirement: Option<retirement::PendingRetirement>,
+    resource_config: ResourceConfig,
 }
 
 impl NativeDevice {
     pub(super) fn new() -> Self {
-        Self::default()
+        Self::with_resource_config(ResourceConfig::default())
+    }
+
+    pub(super) fn with_resource_config(resource_config: ResourceConfig) -> Self {
+        Self {
+            memory: NativeMemory::default(),
+            queues: Vec::new(),
+            completions: Vec::new(),
+            events: VecDeque::new(),
+            runnable: VecDeque::new(),
+            pending_retirement: None,
+            resource_config,
+        }
     }
 
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
@@ -133,5 +149,18 @@ impl NativeDevice {
         self.completions
             .get_mut(id.raw())
             .ok_or(ModelError::UnknownCompletionRing(id))
+    }
+
+    fn completion(&self, id: CompletionRingId) -> ModelResult<&NativeRing<CompletionRecord>> {
+        self.completions
+            .get(id.raw())
+            .ok_or(ModelError::UnknownCompletionRing(id))
+    }
+
+    fn requeue_if_command_pending(&mut self, queue_id: QueueId) -> ModelResult<()> {
+        if !self.queue(queue_id)?.commands.is_empty() && !self.runnable.contains(&queue_id) {
+            self.runnable.push_back(queue_id);
+        }
+        Ok(())
     }
 }

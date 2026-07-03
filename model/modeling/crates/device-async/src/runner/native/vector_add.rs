@@ -1,5 +1,6 @@
 use super::NativeDevice;
-use super::copy::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
+use super::retirement::validate_success_completion_route;
+use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::VectorAddCommand;
 use pdma_model_contract::error::ModelResult;
@@ -52,6 +53,7 @@ pub(super) fn retire_vector_add(
         .zip(src_b.iter())
         .map(|(left, right)| left.wrapping_add(*right))
         .collect::<Vec<_>>();
+    validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     if let Err(source) = device
         .memory
         .write_checked(request.dst(), request.dst_offset(), &sum)

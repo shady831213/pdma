@@ -1,5 +1,6 @@
 use super::NativeDevice;
-use super::copy::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
+use super::retirement::validate_success_completion_route;
+use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::BroadcastCopyCommand;
 use pdma_model_contract::error::ModelResult;
@@ -10,6 +11,7 @@ pub(super) fn retire_broadcast_copy(
     command: &BroadcastCopyCommand,
 ) -> ModelResult<BackendStepStatus> {
     let request = command.request();
+    validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     for destination in request.destinations() {
         let bytes =
             match device

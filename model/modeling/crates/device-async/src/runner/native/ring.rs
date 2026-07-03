@@ -30,6 +30,10 @@ impl<T> NativeRing<T> {
         self.len == 0
     }
 
+    pub(super) const fn len(&self) -> usize {
+        self.len
+    }
+
     pub(super) fn push(&mut self, item: T) -> ModelResult<()> {
         if self.is_full() {
             return Err(ModelError::RingFull);

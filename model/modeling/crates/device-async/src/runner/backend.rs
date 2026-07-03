@@ -7,6 +7,7 @@ use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::trace::TraceEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum BackendStepStatus {
@@ -104,6 +105,36 @@ impl RunnerBackend {
     ) -> ModelResult<Option<EventRecord>> {
         match self {
             Self::Native(device) => device.poll_queue_event(queue_id),
+        }
+    }
+
+    pub(super) const fn enable_tracing(&mut self) {
+        match self {
+            Self::Native(device) => device.enable_tracing(),
+        }
+    }
+
+    pub(super) const fn disable_tracing(&mut self) {
+        match self {
+            Self::Native(device) => device.disable_tracing(),
+        }
+    }
+
+    pub(super) fn clear_trace(&mut self) {
+        match self {
+            Self::Native(device) => device.clear_trace(),
+        }
+    }
+
+    pub(super) fn trace_events(&self) -> Vec<TraceEvent> {
+        match self {
+            Self::Native(device) => device.trace_events(),
+        }
+    }
+
+    pub(super) fn trace_json(&self) -> String {
+        match self {
+            Self::Native(device) => device.trace_json(),
         }
     }
 }

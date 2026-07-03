@@ -8,6 +8,7 @@ mod step;
 mod vector_add;
 
 use super::backend::BackendStepStatus;
+use crate::trace::{TraceSink, command_id, operation_from_external};
 use memory::NativeMemory;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
@@ -16,6 +17,7 @@ use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
+use pdma_model_contract::trace::TraceEvent;
 use ring::NativeRing;
 use std::collections::VecDeque;
 
@@ -34,6 +36,7 @@ pub(super) struct NativeDevice {
     runnable: VecDeque<QueueId>,
     pending_retirement: Option<retirement::PendingRetirement>,
     resource_config: ResourceConfig,
+    trace: TraceSink,
 }
 
 impl NativeDevice {
@@ -50,6 +53,7 @@ impl NativeDevice {
             runnable: VecDeque::new(),
             pending_retirement: None,
             resource_config,
+            trace: TraceSink::default(),
         }
     }
 
@@ -91,7 +95,12 @@ impl NativeDevice {
         queue_id: QueueId,
         command: ExternalCommand,
     ) -> ModelResult<()> {
-        self.queue_mut(queue_id)?.commands.push(command)
+        let operation = operation_from_external(&command);
+        let submitted_command = command_id(&command);
+        self.queue_mut(queue_id)?.commands.push(command).map(|()| {
+            self.trace
+                .command_submitted(queue_id, operation, submitted_command);
+        })
     }
 
     pub(super) fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
@@ -99,6 +108,7 @@ impl NativeDevice {
         if !self.runnable.contains(&queue_id) {
             self.runnable.push_back(queue_id);
         }
+        self.trace.doorbell_runnable(queue_id);
         Ok(())
     }
 
@@ -106,7 +116,13 @@ impl NativeDevice {
         &mut self,
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
-        self.completion_mut(completion_ring_id).map(NativeRing::pop)
+        let completion = self
+            .completion_mut(completion_ring_id)
+            .map(NativeRing::pop)?;
+        if let Some(record) = completion {
+            self.trace.completion_polled(record);
+        }
+        Ok(completion)
     }
 
     pub(super) fn poll_queue_event(
@@ -119,13 +135,36 @@ impl NativeDevice {
             .iter()
             .position(|event| event.queue_id() == queue_id)
         else {
+            self.trace.event_poll(queue_id, None);
             return Ok(None);
         };
-        Ok(self.events.remove(index))
+        let event = self.events.remove(index);
+        self.trace.event_poll(queue_id, event);
+        Ok(event)
     }
 
     pub(super) fn step(&mut self) -> ModelResult<BackendStepStatus> {
         step::step(self)
+    }
+
+    pub(super) const fn enable_tracing(&mut self) {
+        self.trace.enable();
+    }
+
+    pub(super) const fn disable_tracing(&mut self) {
+        self.trace.disable();
+    }
+
+    pub(super) fn clear_trace(&mut self) {
+        self.trace.clear();
+    }
+
+    pub(super) fn trace_events(&self) -> Vec<TraceEvent> {
+        self.trace.events().to_vec()
+    }
+
+    pub(super) fn trace_json(&self) -> String {
+        self.trace.to_json()
     }
 
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {

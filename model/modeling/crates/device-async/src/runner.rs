@@ -15,6 +15,7 @@ use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::trace::TraceEvent;
 use state::{RunnerShared, RunnerState, publish, summary, wake};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -171,6 +172,31 @@ impl AsyncDeviceHandle {
             .await
     }
 
+    /// Enables deterministic trace capture.
+    pub async fn enable_tracing(&self) {
+        self.with_backend_unit(RunnerBackend::enable_tracing).await;
+    }
+
+    /// Disables trace capture without clearing existing events.
+    pub async fn disable_tracing(&self) {
+        self.with_backend_unit(RunnerBackend::disable_tracing).await;
+    }
+
+    /// Clears captured trace events and sequence ordinals.
+    pub async fn clear_trace(&self) {
+        self.with_backend_unit(RunnerBackend::clear_trace).await;
+    }
+
+    /// Returns captured trace events in deterministic sequence order.
+    pub async fn trace_events(&self) -> Vec<TraceEvent> {
+        self.shared.state.lock().await.backend.trace_events()
+    }
+
+    /// Exports captured trace events as Chrome/Perfetto JSON.
+    pub async fn trace_json(&self) -> String {
+        self.shared.state.lock().await.backend.trace_json()
+    }
+
     async fn with_backend<T>(
         &self,
         f: impl FnOnce(&mut RunnerBackend) -> ModelResult<T>,
@@ -183,5 +209,15 @@ impl AsyncDeviceHandle {
         };
         publish(&self.shared, generation);
         result
+    }
+
+    async fn with_backend_unit(&self, f: impl FnOnce(&mut RunnerBackend)) {
+        let generation = {
+            let mut state = self.shared.state.lock().await;
+            f(&mut state.backend);
+            wake(&mut state);
+            state.generation
+        };
+        publish(&self.shared, generation);
     }
 }

@@ -7,15 +7,15 @@ use pdma_model_contract::{
         VectorBufferRange,
     },
 };
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_stalls_without_read_slots() {
     // Given: an async copy on a device with no read slots.
-    let device = PdmaDevice::with_resource_config(ResourceConfig::default().with_read_slots(0));
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+        ResourceConfig::default().with_read_slots(0),
+    );
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -53,12 +53,11 @@ async fn async_runner_copy_stalls_without_read_slots() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_credit() {
     // Given: an async broadcast on a device with insufficient write and descriptor credit.
-    let device = PdmaDevice::with_resource_config(
+    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
         ResourceConfig::default()
             .with_write_slots(1)
             .with_internal_descriptors(1),
     );
-    let runner = AsyncDeviceRunner::spawn(device);
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -108,8 +107,9 @@ async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_cr
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_vector_add_stalls_without_compute_slots() {
     // Given: an async vector-add command on a device with no compute slots.
-    let device = PdmaDevice::with_resource_config(ResourceConfig::default().with_compute_slots(0));
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+        ResourceConfig::default().with_compute_slots(0),
+    );
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -152,8 +152,9 @@ async fn async_runner_vector_add_stalls_without_compute_slots() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_vector_add_stalls_with_one_read_slot() {
     // Given: an async vector-add command on a device with only one read slot.
-    let device = PdmaDevice::with_resource_config(ResourceConfig::default().with_read_slots(1));
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+        ResourceConfig::default().with_read_slots(1),
+    );
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

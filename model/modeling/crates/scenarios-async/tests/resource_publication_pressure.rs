@@ -1,7 +1,6 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, ResourceConfig, desc::CopyRequest};
-use pdma_model_device::PdmaDevice;
 use pdma_model_device_async::AsyncDeviceRunner;
 use pdma_model_host_async::AsyncDriver;
 
@@ -9,10 +8,9 @@ use pdma_model_host_async::AsyncDriver;
 async fn async_runner_completion_publication_capacity_one_preserves_completion_order_after_polling()
 {
     // Given: two async copies queued behind a one-slot completion publication path.
-    let device = PdmaDevice::with_resource_config(
+    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
-    let runner = AsyncDeviceRunner::spawn(device);
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -69,9 +67,9 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_event_publication_capacity_one_preserves_event_order_after_polling() {
     // Given: two faulting async copies behind a one-slot event publication path.
-    let device =
-        PdmaDevice::with_resource_config(ResourceConfig::default().with_event_publication_slots(1));
-    let runner = AsyncDeviceRunner::spawn(device);
+    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+        ResourceConfig::default().with_event_publication_slots(1),
+    );
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

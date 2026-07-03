@@ -1,3 +1,4 @@
+use super::AsyncStepStatus;
 use super::backend::BackendStepStatus;
 use super::state::{RunnerShared, RunnerState, publish};
 use std::sync::Arc;
@@ -15,12 +16,17 @@ async fn run_one(shared: &RunnerShared) -> bool {
         match state.backend.step() {
             Ok(BackendStepStatus::Progressed) => {
                 state.steps = state.steps.saturating_add(1);
+                state.last_status = AsyncStepStatus::Progressed;
                 state.generation = state.generation.saturating_add(1);
                 WorkerOutcome::Continue(state.generation)
             }
-            Ok(BackendStepStatus::Idle) => WorkerOutcome::Wait(wait_for_wake(shared, &mut state)),
-            Ok(BackendStepStatus::Stalled) => {
+            Ok(BackendStepStatus::Idle) => {
+                state.last_status = AsyncStepStatus::Idle;
+                WorkerOutcome::Wait(wait_for_wake(shared, &mut state))
+            }
+            Ok(BackendStepStatus::Stalled(reason)) => {
                 state.stalls = state.stalls.saturating_add(1);
+                state.last_status = AsyncStepStatus::Stalled(reason);
                 WorkerOutcome::Wait(wait_for_wake(shared, &mut state))
             }
             Err(_) => {

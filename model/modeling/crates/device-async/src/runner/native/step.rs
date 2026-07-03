@@ -4,6 +4,7 @@ use super::copy;
 use super::resources::ResourceDemand;
 use super::retirement;
 use super::vector_add;
+use crate::runner::AsyncStallReason;
 use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
@@ -20,7 +21,9 @@ pub(super) fn step(device: &mut NativeDevice) -> ModelResult<BackendStepStatus> 
     };
     if !ResourceDemand::for_command(&command).fits(device.resource_config) {
         device.requeue_if_command_pending(queue_id)?;
-        return Ok(BackendStepStatus::Stalled);
+        return Ok(BackendStepStatus::Stalled(
+            AsyncStallReason::ExecutionResourcePressure,
+        ));
     }
     match command {
         ExternalCommand::Copy(copy_command) => copy::retire_copy(device, queue_id, copy_command),

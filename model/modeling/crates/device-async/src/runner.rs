@@ -4,6 +4,7 @@ mod backend;
 mod native;
 mod state;
 mod types;
+mod wait;
 mod worker;
 
 use backend::RunnerBackend;
@@ -14,10 +15,12 @@ use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use state::{RunnerShared, RunnerState, publish, snapshot, summary, wake};
+use state::{RunnerShared, RunnerState, publish, summary, wake};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-pub use types::{AsyncRunJoinError, AsyncRunSnapshot, AsyncRunSummary};
+pub use types::{
+    AsyncRunJoinError, AsyncRunSnapshot, AsyncRunSummary, AsyncStallReason, AsyncStepStatus,
+};
 use worker::run_worker;
 
 /// Cloneable host-facing handle for an async hardware runner.
@@ -67,26 +70,6 @@ impl AsyncDeviceRunner {
         self.handle.clone()
     }
 
-    /// Returns the current runner snapshot.
-    pub async fn snapshot(&self) -> AsyncRunSnapshot {
-        self.handle.snapshot().await
-    }
-
-    /// Waits until the runner records any change after the supplied snapshot.
-    pub async fn wait_for_change_after(&self, snapshot: AsyncRunSnapshot) -> AsyncRunSnapshot {
-        self.handle.wait_for_change_after(snapshot).await
-    }
-
-    /// Waits until the runner records more progress than `steps`.
-    pub async fn wait_for_progress_after(&self, steps: usize) -> AsyncRunSnapshot {
-        self.handle.wait_for_progress_after(steps).await
-    }
-
-    /// Waits until the runner records more errors than `errors`.
-    pub async fn wait_for_error_after(&self, errors: usize) -> AsyncRunSnapshot {
-        self.handle.wait_for_error_after(errors).await
-    }
-
     /// Requests worker shutdown.
     pub async fn request_shutdown(&self) {
         self.handle.request_shutdown().await;
@@ -116,30 +99,6 @@ impl AsyncDeviceHandle {
             state.generation
         };
         publish(&self.shared, generation);
-    }
-
-    /// Returns the current runner snapshot.
-    pub async fn snapshot(&self) -> AsyncRunSnapshot {
-        let state = self.shared.state.lock().await;
-        snapshot(&state)
-    }
-
-    /// Waits until the runner records any change after the supplied snapshot.
-    pub async fn wait_for_change_after(&self, previous: AsyncRunSnapshot) -> AsyncRunSnapshot {
-        self.wait_until(|state| state.generation != previous.generation || state.shutdown_requested)
-            .await
-    }
-
-    /// Waits until the runner records more progress than `steps`.
-    pub async fn wait_for_progress_after(&self, steps: usize) -> AsyncRunSnapshot {
-        self.wait_until(|state| state.steps > steps || state.shutdown_requested)
-            .await
-    }
-
-    /// Waits until the runner records more errors than `errors`.
-    pub async fn wait_for_error_after(&self, errors: usize) -> AsyncRunSnapshot {
-        self.wait_until(|state| state.errors > errors || state.shutdown_requested)
-            .await
     }
 
     /// Provisions one command queue and one bound completion ring.
@@ -210,25 +169,6 @@ impl AsyncDeviceHandle {
     pub async fn poll_queue_event(&self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
         self.with_backend(|backend| backend.poll_queue_event(queue_id))
             .await
-    }
-
-    async fn wait_until(&self, predicate: impl Fn(&RunnerState) -> bool) -> AsyncRunSnapshot {
-        let mut changes = self.shared.changed.subscribe();
-        loop {
-            let current = {
-                let state = self.shared.state.lock().await;
-                if predicate(&state) {
-                    return snapshot(&state);
-                }
-                state.generation
-            };
-            if *changes.borrow_and_update() != current {
-                continue;
-            }
-            if changes.changed().await.is_err() {
-                return self.snapshot().await;
-            }
-        }
     }
 
     async fn with_backend<T>(

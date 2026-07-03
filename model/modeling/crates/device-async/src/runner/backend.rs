@@ -1,3 +1,4 @@
+use super::AsyncStallReason;
 use super::native::NativeDevice;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
@@ -11,7 +12,7 @@ use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 pub(super) enum BackendStepStatus {
     Progressed,
     Idle,
-    Stalled,
+    Stalled(AsyncStallReason),
 }
 
 #[derive(Debug)]

@@ -1,4 +1,4 @@
-use super::{AsyncRunSnapshot, AsyncRunSummary};
+use super::{AsyncRunSnapshot, AsyncRunSummary, AsyncStepStatus};
 use crate::runner::backend::RunnerBackend;
 use tokio::sync::{Mutex, watch};
 
@@ -14,6 +14,7 @@ pub(super) struct RunnerState {
     pub(super) steps: usize,
     pub(super) errors: usize,
     pub(super) stalls: usize,
+    pub(super) last_status: AsyncStepStatus,
     pub(super) generation: usize,
     pub(super) wake_generation: usize,
     pub(super) shutdown_requested: bool,
@@ -26,6 +27,7 @@ impl RunnerState {
             steps: 0,
             errors: 0,
             stalls: 0,
+            last_status: AsyncStepStatus::Idle,
             generation: 0,
             wake_generation: 0,
             shutdown_requested: false,
@@ -38,8 +40,19 @@ pub(super) const fn snapshot(state: &RunnerState) -> AsyncRunSnapshot {
         steps: state.steps,
         errors: state.errors,
         stalls: state.stalls,
+        last_status: state.last_status,
         shutdown_requested: state.shutdown_requested,
         generation: state.generation,
+    }
+}
+
+pub(super) const fn snapshot_with_status(
+    state: &RunnerState,
+    last_status: AsyncStepStatus,
+) -> AsyncRunSnapshot {
+    AsyncRunSnapshot {
+        last_status,
+        ..snapshot(state)
     }
 }
 
@@ -48,6 +61,7 @@ pub(super) const fn summary(state: &RunnerState) -> AsyncRunSummary {
         steps: state.steps,
         errors: state.errors,
         stalls: state.stalls,
+        last_status: state.last_status,
     }
 }
 

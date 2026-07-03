@@ -1,4 +1,5 @@
 use super::NativeDevice;
+use crate::runner::AsyncStallReason;
 use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
 use pdma_model_contract::error::{ModelError, ModelResult};
@@ -39,7 +40,9 @@ pub(super) fn publish_completion(
     if completion_publication_is_full(device, success.completion_ring)? {
         retire_command_without_requeue(device, success.queue)?;
         device.pending_retirement = Some(PendingRetirement::Completion(success));
-        return Ok(BackendStepStatus::Stalled);
+        return Ok(BackendStepStatus::Stalled(
+            AsyncStallReason::CompletionPublicationPressure,
+        ));
     }
     device
         .completion_mut(success.completion_ring)?
@@ -83,7 +86,9 @@ fn retry_pending_completion(
     let completion =
         CompletionRecord::new(pending.queue, pending.command, CompletionStatus::Success);
     if completion_publication_is_full(device, pending.completion_ring)? {
-        return Ok(BackendStepStatus::Stalled);
+        return Ok(BackendStepStatus::Stalled(
+            AsyncStallReason::CompletionPublicationPressure,
+        ));
     }
     device
         .completion_mut(pending.completion_ring)?
@@ -100,7 +105,9 @@ fn retry_pending_event(
     source: ModelError,
 ) -> ModelResult<BackendStepStatus> {
     if event_publication_is_full(device) {
-        return Ok(BackendStepStatus::Stalled);
+        return Ok(BackendStepStatus::Stalled(
+            AsyncStallReason::FaultRetirementPendingRetry,
+        ));
     }
     device.events.push_back(record);
     device.pending_retirement = None;
@@ -125,7 +132,9 @@ pub(super) fn publish_fault(
             record: event,
             source: fault.source,
         });
-        return Ok(BackendStepStatus::Stalled);
+        return Ok(BackendStepStatus::Stalled(
+            AsyncStallReason::EventPublicationPressure,
+        ));
     }
     device.events.push_back(event);
     retire_command(device, fault.queue_id)?;

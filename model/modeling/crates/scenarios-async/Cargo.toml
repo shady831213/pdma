@@ -10,7 +10,6 @@ description = "Async PDMA scenarios skeleton"
 
 [dependencies]
 pdma-model-contract = { path = "../contract" }
-pdma-model-device = { path = "../device" }
 pdma-model-device-async = { path = "../device-async" }
 pdma-model-host-async = { path = "../host-async" }
 

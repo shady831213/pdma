@@ -10,7 +10,6 @@ description = "Async PDMA device model skeleton"
 
 [dependencies]
 pdma-model-contract = { path = "../contract" }
-pdma-model-device = { path = "../device" }
 tokio = { version = "1.49", features = ["rt", "sync"] }
 
 [dev-dependencies]

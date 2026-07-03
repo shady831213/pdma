@@ -18,7 +18,6 @@ name = "pdma-model-device-async"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
- "pdma-model-device",
  "tokio",
 ]
 
@@ -53,7 +52,6 @@ name = "pdma-model-scenarios-async"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
- "pdma-model-device",
  "pdma-model-device-async",
  "pdma-model-host-async",
  "tokio",

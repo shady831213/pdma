@@ -4,6 +4,7 @@ use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, 
 use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::BroadcastCopyCommand;
 use pdma_model_contract::error::ModelResult;
+use pdma_model_contract::trace::TraceOperation;
 
 pub(super) fn retire_broadcast_copy(
     device: &mut NativeDevice,
@@ -53,6 +54,7 @@ pub(super) fn retire_broadcast_copy(
             queue: queue_id,
             command: command.command_id(),
             completion_ring: command.completion_ring_id(),
+            operation: TraceOperation::BroadcastCopy,
         },
     )
 }

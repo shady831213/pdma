@@ -5,6 +5,7 @@ use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::{CopyCommand, StridedCopyCommand};
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::ids::{BufferId, QueueId};
+use pdma_model_contract::trace::TraceOperation;
 
 #[derive(Debug, Clone, Copy)]
 struct NativeCopyChunk {
@@ -53,6 +54,7 @@ pub(super) fn retire_copy(
             queue: queue_id,
             command: command.command_id(),
             completion_ring: command.completion_ring_id(),
+            operation: TraceOperation::Copy,
         },
     )
 }
@@ -106,6 +108,7 @@ pub(super) fn retire_strided_copy(
             queue: queue_id,
             command: command.command_id(),
             completion_ring: command.completion_ring_id(),
+            operation: TraceOperation::StridedCopy,
         },
     )
 }

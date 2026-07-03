@@ -5,6 +5,7 @@ use crate::runner::backend::BackendStepStatus;
 use pdma_model_contract::desc::VectorAddCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::QueueId;
+use pdma_model_contract::trace::TraceOperation;
 
 pub(super) fn retire_vector_add(
     device: &mut NativeDevice,
@@ -74,6 +75,7 @@ pub(super) fn retire_vector_add(
             queue: queue_id,
             command: command.command_id(),
             completion_ring: command.completion_ring_id(),
+            operation: TraceOperation::VectorAdd,
         },
     )
 }

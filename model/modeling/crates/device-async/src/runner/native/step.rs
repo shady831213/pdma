@@ -6,6 +6,7 @@ use super::retirement;
 use super::vector_add;
 use crate::runner::AsyncStallReason;
 use crate::runner::backend::BackendStepStatus;
+use crate::trace::{command_id, operation_from_external};
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 
@@ -14,13 +15,21 @@ pub(super) fn step(device: &mut NativeDevice) -> ModelResult<BackendStepStatus> 
         return retirement::retry_pending_retirement(device);
     }
     let Some(queue_id) = device.runnable.pop_front() else {
+        device.trace.idle();
         return Ok(BackendStepStatus::Idle);
     };
     let Some(command) = device.queue(queue_id)?.commands.front().cloned() else {
-        return Ok(BackendStepStatus::Idle);
+        return Ok(BackendStepStatus::Progressed);
     };
+    let operation = operation_from_external(&command);
+    device
+        .trace
+        .scheduled(queue_id, operation, command_id(&command));
     if !ResourceDemand::for_command(&command).fits(device.resource_config) {
         device.requeue_if_command_pending(queue_id)?;
+        device
+            .trace
+            .stall(Some(queue_id), "ExecutionResourcePressure");
         return Ok(BackendStepStatus::Stalled(
             AsyncStallReason::ExecutionResourcePressure,
         ));

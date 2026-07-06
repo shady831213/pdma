@@ -10,7 +10,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_past_source() {
     // Given: async runner handle, AsyncDriver, and a linear copy whose source read is too long.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -30,7 +31,7 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
         .expect("event ring exists")
         .expect("error event was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the original out-of-bounds event is published and no success completion appears.
     assert_eq!(snapshot.errors, 1);
@@ -49,7 +50,8 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() {
     // Given: async runner handle, AsyncDriver, and a one-slot queue with one invalid command.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -75,7 +77,7 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
         .expect("event ring exists")
         .expect("error event was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the event reclaims the command slot for this driver.
     assert_eq!(snapshot.errors, 1);
@@ -92,7 +94,8 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     // Given: one async driver's queue has a pending memory fault event.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -121,7 +124,7 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
         .expect("event ring exists")
         .expect("owning driver can still poll its event");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the non-owning driver does not consume the event or reclaim its own slot.
     assert_eq!(snapshot.errors, 1);
@@ -145,7 +148,8 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_many_memory_fault_events_without_masking_original_error() {
     // Given: more invalid async commands than the previous hidden event-ring depth.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 65, 4)
         .await
@@ -162,7 +166,7 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
     // When: every invalid command is executed without polling events between failures.
     let snapshot = runner.wait_for_error_after(64).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: every fault kept its original error and produced a pollable event.
     assert_eq!(snapshot.errors, 65);
@@ -185,7 +189,8 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
 async fn async_runner_publishes_one_event_and_later_command_still_completes_after_bad_strided_copy()
 {
     // Given: async runner handle, AsyncDriver, and a bad strided copy before a valid linear copy.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -224,7 +229,7 @@ async fn async_runner_publishes_one_event_and_later_command_still_completes_afte
         .expect("completion ring exists")
         .expect("good command completed");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the failed command publishes one event, while the later command still completes.
     assert_eq!(error_snapshot.errors, 1);

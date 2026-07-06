@@ -6,8 +6,9 @@ use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
-    // Given: a native AsyncDevice, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
-    let runner = AsyncDevice::spawn_native();
+    // Given: a queue-port AsyncDevice, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -24,7 +25,7 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
         .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
         .await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: second submit returns ModelError::DriverQueueFull.
     assert_eq!(first, CommandId::new(0));

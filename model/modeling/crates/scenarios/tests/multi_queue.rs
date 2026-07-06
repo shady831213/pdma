@@ -11,7 +11,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_default_policy_retires_runnable_queues_in_submission_order() {
     // Given: two async queues with one runnable copy each, submitted in queue order.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 2, 2)
         .await
@@ -56,7 +57,7 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
         .expect("queue B completion ring exists")
         .expect("queue B completion is published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the default policy schedules the oldest runnable queue first.
     let scheduled_a = scheduled_position(&trace_events, driver_a.queue_id(), command_a)
@@ -82,7 +83,8 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable() {
     // Given: one peer queue and one repeated-work queue are both runnable.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut peer = AsyncDriver::setup_on(&mut handle, 1, 2)
         .await
@@ -136,7 +138,7 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
         .expect("repeated completion ring exists")
         .expect("repeated queue second command completes third");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: each runnable queue is scheduled once before the repeated queue runs again.
     let peer_scheduled = scheduled_position(&trace_events, peer.queue_id(), peer_command)

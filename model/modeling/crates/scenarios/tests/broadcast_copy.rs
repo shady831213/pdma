@@ -11,7 +11,8 @@ use pdma_model_host::AsyncDriver;
 async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_publishes_one_completion()
  {
     // Given: async runner handle, AsyncDriver, one source range, and two destination ranges.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
         .await
@@ -47,7 +48,7 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
         .expect("completion ring exists")
         .expect("broadcast published one completion");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: both destinations receive the same source bytes and only one completion appears.
     assert_eq!(snapshot.steps, 1);
@@ -68,7 +69,8 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_broadcast_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, one valid destination, and one too-small destination.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
         .await
@@ -104,7 +106,7 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
         .expect("event ring exists")
         .expect("broadcast fault event was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the original error is returned, one event is published, and no success completes.
     assert_eq!(snapshot.errors, 1);
@@ -121,7 +123,8 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_overlap() {
     // Given: a broadcast whose first destination overlaps and mutates the source range.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
         .await
@@ -133,7 +136,7 @@ async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_
         .await
         .expect("source write is in bounds");
 
-    // When: the native runner executes the overlapping broadcast copy.
+    // When: the queue-port runner executes the overlapping broadcast copy.
     let command_id = driver
         .submit_broadcast_copy_on(
             &mut handle,
@@ -156,7 +159,7 @@ async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_
         .expect("completion ring exists")
         .expect("broadcast published one completion");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the second destination observes the source after the first destination write.
     assert_eq!(snapshot.steps, 1);

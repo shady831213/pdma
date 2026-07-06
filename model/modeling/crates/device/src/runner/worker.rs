@@ -1,10 +1,9 @@
 use super::AsyncStepStatus;
 use super::backend::ModelStepStatus;
 use super::state::{RunnerShared, RunnerState, publish};
-use std::sync::Arc;
 
-pub(super) async fn run_worker(shared: Arc<RunnerShared>) {
-    while run_one(&shared).await {}
+pub(super) async fn run_worker(shared: &RunnerShared) {
+    while run_one(shared).await {}
 }
 
 async fn run_one(shared: &RunnerShared) -> bool {

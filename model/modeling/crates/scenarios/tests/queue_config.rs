@@ -10,7 +10,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
     // Given: two explicit async queue configurations with different software owners.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let config_a = QueueConfig::new(2, 3, EventRouting::QueueLocal, SoftwareOwnerId::new(10));
     let config_b = QueueConfig::new(4, 5, EventRouting::QueueLocal, SoftwareOwnerId::new(20));
@@ -23,7 +24,7 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
         .await
         .expect("second queue config is valid");
     runner.request_shutdown().await;
-    runner.join().await.expect("runner joins cleanly");
+    worker.await.expect("runner joins cleanly");
 
     // Then: IDs and completion bindings come from stable queue handles.
     let handle_a = driver_a.queue_config_handle();
@@ -46,7 +47,8 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
     // Given: an async driver created from an explicit one-slot queue config.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_with_config_on(
         &mut handle,
@@ -66,7 +68,7 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
         .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 1))
         .await;
     runner.request_shutdown().await;
-    runner.join().await.expect("runner joins cleanly");
+    worker.await.expect("runner joins cleanly");
 
     // Then: the explicit command depth is enforced and the handle records ownership.
     assert_eq!(command_id.raw(), 0);
@@ -82,7 +84,8 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
     // Given: two async drivers with explicit queue-local event routing.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_with_config_on(
         &mut handle,
@@ -120,7 +123,7 @@ async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
         .expect("event polling succeeds")
         .expect("owning queue event remains available");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: queue-local routing preserves ownership and only the owning slot is reclaimed.
     assert_eq!(snapshot.errors, 1);

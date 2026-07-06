@@ -10,7 +10,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
     // Given: an idle async runner with tracing enabled after startup noise is cleared.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     handle.enable_tracing().await;
     handle.clear_trace().await;
@@ -20,7 +21,7 @@ async fn async_trace_log_records_idle_status_steps() {
     let snapshot = runner.wait_for_change_after(baseline).await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: the trace mirrors sync idle status observability.
     assert_eq!(snapshot.last_status, AsyncStepStatus::Idle);
@@ -35,9 +36,9 @@ async fn async_trace_log_records_idle_status_steps() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_schedules_before_resource_stall() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
-        ResourceConfig::default().with_read_slots(0),
-    );
+    let (runner, worker) =
+        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -55,7 +56,7 @@ async fn async_trace_log_schedules_before_resource_stall() {
     let _snapshot = runner.wait_for_stall_after(0).await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: scheduling is recorded before resource pressure stalls the command.
     let scheduled = event_position(&trace_events, TraceEventKind::Scheduled, command)
@@ -72,9 +73,10 @@ async fn async_trace_log_schedules_before_resource_stall() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
     // Given: two traced copies behind a one-slot completion publication path.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -107,7 +109,7 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
     let _second_snapshot = runner.wait_for_stall_after(0).await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: execution success for the second command is retained before publication pressure.
     let succeeded = event_position(
@@ -129,7 +131,8 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_queue_only_doorbells() {
     // Given: two drivers whose first commands reuse the same command id on distinct queues.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut copy_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -164,7 +167,7 @@ async fn async_trace_log_records_queue_only_doorbells() {
         .expect("vector submission has ring space");
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: doorbells stay queue-only and cannot be mislabeled by reused command ids.
     assert_eq!(copy_command, vector_command);

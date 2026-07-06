@@ -7,7 +7,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_interleaves_software_and_hardware_turns() {
     // Given: an async runner, a runner handle, and source/destination buffers.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -31,7 +32,7 @@ async fn async_runner_surface_interleaves_software_and_hardware_turns() {
         .expect("completion ring exists")
         .expect("completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the async runner-backed surface preserves the copy outcome across turns.
     assert_eq!(completion.command_id(), command_id);
@@ -47,7 +48,8 @@ async fn async_runner_surface_interleaves_software_and_hardware_turns() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_poll_before_progress_observes_no_completion() {
     // Given: an async runner, a runner handle, and source/destination buffers.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -75,7 +77,7 @@ async fn async_runner_surface_poll_before_progress_observes_no_completion() {
         .expect("completion ring exists")
         .expect("completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the early software poll sees no completion, and the later poll observes success.
     assert_eq!(early_completion, None);
@@ -92,7 +94,8 @@ async fn async_runner_surface_poll_before_progress_observes_no_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_records_errors_without_stopping_the_loop() {
     // Given: an async runner, a driver handle, one faulting command, and one later valid command.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -128,7 +131,7 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
         .expect("completion ring exists")
         .expect("good completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the fault is recorded and the loop still retires the later good command.
     assert_eq!(fault.command_id(), bad_command);
@@ -147,7 +150,8 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
     // Given: an async runner and one completed command.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -171,7 +175,7 @@ async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
         .expect("completion ring exists")
         .expect("completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: shutdown produces a join summary after the successful copy.
     assert_eq!(completion.command_id(), command_id);

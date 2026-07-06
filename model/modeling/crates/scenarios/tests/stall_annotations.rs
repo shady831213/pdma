@@ -10,13 +10,14 @@ use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
-    // Given: a native async runner with no queued work.
-    let runner = AsyncDevice::spawn_native();
+    // Given: a queue-port async runner with no queued work.
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
 
     // When: software observes the runner before submitting commands.
     let snapshot = runner.snapshot().await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the public status API reports the idle terminal status.
     assert_eq!(snapshot.last_status, AsyncStepStatus::Idle);
@@ -25,8 +26,9 @@ async fn async_runner_no_work_reports_idle_status() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_successful_copy_reports_progressed_status() {
-    // Given: an async copy on a native async runner with default resources.
-    let runner = AsyncDevice::spawn_native();
+    // Given: an async copy on a queue-port async runner with default resources.
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -45,7 +47,7 @@ async fn async_runner_successful_copy_reports_progressed_status() {
         .expect("copy submission has ring space");
     let snapshot = runner.wait_for_progress_after(0).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the progress snapshot reports the progressed status.
     assert_eq!(snapshot.last_status, AsyncStepStatus::Progressed);
@@ -55,9 +57,9 @@ async fn async_runner_successful_copy_reports_progressed_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_resource_stall_reports_execution_reason() {
     // Given: an async copy on a device with no read slots.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
-        ResourceConfig::default().with_read_slots(0),
-    );
+    let (runner, worker) =
+        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -76,7 +78,7 @@ async fn async_runner_resource_stall_reports_execution_reason() {
         .expect("copy submission has ring space");
     let snapshot = runner.wait_for_stall_after(0).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the public status API names execution resource pressure as the stall reason.
     assert_eq!(
@@ -90,9 +92,10 @@ async fn async_runner_resource_stall_reports_execution_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_completion_publication_stall_reports_reason() {
     // Given: two async copies behind a one-slot completion publication path.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -121,7 +124,7 @@ async fn async_runner_completion_publication_stall_reports_reason() {
         .expect("second copy submission has ring space");
     let snapshot = runner.wait_for_stall_after(0).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the public status API names completion publication pressure as the stall reason,
     // and the first completion was already published before the second stalled.
@@ -142,9 +145,10 @@ async fn async_runner_completion_publication_stall_reports_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     // Given: a faulting async copy behind a one-deep event publication path.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_event_publication_slots(0),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -164,7 +168,7 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
         .expect("doorbell rings after first stall");
     let second_snapshot = runner.wait_for_stall_after(first_snapshot.stalls).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the first stall is event publication pressure, and the retry reports fault retirement pending retry.
     assert_eq!(

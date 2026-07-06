@@ -7,7 +7,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     // Given: async runner handle, AsyncDriver, padded source rows, and sentinel destination bytes.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -39,7 +40,7 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
         .expect("completion ring exists")
         .expect("completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: row payloads are copied, destination padding stays unchanged, and one completion is published.
     assert_eq!(snapshot.steps, 1);
@@ -60,7 +61,8 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buffer() {
     // Given: async runner handle, AsyncDriver, and a strided copy whose second row is too long.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -76,7 +78,7 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
     // When: the async runner executes the command.
     let snapshot = runner.wait_for_error_after(0).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: checked memory reports the failing row and no successful completion is published.
     assert_eq!(snapshot.errors, 1);
@@ -87,7 +89,8 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_work() {
     // Given: a bad strided copy followed by a valid strided copy in the same async queue.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -124,7 +127,7 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
         .expect("completion ring exists")
         .expect("good command completed");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the bad command reports its error, while the later command still completes.
     assert_eq!(error_snapshot.errors, 1);
@@ -141,7 +144,8 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
     // Given: two strided copies sharing a one-slot completion ring.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 1)
         .await
@@ -196,7 +200,7 @@ async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy
         .expect("completion ring exists")
         .expect("second completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: completion retry publishes the already-executed copy instead of copying mutated bytes.
     assert!(stalled_snapshot.stalls >= 1);

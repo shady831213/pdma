@@ -10,9 +10,10 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     // Given: two traced copies behind a one-slot completion publication path.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -50,7 +51,7 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     let _second_snapshot = runner.wait_for_progress_after(first_snapshot.steps).await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: retry publishes the completion without duplicating execution success.
     let second_successes = trace_events
@@ -66,7 +67,8 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     // Given: a command submitted while trace capture is disabled.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -93,7 +95,7 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
         .expect("doorbell targets an existing queue");
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: disabled submission metadata does not leak into later queue-only doorbell traces.
     assert!(
@@ -112,7 +114,8 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     // Given: two traced async drivers where one queue faults and the other remains unrelated.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -143,7 +146,7 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     let trace_events = handle.trace_events().await;
     let trace_json = handle.trace_json().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: the unrelated poll does not consume the event and both poll paths are traced.
     assert_eq!(wrong_driver_event, None);

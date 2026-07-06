@@ -1,12 +1,3 @@
-/// Join failure for an async hardware runner.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AsyncRunJoinError {
-    /// The worker task was cancelled before join completed.
-    WorkerCancelled,
-    /// The worker task panicked before join completed.
-    WorkerPanicked,
-}
-
 /// Snapshot of runner-observable hardware progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AsyncRunSnapshot {
@@ -23,7 +14,7 @@ pub struct AsyncRunSnapshot {
     pub(super) generation: usize,
 }
 
-/// Final runner summary returned by `join`.
+/// Final runner summary returned by `AsyncDeviceWorker::run`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AsyncRunSummary {
     /// Commands retired successfully by the worker loop.

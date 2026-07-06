@@ -8,9 +8,10 @@ use pdma_model_host::AsyncDriver;
 async fn async_runner_completion_publication_capacity_one_preserves_completion_order_after_polling()
 {
     // Given: two async copies queued behind a one-slot completion publication path.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -50,7 +51,7 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
         .expect("completion ring exists")
         .expect("second completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: retirement stays ordered across polling.
     assert_eq!(first_snapshot.steps, 1);
@@ -67,9 +68,10 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_event_publication_capacity_one_preserves_event_order_after_polling() {
     // Given: two faulting async copies behind a one-slot event publication path.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_event_publication_slots(1),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -101,7 +103,7 @@ async fn async_runner_event_publication_capacity_one_preserves_event_order_after
         .expect("event ring exists")
         .expect("second error event was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: error publication stays ordered across polling.
     assert_eq!(first_snapshot.errors, 1);

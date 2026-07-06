@@ -10,7 +10,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() {
     // Given: async runner handle, AsyncDriver, two source buffers, and sentinel destination bytes.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -63,7 +64,7 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
         .expect("completion ring exists")
         .expect("vector-add published one completion");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: byte-wise wrapping addition lands at the destination offset and only one success completion appears.
     assert_eq!(snapshot.steps, 1);
@@ -82,7 +83,8 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b_read_fails() {
     // Given: async runner handle, AsyncDriver, and a vector add whose source B read is too long.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -111,7 +113,7 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
         .expect("event ring exists")
         .expect("source-B fault event was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the original out-of-bounds event is published and no success completion appears.
     assert_eq!(command_id.raw(), 0);
@@ -129,7 +131,8 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_vector_add_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, and a vector add whose destination write is too long.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -166,7 +169,7 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_destinat
         .expect("event ring exists")
         .expect("destination fault event was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the destination bounds event is published and no success completion appears.
     assert_eq!(command_id.raw(), 0);

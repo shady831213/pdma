@@ -13,9 +13,9 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_stalls_without_read_slots() {
     // Given: an async copy on a device with no read slots.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
-        ResourceConfig::default().with_read_slots(0),
-    );
+    let (runner, worker) =
+        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -37,7 +37,7 @@ async fn async_runner_copy_stalls_without_read_slots() {
         snapshot = runner.wait_for_change_after(snapshot).await;
     }
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the command stays pending because the read slot budget is empty.
     assert_eq!(command_id.raw(), 0);
@@ -53,9 +53,9 @@ async fn async_runner_copy_stalls_without_read_slots() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_completes_with_one_read_slot() {
     // Given: an async copy on a device with one read slot available.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
-        ResourceConfig::default().with_read_slots(1),
-    );
+    let (runner, worker) =
+        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(1));
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -79,7 +79,7 @@ async fn async_runner_copy_completes_with_one_read_slot() {
         .expect("completion ring exists")
         .expect("copy published one completion");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the copy completes successfully and the destination matches the source.
     assert_eq!(snapshot.steps, 1);
@@ -95,11 +95,12 @@ async fn async_runner_copy_completes_with_one_read_slot() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_credit() {
     // Given: an async broadcast on a device with insufficient write and descriptor credit.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default()
             .with_write_slots(1)
             .with_internal_descriptors(1),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -133,7 +134,7 @@ async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_cr
         snapshot = runner.wait_for_change_after(snapshot).await;
     }
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the command stays pending instead of retiring with too little credit.
     assert_eq!(command_id.raw(), 0);
@@ -149,9 +150,10 @@ async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_cr
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_vector_add_stalls_without_compute_slots() {
     // Given: an async vector-add command on a device with no compute slots.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_compute_slots(0),
     );
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -178,7 +180,7 @@ async fn async_runner_vector_add_stalls_without_compute_slots() {
         snapshot = runner.wait_for_change_after(snapshot).await;
     }
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the command stays pending because no compute slot is available.
     assert_eq!(command_id.raw(), 0);
@@ -194,9 +196,9 @@ async fn async_runner_vector_add_stalls_without_compute_slots() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_vector_add_stalls_with_one_read_slot() {
     // Given: an async vector-add command on a device with only one read slot.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
-        ResourceConfig::default().with_read_slots(1),
-    );
+    let (runner, worker) =
+        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(1));
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -223,7 +225,7 @@ async fn async_runner_vector_add_stalls_with_one_read_slot() {
         snapshot = runner.wait_for_change_after(snapshot).await;
     }
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: the command stays pending because vector-add needs two read slots.
     assert_eq!(command_id.raw(), 0);

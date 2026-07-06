@@ -20,10 +20,7 @@ use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 use state::{RunnerShared, RunnerState, publish, summary, wake};
 use std::sync::Arc;
-use tokio::task::JoinHandle;
-pub use types::{
-    AsyncRunJoinError, AsyncRunSnapshot, AsyncRunSummary, AsyncStallReason, AsyncStepStatus,
-};
+pub use types::{AsyncRunSnapshot, AsyncRunSummary, AsyncStallReason, AsyncStepStatus};
 use worker::run_worker;
 
 /// Cloneable host-facing handle for an async hardware runner.
@@ -32,40 +29,48 @@ pub struct AsyncDeviceHandle {
     shared: Arc<RunnerShared>,
 }
 
-/// Owns the async hardware worker task.
+/// Host-facing async hardware runner state.
 #[derive(Debug)]
 pub struct AsyncDevice {
     handle: AsyncDeviceHandle,
-    worker: JoinHandle<()>,
+}
+
+/// Explicit async hardware worker loop returned to callers for spawning or direct awaiting.
+#[derive(Debug)]
+pub struct AsyncDeviceWorker {
+    shared: Arc<RunnerShared>,
 }
 
 impl AsyncDevice {
-    /// Spawns an async hardware runner backed by the native async linear-copy device slice.
-    pub fn spawn_native() -> Self {
-        Self::spawn_native_with_resource_config(ResourceConfig::default())
+    /// Creates an async hardware runner backed by the queue-port device model.
+    pub fn queue_port() -> (Self, AsyncDeviceWorker) {
+        Self::queue_port_with_resource_config(ResourceConfig::default())
     }
 
-    /// Spawns an async hardware runner backed by the native async device with `config` credits.
-    pub fn spawn_native_with_resource_config(config: ResourceConfig) -> Self {
+    /// Creates an async hardware runner backed by the queue-port device model with `config` credits.
+    pub fn queue_port_with_resource_config(config: ResourceConfig) -> (Self, AsyncDeviceWorker) {
         if config == ResourceConfig::default() {
-            Self::spawn_backend(DeviceModel::queue_port())
+            Self::from_backend(DeviceModel::queue_port())
         } else {
-            Self::spawn_backend(DeviceModel::queue_port_with_resource_config(config))
+            Self::from_backend(DeviceModel::queue_port_with_resource_config(config))
         }
     }
 
-    fn spawn_backend(backend: DeviceModel) -> Self {
+    fn from_backend(backend: DeviceModel) -> (Self, AsyncDeviceWorker) {
         let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
             state: tokio::sync::Mutex::new(RunnerState::new(backend)),
             changed,
         });
-        let worker_shared = Arc::clone(&shared);
-        let worker = tokio::spawn(async move { run_worker(worker_shared).await });
-        Self {
-            handle: AsyncDeviceHandle { shared },
+        let worker = AsyncDeviceWorker {
+            shared: Arc::clone(&shared),
+        };
+        (
+            Self {
+                handle: AsyncDeviceHandle { shared },
+            },
             worker,
-        }
+        )
     }
 
     /// Returns a cloneable handle used by host software.
@@ -77,18 +82,14 @@ impl AsyncDevice {
     pub async fn request_shutdown(&self) {
         self.handle.request_shutdown().await;
     }
+}
 
-    /// Requests shutdown and joins the worker task.
-    pub async fn join(self) -> Result<AsyncRunSummary, AsyncRunJoinError> {
-        self.request_shutdown().await;
-        match self.worker.await {
-            Ok(()) => {
-                let state = self.handle.shared.state.lock().await;
-                Ok(summary(&state))
-            }
-            Err(error) if error.is_panic() => Err(AsyncRunJoinError::WorkerPanicked),
-            Err(_) => Err(AsyncRunJoinError::WorkerCancelled),
-        }
+impl AsyncDeviceWorker {
+    /// Runs the async hardware worker loop until shutdown is requested.
+    pub async fn run(self) -> AsyncRunSummary {
+        run_worker(&self.shared).await;
+        let state = self.shared.state.lock().await;
+        summary(&state)
     }
 }
 

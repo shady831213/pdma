@@ -10,8 +10,9 @@ use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retires_copy_after_handle_submission() {
-    // Given: a native async runner, an async handle, one queue, source/destination buffers, and a source write.
-    let runner: AsyncDevice = AsyncDevice::spawn_native();
+    // Given: a queue-port async runner, an async handle, one queue, source/destination buffers, and a source write.
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle
         .create_queue(QueueConfig::new(
@@ -51,7 +52,7 @@ async fn async_runner_retires_copy_after_handle_submission() {
         .expect("completion ring exists")
         .expect("completion was published");
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: completion is success, snapshot/summary steps are 1, and destination bytes equal source.
     assert_eq!(completion.status(), CompletionStatus::Success);
@@ -63,9 +64,10 @@ async fn async_runner_retires_copy_after_handle_submission() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progress() {
     // Given: a one-slot completion publication path with three direct copy commands on one queue.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
+    let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     let queue = handle
         .create_queue(QueueConfig::new(
@@ -132,7 +134,7 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
         .expect("empty queue doorbell is accepted");
     let final_snapshot = runner.wait_for_change_after(third_snapshot).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: only the three real retirements count as progress and destination buffers are copied once.
     assert_eq!(first_snapshot.steps, 1);
@@ -160,7 +162,8 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_side_effects() {
     // Given: a direct copy command whose completion ring is not present in the async device.
-    let runner: AsyncDevice = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle
         .create_queue(QueueConfig::new(
@@ -200,7 +203,7 @@ async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_si
         .expect("second doorbell rings after malformed command handling");
     let final_snapshot = runner.wait_for_change_after(error_snapshot).await;
     runner.request_shutdown().await;
-    let summary = runner.join().await.expect("runner joins cleanly");
+    let summary = worker.await.expect("runner joins cleanly");
 
     // Then: destination memory is untouched, no valid completion is published, and no retry zombie remains.
     assert_eq!(handle.read_buffer(dst, 0, 4).await, Ok(vec![0, 0, 0, 0]));

@@ -9,7 +9,8 @@ use pdma_model_host::AsyncDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_complete_copy_lifecycle() {
     // Given: an async runner, a driver handle, source/destination buffers, and tracing enabled.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -37,7 +38,7 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
     let trace_events = handle.trace_events().await;
     let trace_json = handle.trace_json().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: the trace stream records the full copy lifecycle and the destination bytes match.
     assert_eq!(completion.command_id(), command_id);
@@ -89,7 +90,8 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_error_event_without_success_completion() {
     // Given: a traced async runner and a copy that reads past the source buffer.
-    let runner = AsyncDevice::spawn_native();
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -117,7 +119,7 @@ async fn async_trace_log_records_error_event_without_success_completion() {
     let trace_events = handle.trace_events().await;
     let trace_json = handle.trace_json().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: the trace records the fault event path and no success completion.
     assert_eq!(event.command_id(), command_id);
@@ -146,9 +148,9 @@ async fn async_trace_log_records_error_event_without_success_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_stall_annotations_for_status_waits() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
-    let runner = AsyncDevice::spawn_native_with_resource_config(
-        ResourceConfig::default().with_read_slots(0),
-    );
+    let (runner, worker) =
+        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -167,7 +169,7 @@ async fn async_trace_log_records_stall_annotations_for_status_waits() {
     let trace_events = handle.trace_events().await;
     let trace_json = handle.trace_json().await;
     runner.request_shutdown().await;
-    let _summary = runner.join().await.expect("runner joins cleanly");
+    let _summary = worker.await.expect("runner joins cleanly");
 
     // Then: the trace records execution-resource pressure as a stall event.
     assert!(trace_events.iter().any(|event: &TraceEvent| {

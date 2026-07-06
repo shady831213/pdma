@@ -6,12 +6,12 @@ use pdma_model_contract::{
     ids::{CommandId, CompletionRingId},
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
-use pdma_model_device::{AsyncDeviceHandle, AsyncDeviceRunner};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retires_copy_after_handle_submission() {
     // Given: a native async runner, an async handle, one queue, source/destination buffers, and a source write.
-    let runner: AsyncDeviceRunner = AsyncDeviceRunner::spawn_native();
+    let runner: AsyncDevice = AsyncDevice::spawn_native();
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle
         .create_queue(QueueConfig::new(
@@ -63,7 +63,7 @@ async fn async_runner_retires_copy_after_handle_submission() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progress() {
     // Given: a one-slot completion publication path with three direct copy commands on one queue.
-    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+    let runner = AsyncDevice::spawn_native_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let handle = runner.handle();
@@ -160,7 +160,7 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_side_effects() {
     // Given: a direct copy command whose completion ring is not present in the async device.
-    let runner: AsyncDeviceRunner = AsyncDeviceRunner::spawn_native();
+    let runner: AsyncDevice = AsyncDevice::spawn_native();
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle
         .create_queue(QueueConfig::new(

@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, desc::StridedCopyRequest};
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     // Given: async runner handle, AsyncDriver, padded source rows, and sentinel destination bytes.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -60,7 +60,7 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buffer() {
     // Given: async runner handle, AsyncDriver, and a strided copy whose second row is too long.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -87,7 +87,7 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_work() {
     // Given: a bad strided copy followed by a valid strided copy in the same async queue.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -141,7 +141,7 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
     // Given: two strided copies sharing a one-slot completion ring.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 1)
         .await

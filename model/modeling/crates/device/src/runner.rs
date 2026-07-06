@@ -34,12 +34,12 @@ pub struct AsyncDeviceHandle {
 
 /// Owns the async hardware worker task.
 #[derive(Debug)]
-pub struct AsyncDeviceRunner {
+pub struct AsyncDevice {
     handle: AsyncDeviceHandle,
     worker: JoinHandle<()>,
 }
 
-impl AsyncDeviceRunner {
+impl AsyncDevice {
     /// Spawns an async hardware runner backed by the native async linear-copy device slice.
     pub fn spawn_native() -> Self {
         Self::spawn_native_with_resource_config(ResourceConfig::default())

@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{ModelError, desc::CopyRequest, ids::CommandId};
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
-    // Given: a native AsyncDeviceRunner, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
-    let runner = AsyncDeviceRunner::spawn_native();
+    // Given: a native AsyncDevice, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await

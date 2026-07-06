@@ -4,13 +4,13 @@ use pdma_model_contract::{
     CompletionStatus, EventErrorKind, ModelError,
     desc::{CopyRequest, StridedCopyRequest},
 };
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_past_source() {
     // Given: async runner handle, AsyncDriver, and a linear copy whose source read is too long.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -49,7 +49,7 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() {
     // Given: async runner handle, AsyncDriver, and a one-slot queue with one invalid command.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -92,7 +92,7 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     // Given: one async driver's queue has a pending memory fault event.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await
@@ -145,7 +145,7 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_many_memory_fault_events_without_masking_original_error() {
     // Given: more invalid async commands than the previous hidden event-ring depth.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 65, 4)
         .await
@@ -185,7 +185,7 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
 async fn async_runner_publishes_one_event_and_later_command_still_completes_after_bad_strided_copy()
 {
     // Given: async runner handle, AsyncDriver, and a bad strided copy before a valid linear copy.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

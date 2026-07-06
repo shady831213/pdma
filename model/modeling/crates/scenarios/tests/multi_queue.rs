@@ -5,13 +5,13 @@ use pdma_model_contract::{
     desc::CopyRequest,
     ids::{CommandId, QueueId},
 };
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_default_policy_retires_runnable_queues_in_submission_order() {
     // Given: two async queues with one runnable copy each, submitted in queue order.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 2, 2)
         .await
@@ -82,7 +82,7 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable() {
     // Given: one peer queue and one repeated-work queue are both runnable.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut peer = AsyncDriver::setup_on(&mut handle, 1, 2)
         .await
@@ -164,7 +164,7 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
     assert_eq!(second_completion.command_id(), repeated_second);
 }
 
-async fn wait_for_steps(runner: &AsyncDeviceRunner, steps: usize) {
+async fn wait_for_steps(runner: &AsyncDevice, steps: usize) {
     loop {
         let snapshot = runner.snapshot().await;
         if snapshot.steps >= steps {

@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, ModelError, desc::CopyRequest};
-use pdma_model_device::{AsyncDeviceRunner, SyncDevice};
+use pdma_model_device::{AsyncDevice, SyncDevice};
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     // Given: async runner handle, AsyncDriver, source/destination buffers, source write.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

@@ -3,13 +3,13 @@
 use pdma_model_contract::{
     CompletionStatus, ResourceConfig, TraceEvent, TraceEventKind, TraceOperation, desc::CopyRequest,
 };
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_complete_copy_lifecycle() {
     // Given: an async runner, a driver handle, source/destination buffers, and tracing enabled.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -89,7 +89,7 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_error_event_without_success_completion() {
     // Given: a traced async runner and a copy that reads past the source buffer.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -146,7 +146,7 @@ async fn async_trace_log_records_error_event_without_success_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_stall_annotations_for_status_waits() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
-    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+    let runner = AsyncDevice::spawn_native_with_resource_config(
         ResourceConfig::default().with_read_slots(0),
     );
     let mut handle = runner.handle();

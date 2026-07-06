@@ -4,13 +4,13 @@ use pdma_model_contract::{
     CommandId, ResourceConfig, TraceEvent, TraceEventKind,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
 };
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     // Given: two traced copies behind a one-slot completion publication path.
-    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+    let runner = AsyncDevice::spawn_native_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let mut handle = runner.handle();
@@ -66,7 +66,7 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     // Given: a command submitted while trace capture is disabled.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -112,7 +112,7 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     // Given: two traced async drivers where one queue faults and the other remains unrelated.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
         .await

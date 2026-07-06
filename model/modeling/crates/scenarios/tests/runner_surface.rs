@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_interleaves_software_and_hardware_turns() {
     // Given: an async runner, a runner handle, and source/destination buffers.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -47,7 +47,7 @@ async fn async_runner_surface_interleaves_software_and_hardware_turns() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_poll_before_progress_observes_no_completion() {
     // Given: an async runner, a runner handle, and source/destination buffers.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -92,7 +92,7 @@ async fn async_runner_surface_poll_before_progress_observes_no_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_records_errors_without_stopping_the_loop() {
     // Given: an async runner, a driver handle, one faulting command, and one later valid command.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await
@@ -147,7 +147,7 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
     // Given: an async runner and one completed command.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

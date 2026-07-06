@@ -4,13 +4,13 @@ use pdma_model_contract::{
     ResourceConfig, TraceEvent, TraceEventKind,
     desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
 };
-use pdma_model_device::{AsyncDeviceRunner, AsyncStepStatus};
+use pdma_model_device::{AsyncDevice, AsyncStepStatus};
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
     // Given: an idle async runner with tracing enabled after startup noise is cleared.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let handle = runner.handle();
     handle.enable_tracing().await;
     handle.clear_trace().await;
@@ -35,7 +35,7 @@ async fn async_trace_log_records_idle_status_steps() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_schedules_before_resource_stall() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
-    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+    let runner = AsyncDevice::spawn_native_with_resource_config(
         ResourceConfig::default().with_read_slots(0),
     );
     let mut handle = runner.handle();
@@ -72,7 +72,7 @@ async fn async_trace_log_schedules_before_resource_stall() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
     // Given: two traced copies behind a one-slot completion publication path.
-    let runner = AsyncDeviceRunner::spawn_native_with_resource_config(
+    let runner = AsyncDevice::spawn_native_with_resource_config(
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let mut handle = runner.handle();
@@ -129,7 +129,7 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_queue_only_doorbells() {
     // Given: two drivers whose first commands reuse the same command id on distinct queues.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut copy_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
         .await

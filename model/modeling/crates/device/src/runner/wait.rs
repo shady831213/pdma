@@ -1,9 +1,9 @@
 //! Tokio-backed asynchronous wait helpers for runner snapshots.
 
 use super::state::{RunnerState, snapshot, snapshot_with_status};
-use super::{AsyncDeviceHandle, AsyncDeviceRunner, AsyncRunSnapshot, AsyncStepStatus};
+use super::{AsyncDevice, AsyncDeviceHandle, AsyncRunSnapshot, AsyncStepStatus};
 
-impl AsyncDeviceRunner {
+impl AsyncDevice {
     /// Returns the current runner snapshot.
     pub async fn snapshot(&self) -> AsyncRunSnapshot {
         self.handle.snapshot().await

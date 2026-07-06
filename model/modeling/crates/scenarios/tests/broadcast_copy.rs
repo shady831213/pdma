@@ -4,14 +4,14 @@ use pdma_model_contract::{
     CompletionStatus, EventErrorKind,
     desc::{BroadcastCopyRequest, BroadcastDestinationRange},
 };
-use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_publishes_one_completion()
  {
     // Given: async runner handle, AsyncDriver, one source range, and two destination ranges.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
         .await
@@ -68,7 +68,7 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_broadcast_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, one valid destination, and one too-small destination.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
         .await
@@ -121,7 +121,7 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_overlap() {
     // Given: a broadcast whose first destination overlaps and mutates the source range.
-    let runner = AsyncDeviceRunner::spawn_native();
+    let runner = AsyncDevice::spawn_native();
     let mut handle = runner.handle();
     let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
         .await

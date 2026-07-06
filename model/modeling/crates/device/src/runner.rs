@@ -9,7 +9,7 @@ mod wait;
 mod worker;
 
 use backend::RunnerBackend;
-pub use manual::AsyncDevice;
+pub use manual::SyncDevice;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;

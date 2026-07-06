@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
-use pdma_model_device::AsyncDevice;
+use pdma_model_device::SyncDevice;
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_tracing_preserves_manual_run_until_idle_behavior() {
     // Given: the same copy on a baseline manual device and a traced manual device.
-    let mut baseline_device = AsyncDevice::new();
+    let mut baseline_device = SyncDevice::new();
     let mut baseline_driver = AsyncDriver::setup_on(&mut baseline_device, 4, 4)
         .await
         .expect("queue setup is valid");
@@ -22,7 +22,7 @@ async fn async_tracing_preserves_manual_run_until_idle_behavior() {
         .await
         .expect("source write is in bounds");
 
-    let mut traced_device = AsyncDevice::new();
+    let mut traced_device = SyncDevice::new();
     let mut traced_driver = AsyncDriver::setup_on(&mut traced_device, 4, 4)
         .await
         .expect("queue setup is valid");

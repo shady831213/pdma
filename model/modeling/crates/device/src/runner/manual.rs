@@ -9,21 +9,21 @@ use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
-/// Manual async device surface for deterministic bounded steps without a worker task.
+/// Synchronous device surface for deterministic bounded steps without a worker task.
 #[derive(Debug)]
-pub struct AsyncDevice {
+pub struct SyncDevice {
     backend: RunnerBackend,
     steps: usize,
     last_status: AsyncStepStatus,
 }
 
-impl AsyncDevice {
-    /// Creates a manual async device with default resource credits.
+impl SyncDevice {
+    /// Creates a synchronous device with default resource credits.
     pub fn new() -> Self {
         Self::with_resource_config(ResourceConfig::default())
     }
 
-    /// Creates a manual async device with explicit resource credits.
+    /// Creates a synchronous device with explicit resource credits.
     pub fn with_resource_config(config: ResourceConfig) -> Self {
         Self {
             backend: RunnerBackend::native_with_resource_config(config),
@@ -79,7 +79,7 @@ impl AsyncDevice {
         self.backend.poll_queue_event(queue_id)
     }
 
-    /// Runs manual deterministic async steps until idle or until the step budget expires.
+    /// Runs deterministic synchronous steps until idle or until the step budget expires.
     pub fn run_until_idle(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
         let start_steps = self.steps;
         while self.steps - start_steps < max_steps {
@@ -101,7 +101,7 @@ impl AsyncDevice {
         self.idle_or_budget_exhausted(max_steps, start_steps)
     }
 
-    /// Runs manual deterministic async steps until idle, stalled, or budget exhaustion.
+    /// Runs deterministic synchronous steps until idle, stalled, or budget exhaustion.
     pub fn run_until_blocked(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
         let start_steps = self.steps;
         let mut stalls = 0;
@@ -187,7 +187,7 @@ impl AsyncDevice {
     }
 }
 
-impl Default for AsyncDevice {
+impl Default for SyncDevice {
     fn default() -> Self {
         Self::new()
     }

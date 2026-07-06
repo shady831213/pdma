@@ -6,7 +6,7 @@ use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
+use pdma_model_device::{AsyncDeviceHandle, SyncDevice};
 
 /// Async device-facing operations required by the host driver actor.
 pub trait AsyncDevicePort: Send + Sync {
@@ -99,7 +99,7 @@ impl AsyncDevicePort for AsyncDeviceHandle {
     }
 }
 
-impl AsyncDevicePort for AsyncDevice {
+impl AsyncDevicePort for SyncDevice {
     async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         Self::create_queue(self, config)
     }

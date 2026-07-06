@@ -4,7 +4,7 @@ mod runner;
 pub mod trace;
 
 pub use runner::{
-    AsyncDevice, AsyncDeviceHandle, AsyncDeviceRunner, AsyncRunJoinError, AsyncRunSnapshot,
-    AsyncRunSummary, AsyncStallReason, AsyncStepStatus,
+    AsyncDeviceHandle, AsyncDeviceRunner, AsyncRunJoinError, AsyncRunSnapshot, AsyncRunSummary,
+    AsyncStallReason, AsyncStepStatus, SyncDevice,
 };
 pub use trace::TraceSink;

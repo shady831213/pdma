@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, ModelError, desc::CopyRequest};
-use pdma_model_device::{AsyncDevice, AsyncDeviceRunner};
+use pdma_model_device::{AsyncDeviceRunner, SyncDevice};
 use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
@@ -47,7 +47,7 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn reports_step_budget_exhaustion_when_work_remains() {
     // Given: one pending copy command.
-    let mut device = AsyncDevice::new();
+    let mut device = SyncDevice::new();
     let mut driver = AsyncDriver::setup_on(&mut device, 4, 4)
         .await
         .expect("queue setup is valid");

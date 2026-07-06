@@ -1,7 +1,11 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{CompletionStatus, ResourceConfig, desc::CopyRequest, ids::CommandId};
-use pdma_model_device_async::{AsyncDeviceRunner, AsyncStallReason, AsyncStepStatus};
+use pdma_model_contract::{
+    CompletionStatus, ModelError, ResourceConfig, desc::CopyRequest, ids::CommandId,
+};
+use pdma_model_device_async::{
+    AsyncDevice, AsyncDeviceRunner, AsyncRunSummary, AsyncStallReason, AsyncStepStatus,
+};
 use pdma_model_host_async::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
@@ -173,4 +177,36 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     );
     assert_eq!(summary.stalls, 2);
     assert_eq!(driver.poll_event_on(&mut handle).await, Ok(None));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors() {
+    // Given: a manual async device with one copy that cannot acquire execution resources.
+    let mut device =
+        AsyncDevice::with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let mut driver = AsyncDriver::setup_on(&mut device, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver.allocate_buffer_on(&mut device, 4).await;
+    let dst = driver.allocate_buffer_on(&mut device, 4).await;
+    driver
+        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
+        .await
+        .expect("copy submission has ring space");
+
+    // When: software runs until blocked and then checks the legacy idle API.
+    let blocked = device.run_until_blocked(1);
+    let idle = device.run_until_idle(1);
+
+    // Then: the blocked API names the stall while the idle API still reports budget exhaustion.
+    assert_eq!(
+        blocked,
+        Ok(AsyncRunSummary {
+            steps: 0,
+            errors: 0,
+            stalls: 1,
+            last_status: AsyncStepStatus::Stalled(AsyncStallReason::ExecutionResourcePressure),
+        })
+    );
+    assert_eq!(idle, Err(ModelError::StepBudgetExhausted { max_steps: 1 }));
 }

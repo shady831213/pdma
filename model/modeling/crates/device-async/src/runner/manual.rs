@@ -101,6 +101,49 @@ impl AsyncDevice {
         self.idle_or_budget_exhausted(max_steps, start_steps)
     }
 
+    /// Runs manual deterministic async steps until idle, stalled, or budget exhaustion.
+    pub fn run_until_blocked(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
+        let start_steps = self.steps;
+        let mut stalls = 0;
+        while self.steps - start_steps < max_steps {
+            match self.backend.step()? {
+                BackendStepStatus::Progressed => {
+                    self.steps = self.steps.saturating_add(1);
+                    self.last_status = AsyncStepStatus::Progressed;
+                }
+                BackendStepStatus::Idle => {
+                    self.last_status = AsyncStepStatus::Idle;
+                    return Ok(AsyncRunSummary {
+                        steps: self.steps - start_steps,
+                        errors: 0,
+                        stalls,
+                        last_status: self.last_status,
+                    });
+                }
+                BackendStepStatus::Stalled(reason) => {
+                    stalls += 1;
+                    self.last_status = AsyncStepStatus::Stalled(reason);
+                    return Ok(AsyncRunSummary {
+                        steps: self.steps - start_steps,
+                        errors: 0,
+                        stalls,
+                        last_status: self.last_status,
+                    });
+                }
+            }
+        }
+        if self.backend.has_work() {
+            Err(ModelError::StepBudgetExhausted { max_steps })
+        } else {
+            Ok(AsyncRunSummary {
+                steps: self.steps - start_steps,
+                errors: 0,
+                stalls,
+                last_status: AsyncStepStatus::Idle,
+            })
+        }
+    }
+
     /// Enables deterministic trace capture.
     pub const fn enable_tracing(&mut self) {
         self.backend.enable_tracing();

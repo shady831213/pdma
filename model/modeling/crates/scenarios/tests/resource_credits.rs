@@ -7,8 +7,8 @@ use pdma_model_contract::{
         VectorBufferRange,
     },
 };
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_stalls_without_read_slots() {

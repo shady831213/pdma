@@ -7,7 +7,7 @@ name = "pdma-model-contract"
 version = "0.1.0"
 
 [[package]]
-name = "pdma-model-device-async"
+name = "pdma-model-device"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
@@ -15,21 +15,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "pdma-model-host-async"
+name = "pdma-model-host"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
- "pdma-model-device-async",
+ "pdma-model-device",
  "tokio",
 ]
 
 [[package]]
-name = "pdma-model-scenarios-async"
+name = "pdma-model-scenarios"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
- "pdma-model-device-async",
- "pdma-model-host-async",
+ "pdma-model-device",
+ "pdma-model-host",
  "tokio",
 ]
 

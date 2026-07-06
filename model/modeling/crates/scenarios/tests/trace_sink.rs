@@ -3,8 +3,8 @@
 use pdma_model_contract::{
     CompletionStatus, ResourceConfig, TraceEvent, TraceEventKind, TraceOperation, desc::CopyRequest,
 };
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_complete_copy_lifecycle() {

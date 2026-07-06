@@ -4,8 +4,8 @@ use pdma_model_contract::{
     CommandId, ResourceConfig, TraceEvent, TraceEventKind,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
 };
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {

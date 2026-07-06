@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{ModelError, desc::CopyRequest, ids::CommandId};
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {

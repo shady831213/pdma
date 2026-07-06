@@ -3,10 +3,10 @@
 use pdma_model_contract::{
     CompletionStatus, ModelError, ResourceConfig, desc::CopyRequest, ids::CommandId,
 };
-use pdma_model_device_async::{
+use pdma_model_device::{
     AsyncDevice, AsyncDeviceRunner, AsyncRunSummary, AsyncStallReason, AsyncStepStatus,
 };
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {

@@ -1,5 +1,5 @@
 [package]
-name = "pdma-model-scenarios-async"
+name = "pdma-model-scenarios"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -10,8 +10,8 @@ description = "Async PDMA scenarios skeleton"
 
 [dependencies]
 pdma-model-contract = { path = "../contract" }
-pdma-model-device-async = { path = "../device-async" }
-pdma-model-host-async = { path = "../host-async" }
+pdma-model-device = { path = "../device" }
+pdma-model-host = { path = "../host" }
 
 [dev-dependencies]
 tokio = { version = "1.49", features = ["macros"] }

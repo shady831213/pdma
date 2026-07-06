@@ -4,8 +4,8 @@ use pdma_model_contract::{
     ResourceConfig, TraceEvent, TraceEventKind,
     desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
 };
-use pdma_model_device_async::{AsyncDeviceRunner, AsyncStepStatus};
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::{AsyncDeviceRunner, AsyncStepStatus};
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {

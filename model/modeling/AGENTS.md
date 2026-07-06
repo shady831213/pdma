@@ -11,12 +11,9 @@ Scope: Rust v0.6 sync actor reference and async parity workspace.
 ```text
 crates/
 ├── contract/         # shared host/device contract and DMA-visible object vocabulary
-├── device/           # sync hardware-behavior reference model
-├── device-async/     # Tokio-backed async hardware runner and handle
-├── host/             # sync SDK/driver-like software model
-├── host-async/       # async SDK/driver-like software model
-├── scenarios/        # sync reference validation stories
-└── scenarios-async/  # async behavior-match validation stories
+├── device/           # Tokio-backed active hardware runner and handle
+├── host/             # active SDK/driver-like software model
+└── scenarios/        # active behavior-match validation stories
 ```
 
 Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and format contract.

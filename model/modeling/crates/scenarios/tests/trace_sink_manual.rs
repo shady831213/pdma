@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
-use pdma_model_device_async::AsyncDevice;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDevice;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_tracing_preserves_manual_run_until_idle_behavior() {

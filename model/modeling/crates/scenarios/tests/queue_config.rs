@@ -4,8 +4,8 @@ use pdma_model_contract::{
     EventRouting, ModelError, QueueConfig, QueueId, SoftwareOwnerId,
     desc::{CopyRequest, StridedCopyRequest},
 };
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {

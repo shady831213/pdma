@@ -6,7 +6,7 @@ use pdma_model_contract::{
     ids::{CommandId, CompletionRingId},
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
-use pdma_model_device_async::{AsyncDeviceHandle, AsyncDeviceRunner};
+use pdma_model_device::{AsyncDeviceHandle, AsyncDeviceRunner};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retires_copy_after_handle_submission() {

@@ -4,8 +4,8 @@ use pdma_model_contract::{
     CompletionStatus, EventErrorKind,
     desc::{BroadcastCopyRequest, BroadcastDestinationRange},
 };
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_publishes_one_completion()

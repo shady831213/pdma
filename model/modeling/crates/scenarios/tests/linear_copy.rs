@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, ModelError, desc::CopyRequest};
-use pdma_model_device_async::{AsyncDevice, AsyncDeviceRunner};
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::{AsyncDevice, AsyncDeviceRunner};
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {

@@ -4,8 +4,8 @@ use pdma_model_contract::{
     CompletionStatus, EventErrorKind, ModelError,
     desc::{CopyRequest, StridedCopyRequest},
 };
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_past_source() {

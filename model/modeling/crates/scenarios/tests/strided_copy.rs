@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{CompletionStatus, desc::StridedCopyRequest};
-use pdma_model_device_async::AsyncDeviceRunner;
-use pdma_model_host_async::AsyncDriver;
+use pdma_model_device::AsyncDeviceRunner;
+use pdma_model_host::AsyncDriver;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {

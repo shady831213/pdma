@@ -1,9 +1,9 @@
 [workspace]
 members = [
     "crates/contract",
-    "crates/device-async",
-    "crates/host-async",
-    "crates/scenarios-async",
+    "crates/device",
+    "crates/host",
+    "crates/scenarios",
 ]
 resolver = "3"
 

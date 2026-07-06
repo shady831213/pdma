@@ -137,8 +137,9 @@ code.
 
 Proposed retirement shape:
 
-- Move `crates/device`, `crates/host`, and `crates/scenarios` out of the active
-  workspace into a temporary `model/retired/v0_6_sync_reference/` tree.
+- Move `crates/contract`, `crates/device`, `crates/host`, and `crates/scenarios`
+  out of the active workspace into a temporary `model/retired/v0_6_sync_reference/`
+  tree so the retired sync stack is decoupled from future active contract changes.
 - Remove retired crates from workspace build/test membership.
 - Treat retired sources as short-term rollback material only; do not add features,
   fixes, or new tests there.

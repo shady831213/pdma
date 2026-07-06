@@ -98,6 +98,35 @@ Async scenarios are naturally async system stories. They should drive host softw
 
 Until the async-native hardware split is complete, existing async scenario coverage documents behavior parity of the current transitional async facade. New Phase 2 work should prioritize replacing that facade with an async-native device implementation before adding more parity tests that depend on sync device internals.
 
+### Phase 2 Queue-Port Parity Audit
+
+As of `82a195e Add async manual blocked parity`, the current queue-port-layer async
+surface has no known smallest remaining sync-reference behavior gap worth implementing
+as another behavior slice. The async suite covers the sync reference behavior across
+matching async-native runner, manual-device, trace, resource, and publication-pressure
+tests rather than by requiring one-to-one test file names.
+
+Current sync-to-async coverage map:
+
+| Sync reference | Async coverage | Status |
+| --- | --- | --- |
+| `crates/scenarios/tests/sync_actor.rs` | `crates/scenarios-async/tests/runner_surface.rs`, `crates/scenarios-async/tests/resource_publication_pressure.rs` | Covered. The completion-publication retry behavior is validated by the publication-pressure tests instead of duplicating the sync runner-surface story. |
+| `crates/scenarios/tests/resource_credits.rs` | `crates/scenarios-async/tests/resource_credits.rs`, `crates/scenarios-async/tests/resource_publication_pressure.rs` | Covered. Resource stalls and completion/event publication ordering are split by concern in async tests. |
+| `crates/scenarios/tests/trace_sink.rs` | `crates/scenarios-async/tests/trace_sink.rs`, `crates/scenarios-async/tests/trace_sink_manual.rs`, `crates/scenarios-async/tests/trace_sink_parity.rs` | Covered. Lifecycle, JSON export, status tracing, manual `run_until_idle`, and ordering parity are represented. |
+| `crates/scenarios/tests/trace_sink_polling.rs` | `crates/scenarios-async/tests/trace_sink_edges.rs`, `crates/scenarios-async/tests/error_event.rs` | Covered. Async trace polling records the trace edge, while async error-event tests cover unrelated-queue event polling behavior. |
+| `crates/scenarios/tests/stall_annotations.rs` | `crates/scenarios-async/tests/stall_annotations.rs`, `crates/scenarios-async/tests/trace_sink_parity.rs` | Covered. Runner status waits, manual `run_until_blocked`, and traced stall ordering are represented. |
+
+Validation baseline for this audit:
+
+```bash
+cargo test -p pdma-model-scenarios --test sync_actor --test resource_credits --test trace_sink --test trace_sink_polling --test stall_annotations
+cargo test -p pdma-model-scenarios-async --test runner_surface --test resource_credits --test resource_publication_pressure --test trace_sink --test trace_sink_edges --test trace_sink_manual --test trace_sink_parity --test stall_annotations
+```
+
+The bus/MMIO/DMA-memory/IRQ boundary described below remains a long-term direction,
+not a current v0.6 parity gap. It is also outside the current sync reference, so it
+must not be counted as async work required to match v0.6 queue-port behavior.
+
 ### Long-Term Async Boundary Goal
 
 The conceptual async queue-port boundary is an intermediate modeling layer. The long-term direction is a bus-level async boundary where the host driver performs awaitable register, DMA-memory, and interrupt operations, and higher-level driver methods are imperative sequences built from those operations.

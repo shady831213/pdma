@@ -1,6 +1,7 @@
 //! Tokio-backed asynchronous hardware runner.
 
 mod backend;
+mod manual;
 mod native;
 mod state;
 mod types;
@@ -8,6 +9,7 @@ mod wait;
 mod worker;
 
 use backend::RunnerBackend;
+pub use manual::AsyncDevice;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;

@@ -40,6 +40,12 @@ impl RunnerBackend {
         }
     }
 
+    pub(super) fn has_work(&self) -> bool {
+        match self {
+            Self::Native(device) => device.has_work(),
+        }
+    }
+
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         match self {
             Self::Native(device) => device.create_queue(config),

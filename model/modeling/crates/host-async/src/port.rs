@@ -6,7 +6,7 @@ use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use pdma_model_device_async::AsyncDeviceHandle;
+use pdma_model_device_async::{AsyncDevice, AsyncDeviceHandle};
 
 /// Async device-facing operations required by the host driver actor.
 pub trait AsyncDevicePort: Send + Sync {
@@ -96,5 +96,46 @@ impl AsyncDevicePort for AsyncDeviceHandle {
 
     async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
         Self::poll_queue_event(self, queue_id).await
+    }
+}
+
+impl AsyncDevicePort for AsyncDevice {
+    async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+        Self::create_queue(self, config)
+    }
+
+    async fn allocate_buffer(&mut self, len: usize) -> BufferId {
+        Self::allocate_buffer(self, len)
+    }
+
+    async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
+        Self::write_buffer(self, id, offset, data)
+    }
+
+    async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
+        Self::read_buffer(self, id, offset, len)
+    }
+
+    async fn submit_command(
+        &mut self,
+        queue_id: QueueId,
+        command: ExternalCommand,
+    ) -> ModelResult<()> {
+        Self::submit_command(self, queue_id, command)
+    }
+
+    async fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
+        Self::ring_doorbell(self, queue_id)
+    }
+
+    async fn poll_completion(
+        &mut self,
+        completion_ring_id: CompletionRingId,
+    ) -> ModelResult<Option<CompletionRecord>> {
+        Self::poll_completion(self, completion_ring_id)
+    }
+
+    async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
+        Self::poll_queue_event(self, queue_id)
     }
 }

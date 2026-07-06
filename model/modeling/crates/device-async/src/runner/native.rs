@@ -147,6 +147,12 @@ impl NativeDevice {
         step::step(self)
     }
 
+    pub(super) fn has_work(&self) -> bool {
+        self.pending_retirement.is_some()
+            || !self.runnable.is_empty()
+            || self.queues.iter().any(|queue| !queue.commands.is_empty())
+    }
+
     pub(super) const fn enable_tracing(&mut self) {
         self.trace.enable();
     }

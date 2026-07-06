@@ -1,9 +1,6 @@
 [workspace]
 members = [
     "crates/contract",
-    "crates/device",
-    "crates/host",
-    "crates/scenarios",
     "crates/device-async",
     "crates/host-async",
     "crates/scenarios-async",

@@ -7,26 +7,11 @@ name = "pdma-model-contract"
 version = "0.1.0"
 
 [[package]]
-name = "pdma-model-device"
-version = "0.1.0"
-dependencies = [
- "pdma-model-contract",
-]
-
-[[package]]
 name = "pdma-model-device-async"
 version = "0.1.0"
 dependencies = [
  "pdma-model-contract",
  "tokio",
-]
-
-[[package]]
-name = "pdma-model-host"
-version = "0.1.0"
-dependencies = [
- "pdma-model-contract",
- "pdma-model-device",
 ]
 
 [[package]]
@@ -36,15 +21,6 @@ dependencies = [
  "pdma-model-contract",
  "pdma-model-device-async",
  "tokio",
-]
-
-[[package]]
-name = "pdma-model-scenarios"
-version = "0.1.0"
-dependencies = [
- "pdma-model-contract",
- "pdma-model-device",
- "pdma-model-host",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 use super::{AsyncRunSnapshot, AsyncRunSummary, AsyncStepStatus};
-use crate::runner::backend::RunnerBackend;
+use crate::runner::backend::DeviceModel;
 use tokio::sync::{Mutex, watch};
 
 #[derive(Debug)]
@@ -10,7 +10,7 @@ pub(super) struct RunnerShared {
 
 #[derive(Debug)]
 pub(super) struct RunnerState {
-    pub(super) backend: RunnerBackend,
+    pub(super) backend: DeviceModel,
     pub(super) steps: usize,
     pub(super) errors: usize,
     pub(super) stalls: usize,
@@ -21,7 +21,7 @@ pub(super) struct RunnerState {
 }
 
 impl RunnerState {
-    pub(super) const fn new(backend: RunnerBackend) -> Self {
+    pub(super) const fn new(backend: DeviceModel) -> Self {
         Self {
             backend,
             steps: 0,

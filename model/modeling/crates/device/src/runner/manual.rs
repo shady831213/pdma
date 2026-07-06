@@ -1,4 +1,4 @@
-use super::backend::{BackendStepStatus, RunnerBackend};
+use super::backend::{DeviceModel, ModelStepStatus};
 use super::{AsyncRunSummary, AsyncStepStatus};
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
@@ -12,7 +12,7 @@ use pdma_model_contract::trace::TraceEvent;
 /// Synchronous device surface for deterministic bounded steps without a worker task.
 #[derive(Debug)]
 pub struct SyncDevice {
-    backend: RunnerBackend,
+    backend: DeviceModel,
     steps: usize,
     last_status: AsyncStepStatus,
 }
@@ -26,7 +26,7 @@ impl SyncDevice {
     /// Creates a synchronous device with explicit resource credits.
     pub fn with_resource_config(config: ResourceConfig) -> Self {
         Self {
-            backend: RunnerBackend::native_with_resource_config(config),
+            backend: DeviceModel::queue_port_with_resource_config(config),
             steps: 0,
             last_status: AsyncStepStatus::Idle,
         }
@@ -84,15 +84,15 @@ impl SyncDevice {
         let start_steps = self.steps;
         while self.steps - start_steps < max_steps {
             match self.backend.step()? {
-                BackendStepStatus::Progressed => {
+                ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;
                 }
-                BackendStepStatus::Idle => {
+                ModelStepStatus::Idle => {
                     self.last_status = AsyncStepStatus::Idle;
                     return self.idle_or_budget_exhausted(max_steps, start_steps);
                 }
-                BackendStepStatus::Stalled(reason) => {
+                ModelStepStatus::Stalled(reason) => {
                     self.last_status = AsyncStepStatus::Stalled(reason);
                     return self.idle_or_budget_exhausted(max_steps, start_steps);
                 }
@@ -107,11 +107,11 @@ impl SyncDevice {
         let mut stalls = 0;
         while self.steps - start_steps < max_steps {
             match self.backend.step()? {
-                BackendStepStatus::Progressed => {
+                ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;
                 }
-                BackendStepStatus::Idle => {
+                ModelStepStatus::Idle => {
                     self.last_status = AsyncStepStatus::Idle;
                     return Ok(AsyncRunSummary {
                         steps: self.steps - start_steps,
@@ -120,7 +120,7 @@ impl SyncDevice {
                         last_status: self.last_status,
                     });
                 }
-                BackendStepStatus::Stalled(reason) => {
+                ModelStepStatus::Stalled(reason) => {
                     stalls += 1;
                     self.last_status = AsyncStepStatus::Stalled(reason);
                     return Ok(AsyncRunSummary {

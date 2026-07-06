@@ -1,25 +1,25 @@
-use super::NativeDevice;
+use super::QueuePortDeviceModel;
 use super::broadcast;
 use super::copy;
 use super::resources::ResourceDemand;
 use super::retirement;
 use super::vector_add;
 use crate::runner::AsyncStallReason;
-use crate::runner::backend::BackendStepStatus;
+use crate::runner::backend::ModelStepStatus;
 use crate::trace::{command_id, operation_from_external};
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 
-pub(super) fn step(device: &mut NativeDevice) -> ModelResult<BackendStepStatus> {
+pub(super) fn step(device: &mut QueuePortDeviceModel) -> ModelResult<ModelStepStatus> {
     if device.pending_retirement.is_some() {
         return retirement::retry_pending_retirement(device);
     }
     let Some(queue_id) = device.runnable.pop_front() else {
         device.trace.idle();
-        return Ok(BackendStepStatus::Idle);
+        return Ok(ModelStepStatus::Idle);
     };
     let Some(command) = device.queue(queue_id)?.commands.front().cloned() else {
-        return Ok(BackendStepStatus::Progressed);
+        return Ok(ModelStepStatus::Progressed);
     };
     let operation = operation_from_external(&command);
     device
@@ -30,7 +30,7 @@ pub(super) fn step(device: &mut NativeDevice) -> ModelResult<BackendStepStatus> 
         device
             .trace
             .stall(Some(queue_id), "ExecutionResourcePressure");
-        return Ok(BackendStepStatus::Stalled(
+        return Ok(ModelStepStatus::Stalled(
             AsyncStallReason::ExecutionResourcePressure,
         ));
     }

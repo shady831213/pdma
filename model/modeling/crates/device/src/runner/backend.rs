@@ -1,5 +1,5 @@
 use super::AsyncStallReason;
-use super::native::NativeDevice;
+use super::native::QueuePortDeviceModel;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
@@ -10,51 +10,51 @@ use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum BackendStepStatus {
+pub(super) enum ModelStepStatus {
     Progressed,
     Idle,
     Stalled(AsyncStallReason),
 }
 
 #[derive(Debug)]
-pub(super) enum RunnerBackend {
-    Native(NativeDevice),
+pub(super) enum DeviceModel {
+    QueuePort(QueuePortDeviceModel),
 }
 
-impl RunnerBackend {
-    pub(super) fn native() -> Self {
-        Self::native_with_resource_config(ResourceConfig::default())
+impl DeviceModel {
+    pub(super) fn queue_port() -> Self {
+        Self::queue_port_with_resource_config(ResourceConfig::default())
     }
 
-    pub(super) fn native_with_resource_config(config: ResourceConfig) -> Self {
+    pub(super) fn queue_port_with_resource_config(config: ResourceConfig) -> Self {
         if config == ResourceConfig::default() {
-            Self::Native(NativeDevice::new())
+            Self::QueuePort(QueuePortDeviceModel::new())
         } else {
-            Self::Native(NativeDevice::with_resource_config(config))
+            Self::QueuePort(QueuePortDeviceModel::with_resource_config(config))
         }
     }
 
-    pub(super) fn step(&mut self) -> ModelResult<BackendStepStatus> {
+    pub(super) fn step(&mut self) -> ModelResult<ModelStepStatus> {
         match self {
-            Self::Native(device) => device.step(),
+            Self::QueuePort(device) => device.step(),
         }
     }
 
     pub(super) fn has_work(&self) -> bool {
         match self {
-            Self::Native(device) => device.has_work(),
+            Self::QueuePort(device) => device.has_work(),
         }
     }
 
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         match self {
-            Self::Native(device) => device.create_queue(config),
+            Self::QueuePort(device) => device.create_queue(config),
         }
     }
 
     pub(super) fn allocate_buffer(&mut self, len: usize) -> BufferId {
         match self {
-            Self::Native(device) => device.allocate_buffer(len),
+            Self::QueuePort(device) => device.allocate_buffer(len),
         }
     }
 
@@ -65,7 +65,7 @@ impl RunnerBackend {
         data: &[u8],
     ) -> ModelResult<()> {
         match self {
-            Self::Native(device) => device.write_buffer(id, offset, data),
+            Self::QueuePort(device) => device.write_buffer(id, offset, data),
         }
     }
 
@@ -76,7 +76,7 @@ impl RunnerBackend {
         len: usize,
     ) -> ModelResult<Vec<u8>> {
         match self {
-            Self::Native(device) => device.read_buffer(id, offset, len),
+            Self::QueuePort(device) => device.read_buffer(id, offset, len),
         }
     }
 
@@ -86,13 +86,13 @@ impl RunnerBackend {
         command: ExternalCommand,
     ) -> ModelResult<()> {
         match self {
-            Self::Native(device) => device.submit_command(queue_id, command),
+            Self::QueuePort(device) => device.submit_command(queue_id, command),
         }
     }
 
     pub(super) fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
         match self {
-            Self::Native(device) => device.ring_doorbell(queue_id),
+            Self::QueuePort(device) => device.ring_doorbell(queue_id),
         }
     }
 
@@ -101,7 +101,7 @@ impl RunnerBackend {
         completion_ring_id: CompletionRingId,
     ) -> ModelResult<Option<CompletionRecord>> {
         match self {
-            Self::Native(device) => device.poll_completion(completion_ring_id),
+            Self::QueuePort(device) => device.poll_completion(completion_ring_id),
         }
     }
 
@@ -110,37 +110,37 @@ impl RunnerBackend {
         queue_id: QueueId,
     ) -> ModelResult<Option<EventRecord>> {
         match self {
-            Self::Native(device) => device.poll_queue_event(queue_id),
+            Self::QueuePort(device) => device.poll_queue_event(queue_id),
         }
     }
 
     pub(super) const fn enable_tracing(&mut self) {
         match self {
-            Self::Native(device) => device.enable_tracing(),
+            Self::QueuePort(device) => device.enable_tracing(),
         }
     }
 
     pub(super) const fn disable_tracing(&mut self) {
         match self {
-            Self::Native(device) => device.disable_tracing(),
+            Self::QueuePort(device) => device.disable_tracing(),
         }
     }
 
     pub(super) fn clear_trace(&mut self) {
         match self {
-            Self::Native(device) => device.clear_trace(),
+            Self::QueuePort(device) => device.clear_trace(),
         }
     }
 
     pub(super) fn trace_events(&self) -> Vec<TraceEvent> {
         match self {
-            Self::Native(device) => device.trace_events(),
+            Self::QueuePort(device) => device.trace_events(),
         }
     }
 
     pub(super) fn trace_json(&self) -> String {
         match self {
-            Self::Native(device) => device.trace_json(),
+            Self::QueuePort(device) => device.trace_json(),
         }
     }
 }

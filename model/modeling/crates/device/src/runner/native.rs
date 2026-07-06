@@ -7,7 +7,7 @@ mod ring;
 mod step;
 mod vector_add;
 
-use super::backend::BackendStepStatus;
+use super::backend::ModelStepStatus;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use memory::NativeMemory;
 use pdma_model_contract::ResourceConfig;
@@ -28,7 +28,7 @@ struct QueueContext {
 }
 
 #[derive(Debug)]
-pub(super) struct NativeDevice {
+pub(super) struct QueuePortDeviceModel {
     memory: NativeMemory,
     queues: Vec<QueueContext>,
     completions: Vec<NativeRing<CompletionRecord>>,
@@ -39,7 +39,7 @@ pub(super) struct NativeDevice {
     trace: TraceSink,
 }
 
-impl NativeDevice {
+impl QueuePortDeviceModel {
     pub(super) fn new() -> Self {
         Self::with_resource_config(ResourceConfig::default())
     }
@@ -143,7 +143,7 @@ impl NativeDevice {
         Ok(event)
     }
 
-    pub(super) fn step(&mut self) -> ModelResult<BackendStepStatus> {
+    pub(super) fn step(&mut self) -> ModelResult<ModelStepStatus> {
         step::step(self)
     }
 

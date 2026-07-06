@@ -8,7 +8,7 @@ mod types;
 mod wait;
 mod worker;
 
-use backend::RunnerBackend;
+use backend::DeviceModel;
 pub use manual::SyncDevice;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
@@ -48,13 +48,13 @@ impl AsyncDevice {
     /// Spawns an async hardware runner backed by the native async device with `config` credits.
     pub fn spawn_native_with_resource_config(config: ResourceConfig) -> Self {
         if config == ResourceConfig::default() {
-            Self::spawn_backend(RunnerBackend::native())
+            Self::spawn_backend(DeviceModel::queue_port())
         } else {
-            Self::spawn_backend(RunnerBackend::native_with_resource_config(config))
+            Self::spawn_backend(DeviceModel::queue_port_with_resource_config(config))
         }
     }
 
-    fn spawn_backend(backend: RunnerBackend) -> Self {
+    fn spawn_backend(backend: DeviceModel) -> Self {
         let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
             state: tokio::sync::Mutex::new(RunnerState::new(backend)),
@@ -176,17 +176,17 @@ impl AsyncDeviceHandle {
 
     /// Enables deterministic trace capture.
     pub async fn enable_tracing(&self) {
-        self.with_backend_unit(RunnerBackend::enable_tracing).await;
+        self.with_backend_unit(DeviceModel::enable_tracing).await;
     }
 
     /// Disables trace capture without clearing existing events.
     pub async fn disable_tracing(&self) {
-        self.with_backend_unit(RunnerBackend::disable_tracing).await;
+        self.with_backend_unit(DeviceModel::disable_tracing).await;
     }
 
     /// Clears captured trace events and sequence ordinals.
     pub async fn clear_trace(&self) {
-        self.with_backend_unit(RunnerBackend::clear_trace).await;
+        self.with_backend_unit(DeviceModel::clear_trace).await;
     }
 
     /// Returns captured trace events in deterministic sequence order.
@@ -201,7 +201,7 @@ impl AsyncDeviceHandle {
 
     async fn with_backend<T>(
         &self,
-        f: impl FnOnce(&mut RunnerBackend) -> ModelResult<T>,
+        f: impl FnOnce(&mut DeviceModel) -> ModelResult<T>,
     ) -> ModelResult<T> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
@@ -213,7 +213,7 @@ impl AsyncDeviceHandle {
         result
     }
 
-    async fn with_backend_unit(&self, f: impl FnOnce(&mut RunnerBackend)) {
+    async fn with_backend_unit(&self, f: impl FnOnce(&mut DeviceModel)) {
         let generation = {
             let mut state = self.shared.state.lock().await;
             f(&mut state.backend);

@@ -1,7 +1,7 @@
-use super::NativeDevice;
+use super::QueuePortDeviceModel;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
-use crate::runner::backend::BackendStepStatus;
+use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::desc::{CopyCommand, StridedCopyCommand};
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::ids::{BufferId, QueueId};
@@ -17,10 +17,10 @@ struct NativeCopyChunk {
 }
 
 pub(super) fn retire_copy(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     queue_id: QueueId,
     command: CopyCommand,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     let request = command.request();
     let bytes = match device.memory.read_checked(request.src(), 0, request.len()) {
         Ok(bytes) => bytes,
@@ -60,10 +60,10 @@ pub(super) fn retire_copy(
 }
 
 pub(super) fn retire_strided_copy(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     queue_id: QueueId,
     command: StridedCopyCommand,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     let chunks = match strided_chunks(queue_id, command) {
         Ok(chunks) => chunks,
         Err(fault) => return publish_fault(device, fault),

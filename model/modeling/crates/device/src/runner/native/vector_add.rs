@@ -1,17 +1,17 @@
-use super::NativeDevice;
+use super::QueuePortDeviceModel;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
-use crate::runner::backend::BackendStepStatus;
+use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::desc::VectorAddCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::QueueId;
 use pdma_model_contract::trace::TraceOperation;
 
 pub(super) fn retire_vector_add(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     queue_id: QueueId,
     command: VectorAddCommand,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     let request = command.request();
     let src_a =
         match device

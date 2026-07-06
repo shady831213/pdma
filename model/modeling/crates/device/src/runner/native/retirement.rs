@@ -1,6 +1,6 @@
-use super::NativeDevice;
+use super::QueuePortDeviceModel;
 use crate::runner::AsyncStallReason;
-use crate::runner::backend::BackendStepStatus;
+use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::{EventErrorKind, EventRecord};
@@ -34,9 +34,9 @@ pub(super) enum PendingRetirement {
 }
 
 pub(super) fn publish_completion(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     success: SuccessRetirement,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     let completion =
         CompletionRecord::new(success.queue, success.command, CompletionStatus::Success);
     device
@@ -48,7 +48,7 @@ pub(super) fn publish_completion(
         device
             .trace
             .stall(Some(success.queue), "CompletionPublicationPressure");
-        return Ok(BackendStepStatus::Stalled(
+        return Ok(ModelStepStatus::Stalled(
             AsyncStallReason::CompletionPublicationPressure,
         ));
     }
@@ -57,11 +57,11 @@ pub(super) fn publish_completion(
         .push(completion)?;
     device.trace.completion_published(completion);
     retire_command(device, success.queue)?;
-    Ok(BackendStepStatus::Progressed)
+    Ok(ModelStepStatus::Progressed)
 }
 
 pub(super) fn validate_success_completion_route(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     queue_id: QueueId,
     completion_ring_id: CompletionRingId,
 ) -> ModelResult<()> {
@@ -73,10 +73,10 @@ pub(super) fn validate_success_completion_route(
 }
 
 pub(super) fn retry_pending_retirement(
-    device: &mut NativeDevice,
-) -> ModelResult<BackendStepStatus> {
+    device: &mut QueuePortDeviceModel,
+) -> ModelResult<ModelStepStatus> {
     let Some(pending) = device.pending_retirement else {
-        return Ok(BackendStepStatus::Idle);
+        return Ok(ModelStepStatus::Idle);
     };
     match pending {
         PendingRetirement::Completion(success) => retry_pending_completion(device, success),
@@ -89,16 +89,16 @@ pub(super) fn retry_pending_retirement(
 }
 
 fn retry_pending_completion(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     pending: SuccessRetirement,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     let completion =
         CompletionRecord::new(pending.queue, pending.command, CompletionStatus::Success);
     if completion_publication_is_full(device, pending.completion_ring)? {
         device
             .trace
             .stall(Some(pending.queue), "CompletionPublicationPressure");
-        return Ok(BackendStepStatus::Stalled(
+        return Ok(ModelStepStatus::Stalled(
             AsyncStallReason::CompletionPublicationPressure,
         ));
     }
@@ -108,20 +108,20 @@ fn retry_pending_completion(
     device.trace.completion_published(completion);
     device.pending_retirement = None;
     device.requeue_if_command_pending(pending.queue)?;
-    Ok(BackendStepStatus::Progressed)
+    Ok(ModelStepStatus::Progressed)
 }
 
 fn retry_pending_event(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     queue_id: QueueId,
     record: EventRecord,
     source: ModelError,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     if event_publication_is_full(device) {
         device
             .trace
             .stall(Some(queue_id), "FaultRetirementPendingRetry");
-        return Ok(BackendStepStatus::Stalled(
+        return Ok(ModelStepStatus::Stalled(
             AsyncStallReason::FaultRetirementPendingRetry,
         ));
     }
@@ -133,9 +133,9 @@ fn retry_pending_event(
 }
 
 pub(super) fn publish_fault(
-    device: &mut NativeDevice,
+    device: &mut QueuePortDeviceModel,
     fault: FaultRetirement,
-) -> ModelResult<BackendStepStatus> {
+) -> ModelResult<ModelStepStatus> {
     let event = EventRecord::new(
         fault.queue_id,
         fault.command_id,
@@ -153,7 +153,7 @@ pub(super) fn publish_fault(
         device
             .trace
             .stall(Some(fault.queue_id), "EventPublicationPressure");
-        return Ok(BackendStepStatus::Stalled(
+        return Ok(ModelStepStatus::Stalled(
             AsyncStallReason::EventPublicationPressure,
         ));
     }
@@ -164,7 +164,7 @@ pub(super) fn publish_fault(
 }
 
 fn completion_publication_is_full(
-    device: &NativeDevice,
+    device: &QueuePortDeviceModel,
     completion_ring_id: CompletionRingId,
 ) -> ModelResult<bool> {
     let completion = device.completion(completion_ring_id)?;
@@ -172,16 +172,19 @@ fn completion_publication_is_full(
         || completion.len() >= device.resource_config.completion_publication_slots())
 }
 
-fn event_publication_is_full(device: &NativeDevice) -> bool {
+fn event_publication_is_full(device: &QueuePortDeviceModel) -> bool {
     device.events.len() >= device.resource_config.event_publication_slots()
 }
 
-fn retire_command(device: &mut NativeDevice, queue_id: QueueId) -> ModelResult<()> {
+fn retire_command(device: &mut QueuePortDeviceModel, queue_id: QueueId) -> ModelResult<()> {
     retire_command_without_requeue(device, queue_id)?;
     device.requeue_if_command_pending(queue_id)
 }
 
-fn retire_command_without_requeue(device: &mut NativeDevice, queue_id: QueueId) -> ModelResult<()> {
+fn retire_command_without_requeue(
+    device: &mut QueuePortDeviceModel,
+    queue_id: QueueId,
+) -> ModelResult<()> {
     let queue = device.queue_mut(queue_id)?;
     let _retired = queue.commands.pop();
     Ok(())

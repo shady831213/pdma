@@ -1,17 +1,17 @@
 # PDMA MODELING WORKSPACE
 
-Scope: Rust v0.6 sync actor reference and async parity workspace.
+Scope: Rust v0.6.5 active async queue-port model workspace.
 
 ## OVERVIEW
 
-`model/modeling` is a Rust 2024 workspace for deterministic, step-based PDMA behavior slices. The former flat `pdma-modeling` crate has been split into contract, device, host, and scenarios crates.
+`model/modeling` is a Rust 2024 workspace for deterministic, step-based PDMA behavior slices. The old sync reference stack has been retired to `model/retired/v0_6_sync_reference/`; this workspace now contains the active contract, device, host, and scenarios crates.
 
 ## STRUCTURE
 
 ```text
 crates/
 ├── contract/         # shared host/device contract and DMA-visible object vocabulary
-├── device/           # Tokio-backed active hardware runner and handle
+├── device/           # Tokio-backed active hardware runner, worker, and handle
 ├── host/             # active SDK/driver-like software model
 └── scenarios/        # active behavior-match validation stories
 ```
@@ -23,16 +23,16 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 | Task | Location | Notes |
 | --- | --- | --- |
 | Shared contract | `crates/contract/src/` | No backing memory or device execution behavior. |
-| Device behavior | `crates/device/src/` | Device owns backing store, scheduler, engines, resources, and trace sink. |
-| Host software | `crates/host/src/` | Host owns `Driver` and local command-slot accounting. |
-| System scenarios | `crates/scenarios/tests/` | Drive primary behavior through `Driver::*_on` and the sync runner, not private internals. |
+| Device behavior | `crates/device/src/` | Active queue-port device model, async actor handle/worker, sync/manual drive facade, resources, and trace sink. |
+| Host software | `crates/host/src/` | Host owns `AsyncDriver` and local command-slot accounting. |
+| System scenarios | `crates/scenarios/tests/` | Drive behavior through `AsyncDriver::*_on`, `AsyncDeviceHandle`, and caller-owned worker execution. |
 
 ## CONVENTIONS
 
 - Tests use Given/When/Then comments and assert observable completions, events, and memory contents.
-- `PdmaDevice::step()` executes at most one command and remains a helper/status surface. Primary v0.6 scenarios use `PdmaDevice::spawn_sync_runner()`, a `SyncDeviceHandle`, and runner progress/error waits.
-- Direct `step()`, `run_until_idle(max_steps)`, and `run_until_blocked(max_steps)` calls belong only in explicit helper/status/trace/arbitration and step-budget tests.
-- `Driver` owns local command-slot accounting; completions/events reclaim slots.
+- `AsyncDevice::queue_port*()` returns `(AsyncDevice, AsyncDeviceWorker)`; callers choose whether to `tokio::spawn(worker.run())`, directly await it, or use another executor strategy.
+- `SyncDevice::run_until_idle(max_steps)` and `SyncDevice::run_until_blocked(max_steps)` calls belong only in explicit manual-drive helper/status/trace and step-budget tests.
+- `AsyncDriver` owns local command-slot accounting; completions/events reclaim slots.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.
 - New public structs need terse docs because `missing_docs` is enabled.
 - Prefer typed request structs/newtypes over long argument lists or clippy suppressions.
@@ -50,12 +50,12 @@ cargo doc --workspace --no-deps --document-private-items
 
 ## CURRENT NEXT SLICE
 
-v0.6 Phase 2 async parity: keep the sync actor-style runner-backed reference locked, and extend async crates in small behavior-matching slices.
+v0.6.5 active-model cleanup is the current state: old sync crates are retired, active crates use canonical names, and spawn policy lives in scenarios or higher-level callers.
 
 ## DO NOT
 
 - Do not add exact descriptor byte layout, register offsets, C ABI, generated headers, or cycle timing.
-- Do not add async/runtime dependencies to the sync crates during v0.6 Phase 1.
+- Do not modify retired sync crates except for deliberate rollback-snapshot maintenance requested by the user.
 - Do not add `unsafe`, `unwrap`, `expect`, `panic`, `todo`, or indexing/slicing in production code.
 - Do not grow any Rust source beyond 250 pure LOC; split before adding behavior.
 - Do not put backing memory in contract; keep DMA-visible data structures separate from storage media.

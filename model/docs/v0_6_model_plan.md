@@ -127,33 +127,32 @@ The bus/MMIO/DMA-memory/IRQ boundary described below remains a long-term directi
 not a current v0.6 parity gap. It is also outside the current sync reference, so it
 must not be counted as async work required to match v0.6 queue-port behavior.
 
-### Post-v0.6 Sync Retirement Direction
+### Post-v0.6.5 Active Model State
 
-After queue-port parity, the next architectural decision is whether to retire the
-old sync reference rather than keep it as an active peer. The working direction is
-to make the current async-side model the active model and retain the old sync crates
-only temporarily as retired rollback material, not as maintained archive/reference
-code.
+After queue-port parity, v0.6.5 retired the old sync reference as an active peer.
+The current async-side model is now the active model, while the old sync stack is
+kept only as retired rollback material, not as maintained archive/reference code.
 
-Proposed retirement shape:
+Implemented retirement shape:
 
-- Move `crates/contract`, `crates/device`, `crates/host`, and `crates/scenarios`
-  out of the active workspace into a temporary `model/retired/v0_6_sync_reference/`
-  tree so the retired sync stack is decoupled from future active contract changes.
-- Remove retired crates from workspace build/test membership.
+- Moved the old sync `contract`, `device`, `host`, and `scenarios` crates into
+  `model/retired/v0_6_sync_reference/`.
+- Added a retired workspace root and lockfile so the retired sync stack is
+  self-contained and decoupled from future active contract changes.
+- Removed retired crates from active workspace build/test membership.
 - Treat retired sources as short-term rollback material only; do not add features,
   fixes, or new tests there.
 - Once the retired code is no longer needed for rollback confidence, delete it in a
   later cleanup.
 
-Proposed active naming after the sync retirement:
+Implemented active naming after the sync retirement:
 
 | Current name | Proposed name | Meaning |
 | --- | --- | --- |
 | `pdma-model-device-async` | `pdma-model-device` | Active device model crate. |
 | `pdma-model-host-async` | `pdma-model-host` | Active host driver crate. |
 | `pdma-model-scenarios-async` | `pdma-model-scenarios` | Active scenario crate. |
-| `AsyncDeviceRunner` | `AsyncDevice` | Spawned async actor drive mode. |
+| `AsyncDeviceRunner` | `AsyncDevice` | Async actor drive mode. |
 | `AsyncDeviceHandle` | `AsyncDeviceHandle` | Host-facing handle for the async actor drive mode. |
 | `AsyncDevice` | `SyncDevice` | Synchronous/manual drive mode over the active model. |
 | `RunnerBackend` | `DeviceModel` | Internal model facade shared by async and sync drive modes. |
@@ -168,10 +167,9 @@ becomes the active model rather than an alternate async variant.
 The active async device API should expose async operations and actor/run-loop
 primitives without deciding whether they are spawned. Choosing `tokio::spawn`,
 `block_on`, or another executor strategy belongs in scenarios or higher-level
-callers. The current `AsyncDeviceRunner::spawn_*` surface was useful for v0.6 parity,
-but the post-retirement shape should move spawn policy out of the device crate so the
-same async device API can be driven either as a spawned actor or by a caller-owned
-executor.
+callers. The active API now returns `(AsyncDevice, AsyncDeviceWorker)` from
+`AsyncDevice::queue_port*`; callers choose whether to run `AsyncDeviceWorker::run()`
+with `tokio::spawn`, `join!`, `block_on`, or another executor strategy.
 
 ### Long-Term Async Boundary Goal
 
@@ -192,17 +190,15 @@ This is the point where device interrupts become naturally observable. A high-le
 
 ## Boundaries
 
-The v0.5 workspace boundaries remain in force:
+The active v0.6.5 workspace boundaries are:
 
 | Crate | v0.6 responsibility |
 | --- | --- |
 | `pdma-model-contract` | Shared host/device contract vocabulary only. No backing memory, device behavior, host port, or runtime surface. |
-| `pdma-model-device` | Sync hardware-behavior reference model and explicit hardware turns. No dependency on host or scenarios. |
-| `pdma-model-host` | Sync driver actor surface, `DevicePort`, local slot accounting, and legacy wrapper APIs. |
-| `pdma-model-scenarios` | Sync reference behavior scenarios that interleave software and hardware turns. |
-| `pdma-model-device-async` | Async-native hardware actor/model and async device handle. No dependency on sync device, host, or scenarios. |
-| `pdma-model-host-async` | Imperative async driver client and async device-port boundary. No dependency on sync host. |
-| `pdma-model-scenarios-async` | Async system scenarios against the async-native hardware model and sync reference behavior. |
+| `pdma-model-device` | Active async-native queue-port hardware actor/model, `AsyncDevice`, `AsyncDeviceWorker`, `AsyncDeviceHandle`, and `SyncDevice`. No dependency on host or scenarios. |
+| `pdma-model-host` | Imperative async driver client and async device-port boundary. No dependency on scenarios. |
+| `pdma-model-scenarios` | Active async system scenarios against the queue-port hardware model. |
+| `model/retired/v0_6_sync_reference/` | Self-contained retired sync reference snapshot for short-term rollback only. |
 
 ## Completion Criteria
 
@@ -218,4 +214,11 @@ The v0.5 workspace boundaries remain in force:
 - Phase 2 architecture correction: async device behavior is async-native and no longer depends on the sync `pdma-model-device` implementation.
 - Phase 2 software boundary: host async APIs await only hardware-boundary operations while local driver bookkeeping remains imperative.
 - Phase 2 lower-level direction: future MMIO, DMA-memory, and interrupt modeling moves await points down to register, memory, and IRQ actions.
+- v0.6.5 sync retirement: old sync contract/device/host/scenarios are out of the
+  active workspace and self-contained under `model/retired/v0_6_sync_reference/`.
+- v0.6.5 active naming: active crates use `pdma-model-device`, `pdma-model-host`,
+  and `pdma-model-scenarios`; active device API uses `AsyncDevice`,
+  `AsyncDeviceHandle`, `AsyncDeviceWorker`, and `SyncDevice`.
+- v0.6.5 spawn policy: the device crate exposes worker/run-loop primitives and
+  higher-level callers choose whether to spawn or directly await the worker.
 - Full workspace format, test, clippy, and doc validation pass.

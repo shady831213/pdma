@@ -127,6 +127,51 @@ The bus/MMIO/DMA-memory/IRQ boundary described below remains a long-term directi
 not a current v0.6 parity gap. It is also outside the current sync reference, so it
 must not be counted as async work required to match v0.6 queue-port behavior.
 
+### Post-v0.6 Sync Retirement Direction
+
+After queue-port parity, the next architectural decision is whether to retire the
+old sync reference rather than keep it as an active peer. The working direction is
+to make the current async-side model the active model and retain the old sync crates
+only temporarily as retired rollback material, not as maintained archive/reference
+code.
+
+Proposed retirement shape:
+
+- Move `crates/device`, `crates/host`, and `crates/scenarios` out of the active
+  workspace into a temporary `model/retired/v0_6_sync_reference/` tree.
+- Remove retired crates from workspace build/test membership.
+- Treat retired sources as short-term rollback material only; do not add features,
+  fixes, or new tests there.
+- Once the retired code is no longer needed for rollback confidence, delete it in a
+  later cleanup.
+
+Proposed active naming after the sync retirement:
+
+| Current name | Proposed name | Meaning |
+| --- | --- | --- |
+| `pdma-model-device-async` | `pdma-model-device` | Active device model crate. |
+| `pdma-model-host-async` | `pdma-model-host` | Active host driver crate. |
+| `pdma-model-scenarios-async` | `pdma-model-scenarios` | Active scenario crate. |
+| `AsyncDeviceRunner` | `AsyncDevice` | Spawned async actor drive mode. |
+| `AsyncDeviceHandle` | `AsyncDeviceHandle` | Host-facing handle for the async actor drive mode. |
+| `AsyncDevice` | `SyncDevice` | Synchronous/manual drive mode over the active model. |
+| `RunnerBackend` | `DeviceModel` | Internal model facade shared by async and sync drive modes. |
+| `BackendStepStatus` | `ModelStepStatus` | Internal model step outcome. |
+| `NativeDevice` | `QueuePortDeviceModel` | Current deterministic queue-port-layer model core. |
+
+The term `SyncDevice` means a synchronous drive mode over the active model, not the
+retired sync reference implementation. The `*-async` crate suffixes should disappear
+only after the old sync crates are retired, because the async-side implementation then
+becomes the active model rather than an alternate async variant.
+
+The active async device API should expose async operations and actor/run-loop
+primitives without deciding whether they are spawned. Choosing `tokio::spawn`,
+`block_on`, or another executor strategy belongs in scenarios or higher-level
+callers. The current `AsyncDeviceRunner::spawn_*` surface was useful for v0.6 parity,
+but the post-retirement shape should move spawn policy out of the device crate so the
+same async device API can be driven either as a spawned actor or by a caller-owned
+executor.
+
 ### Long-Term Async Boundary Goal
 
 The conceptual async queue-port boundary is an intermediate modeling layer. The long-term direction is a bus-level async boundary where the host driver performs awaitable register, DMA-memory, and interrupt operations, and higher-level driver methods are imperative sequences built from those operations.

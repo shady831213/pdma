@@ -1,5 +1,6 @@
 mod broadcast;
 mod copy;
+mod irq;
 mod memory;
 mod resources;
 mod retirement;
@@ -9,6 +10,7 @@ mod vector_add;
 
 use super::backend::ModelStepStatus;
 use crate::trace::{TraceSink, command_id, operation_from_external};
+use irq::PdmaIrqController;
 use memory::NativeMemory;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
@@ -16,6 +18,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
+use pdma_model_contract::irq::{IrqLine, IrqSnapshot, IrqSource, IrqVector};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use pdma_model_contract::trace::TraceEvent;
 use ring::NativeRing;
@@ -35,6 +38,7 @@ pub(super) struct QueuePortDeviceModel {
     events: VecDeque<EventRecord>,
     runnable: VecDeque<QueueId>,
     pending_retirement: Option<retirement::PendingRetirement>,
+    irq: PdmaIrqController,
     resource_config: ResourceConfig,
     trace: TraceSink,
 }
@@ -52,6 +56,7 @@ impl QueuePortDeviceModel {
             events: VecDeque::new(),
             runnable: VecDeque::new(),
             pending_retirement: None,
+            irq: PdmaIrqController::new(IrqLine::new(IrqVector::new(0))),
             resource_config,
             trace: TraceSink::default(),
         }
@@ -143,6 +148,44 @@ impl QueuePortDeviceModel {
         Ok(event)
     }
 
+    pub(super) fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.validate_irq_source(source)?;
+        self.irq.enable(source);
+        Ok(())
+    }
+
+    pub(super) fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.validate_irq_source(source)?;
+        self.irq.disable(source);
+        Ok(())
+    }
+
+    pub(super) fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.validate_irq_source(source)?;
+        self.irq.mask(source);
+        Ok(())
+    }
+
+    pub(super) fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.validate_irq_source(source)?;
+        self.irq.unmask(source);
+        Ok(())
+    }
+
+    pub(super) fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.validate_irq_source(source)?;
+        self.irq.ack(source);
+        Ok(())
+    }
+
+    pub(super) fn latch_irq_source(&mut self, source: IrqSource) {
+        self.irq.latch(source);
+    }
+
+    pub(super) fn irq_snapshot(&self) -> Option<IrqSnapshot> {
+        self.irq.pending_snapshot()
+    }
+
     pub(super) fn step(&mut self) -> ModelResult<ModelStepStatus> {
         step::step(self)
     }
@@ -200,6 +243,19 @@ impl QueuePortDeviceModel {
         self.completions
             .get(id.raw())
             .ok_or(ModelError::UnknownCompletionRing(id))
+    }
+
+    fn validate_irq_source(&self, source: IrqSource) -> ModelResult<()> {
+        match source {
+            IrqSource::Completion(id) => self
+                .completion(id)
+                .map(|_| ())
+                .map_err(|_| ModelError::UnknownIrqSource(source)),
+            IrqSource::Event(id) => self
+                .queue(id)
+                .map(|_| ())
+                .map_err(|_| ModelError::UnknownIrqSource(source)),
+        }
     }
 
     fn requeue_if_command_pending(&mut self, queue_id: QueueId) -> ModelResult<()> {

@@ -6,6 +6,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
+use pdma_model_contract::irq::{IrqSnapshot, IrqSource};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
@@ -111,6 +112,42 @@ impl DeviceModel {
     ) -> ModelResult<Option<EventRecord>> {
         match self {
             Self::QueuePort(device) => device.poll_queue_event(queue_id),
+        }
+    }
+
+    pub(super) fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.enable_irq_source(source),
+        }
+    }
+
+    pub(super) fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.disable_irq_source(source),
+        }
+    }
+
+    pub(super) fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.mask_irq_source(source),
+        }
+    }
+
+    pub(super) fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.unmask_irq_source(source),
+        }
+    }
+
+    pub(super) fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.ack_irq_source(source),
+        }
+    }
+
+    pub(super) fn irq_snapshot(&self) -> Option<IrqSnapshot> {
+        match self {
+            Self::QueuePort(device) => device.irq_snapshot(),
         }
     }
 

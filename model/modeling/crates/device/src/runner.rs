@@ -1,6 +1,7 @@
 //! Tokio-backed asynchronous hardware runner.
 
 mod backend;
+mod irq;
 mod manual;
 mod native;
 mod state;

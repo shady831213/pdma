@@ -6,6 +6,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
+use pdma_model_contract::irq::{IrqSnapshot, IrqSource};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
@@ -77,6 +78,41 @@ impl SyncDevice {
     /// Pops one event for a queue-local event path.
     pub fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
         self.backend.poll_queue_event(queue_id)
+    }
+
+    /// Enables a PDMA-local IRQ source.
+    pub fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.backend.enable_irq_source(source)
+    }
+
+    /// Disables a PDMA-local IRQ source.
+    pub fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.backend.disable_irq_source(source)
+    }
+
+    /// Masks a PDMA-local IRQ source without clearing pending state.
+    pub fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.backend.mask_irq_source(source)
+    }
+
+    /// Unmasks a PDMA-local IRQ source.
+    pub fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.backend.unmask_irq_source(source)
+    }
+
+    /// Acknowledges and clears a PDMA-local IRQ source.
+    pub fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        self.backend.ack_irq_source(source)
+    }
+
+    /// Returns the current pending IRQ snapshot, if any.
+    pub fn irq_snapshot(&self) -> Option<IrqSnapshot> {
+        self.backend.irq_snapshot()
+    }
+
+    /// Returns the currently asserted IRQ snapshot, if any.
+    pub fn wait_irq(&self) -> Option<IrqSnapshot> {
+        self.irq_snapshot().filter(|snapshot| snapshot.asserted())
     }
 
     /// Runs deterministic synchronous steps until idle or until the step budget expires.

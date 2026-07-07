@@ -1,0 +1,212 @@
+#![allow(missing_docs)]
+
+use pdma_model_contract::{
+    ModelError, ResourceConfig,
+    desc::{CopyCommand, CopyRequest, ExternalCommand},
+    ids::{CommandId, CompletionRingId, QueueId},
+    irq::IrqSource,
+    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
+};
+use pdma_model_device::AsyncDevice;
+
+#[tokio::test(flavor = "current_thread")]
+async fn completion_irq_latches_only_after_publication_retry_succeeds() {
+    // Given: two copies behind one completion publication slot and an enabled completion IRQ.
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+        ResourceConfig::default().with_completion_publication_slots(1),
+    );
+    let worker = tokio::spawn(worker.run());
+    let handle = runner.handle();
+    let queue = handle
+        .create_queue(QueueConfig::new(
+            4,
+            4,
+            EventRouting::QueueLocal,
+            SoftwareOwnerId::new(0),
+        ))
+        .await
+        .expect("queue setup is valid");
+    let source = IrqSource::Completion(queue.completion_ring_id());
+    handle
+        .enable_irq_source(source)
+        .await
+        .expect("completion IRQ source exists");
+    handle
+        .unmask_irq_source(source)
+        .await
+        .expect("completion IRQ source exists");
+    let src = handle.allocate_buffer(4).await;
+    let first_dst = handle.allocate_buffer(4).await;
+    let second_dst = handle.allocate_buffer(4).await;
+    handle
+        .write_buffer(src, 0, &[1, 3, 5, 7])
+        .await
+        .expect("source write is in bounds");
+    for (command_id, dst) in [first_dst, second_dst].into_iter().enumerate() {
+        let command = ExternalCommand::Copy(CopyCommand::new(
+            CommandId::new(command_id),
+            queue.queue_id(),
+            queue.completion_ring_id(),
+            CopyRequest::new(src, dst, 4),
+        ));
+        handle
+            .submit_command(queue.queue_id(), command)
+            .await
+            .expect("copy submission has ring space");
+    }
+
+    // When: the first completion publishes, the second stalls, and software clears the first IRQ.
+    handle
+        .ring_doorbell(queue.queue_id())
+        .await
+        .expect("doorbell rings");
+    let first_snapshot = runner.wait_for_progress_after(0).await;
+    tokio::task::yield_now().await;
+    let stalled_snapshot = runner.snapshot().await;
+    let first_irq = handle
+        .irq_snapshot()
+        .await
+        .expect("first published completion asserts IRQ");
+    handle
+        .ack_irq_source(source)
+        .await
+        .expect("completion IRQ source exists");
+    let cleared_irq = handle.irq_snapshot().await;
+    let first_completion = handle
+        .poll_completion(queue.completion_ring_id())
+        .await
+        .expect("completion ring exists")
+        .expect("first completion was published");
+    let retry_snapshot = runner.wait_for_progress_after(1).await;
+    let retry_irq = handle
+        .irq_snapshot()
+        .await
+        .expect("retry publication asserts IRQ");
+    runner.request_shutdown().await;
+    let summary = worker.await.expect("runner joins cleanly");
+
+    // Then: stalled publication did not assert early, but retry publication asserts again.
+    assert_eq!(first_snapshot.steps, 1);
+    assert!(stalled_snapshot.stalls >= 1);
+    assert!(first_irq.asserted());
+    assert_eq!(first_irq.cause().source(), source);
+    assert_eq!(cleared_irq, None);
+    assert_eq!(first_completion.command_id(), CommandId::new(0));
+    assert_eq!(retry_snapshot.steps, 2);
+    assert!(retry_irq.asserted());
+    assert_eq!(retry_irq.cause().source(), source);
+    assert_eq!(summary.steps, 2);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn invalid_irq_source_control_returns_error_without_creating_state() {
+    // Given: a device with one queue and invalid IRQ source identities.
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
+    let handle = runner.handle();
+    handle
+        .create_queue(QueueConfig::new(
+            4,
+            4,
+            EventRouting::QueueLocal,
+            SoftwareOwnerId::new(0),
+        ))
+        .await
+        .expect("queue setup is valid");
+    let unknown_completion = IrqSource::Completion(CompletionRingId::new(99));
+    let unknown_event = IrqSource::Event(QueueId::new(99));
+
+    // When: software controls unknown IRQ sources.
+    let completion_result = handle.enable_irq_source(unknown_completion).await;
+    let event_result = handle.mask_irq_source(unknown_event).await;
+
+    // Then: both controls fail and no pending IRQ state is created.
+    assert_eq!(
+        completion_result,
+        Err(ModelError::UnknownIrqSource(unknown_completion))
+    );
+    assert_eq!(
+        event_result,
+        Err(ModelError::UnknownIrqSource(unknown_event))
+    );
+    assert_eq!(handle.irq_snapshot().await, None);
+    runner.request_shutdown().await;
+    worker.await.expect("runner joins cleanly");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn event_irq_latches_only_after_publication_retry_succeeds() {
+    // Given: two faulty copies behind one event publication slot and an enabled event IRQ.
+    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+        ResourceConfig::default().with_event_publication_slots(1),
+    );
+    let worker = tokio::spawn(worker.run());
+    let handle = runner.handle();
+    let queue = handle
+        .create_queue(QueueConfig::new(
+            4,
+            4,
+            EventRouting::QueueLocal,
+            SoftwareOwnerId::new(0),
+        ))
+        .await
+        .expect("queue setup is valid");
+    let source = IrqSource::Event(queue.queue_id());
+    handle
+        .enable_irq_source(source)
+        .await
+        .expect("event IRQ source exists");
+    handle
+        .unmask_irq_source(source)
+        .await
+        .expect("event IRQ source exists");
+    let src = handle.allocate_buffer(4).await;
+    let dst = handle.allocate_buffer(4).await;
+    for command_id in 0..2 {
+        let command = ExternalCommand::Copy(CopyCommand::new(
+            CommandId::new(command_id),
+            queue.queue_id(),
+            queue.completion_ring_id(),
+            CopyRequest::new(src, dst, 8),
+        ));
+        handle
+            .submit_command(queue.queue_id(), command)
+            .await
+            .expect("faulting copy submission has ring space");
+    }
+
+    // When: first event publishes, second event stalls, and software clears the first IRQ.
+    handle
+        .ring_doorbell(queue.queue_id())
+        .await
+        .expect("doorbell rings");
+    let first_error = runner.wait_for_error_after(0).await;
+    tokio::task::yield_now().await;
+    let stalled_snapshot = runner.snapshot().await;
+    let first_irq = handle.wait_irq().await.expect("first event asserts IRQ");
+    handle
+        .ack_irq_source(source)
+        .await
+        .expect("event IRQ source exists");
+    assert_eq!(handle.irq_snapshot().await, None);
+    let first_event = handle
+        .poll_queue_event(queue.queue_id())
+        .await
+        .expect("queue exists")
+        .expect("first event was published");
+    let retry_error = runner.wait_for_error_after(1).await;
+    let retry_irq = handle.wait_irq().await.expect("retry event asserts IRQ");
+    runner.request_shutdown().await;
+    let summary = worker.await.expect("runner joins cleanly");
+
+    // Then: stalled event publication did not assert early, but retry publication asserts again.
+    assert_eq!(first_error.errors, 1);
+    assert!(stalled_snapshot.stalls >= 1);
+    assert!(first_irq.asserted());
+    assert_eq!(first_irq.cause().source(), source);
+    assert_eq!(first_event.command_id(), CommandId::new(0));
+    assert_eq!(retry_error.errors, 2);
+    assert!(retry_irq.asserted());
+    assert_eq!(retry_irq.cause().source(), source);
+    assert_eq!(summary.errors, 2);
+}

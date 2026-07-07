@@ -5,6 +5,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
+use pdma_model_contract::irq::{IrqSnapshot, IrqSource};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_device::{AsyncDeviceHandle, SyncDevice};
 
@@ -56,6 +57,40 @@ pub trait AsyncDevicePort: Send + Sync {
         &mut self,
         queue_id: QueueId,
     ) -> impl Future<Output = ModelResult<Option<EventRecord>>> + Send;
+
+    /// Enables a PDMA-local IRQ source.
+    fn enable_irq_source(
+        &mut self,
+        source: IrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
+
+    /// Disables a PDMA-local IRQ source.
+    fn disable_irq_source(
+        &mut self,
+        source: IrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
+
+    /// Masks a PDMA-local IRQ source without clearing pending state.
+    fn mask_irq_source(
+        &mut self,
+        source: IrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
+
+    /// Unmasks a PDMA-local IRQ source.
+    fn unmask_irq_source(
+        &mut self,
+        source: IrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
+
+    /// Acknowledges and clears a PDMA-local IRQ source.
+    fn ack_irq_source(&mut self, source: IrqSource)
+    -> impl Future<Output = ModelResult<()>> + Send;
+
+    /// Returns the current pending IRQ snapshot, if any.
+    fn irq_snapshot(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send;
+
+    /// Waits until the device has an asserted IRQ snapshot.
+    fn wait_irq(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send;
 }
 
 impl AsyncDevicePort for AsyncDeviceHandle {
@@ -97,6 +132,34 @@ impl AsyncDevicePort for AsyncDeviceHandle {
     async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
         Self::poll_queue_event(self, queue_id).await
     }
+
+    async fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::enable_irq_source(self, source).await
+    }
+
+    async fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::disable_irq_source(self, source).await
+    }
+
+    async fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::mask_irq_source(self, source).await
+    }
+
+    async fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::unmask_irq_source(self, source).await
+    }
+
+    async fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::ack_irq_source(self, source).await
+    }
+
+    async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
+        Self::irq_snapshot(self).await
+    }
+
+    async fn wait_irq(&self) -> Option<IrqSnapshot> {
+        Self::wait_irq(self).await
+    }
 }
 
 impl AsyncDevicePort for SyncDevice {
@@ -137,5 +200,33 @@ impl AsyncDevicePort for SyncDevice {
 
     async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
         Self::poll_queue_event(self, queue_id)
+    }
+
+    async fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::enable_irq_source(self, source)
+    }
+
+    async fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::disable_irq_source(self, source)
+    }
+
+    async fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::mask_irq_source(self, source)
+    }
+
+    async fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::unmask_irq_source(self, source)
+    }
+
+    async fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+        Self::ack_irq_source(self, source)
+    }
+
+    async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
+        Self::irq_snapshot(self)
+    }
+
+    async fn wait_irq(&self) -> Option<IrqSnapshot> {
+        Self::wait_irq(self)
     }
 }

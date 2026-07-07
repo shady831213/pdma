@@ -1,6 +1,7 @@
 //! Shared typed errors for checked model contract operations.
 
 use crate::ids::{BufferId, CompletionRingId, QueueId};
+use crate::irq::IrqSource;
 use core::fmt;
 
 /// Result type used throughout the PDMA model.
@@ -20,6 +21,8 @@ pub enum ModelError {
     UnknownQueue(QueueId),
     /// The requested completion ring does not exist.
     UnknownCompletionRing(CompletionRingId),
+    /// The requested IRQ source does not exist.
+    UnknownIrqSource(IrqSource),
     /// A checked offset plus length calculation overflowed.
     RangeOverflow,
     /// A memory read or write exceeded the buffer bounds.
@@ -48,6 +51,7 @@ impl fmt::Display for ModelError {
             Self::UnknownBuffer(id) => write!(f, "unknown buffer {}", id.raw()),
             Self::UnknownQueue(id) => write!(f, "unknown queue {}", id.raw()),
             Self::UnknownCompletionRing(id) => write!(f, "unknown completion ring {}", id.raw()),
+            Self::UnknownIrqSource(source) => write!(f, "unknown IRQ source {source:?}"),
             Self::RangeOverflow => f.write_str("range calculation overflowed"),
             Self::OutOfBounds { buffer, len, end } => {
                 write!(

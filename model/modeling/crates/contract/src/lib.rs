@@ -10,6 +10,7 @@ pub mod dma;
 pub mod error;
 pub mod event;
 pub mod ids;
+pub mod irq;
 pub mod queue;
 pub mod resources;
 pub mod trace;
@@ -24,6 +25,7 @@ pub use dma::{DmaRange, DmaRangeStart};
 pub use error::{ModelError, ModelResult};
 pub use event::{EventErrorKind, EventRecord, MemoryFault};
 pub use ids::{BufferId, CommandId, CompletionRingId, DmaObjectId, QueueId};
+pub use irq::{IrqCause, IrqLine, IrqSnapshot, IrqSource, IrqVector};
 pub use queue::{
     EventRouting, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, SoftwareOwnerId,
 };

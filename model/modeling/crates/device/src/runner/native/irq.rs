@@ -1,4 +1,7 @@
-use pdma_model_contract::{IrqCause, IrqLine, IrqSnapshot, IrqSource};
+use pdma_model_contract::{
+    IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
+    ModelError, ModelResult,
+};
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
@@ -10,9 +13,12 @@ pub(super) struct PdmaIrqController {
 #[derive(Debug, Clone, Copy)]
 struct PdmaIrqSourceState {
     source: IrqSource,
+    route: IrqRoute,
     enabled: bool,
     masked: bool,
-    pending: bool,
+    cause_pending: bool,
+    pending_messages: usize,
+    next_message_id: usize,
 }
 
 impl PdmaIrqController {
@@ -27,6 +33,19 @@ impl PdmaIrqController {
         self.source_state_mut(source).enabled = true;
     }
 
+    pub(super) fn configure_route(
+        &mut self,
+        source: IrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
+        let state = self.source_state_mut(source);
+        if state.is_active() {
+            return Err(ModelError::IrqSourceActive(source));
+        }
+        state.route = route;
+        Ok(())
+    }
+
     pub(super) fn disable(&mut self, source: IrqSource) {
         self.source_state_mut(source).enabled = false;
     }
@@ -39,19 +58,25 @@ impl PdmaIrqController {
         self.source_state_mut(source).masked = false;
     }
 
-    pub(super) fn latch(&mut self, source: IrqSource) {
+    pub(super) fn latch(&mut self, source: IrqSource) -> bool {
         let state = self.source_state_mut(source);
         if state.enabled {
-            state.pending = true;
+            state.latch();
+            return true;
         }
+        false
     }
 
     pub(super) fn ack(&mut self, source: IrqSource) {
-        self.source_state_mut(source).pending = false;
+        self.source_state_mut(source).cause_pending = false;
     }
 
     pub(super) fn pending_snapshot(&self) -> Option<IrqSnapshot> {
-        let pending = self.sources.values().find(|state| state.pending).copied()?;
+        let pending = self
+            .sources
+            .values()
+            .find(|state| state.has_line_cause())
+            .copied()?;
         let asserted = self.sources.values().any(PdmaIrqSourceState::asserts_line);
         let state = self
             .sources
@@ -59,169 +84,104 @@ impl PdmaIrqController {
             .find(|state| state.asserts_line())
             .copied()
             .unwrap_or(pending);
+        let line = state.line()?;
         Some(IrqSnapshot::new(
-            IrqCause::new(self.line, state.source),
+            IrqCause::new(line, state.source),
             asserted,
         ))
     }
 
+    pub(super) fn take_notification(&mut self) -> Option<IrqNotification> {
+        if let Some(state) = self.sources.values().find(|state| state.asserts_line()) {
+            if let Some(line) = state.line() {
+                return Some(IrqNotification::Line(IrqSnapshot::new(
+                    IrqCause::new(line, state.source),
+                    true,
+                )));
+            }
+        }
+        self.sources
+            .values_mut()
+            .find(|state| state.can_deliver_message())
+            .and_then(PdmaIrqSourceState::take_message)
+            .map(IrqNotification::Message)
+    }
+
+    pub(super) fn line_asserted(&self) -> bool {
+        self.sources.values().any(PdmaIrqSourceState::asserts_line)
+    }
+
     fn source_state_mut(&mut self, source: IrqSource) -> &mut PdmaIrqSourceState {
+        let line = self.line;
         self.sources
             .entry(source)
-            .or_insert_with(|| PdmaIrqSourceState::new(source))
+            .or_insert_with(|| PdmaIrqSourceState::new(source, line))
     }
 }
 
 impl PdmaIrqSourceState {
-    const fn new(source: IrqSource) -> Self {
+    const fn new(source: IrqSource, line: IrqLine) -> Self {
         Self {
             source,
+            route: IrqRoute::Line(line),
             enabled: false,
             masked: true,
-            pending: false,
+            cause_pending: false,
+            pending_messages: 0,
+            next_message_id: 0,
         }
     }
 
     const fn asserts_line(&self) -> bool {
-        self.pending && self.enabled && !self.masked
+        self.has_line_cause() && self.enabled && !self.masked
+    }
+
+    const fn has_line_cause(&self) -> bool {
+        matches!(self.route, IrqRoute::Line(_)) && self.cause_pending
+    }
+
+    const fn line(&self) -> Option<IrqLine> {
+        match self.route {
+            IrqRoute::Line(line) => Some(line),
+            IrqRoute::Message(_) => None,
+        }
+    }
+
+    const fn is_active(&self) -> bool {
+        self.enabled || self.cause_pending || self.pending_messages != 0
+    }
+
+    fn latch(&mut self) {
+        self.cause_pending = true;
+        match self.route {
+            IrqRoute::Line(_) => {}
+            IrqRoute::Message(_) => {
+                self.pending_messages = self.pending_messages.saturating_add(1);
+            }
+        }
+    }
+
+    const fn can_deliver_message(&self) -> bool {
+        matches!(self.route, IrqRoute::Message(_))
+            && self.enabled
+            && !self.masked
+            && self.pending_messages != 0
+    }
+
+    fn take_message(&mut self) -> Option<IrqMessage> {
+        if !self.can_deliver_message() {
+            return None;
+        }
+        let vector = match self.route {
+            IrqRoute::Line(_) => return None,
+            IrqRoute::Message(vector) => vector,
+        };
+        let message = IrqMessage::new(IrqMessageId::new(self.next_message_id), vector, self.source);
+        self.next_message_id = self.next_message_id.saturating_add(1);
+        self.pending_messages -= 1;
+        Some(message)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::PdmaIrqController;
-    use pdma_model_contract::{CompletionRingId, IrqLine, IrqSource, IrqVector};
-
-    #[test]
-    fn latch_asserts_enabled_unmasked_source() {
-        // Given: an enabled and unmasked completion IRQ source.
-        let line = IrqLine::new(IrqVector::new(0));
-        let source = IrqSource::Completion(CompletionRingId::new(1));
-        let mut controller = PdmaIrqController::new(line);
-        controller.enable(source);
-        controller.unmask(source);
-
-        // When: the device latches the source.
-        controller.latch(source);
-
-        // Then: software can observe an asserted pending IRQ for the source.
-        let snapshot = controller
-            .pending_snapshot()
-            .expect("enabled source should latch pending IRQ");
-        assert!(snapshot.asserted());
-        assert_eq!(snapshot.cause().source(), source);
-        assert_eq!(snapshot.cause().line(), line);
-    }
-
-    #[test]
-    fn masked_source_latches_without_asserting_line() {
-        // Given: an enabled but masked completion IRQ source.
-        let line = IrqLine::new(IrqVector::new(0));
-        let source = IrqSource::Completion(CompletionRingId::new(2));
-        let mut controller = PdmaIrqController::new(line);
-        controller.enable(source);
-
-        // When: the device latches the source.
-        controller.latch(source);
-
-        // Then: pending cause is preserved while line assertion is suppressed.
-        let snapshot = controller
-            .pending_snapshot()
-            .expect("masked source should remain pending");
-        assert!(!snapshot.asserted());
-        assert_eq!(snapshot.cause().source(), source);
-    }
-
-    #[test]
-    fn ack_clears_pending_without_changing_mask_state() {
-        // Given: a masked pending IRQ source.
-        let line = IrqLine::new(IrqVector::new(0));
-        let source = IrqSource::Completion(CompletionRingId::new(3));
-        let mut controller = PdmaIrqController::new(line);
-        controller.enable(source);
-        controller.latch(source);
-
-        // When: software acknowledges the source and the device latches it again.
-        controller.ack(source);
-        controller.latch(source);
-
-        // Then: the source remains masked after ack and still does not assert.
-        let snapshot = controller
-            .pending_snapshot()
-            .expect("source should latch again after ack");
-        assert!(!snapshot.asserted());
-    }
-
-    #[test]
-    fn disabled_source_does_not_latch() {
-        // Given: a disabled IRQ source.
-        let source = IrqSource::Completion(CompletionRingId::new(4));
-        let mut controller = PdmaIrqController::new(IrqLine::new(IrqVector::new(0)));
-
-        // When: the device attempts to latch the disabled source.
-        controller.latch(source);
-
-        // Then: no pending IRQ is recorded.
-        assert_eq!(controller.pending_snapshot(), None);
-    }
-
-    #[test]
-    fn disabled_pending_source_stays_pending_without_asserting_line() {
-        // Given: an enabled pending source whose line is asserted.
-        let source = IrqSource::Completion(CompletionRingId::new(5));
-        let mut controller = PdmaIrqController::new(IrqLine::new(IrqVector::new(0)));
-        controller.enable(source);
-        controller.unmask(source);
-        controller.latch(source);
-
-        // When: software disables that source before acking it.
-        controller.disable(source);
-
-        // Then: pending cause remains visible but delivery is deasserted.
-        let snapshot = controller
-            .pending_snapshot()
-            .expect("disabled pending source should stay visible");
-        assert!(!snapshot.asserted());
-    }
-
-    #[test]
-    fn remasking_pending_source_deasserts_line() {
-        // Given: an asserted pending source.
-        let source = IrqSource::Completion(CompletionRingId::new(6));
-        let mut controller = PdmaIrqController::new(IrqLine::new(IrqVector::new(0)));
-        controller.enable(source);
-        controller.unmask(source);
-        controller.latch(source);
-
-        // When: software masks that source.
-        controller.mask(source);
-
-        // Then: pending cause remains visible but delivery is suppressed.
-        let snapshot = controller
-            .pending_snapshot()
-            .expect("masked pending source should stay visible");
-        assert!(!snapshot.asserted());
-    }
-
-    #[test]
-    fn asserted_source_takes_priority_over_masked_pending_source() {
-        // Given: a masked lower source and an unmasked higher source are both pending.
-        let masked = IrqSource::Completion(CompletionRingId::new(0));
-        let asserted = IrqSource::Completion(CompletionRingId::new(1));
-        let mut controller = PdmaIrqController::new(IrqLine::new(IrqVector::new(0)));
-        controller.enable(masked);
-        controller.latch(masked);
-        controller.enable(asserted);
-        controller.unmask(asserted);
-        controller.latch(asserted);
-
-        // When: software observes the pending IRQ snapshot.
-        let snapshot = controller
-            .pending_snapshot()
-            .expect("pending sources should produce a snapshot");
-
-        // Then: the asserted source is selected instead of the masked lower source.
-        assert!(snapshot.asserted());
-        assert_eq!(snapshot.cause().source(), asserted);
-    }
-}
+mod tests;

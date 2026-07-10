@@ -2,9 +2,15 @@
 
 use super::AsyncDeviceHandle;
 use pdma_model_contract::error::ModelResult;
-use pdma_model_contract::irq::{IrqSnapshot, IrqSource};
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
 
 impl AsyncDeviceHandle {
+    /// Configures the delivery route of an inactive PDMA-local IRQ source.
+    pub async fn configure_irq_route(&self, source: IrqSource, route: IrqRoute) -> ModelResult<()> {
+        self.with_backend(|backend| backend.configure_irq_route(source, route))
+            .await
+    }
+
     /// Enables a PDMA-local IRQ source.
     pub async fn enable_irq_source(&self, source: IrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.enable_irq_source(source))
@@ -66,6 +72,35 @@ impl AsyncDeviceHandle {
                     .irq_snapshot()
                     .await
                     .filter(|snapshot| snapshot.asserted());
+            }
+        }
+    }
+
+    /// Waits for one line or message IRQ notification.
+    pub async fn wait_irq_notification(&self) -> Option<IrqNotification> {
+        let mut changes = self.shared.changed.subscribe();
+        loop {
+            let current = {
+                let mut state = self.shared.state.lock().await;
+                if let Some(notification) = state.backend.take_irq_notification() {
+                    return Some(notification);
+                }
+                if state.shutdown_requested {
+                    return None;
+                }
+                state.generation
+            };
+            if *changes.borrow_and_update() != current {
+                continue;
+            }
+            if changes.changed().await.is_err() {
+                return self
+                    .shared
+                    .state
+                    .lock()
+                    .await
+                    .backend
+                    .take_irq_notification();
             }
         }
     }

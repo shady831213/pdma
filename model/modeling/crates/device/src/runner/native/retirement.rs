@@ -56,8 +56,8 @@ pub(super) fn publish_completion(
     device
         .completion_mut(success.completion_ring)?
         .push(completion)?;
-    device.latch_irq_source(IrqSource::Completion(success.completion_ring));
     device.trace.completion_published(completion);
+    device.latch_irq_source(IrqSource::Completion(success.completion_ring));
     retire_command(device, success.queue)?;
     Ok(ModelStepStatus::Progressed)
 }
@@ -107,8 +107,8 @@ fn retry_pending_completion(
     device
         .completion_mut(pending.completion_ring)?
         .push(completion)?;
-    device.latch_irq_source(IrqSource::Completion(pending.completion_ring));
     device.trace.completion_published(completion);
+    device.latch_irq_source(IrqSource::Completion(pending.completion_ring));
     device.pending_retirement = None;
     device.requeue_if_command_pending(pending.queue)?;
     Ok(ModelStepStatus::Progressed)
@@ -129,8 +129,8 @@ fn retry_pending_event(
         ));
     }
     device.events.push_back(record);
-    device.latch_irq_source(IrqSource::Event(queue_id));
     device.trace.event_published(record);
+    device.latch_irq_source(IrqSource::Event(queue_id));
     device.pending_retirement = None;
     device.requeue_if_command_pending(queue_id)?;
     Err(source)
@@ -162,8 +162,8 @@ pub(super) fn publish_fault(
         ));
     }
     device.events.push_back(event);
-    device.latch_irq_source(IrqSource::Event(fault.queue_id));
     device.trace.event_published(event);
+    device.latch_irq_source(IrqSource::Event(fault.queue_id));
     retire_command(device, fault.queue_id)?;
     Err(fault.source)
 }

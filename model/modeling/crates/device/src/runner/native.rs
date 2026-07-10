@@ -1,6 +1,7 @@
 mod broadcast;
 mod copy;
 mod irq;
+mod irq_api;
 mod memory;
 mod resources;
 mod retirement;
@@ -18,7 +19,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqLine, IrqSnapshot, IrqSource, IrqVector};
+use pdma_model_contract::irq::{IrqLine, IrqVector};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use pdma_model_contract::trace::TraceEvent;
 use ring::NativeRing;
@@ -148,44 +149,6 @@ impl QueuePortDeviceModel {
         Ok(event)
     }
 
-    pub(super) fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
-        self.validate_irq_source(source)?;
-        self.irq.enable(source);
-        Ok(())
-    }
-
-    pub(super) fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
-        self.validate_irq_source(source)?;
-        self.irq.disable(source);
-        Ok(())
-    }
-
-    pub(super) fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
-        self.validate_irq_source(source)?;
-        self.irq.mask(source);
-        Ok(())
-    }
-
-    pub(super) fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
-        self.validate_irq_source(source)?;
-        self.irq.unmask(source);
-        Ok(())
-    }
-
-    pub(super) fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
-        self.validate_irq_source(source)?;
-        self.irq.ack(source);
-        Ok(())
-    }
-
-    pub(super) fn latch_irq_source(&mut self, source: IrqSource) {
-        self.irq.latch(source);
-    }
-
-    pub(super) fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        self.irq.pending_snapshot()
-    }
-
     pub(super) fn step(&mut self) -> ModelResult<ModelStepStatus> {
         step::step(self)
     }
@@ -243,19 +206,6 @@ impl QueuePortDeviceModel {
         self.completions
             .get(id.raw())
             .ok_or(ModelError::UnknownCompletionRing(id))
-    }
-
-    fn validate_irq_source(&self, source: IrqSource) -> ModelResult<()> {
-        match source {
-            IrqSource::Completion(id) => self
-                .completion(id)
-                .map(|_| ())
-                .map_err(|_| ModelError::UnknownIrqSource(source)),
-            IrqSource::Event(id) => self
-                .queue(id)
-                .map(|_| ())
-                .map_err(|_| ModelError::UnknownIrqSource(source)),
-        }
     }
 
     fn requeue_if_command_pending(&mut self, queue_id: QueueId) -> ModelResult<()> {

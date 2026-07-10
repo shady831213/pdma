@@ -6,7 +6,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqSnapshot, IrqSource};
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
@@ -121,6 +121,16 @@ impl DeviceModel {
         }
     }
 
+    pub(super) fn configure_irq_route(
+        &mut self,
+        source: IrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.configure_irq_route(source, route),
+        }
+    }
+
     pub(super) fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
         match self {
             Self::QueuePort(device) => device.disable_irq_source(source),
@@ -148,6 +158,12 @@ impl DeviceModel {
     pub(super) fn irq_snapshot(&self) -> Option<IrqSnapshot> {
         match self {
             Self::QueuePort(device) => device.irq_snapshot(),
+        }
+    }
+
+    pub(super) fn take_irq_notification(&mut self) -> Option<IrqNotification> {
+        match self {
+            Self::QueuePort(device) => device.take_irq_notification(),
         }
     }
 

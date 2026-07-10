@@ -6,7 +6,7 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqSnapshot, IrqSource};
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
@@ -85,6 +85,11 @@ impl SyncDevice {
         self.backend.enable_irq_source(source)
     }
 
+    /// Configures the delivery route of an inactive PDMA-local IRQ source.
+    pub fn configure_irq_route(&mut self, source: IrqSource, route: IrqRoute) -> ModelResult<()> {
+        self.backend.configure_irq_route(source, route)
+    }
+
     /// Disables a PDMA-local IRQ source.
     pub fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
         self.backend.disable_irq_source(source)
@@ -113,6 +118,11 @@ impl SyncDevice {
     /// Returns the currently asserted IRQ snapshot, if any.
     pub fn wait_irq(&self) -> Option<IrqSnapshot> {
         self.irq_snapshot().filter(|snapshot| snapshot.asserted())
+    }
+
+    /// Returns and consumes one deliverable line or message IRQ notification.
+    pub fn wait_irq_notification(&mut self) -> Option<IrqNotification> {
+        self.backend.take_irq_notification()
     }
 
     /// Runs deterministic synchronous steps until idle or until the step budget expires.

@@ -11,9 +11,10 @@ description = "Async PDMA host model skeleton"
 [dependencies]
 pdma-model-contract = { path = "../contract" }
 pdma-model-device = { path = "../device" }
+tokio = { version = "1.49", features = ["macros", "sync"] }
 
 [dev-dependencies]
-tokio = { version = "1.49", features = ["macros"] }
+tokio = { version = "1.49", features = ["macros", "sync"] }
 
 [lints]
 workspace = true

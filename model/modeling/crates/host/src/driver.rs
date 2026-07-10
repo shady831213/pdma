@@ -1,5 +1,9 @@
 //! SDK/driver-like async submission and completion polling model.
 
+mod irq;
+
+pub use irq::DriverIrqRecord;
+
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, CopyCommand, CopyRequest, ExternalCommand,

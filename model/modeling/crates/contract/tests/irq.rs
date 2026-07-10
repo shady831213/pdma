@@ -1,7 +1,8 @@
 //! IRQ contract vocabulary tests.
 
 use pdma_model_contract::{
-    CompletionRingId, IrqCause, IrqLine, IrqSnapshot, IrqSource, IrqVector, QueueId,
+    CompletionRingId, IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute,
+    IrqSnapshot, IrqSource, IrqVector, QueueId,
 };
 
 #[test]
@@ -47,4 +48,39 @@ fn irq_snapshot_records_line_pending_and_asserted_state() {
     // Then: pending cause and assertion state are explicit and separate.
     assert_eq!(snapshot.cause(), cause);
     assert!(snapshot.asserted());
+}
+
+#[test]
+fn irq_route_distinguishes_line_and_message_delivery() {
+    // Given: one host-observable line and one message-signaled vector.
+    let line = IrqLine::new(IrqVector::new(2));
+    let vector = IrqVector::new(9);
+
+    // When: each delivery mechanism is represented as an IRQ route.
+    let line_route = IrqRoute::Line(line);
+    let message_route = IrqRoute::Message(vector);
+
+    // Then: the routes retain distinct delivery semantics and typed identities.
+    assert_eq!(line_route, IrqRoute::Line(line));
+    assert_eq!(message_route, IrqRoute::Message(vector));
+    assert_ne!(line_route, message_route);
+}
+
+#[test]
+fn irq_message_preserves_each_discrete_delivery_identity() {
+    // Given: two message-signaled notifications for the same PDMA source and vector.
+    let source = IrqSource::Event(QueueId::new(4));
+    let vector = IrqVector::new(7);
+    let first = IrqMessage::new(IrqMessageId::new(0), vector, source);
+    let second = IrqMessage::new(IrqMessageId::new(1), vector, source);
+
+    // When: both are carried across the common IRQ notification boundary.
+    let first_notification = IrqNotification::Message(first);
+    let second_notification = IrqNotification::Message(second);
+
+    // Then: the messages remain distinct without encoding PCIe address/data details.
+    assert_eq!(first.id().raw(), 0);
+    assert_eq!(first.vector(), vector);
+    assert_eq!(first.source(), source);
+    assert_ne!(first_notification, second_notification);
 }

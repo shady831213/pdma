@@ -36,6 +36,20 @@ pub enum TraceEventKind {
     CompletionPolled,
     /// Software polled an event path.
     EventPolled,
+    /// A PDMA-local IRQ source latched a cause.
+    IrqSourceLatched,
+    /// The shared device IRQ line transitioned to asserted.
+    IrqLineAsserted,
+    /// The shared device IRQ line transitioned to deasserted.
+    IrqLineDeasserted,
+    /// The device emitted one discrete IRQ message.
+    IrqMessageEmitted,
+    /// Software acknowledged a PDMA-local IRQ cause.
+    IrqDeviceAck,
+    /// Host delivery began one handler turn.
+    IrqHandlerStarted,
+    /// One host handler future returned.
+    IrqHandlerCompleted,
     /// A status step observed backpressure.
     Stall,
     /// A status step found no runnable work.
@@ -78,6 +92,13 @@ impl TraceEventKind {
             Self::EventPublished => "event published",
             Self::CompletionPolled => "completion poll",
             Self::EventPolled => "event poll",
+            Self::IrqSourceLatched => "IRQ source latched",
+            Self::IrqLineAsserted => "IRQ line asserted",
+            Self::IrqLineDeasserted => "IRQ line deasserted",
+            Self::IrqMessageEmitted => "IRQ message emitted",
+            Self::IrqDeviceAck => "IRQ device ack",
+            Self::IrqHandlerStarted => "IRQ handler started",
+            Self::IrqHandlerCompleted => "IRQ handler completed",
             Self::Stall => "Stall",
             Self::Idle => "idle",
         }

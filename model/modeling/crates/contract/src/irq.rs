@@ -12,6 +12,15 @@ pub struct IrqLine {
     vector: IrqVector,
 }
 
+/// Device interrupt delivery route selected for one PDMA-local source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum IrqRoute {
+    /// Stateful interrupt-line delivery.
+    Line(IrqLine),
+    /// Discrete message-signaled delivery identified by a host vector.
+    Message(IrqVector),
+}
+
 /// PDMA-local source that can latch an interrupt cause.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IrqSource {
@@ -33,6 +42,27 @@ pub struct IrqCause {
 pub struct IrqSnapshot {
     cause: IrqCause,
     asserted: bool,
+}
+
+/// Monotonic identity assigned to one discrete IRQ message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct IrqMessageId(usize);
+
+/// One discrete message-signaled IRQ delivery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IrqMessage {
+    id: IrqMessageId,
+    vector: IrqVector,
+    source: IrqSource,
+}
+
+/// Device IRQ observation delivered across the host boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IrqNotification {
+    /// Stateful interrupt-line observation.
+    Line(IrqSnapshot),
+    /// Discrete message-signaled observation.
+    Message(IrqMessage),
 }
 
 impl IrqVector {
@@ -90,5 +120,39 @@ impl IrqSnapshot {
     /// Whether the modeled IRQ line is asserted for delivery.
     pub const fn asserted(self) -> bool {
         self.asserted
+    }
+}
+
+impl IrqMessageId {
+    /// Creates a message identity from its monotonic raw value.
+    pub const fn new(raw: usize) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the raw monotonic value.
+    pub const fn raw(self) -> usize {
+        self.0
+    }
+}
+
+impl IrqMessage {
+    /// Creates one message-signaled delivery observation.
+    pub const fn new(id: IrqMessageId, vector: IrqVector, source: IrqSource) -> Self {
+        Self { id, vector, source }
+    }
+
+    /// Monotonic message identity.
+    pub const fn id(self) -> IrqMessageId {
+        self.id
+    }
+
+    /// Host vector carried by the message.
+    pub const fn vector(self) -> IrqVector {
+        self.vector
+    }
+
+    /// PDMA-local source that emitted the message.
+    pub const fn source(self) -> IrqSource {
+        self.source
     }
 }

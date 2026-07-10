@@ -23,6 +23,8 @@ pub enum ModelError {
     UnknownCompletionRing(CompletionRingId),
     /// The requested IRQ source does not exist.
     UnknownIrqSource(IrqSource),
+    /// An active IRQ source cannot change its delivery route.
+    IrqSourceActive(IrqSource),
     /// A checked offset plus length calculation overflowed.
     RangeOverflow,
     /// A memory read or write exceeded the buffer bounds.
@@ -52,6 +54,7 @@ impl fmt::Display for ModelError {
             Self::UnknownQueue(id) => write!(f, "unknown queue {}", id.raw()),
             Self::UnknownCompletionRing(id) => write!(f, "unknown completion ring {}", id.raw()),
             Self::UnknownIrqSource(source) => write!(f, "unknown IRQ source {source:?}"),
+            Self::IrqSourceActive(source) => write!(f, "IRQ source {source:?} is active"),
             Self::RangeOverflow => f.write_str("range calculation overflowed"),
             Self::OutOfBounds { buffer, len, end } => {
                 write!(

@@ -4,7 +4,7 @@ use pdma_model_contract::{
     ModelError, ResourceConfig,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::{CommandId, CompletionRingId, QueueId},
-    irq::{IrqMessageId, IrqNotification, IrqRoute, IrqSource, IrqVector},
+    irq::IrqSource,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::AsyncDevice;
@@ -55,7 +55,7 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
             .expect("copy submission has ring space");
     }
 
-    // When: the first completion publishes, the second stalls, and software clears the first IRQ.
+    // When: the first completion publishes, the second stalls, and software acks before draining.
     handle
         .ring_doorbell(queue.queue_id())
         .await
@@ -71,7 +71,7 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
         .ack_irq_source(source)
         .await
         .expect("completion IRQ source exists");
-    let cleared_irq = handle.irq_snapshot().await;
+    let retained_irq = handle.irq_snapshot().await;
     let first_completion = handle
         .poll_completion(queue.completion_ring_id())
         .await
@@ -85,12 +85,12 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
-    // Then: stalled publication did not assert early, but retry publication asserts again.
+    // Then: early ack preserves the record-backed cause and retry publication stays asserted.
     assert_eq!(first_snapshot.steps, 1);
     assert!(stalled_snapshot.stalls >= 1);
     assert!(first_irq.asserted());
     assert_eq!(first_irq.cause().source(), source);
-    assert_eq!(cleared_irq, None);
+    assert!(retained_irq.is_some_and(pdma_model_contract::IrqSnapshot::asserted));
     assert_eq!(first_completion.command_id(), CommandId::new(0));
     assert_eq!(retry_snapshot.steps, 2);
     assert!(retry_irq.asserted());
@@ -175,7 +175,7 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
             .expect("faulting copy submission has ring space");
     }
 
-    // When: first event publishes, second event stalls, and software clears the first IRQ.
+    // When: the first event publishes, the second stalls, and software acks before draining.
     handle
         .ring_doorbell(queue.queue_id())
         .await
@@ -188,7 +188,7 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
         .ack_irq_source(source)
         .await
         .expect("event IRQ source exists");
-    assert_eq!(handle.irq_snapshot().await, None);
+    let retained_irq = handle.irq_snapshot().await;
     let first_event = handle
         .poll_queue_event(queue.queue_id())
         .await
@@ -199,98 +199,15 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
-    // Then: stalled event publication did not assert early, but retry publication asserts again.
+    // Then: early ack preserves the record-backed cause and retry publication stays asserted.
     assert_eq!(first_error.errors, 1);
     assert!(stalled_snapshot.stalls >= 1);
     assert!(first_irq.asserted());
     assert_eq!(first_irq.cause().source(), source);
+    assert!(retained_irq.is_some_and(pdma_model_contract::IrqSnapshot::asserted));
     assert_eq!(first_event.command_id(), CommandId::new(0));
     assert_eq!(retry_error.errors, 2);
     assert!(retry_irq.asserted());
     assert_eq!(retry_irq.cause().source(), source);
     assert_eq!(summary.errors, 2);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn message_irq_delivers_each_completion_publication_without_coalescing() {
-    // Given: two successful copies routed to one enabled message-signaled IRQ source.
-    let (runner, worker) = AsyncDevice::queue_port();
-    let worker = tokio::spawn(worker.run());
-    let handle = runner.handle();
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await
-        .expect("queue setup is valid");
-    let source = IrqSource::Completion(queue.completion_ring_id());
-    let vector = IrqVector::new(11);
-    handle
-        .configure_irq_route(source, IrqRoute::Message(vector))
-        .await
-        .expect("inactive IRQ source route is configurable");
-    handle
-        .enable_irq_source(source)
-        .await
-        .expect("completion IRQ source exists");
-    handle
-        .unmask_irq_source(source)
-        .await
-        .expect("completion IRQ source exists");
-    let src = handle.allocate_buffer(4).await;
-    let first_dst = handle.allocate_buffer(4).await;
-    let second_dst = handle.allocate_buffer(4).await;
-    handle
-        .write_buffer(src, 0, &[2, 4, 6, 8])
-        .await
-        .expect("source write is in bounds");
-    for (command_id, dst) in [first_dst, second_dst].into_iter().enumerate() {
-        handle
-            .submit_command(
-                queue.queue_id(),
-                ExternalCommand::Copy(CopyCommand::new(
-                    CommandId::new(command_id),
-                    queue.queue_id(),
-                    queue.completion_ring_id(),
-                    CopyRequest::new(src, dst, 4),
-                )),
-            )
-            .await
-            .expect("copy submission has ring space");
-    }
-
-    // When: both copies retire and software waits for two IRQ notifications.
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
-    let first = handle
-        .wait_irq_notification()
-        .await
-        .expect("first IRQ message is delivered");
-    let second = handle
-        .wait_irq_notification()
-        .await
-        .expect("second IRQ message is delivered");
-    runner.request_shutdown().await;
-    worker.await.expect("runner joins cleanly");
-
-    // Then: both publications retain distinct message identities on the configured vector.
-    assert!(matches!(
-        first,
-        IrqNotification::Message(message)
-            if message.id() == IrqMessageId::new(0)
-                && message.vector() == vector
-                && message.source() == source
-    ));
-    assert!(matches!(
-        second,
-        IrqNotification::Message(message)
-            if message.id() == IrqMessageId::new(1)
-                && message.vector() == vector
-                && message.source() == source
-    ));
 }

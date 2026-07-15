@@ -105,7 +105,7 @@ impl SyncDevice {
         self.backend.unmask_irq_source(source)
     }
 
-    /// Acknowledges and clears a PDMA-local IRQ source.
+    /// Acknowledges a source, retaining a Line cause while source records remain.
     pub fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
         self.backend.ack_irq_source(source)
     }

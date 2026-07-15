@@ -54,7 +54,7 @@ fn ack_clears_pending_without_changing_mask_state() {
     controller.latch(source);
 
     // When: software acknowledges the source and the device latches it again.
-    controller.ack(source);
+    controller.ack(source, false);
     controller.latch(source);
 
     // Then: the source remains masked after ack and still does not assert.

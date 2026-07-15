@@ -44,7 +44,7 @@ pub struct IrqSnapshot {
     asserted: bool,
 }
 
-/// Monotonic identity assigned to one discrete IRQ message.
+/// Source-scoped monotonic identity assigned to one discrete IRQ message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IrqMessageId(usize);
 
@@ -124,12 +124,12 @@ impl IrqSnapshot {
 }
 
 impl IrqMessageId {
-    /// Creates a message identity from its monotonic raw value.
+    /// Creates a source-scoped message identity from its monotonic raw value.
     pub const fn new(raw: usize) -> Self {
         Self(raw)
     }
 
-    /// Returns the raw monotonic value.
+    /// Returns the raw value that is monotonic within one IRQ source.
     pub const fn raw(self) -> usize {
         self.0
     }
@@ -141,7 +141,7 @@ impl IrqMessage {
         Self { id, vector, source }
     }
 
-    /// Monotonic message identity.
+    /// Message identity that is monotonic within this message's source.
     pub const fn id(self) -> IrqMessageId {
         self.id
     }

@@ -35,7 +35,7 @@ impl AsyncDeviceHandle {
             .await
     }
 
-    /// Acknowledges and clears a PDMA-local IRQ source.
+    /// Acknowledges a source, retaining a Line cause while source records remain.
     pub async fn ack_irq_source(&self, source: IrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.ack_irq_source(source))
             .await

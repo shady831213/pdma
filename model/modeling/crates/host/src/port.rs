@@ -91,7 +91,7 @@ pub trait AsyncDevicePort: Send + Sync {
         source: IrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
-    /// Acknowledges and clears a PDMA-local IRQ source.
+    /// Acknowledges a source, retaining a Line cause while source records remain.
     fn ack_irq_source(&mut self, source: IrqSource)
     -> impl Future<Output = ModelResult<()>> + Send;
 

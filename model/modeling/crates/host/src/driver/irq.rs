@@ -16,7 +16,7 @@ pub enum DriverIrqRecord {
 }
 
 impl AsyncDriver {
-    /// Demultiplexes one IRQ, drains its ring, then clears the device-local cause.
+    /// Demultiplexes one IRQ, drains its ring, then acknowledges the device cause.
     pub async fn service_irq_on(
         &mut self,
         device: &mut impl AsyncDevicePort,

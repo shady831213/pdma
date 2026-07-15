@@ -13,6 +13,10 @@ struct BlockingHandler {
     release_first: Option<oneshot::Receiver<()>>,
 }
 
+struct CountingHandler {
+    calls: mpsc::UnboundedSender<()>,
+}
+
 impl IrqHandler for BlockingHandler {
     fn handle(&mut self, _notification: IrqNotification) -> IrqHandlerFuture<'_> {
         Box::pin(async move {
@@ -21,6 +25,15 @@ impl IrqHandler for BlockingHandler {
             if let Some(release) = self.release_first.take() {
                 let _ = release.await;
             }
+            Ok(())
+        })
+    }
+}
+
+impl IrqHandler for CountingHandler {
+    fn handle(&mut self, _notification: IrqNotification) -> IrqHandlerFuture<'_> {
+        Box::pin(async move {
+            let _ = self.calls.send(());
             Ok(())
         })
     }
@@ -84,12 +97,60 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
     let _ = release_tx.send(());
     assert_eq!(main_rx.recv().await, Some(()));
     assert_eq!(started_rx.recv().await, Some(2));
-    delivery_handle.wait_for_deliveries(2).await;
+    delivery_handle
+        .wait_for_deliveries(2)
+        .await
+        .expect("both handler turns complete before shutdown");
     delivery_handle.request_shutdown();
     device.request_shutdown().await;
     main.await.expect("SW main task joins cleanly");
     let summary = delivery.await.expect("delivery task joins cleanly")?;
     worker.await.expect("device worker joins cleanly");
     assert_eq!(summary.deliveries(), 2);
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn shutdown_wins_over_a_ready_notification_and_closes_progress_waiters() -> ModelResult<()> {
+    // Given: a pending message notification and a delivery actor not yet running.
+    let (device, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
+    let mut device_port = device.handle();
+    let mut driver = AsyncDriver::setup_on(&mut device_port, 4, 4).await?;
+    let source = IrqSource::Completion(driver.completion_ring_id());
+    device_port
+        .configure_irq_route(source, IrqRoute::Message(IrqVector::new(8)))
+        .await?;
+    device_port.enable_irq_source(source).await?;
+    device_port.unmask_irq_source(source).await?;
+    let src = driver.allocate_buffer_on(&mut device_port, 4).await;
+    let dst = driver.allocate_buffer_on(&mut device_port, 4).await;
+    driver
+        .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
+        .await?;
+    let (calls_tx, mut calls_rx) = mpsc::unbounded_channel();
+    let (delivery, delivery_handle) = IrqDelivery::new(device_port.clone(), SoftwareCpu::new())
+        .register_handler(CountingHandler { calls: calls_tx });
+    driver
+        .submit_copy_on(&mut device_port, CopyRequest::new(src, dst, 4))
+        .await?;
+    let progress = device.wait_for_progress_after(0).await;
+    assert_eq!(progress.steps, 1);
+
+    // When: shutdown and the pending notification are both ready before actor polling begins.
+    delivery_handle.request_shutdown();
+    let summary = delivery.run().await?;
+    let stopped = delivery_handle
+        .wait_for_deliveries(1)
+        .await
+        .expect_err("progress wait reports actor termination below its target");
+
+    // Then: deterministic shutdown priority prevents an extra handler turn.
+    assert_eq!(summary.deliveries(), 0);
+    assert_eq!(stopped.target(), 1);
+    assert_eq!(stopped.completed(), 0);
+    assert!(calls_rx.try_recv().is_err());
+    device.request_shutdown().await;
+    worker.await.expect("device worker joins cleanly");
     Ok(())
 }

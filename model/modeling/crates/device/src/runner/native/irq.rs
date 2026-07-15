@@ -67,8 +67,8 @@ impl PdmaIrqController {
         false
     }
 
-    pub(super) fn ack(&mut self, source: IrqSource) {
-        self.source_state_mut(source).cause_pending = false;
+    pub(super) fn ack(&mut self, source: IrqSource, records_pending: bool) {
+        self.source_state_mut(source).ack(records_pending);
     }
 
     pub(super) fn pending_snapshot(&self) -> Option<IrqSnapshot> {
@@ -151,7 +151,7 @@ impl PdmaIrqSourceState {
         self.enabled || self.cause_pending || self.pending_messages != 0
     }
 
-    fn latch(&mut self) {
+    const fn latch(&mut self) {
         self.cause_pending = true;
         match self.route {
             IrqRoute::Line(_) => {}
@@ -161,6 +161,11 @@ impl PdmaIrqSourceState {
         }
     }
 
+    const fn ack(&mut self, records_pending: bool) {
+        self.cause_pending =
+            self.cause_pending && records_pending && matches!(self.route, IrqRoute::Line(_));
+    }
+
     const fn can_deliver_message(&self) -> bool {
         matches!(self.route, IrqRoute::Message(_))
             && self.enabled
@@ -168,7 +173,7 @@ impl PdmaIrqSourceState {
             && self.pending_messages != 0
     }
 
-    fn take_message(&mut self) -> Option<IrqMessage> {
+    const fn take_message(&mut self) -> Option<IrqMessage> {
         if !self.can_deliver_message() {
             return None;
         }

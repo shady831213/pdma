@@ -4,7 +4,7 @@ mod trace;
 
 use crate::{AsyncDevicePort, SoftwareCpu};
 use pdma_model_contract::{IrqNotification, ModelResult, TraceEvent};
-use std::{future::Future, marker::PhantomData, pin::Pin, sync::Arc};
+use std::{fmt, future::Future, marker::PhantomData, pin::Pin, sync::Arc};
 use tokio::sync::watch;
 use trace::HostIrqTrace;
 
@@ -45,6 +45,13 @@ pub struct IrqDeliveryHandle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IrqDeliverySummary {
     deliveries: usize,
+}
+
+/// Error returned when delivery stops before an observed progress target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IrqDeliveryStopped {
+    target: usize,
+    completed: usize,
 }
 
 impl<P> IrqDelivery<P, NoHandler> {
@@ -99,6 +106,7 @@ where
     pub async fn run(mut self) -> ModelResult<IrqDeliverySummary> {
         loop {
             let notification = tokio::select! {
+                biased;
                 changed = self.shutdown.changed() => {
                     if changed.is_err() || *self.shutdown.borrow() {
                         break;
@@ -138,13 +146,17 @@ impl IrqDeliveryHandle {
     }
 
     /// Waits until at least `target` handler turns have completed.
-    pub async fn wait_for_deliveries(&self, target: usize) {
+    pub async fn wait_for_deliveries(&self, target: usize) -> Result<(), IrqDeliveryStopped> {
         let mut delivered = self.delivered.clone();
         while *delivered.borrow_and_update() < target {
             if delivered.changed().await.is_err() {
-                break;
+                return Err(IrqDeliveryStopped {
+                    target,
+                    completed: *delivered.borrow(),
+                });
             }
         }
+        Ok(())
     }
 
     /// Returns host handler lifecycle events in deterministic delivery order.
@@ -159,3 +171,27 @@ impl IrqDeliverySummary {
         self.deliveries
     }
 }
+
+impl IrqDeliveryStopped {
+    /// Delivery count the caller was waiting to observe.
+    pub const fn target(self) -> usize {
+        self.target
+    }
+
+    /// Successfully completed handler turns observed before delivery stopped.
+    pub const fn completed(self) -> usize {
+        self.completed
+    }
+}
+
+impl fmt::Display for IrqDeliveryStopped {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "IRQ delivery stopped after {} of {} handler turns",
+            self.completed, self.target
+        )
+    }
+}
+
+impl std::error::Error for IrqDeliveryStopped {}

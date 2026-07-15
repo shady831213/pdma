@@ -1,13 +1,13 @@
 # PROJECT KNOWLEDGE BASE
 
-Generated: 2026-07-07
-Commit: v0.6.5 pushed to origin/master
+Generated: 2026-07-15
+Commit: v0.7 implementation checkpoint `a11d54b`; closeout documentation follows
 Branch: master
-Scope: continue the executable PDMA model work. v0.6.5 is complete; current work is v0.7 host-owned IRQ delivery modeling.
+Scope: v0.7 host-owned IRQ delivery modeling is complete; preserve its validated boundaries when selecting the next slice.
 
 ## OVERVIEW
 
-This repo is currently being advanced through the Rust PDMA conceptual model. Treat white-board architecture docs as background. `model/docs/v0_model_plan.md` records completed v0 behavior, `model/docs/v0_5_model_plan.md` records the completed workspace boundary refactor, `model/docs/v0_6_model_plan.md` records the completed actor/async transition and v0.6.5 active-model cleanup, and `model/docs/v0_7_model_plan.md` is the source of truth for active IRQ delivery work.
+This repo is currently being advanced through the Rust PDMA conceptual model. Treat white-board architecture docs as background. `model/docs/v0_model_plan.md` records completed v0 behavior, `model/docs/v0_5_model_plan.md` records the completed workspace boundary refactor, `model/docs/v0_6_model_plan.md` records the completed actor/async transition and v0.6.5 active-model cleanup, and `model/docs/v0_7_model_plan.md` records the completed IRQ delivery work.
 
 ## STRUCTURE
 
@@ -16,7 +16,7 @@ pdma/
 ├── model/docs/v0_model_plan.md    # completed v0 behavior ledger
 ├── model/docs/v0_5_model_plan.md  # completed v0.5 workspace/boundary plan
 ├── model/docs/v0_6_model_plan.md  # completed v0.6 actor/async transition and v0.6.5 cleanup
-├── model/docs/v0_7_model_plan.md  # active v0.7 host-owned IRQ delivery plan
+├── model/docs/v0_7_model_plan.md  # completed v0.7 host-owned IRQ delivery plan
 └── model/modeling/                # Rust 2024 model workspace
 ```
 
@@ -26,7 +26,7 @@ Ignore generated `model/modeling/target/` content.
 
 | Task | Location | Notes |
 | --- | --- | --- |
-| Determine current slice | `model/docs/v0_7_model_plan.md` | Active IRQ delivery plan and boundaries. |
+| Review latest completed slice | `model/docs/v0_7_model_plan.md` | Implemented IRQ delivery behavior and boundaries. |
 | Shared host/device contract | `model/modeling/crates/contract/` | IDs, DMA object/range vocabulary, descriptors, records, config, and IRQ vocabulary. |
 | Device behavior | `model/modeling/crates/device/` | Active queue-port device actor, worker, handle, manual facade, resources, trace sink, and PDMA-local IRQ controller. |
 | Host-side model | `model/modeling/crates/host/` | Driver, device port, host IRQ delivery actor, and SW execution contexts. |
@@ -47,7 +47,7 @@ Ignore generated `model/modeling/target/` content.
 
 Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft, v0.6 actor/async transition, and v0.6.5 active-model cleanup.
 
-Active next slice: v0.7 Host-Owned IRQ Delivery Model. The active workspace now has canonical `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. The old sync stack is retired under `model/retired/v0_6_sync_reference/`. v0.7 adds a PDMA-local IRQ controller in the device crate and a host-owned IRQ delivery actor in the host crate.
+v0.7 Host-Owned IRQ Delivery Model is complete. The canonical workspace has `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. It models a PDMA-local IRQ controller, Line and Message routes, a host-owned delivery actor, one shared software CPU token, driver source demultiplexing, and IRQ lifecycle trace. The old sync stack remains retired under `model/retired/v0_6_sync_reference/`.
 
 ## CONVENTIONS
 
@@ -66,7 +66,7 @@ Active next slice: v0.7 Host-Owned IRQ Delivery Model. The active workspace now 
 - Do not stage or document `model/modeling/target/`.
 - Treat `docs/white_boards/**` as exploratory background, not active implementation scope.
 - Do not add unsafe code, descriptor ABI, register maps, or C headers in v0.7 slices.
-- Do not collapse device-local IRQ masking/ack into system delivery masking/completion; keep the two layers distinct.
+- Do not add a duplicate host enable/mask layer while the modeled system has only one PDMA device; device-local mask/ack remains distinct from host handler dispatch.
 - Do not publish success completions after memory faults.
 - Do not weaken tests to pass validation.
 

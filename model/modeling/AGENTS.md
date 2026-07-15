@@ -1,6 +1,6 @@
 # PDMA MODELING WORKSPACE
 
-Scope: Rust v0.7 active queue-port IRQ delivery model workspace.
+Scope: Rust workspace with the completed v0.7 queue-port IRQ delivery model.
 
 ## OVERVIEW
 
@@ -33,7 +33,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - `AsyncDevice::queue_port*()` returns `(AsyncDevice, AsyncDeviceWorker)`; callers choose whether to `tokio::spawn(worker.run())`, directly await it, or use another executor strategy.
 - `SyncDevice::run_until_idle(max_steps)` and `SyncDevice::run_until_blocked(max_steps)` calls belong only in explicit manual-drive helper/status/trace and step-budget tests.
 - `AsyncDriver` owns local command-slot accounting; completions/events reclaim slots.
-- Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; system IRQ handler registration and delivery masking belongs to `pdma-model-host`.
+- Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; handler registration and delivery adaptation belongs to `pdma-model-host`.
 - Software handlers must register with host IRQ delivery, never with the device, and delivery must be non-reentrant.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.
 - New public structs need terse docs because `missing_docs` is enabled.
@@ -50,9 +50,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo doc --workspace --no-deps --document-private-items
 ```
 
-## CURRENT NEXT SLICE
+## CURRENT STATE
 
-v0.7 Host-Owned IRQ Delivery Model is active. Implement `model/docs/v0_7_model_plan.md`: shared IRQ vocabulary, PDMA-local IRQ controller, host IRQ delivery actor, handler atomicity, and concurrent SW main/IRQ context scenarios.
+v0.7 Host-Owned IRQ Delivery Model is complete. `model/docs/v0_7_model_plan.md` records shared IRQ vocabulary, PDMA-local Line/Message behavior, the host IRQ delivery actor, shared CPU-token handler atomicity, driver drain/ack behavior, and three-actor scenarios. No next implementation slice is selected in this workspace knowledge base.
 
 ## DO NOT
 

@@ -8,7 +8,6 @@ mod port;
 pub use context::SoftwareCpu;
 pub use driver::{AsyncDriver, DriverIrqRecord};
 pub use irq_delivery::{
-    IrqDelivery, IrqDeliveryHandle, IrqDeliveryStopped, IrqDeliverySummary, IrqHandler,
-    IrqHandlerFuture, NoHandler,
+    IrqDelivery, IrqDeliveryHandle, IrqDeliverySummary, IrqHandler, IrqHandlerFuture, NoHandler,
 };
 pub use port::AsyncDevicePort;

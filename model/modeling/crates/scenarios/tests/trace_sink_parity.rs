@@ -5,7 +5,7 @@ use pdma_model_contract::{
     desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
 };
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
-use pdma_model_host::AsyncDriver;
+use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
@@ -40,20 +40,26 @@ async fn async_trace_log_schedules_before_resource_stall() {
         AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
+    let cpu = SoftwareCpu::new();
     handle.enable_tracing().await;
     handle.clear_trace().await;
-    let src = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
 
-    // When: software submits the copy and waits for the first stall annotation.
-    let command = driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
-        .await
-        .expect("copy submission has ring space");
-    let _snapshot = runner.wait_for_stall_after(0).await;
+    // When: one software main submits the copy and waits for its first stall.
+    let command = cpu
+        .run_main(async {
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let command = driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
+                .await
+                .expect("copy submission has ring space");
+            let _snapshot = runner.wait_for_stall_after(0).await;
+            command
+        })
+        .await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
@@ -78,35 +84,41 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
     );
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
+    let cpu = SoftwareCpu::new();
     handle.enable_tracing().await;
     handle.clear_trace().await;
-    let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-    let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
-    driver
-        .write_buffer_on(&mut handle, src_a, &[1, 2, 3, 4])
-        .await
-        .expect("source A write is in bounds");
-    driver
-        .write_buffer_on(&mut handle, src_b, &[5, 6, 7, 8])
-        .await
-        .expect("source B write is in bounds");
 
-    // When: the first completion fills publication capacity and the second copy stalls.
-    let _first_command = driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src_a, dst_a, 4))
-        .await
-        .expect("first copy submission has ring space");
-    let second_command = driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src_b, dst_b, 4))
-        .await
-        .expect("second copy submission has ring space");
-    let _first_snapshot = runner.wait_for_progress_after(0).await;
-    let _second_snapshot = runner.wait_for_stall_after(0).await;
+    // When: one software main fills completion capacity and waits for the second stall.
+    let second_command = cpu
+        .run_main(async {
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            driver
+                .write_buffer_on(&mut handle, src_a, &[1, 2, 3, 4])
+                .await
+                .expect("source A write is in bounds");
+            driver
+                .write_buffer_on(&mut handle, src_b, &[5, 6, 7, 8])
+                .await
+                .expect("source B write is in bounds");
+            let _first_command = driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src_a, dst_a, 4))
+                .await
+                .expect("first copy submission has ring space");
+            let second_command = driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src_b, dst_b, 4))
+                .await
+                .expect("second copy submission has ring space");
+            let _first_snapshot = runner.wait_for_progress_after(0).await;
+            let _second_snapshot = runner.wait_for_stall_after(0).await;
+            second_command
+        })
+        .await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
@@ -134,37 +146,43 @@ async fn async_trace_log_records_queue_only_doorbells() {
     let (runner, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
-    let mut copy_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("copy queue setup is valid");
-    let mut vector_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("vector queue setup is valid");
+    let cpu = SoftwareCpu::new();
     handle.enable_tracing().await;
     handle.clear_trace().await;
-    let copy_src = copy_driver.allocate_buffer_on(&mut handle, 4).await;
-    let copy_dst = copy_driver.allocate_buffer_on(&mut handle, 4).await;
-    let src_a = vector_driver.allocate_buffer_on(&mut handle, 4).await;
-    let src_b = vector_driver.allocate_buffer_on(&mut handle, 4).await;
-    let vector_dst = vector_driver.allocate_buffer_on(&mut handle, 4).await;
 
-    // When: both queues submit command id zero with different operations.
-    let copy_command = copy_driver
-        .submit_copy_on(&mut handle, CopyRequest::new(copy_src, copy_dst, 4))
-        .await
-        .expect("copy submission has ring space");
-    let vector_command = vector_driver
-        .submit_vector_add_on(
-            &mut handle,
-            VectorAddRequest::new(
-                VectorBufferRange::new(src_a, 0),
-                VectorBufferRange::new(src_b, 0),
-                VectorBufferRange::new(vector_dst, 0),
-                4,
-            ),
-        )
-        .await
-        .expect("vector submission has ring space");
+    // When: one software main submits command id zero on both queues.
+    let (copy_command, vector_command, vector_queue_id) = cpu
+        .run_main(async {
+            let mut copy_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("copy queue setup is valid");
+            let mut vector_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("vector queue setup is valid");
+            let copy_src = copy_driver.allocate_buffer_on(&mut handle, 4).await;
+            let copy_dst = copy_driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_a = vector_driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_b = vector_driver.allocate_buffer_on(&mut handle, 4).await;
+            let vector_dst = vector_driver.allocate_buffer_on(&mut handle, 4).await;
+            let copy_command = copy_driver
+                .submit_copy_on(&mut handle, CopyRequest::new(copy_src, copy_dst, 4))
+                .await
+                .expect("copy submission has ring space");
+            let vector_command = vector_driver
+                .submit_vector_add_on(
+                    &mut handle,
+                    VectorAddRequest::new(
+                        VectorBufferRange::new(src_a, 0),
+                        VectorBufferRange::new(src_b, 0),
+                        VectorBufferRange::new(vector_dst, 0),
+                        4,
+                    ),
+                )
+                .await
+                .expect("vector submission has ring space");
+            (copy_command, vector_command, vector_driver.queue_id())
+        })
+        .await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
@@ -173,7 +191,7 @@ async fn async_trace_log_records_queue_only_doorbells() {
     assert_eq!(copy_command, vector_command);
     assert!(trace_events.iter().any(|event: &TraceEvent| {
         event.kind() == TraceEventKind::DoorbellRunnable
-            && event.queue_id() == Some(vector_driver.queue_id())
+            && event.queue_id() == Some(vector_queue_id)
             && event.command_id().is_none()
             && event.operation().is_none()
     }));

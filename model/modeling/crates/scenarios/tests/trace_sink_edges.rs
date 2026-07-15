@@ -5,7 +5,7 @@ use pdma_model_contract::{
     desc::{CopyCommand, CopyRequest, ExternalCommand},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::AsyncDriver;
+use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
@@ -15,40 +15,46 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     );
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
+    let cpu = SoftwareCpu::new();
     handle.enable_tracing().await;
     handle.clear_trace().await;
-    let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-    let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
-    driver
-        .write_buffer_on(&mut handle, src_a, &[1, 2, 3, 4])
-        .await
-        .expect("source A write is in bounds");
-    driver
-        .write_buffer_on(&mut handle, src_b, &[5, 6, 7, 8])
-        .await
-        .expect("source B write is in bounds");
 
-    // When: the second copy stalls, software drains the first completion, and retry publishes it.
-    let _first_command = driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src_a, dst_a, 4))
-        .await
-        .expect("first copy submission has ring space");
-    let second_command = driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src_b, dst_b, 4))
-        .await
-        .expect("second copy submission has ring space");
-    let first_snapshot = runner.wait_for_progress_after(0).await;
-    let _first_completion = driver
-        .poll_completion_on(&mut handle)
-        .await
-        .expect("completion ring exists")
-        .expect("first completion was published");
-    let _second_snapshot = runner.wait_for_progress_after(first_snapshot.steps).await;
+    // When: one software main drains the first completion so retry can publish the second.
+    let second_command = cpu
+        .run_main(async {
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            driver
+                .write_buffer_on(&mut handle, src_a, &[1, 2, 3, 4])
+                .await
+                .expect("source A write is in bounds");
+            driver
+                .write_buffer_on(&mut handle, src_b, &[5, 6, 7, 8])
+                .await
+                .expect("source B write is in bounds");
+            let _first_command = driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src_a, dst_a, 4))
+                .await
+                .expect("first copy submission has ring space");
+            let second_command = driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src_b, dst_b, 4))
+                .await
+                .expect("second copy submission has ring space");
+            let first_snapshot = runner.wait_for_progress_after(0).await;
+            let _first_completion = driver
+                .poll_completion_on(&mut handle)
+                .await
+                .expect("completion ring exists")
+                .expect("first completion was published");
+            let _second_snapshot = runner.wait_for_progress_after(first_snapshot.steps).await;
+            second_command
+        })
+        .await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
@@ -70,29 +76,35 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     let (runner, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
-    let driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
-    let command = CopyCommand::new(
-        CommandId::new(0),
-        driver.queue_id(),
-        driver.completion_ring_id(),
-        CopyRequest::new(src, dst, 4),
-    );
-    handle
-        .submit_command(driver.queue_id(), ExternalCommand::Copy(command))
-        .await
-        .expect("direct submission has ring space");
+    let cpu = SoftwareCpu::new();
 
-    // When: tracing is enabled only after submission and before the doorbell.
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
-    handle
-        .ring_doorbell(driver.queue_id())
-        .await
-        .expect("doorbell targets an existing queue");
+    // When: instrumentation stays inside main to preserve submit-disabled doorbell ordering.
+    let queue_id = cpu
+        .run_main(async {
+            let driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let command = CopyCommand::new(
+                CommandId::new(0),
+                driver.queue_id(),
+                driver.completion_ring_id(),
+                CopyRequest::new(src, dst, 4),
+            );
+            handle
+                .submit_command(driver.queue_id(), ExternalCommand::Copy(command))
+                .await
+                .expect("direct submission has ring space");
+            handle.enable_tracing().await;
+            handle.clear_trace().await;
+            handle
+                .ring_doorbell(driver.queue_id())
+                .await
+                .expect("doorbell targets an existing queue");
+            driver.queue_id()
+        })
+        .await;
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
@@ -105,7 +117,7 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     );
     assert!(trace_events.iter().any(|event| {
         event.kind() == TraceEventKind::DoorbellRunnable
-            && event.queue_id() == Some(driver.queue_id())
+            && event.queue_id() == Some(queue_id)
             && event.operation().is_none()
             && event.command_id().is_none()
     }));
@@ -117,32 +129,43 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     let (runner, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
-    let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
-        .await
-        .expect("first queue setup is valid");
-    let mut driver_b = AsyncDriver::setup_on(&mut handle, 1, 4)
-        .await
-        .expect("second queue setup is valid");
+    let cpu = SoftwareCpu::new();
     handle.enable_tracing().await;
     handle.clear_trace().await;
-    let a_src = driver_a.allocate_buffer_on(&mut handle, 4).await;
-    let a_dst = driver_a.allocate_buffer_on(&mut handle, 8).await;
 
-    // When: the fault is published and an unrelated queue polls first.
-    driver_a
-        .submit_copy_on(&mut handle, CopyRequest::new(a_src, a_dst, 8))
-        .await
-        .expect("faulting copy has ring space");
-    let _snapshot = runner.wait_for_error_after(0).await;
-    let wrong_driver_event = driver_b
-        .poll_event_on(&mut handle)
-        .await
-        .expect("event ring exists");
-    let owner_event = driver_a
-        .poll_event_on(&mut handle)
-        .await
-        .expect("event ring exists")
-        .expect("owning driver can still poll its event");
+    // When: one software main polls the unrelated queue before the faulting queue.
+    let (wrong_driver_event, owner_event, owner_queue_id, unrelated_queue_id) = cpu
+        .run_main(async {
+            let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
+                .await
+                .expect("first queue setup is valid");
+            let mut driver_b = AsyncDriver::setup_on(&mut handle, 1, 4)
+                .await
+                .expect("second queue setup is valid");
+            let a_src = driver_a.allocate_buffer_on(&mut handle, 4).await;
+            let a_dst = driver_a.allocate_buffer_on(&mut handle, 8).await;
+            driver_a
+                .submit_copy_on(&mut handle, CopyRequest::new(a_src, a_dst, 8))
+                .await
+                .expect("faulting copy has ring space");
+            let _snapshot = runner.wait_for_error_after(0).await;
+            let wrong_driver_event = driver_b
+                .poll_event_on(&mut handle)
+                .await
+                .expect("event ring exists");
+            let owner_event = driver_a
+                .poll_event_on(&mut handle)
+                .await
+                .expect("event ring exists")
+                .expect("owning driver can still poll its event");
+            (
+                wrong_driver_event,
+                owner_event,
+                driver_a.queue_id(),
+                driver_b.queue_id(),
+            )
+        })
+        .await;
     let trace_events = handle.trace_events().await;
     let trace_json = handle.trace_json().await;
     runner.request_shutdown().await;
@@ -150,15 +173,15 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
 
     // Then: the unrelated poll does not consume the event and both poll paths are traced.
     assert_eq!(wrong_driver_event, None);
-    assert_eq!(owner_event.queue_id(), driver_a.queue_id());
+    assert_eq!(owner_event.queue_id(), owner_queue_id);
     assert!(trace_events.iter().any(|event: &TraceEvent| {
         event.kind() == TraceEventKind::EventPolled
-            && event.queue_id() == Some(driver_b.queue_id())
+            && event.queue_id() == Some(unrelated_queue_id)
             && event.detail() == "event poll None"
     }));
     assert!(trace_events.iter().any(|event: &TraceEvent| {
         event.kind() == TraceEventKind::EventPolled
-            && event.queue_id() == Some(driver_a.queue_id())
+            && event.queue_id() == Some(owner_queue_id)
             && event.detail() == "event poll Some"
     }));
     assert!(trace_json.contains("traceEvents"));

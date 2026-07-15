@@ -9,6 +9,9 @@ This file tracks executable v0 model progress. White-board documents explain arc
 - Keep v0 deterministic and step-based with `step()` and `run_until_idle()` scenario tests.
 - Run the active device, SW main, and IRQ delivery actors on Tokio while keeping device
   behavior deterministic and step-based.
+- Represent each modeled software program as one complete `run_main` future. A main
+  atomic segment is one poll, and only a real pending result admits IRQ execution before
+  the next main poll; a complete handler future remains atomic and non-nested.
 - Prefer native behavioral operation derivation over cycle-accurate timing.
 - Keep byte-accurate external descriptor layout, register offsets, C ABI, and generated headers abstract until the model behavior stabilizes.
 - Validate every model slice with `cargo fmt --check`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps --document-private-items`.
@@ -34,12 +37,15 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | Backpressure/Stall Annotation Layer | Done | `crates/device/src/runner/native/step.rs`, `crates/device/src/runner/native/retirement.rs`, `tests/stall_annotations.rs` | Scenario-visible stall reasons distinguish idle, resource pressure, completion pressure, event pressure, and fault-related retirement behavior. |
 | Trace Sink | Done | `crates/device/src/trace/`, native runner hooks, `crates/device/src/lib.rs` re-exports, `tests/trace_sink.rs` | In-memory deterministic trace events and Chrome/Perfetto JSON export via sequence ordinals; public API `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, `trace_json`. |
 | v0 architecture specification draft | Done | `model/docs/pdma_arch_spec_v0.md` | The original v0 behavior was documented with ABI, register, cycle timing, interrupt, and reset details deferred at that milestone. |
-| v0.7 host-owned IRQ delivery | Done | `model/docs/v0_7_model_plan.md`, `crates/scenarios/tests/irq_delivery.rs` | Line and Message routes, device-local IRQ state, one host handler, shared CPU-token atomicity, driver drain/ack, and IRQ trace are validated; concrete MSI/MSI-X transport remains deferred. |
+| v0.7 host-owned IRQ delivery | Done | `model/docs/v0_7_model_plan.md`, `crates/scenarios/tests/irq_delivery.rs` | Line and Message routes, device-local IRQ state, one complete software main, poll-boundary CPU serialization, whole-handler atomicity, driver drain/ack, final delivery summaries, and IRQ trace are validated; concrete MSI/MSI-X transport remains deferred. |
 
 ## Active Next Slice
 
 No active implementation slice remains. The v0 model is complete through the v0.7
 host-owned IRQ delivery slice recorded in `model/docs/pdma_arch_spec_v0.md`.
+The scenario suite has 52 tests: 47 software-bearing tests each use exactly one complete
+`run_main`, while five named pure device/manual observability tests intentionally use
+none, as enumerated in the architecture specification.
 
 ## Planned Slices
 

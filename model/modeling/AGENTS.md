@@ -35,6 +35,17 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - `AsyncDriver` owns local command-slot accounting; completions/events reclaim slots.
 - Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; handler registration and delivery adaptation belongs to `pdma-model-host`.
 - Software handlers must register with host IRQ delivery, never with the device, and delivery must be non-reentrant.
+- Each software-bearing scenario calls `SoftwareCpu::run_main` once with its complete
+  program. One poll is one atomic main segment; only `Poll::Pending` releases the CPU
+  before the next poll, while the complete IRQ handler future remains atomic.
+- CPU gate ordering is FIFO only after a contender requests it. Do not claim priority
+  for an unobserved IRQ notification or allow a later IRQ request to overtake queued main.
+- Actor construction/spawn/shutdown/join, trace instrumentation/collection, and final
+  assertions belong to the harness. The disabled-submission trace edge test alone keeps
+  trace enable/clear inside main to preserve its deliberate interleaving.
+- The scenario invariant is 52 tests: 47 software-bearing tests with one `run_main` and
+  five pure device/manual observability exceptions with none. Do not add artificial
+  software actors to those exceptions.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.
 - New public structs need terse docs because `missing_docs` is enabled.
 - Prefer typed request structs/newtypes over long argument lists or clippy suppressions.
@@ -52,7 +63,7 @@ cargo doc --workspace --no-deps --document-private-items
 
 ## CURRENT STATE
 
-v0.7 Host-Owned IRQ Delivery Model is complete. `model/docs/v0_7_model_plan.md` records shared IRQ vocabulary, PDMA-local Line/Message behavior, the host IRQ delivery actor, shared CPU-token handler atomicity, driver drain/ack behavior, and three-actor scenarios. No next implementation slice is selected in this workspace knowledge base.
+v0.7 Host-Owned IRQ Delivery Model is complete. `model/docs/v0_7_model_plan.md` records shared IRQ vocabulary, PDMA-local Line/Message behavior, one complete SW main with poll-boundary CPU serialization, the host IRQ delivery actor, complete-handler atomicity, driver drain/ack behavior, summary-based delivery completion, and three-actor scenarios. No next implementation slice is selected in this workspace knowledge base.
 
 ## DO NOT
 

@@ -6,7 +6,7 @@ use pdma_model_contract::{
 use pdma_model_device::{
     AsyncDevice, AsyncRunSummary, AsyncStallReason, AsyncStepStatus, SyncDevice,
 };
-use pdma_model_host::AsyncDriver;
+use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
@@ -29,23 +29,27 @@ async fn async_runner_successful_copy_reports_progressed_status() {
     // Given: an async copy on a queue-port async runner with default resources.
     let (runner, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
-    driver
-        .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
-        .await
-        .expect("source write is in bounds");
+    let snapshot = SoftwareCpu::new()
+        .run_main(async {
+            let mut handle = runner.handle();
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            driver
+                .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
+                .await
+                .expect("source write is in bounds");
 
-    // When: software submits the copy and waits for one hardware progress step.
-    driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
-        .await
-        .expect("copy submission has ring space");
-    let snapshot = runner.wait_for_progress_after(0).await;
+            // When: software submits the copy and waits for one hardware progress step.
+            driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
+                .await
+                .expect("copy submission has ring space");
+            runner.wait_for_progress_after(0).await
+        })
+        .await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
@@ -60,23 +64,29 @@ async fn async_runner_resource_stall_reports_execution_reason() {
     let (runner, worker) =
         AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst = driver.allocate_buffer_on(&mut handle, 4).await;
-    driver
-        .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
-        .await
-        .expect("source write is in bounds");
+    let (snapshot, completion) = SoftwareCpu::new()
+        .run_main(async {
+            let mut handle = runner.handle();
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            driver
+                .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
+                .await
+                .expect("source write is in bounds");
 
-    // When: software submits the copy and waits for the first stall annotation.
-    driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
-        .await
-        .expect("copy submission has ring space");
-    let snapshot = runner.wait_for_stall_after(0).await;
+            // When: software submits the copy and waits for the first stall annotation.
+            driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
+                .await
+                .expect("copy submission has ring space");
+            let snapshot = runner.wait_for_stall_after(0).await;
+            let completion = driver.poll_completion_on(&mut handle).await;
+            (snapshot, completion)
+        })
+        .await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
@@ -86,7 +96,7 @@ async fn async_runner_resource_stall_reports_execution_reason() {
         AsyncStepStatus::Stalled(AsyncStallReason::ExecutionResourcePressure)
     );
     assert_eq!(summary.stalls, 1);
-    assert_eq!(driver.poll_completion_on(&mut handle).await, Ok(None));
+    assert_eq!(completion, Ok(None));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -96,33 +106,43 @@ async fn async_runner_completion_publication_stall_reports_reason() {
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-    let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-    let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
-    driver
-        .write_buffer_on(&mut handle, src_a, &[10, 11, 12, 13])
-        .await
-        .expect("source A write is in bounds");
-    driver
-        .write_buffer_on(&mut handle, src_b, &[20, 21, 22, 23])
-        .await
-        .expect("source B write is in bounds");
+    let (snapshot, first_completion) = SoftwareCpu::new()
+        .run_main(async {
+            let mut handle = runner.handle();
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            driver
+                .write_buffer_on(&mut handle, src_a, &[10, 11, 12, 13])
+                .await
+                .expect("source A write is in bounds");
+            driver
+                .write_buffer_on(&mut handle, src_b, &[20, 21, 22, 23])
+                .await
+                .expect("source B write is in bounds");
 
-    // When: software submits both copies and waits for the publication stall.
-    driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src_a, dst_a, 4))
-        .await
-        .expect("first copy submission has ring space");
-    driver
-        .submit_copy_on(&mut handle, CopyRequest::new(src_b, dst_b, 4))
-        .await
-        .expect("second copy submission has ring space");
-    let snapshot = runner.wait_for_stall_after(0).await;
+            // When: software submits both copies and waits for the publication stall.
+            driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src_a, dst_a, 4))
+                .await
+                .expect("first copy submission has ring space");
+            driver
+                .submit_copy_on(&mut handle, CopyRequest::new(src_b, dst_b, 4))
+                .await
+                .expect("second copy submission has ring space");
+            let snapshot = runner.wait_for_stall_after(0).await;
+            let first_completion = driver
+                .poll_completion_on(&mut handle)
+                .await
+                .expect("completion ring exists")
+                .expect("first completion was published");
+            (snapshot, first_completion)
+        })
+        .await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
@@ -133,11 +153,6 @@ async fn async_runner_completion_publication_stall_reports_reason() {
         AsyncStepStatus::Stalled(AsyncStallReason::CompletionPublicationPressure)
     );
     assert_eq!(summary.stalls, 1);
-    let first_completion = driver
-        .poll_completion_on(&mut handle)
-        .await
-        .expect("completion ring exists")
-        .expect("first completion was published");
     assert_eq!(first_completion.command_id(), CommandId::new(0));
     assert_eq!(first_completion.status(), CompletionStatus::Success);
 }
@@ -149,24 +164,30 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
         ResourceConfig::default().with_event_publication_slots(0),
     );
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
-    let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let bad_src = driver.allocate_buffer_on(&mut handle, 4).await;
-    let bad_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+    let (first_snapshot, second_snapshot, event) = SoftwareCpu::new()
+        .run_main(async {
+            let mut handle = runner.handle();
+            let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
+                .await
+                .expect("queue setup is valid");
+            let bad_src = driver.allocate_buffer_on(&mut handle, 4).await;
+            let bad_dst = driver.allocate_buffer_on(&mut handle, 4).await;
 
-    // When: software submits the faulting copy and waits across the retry boundary.
-    driver
-        .submit_copy_on(&mut handle, CopyRequest::new(bad_src, bad_dst, 8))
-        .await
-        .expect("faulting copy submission has ring space");
-    let first_snapshot = runner.wait_for_stall_after(0).await;
-    handle
-        .ring_doorbell(driver.queue_id())
-        .await
-        .expect("doorbell rings after first stall");
-    let second_snapshot = runner.wait_for_stall_after(first_snapshot.stalls).await;
+            // When: software submits the faulting copy and waits across the retry boundary.
+            driver
+                .submit_copy_on(&mut handle, CopyRequest::new(bad_src, bad_dst, 8))
+                .await
+                .expect("faulting copy submission has ring space");
+            let first_snapshot = runner.wait_for_stall_after(0).await;
+            handle
+                .ring_doorbell(driver.queue_id())
+                .await
+                .expect("doorbell rings after first stall");
+            let second_snapshot = runner.wait_for_stall_after(first_snapshot.stalls).await;
+            let event = driver.poll_event_on(&mut handle).await;
+            (first_snapshot, second_snapshot, event)
+        })
+        .await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
@@ -180,7 +201,7 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
         AsyncStepStatus::Stalled(AsyncStallReason::FaultRetirementPendingRetry)
     );
     assert_eq!(summary.stalls, 2);
-    assert_eq!(driver.poll_event_on(&mut handle).await, Ok(None));
+    assert_eq!(event, Ok(None));
 }
 
 #[tokio::test(flavor = "current_thread")]

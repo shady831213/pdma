@@ -14,7 +14,7 @@ pdma-model-device = { path = "../device" }
 pdma-model-host = { path = "../host" }
 
 [dev-dependencies]
-tokio = { version = "1.49", features = ["macros", "sync"] }
+tokio = { version = "1.49", features = ["macros", "rt", "sync"] }
 
 [lints]
 workspace = true

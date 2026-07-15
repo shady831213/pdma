@@ -24,6 +24,8 @@ The v0 model validates the following end-to-end behaviors:
 - Deterministic trace sink with structured in-memory events and Chrome/Perfetto JSON export.
 - PDMA-local completion/event IRQ sources with Line and Message routes.
 - Host-owned IRQ delivery with one registered handler and a CPU token shared with SW main.
+- One complete software-main future whose real async suspension points define interruptible
+  execution boundaries.
 
 The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
 
@@ -42,6 +44,11 @@ The driver model, implemented in `model/modeling/crates/host/src/driver.rs`, own
 - Demultiplex IRQ sources, drain the relevant completion/event path, then acknowledge the device cause.
 
 The driver does not access the command ring directly, does not execute commands, and does not rely on wall-clock timing or cycle counts.
+
+Each software-bearing system scenario enters this boundary exactly once through
+`SoftwareCpu::run_main`. Driver setup, device IRQ configuration, buffer access,
+submission, and software polling or waiting form one complete main future rather than a
+sequence of manually scheduled turns.
 
 ## Device Responsibility Boundary
 
@@ -118,15 +125,29 @@ separately; the model performs no intentional coalescing or moderation. Exact PC
 MSI/MSI-X address/data, table/PBA, and transport behavior remain deferred.
 
 The host-owned `IrqDelivery` actor registers one software handler through type state and
-never places a handler in the device. `SoftwareCpu` supplies one token shared by SW main
-turns and the full handler future, so main and IRQ contexts do not overlap and nested IRQ
-handlers cannot run. The independent device worker may continue progressing. Driver IRQ
-service reads the delivered source, drains completion/event records, then acknowledges
-the device cause; this ordering is idempotent for redundant message deliveries, and the
-device retains a Line cause if a new record appears before ack. Shutdown has deterministic
-priority over a simultaneously ready notification, and delivery-progress waiters receive
-an error if the actor ends below their target. Evidence: `crates/device/tests/irq_line_ack.rs`,
-`crates/host/tests/irq_delivery.rs`, and `crates/scenarios/tests/irq_delivery.rs`.
+never places a handler in the device. `SoftwareCpu::run_main` receives one complete main
+future. One main atomic segment is exactly one poll of that future, ending in
+`Poll::Ready` or `Poll::Pending`; only a real `Poll::Pending` releases the CPU for later
+main reacquisition. Consequently, an `.await` whose awaited future is immediately ready
+does not create an interrupt boundary.
+
+The complete handler future owns the same CPU token across all of its polls and
+suspensions. Main and IRQ contexts therefore do not overlap, handlers are atomic and
+non-nested, and the independent device worker may still progress. CPU ordering follows
+the Tokio mutex's FIFO request order: an IRQ precedes main reacquisition only after the
+delivery actor has observed a notification and requested the gate first. An unobserved
+device notification has no CPU priority, and a later IRQ request does not overtake an
+already queued main request; the model makes no broader scheduler-priority promise.
+
+Driver IRQ service reads the delivered source, drains completion/event records, then
+acknowledges the device cause. This ordering is idempotent for redundant message
+deliveries, and the device retains a Line cause if a new record appears before ack.
+Shutdown has deterministic priority over a simultaneously ready notification. Delivery
+progress is synchronized by handler-owned channels when a scenario needs it, while the
+actor's final `IrqDeliverySummary` reports only successfully completed handler turns; no
+separate delivery-progress watch API exists. Evidence:
+`crates/device/tests/irq_line_ack.rs`, `crates/host/tests/irq_delivery.rs`, and
+`crates/scenarios/tests/irq_delivery.rs`.
 
 ## Conceptual Command Boundary
 
@@ -188,6 +209,23 @@ Every validated slice is guarded by narrative scenario tests in `model/modeling/
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo doc --workspace --no-deps --document-private-items`
+
+The 52 scenario tests contain 47 modeled software programs, each with exactly one
+complete `run_main` entry. Five pure device/manual observability tests have no software
+actor and therefore no `run_main` entry:
+
+- `reports_step_budget_exhaustion_when_work_remains`;
+- `async_runner_no_work_reports_idle_status`;
+- `async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors`;
+- `async_tracing_preserves_manual_run_until_idle_behavior`;
+- `async_trace_log_records_idle_status_steps`.
+
+Actor construction, spawn, shutdown, join, trace instrumentation/collection, and final
+assertions are scenario-harness responsibilities. The single intentional instrumentation
+interleaving exception is
+`async_trace_log_does_not_leak_disabled_submission_metadata`: trace enable/clear remains
+inside its one main future so the test can order an untraced submission before a traced
+doorbell without inventing a second software entry.
 
 Each device-worker turn advances at most one native command or retirement retry. The manual `SyncDevice` facade exposes bounded `run_until_idle(max_steps)` and `run_until_blocked(max_steps)` helpers for explicit deterministic driving. Because the same inputs always produce the same runnable ordering, resource decisions, completions, events, IRQ notifications, and trace ordinals, the model is deterministic and suitable for regression testing.
 

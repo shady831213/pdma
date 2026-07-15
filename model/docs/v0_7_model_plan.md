@@ -13,7 +13,7 @@ Host IRQ delivery actor
   adapts device notifications into one registered software handler
 
 SW main future
-  owns normal driver setup, submission, polling, and device IRQ configuration
+  is one complete program owning driver setup, submission, polling, and IRQ configuration
 ```
 
 The goal is to model software main-context and IRQ-context interaction without copying
@@ -84,7 +84,7 @@ It owns:
 - serial notification delivery;
 - acquisition of the shared CPU token for the complete handler future;
 - handler start/completion trace events;
-- the delivery future run loop.
+- the delivery future run loop and final successful-delivery summary.
 
 Handlers register with the delivery actor, not with the device. The delivery actor may
 call driver code through host-facing APIs; it never receives direct mutable access to
@@ -109,12 +109,21 @@ or isolating another device in the current one-device system.
 - One IRQ delivery actor runs at most one handler future at a time.
 - IRQs that arrive while a handler is running remain pending and dispatch only after the
   current handler returns.
+- `SoftwareCpu::run_main` receives one complete main future. One main atomic segment is
+  exactly one poll ending in `Poll::Ready` or `Poll::Pending`; only a real pending result
+  releases the CPU before the next main poll. Immediately-ready `.await` chains remain
+  in the same segment.
 - A handler may be expressed as an async Rust future, but it owns the modeled CPU token
-  for the entire future. SW main cannot execute during that interval, and nested IRQ
-  handlers are unsupported.
+  for the entire future, including suspension. SW main cannot execute during that
+  interval, and nested IRQ handlers are unsupported.
+- CPU request order is FIFO. IRQ precedence over main begins only when the delivery actor
+  has observed the notification and requests the CPU before main's next reacquisition.
+  An unobserved notification has no CPU priority, a later IRQ request cannot overtake an
+  already queued main request, and v0.7 makes no global scheduler-priority promise.
 - The device actor remains independent and may progress while software is in IRQ context.
 - Host shutdown has deterministic priority when shutdown and a notification are ready
-  together. Progress observation reports actor termination below its requested target.
+  together. Successful handler turns are counted in the actor's final summary; scenarios
+  use handler channels when they need intermediate synchronization.
 
 ## Implementation Slices
 
@@ -154,13 +163,16 @@ or isolating another device in the current one-device system.
 ### Slice 6: IRQ Delivery Actor — Complete
 
 - Add a host-owned delivery actor and handle.
-- Support type-state handler registration and explicit shutdown/progress observation.
+- Support type-state handler registration, explicit shutdown, and final summary
+  accounting without a separate delivery-progress watch.
 - Keep caller-owned spawn policy: scenarios decide whether to `tokio::spawn`, `join!`,
   or directly await the delivery future.
 
 ### Slice 7: Handler Atomicity — Complete
 
 - Enforce one modeled CPU token across SW main and IRQ handler contexts.
+- Run one complete main future as poll-to-pending atomic segments while retaining FIFO
+  acquisition state across outer polls.
 - Test that an IRQ arriving during a handler remains pending and dispatches only after
   the current handler future completes.
 
@@ -168,6 +180,8 @@ or isolating another device in the current one-device system.
 
 - Add scenarios where the SW main future submits work and does not inline-poll the
   completion/event.
+- Keep setup, configuration, submission, and software waits inside that single complete
+  main entry rather than manually invoking one turn at a time.
 - The IRQ delivery actor dispatches the handler; the handler drains completion/event and
   acks device causes.
 - The main future observes handler completion through explicit synchronization.
@@ -211,11 +225,14 @@ above.
 - Host has clear `driver`, `port`, and `irq_delivery` roles.
 - Handlers register with host IRQ delivery, not device.
 - The IRQ delivery actor guarantees non-reentrant handler execution.
-- Scenarios prove SW main and IRQ contexts serialize on one CPU token while the device
-  actor remains independent.
+- Scenarios prove one complete SW main and IRQ contexts serialize at real main
+  suspension boundaries while the device actor remains independent.
 - Scenarios prove line completion and message event delivery through three actors.
 - Message tests prove discrete delivery without coalescing and a deterministic empty
   redundant handler turn.
 - Line tests prove ack cannot clear a relatched cause while its record remains pending.
-- Host tests prove deterministic shutdown priority and premature progress-wait failure.
+- Host tests prove deterministic shutdown priority and final successful-delivery
+  accounting, including that handler errors are not counted.
+- Across all 52 scenario tests, 47 software-bearing tests use exactly one complete
+  `run_main`; five pure device/manual observability tests use none.
 - Existing queue-port behavior remains green.

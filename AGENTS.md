@@ -47,7 +47,7 @@ Ignore generated `model/modeling/target/` content.
 
 Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft, v0.6 actor/async transition, and v0.6.5 active-model cleanup.
 
-v0.7 Host-Owned IRQ Delivery Model is complete. The canonical workspace has `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. It models a PDMA-local IRQ controller, Line and Message routes, a host-owned delivery actor, one shared software CPU token, driver source demultiplexing, and IRQ lifecycle trace. The old sync stack remains retired under `model/retired/v0_6_sync_reference/`.
+v0.7 Host-Owned IRQ Delivery Model is complete. The canonical workspace has `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. It models a PDMA-local IRQ controller, Line and Message routes, a host-owned delivery actor, one complete SW-main future split into poll-to-pending CPU segments, atomic non-nested handler futures, driver source demultiplexing, final delivery summaries, and IRQ lifecycle trace. The old sync stack remains retired under `model/retired/v0_6_sync_reference/`.
 
 ## CONVENTIONS
 
@@ -55,6 +55,10 @@ v0.7 Host-Owned IRQ Delivery Model is complete. The canonical workspace has `pdm
 - Add failing scenario tests first, then minimum model behavior.
 - Preserve existing behavior for linear, strided, event, queue-config, arbitration, broadcast, vector-add, resource-credit, stall-annotation, and trace-sink slices.
 - For v0.7 IRQ scenarios, run the device worker, SW main future, and host IRQ delivery future as explicit concurrent actors.
+- In every software-bearing system scenario, call `run_main` exactly once with the complete software program. Only a real `Poll::Pending` ends a main CPU segment; immediately-ready awaits do not.
+- Keep handler futures atomic across their complete execution and do not promise IRQ priority before host delivery has requested the FIFO CPU gate.
+- Keep actor construction/spawn/shutdown/join, trace instrumentation/collection, and final assertions in the scenario harness. The disabled-submission trace test is the sole intentional trace-control interleaving inside main.
+- Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 52 total, 47 one-entry software tests, and five zero-entry exceptions documented in the architecture spec.
 - Do not register or invoke software handlers from the device loop; handlers belong to host IRQ delivery.
 - Keep operation descriptors conceptual; exact byte layout, register offsets, C ABI, and generated headers stay deferred.
 - Keep Rust files below 250 pure LOC; split by responsibility before growing `desc.rs` or `device.rs`.

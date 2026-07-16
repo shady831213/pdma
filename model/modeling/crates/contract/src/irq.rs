@@ -65,6 +65,16 @@ pub enum IrqNotification {
     Message(IrqMessage),
 }
 
+impl IrqNotification {
+    /// Host-system vector selected for this delivery.
+    pub const fn vector(self) -> IrqVector {
+        match self {
+            Self::Line(snapshot) => snapshot.cause().line().vector(),
+            Self::Message(message) => message.vector(),
+        }
+    }
+}
+
 impl IrqVector {
     /// Creates a host-system interrupt vector from its raw value.
     pub const fn new(raw: usize) -> Self {

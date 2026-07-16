@@ -8,7 +8,7 @@ use pdma_model_host::AsyncDriver;
 async fn async_tracing_preserves_manual_run_until_idle_behavior() {
     // Given: the same copy on a baseline manual device and a traced manual device.
     let mut baseline_device = SyncDevice::new();
-    let mut baseline_driver = AsyncDriver::setup_on(&mut baseline_device, 4, 4)
+    let mut baseline_driver = AsyncDriver::setup_manual_on(&mut baseline_device, 4, 4)
         .await
         .expect("queue setup is valid");
     let baseline_src = baseline_driver
@@ -23,7 +23,7 @@ async fn async_tracing_preserves_manual_run_until_idle_behavior() {
         .expect("source write is in bounds");
 
     let mut traced_device = SyncDevice::new();
-    let mut traced_driver = AsyncDriver::setup_on(&mut traced_device, 4, 4)
+    let mut traced_driver = AsyncDriver::setup_manual_on(&mut traced_device, 4, 4)
         .await
         .expect("queue setup is valid");
     let traced_src = traced_driver

@@ -1,7 +1,7 @@
 //! Shared typed errors for checked model contract operations.
 
 use crate::ids::{BufferId, CompletionRingId, QueueId};
-use crate::irq::IrqSource;
+use crate::irq::{IrqSource, IrqVector};
 use core::fmt;
 
 /// Result type used throughout the PDMA model.
@@ -25,6 +25,16 @@ pub enum ModelError {
     UnknownIrqSource(IrqSource),
     /// An active IRQ source cannot change its delivery route.
     IrqSourceActive(IrqSource),
+    /// The host IRQ delivery registry already has a handler for this vector.
+    DuplicateIrqVector(IrqVector),
+    /// The host IRQ delivery registry has no handler for this vector.
+    UnregisteredIrqVector(IrqVector),
+    /// CPU-local state was accessed outside modeled software CPU execution.
+    SoftwareCpuInactive,
+    /// CPU-local state belongs to another modeled software CPU.
+    SoftwareCpuMismatch,
+    /// CPU-local state was already borrowed during modeled CPU execution.
+    SoftwareCpuStateBusy,
     /// A checked offset plus length calculation overflowed.
     RangeOverflow,
     /// A memory read or write exceeded the buffer bounds.
@@ -55,6 +65,17 @@ impl fmt::Display for ModelError {
             Self::UnknownCompletionRing(id) => write!(f, "unknown completion ring {}", id.raw()),
             Self::UnknownIrqSource(source) => write!(f, "unknown IRQ source {source:?}"),
             Self::IrqSourceActive(source) => write!(f, "IRQ source {source:?} is active"),
+            Self::DuplicateIrqVector(vector) => {
+                write!(f, "IRQ vector {} already has a handler", vector.raw())
+            }
+            Self::UnregisteredIrqVector(vector) => {
+                write!(f, "IRQ vector {} has no registered handler", vector.raw())
+            }
+            Self::SoftwareCpuInactive => f.write_str("software CPU context is inactive"),
+            Self::SoftwareCpuMismatch => {
+                f.write_str("software CPU context does not match this state")
+            }
+            Self::SoftwareCpuStateBusy => f.write_str("software CPU-local state is busy"),
             Self::RangeOverflow => f.write_str("range calculation overflowed"),
             Self::OutOfBounds { buffer, len, end } => {
                 write!(

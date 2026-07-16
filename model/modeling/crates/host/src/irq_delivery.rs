@@ -3,8 +3,15 @@
 mod trace;
 
 use crate::{AsyncDevicePort, SoftwareCpu};
-use pdma_model_contract::{IrqNotification, ModelResult, TraceEvent};
-use std::{future::Future, marker::PhantomData, pin::Pin, sync::Arc};
+use pdma_model_contract::{IrqNotification, IrqVector, ModelError, ModelResult, TraceEvent};
+use std::{
+    collections::{BTreeMap, btree_map::Entry},
+    fmt,
+    future::Future,
+    marker::PhantomData,
+    pin::Pin,
+    sync::Arc,
+};
 use tokio::sync::watch;
 use trace::HostIrqTrace;
 
@@ -20,6 +27,20 @@ pub trait IrqHandler: Send {
 /// Type-state marker for a delivery actor without a registered handler.
 #[derive(Debug)]
 pub struct NoHandler(PhantomData<()>);
+
+/// Type-state marker carrying a non-empty vector-to-handler registry.
+pub struct HasHandlers<'handler> {
+    handlers: BTreeMap<IrqVector, Box<dyn IrqHandler + 'handler>>,
+}
+
+impl fmt::Debug for HasHandlers<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HasHandlers")
+            .field("vectors", &self.handlers.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
 
 /// Host-owned actor adapting device IRQ notifications into handler turns.
 #[derive(Debug)]
@@ -60,20 +81,26 @@ impl<P> IrqDelivery<P, NoHandler> {
         }
     }
 
-    /// Registers the single PDMA software handler and makes the actor runnable.
-    pub fn register_handler<H>(self, handler: H) -> (IrqDelivery<P, H>, IrqDeliveryHandle)
+    /// Registers the first vector handler and makes the actor runnable.
+    pub fn register_handler<'handler, H>(
+        self,
+        vector: IrqVector,
+        handler: H,
+    ) -> (IrqDelivery<P, HasHandlers<'handler>>, IrqDeliveryHandle)
     where
-        H: IrqHandler,
+        H: IrqHandler + 'handler,
     {
         let handle = IrqDeliveryHandle {
             shutdown: self.shutdown_sender.clone(),
             trace: Arc::clone(&self.trace),
         };
+        let mut handlers: BTreeMap<IrqVector, Box<dyn IrqHandler + 'handler>> = BTreeMap::new();
+        handlers.insert(vector, Box::new(handler));
         (
             IrqDelivery {
                 port: self.port,
                 cpu: self.cpu,
-                handler,
+                handler: HasHandlers { handlers },
                 shutdown_sender: self.shutdown_sender,
                 shutdown: self.shutdown,
                 trace: self.trace,
@@ -83,11 +110,24 @@ impl<P> IrqDelivery<P, NoHandler> {
     }
 }
 
-impl<P, H> IrqDelivery<P, H>
+impl<'handler, P> IrqDelivery<P, HasHandlers<'handler>>
 where
     P: AsyncDevicePort,
-    H: IrqHandler,
 {
+    /// Adds a handler before actor execution without replacing existing vectors.
+    pub fn register_handler<H>(&mut self, vector: IrqVector, handler: H) -> ModelResult<()>
+    where
+        H: IrqHandler + 'handler,
+    {
+        match self.handler.handlers.entry(vector) {
+            Entry::Vacant(entry) => {
+                entry.insert(Box::new(handler));
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(ModelError::DuplicateIrqVector(vector)),
+        }
+    }
+
     /// Runs until host shutdown is requested or the device notification stream closes.
     pub async fn run(mut self) -> ModelResult<IrqDeliverySummary> {
         let mut deliveries = 0usize;
@@ -105,8 +145,13 @@ where
             let Some(notification) = notification else {
                 break;
             };
+            let vector = notification.vector();
+            let handler = self
+                .handler
+                .handlers
+                .get_mut(&vector)
+                .ok_or(ModelError::UnregisteredIrqVector(vector))?;
             let trace = Arc::clone(&self.trace);
-            let handler = &mut self.handler;
             let result = self
                 .cpu
                 .run_irq(async move {

@@ -2,7 +2,12 @@
 
 ## Purpose and Scope
 
-This document records the validated behavioral contract of the PDMA executable model through v0.7. It is the source of truth for what the Rust model proves today. White-board architecture documents are background only. The spec deliberately defers anything that is not exercised by the current scenario tests, including cycle timing, descriptor byte layouts, register offsets, the C ABI, generated headers, concrete PCIe MSI/MSI-X transport, reset behavior, and real operating-system integration.
+This document records the validated behavioral contract of the PDMA executable model
+through v0.8. It is the source of truth for what the Rust model proves today.
+White-board architecture documents are background only. The spec deliberately defers
+anything that is not exercised by the current scenario tests, including cycle timing,
+descriptor byte layouts, register offsets, the C ABI, generated headers, concrete PCIe
+MSI/MSI-X transport, reset behavior, and real operating-system integration.
 
 The intended readers are implementers who will extend the model, port it to a cycle-accurate or RTL context, or write future drivers against a more concrete ABI.
 
@@ -23,9 +28,14 @@ The v0 model validates the following end-to-end behaviors:
 - Resource-credit gating and observable stall annotations.
 - Deterministic trace sink with structured in-memory events and Chrome/Perfetto JSON export.
 - PDMA-local completion/event IRQ sources with Line and Message routes.
-- Host-owned IRQ delivery with one registered handler and a CPU token shared with SW main.
+- Host-owned IRQ delivery through a fixed vector-to-handler registry and a CPU token
+  shared with SW main.
 - One complete software-main future whose real async suspension points define interruptible
   execution boundaries.
+- CPU-bound, closure-scoped single-copy software state shared across repeated
+  main/handler switches.
+- Shared driver accounting with explicit cancellation semantics before and after device
+  command acceptance.
 
 The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
 
@@ -34,16 +44,28 @@ The contract is deterministic: the same initial state, resource configuration, a
 The driver model, implemented in `model/modeling/crates/host/src/driver.rs`, owns the following responsibilities:
 
 - Allocate device-visible buffers through `AsyncDevicePort` and fill source data through `write_buffer_on`.
-- Configure a queue with `AsyncDriver::setup_on` or `setup_with_config_on`, receiving a `QueueConfigHandle`.
-- Assign monotonic per-queue command IDs and track free local command slots.
+- Configure a CPU-bound queue with `AsyncDriver::setup_on` or
+  `setup_with_config_on`, receiving a `QueueConfigHandle`. The active software CPU is
+  captured before device queue creation and revalidated before every nested create poll.
+- Among system scenarios, use explicit manual setup only in the five named no-software
+  observability tests. A focused host integration test also exercises manual-mode parity
+  without representing a software-bearing scenario.
+- Assign monotonic per-queue command IDs and track free local command slots in one
+  accounting allocation shared by all driver clones.
 - Build external request structs (`CopyRequest`, `StridedCopyRequest`, `BroadcastCopyRequest`, `VectorAddRequest`) and call the matching `submit_*` helper.
 - Ring the implicit doorbell by submitting through the driver helper.
-- Poll the bound completion ring with `poll_completion` and reclaim one local slot per returned record.
-- Poll the queue-local event path with `poll_event_on` and reclaim one local slot per returned event.
+- Validate the owning active software CPU before every nested create, submit, doorbell,
+  completion, and event port poll. A pending future resumed inactive or on another CPU
+  returns the typed error before the inner operation's commit point.
+- Reclaim one local slot synchronously for each successfully returned completion/event
+  record.
 - Configure device IRQ routes and source controls through the host device port.
 - Demultiplex IRQ sources, drain the relevant completion/event path, then acknowledge the device cause.
 
-The driver does not access the command ring directly, does not execute commands, and does not rely on wall-clock timing or cycle counts.
+The driver does not access the command ring directly, does not execute commands, and
+does not rely on wall-clock timing or cycle counts. A CPU-bound driver rejects
+off-context or wrong-CPU access, including migration between polls of one port future,
+instead of silently falling back to manual state.
 
 Each software-bearing system scenario enters this boundary exactly once through
 `SoftwareCpu::run_main`. Driver setup, device IRQ configuration, buffer access,
@@ -85,7 +107,35 @@ For event routing, v0 supports only `EventRouting::QueueLocal`. A driver may pol
 
 ### Submission
 
-The driver builds a request, wraps it in an external command descriptor, and calls `submit_*`. The driver decrements its free slot count, assigns the next command ID, pushes the command onto the command ring, and rings the doorbell. A `TraceEventKind::CommandSubmitted` event is emitted.
+CPU-bound queue creation, submission, doorbell, completion, and event futures validate
+the owning CPU before every nested port poll. If one first returns `Pending` on its
+owner and is later resumed inactive or on another CPU, the typed CPU error is returned
+before the inner port operation can reach its commit point. Manual accounting uses the
+same polling adapter without adding CPU identity restrictions.
+
+The driver builds a request, wraps it in an external command descriptor, and calls
+`submit_*`. Preparation drains deferred rollbacks, consumes the next command ID, and
+reserves one local slot. If submission fails, migrates to an invalid CPU context, or is
+cancelled before `submit_command` accepts the command, reservation Drop queues a
+deferred slot rollback; the command ID remains consumed. The next accounting access
+drains the rollback.
+
+Successful `submit_command` is the device-acceptance point. The reservation is disarmed
+synchronously in that same poll before the doorbell future is polled, so doorbell
+failure, invalid-context migration, or cancellation keeps both the accepted command and
+its local slot consumed while an uncommitted doorbell leaves runnable state unchanged.
+The port removes a completion/event record only on `Ok(Some(_))`, after which the driver
+reclaims its slot synchronously in the same poll before another suspension is possible.
+An invalid-context attempt cannot consume the record or credit. No accounting borrow
+spans a device-port poll or await. A `TraceEventKind::CommandSubmitted` event is emitted
+when the device accepts the command.
+
+`AsyncDevicePort` defines these cancel-safe commit points: `create_queue` creates the
+queue and consumes its ID only on `Ok(_)`; `submit_command` accepts the command only on
+`Ok(())`; `ring_doorbell` mutates runnable state and trace only on `Ok(())`; and
+completion/event polling removes a record only on `Ok(Some(_))`. Dropping any of those
+futures while `Pending` leaves the corresponding queue, ID, command, runnable state,
+trace, or record unchanged.
 
 ### Doorbell/Runnable
 
@@ -124,20 +174,37 @@ monotonic `IrqMessageId`. Each trigger within representable model state is retai
 separately; the model performs no intentional coalescing or moderation. Exact PCIe
 MSI/MSI-X address/data, table/PBA, and transport behavior remain deferred.
 
-The host-owned `IrqDelivery` actor registers one software handler through type state and
-never places a handler in the device. `SoftwareCpu::run_main` receives one complete main
-future. One main atomic segment is exactly one poll of that future, ending in
-`Poll::Ready` or `Poll::Pending`; only a real `Poll::Pending` releases the CPU for later
-main reacquisition. Consequently, an `.await` whose awaited future is immediately ready
-does not create an interrupt boundary.
+Both Line and Message notifications resolve one `IrqVector` at the shared contract
+boundary. The host-owned `IrqDelivery` actor registers a non-empty vector-to-handler
+map through type state and never places a handler in the device. The first registration
+transitions `NoHandler` to `HasHandlers`; further registrations occur before `run`.
+Different sources may share one vector and persistent handler. Duplicate registration
+returns `DuplicateIrqVector` without replacement. An unregistered vector returns
+`UnregisteredIrqVector` before CPU acquisition, lifecycle tracing, or delivery-summary
+increment.
+
+`SoftwareCpu::run_main` receives one complete main future. One main atomic segment is
+exactly one poll of that future, ending in `Poll::Ready` or `Poll::Pending`; only a real
+`Poll::Pending` releases the CPU for later main reacquisition. Consequently, an
+`.await` whose awaited future is immediately ready does not create an interrupt
+boundary.
 
 The complete handler future owns the same CPU token across all of its polls and
-suspensions. Main and IRQ contexts therefore do not overlap, handlers are atomic and
-non-nested, and the independent device worker may still progress. CPU ordering follows
-the Tokio mutex's FIFO request order: an IRQ precedes main reacquisition only after the
-delivery actor has observed a notification and requested the gate first. An unobserved
-device notification has no CPU priority, and a later IRQ request does not overtake an
-already queued main request; the model makes no broader scheduler-priority promise.
+suspensions. Main and IRQ contexts therefore do not overlap, handlers remain atomic,
+serial, and non-nested across vectors, and the independent device worker may still
+progress. CPU ordering follows the Tokio mutex's FIFO request order: an IRQ precedes
+main reacquisition only after the delivery actor has observed a notification and
+requested the gate first. An unobserved device notification has no CPU priority, and a
+later IRQ request does not overtake an already queued main request; the model makes no
+broader scheduler-priority promise.
+
+`CpuLocal<T>` binds one mutable value to one private `SoftwareCpu` identity. Cloned
+capabilities share that single value without requiring `T: Clone`. The identity is
+active only while the owning main or handler future is being polled. Synchronous
+`CpuLocal::with` access returns typed inactive, mismatch, or busy errors and uses
+`try_lock`; it exposes no identity, lock, guard, reference escape, or async borrow across
+an await. Cancellation removes the active identity and releases the CPU gate through
+RAII.
 
 Driver IRQ service reads the delivered source, drains completion/event records, then
 acknowledges the device cause. This ordering is idempotent for redundant message
@@ -148,6 +215,15 @@ actor's final `IrqDeliverySummary` reports only successfully completed handler t
 separate delivery-progress watch API exists. Evidence:
 `crates/device/tests/irq_line_ack.rs`, `crates/host/tests/irq_delivery.rs`, and
 `crates/scenarios/tests/irq_delivery.rs`.
+
+IRQ scenarios bootstrap without transferring driver ownership away from main. Main
+performs CPU-bound setup, retains one driver capability, and publishes a clone plus
+source identities over a one-shot channel. Delivery receives that clone outside the
+modeled CPU, constructs and registers the vector handlers, then signals readiness. Main
+waits for readiness before configuring routes, enabling/unmasking sources, or
+submitting. No handler waits for initialization while holding the CPU. The depth-one
+alternation story proves repeated `main -> handler A -> main -> handler B -> main`
+switches and a later submission through main's retained capability.
 
 ## Conceptual Command Boundary
 
@@ -210,7 +286,7 @@ Every validated slice is guarded by narrative scenario tests in `model/modeling/
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo doc --workspace --no-deps --document-private-items`
 
-The 52 scenario tests contain 47 modeled software programs, each with exactly one
+The 54 scenario tests contain 49 modeled software programs, each with exactly one
 complete `run_main` entry. Five pure device/manual observability tests have no software
 actor and therefore no `run_main` entry:
 
@@ -219,6 +295,10 @@ actor and therefore no `run_main` entry:
 - `async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors`;
 - `async_tracing_preserves_manual_run_until_idle_behavior`;
 - `async_trace_log_records_idle_status_steps`.
+
+Three of those five tests contain four explicit manual-driver setup calls: the manual
+tracing comparison constructs separate baseline and traced drivers. The IRQ scenario
+binary contains four tests and four `run_main` calls.
 
 Actor construction, spawn, shutdown, join, trace instrumentation/collection, and final
 assertions are scenario-harness responsibilities. The single intentional instrumentation

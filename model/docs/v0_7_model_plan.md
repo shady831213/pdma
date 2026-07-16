@@ -1,5 +1,11 @@
 # PDMA v0.7 Model Plan
 
+> Historical snapshot: this file records the completed v0.7 checkpoint. Its
+> single-handler wording and 52/47/5 test counts are intentionally retained as v0.7
+> closeout facts. v0.8 supersedes the active host-delivery shape with a fixed
+> vector-to-handler registry, CPU-local state, and 54/49/5 scenario counts; see
+> `model/docs/v0_8_model_plan.md`.
+
 ## Purpose
 
 v0.7 adds a complete conceptual interrupt model at the current queue-port layer. It
@@ -77,8 +83,8 @@ the retry succeeds.
 
 ### Host IRQ Delivery Actor
 
-The host delivery actor adapts the device notification boundary into software context.
-It owns:
+At the v0.7 checkpoint, the host delivery actor adapted the device notification
+boundary into software context and owned:
 
 - type-state registration of one PDMA handler;
 - serial notification delivery;
@@ -233,6 +239,6 @@ above.
 - Line tests prove ack cannot clear a relatched cause while its record remains pending.
 - Host tests prove deterministic shutdown priority and final successful-delivery
   accounting, including that handler errors are not counted.
-- Across all 52 scenario tests, 47 software-bearing tests use exactly one complete
-  `run_main`; five pure device/manual observability tests use none.
+- At v0.7 closeout, across all 52 scenario tests, 47 software-bearing tests used exactly
+  one complete `run_main`; five pure device/manual observability tests used none.
 - Existing queue-port behavior remains green.

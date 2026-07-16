@@ -1,6 +1,6 @@
 # PDMA MODELING WORKSPACE
 
-Scope: Rust workspace with the completed v0.7 queue-port IRQ delivery model.
+Scope: Rust workspace with the completed v0.8 vector-routed IRQ context model.
 
 ## OVERVIEW
 
@@ -32,9 +32,21 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - Tests use Given/When/Then comments and assert observable completions, events, and memory contents.
 - `AsyncDevice::queue_port*()` returns `(AsyncDevice, AsyncDeviceWorker)`; callers choose whether to `tokio::spawn(worker.run())`, directly await it, or use another executor strategy.
 - `SyncDevice::run_until_idle(max_steps)` and `SyncDevice::run_until_blocked(max_steps)` calls belong only in explicit manual-drive helper/status/trace and step-budget tests.
-- `AsyncDriver` owns local command-slot accounting; completions/events reclaim slots.
+- `AsyncDriver` clones share one command-ID/slot accounting state. CPU-bound setup requires
+  an active matching `SoftwareCpu`; among system scenarios, only the five named zero-entry
+  observability tests use explicit manual setup. Focused host tests may exercise that API.
 - Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; handler registration and delivery adaptation belongs to `pdma-model-host`.
-- Software handlers must register with host IRQ delivery, never with the device, and delivery must be non-reentrant.
+- Software handlers register by `IrqVector` with host IRQ delivery before `run`, never
+  with the device. Multiple sources may share one vector; each vector has one persistent
+  handler entry, and delivery remains serial and non-reentrant.
+- `CpuLocal<T>` is the modeled single-copy mutable software-state capability. Access is
+  synchronous and valid only during a poll of the owning CPU's main or handler future;
+  do not expose a lock, guard, raw CPU identity, or await-spanning borrow.
+- Before every nested poll of a CPU-bound create, submit, doorbell, completion, or event
+  port future, validate the owning active CPU. A pending future resumed inactive or on
+  another CPU returns the typed error before its commit point. `AsyncDevicePort` commits
+  create only on `Ok(_)`, submit/doorbell only on `Ok(())`, record removal only on
+  `Ok(Some(_))`, and preserves the corresponding device state when dropped pending.
 - Each software-bearing scenario calls `SoftwareCpu::run_main` once with its complete
   program. One poll is one atomic main segment; only `Poll::Pending` releases the CPU
   before the next poll, while the complete IRQ handler future remains atomic.
@@ -43,7 +55,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - Actor construction/spawn/shutdown/join, trace instrumentation/collection, and final
   assertions belong to the harness. The disabled-submission trace edge test alone keeps
   trace enable/clear inside main to preserve its deliberate interleaving.
-- The scenario invariant is 52 tests: 47 software-bearing tests with one `run_main` and
+- The scenario invariant is 54 tests: 49 software-bearing tests with one `run_main` and
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.
@@ -63,7 +75,11 @@ cargo doc --workspace --no-deps --document-private-items
 
 ## CURRENT STATE
 
-v0.7 Host-Owned IRQ Delivery Model is complete. `model/docs/v0_7_model_plan.md` records shared IRQ vocabulary, PDMA-local Line/Message behavior, one complete SW main with poll-boundary CPU serialization, the host IRQ delivery actor, complete-handler atomicity, driver drain/ack behavior, summary-based delivery completion, and three-actor scenarios. No next implementation slice is selected in this workspace knowledge base.
+v0.8 Vector-Routed IRQ Context Model is complete. `model/docs/v0_8_model_plan.md`
+records vector-to-handler dispatch, CPU-local single-copy state, cancel-safe shared driver
+accounting, bootstrap ordering, and repeated main/handler alternation. The v0.7 plan is a
+historical single-handler snapshot. No next implementation slice is selected in this
+workspace knowledge base.
 
 ## DO NOT
 

@@ -2,6 +2,8 @@ use super::SoftwareCpu;
 use std::{future::Future, pin::Pin, task::Poll};
 use tokio::sync::oneshot;
 
+mod cpu_local;
+
 fn poll_once<F>(future: Pin<&mut F>) -> Poll<F::Output>
 where
     F: Future + ?Sized,

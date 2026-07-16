@@ -1,27 +1,28 @@
 //! SDK/driver-like async submission and completion polling model.
 
+mod accounting;
 mod irq;
+mod submission;
 
 pub use irq::DriverIrqRecord;
 
 use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::{
-    BroadcastCopyCommand, BroadcastCopyRequest, CopyCommand, CopyRequest, ExternalCommand,
-    StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
-};
-use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
 use pdma_model_contract::queue::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
 
 use crate::AsyncDevicePort;
 
 /// Async software driver model owning queue setup and local ring-space accounting.
+///
+/// Cancelling submission before device acceptance restores its slot on the next accounting
+/// access while keeping the command ID consumed. After acceptance, cancellation retains both the
+/// queued command and its consumed slot, including cancellation during the doorbell operation.
 #[derive(Debug, Clone)]
 pub struct AsyncDriver {
     queue_config: QueueConfigHandle,
-    next_command: usize,
-    free_command_slots: usize,
+    accounting: accounting::SharedAccounting,
 }
 
 impl AsyncDriver {
@@ -48,11 +49,42 @@ impl AsyncDriver {
         device: &mut impl AsyncDevicePort,
         config: QueueConfig,
     ) -> ModelResult<Self> {
-        let queue_config = device.create_queue(config).await?;
+        let accounting = accounting::SharedAccounting::capture_active(config.command_depth())?;
+        let queue_config = accounting.poll_valid(device.create_queue(config)).await?;
         Ok(Self {
             queue_config,
-            next_command: 0,
-            free_command_slots: config.command_depth(),
+            accounting,
+        })
+    }
+
+    /// Sets up one command queue for an intentional manual-observability path.
+    pub async fn setup_manual_on(
+        device: &mut impl AsyncDevicePort,
+        command_depth: usize,
+        completion_depth: usize,
+    ) -> ModelResult<Self> {
+        Self::setup_manual_with_config_on(
+            device,
+            QueueConfig::new(
+                command_depth,
+                completion_depth,
+                EventRouting::QueueLocal,
+                SoftwareOwnerId::new(0),
+            ),
+        )
+        .await
+    }
+
+    /// Sets up one manually driven queue from an explicit queue configuration.
+    pub async fn setup_manual_with_config_on(
+        device: &mut impl AsyncDevicePort,
+        config: QueueConfig,
+    ) -> ModelResult<Self> {
+        let accounting = accounting::SharedAccounting::manual(config.command_depth());
+        let queue_config = accounting.poll_valid(device.create_queue(config)).await?;
+        Ok(Self {
+            queue_config,
+            accounting,
         })
     }
 
@@ -85,88 +117,17 @@ impl AsyncDriver {
         device.read_buffer(buffer, 0, len).await
     }
 
-    /// Emits a copy descriptor through an async device port and rings the doorbell.
-    pub async fn submit_copy_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-        request: CopyRequest,
-    ) -> ModelResult<CommandId> {
-        self.reserve_command_slot()?;
-        let command_id = CommandId::new(self.next_command);
-        let command = CopyCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command_on(device, command_id, ExternalCommand::Copy(command))
-            .await
-    }
-
-    /// Emits a strided copy descriptor through an async device port and rings the doorbell.
-    pub async fn submit_strided_copy_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-        request: StridedCopyRequest,
-    ) -> ModelResult<CommandId> {
-        self.reserve_command_slot()?;
-        let command_id = CommandId::new(self.next_command);
-        let command = StridedCopyCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command_on(device, command_id, ExternalCommand::StridedCopy(command))
-            .await
-    }
-
-    /// Emits a broadcast copy descriptor through an async device port and rings the doorbell.
-    pub async fn submit_broadcast_copy_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-        request: BroadcastCopyRequest,
-    ) -> ModelResult<CommandId> {
-        self.reserve_command_slot()?;
-        let command_id = CommandId::new(self.next_command);
-        let command = BroadcastCopyCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command_on(device, command_id, ExternalCommand::BroadcastCopy(command))
-            .await
-    }
-
-    /// Emits a vector-add descriptor through an async device port and rings the doorbell.
-    pub async fn submit_vector_add_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-        request: VectorAddRequest,
-    ) -> ModelResult<CommandId> {
-        self.reserve_command_slot()?;
-        let command_id = CommandId::new(self.next_command);
-        let command = VectorAddCommand::new(
-            command_id,
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command_on(device, command_id, ExternalCommand::VectorAdd(command))
-            .await
-    }
-
     /// Polls one completion through an async device port and reclaims one local command slot.
     pub async fn poll_completion_on(
         &mut self,
         device: &mut impl AsyncDevicePort,
     ) -> ModelResult<Option<CompletionRecord>> {
-        let completion = device
-            .poll_completion(self.queue_config.completion_ring_id())
+        let completion = self
+            .accounting
+            .poll_valid(device.poll_completion(self.queue_config.completion_ring_id()))
             .await?;
         if completion.is_some() {
-            self.free_command_slots = self.free_command_slots.saturating_add(1);
+            self.accounting.reclaim()?;
         }
         Ok(completion)
     }
@@ -178,13 +139,13 @@ impl AsyncDriver {
     ) -> ModelResult<Option<EventRecord>> {
         let event = match self.queue_config.event_routing() {
             EventRouting::QueueLocal => {
-                device
-                    .poll_queue_event(self.queue_config.queue_id())
+                self.accounting
+                    .poll_valid(device.poll_queue_event(self.queue_config.queue_id()))
                     .await?
             }
         };
         if event.is_some() {
-            self.free_command_slots = self.free_command_slots.saturating_add(1);
+            self.accounting.reclaim()?;
         }
         Ok(event)
     }
@@ -202,27 +163,5 @@ impl AsyncDriver {
     /// Queue configuration handle owned by this driver instance.
     pub const fn queue_config_handle(&self) -> QueueConfigHandle {
         self.queue_config
-    }
-
-    const fn reserve_command_slot(&self) -> ModelResult<()> {
-        if self.free_command_slots == 0 {
-            return Err(ModelError::DriverQueueFull);
-        }
-        Ok(())
-    }
-
-    async fn submit_external_command_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-        command_id: CommandId,
-        command: ExternalCommand,
-    ) -> ModelResult<CommandId> {
-        self.next_command = self.next_command.saturating_add(1);
-        device
-            .submit_command(self.queue_config.queue_id(), command)
-            .await?;
-        self.free_command_slots -= 1;
-        device.ring_doorbell(self.queue_config.queue_id()).await?;
-        Ok(command_id)
     }
 }

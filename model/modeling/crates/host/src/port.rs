@@ -14,6 +14,11 @@ use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 /// Async device-facing operations required by the host driver actor.
 pub trait AsyncDevicePort: Send + Sync {
     /// Provisions one command queue and one bound completion ring.
+    ///
+    /// # Cancel safety
+    ///
+    /// The queue and its ID are created only when the future returns `Ok(_)`. Dropping it while
+    /// pending leaves queue state and the next queue ID unchanged.
     fn create_queue(
         &mut self,
         config: QueueConfig,
@@ -39,6 +44,12 @@ pub trait AsyncDevicePort: Send + Sync {
     ) -> impl Future<Output = ModelResult<Vec<u8>>> + Send;
 
     /// Pushes one command into a queue's command ring.
+    ///
+    /// # Cancel safety
+    ///
+    /// The future must not accept or mutate the queue until it returns `Ok(())`. Dropping it while
+    /// pending leaves the command unaccepted. This successful return is the acceptance commit point
+    /// used by driver reservation rollback.
     fn submit_command(
         &mut self,
         queue_id: QueueId,
@@ -46,15 +57,30 @@ pub trait AsyncDevicePort: Send + Sync {
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Captures a software doorbell for one queue.
+    ///
+    /// # Cancel safety
+    ///
+    /// Runnable state and the doorbell trace commit only when the future returns `Ok(())`.
+    /// Dropping it while pending leaves both unchanged.
     fn ring_doorbell(&mut self, queue_id: QueueId) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Pops one completion from a completion ring.
+    ///
+    /// # Cancel safety
+    ///
+    /// A record is removed only when the future returns `Ok(Some(_))`. Dropping it while pending
+    /// leaves the record present; `Ok(Some(_))` is the driver's completion-reclaim commit point.
     fn poll_completion(
         &mut self,
         completion_ring_id: CompletionRingId,
     ) -> impl Future<Output = ModelResult<Option<CompletionRecord>>> + Send;
 
     /// Pops one event from a queue-local event path.
+    ///
+    /// # Cancel safety
+    ///
+    /// A record is removed only when the future returns `Ok(Some(_))`. Dropping it while pending
+    /// leaves the record present; `Ok(Some(_))` is the driver's event-reclaim commit point.
     fn poll_queue_event(
         &mut self,
         queue_id: QueueId,

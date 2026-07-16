@@ -38,12 +38,13 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | Trace Sink | Done | `crates/device/src/trace/`, native runner hooks, `crates/device/src/lib.rs` re-exports, `tests/trace_sink.rs` | In-memory deterministic trace events and Chrome/Perfetto JSON export via sequence ordinals; public API `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, `trace_json`. |
 | v0 architecture specification draft | Done | `model/docs/pdma_arch_spec_v0.md` | The original v0 behavior was documented with ABI, register, cycle timing, interrupt, and reset details deferred at that milestone. |
 | v0.7 host-owned IRQ delivery | Done | `model/docs/v0_7_model_plan.md`, `crates/scenarios/tests/irq_delivery.rs` | Line and Message routes, device-local IRQ state, one complete software main, poll-boundary CPU serialization, whole-handler atomicity, driver drain/ack, final delivery summaries, and IRQ trace are validated; concrete MSI/MSI-X transport remains deferred. |
+| v0.8 vector-routed IRQ contexts | Done | `model/docs/v0_8_model_plan.md`, host/context/driver/IRQ tests, `crates/scenarios/tests/irq_delivery/` | Line and Message notifications dispatch through a fixed per-vector host registry; CPU-local state and shared cancel-safe driver accounting survive repeated main/handler switches without device-owned callbacks. |
 
 ## Active Next Slice
 
-No active implementation slice remains. The v0 model is complete through the v0.7
-host-owned IRQ delivery slice recorded in `model/docs/pdma_arch_spec_v0.md`.
-The scenario suite has 52 tests: 47 software-bearing tests each use exactly one complete
+No active implementation slice remains. The v0 model is complete through the v0.8
+vector-routed IRQ context slice recorded in `model/docs/pdma_arch_spec_v0.md`.
+The scenario suite has 54 tests: 49 software-bearing tests each use exactly one complete
 `run_main`, while five named pure device/manual observability tests intentionally use
 none, as enumerated in the architecture specification.
 

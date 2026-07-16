@@ -2,7 +2,7 @@
 
 use pdma_model_contract::{
     CompletionRingId, IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute,
-    IrqSnapshot, IrqSource, IrqVector, QueueId,
+    IrqSnapshot, IrqSource, IrqVector, ModelError, QueueId,
 };
 
 #[test]
@@ -83,4 +83,64 @@ fn irq_message_preserves_each_discrete_delivery_identity() {
     assert_eq!(first.vector(), vector);
     assert_eq!(first.source(), source);
     assert_ne!(first_notification, second_notification);
+}
+
+#[test]
+fn irq_notification_resolves_line_and_message_vectors() {
+    // Given: line and message notifications routed to different host vectors.
+    let line_vector = IrqVector::new(5);
+    let message_vector = IrqVector::new(11);
+    let source = IrqSource::Event(QueueId::new(2));
+    let line = IrqNotification::Line(IrqSnapshot::new(
+        IrqCause::new(IrqLine::new(line_vector), source),
+        true,
+    ));
+    let message = IrqNotification::Message(IrqMessage::new(
+        IrqMessageId::new(0),
+        message_vector,
+        source,
+    ));
+
+    // When/Then: the common boundary resolves the configured vector for either route.
+    assert_eq!(line.vector(), line_vector);
+    assert_eq!(message.vector(), message_vector);
+}
+
+#[test]
+fn irq_registry_errors_preserve_the_rejected_vector() {
+    // Given: one vector rejected for duplicate registration or missing registration.
+    let vector = IrqVector::new(13);
+    let duplicate = ModelError::DuplicateIrqVector(vector);
+    let unregistered = ModelError::UnregisteredIrqVector(vector);
+
+    // When/Then: equality retains the typed vector and display distinguishes the failures.
+    assert_eq!(duplicate, ModelError::DuplicateIrqVector(vector));
+    assert_eq!(unregistered, ModelError::UnregisteredIrqVector(vector));
+    assert_ne!(duplicate, unregistered);
+    assert_eq!(duplicate.to_string(), "IRQ vector 13 already has a handler");
+    assert_eq!(
+        unregistered.to_string(),
+        "IRQ vector 13 has no registered handler"
+    );
+}
+
+#[test]
+fn software_cpu_errors_have_distinct_identities() {
+    // Given: the three CPU-local invariant failures.
+    let errors = [
+        ModelError::SoftwareCpuInactive,
+        ModelError::SoftwareCpuMismatch,
+        ModelError::SoftwareCpuStateBusy,
+    ];
+
+    // When/Then: equality and display keep every invariant failure distinct.
+    assert_ne!(errors[0], errors[1]);
+    assert_ne!(errors[1], errors[2]);
+    assert_ne!(errors[0], errors[2]);
+    assert_eq!(errors[0].to_string(), "software CPU context is inactive");
+    assert_eq!(
+        errors[1].to_string(),
+        "software CPU context does not match this state"
+    );
+    assert_eq!(errors[2].to_string(), "software CPU-local state is busy");
 }

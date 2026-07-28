@@ -24,7 +24,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 | --- | --- | --- |
 | Shared contract | `crates/contract/src/` | No backing memory, runtime, handler traits, or device execution behavior. |
 | Device behavior | `crates/device/src/` | Active queue-port device model, async actor handle/worker, sync/manual drive facade, resources, trace sink, and PDMA-local IRQ controller. |
-| Host-side model | `crates/host/src/` | Host owns `AsyncDriver`, device port traits, IRQ delivery actor, and SW execution context helpers. |
+| Host-side model | `crates/host/src/` | Host owns CPU-bound `AsyncDriver`, CPU-unbound `ManualDriver`, device port traits, IRQ delivery actor, and SW execution context helpers. |
 | System scenarios | `crates/scenarios/tests/` | Drive behavior through concurrent device worker, SW main future, and IRQ delivery future. |
 
 ## CONVENTIONS
@@ -32,9 +32,12 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - Tests use Given/When/Then comments and assert observable completions, events, and memory contents.
 - `AsyncDevice::queue_port*()` returns `(AsyncDevice, AsyncDeviceWorker)`; callers choose whether to `tokio::spawn(worker.run())`, directly await it, or use another executor strategy.
 - `SyncDevice::run_until_idle(max_steps)` and `SyncDevice::run_until_blocked(max_steps)` calls belong only in explicit manual-drive helper/status/trace and step-budget tests.
-- `AsyncDriver` clones share one command-ID/slot accounting state. CPU-bound setup requires
-  an active matching `SoftwareCpu`; among system scenarios, only the five named zero-entry
-  observability tests use explicit manual setup. Focused host tests may exercise that API.
+- `AsyncDriver` is CPU-bound: setup requires an active matching `SoftwareCpu`, clones share
+  one command-ID/slot accounting state, and it alone services IRQs. `ManualDriver` is the
+  explicit CPU-unbound observability facade, constructed with `ManualDriver::setup_on` or
+  `ManualDriver::setup_with_config_on`; it has no IRQ service. Both public facades forward
+  to one private core with clone-shared accounting. Among system scenarios, only the five
+  named zero-entry observability tests use manual setup; focused host tests may exercise it.
 - Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; handler registration and delivery adaptation belongs to `pdma-model-host`.
 - Software handlers register by `IrqVector` with host IRQ delivery before `run`, never
   with the device. Multiple sources may share one vector; each vector has one persistent
@@ -42,6 +45,9 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - `CpuLocal<T>` is the modeled single-copy mutable software-state capability. Access is
   synchronous and valid only during a poll of the owning CPU's main or handler future;
   do not expose a lock, guard, raw CPU identity, or await-spanning borrow.
+- The private `SoftwareCpuToken` is installed in the single `CURRENT_SOFTWARE_CPU` option
+  only around an actual inner main or handler poll. RAII restores any prior token after the
+  poll, so a nested CPU context does not erase its enclosing context.
 - Before every nested poll of a CPU-bound create, submit, doorbell, completion, or event
   port future, validate the owning active CPU. A pending future resumed inactive or on
   another CPU returns the typed error before its commit point. `AsyncDevicePort` commits
@@ -55,7 +61,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - Actor construction/spawn/shutdown/join, trace instrumentation/collection, and final
   assertions belong to the harness. The disabled-submission trace edge test alone keeps
   trace enable/clear inside main to preserve its deliberate interleaving.
-- The scenario invariant is 54 tests: 49 software-bearing tests with one `run_main` and
+- The scenario invariant is 55 tests: 50 software-bearing tests with one `run_main` and
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.
@@ -90,3 +96,4 @@ workspace knowledge base.
 - Do not put backing memory in contract; keep DMA-visible data structures separate from storage media.
 - Do not make device depend on host or scenarios.
 - Do not make the device store handler tables or invoke software callbacks.
+- Do not add IRQ service to `ManualDriver` or bypass `AsyncDriver` CPU validation.

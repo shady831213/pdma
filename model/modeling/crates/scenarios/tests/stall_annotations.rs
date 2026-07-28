@@ -6,7 +6,7 @@ use pdma_model_contract::{
 use pdma_model_device::{
     AsyncDevice, AsyncRunSummary, AsyncStallReason, AsyncStepStatus, SyncDevice,
 };
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
@@ -208,7 +208,7 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
 async fn async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors() {
     // Given: a manual async device with one copy that cannot acquire execution resources.
     let mut device = SyncDevice::with_resource_config(ResourceConfig::default().with_read_slots(0));
-    let mut driver = AsyncDriver::setup_manual_on(&mut device, 4, 4)
+    let mut driver = ManualDriver::setup_on(&mut device, 4, 4)
         .await
         .expect("queue setup is valid");
     let src = driver.allocate_buffer_on(&mut device, 4).await;

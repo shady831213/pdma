@@ -92,6 +92,7 @@ impl SharedAccounting {
     {
         let mut future = Box::pin(future);
         poll_fn(|context| {
+            // Validate before each inner poll so migration cannot cross a commit point.
             if let Err(error) = self.validate() {
                 return std::task::Poll::Ready(Err(error));
             }
@@ -143,6 +144,7 @@ impl CommandReservation {
 impl Drop for CommandReservation {
     fn drop(&mut self) {
         if self.armed {
+            // Pre-acceptance cancellation defers rollback to canonical accounting.
             self.pending_rollbacks.fetch_add(1, Ordering::Release);
         }
     }

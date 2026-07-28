@@ -48,7 +48,7 @@ Ignore generated `model/modeling/target/` content.
 
 Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft, v0.6 actor/async transition, and v0.6.5 active-model cleanup.
 
-v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. It extends v0.7 with Line/Message vector resolution, a fixed pre-run vector-to-handler registry, CPU-bound single-copy software state, shared cancel-safe driver accounting, and bootstrap ordering that lets main retain a driver capability across repeated handler turns. The device still owns only PDMA-local IRQ state and never stores or invokes handlers. The old sync stack remains retired under `model/retired/v0_6_sync_reference/`.
+v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. It extends v0.7 with Line/Message vector resolution, a fixed pre-run vector-to-handler registry, CPU-bound single-copy software state, and bootstrap ordering that lets main retain an `AsyncDriver` capability across repeated handler turns. `AsyncDriver` is CPU-bound and exclusively services IRQs; `ManualDriver` is the explicit CPU-unbound observability facade, constructed with `ManualDriver::setup_on` or `ManualDriver::setup_with_config_on`, and has no IRQ service. Both facades forward to one private shared core with clone-shared cancel-safe accounting. The device still owns only PDMA-local IRQ state and never stores or invokes handlers. The old sync stack remains retired under `model/retired/v0_6_sync_reference/`.
 
 ## CONVENTIONS
 
@@ -60,14 +60,15 @@ v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `p
 - Keep handler futures atomic across their complete execution and do not promise IRQ priority before host delivery has requested the FIFO CPU gate.
 - Register every host handler by `IrqVector` before delivery starts. Multiple sources may share a vector; each vector has one persistent handler entry.
 - Keep IRQ-visible mutable software state in `CpuLocal<T>` or another explicitly modeled single-copy transfer. `CpuLocal::with` is synchronous, CPU-bound, and must not expose a guard or borrow across `.await`.
-- CPU-bound `AsyncDriver` setup must occur inside an active matching `SoftwareCpu`; clones share one accounting state. System scenarios use manual setup only in the five named zero-entry observability tests; focused host tests may exercise the explicit manual API itself.
+- CPU-bound `AsyncDriver` setup must occur inside an active matching `SoftwareCpu`; it alone services IRQs. `ManualDriver::setup_on` and `ManualDriver::setup_with_config_on` are CPU-unbound observability setup only and expose no IRQ service. Both facades use one private core and clones share one accounting state. System scenarios use manual setup only in the five named zero-entry observability tests; focused host tests may exercise the explicit manual API itself.
+- The private `SoftwareCpuToken` occupies one `CURRENT_SOFTWARE_CPU` option only while an inner main or IRQ-handler poll executes. Its RAII guard restores the prior token after that poll, including a temporarily nested CPU context.
 - Every nested poll of a CPU-bound create, submit, doorbell, completion, or event port
   future must first validate the owning active CPU. Migration to inactive or wrong-CPU
   execution returns the typed error before the operation's commit point. Create commits
   only on `Ok(_)`, submit/doorbell only on `Ok(())`, record removal only on
   `Ok(Some(_))`, and dropping a pending port future leaves its device state unchanged.
 - Keep actor construction/spawn/shutdown/join, trace instrumentation/collection, and final assertions in the scenario harness. The disabled-submission trace test is the sole intentional trace-control interleaving inside main.
-- Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 54 total, 49 one-entry software tests, and the same five zero-entry exceptions documented in the architecture spec.
+- Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 55 total, 50 one-entry software tests, and the same five zero-entry exceptions documented in the architecture spec.
 - Do not register or invoke software handlers from the device loop; handlers belong to host IRQ delivery.
 - Keep operation descriptors conceptual; exact byte layout, register offsets, C ABI, and generated headers stay deferred.
 - Keep Rust files below 250 pure LOC; split by responsibility before growing `desc.rs` or `device.rs`.
@@ -80,7 +81,7 @@ v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `p
 - Treat `docs/white_boards/**` as exploratory background, not active implementation scope.
 - Do not add unsafe code, descriptor ABI, register maps, or C headers in v0.8 slices.
 - Do not add a duplicate host enable/mask layer while the modeled system has only one PDMA device; device-local mask/ack remains distinct from host handler dispatch.
-- Do not expose raw CPU identity, mutex guards, async CPU-local borrows, or a manual-driver escape hatch for software-bearing scenarios.
+- Do not expose raw CPU identity, mutex guards, async CPU-local borrows, or a manual-driver escape hatch for software-bearing scenarios. Do not give `ManualDriver` IRQ service or weaken `AsyncDriver` CPU validation.
 - Do not publish success completions after memory faults.
 - Do not weaken tests to pass validation.
 

@@ -66,8 +66,10 @@ main segment; only a real `Poll::Pending` releases the FIFO CPU gate. An immedia
 ready `.await` remains in the same segment.
 
 `SoftwareCpu::run_irq` holds that same gate for the complete handler future, including
-its suspended intervals. The private active CPU identity is installed only while the
-main or handler future is being polled. Therefore:
+its suspended intervals. The private `SoftwareCpuToken` is installed in the one
+`CURRENT_SOFTWARE_CPU` option only around an actual inner main or handler poll. Its RAII
+guard restores the previous option after that poll, including when one CPU temporarily
+polls inside another CPU's context. Therefore:
 
 - main and handler code never execute concurrently;
 - handlers cannot nest;
@@ -89,27 +91,30 @@ contract.
 
 ## Shared Driver Accounting and Cancellation
 
-Software-bearing setup uses `AsyncDriver::setup_on` or
-`setup_with_config_on`. It captures the active private CPU identity before calling
-`create_queue` and validates that owner before every nested poll of the create future.
-Off-context setup, or a pending setup resumed inactive/on another CPU, therefore returns
-the typed CPU error before queue creation or queue-ID consumption.
+Software-bearing setup uses CPU-bound `AsyncDriver::setup_on` or
+`AsyncDriver::setup_with_config_on`. It captures the active private CPU identity before
+calling `create_queue` and validates that owner before every nested poll of the create
+future. `AsyncDriver` exclusively services IRQs. Off-context setup, or a pending setup
+resumed inactive/on another CPU, therefore returns the typed CPU error before queue
+creation or queue-ID consumption.
 
-When one of the five zero-entry system-scenario observability tests needs a driver, it uses
-the explicit `setup_manual_on`/`setup_manual_with_config_on` path. There are exactly four
-scenario call sites; a focused host integration test separately verifies manual-mode parity:
-one in the step-budget test, one in the manual run-until-blocked test, and two for the
-baseline/traced drivers in the manual tracing comparison. Manual setup is not an
-IRQ-sharing escape hatch.
+`ManualDriver` is the explicit CPU-unbound observability facade. It is constructed with
+`ManualDriver::setup_on` or `ManualDriver::setup_with_config_on` and has no IRQ service.
+The five zero-entry system-scenario observability tests contain exactly four such setup
+calls: one in the step-budget test, one in the manual run-until-blocked test, and two for
+the baseline/traced drivers in the manual tracing comparison. A focused host integration
+test separately verifies manual-mode parity. Manual setup is not an IRQ-sharing escape
+hatch.
 
-An `AsyncDriver` stores immutable queue identity separately from one shared accounting
-allocation. Every clone observes the same next-command ID, free-slot budget, and
-deferred rollback queue. A common adapter validates the owning active `SoftwareCpu`
-before every inner poll of CPU-bound create, submit, doorbell, completion, and event
-port futures. A future that first returned `Pending` on its owner cannot later commit
-when resumed outside software CPU execution or on another CPU; it returns
-`SoftwareCpuInactive` or `SoftwareCpuMismatch` before polling the inner port operation.
-Manual accounting uses the same adapter without adding a modeled CPU identity.
+Both facades hold immutable queue identity plus one private shared core with one
+clone-shared accounting allocation. Every clone observes the same next-command ID,
+free-slot budget, and deferred rollback queue. The CPU-bound accounting path validates
+the owning active `SoftwareCpu` before every inner poll of create, submit, doorbell,
+completion, and event port futures. A future that first returned `Pending` on its owner
+cannot later commit when resumed outside software CPU execution or on another CPU; it
+returns `SoftwareCpuInactive` or `SoftwareCpuMismatch` before polling the inner port
+operation. Manual accounting uses the same commit and cancellation mechanics without a
+modeled CPU identity.
 
 Submission and polling semantics are:
 
@@ -165,11 +170,21 @@ credit, main's retained clone submits the next operation, and a final retained-m
 submission succeeds. Milestones prove a pending handler blocks main and the other vector
 until it returns; trace and summary counts prove all successful turns.
 
+The standalone `message_irq_linear_copy` story keeps one complete nominal path in one
+file: the single software main registers an async-closure handler, configures a Message
+route, and submits a copy; device completion publication latches and emits the IRQ; host
+delivery enters the handler; the handler drains and acknowledges the completion; and the
+same main program resumes to observe the copied bytes. The harness constructs and runs
+the deferred delivery runner, while software owns the bootstrap through one complete
+handler-registration transaction. Successful registration automatically publishes the
+fixed registry to the runner; the internal ownership handoff does not leak a channel or
+start operation into the scenario.
+
 ## Validation Invariant
 
-The scenario suite contains 54 tests:
+The scenario suite contains 55 tests:
 
-- 49 software-bearing tests, each with exactly one complete `run_main`;
+- 50 software-bearing tests, each with exactly one complete `run_main`;
 - five zero-entry pure device/manual observability tests:
   - `reports_step_budget_exhaustion_when_work_remains`;
   - `async_runner_no_work_reports_idle_status`;
@@ -177,8 +192,9 @@ The scenario suite contains 54 tests:
   - `async_tracing_preserves_manual_run_until_idle_behavior`;
   - `async_trace_log_records_idle_status_steps`.
 
-The IRQ scenario binary contains exactly four tests and four `run_main` calls. The five
-zero-entry tests contain exactly four explicit manual setup calls.
+The IRQ mechanism binary contains exactly four tests and four `run_main` calls; the
+standalone nominal Message-IRQ copy adds one test and one `run_main`. The five zero-entry
+tests contain exactly four explicit manual setup calls.
 
 Workspace closeout gates are:
 

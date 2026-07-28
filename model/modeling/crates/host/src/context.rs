@@ -16,36 +16,44 @@ mod tests;
 pub use cpu_local::CpuLocal;
 
 #[derive(Debug)]
-struct CpuIdentity;
+struct SoftwareCpuToken;
 
 thread_local! {
-    static ACTIVE_CPUS: RefCell<Vec<Arc<CpuIdentity>>> = const { RefCell::new(Vec::new()) };
+    static CURRENT_SOFTWARE_CPU: RefCell<Option<Arc<SoftwareCpuToken>>> = const { RefCell::new(None) };
 }
 
-struct ActiveCpu;
+struct ActiveCpu {
+    previous: Option<Arc<SoftwareCpuToken>>,
+}
 
 impl ActiveCpu {
-    fn enter(identity: Arc<CpuIdentity>) -> Self {
-        ACTIVE_CPUS.with(|active| active.borrow_mut().push(identity));
-        Self
+    fn enter(token: Arc<SoftwareCpuToken>) -> Self {
+        let previous = CURRENT_SOFTWARE_CPU.with(|current| {
+            // Install this poll's dynamic software CPU token.
+            current.replace(Some(token))
+        });
+        Self { previous }
     }
 }
 
 impl Drop for ActiveCpu {
     fn drop(&mut self) {
-        ACTIVE_CPUS.with(|active| drop(active.borrow_mut().pop()));
+        CURRENT_SOFTWARE_CPU.with(|current| {
+            // Restore the enclosing poll's token, if one exists.
+            current.replace(self.previous.take());
+        });
     }
 }
 
-fn active_cpu() -> Option<Arc<CpuIdentity>> {
-    ACTIVE_CPUS.with(|active| active.borrow().last().cloned())
+fn current_software_cpu() -> Option<Arc<SoftwareCpuToken>> {
+    CURRENT_SOFTWARE_CPU.with(|current| current.borrow().clone())
 }
 
 /// Single modeled CPU token shared by SW main and IRQ handler contexts.
 #[derive(Debug, Clone)]
 pub struct SoftwareCpu {
     gate: Arc<Mutex<()>>,
-    identity: Arc<CpuIdentity>,
+    token: Arc<SoftwareCpuToken>,
 }
 
 type CpuAcquisition = Pin<Box<dyn Future<Output = OwnedMutexGuard<()>> + Send>>;
@@ -55,13 +63,13 @@ impl SoftwareCpu {
     pub fn new() -> Self {
         Self {
             gate: Arc::new(Mutex::new(())),
-            identity: Arc::new(CpuIdentity),
+            token: Arc::new(SoftwareCpuToken),
         }
     }
 
     /// Binds one mutable value to this modeled CPU.
     pub fn local<T>(&self, value: T) -> CpuLocal<T> {
-        CpuLocal::new(Arc::clone(&self.identity), value)
+        CpuLocal::new(Arc::clone(&self.token), value)
     }
 
     /// Runs one complete SW-main program as atomic poll-to-pending segments.
@@ -70,7 +78,7 @@ impl SoftwareCpu {
         F: Future<Output = T>,
     {
         let gate = Arc::clone(&self.gate);
-        let identity = Arc::clone(&self.identity);
+        let token = Arc::clone(&self.token);
         let mut program = Box::pin(program);
         let mut acquisition: Option<CpuAcquisition> = None;
         poll_fn(move |context| {
@@ -78,7 +86,7 @@ impl SoftwareCpu {
                 acquisition.get_or_insert_with(|| Box::pin(Arc::clone(&gate).lock_owned()));
             let cpu = ready!(acquire.as_mut().poll(context));
             acquisition = None;
-            let active = ActiveCpu::enter(Arc::clone(&identity));
+            let active = ActiveCpu::enter(Arc::clone(&token));
             let state = program.as_mut().poll(context);
             drop(active);
             drop(cpu);
@@ -99,10 +107,10 @@ impl SoftwareCpu {
         F: Future<Output = T>,
     {
         let _cpu = Arc::clone(&self.gate).lock_owned().await;
-        let identity = Arc::clone(&self.identity);
+        let token = Arc::clone(&self.token);
         let mut work = Box::pin(work);
         poll_fn(move |context| {
-            let active = ActiveCpu::enter(Arc::clone(&identity));
+            let active = ActiveCpu::enter(Arc::clone(&token));
             let state = work.as_mut().poll(context);
             drop(active);
             state

@@ -1,6 +1,6 @@
 use pdma_model_contract::{BufferId, CommandId, CopyRequest, ModelError};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus, SyncDevice};
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
@@ -74,7 +74,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
 async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
     // Given: two manual driver capabilities for one depth-one queue.
     let mut device = SyncDevice::new();
-    let mut first = AsyncDriver::setup_manual_on(&mut device, 1, 1)
+    let mut first = ManualDriver::setup_on(&mut device, 1, 1)
         .await
         .expect("manual setup is valid");
     let mut second = first.clone();

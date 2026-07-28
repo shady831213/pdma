@@ -29,6 +29,10 @@ pub enum ModelError {
     DuplicateIrqVector(IrqVector),
     /// The host IRQ delivery registry has no handler for this vector.
     UnregisteredIrqVector(IrqVector),
+    /// Software completed deferred delivery registration without any vector handler.
+    EmptyIrqHandlerRegistry,
+    /// Deferred host IRQ delivery lost its software or harness endpoint before publication.
+    IrqDeliveryUnavailable,
     /// CPU-local state was accessed outside modeled software CPU execution.
     SoftwareCpuInactive,
     /// CPU-local state belongs to another modeled software CPU.
@@ -70,6 +74,10 @@ impl fmt::Display for ModelError {
             }
             Self::UnregisteredIrqVector(vector) => {
                 write!(f, "IRQ vector {} has no registered handler", vector.raw())
+            }
+            Self::EmptyIrqHandlerRegistry => f.write_str("IRQ handler registry must not be empty"),
+            Self::IrqDeliveryUnavailable => {
+                f.write_str("deferred host IRQ delivery is unavailable")
             }
             Self::SoftwareCpuInactive => f.write_str("software CPU context is inactive"),
             Self::SoftwareCpuMismatch => {

@@ -1,4 +1,4 @@
-use super::AsyncDriver;
+use super::{AsyncDriver, ManualDriver, core::DriverCore};
 use crate::AsyncDevicePort;
 use pdma_model_contract::{
     BroadcastCopyCommand, BroadcastCopyRequest, CommandId, CopyCommand, CopyRequest,
@@ -6,10 +6,9 @@ use pdma_model_contract::{
     VectorAddRequest,
 };
 
-impl AsyncDriver {
-    /// Emits a copy descriptor through an async device port and rings the doorbell.
-    pub async fn submit_copy_on(
-        &mut self,
+impl DriverCore {
+    async fn submit_copy_on(
+        &self,
         device: &mut impl AsyncDevicePort,
         request: CopyRequest,
     ) -> ModelResult<CommandId> {
@@ -24,9 +23,8 @@ impl AsyncDriver {
             .await
     }
 
-    /// Emits a strided copy descriptor through an async device port and rings the doorbell.
-    pub async fn submit_strided_copy_on(
-        &mut self,
+    async fn submit_strided_copy_on(
+        &self,
         device: &mut impl AsyncDevicePort,
         request: StridedCopyRequest,
     ) -> ModelResult<CommandId> {
@@ -41,9 +39,8 @@ impl AsyncDriver {
             .await
     }
 
-    /// Emits a broadcast copy descriptor through an async device port and rings the doorbell.
-    pub async fn submit_broadcast_copy_on(
-        &mut self,
+    async fn submit_broadcast_copy_on(
+        &self,
         device: &mut impl AsyncDevicePort,
         request: BroadcastCopyRequest,
     ) -> ModelResult<CommandId> {
@@ -62,9 +59,8 @@ impl AsyncDriver {
         .await
     }
 
-    /// Emits a vector-add descriptor through an async device port and rings the doorbell.
-    pub async fn submit_vector_add_on(
-        &mut self,
+    async fn submit_vector_add_on(
+        &self,
         device: &mut impl AsyncDevicePort,
         request: VectorAddRequest,
     ) -> ModelResult<CommandId> {
@@ -89,6 +85,7 @@ impl AsyncDriver {
         self.accounting
             .poll_valid(device.submit_command(self.queue_config.queue_id(), command))
             .await?;
+        // Acceptance transfers rollback ownership from the local reservation.
         reservation.disarm();
         self.accounting
             .poll_valid(device.ring_doorbell(self.queue_config.queue_id()))
@@ -96,3 +93,48 @@ impl AsyncDriver {
         Ok(command_id)
     }
 }
+
+macro_rules! impl_driver_submission {
+    ($driver:ty) => {
+        impl $driver {
+            /// Emits a copy descriptor through an async device port and rings the doorbell.
+            pub async fn submit_copy_on(
+                &mut self,
+                device: &mut impl AsyncDevicePort,
+                request: CopyRequest,
+            ) -> ModelResult<CommandId> {
+                self.core.submit_copy_on(device, request).await
+            }
+
+            /// Emits a strided copy descriptor through an async device port and rings the doorbell.
+            pub async fn submit_strided_copy_on(
+                &mut self,
+                device: &mut impl AsyncDevicePort,
+                request: StridedCopyRequest,
+            ) -> ModelResult<CommandId> {
+                self.core.submit_strided_copy_on(device, request).await
+            }
+
+            /// Emits a broadcast copy descriptor through an async port and rings the doorbell.
+            pub async fn submit_broadcast_copy_on(
+                &mut self,
+                device: &mut impl AsyncDevicePort,
+                request: BroadcastCopyRequest,
+            ) -> ModelResult<CommandId> {
+                self.core.submit_broadcast_copy_on(device, request).await
+            }
+
+            /// Emits a vector-add descriptor through an async device port and rings the doorbell.
+            pub async fn submit_vector_add_on(
+                &mut self,
+                device: &mut impl AsyncDevicePort,
+                request: VectorAddRequest,
+            ) -> ModelResult<CommandId> {
+                self.core.submit_vector_add_on(device, request).await
+            }
+        }
+    };
+}
+
+impl_driver_submission!(AsyncDriver);
+impl_driver_submission!(ManualDriver);

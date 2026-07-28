@@ -1,4 +1,4 @@
-use super::{CpuIdentity, active_cpu};
+use super::{SoftwareCpuToken, current_software_cpu};
 use pdma_model_contract::{ModelError, ModelResult};
 use std::{fmt, sync::Arc};
 use tokio::sync::Mutex;
@@ -32,12 +32,14 @@ use tokio::sync::Mutex;
 /// # let _ = future;
 /// ```
 pub struct CpuLocal<T> {
-    owner: Arc<CpuIdentity>,
+    // Owner token authorizes synchronous access from one modeled CPU.
+    owner: Arc<SoftwareCpuToken>,
+    // Canonical state stays shared across all capability clones.
     state: Arc<Mutex<T>>,
 }
 
 impl<T> CpuLocal<T> {
-    pub(super) fn new(owner: Arc<CpuIdentity>, value: T) -> Self {
+    pub(super) fn new(owner: Arc<SoftwareCpuToken>, value: T) -> Self {
         Self {
             owner,
             state: Arc::new(Mutex::new(value)),
@@ -45,13 +47,13 @@ impl<T> CpuLocal<T> {
     }
 
     pub(crate) fn capture_active(value: T) -> ModelResult<Self> {
-        let owner = active_cpu().ok_or(ModelError::SoftwareCpuInactive)?;
+        let owner = current_software_cpu().ok_or(ModelError::SoftwareCpuInactive)?;
         Ok(Self::new(owner, value))
     }
 
     /// Applies one synchronous operation while the owning CPU is active.
     pub fn with<R>(&self, operation: impl FnOnce(&mut T) -> R) -> ModelResult<R> {
-        let active = active_cpu().ok_or(ModelError::SoftwareCpuInactive)?;
+        let active = current_software_cpu().ok_or(ModelError::SoftwareCpuInactive)?;
         if !Arc::ptr_eq(&active, &self.owner) {
             return Err(ModelError::SoftwareCpuMismatch);
         }

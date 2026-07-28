@@ -45,13 +45,17 @@ The driver model, implemented in `model/modeling/crates/host/src/driver.rs`, own
 
 - Allocate device-visible buffers through `AsyncDevicePort` and fill source data through `write_buffer_on`.
 - Configure a CPU-bound queue with `AsyncDriver::setup_on` or
-  `setup_with_config_on`, receiving a `QueueConfigHandle`. The active software CPU is
-  captured before device queue creation and revalidated before every nested create poll.
-- Among system scenarios, use explicit manual setup only in the five named no-software
-  observability tests. A focused host integration test also exercises manual-mode parity
-  without representing a software-bearing scenario.
+  `AsyncDriver::setup_with_config_on`, receiving a `QueueConfigHandle`. The active
+  software CPU is captured before device queue creation and revalidated before every
+  nested create poll. `AsyncDriver` exclusively services IRQs.
+- Use CPU-unbound `ManualDriver` only as the explicit observability facade, constructed
+  with `ManualDriver::setup_on` or `ManualDriver::setup_with_config_on`; it has no IRQ
+  service. Among system scenarios, only the five named no-software observability tests
+  use it. A focused host integration test also exercises manual-mode parity without
+  representing a software-bearing scenario.
 - Assign monotonic per-queue command IDs and track free local command slots in one
-  accounting allocation shared by all driver clones.
+  private shared core with one accounting allocation shared by all clones of either
+  driver facade.
 - Build external request structs (`CopyRequest`, `StridedCopyRequest`, `BroadcastCopyRequest`, `VectorAddRequest`) and call the matching `submit_*` helper.
 - Ring the implicit doorbell by submitting through the driver helper.
 - Validate the owning active software CPU before every nested create, submit, doorbell,
@@ -199,12 +203,13 @@ later IRQ request does not overtake an already queued main request; the model ma
 broader scheduler-priority promise.
 
 `CpuLocal<T>` binds one mutable value to one private `SoftwareCpu` identity. Cloned
-capabilities share that single value without requiring `T: Clone`. The identity is
-active only while the owning main or handler future is being polled. Synchronous
-`CpuLocal::with` access returns typed inactive, mismatch, or busy errors and uses
-`try_lock`; it exposes no identity, lock, guard, reference escape, or async borrow across
-an await. Cancellation removes the active identity and releases the CPU gate through
-RAII.
+capabilities share that single value without requiring `T: Clone`. The private
+`SoftwareCpuToken` is installed in the single `CURRENT_SOFTWARE_CPU` option only around
+an actual inner main or handler poll; its RAII guard restores any prior token afterward.
+Synchronous `CpuLocal::with` access returns typed inactive, mismatch, or busy errors and
+uses `try_lock`; it exposes no identity, lock, guard, reference escape, or async borrow
+across an await. Cancellation removes the active identity and releases the CPU gate
+through RAII.
 
 Driver IRQ service reads the delivered source, drains completion/event records, then
 acknowledges the device cause. This ordering is idempotent for redundant message
@@ -286,7 +291,7 @@ Every validated slice is guarded by narrative scenario tests in `model/modeling/
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo doc --workspace --no-deps --document-private-items`
 
-The 54 scenario tests contain 49 modeled software programs, each with exactly one
+The 55 scenario tests contain 50 modeled software programs, each with exactly one
 complete `run_main` entry. Five pure device/manual observability tests have no software
 actor and therefore no `run_main` entry:
 
@@ -297,8 +302,18 @@ actor and therefore no `run_main` entry:
 - `async_trace_log_records_idle_status_steps`.
 
 Three of those five tests contain four explicit manual-driver setup calls: the manual
-tracing comparison constructs separate baseline and traced drivers. The IRQ scenario
-binary contains four tests and four `run_main` calls.
+tracing comparison constructs separate baseline and traced drivers. The IRQ mechanism
+binary contains four tests and four `run_main` calls. The standalone
+`message_irq_linear_copy` test adds one complete nominal Message-IRQ path in one file:
+software handler registration, configuration and submission, device completion/IRQ
+emission, host delivery, handler drain/acknowledgment, and resumed-main observation.
+The common async-closure adapter keeps handler-future boxing at the host type-erasure
+boundary instead of every software handler call site.
+`IrqDelivery::defer` splits a software-side registration bootstrap from a harness-side
+runner. Software registers one handler directly or configures multiple handlers in one
+closure; successful registration automatically publishes the fixed registry, and the
+runner owns the resulting actor loop. The one-time ownership handoff remains private to
+the host API.
 
 Actor construction, spawn, shutdown, join, trace instrumentation/collection, and final
 assertions are scenario-harness responsibilities. The single intentional instrumentation

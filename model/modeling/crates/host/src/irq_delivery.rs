@@ -1,8 +1,10 @@
 //! Host-owned IRQ delivery actor.
 
+mod bootstrap;
 mod trace;
 
 use crate::{AsyncDevicePort, SoftwareCpu};
+pub use bootstrap::{IrqDeliveryBootstrap, IrqDeliveryRunner};
 use pdma_model_contract::{IrqNotification, IrqVector, ModelError, ModelResult, TraceEvent};
 use std::{
     collections::{BTreeMap, btree_map::Entry},
@@ -24,20 +26,84 @@ pub trait IrqHandler: Send {
     fn handle(&mut self, notification: IrqNotification) -> IrqHandlerFuture<'_>;
 }
 
+struct FunctionIrqHandler<F>(F);
+
+/// Adapts an async function or closure into a type-erased IRQ handler.
+pub const fn irq_handler<F, Fut>(handler: F) -> impl IrqHandler
+where
+    F: FnMut(IrqNotification) -> Fut + Send,
+    Fut: Future<Output = ModelResult<()>> + Send + 'static,
+{
+    FunctionIrqHandler(handler)
+}
+
+impl<F, Fut> IrqHandler for FunctionIrqHandler<F>
+where
+    F: FnMut(IrqNotification) -> Fut + Send,
+    Fut: Future<Output = ModelResult<()>> + Send + 'static,
+{
+    fn handle(&mut self, notification: IrqNotification) -> IrqHandlerFuture<'_> {
+        Box::pin((self.0)(notification))
+    }
+}
+
 /// Type-state marker for a delivery actor without a registered handler.
 #[derive(Debug)]
 pub struct NoHandler(PhantomData<()>);
 
+/// Mutable software registration surface for a fixed host IRQ handler registry.
+pub struct IrqHandlerRegistry<'handler> {
+    handlers: BTreeMap<IrqVector, Box<dyn IrqHandler + 'handler>>,
+}
+
+impl fmt::Debug for IrqHandlerRegistry<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("IrqHandlerRegistry")
+            .field("vectors", &self.handlers.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+impl<'handler> IrqHandlerRegistry<'handler> {
+    const fn new() -> Self {
+        Self {
+            handlers: BTreeMap::new(),
+        }
+    }
+
+    /// Adds one vector handler without replacing an existing registration.
+    pub fn register<H>(&mut self, vector: IrqVector, handler: H) -> ModelResult<()>
+    where
+        H: IrqHandler + 'handler,
+    {
+        match self.handlers.entry(vector) {
+            Entry::Vacant(entry) => {
+                entry.insert(Box::new(handler));
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(ModelError::DuplicateIrqVector(vector)),
+        }
+    }
+
+    fn into_handler_state(self) -> ModelResult<HasHandlers<'handler>> {
+        if self.handlers.is_empty() {
+            return Err(ModelError::EmptyIrqHandlerRegistry);
+        }
+        Ok(HasHandlers { registry: self })
+    }
+}
+
 /// Type-state marker carrying a non-empty vector-to-handler registry.
 pub struct HasHandlers<'handler> {
-    handlers: BTreeMap<IrqVector, Box<dyn IrqHandler + 'handler>>,
+    registry: IrqHandlerRegistry<'handler>,
 }
 
 impl fmt::Debug for HasHandlers<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("HasHandlers")
-            .field("vectors", &self.handlers.keys().collect::<Vec<_>>())
+            .field("registry", &self.registry)
             .finish()
     }
 }
@@ -90,17 +156,26 @@ impl<P> IrqDelivery<P, NoHandler> {
     where
         H: IrqHandler + 'handler,
     {
+        let mut handlers: BTreeMap<IrqVector, Box<dyn IrqHandler + 'handler>> = BTreeMap::new();
+        handlers.insert(vector, Box::new(handler));
+        self.with_handlers(HasHandlers {
+            registry: IrqHandlerRegistry { handlers },
+        })
+    }
+
+    fn with_handlers(
+        self,
+        handler: HasHandlers<'_>,
+    ) -> (IrqDelivery<P, HasHandlers<'_>>, IrqDeliveryHandle) {
         let handle = IrqDeliveryHandle {
             shutdown: self.shutdown_sender.clone(),
             trace: Arc::clone(&self.trace),
         };
-        let mut handlers: BTreeMap<IrqVector, Box<dyn IrqHandler + 'handler>> = BTreeMap::new();
-        handlers.insert(vector, Box::new(handler));
         (
             IrqDelivery {
                 port: self.port,
                 cpu: self.cpu,
-                handler: HasHandlers { handlers },
+                handler,
                 shutdown_sender: self.shutdown_sender,
                 shutdown: self.shutdown,
                 trace: self.trace,
@@ -119,13 +194,7 @@ where
     where
         H: IrqHandler + 'handler,
     {
-        match self.handler.handlers.entry(vector) {
-            Entry::Vacant(entry) => {
-                entry.insert(Box::new(handler));
-                Ok(())
-            }
-            Entry::Occupied(_) => Err(ModelError::DuplicateIrqVector(vector)),
-        }
+        self.handler.registry.register(vector, handler)
     }
 
     /// Runs until host shutdown is requested or the device notification stream closes.
@@ -148,6 +217,7 @@ where
             let vector = notification.vector();
             let handler = self
                 .handler
+                .registry
                 .handlers
                 .get_mut(&vector)
                 .ok_or(ModelError::UnregisteredIrqVector(vector))?;

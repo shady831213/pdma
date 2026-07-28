@@ -124,6 +124,8 @@ const fn message(id: usize, vector: IrqVector, source: IrqSource) -> IrqNotifica
 
 #[path = "irq_delivery/atomicity.rs"]
 mod atomicity;
+#[path = "irq_delivery/bootstrap.rs"]
+mod bootstrap;
 #[path = "irq_delivery/handler_error.rs"]
 mod handler_error;
 #[path = "irq_delivery/registry.rs"]

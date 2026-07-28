@@ -47,12 +47,23 @@ async fn cpu_local_rejects_access_from_another_cpu() {
     let owner = SoftwareCpu::new();
     let other = SoftwareCpu::new();
     let state = owner.local(0_u8);
+    let other_state = other.local(1_u8);
+    let foreign_state = state.clone();
 
-    let result = other
-        .run_main(async move { state.with(|value| *value) })
+    let result = owner
+        .run_main(async move {
+            let nested_result = other
+                .run_main(async move {
+                    assert_eq!(other_state.with(|value| *value), Ok(1));
+                    foreign_state.with(|value| *value)
+                })
+                .await;
+            assert_eq!(nested_result, Err(ModelError::SoftwareCpuMismatch));
+            state.with(|value| *value += 1)
+        })
         .await;
 
-    assert_eq!(result, Err(ModelError::SoftwareCpuMismatch));
+    assert_eq!(result, Ok(()));
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -1,16 +1,17 @@
 //! SDK/driver-like async submission and completion polling model.
 
 mod accounting;
+mod core;
 mod irq;
 mod submission;
 
 pub use irq::DriverIrqRecord;
 
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::error::ModelResult;
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::queue::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
+use core::DriverCore;
+use pdma_model_contract::{
+    BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, ModelResult,
+    QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
+};
 
 use crate::AsyncDevicePort;
 
@@ -21,8 +22,15 @@ use crate::AsyncDevicePort;
 /// queued command and its consumed slot, including cancellation during the doorbell operation.
 #[derive(Debug, Clone)]
 pub struct AsyncDriver {
-    queue_config: QueueConfigHandle,
-    accounting: accounting::SharedAccounting,
+    core: DriverCore,
+}
+
+/// Explicit CPU-unbound driver facade for manual device observability.
+///
+/// Clones share command IDs, queue credit, and deferred reservation rollback state.
+#[derive(Debug, Clone)]
+pub struct ManualDriver {
+    core: DriverCore,
 }
 
 impl AsyncDriver {
@@ -50,20 +58,19 @@ impl AsyncDriver {
         config: QueueConfig,
     ) -> ModelResult<Self> {
         let accounting = accounting::SharedAccounting::capture_active(config.command_depth())?;
-        let queue_config = accounting.poll_valid(device.create_queue(config)).await?;
-        Ok(Self {
-            queue_config,
-            accounting,
-        })
+        let core = DriverCore::setup_on(device, config, accounting).await?;
+        Ok(Self { core })
     }
+}
 
+impl ManualDriver {
     /// Sets up one command queue for an intentional manual-observability path.
-    pub async fn setup_manual_on(
+    pub async fn setup_on(
         device: &mut impl AsyncDevicePort,
         command_depth: usize,
         completion_depth: usize,
     ) -> ModelResult<Self> {
-        Self::setup_manual_with_config_on(
+        Self::setup_with_config_on(
             device,
             QueueConfig::new(
                 command_depth,
@@ -76,92 +83,81 @@ impl AsyncDriver {
     }
 
     /// Sets up one manually driven queue from an explicit queue configuration.
-    pub async fn setup_manual_with_config_on(
+    pub async fn setup_with_config_on(
         device: &mut impl AsyncDevicePort,
         config: QueueConfig,
     ) -> ModelResult<Self> {
         let accounting = accounting::SharedAccounting::manual(config.command_depth());
-        let queue_config = accounting.poll_valid(device.create_queue(config)).await?;
-        Ok(Self {
-            queue_config,
-            accounting,
-        })
-    }
-
-    /// Allocates a device-visible buffer through an async device port.
-    pub async fn allocate_buffer_on(
-        &self,
-        device: &mut impl AsyncDevicePort,
-        len: usize,
-    ) -> BufferId {
-        device.allocate_buffer(len).await
-    }
-
-    /// Writes a complete buffer payload at offset zero through an async device port.
-    pub async fn write_buffer_on(
-        &self,
-        device: &mut impl AsyncDevicePort,
-        buffer: BufferId,
-        data: &[u8],
-    ) -> ModelResult<()> {
-        device.write_buffer(buffer, 0, data).await
-    }
-
-    /// Reads a checked buffer payload at offset zero through an async device port.
-    pub async fn read_buffer_on(
-        &self,
-        device: &impl AsyncDevicePort,
-        buffer: BufferId,
-        len: usize,
-    ) -> ModelResult<Vec<u8>> {
-        device.read_buffer(buffer, 0, len).await
-    }
-
-    /// Polls one completion through an async device port and reclaims one local command slot.
-    pub async fn poll_completion_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-    ) -> ModelResult<Option<CompletionRecord>> {
-        let completion = self
-            .accounting
-            .poll_valid(device.poll_completion(self.queue_config.completion_ring_id()))
-            .await?;
-        if completion.is_some() {
-            self.accounting.reclaim()?;
-        }
-        Ok(completion)
-    }
-
-    /// Polls one event through an async device port and reclaims one local command slot.
-    pub async fn poll_event_on(
-        &mut self,
-        device: &mut impl AsyncDevicePort,
-    ) -> ModelResult<Option<EventRecord>> {
-        let event = match self.queue_config.event_routing() {
-            EventRouting::QueueLocal => {
-                self.accounting
-                    .poll_valid(device.poll_queue_event(self.queue_config.queue_id()))
-                    .await?
-            }
-        };
-        if event.is_some() {
-            self.accounting.reclaim()?;
-        }
-        Ok(event)
-    }
-
-    /// Queue ID owned by this driver instance.
-    pub const fn queue_id(&self) -> QueueId {
-        self.queue_config.queue_id()
-    }
-
-    /// Completion ring ID owned by this driver instance.
-    pub const fn completion_ring_id(&self) -> CompletionRingId {
-        self.queue_config.completion_ring_id()
-    }
-
-    /// Queue configuration handle owned by this driver instance.
-    pub const fn queue_config_handle(&self) -> QueueConfigHandle {
-        self.queue_config
+        let core = DriverCore::setup_on(device, config, accounting).await?;
+        Ok(Self { core })
     }
 }
+
+macro_rules! impl_driver_data_plane {
+    ($driver:ty) => {
+        impl $driver {
+            /// Allocates a device-visible buffer through an async device port.
+            pub async fn allocate_buffer_on(
+                &self,
+                device: &mut impl AsyncDevicePort,
+                len: usize,
+            ) -> BufferId {
+                self.core.allocate_buffer_on(device, len).await
+            }
+
+            /// Writes a complete buffer payload at offset zero through an async device port.
+            pub async fn write_buffer_on(
+                &self,
+                device: &mut impl AsyncDevicePort,
+                buffer: BufferId,
+                data: &[u8],
+            ) -> ModelResult<()> {
+                self.core.write_buffer_on(device, buffer, data).await
+            }
+
+            /// Reads a checked buffer payload at offset zero through an async device port.
+            pub async fn read_buffer_on(
+                &self,
+                device: &impl AsyncDevicePort,
+                buffer: BufferId,
+                len: usize,
+            ) -> ModelResult<Vec<u8>> {
+                self.core.read_buffer_on(device, buffer, len).await
+            }
+
+            /// Polls one completion and reclaims one local command slot.
+            pub async fn poll_completion_on(
+                &mut self,
+                device: &mut impl AsyncDevicePort,
+            ) -> ModelResult<Option<CompletionRecord>> {
+                self.core.poll_completion_on(device).await
+            }
+
+            /// Polls one event and reclaims one local command slot.
+            pub async fn poll_event_on(
+                &mut self,
+                device: &mut impl AsyncDevicePort,
+            ) -> ModelResult<Option<EventRecord>> {
+                self.core.poll_event_on(device).await
+            }
+
+            /// Queue ID owned by this driver instance.
+            pub const fn queue_id(&self) -> QueueId {
+                self.core.queue_id()
+            }
+
+            /// Completion ring ID owned by this driver instance.
+            pub const fn completion_ring_id(&self) -> CompletionRingId {
+                self.core.completion_ring_id()
+            }
+
+            /// Queue configuration handle owned by this driver instance.
+            pub const fn queue_config_handle(&self) -> QueueConfigHandle {
+                self.core.queue_config_handle()
+            }
+        }
+    };
+}
+
+impl_driver_data_plane!(AsyncDriver);
+impl_driver_data_plane!(ManualDriver);

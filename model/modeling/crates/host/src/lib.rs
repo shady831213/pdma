@@ -6,9 +6,9 @@ mod irq_delivery;
 mod port;
 
 pub use context::{CpuLocal, SoftwareCpu};
-pub use driver::{AsyncDriver, DriverIrqRecord};
+pub use driver::{AsyncDriver, DriverIrqRecord, ManualDriver};
 pub use irq_delivery::{
-    HasHandlers, IrqDelivery, IrqDeliveryHandle, IrqDeliverySummary, IrqHandler, IrqHandlerFuture,
-    NoHandler,
+    HasHandlers, IrqDelivery, IrqDeliveryBootstrap, IrqDeliveryHandle, IrqDeliveryRunner,
+    IrqDeliverySummary, IrqHandler, IrqHandlerFuture, IrqHandlerRegistry, NoHandler, irq_handler,
 };
 pub use port::AsyncDevicePort;

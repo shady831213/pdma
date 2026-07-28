@@ -5,7 +5,10 @@ use pdma_model_contract::{
     IrqSource, IrqVector, ModelError, ModelResult, TraceEvent, TraceEventKind,
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
-use pdma_model_host::{AsyncDriver, DriverIrqRecord, IrqDelivery, SoftwareCpu, irq_handler};
+use pdma_model_host::{
+    AsyncDriver, CpuLocal, DriverIrqRecord, IrqDelivery, SoftwareCpu, StatefulIrqHandler,
+    stateful_irq_handler,
+};
 use tokio::sync::oneshot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +22,31 @@ enum SoftwarePhase {
 struct HandlerReport {
     notification: IrqNotification,
     records: Vec<DriverIrqRecord>,
+}
+
+struct LinearCopyHandler {
+    driver: AsyncDriver,
+    port: AsyncDeviceHandle,
+    phase: CpuLocal<SoftwarePhase>,
+    report: Option<oneshot::Sender<HandlerReport>>,
+}
+
+impl StatefulIrqHandler for LinearCopyHandler {
+    async fn handle(&mut self, notification: IrqNotification) -> ModelResult<()> {
+        self.phase.with(|phase| *phase = SoftwarePhase::Handler)?;
+        let records = self
+            .driver
+            .service_irq_on(&mut self.port, notification)
+            .await?;
+        // This report is scenario evidence, not part of IRQ handler mechanics.
+        if let Some(report) = self.report.take() {
+            drop(report.send(HandlerReport {
+                notification,
+                records,
+            }));
+        }
+        Ok(())
+    }
 }
 
 struct MainOutcome {
@@ -46,7 +74,6 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
     start_trace(&port).await;
     let cpu = SoftwareCpu::new();
     let phase = cpu.local(SoftwarePhase::MainBeforeSubmit);
-    let handler_driver = cpu.local(None::<AsyncDriver>);
     let vector = IrqVector::new(64);
     // Test-only rendezvous: main consumes the handler's observation to prove main-handler-main.
     let (report_tx, report_rx) = oneshot::channel();
@@ -61,37 +88,11 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
             let source = IrqSource::Completion(driver.completion_ring_id());
-            handler_driver.with(|slot| *slot = Some(driver.clone()))?;
-            let handler_driver = handler_driver.clone();
-            let handler_phase = phase.clone();
-            let handler_port = main_port.clone();
-            let mut report = Some(report_tx);
-            let handler = irq_handler(move |notification| {
-                // Per-turn owned captures: phase/report are test probes; driver_slot/port
-                // are specific to this handler's async IRQ service, not universal boilerplate.
-                let driver_slot = handler_driver.clone();
-                let phase = handler_phase.clone();
-                let mut port = handler_port.clone();
-                let report = report.take();
-                async move {
-                    // CpuLocal cannot lend across await, so this handler moves out the driver
-                    // for async service and restores it afterward; other handlers may not need it.
-                    let Some(mut driver) = driver_slot.with(Option::take)? else {
-                        return Err(ModelError::SoftwareCpuStateBusy);
-                    };
-                    phase.with(|phase| *phase = SoftwarePhase::Handler)?;
-                    let records = driver.service_irq_on(&mut port, notification).await;
-                    driver_slot.with(|slot| *slot = Some(driver))?;
-                    let records = records?;
-                    // This report is scenario evidence, not part of IRQ handler mechanics.
-                    if let Some(report) = report {
-                        drop(report.send(HandlerReport {
-                            notification,
-                            records,
-                        }));
-                    }
-                    Ok(())
-                }
+            let handler = stateful_irq_handler(LinearCopyHandler {
+                driver: driver.clone(),
+                port: main_port.clone(),
+                phase: phase.clone(),
+                report: Some(report_tx),
             });
             delivery.register_handler(vector, handler)?;
             main_port

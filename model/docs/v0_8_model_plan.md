@@ -171,20 +171,27 @@ submission succeeds. Milestones prove a pending handler blocks main and the othe
 until it returns; trace and summary counts prove all successful turns.
 
 The standalone `message_irq_linear_copy` story keeps one complete nominal path in one
-file: the single software main registers an async-closure handler, configures a Message
-route, and submits a copy; device completion publication latches and emits the IRQ; host
-delivery enters the handler; the handler drains and acknowledges the completion; and the
-same main program resumes to observe the copied bytes. The harness constructs and runs
-the deferred delivery runner, while software owns the bootstrap through one complete
-handler-registration transaction. Successful registration automatically publishes the
-fixed registry to the runner; the internal ownership handoff does not leak a channel or
-start operation into the scenario.
+file: the single software main registers a persistent stateful handler, configures a
+Message route, and submits a copy; device completion publication latches and emits the
+IRQ; host delivery enters the handler; the handler drains and acknowledges the
+completion; and the same main program resumes to observe the copied bytes. The handler
+owns its await-spanning driver and port capabilities directly, while test-only shared
+phase remains `CpuLocal`. The harness constructs and runs the deferred delivery runner,
+while software owns the bootstrap through one complete handler-registration transaction.
+Successful registration automatically publishes the fixed registry to the runner; the
+internal ownership handoff does not leak a channel or start operation into the scenario.
+
+The standalone `message_irq_dual_handler` story registers completion and event vectors
+to two independent persistent handlers. Main and both handlers each retain an
+`AsyncDriver` clone over one shared depth-one accounting state. A success, a fault, and
+a second success prove that either handler can reclaim credit for main, while per-handler
+call counts prove the completion handler remains persistent across repeated turns.
 
 ## Validation Invariant
 
-The scenario suite contains 55 tests:
+The scenario suite contains 56 tests:
 
-- 50 software-bearing tests, each with exactly one complete `run_main`;
+- 51 software-bearing tests, each with exactly one complete `run_main`;
 - five zero-entry pure device/manual observability tests:
   - `reports_step_budget_exhaustion_when_work_remains`;
   - `async_runner_no_work_reports_idle_status`;
@@ -192,9 +199,9 @@ The scenario suite contains 55 tests:
   - `async_tracing_preserves_manual_run_until_idle_behavior`;
   - `async_trace_log_records_idle_status_steps`.
 
-The IRQ mechanism binary contains exactly four tests and four `run_main` calls; the
-standalone nominal Message-IRQ copy adds one test and one `run_main`. The five zero-entry
-tests contain exactly four explicit manual setup calls.
+The IRQ mechanism binary contains exactly four tests and four `run_main` calls; the two
+standalone Message-IRQ stories add two tests and two `run_main` calls. The five
+zero-entry tests contain exactly four explicit manual setup calls.
 
 Workspace closeout gates are:
 

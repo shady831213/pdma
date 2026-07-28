@@ -60,6 +60,7 @@ v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `p
 - Keep handler futures atomic across their complete execution and do not promise IRQ priority before host delivery has requested the FIFO CPU gate.
 - Register every host handler by `IrqVector` before delivery starts. Multiple sources may share a vector; each vector has one persistent handler entry.
 - Keep IRQ-visible mutable software state in `CpuLocal<T>` or another explicitly modeled single-copy transfer. `CpuLocal::with` is synchronous, CPU-bound, and must not expose a guard or borrow across `.await`.
+- Keep await-spanning state private to one handler in its persistent `StatefulIrqHandler`; do not shuttle handler-owned resources through `CpuLocal<Option<T>>` on every IRQ turn.
 - CPU-bound `AsyncDriver` setup must occur inside an active matching `SoftwareCpu`; it alone services IRQs. `ManualDriver::setup_on` and `ManualDriver::setup_with_config_on` are CPU-unbound observability setup only and expose no IRQ service. Both facades use one private core and clones share one accounting state. System scenarios use manual setup only in the five named zero-entry observability tests; focused host tests may exercise the explicit manual API itself.
 - The private `SoftwareCpuToken` occupies one `CURRENT_SOFTWARE_CPU` option only while an inner main or IRQ-handler poll executes. Its RAII guard restores the prior token after that poll, including a temporarily nested CPU context.
 - Every nested poll of a CPU-bound create, submit, doorbell, completion, or event port
@@ -68,7 +69,7 @@ v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `p
   only on `Ok(_)`, submit/doorbell only on `Ok(())`, record removal only on
   `Ok(Some(_))`, and dropping a pending port future leaves its device state unchanged.
 - Keep actor construction/spawn/shutdown/join, trace instrumentation/collection, and final assertions in the scenario harness. The disabled-submission trace test is the sole intentional trace-control interleaving inside main.
-- Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 55 total, 50 one-entry software tests, and the same five zero-entry exceptions documented in the architecture spec.
+- Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 56 total, 51 one-entry software tests, and the same five zero-entry exceptions documented in the architecture spec.
 - Do not register or invoke software handlers from the device loop; handlers belong to host IRQ delivery.
 - Keep operation descriptors conceptual; exact byte layout, register offsets, C ABI, and generated headers stay deferred.
 - Keep Rust files below 250 pure LOC; split by responsibility before growing `desc.rs` or `device.rs`.

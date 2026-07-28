@@ -45,6 +45,9 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - `CpuLocal<T>` is the modeled single-copy mutable software-state capability. Access is
   synchronous and valid only during a poll of the owning CPU's main or handler future;
   do not expose a lock, guard, raw CPU identity, or await-spanning borrow.
+- Await-spanning state private to one vector handler belongs in its persistent
+  `StatefulIrqHandler`; do not shuttle handler-owned resources through
+  `CpuLocal<Option<T>>` on every IRQ turn.
 - The private `SoftwareCpuToken` is installed in the single `CURRENT_SOFTWARE_CPU` option
   only around an actual inner main or handler poll. RAII restores any prior token after the
   poll, so a nested CPU context does not erase its enclosing context.
@@ -61,7 +64,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - Actor construction/spawn/shutdown/join, trace instrumentation/collection, and final
   assertions belong to the harness. The disabled-submission trace edge test alone keeps
   trace enable/clear inside main to preserve its deliberate interleaving.
-- The scenario invariant is 55 tests: 50 software-bearing tests with one `run_main` and
+- The scenario invariant is 56 tests: 51 software-bearing tests with one `run_main` and
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.

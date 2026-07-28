@@ -26,7 +26,18 @@ pub trait IrqHandler: Send {
     fn handle(&mut self, notification: IrqNotification) -> IrqHandlerFuture<'_>;
 }
 
+/// Persistent handler state with an awaitable, statically dispatched handler turn.
+pub trait StatefulIrqHandler: Send {
+    /// Handles one notification while borrowing the persistent handler state.
+    fn handle(
+        &mut self,
+        notification: IrqNotification,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
+}
+
 struct FunctionIrqHandler<F>(F);
+
+struct StatefulIrqHandlerAdapter<H>(H);
 
 /// Adapts an async function or closure into a type-erased IRQ handler.
 pub const fn irq_handler<F, Fut>(handler: F) -> impl IrqHandler
@@ -37,6 +48,14 @@ where
     FunctionIrqHandler(handler)
 }
 
+/// Adapts persistent async handler state into a type-erased IRQ handler.
+pub const fn stateful_irq_handler<H>(handler: H) -> impl IrqHandler
+where
+    H: StatefulIrqHandler,
+{
+    StatefulIrqHandlerAdapter(handler)
+}
+
 impl<F, Fut> IrqHandler for FunctionIrqHandler<F>
 where
     F: FnMut(IrqNotification) -> Fut + Send,
@@ -44,6 +63,15 @@ where
 {
     fn handle(&mut self, notification: IrqNotification) -> IrqHandlerFuture<'_> {
         Box::pin((self.0)(notification))
+    }
+}
+
+impl<H> IrqHandler for StatefulIrqHandlerAdapter<H>
+where
+    H: StatefulIrqHandler,
+{
+    fn handle(&mut self, notification: IrqNotification) -> IrqHandlerFuture<'_> {
+        Box::pin(StatefulIrqHandler::handle(&mut self.0, notification))
     }
 }
 

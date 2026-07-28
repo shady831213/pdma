@@ -291,7 +291,7 @@ Every validated slice is guarded by narrative scenario tests in `model/modeling/
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo doc --workspace --no-deps --document-private-items`
 
-The 55 scenario tests contain 50 modeled software programs, each with exactly one
+The 56 scenario tests contain 51 modeled software programs, each with exactly one
 complete `run_main` entry. Five pure device/manual observability tests have no software
 actor and therefore no `run_main` entry:
 
@@ -307,8 +307,14 @@ binary contains four tests and four `run_main` calls. The standalone
 `message_irq_linear_copy` test adds one complete nominal Message-IRQ path in one file:
 software handler registration, configuration and submission, device completion/IRQ
 emission, host delivery, handler drain/acknowledgment, and resumed-main observation.
-The common async-closure adapter keeps handler-future boxing at the host type-erasure
-boundary instead of every software handler call site.
+The persistent stateful-handler adapter keeps await-spanning handler-owned capabilities
+in one registry entry and handler-future boxing at the host type-erasure boundary.
+Cross-context test phase remains `CpuLocal`; the handler does not take and restore its
+driver through a CPU-local option on every IRQ turn.
+The standalone `message_irq_dual_handler` test registers separate completion and event
+handlers. Main and both persistent handlers hold clones of one CPU-bound driver;
+depth-one success/fault/success submissions prove shared credit reclamation across
+repeated main/handler transitions while preserving independent handler call state.
 `IrqDelivery::defer` splits a software-side registration bootstrap from a harness-side
 runner. Software registers one handler directly or configures multiple handlers in one
 closure; successful registration automatically publishes the fixed registry, and the

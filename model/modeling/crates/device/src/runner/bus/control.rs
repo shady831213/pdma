@@ -68,6 +68,15 @@ impl BusControlState {
         }
     }
 
+    pub(in crate::runner) const fn epoch(&self) -> DeviceEpoch {
+        self.epoch
+    }
+
+    pub(in crate::runner) fn reset(&mut self, epoch: DeviceEpoch) {
+        self.epoch = epoch;
+        self.queues.clear();
+    }
+
     pub(super) fn queue(&self, queue: EpochQueue) -> Result<&ActiveQueue, BusControlError> {
         self.validate_queue(queue)?;
         self.queues

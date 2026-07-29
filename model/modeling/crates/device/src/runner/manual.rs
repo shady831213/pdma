@@ -16,7 +16,7 @@ use pdma_model_contract::trace::TraceEvent;
 /// Synchronous device surface for deterministic bounded steps without a worker task.
 #[derive(Debug)]
 pub struct SyncDevice {
-    backend: DeviceModel,
+    pub(in crate::runner) backend: DeviceModel,
     dma_space: DmaSpace,
     steps: usize,
     last_status: AsyncStepStatus,
@@ -98,11 +98,6 @@ impl SyncDevice {
     /// Returns the committed DMA allocator generation.
     pub const fn dma_generation(&self) -> u64 {
         self.dma_space.generation()
-    }
-
-    /// Reconstructs only the resettable queue-port backend while retaining DMA storage.
-    pub fn replace_queue_port_backend(&mut self, config: ResourceConfig) {
-        self.backend = DeviceModel::queue_port_with_resource_config(config);
     }
 
     /// Pushes one command into a queue's command ring.

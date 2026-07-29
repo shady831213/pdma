@@ -242,3 +242,10 @@ mod handler_error;
 mod registry;
 #[path = "irq_delivery/shutdown.rs"]
 mod shutdown;
+#[path = "irq_delivery/stale_reset.rs"]
+pub mod stale_reset;
+
+#[tokio::test(flavor = "current_thread")]
+async fn stale_notification_terminates_old_delivery_without_ack() -> ModelResult<()> {
+    stale_reset::run().await
+}

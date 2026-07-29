@@ -6,6 +6,7 @@ mod irq;
 mod manual;
 mod native;
 mod queue_api;
+mod reset;
 mod state;
 mod types;
 mod wait;
@@ -220,17 +221,6 @@ impl AsyncDeviceHandle {
     /// Returns the committed DMA allocator generation.
     pub async fn dma_generation(&self) -> u64 {
         self.shared.state.lock().await.dma_space.generation()
-    }
-
-    /// Reconstructs only the resettable queue-port backend while retaining DMA storage.
-    pub async fn replace_queue_port_backend(&self, config: ResourceConfig) {
-        let generation = {
-            let mut state = self.shared.state.lock().await;
-            state.backend = DeviceModel::queue_port_with_resource_config(config);
-            wake(&mut state);
-            state.generation
-        };
-        publish(&self.shared, generation);
     }
 
     /// Enables deterministic trace capture.

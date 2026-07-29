@@ -169,6 +169,18 @@ impl DeviceModel {
         }
     }
 
+    pub(super) const fn epoch(&self) -> DeviceEpoch {
+        match self {
+            Self::QueuePort(device) => device.epoch(),
+        }
+    }
+
+    pub(super) fn reset(&mut self, epoch: DeviceEpoch) {
+        match self {
+            Self::QueuePort(device) => device.reset(epoch),
+        }
+    }
+
     pub(super) const fn enable_tracing(&mut self) {
         match self {
             Self::QueuePort(device) => device.enable_tracing(),
@@ -200,9 +212,7 @@ impl DeviceModel {
     }
 
     fn validate_epoch(&self, actual: DeviceEpoch) -> ModelResult<()> {
-        let expected = match self {
-            Self::QueuePort(device) => device.epoch(),
-        };
+        let expected = self.epoch();
         if actual == expected {
             Ok(())
         } else {

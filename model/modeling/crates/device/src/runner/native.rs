@@ -3,6 +3,7 @@ mod copy;
 mod io;
 mod irq;
 mod irq_api;
+mod reset;
 mod resources;
 mod retirement;
 mod ring;

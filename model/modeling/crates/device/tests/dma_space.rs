@@ -1,7 +1,6 @@
 //! Checked DMA allocation, atomic staging, access, and backend-persistence tests.
 
-use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
+use pdma_model_contract::abi::{DeviceEpoch, DmaAddress, DmaRegion, WholeDeviceReset};
 use pdma_model_contract::ids::BufferId;
 use pdma_model_device::{DmaSpace, DmaSpaceError, SyncDevice};
 
@@ -106,8 +105,10 @@ fn allocations_and_checked_iova_access_survive_backend_reset() {
         .write_iova(region.base().checked_add(2).expect("offset"), &[7, 8, 9])
         .expect("checked write");
 
-    // When only the queue-port backend is replaced.
-    device.replace_queue_port_backend(ResourceConfig::default());
+    // When the whole device resets.
+    device
+        .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
+        .expect("reset advances epoch");
 
     // Then the mapping generation and backing bytes remain unchanged.
     assert_eq!(device.dma_generation(), 1);

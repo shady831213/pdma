@@ -28,7 +28,7 @@ impl DriverCore {
         &self,
         device: &mut impl AsyncDevicePort,
         len: usize,
-    ) -> BufferId {
+    ) -> ModelResult<BufferId> {
         device.allocate_buffer(len).await
     }
 

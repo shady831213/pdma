@@ -26,7 +26,8 @@ pub trait AsyncDevicePort: Send + Sync {
     ) -> impl Future<Output = ModelResult<QueueConfigHandle>> + Send;
 
     /// Allocates a device-visible memory buffer.
-    fn allocate_buffer(&mut self, len: usize) -> impl Future<Output = BufferId> + Send;
+    fn allocate_buffer(&mut self, len: usize)
+    -> impl Future<Output = ModelResult<BufferId>> + Send;
 
     /// Writes bytes into a checked device buffer range.
     fn write_buffer(

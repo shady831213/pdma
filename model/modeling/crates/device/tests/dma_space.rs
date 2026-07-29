@@ -39,6 +39,59 @@ fn staged_batch_returns_regions_and_commits_all_or_none() {
 }
 
 #[test]
+fn committed_region_exposes_object_base_and_length() {
+    // Given: a fresh checked DMA space.
+    let mut space = DmaSpace::new();
+
+    // When: one semantic-sized allocation commits.
+    let committed = space.allocate(7).expect("allocation");
+
+    // Then: its object, aligned base, length, and zeroed bytes are one exact mapping.
+    assert_eq!(committed.object(), BufferId::new(0));
+    assert_eq!(committed.base(), DmaAddress::new(0x1_0000));
+    assert_eq!(committed.length(), 7);
+    assert_eq!(space.region_for_object(committed.object()), Some(committed));
+    assert_eq!(space.read_iova(committed.base(), 7), Ok(vec![0; 7]));
+    assert_eq!(space.generation(), 1);
+}
+
+#[test]
+fn allocation_exhaustion_preserves_allocator_state() {
+    // Given: one committed mapping with sentinel bytes and its next allocation staged.
+    let mut space = DmaSpace::new();
+    let first = space.allocate(4).expect("first allocation");
+    space
+        .write_iova(first.base(), &[1, 2, 3, 4])
+        .expect("sentinel write");
+    let generation_before = space.generation();
+
+    // When: an allocation cannot fit in the bounded u64 DMA address space.
+    let exhausted = space.allocate(u64::MAX);
+
+    // Then: ID/base/mapping/bytes remain unchanged and the next success advances once.
+    assert_eq!(exhausted, Err(DmaSpaceError::AddressExhausted));
+    assert_eq!(space.generation(), generation_before);
+    assert_eq!(space.read_iova(first.base(), 4), Ok(vec![1, 2, 3, 4]));
+    assert_eq!(space.region_for_object(BufferId::new(1)), None);
+    let next = space.allocate(4).expect("next allocation");
+    assert_eq!(next.object(), BufferId::new(1));
+    assert_eq!(next.base(), DmaAddress::new(0x1_0040));
+    assert_eq!(next.length(), 4);
+    assert_eq!(space.read_iova(next.base(), 4), Ok(vec![0; 4]));
+    assert_eq!(space.generation(), generation_before + 1);
+    eprintln!(
+        "exhausted={exhausted:?} next_object={} next_base={:#x} next_length={} \
+         first_bytes={:?} next_bytes={:?} generation={}",
+        next.object().raw(),
+        next.base().raw(),
+        next.length(),
+        space.read_iova(first.base(), 4).expect("sentinel bytes"),
+        space.read_iova(next.base(), 4).expect("next bytes"),
+        space.generation(),
+    );
+}
+
+#[test]
 fn allocations_and_checked_iova_access_survive_backend_reset() {
     // Given a staged region committed beside a synchronous backend.
     let mut device = SyncDevice::new();

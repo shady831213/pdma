@@ -26,10 +26,22 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src_a, &[10, 11, 12, 13])
                 .await
@@ -108,10 +120,22 @@ async fn async_runner_event_publication_capacity_one_preserves_event_order_after
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let bad_src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let bad_dst_a = driver.allocate_buffer_on(&mut handle, 8).await;
-            let bad_src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-            let bad_dst_b = driver.allocate_buffer_on(&mut handle, 8).await;
+            let bad_src_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let bad_dst_a = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
+            let bad_src_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let bad_dst_b = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
 
             // When: software submits both invalid copies, fills event publication, then polls before retrying.
             let first_command = driver

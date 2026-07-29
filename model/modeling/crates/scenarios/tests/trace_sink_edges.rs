@@ -25,10 +25,22 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src_a, &[1, 2, 3, 4])
                 .await
@@ -84,8 +96,14 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
             let driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             let command = CopyCommand::new(
                 CommandId::new(0),
                 driver.queue_id(),
@@ -142,8 +160,14 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
             let mut driver_b = AsyncDriver::setup_on(&mut handle, 1, 4)
                 .await
                 .expect("second queue setup is valid");
-            let a_src = driver_a.allocate_buffer_on(&mut handle, 4).await;
-            let a_dst = driver_a.allocate_buffer_on(&mut handle, 8).await;
+            let a_src = driver_a
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let a_dst = driver_a
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
             driver_a
                 .submit_copy_on(&mut handle, CopyRequest::new(a_src, a_dst, 8))
                 .await

@@ -101,7 +101,7 @@ macro_rules! impl_driver_data_plane {
                 &self,
                 device: &mut impl AsyncDevicePort,
                 len: usize,
-            ) -> BufferId {
+            ) -> ModelResult<BufferId> {
                 self.core.allocate_buffer_on(device, len).await
             }
 

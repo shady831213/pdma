@@ -15,8 +15,14 @@ async fn async_runner_surface_interleaves_software_and_hardware_turns() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
                 .await
@@ -59,8 +65,14 @@ async fn async_runner_surface_poll_before_progress_observes_no_completion() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
                 .await
@@ -109,10 +121,22 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
                 let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                     .await
                     .expect("queue setup is valid");
-                let bad_src = driver.allocate_buffer_on(&mut handle, 4).await;
-                let bad_dst = driver.allocate_buffer_on(&mut handle, 4).await;
-                let good_src = driver.allocate_buffer_on(&mut handle, 4).await;
-                let good_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+                let bad_src = driver
+                    .allocate_buffer_on(&mut handle, 4)
+                    .await
+                    .expect("allocation");
+                let bad_dst = driver
+                    .allocate_buffer_on(&mut handle, 4)
+                    .await
+                    .expect("allocation");
+                let good_src = driver
+                    .allocate_buffer_on(&mut handle, 4)
+                    .await
+                    .expect("allocation");
+                let good_dst = driver
+                    .allocate_buffer_on(&mut handle, 4)
+                    .await
+                    .expect("allocation");
                 driver
                     .write_buffer_on(&mut handle, good_src, &[7, 8, 9, 10])
                     .await
@@ -176,8 +200,14 @@ async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 3, 5, 7])
                 .await

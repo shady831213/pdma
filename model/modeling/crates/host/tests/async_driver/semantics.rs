@@ -11,8 +11,14 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
     let (completion, next) = SoftwareCpu::new()
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut device, 1, 1).await?;
-            let src = driver.allocate_buffer_on(&mut device, 4).await;
-            let dst = driver.allocate_buffer_on(&mut device, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut device, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut device, 4)
+                .await
+                .expect("allocation");
             driver
                 .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
                 .await?;
@@ -46,7 +52,10 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
     let (event, next) = SoftwareCpu::new()
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;
-            let dst = driver.allocate_buffer_on(&mut port, 4).await;
+            let dst = driver
+                .allocate_buffer_on(&mut port, 4)
+                .await
+                .expect("allocation");
             driver
                 .submit_copy_on(&mut port, CopyRequest::new(BufferId::new(99), dst, 4))
                 .await?;
@@ -78,8 +87,14 @@ async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
         .await
         .expect("manual setup is valid");
     let mut second = first.clone();
-    let src = first.allocate_buffer_on(&mut device, 4).await;
-    let dst = first.allocate_buffer_on(&mut device, 4).await;
+    let src = first
+        .allocate_buffer_on(&mut device, 4)
+        .await
+        .expect("allocation");
+    let dst = first
+        .allocate_buffer_on(&mut device, 4)
+        .await
+        .expect("allocation");
 
     // When: one clone consumes, the peer observes full, then reclaims the completion.
     let submitted = first

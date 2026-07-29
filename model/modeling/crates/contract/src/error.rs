@@ -58,6 +58,8 @@ pub enum ModelError {
         /// Requested exclusive range end.
         end: usize,
     },
+    /// A DMA object cannot fit in the modeled address space or backing storage.
+    DmaAllocationExhausted,
     /// The driver has no locally reclaimed command slots.
     DriverQueueFull,
     /// The device still had runnable work after the caller's step budget expired.
@@ -110,6 +112,7 @@ impl fmt::Display for ModelError {
                     len
                 )
             }
+            Self::DmaAllocationExhausted => f.write_str("DMA allocation is exhausted"),
             Self::DriverQueueFull => f.write_str("driver command ring shadow is full"),
             Self::StepBudgetExhausted { max_steps } => {
                 write!(f, "device still has work after {max_steps} steps")

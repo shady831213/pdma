@@ -18,8 +18,14 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
 
             // When: the async runner executes the invalid copy and software polls its event.
             let command_id = driver
@@ -74,8 +80,14 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
             driver
                 .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
                 .await
@@ -125,10 +137,22 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
                 let mut driver_b = AsyncDriver::setup_on(&mut handle, 1, 4)
                     .await
                     .expect("queue setup is valid");
-                let src = driver_a.allocate_buffer_on(&mut handle, 4).await;
-                let dst = driver_a.allocate_buffer_on(&mut handle, 8).await;
-                let b_src = driver_b.allocate_buffer_on(&mut handle, 1).await;
-                let b_dst = driver_b.allocate_buffer_on(&mut handle, 1).await;
+                let src = driver_a
+                    .allocate_buffer_on(&mut handle, 4)
+                    .await
+                    .expect("allocation");
+                let dst = driver_a
+                    .allocate_buffer_on(&mut handle, 8)
+                    .await
+                    .expect("allocation");
+                let b_src = driver_b
+                    .allocate_buffer_on(&mut handle, 1)
+                    .await
+                    .expect("allocation");
+                let b_dst = driver_b
+                    .allocate_buffer_on(&mut handle, 1)
+                    .await
+                    .expect("allocation");
                 driver_a
                     .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
                     .await

@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+include!("async_driver/allocation.rs");
 #[path = "async_driver/cancellation.rs"]
 mod cancellation;
 #[path = "async_driver/poll_preflight.rs"]
@@ -52,8 +53,14 @@ async fn cloned_drivers_share_depth_one_command_credit() {
         .run_main(async {
             let mut first_driver = AsyncDriver::setup_on(&mut device, 1, 1).await?;
             let mut second_driver = first_driver.clone();
-            let src = first_driver.allocate_buffer_on(&mut device, 4).await;
-            let dst = first_driver.allocate_buffer_on(&mut device, 4).await;
+            let src = first_driver
+                .allocate_buffer_on(&mut device, 4)
+                .await
+                .expect("allocation");
+            let dst = first_driver
+                .allocate_buffer_on(&mut device, 4)
+                .await
+                .expect("allocation");
             let first = first_driver
                 .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
                 .await;
@@ -79,8 +86,14 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
     let (first, second) = SoftwareCpu::new()
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4).await?;
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
 
             // When: first async copy submit succeeds, second submit before polling is attempted.
             let first = driver
@@ -148,8 +161,8 @@ async fn stale_queue_and_result_capabilities_commit_nothing() {
         .expect("queue setup is valid");
     let stale_epoch = queue.epoch().next().expect("initial epoch can advance");
     let stale_queue = QueueConfigHandle::new(stale_epoch, queue.directory_entry());
-    let source = device.allocate_buffer(1);
-    let destination = device.allocate_buffer(1);
+    let source = device.allocate_buffer(1).expect("allocation");
+    let destination = device.allocate_buffer(1).expect("allocation");
     let command = ExternalCommand::Copy(CopyCommand::new(
         CommandId::new(0),
         queue.queue_id(),

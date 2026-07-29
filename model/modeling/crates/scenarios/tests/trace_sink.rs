@@ -22,8 +22,14 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
                 .await
@@ -107,8 +113,14 @@ async fn async_trace_log_records_error_event_without_success_completion() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             let command_id = driver
                 .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
                 .await
@@ -171,8 +183,14 @@ async fn async_trace_log_records_stall_annotations_for_status_waits() {
         let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
             .await
             .expect("queue setup is valid");
-        let src = driver.allocate_buffer_on(&mut handle, 4).await;
-        let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+        let src = driver
+            .allocate_buffer_on(&mut handle, 4)
+            .await
+            .expect("allocation");
+        let dst = driver
+            .allocate_buffer_on(&mut handle, 4)
+            .await
+            .expect("allocation");
         driver
             .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
             .await

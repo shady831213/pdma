@@ -23,8 +23,8 @@ async fn async_runner_retires_copy_after_handle_submission() {
         ))
         .await
         .expect("queue setup is valid");
-    let src = handle.allocate_buffer(4).await;
-    let dst = handle.allocate_buffer(4).await;
+    let src = handle.allocate_buffer(4).await.expect("allocation");
+    let dst = handle.allocate_buffer(4).await.expect("allocation");
     handle
         .write_buffer(src, 0, &[1, 2, 3, 4])
         .await
@@ -75,10 +75,10 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
         ))
         .await
         .expect("queue setup is valid");
-    let src = handle.allocate_buffer(4).await;
-    let first_dst = handle.allocate_buffer(4).await;
-    let second_dst = handle.allocate_buffer(4).await;
-    let third_dst = handle.allocate_buffer(4).await;
+    let src = handle.allocate_buffer(4).await.expect("allocation");
+    let first_dst = handle.allocate_buffer(4).await.expect("allocation");
+    let second_dst = handle.allocate_buffer(4).await.expect("allocation");
+    let third_dst = handle.allocate_buffer(4).await.expect("allocation");
     handle
         .write_buffer(src, 0, &[3, 5, 7, 9])
         .await
@@ -168,8 +168,8 @@ async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_si
         ))
         .await
         .expect("queue setup is valid");
-    let src = handle.allocate_buffer(4).await;
-    let dst = handle.allocate_buffer(4).await;
+    let src = handle.allocate_buffer(4).await.expect("allocation");
+    let dst = handle.allocate_buffer(4).await.expect("allocation");
     handle
         .write_buffer(src, 0, &[8, 6, 4, 2])
         .await

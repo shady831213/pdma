@@ -102,8 +102,14 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
             main_port.enable_irq_source(source_capability).await?;
             main_port.unmask_irq_source(source_capability).await?;
 
-            let src = driver.allocate_buffer_on(&mut main_port, 4).await;
-            let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut main_port, src, &[1, 2, 3, 4])
                 .await?;

@@ -62,6 +62,7 @@ impl OperationGate {
 
 #[derive(Debug, Default)]
 struct PortControl {
+    allocation: OperationGate,
     create: OperationGate,
     submit: OperationGate,
     doorbell: OperationGate,
@@ -85,6 +86,18 @@ impl BlockingPort {
 
     pub fn create_calls(&self) -> usize {
         self.control.create.inner_calls()
+    }
+
+    pub fn block_allocation(&self) {
+        self.control.allocation.block();
+    }
+
+    pub async fn wait_allocation_entered(&self) {
+        self.control.allocation.wait_entered().await;
+    }
+
+    pub fn allow_allocation(&self) {
+        self.control.allocation.allow();
     }
 
     pub fn block_create(&self) {
@@ -171,7 +184,9 @@ impl AsyncDevicePort for BlockingPort {
         self.inner.create_queue(config).await
     }
 
-    async fn allocate_buffer(&mut self, len: usize) -> BufferId {
+    async fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
+        self.control.allocation.enter().await?;
+        self.control.allocation.record_inner_call();
         self.inner.allocate_buffer(len).await
     }
 

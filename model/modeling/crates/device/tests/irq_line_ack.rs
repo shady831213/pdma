@@ -26,9 +26,9 @@ fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelRes
     device
         .unmask_irq_source(source)
         .expect("completion IRQ source exists");
-    let src = device.allocate_buffer(4);
-    let first_dst = device.allocate_buffer(4);
-    let second_dst = device.allocate_buffer(4);
+    let src = device.allocate_buffer(4).expect("allocation");
+    let first_dst = device.allocate_buffer(4).expect("allocation");
+    let second_dst = device.allocate_buffer(4).expect("allocation");
     device
         .write_buffer(src, 0, &[1, 2, 3, 4])
         .expect("source write is in bounds");
@@ -75,8 +75,8 @@ fn line_ack_cannot_create_a_cause_for_a_disabled_source() -> ModelResult<()> {
         SoftwareOwnerId::new(0),
     ))?;
     let source = queue.completion_irq_source();
-    let src = device.allocate_buffer(4);
-    let dst = device.allocate_buffer(4);
+    let src = device.allocate_buffer(4).expect("allocation");
+    let dst = device.allocate_buffer(4).expect("allocation");
     device.write_buffer(src, 0, &[1, 2, 3, 4])?;
     submit_copy(&mut device, queue, src, dst, 0)?;
     device.run_until_idle(1)?;

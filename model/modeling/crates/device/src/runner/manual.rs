@@ -44,8 +44,15 @@ impl SyncDevice {
     }
 
     /// Allocates a device-visible memory buffer.
-    pub fn allocate_buffer(&mut self, len: usize) -> BufferId {
-        self.dma_space.allocate_legacy(len)
+    pub fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
+        self.allocate_dma_region(len).map(DmaRegion::object)
+    }
+
+    fn allocate_dma_region(&mut self, len: usize) -> ModelResult<DmaRegion> {
+        let length = u64::try_from(len).map_err(|_| ModelError::DmaAllocationExhausted)?;
+        self.dma_space
+            .allocate(length)
+            .map_err(|_| ModelError::DmaAllocationExhausted)
     }
 
     /// Writes bytes into a checked device buffer range.

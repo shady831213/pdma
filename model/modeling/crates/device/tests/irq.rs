@@ -35,9 +35,9 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
         .unmask_irq_source(source)
         .await
         .expect("completion IRQ source exists");
-    let src = handle.allocate_buffer(4).await;
-    let first_dst = handle.allocate_buffer(4).await;
-    let second_dst = handle.allocate_buffer(4).await;
+    let src = handle.allocate_buffer(4).await.expect("allocation");
+    let first_dst = handle.allocate_buffer(4).await.expect("allocation");
+    let second_dst = handle.allocate_buffer(4).await.expect("allocation");
     handle
         .write_buffer(src, 0, &[1, 3, 5, 7])
         .await
@@ -224,8 +224,8 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
         .unmask_irq_source(source)
         .await
         .expect("event IRQ source exists");
-    let src = handle.allocate_buffer(4).await;
-    let dst = handle.allocate_buffer(4).await;
+    let src = handle.allocate_buffer(4).await.expect("allocation");
+    let dst = handle.allocate_buffer(4).await.expect("allocation");
     for command_id in 0..2 {
         let command = ExternalCommand::Copy(CopyCommand::new(
             CommandId::new(command_id),

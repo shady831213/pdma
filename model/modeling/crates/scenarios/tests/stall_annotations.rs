@@ -35,8 +35,14 @@ async fn async_runner_successful_copy_reports_progressed_status() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
                 .await
@@ -70,8 +76,14 @@ async fn async_runner_resource_stall_reports_execution_reason() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
                 .await
@@ -112,10 +124,22 @@ async fn async_runner_completion_publication_stall_reports_reason() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src_a, &[10, 11, 12, 13])
                 .await
@@ -170,8 +194,14 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let bad_src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let bad_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let bad_src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let bad_dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
 
             // When: software submits the faulting copy and waits across the retry boundary.
             driver
@@ -211,8 +241,14 @@ async fn async_manual_run_until_blocked_returns_terminal_status_without_losing_i
     let mut driver = ManualDriver::setup_on(&mut device, 4, 4)
         .await
         .expect("queue setup is valid");
-    let src = driver.allocate_buffer_on(&mut device, 4).await;
-    let dst = driver.allocate_buffer_on(&mut device, 4).await;
+    let src = driver
+        .allocate_buffer_on(&mut device, 4)
+        .await
+        .expect("allocation");
+    let dst = driver
+        .allocate_buffer_on(&mut device, 4)
+        .await
+        .expect("allocation");
     driver
         .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
         .await

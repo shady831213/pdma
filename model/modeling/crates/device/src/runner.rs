@@ -106,15 +106,30 @@ impl AsyncDeviceHandle {
     }
 
     /// Allocates a device-visible memory buffer.
-    pub async fn allocate_buffer(&self, len: usize) -> BufferId {
-        let (id, generation) = {
+    pub async fn allocate_buffer(&self, len: usize) -> ModelResult<BufferId> {
+        self.allocate_dma_region(len).await.map(DmaRegion::object)
+    }
+
+    pub(crate) async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
+        let (region, generation) = {
             let mut state = self.shared.state.lock().await;
-            let id = state.dma_space.allocate_legacy(len);
-            wake(&mut state);
-            (id, state.generation)
+            let region = u64::try_from(len)
+                .map_err(|_| pdma_model_contract::error::ModelError::DmaAllocationExhausted)
+                .and_then(|length| {
+                    state
+                        .dma_space
+                        .allocate(length)
+                        .map_err(|_| pdma_model_contract::error::ModelError::DmaAllocationExhausted)
+                });
+            if region.is_ok() {
+                wake(&mut state);
+            }
+            (region, state.generation)
         };
-        publish(&self.shared, generation);
-        id
+        if region.is_ok() {
+            publish(&self.shared, generation);
+        }
+        region
     }
 
     /// Writes bytes into a checked device buffer range.

@@ -64,8 +64,14 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
                 main_port.enable_irq_source(source).await?;
                 main_port.unmask_irq_source(source).await?;
             }
-            let src = driver.allocate_buffer_on(&mut main_port, 4).await;
-            let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut main_port, src, &[1, 3, 5, 7])
                 .await?;
@@ -164,8 +170,14 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
                 .configure_irq_route(event_capability, IrqRoute::Message(vector))
                 .await?;
             main_port.enable_irq_source(event_capability).await?;
-            let src = driver.allocate_buffer_on(&mut main_port, 4).await;
-            let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
             for _ in 0..2 {
                 driver
                     .submit_copy_on(&mut main_port, CopyRequest::new(src, dst, 8))

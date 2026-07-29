@@ -37,9 +37,9 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
         .unmask_irq_source(source)
         .await
         .expect("completion IRQ source exists");
-    let src = handle.allocate_buffer(4).await;
-    let first_dst = handle.allocate_buffer(4).await;
-    let second_dst = handle.allocate_buffer(4).await;
+    let src = handle.allocate_buffer(4).await.expect("allocation");
+    let first_dst = handle.allocate_buffer(4).await.expect("allocation");
+    let second_dst = handle.allocate_buffer(4).await.expect("allocation");
     handle
         .write_buffer(src, 0, &[2, 4, 6, 8])
         .await

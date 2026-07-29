@@ -66,8 +66,8 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<ModelResult<MainOutcom
                     program.port.enable_irq_source(source).await?;
                     program.port.unmask_irq_source(source).await?;
                 }
-                let src = driver.allocate_buffer_on(&mut program.port, 4).await;
-                let dst = driver.allocate_buffer_on(&mut program.port, 4).await;
+                let src = driver.allocate_buffer_on(&mut program.port, 4).await?;
+                let dst = driver.allocate_buffer_on(&mut program.port, 4).await?;
                 driver
                     .write_buffer_on(&mut program.port, src, &[9, 8, 7, 6])
                     .await?;

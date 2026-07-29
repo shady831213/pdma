@@ -13,10 +13,12 @@ async fn async_tracing_preserves_manual_run_until_idle_behavior() {
         .expect("queue setup is valid");
     let baseline_src = baseline_driver
         .allocate_buffer_on(&mut baseline_device, 4)
-        .await;
+        .await
+        .expect("allocation");
     let baseline_dst = baseline_driver
         .allocate_buffer_on(&mut baseline_device, 4)
-        .await;
+        .await
+        .expect("allocation");
     baseline_driver
         .write_buffer_on(&mut baseline_device, baseline_src, &[4, 3, 2, 1])
         .await
@@ -28,10 +30,12 @@ async fn async_tracing_preserves_manual_run_until_idle_behavior() {
         .expect("queue setup is valid");
     let traced_src = traced_driver
         .allocate_buffer_on(&mut traced_device, 4)
-        .await;
+        .await
+        .expect("allocation");
     let traced_dst = traced_driver
         .allocate_buffer_on(&mut traced_device, 4)
-        .await;
+        .await
+        .expect("allocation");
     traced_driver
         .write_buffer_on(&mut traced_device, traced_src, &[4, 3, 2, 1])
         .await

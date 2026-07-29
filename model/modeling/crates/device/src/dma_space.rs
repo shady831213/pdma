@@ -119,14 +119,6 @@ impl DmaSpace {
             .ok_or(DmaSpaceError::AddressExhausted)
     }
 
-    pub(crate) fn allocate_legacy(&mut self, length: usize) -> BufferId {
-        let object = BufferId::new(self.regions.len());
-        let Ok(length) = u64::try_from(length) else {
-            return object;
-        };
-        self.allocate(length).map_or(object, DmaRegion::object)
-    }
-
     fn validate_proposal(&self, stage: &DmaStage) -> Result<(), DmaSpaceError> {
         let mut previous_end = self
             .regions

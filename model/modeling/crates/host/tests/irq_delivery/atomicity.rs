@@ -63,9 +63,18 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
                 .await?;
             device_port.enable_irq_source(source).await?;
             device_port.unmask_irq_source(source).await?;
-            let src = driver.allocate_buffer_on(&mut device_port, 4).await;
-            let first_dst = driver.allocate_buffer_on(&mut device_port, 4).await;
-            let second_dst = driver.allocate_buffer_on(&mut device_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut device_port, 4)
+                .await
+                .expect("allocation");
+            let first_dst = driver
+                .allocate_buffer_on(&mut device_port, 4)
+                .await
+                .expect("allocation");
+            let second_dst = driver
+                .allocate_buffer_on(&mut device_port, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;

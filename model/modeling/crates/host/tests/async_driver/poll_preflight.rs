@@ -64,8 +64,8 @@ async fn completion_fixture() -> ModelResult<PollFixture> {
     let (driver, retry) = owner
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut device, 1, 1).await?;
-            let src = driver.allocate_buffer_on(&mut device, 4).await;
-            let dst = driver.allocate_buffer_on(&mut device, 4).await;
+            let src = driver.allocate_buffer_on(&mut device, 4).await?;
+            let dst = driver.allocate_buffer_on(&mut device, 4).await?;
             let retry = CopyRequest::new(src, dst, 4);
             driver.submit_copy_on(&mut device, retry).await?;
             Ok::<_, ModelError>((driver, retry))
@@ -89,7 +89,7 @@ async fn event_fixture() -> ModelResult<PollFixture> {
     let (driver, retry) = owner
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut device, 1, 1).await?;
-            let dst = driver.allocate_buffer_on(&mut device, 4).await;
+            let dst = driver.allocate_buffer_on(&mut device, 4).await?;
             driver
                 .submit_copy_on(
                     &mut device,

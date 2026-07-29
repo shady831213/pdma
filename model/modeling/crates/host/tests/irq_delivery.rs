@@ -26,7 +26,7 @@ impl AsyncDevicePort for NotificationPort {
         std::future::pending().await
     }
 
-    async fn allocate_buffer(&mut self, _len: usize) -> BufferId {
+    async fn allocate_buffer(&mut self, _len: usize) -> ModelResult<BufferId> {
         std::future::pending().await
     }
 
@@ -151,8 +151,14 @@ async fn stale_notification_fails_before_drain_or_ack() {
         .expect("current completion source unmasks");
     let (source, destination) = cpu
         .run_main(async {
-            let source = driver.allocate_buffer_on(&mut device, 1).await;
-            let destination = driver.allocate_buffer_on(&mut device, 1).await;
+            let source = driver
+                .allocate_buffer_on(&mut device, 1)
+                .await
+                .expect("allocation");
+            let destination = driver
+                .allocate_buffer_on(&mut device, 1)
+                .await
+                .expect("allocation");
             driver.write_buffer_on(&mut device, source, &[9]).await?;
             driver
                 .submit_copy_on(&mut device, CopyRequest::new(source, destination, 1))

@@ -16,8 +16,14 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
             let mut driver = AsyncDriver::setup_on(&mut handle, 65, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
             for _ in 0..65 {
                 driver
                     .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 8))
@@ -74,10 +80,22 @@ async fn async_runner_publishes_one_event_and_later_command_still_completes_afte
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let bad_src = driver.allocate_buffer_on(&mut handle, 8).await;
-            let bad_dst = driver.allocate_buffer_on(&mut handle, 8).await;
-            let good_src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let good_dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let bad_src = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
+            let bad_dst = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
+            let good_src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let good_dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, good_src, &[0x10, 0x11, 0x12, 0x13])
                 .await

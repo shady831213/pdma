@@ -59,8 +59,14 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
                 .await?;
             main_port.enable_irq_source(completion_capability).await?;
             main_port.unmask_irq_source(completion_capability).await?;
-            let src = driver.allocate_buffer_on(&mut main_port, 4).await;
-            let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut main_port, src, &[4, 3, 2, 1])
                 .await?;

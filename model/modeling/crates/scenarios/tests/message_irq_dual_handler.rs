@@ -121,8 +121,14 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
                 main_port.unmask_irq_source(source).await?;
             }
 
-            let src = driver.allocate_buffer_on(&mut main_port, 4).await;
-            let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut main_port, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut main_port, src, &[2, 4, 6, 8])
                 .await?;

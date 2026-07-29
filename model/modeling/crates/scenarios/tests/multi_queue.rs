@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{
-    CompletionStatus, TraceEvent, TraceEventKind,
+    CompletionStatus, ModelError, TraceEvent, TraceEventKind,
     desc::CopyRequest,
     ids::{CommandId, QueueId},
 };
@@ -25,10 +25,22 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
                 let mut driver_b = AsyncDriver::setup_on(&mut handle, 2, 2)
                     .await
                     .expect("queue B setup is valid");
-                let src_a = driver_a.allocate_buffer_on(&mut handle, 1).await;
-                let dst_a = driver_a.allocate_buffer_on(&mut handle, 1).await;
-                let src_b = driver_b.allocate_buffer_on(&mut handle, 1).await;
-                let dst_b = driver_b.allocate_buffer_on(&mut handle, 1).await;
+                let src_a = driver_a
+                    .allocate_buffer_on(&mut handle, 1)
+                    .await
+                    .expect("allocation");
+                let dst_a = driver_a
+                    .allocate_buffer_on(&mut handle, 1)
+                    .await
+                    .expect("allocation");
+                let src_b = driver_b
+                    .allocate_buffer_on(&mut handle, 1)
+                    .await
+                    .expect("allocation");
+                let dst_b = driver_b
+                    .allocate_buffer_on(&mut handle, 1)
+                    .await
+                    .expect("allocation");
                 driver_a
                     .write_buffer_on(&mut handle, src_a, &[10])
                     .await
@@ -118,10 +130,10 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
             let mut repeated = AsyncDriver::setup_on(&mut handle, 2, 3)
                 .await
                 .expect("repeated queue setup is valid");
-            let peer_src = peer.allocate_buffer_on(&mut handle, 1).await;
-            let peer_dst = peer.allocate_buffer_on(&mut handle, 1).await;
-            let repeated_src = repeated.allocate_buffer_on(&mut handle, 2).await;
-            let repeated_dst = repeated.allocate_buffer_on(&mut handle, 2).await;
+            let peer_src = peer.allocate_buffer_on(&mut handle, 1).await?;
+            let peer_dst = peer.allocate_buffer_on(&mut handle, 1).await?;
+            let repeated_src = repeated.allocate_buffer_on(&mut handle, 2).await?;
+            let repeated_dst = repeated.allocate_buffer_on(&mut handle, 2).await?;
             peer.write_buffer_on(&mut handle, peer_src, &[30])
                 .await
                 .expect("peer source write is in bounds");
@@ -162,7 +174,7 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
                 .expect("repeated queue second command completes third");
             let peer_copy = peer.read_buffer_on(&handle, peer_dst, 1).await;
             let repeated_copy = repeated.read_buffer_on(&handle, repeated_dst, 2).await;
-            (
+            Ok::<_, ModelError>((
                 peer.queue_id(),
                 repeated.queue_id(),
                 peer_command,
@@ -173,9 +185,10 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
                 second_completion,
                 peer_copy,
                 repeated_copy,
-            )
+            ))
         })
-        .await;
+        .await
+        .expect("software program succeeds");
     let trace_events = handle.trace_events().await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");

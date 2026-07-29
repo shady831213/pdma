@@ -36,8 +36,14 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
                 .await?;
             device_port.enable_irq_source(source).await?;
             device_port.unmask_irq_source(source).await?;
-            let src = driver.allocate_buffer_on(&mut device_port, 4).await;
-            let dst = driver.allocate_buffer_on(&mut device_port, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut device_port, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut device_port, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;

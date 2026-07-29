@@ -20,9 +20,18 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
                 let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                     .await
                     .expect("queue setup is valid");
-                let src = driver.allocate_buffer_on(&mut handle, 8).await;
-                let dst_a = driver.allocate_buffer_on(&mut handle, 8).await;
-                let dst_b = driver.allocate_buffer_on(&mut handle, 8).await;
+                let src = driver
+                    .allocate_buffer_on(&mut handle, 8)
+                    .await
+                    .expect("allocation");
+                let dst_a = driver
+                    .allocate_buffer_on(&mut handle, 8)
+                    .await
+                    .expect("allocation");
+                let dst_b = driver
+                    .allocate_buffer_on(&mut handle, 8)
+                    .await
+                    .expect("allocation");
                 driver
                     .write_buffer_on(&mut handle, src, &[0, 1, 2, 3, 4, 5, 6, 7])
                     .await
@@ -87,9 +96,18 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
             let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let valid_dst = driver.allocate_buffer_on(&mut handle, 4).await;
-            let bad_dst = driver.allocate_buffer_on(&mut handle, 2).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let valid_dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let bad_dst = driver
+                .allocate_buffer_on(&mut handle, 2)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[9, 8, 7, 6])
                 .await
@@ -147,8 +165,14 @@ async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_
             let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4])
                 .await

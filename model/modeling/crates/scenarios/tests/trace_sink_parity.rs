@@ -50,8 +50,14 @@ async fn async_trace_log_schedules_before_resource_stall() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             let command = driver
                 .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
                 .await
@@ -94,10 +100,22 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_a = driver.allocate_buffer_on(&mut handle, 4).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst_b = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_a = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src_a, &[1, 2, 3, 4])
                 .await
@@ -159,11 +177,26 @@ async fn async_trace_log_records_queue_only_doorbells() {
             let mut vector_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("vector queue setup is valid");
-            let copy_src = copy_driver.allocate_buffer_on(&mut handle, 4).await;
-            let copy_dst = copy_driver.allocate_buffer_on(&mut handle, 4).await;
-            let src_a = vector_driver.allocate_buffer_on(&mut handle, 4).await;
-            let src_b = vector_driver.allocate_buffer_on(&mut handle, 4).await;
-            let vector_dst = vector_driver.allocate_buffer_on(&mut handle, 4).await;
+            let copy_src = copy_driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let copy_dst = copy_driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let src_a = vector_driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let src_b = vector_driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let vector_dst = vector_driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             let copy_command = copy_driver
                 .submit_copy_on(&mut handle, CopyRequest::new(copy_src, copy_dst, 4))
                 .await

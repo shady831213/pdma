@@ -18,9 +18,18 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 12).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 12).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 16).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 12)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 12)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 16)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(
                     &mut handle,
@@ -98,9 +107,18 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 8).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 4).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 8).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
 
             // When: the invalid vector add is submitted and the async runner executes it.
             let command_id = driver
@@ -152,9 +170,18 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_destinat
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src_a = driver.allocate_buffer_on(&mut handle, 8).await;
-            let src_b = driver.allocate_buffer_on(&mut handle, 8).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 4).await;
+            let src_a = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
+            let src_b = driver
+                .allocate_buffer_on(&mut handle, 8)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src_a, &[0xD0, 0xD1, 9, 8, 7, 6, 0xD2, 0xD3])
                 .await

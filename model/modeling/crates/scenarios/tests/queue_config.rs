@@ -60,8 +60,14 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
             )
             .await
             .expect("queue config is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 1).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 1).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 1)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 1)
+                .await
+                .expect("allocation");
 
             // When: software submits one command and tries to submit another before reclaim.
             let command_id = driver
@@ -114,10 +120,22 @@ async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
             )
             .await
             .expect("second queue config is valid");
-            let bad_src = driver_a.allocate_buffer_on(&mut handle, 4).await;
-            let bad_dst = driver_a.allocate_buffer_on(&mut handle, 4).await;
-            let good_src = driver_b.allocate_buffer_on(&mut handle, 1).await;
-            let good_dst = driver_b.allocate_buffer_on(&mut handle, 1).await;
+            let bad_src = driver_a
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let bad_dst = driver_a
+                .allocate_buffer_on(&mut handle, 4)
+                .await
+                .expect("allocation");
+            let good_src = driver_b
+                .allocate_buffer_on(&mut handle, 1)
+                .await
+                .expect("allocation");
+            let good_dst = driver_b
+                .allocate_buffer_on(&mut handle, 1)
+                .await
+                .expect("allocation");
             driver_a
                 .submit_strided_copy_on(
                     &mut handle,

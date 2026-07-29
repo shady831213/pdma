@@ -10,7 +10,7 @@ impl AsyncDevicePort for AsyncDeviceHandle {
         Self::create_queue(self, config).await
     }
 
-    async fn allocate_buffer(&mut self, len: usize) -> BufferId {
+    async fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
         Self::allocate_buffer(self, len).await
     }
 

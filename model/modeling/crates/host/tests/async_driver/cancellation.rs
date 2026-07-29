@@ -6,8 +6,8 @@ use tokio::sync::oneshot;
 
 async fn setup_copy(port: &mut BlockingPort) -> ModelResult<(AsyncDriver, CopyRequest)> {
     let driver = AsyncDriver::setup_on(port, 1, 1).await?;
-    let src = driver.allocate_buffer_on(port, 4).await;
-    let dst = driver.allocate_buffer_on(port, 4).await;
+    let src = driver.allocate_buffer_on(port, 4).await?;
+    let dst = driver.allocate_buffer_on(port, 4).await?;
     Ok((driver, CopyRequest::new(src, dst, 4)))
 }
 

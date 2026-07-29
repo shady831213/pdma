@@ -16,8 +16,14 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
-            let src = driver.allocate_buffer_on(&mut handle, 5).await;
-            let dst = driver.allocate_buffer_on(&mut handle, 5).await;
+            let src = driver
+                .allocate_buffer_on(&mut handle, 5)
+                .await
+                .expect("allocation");
+            let dst = driver
+                .allocate_buffer_on(&mut handle, 5)
+                .await
+                .expect("allocation");
             driver
                 .write_buffer_on(&mut handle, src, &[1, 2, 3, 4, 5])
                 .await
@@ -56,8 +62,14 @@ async fn reports_step_budget_exhaustion_when_work_remains() {
     let mut driver = ManualDriver::setup_on(&mut device, 4, 4)
         .await
         .expect("queue setup is valid");
-    let src = driver.allocate_buffer_on(&mut device, 1).await;
-    let dst = driver.allocate_buffer_on(&mut device, 1).await;
+    let src = driver
+        .allocate_buffer_on(&mut device, 1)
+        .await
+        .expect("allocation");
+    let dst = driver
+        .allocate_buffer_on(&mut device, 1)
+        .await
+        .expect("allocation");
     driver
         .submit_copy_on(&mut device, CopyRequest::new(src, dst, 1))
         .await

@@ -4,6 +4,7 @@
 //! contracts only. It does not provide memory backing storage or address
 //! translation behavior.
 
+pub mod abi;
 pub mod completion;
 pub mod desc;
 pub mod dma;

@@ -7,6 +7,7 @@ pub mod trace;
 pub use dma_space::{DmaSpace, DmaSpaceError, DmaStage};
 pub use runner::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
-    AsyncStallReason, AsyncStepStatus, SyncDevice,
+    AsyncStallReason, AsyncStepStatus, BusControlError, DmaWrite, QueueStatus,
+    SubmissionAcceptance, SyncDevice,
 };
 pub use trace::TraceSink;

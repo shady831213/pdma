@@ -1,6 +1,7 @@
 use super::{AsyncRunSnapshot, AsyncRunSummary, AsyncStepStatus};
 use crate::dma_space::DmaSpace;
 use crate::runner::backend::DeviceModel;
+use crate::runner::bus::control::BusControlState;
 use tokio::sync::{Mutex, watch};
 
 #[derive(Debug)]
@@ -13,6 +14,7 @@ pub(super) struct RunnerShared {
 pub(super) struct RunnerState {
     pub(super) backend: DeviceModel,
     pub(super) dma_space: DmaSpace,
+    pub(super) bus_control: BusControlState,
     pub(super) steps: usize,
     pub(super) errors: usize,
     pub(super) stalls: usize,
@@ -27,6 +29,7 @@ impl RunnerState {
         Self {
             backend,
             dma_space: DmaSpace::new(),
+            bus_control: BusControlState::new(),
             steps: 0,
             errors: 0,
             stalls: 0,

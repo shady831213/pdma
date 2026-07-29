@@ -1,6 +1,7 @@
 //! Tokio-backed asynchronous hardware runner.
 
 mod backend;
+mod bus;
 mod irq;
 mod manual;
 mod native;
@@ -12,6 +13,7 @@ mod worker;
 
 use crate::dma_space::{DmaSpaceError, DmaStage};
 use backend::DeviceModel;
+pub use bus::{BusControlError, DmaWrite, QueueStatus, SubmissionAcceptance};
 pub use manual::SyncDevice;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::abi::{DmaAddress, DmaRegion};

@@ -1,6 +1,7 @@
 use super::NativeExecution;
 use super::broadcast;
 use super::copy;
+use super::io::QueueFetch;
 use super::resources::ResourceDemand;
 use super::retirement;
 use super::vector_add;
@@ -11,23 +12,40 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 
 pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatus> {
-    let NativeExecution { device, dma_space } = execution;
+    let NativeExecution {
+        device,
+        dma_space,
+        bus_control,
+    } = execution;
     if device.pending_retirement.is_some() {
-        return retirement::retry_pending_retirement(device, dma_space);
+        return retirement::retry_pending_retirement(device, dma_space, bus_control);
     }
     let Some(queue_id) = device.runnable.pop_front() else {
         device.trace.idle();
         return Ok(ModelStepStatus::Idle);
     };
-    let Some(command) = device.queue(queue_id)?.io.fetch(dma_space) else {
+    let entry = device.queue(queue_id)?.entry;
+    let Some(fetched) = device.queue(queue_id)?.io.fetch(
+        dma_space,
+        bus_control,
+        queue_id,
+        entry.completion_ring_id(),
+    )?
+    else {
         return Ok(ModelStepStatus::Progressed);
+    };
+    let command = match fetched {
+        QueueFetch::Command(command) => command,
+        QueueFetch::Fault(event) => {
+            return retirement::cache_dma_fault(device, dma_space, bus_control, event);
+        }
     };
     let operation = operation_from_external(&command);
     device
         .trace
         .scheduled(queue_id, operation, command_id(&command));
     if !ResourceDemand::for_command(&command).fits(device.resource_config) {
-        device.requeue_if_command_pending(dma_space, queue_id)?;
+        device.requeue_if_command_pending(dma_space, bus_control, queue_id)?;
         device
             .trace
             .stall(Some(queue_id), "ExecutionResourcePressure");
@@ -37,20 +55,38 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
     }
     match command {
         ExternalCommand::Copy(copy_command) => copy::retire_copy(
-            NativeExecution { device, dma_space },
+            NativeExecution {
+                device,
+                dma_space,
+                bus_control,
+            },
             queue_id,
             copy_command,
         ),
-        ExternalCommand::StridedCopy(strided) => {
-            copy::retire_strided_copy(NativeExecution { device, dma_space }, queue_id, strided)
-        }
+        ExternalCommand::StridedCopy(strided) => copy::retire_strided_copy(
+            NativeExecution {
+                device,
+                dma_space,
+                bus_control,
+            },
+            queue_id,
+            strided,
+        ),
         ExternalCommand::BroadcastCopy(broadcast_command) => broadcast::retire_broadcast_copy(
-            NativeExecution { device, dma_space },
+            NativeExecution {
+                device,
+                dma_space,
+                bus_control,
+            },
             queue_id,
             &broadcast_command,
         ),
         ExternalCommand::VectorAdd(vector_add) => vector_add::retire_vector_add(
-            NativeExecution { device, dma_space },
+            NativeExecution {
+                device,
+                dma_space,
+                bus_control,
+            },
             queue_id,
             vector_add,
         ),

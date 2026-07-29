@@ -1,5 +1,7 @@
 use super::AsyncStallReason;
+use super::bus::control::BusControlState;
 use super::native::QueuePortDeviceModel;
+use super::native::dma_bus_api::PreparedDmaBusQueue;
 use crate::dma_space::DmaSpace;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
@@ -35,15 +37,19 @@ impl DeviceModel {
         }
     }
 
-    pub(super) fn step(&mut self, dma_space: &mut DmaSpace) -> ModelResult<ModelStepStatus> {
+    pub(super) fn step(
+        &mut self,
+        dma_space: &mut DmaSpace,
+        bus_control: &mut BusControlState,
+    ) -> ModelResult<ModelStepStatus> {
         match self {
-            Self::QueuePort(device) => device.step(dma_space),
+            Self::QueuePort(device) => device.step(dma_space, bus_control),
         }
     }
 
-    pub(super) fn has_work(&self, dma_space: &DmaSpace) -> bool {
+    pub(super) fn has_work(&self, dma_space: &DmaSpace, bus_control: &BusControlState) -> bool {
         match self {
-            Self::QueuePort(device) => device.has_work(dma_space),
+            Self::QueuePort(device) => device.has_work(dma_space, bus_control),
         }
     }
 
@@ -59,17 +65,6 @@ impl DeviceModel {
     ) -> ModelResult<QueueConfigHandle> {
         match self {
             Self::QueuePort(device) => device.create_dma_bus_queue(config),
-        }
-    }
-
-    pub(super) fn submit_decoded_dma_command(
-        &mut self,
-        queue: QueueConfigHandle,
-        command: ExternalCommand,
-    ) -> ModelResult<()> {
-        self.validate_epoch(queue.epoch())?;
-        match self {
-            Self::QueuePort(device) => device.submit_decoded_dma_command(queue, command),
         }
     }
 
@@ -178,6 +173,54 @@ impl DeviceModel {
     pub(super) fn reset(&mut self, epoch: DeviceEpoch) {
         match self {
             Self::QueuePort(device) => device.reset(epoch),
+        }
+    }
+
+    pub(in crate::runner) fn ring_dma_bus_doorbell(
+        &mut self,
+        queue: pdma_model_contract::abi::EpochQueue,
+    ) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.ring_dma_bus_doorbell(queue),
+        }
+    }
+
+    pub(in crate::runner) fn prepare_dma_bus_queue(
+        &mut self,
+        config: QueueConfig,
+    ) -> ModelResult<PreparedDmaBusQueue> {
+        match self {
+            Self::QueuePort(device) => device.prepare_dma_bus_queue(config),
+        }
+    }
+
+    pub(in crate::runner) fn install_dma_bus_queue(
+        &mut self,
+        prepared: PreparedDmaBusQueue,
+    ) -> QueueConfigHandle {
+        match self {
+            Self::QueuePort(device) => device.install_dma_bus_queue(prepared),
+        }
+    }
+
+    pub(in crate::runner) fn validate_dma_bus_queue(
+        &self,
+        queue: pdma_model_contract::abi::EpochQueue,
+    ) -> ModelResult<()> {
+        match self {
+            Self::QueuePort(device) => device.validate_dma_bus_queue(queue),
+        }
+    }
+
+    pub(in crate::runner) fn next_queue_id(&self) -> pdma_model_contract::QueueId {
+        match self {
+            Self::QueuePort(device) => device.next_queue_id(),
+        }
+    }
+
+    pub(in crate::runner) fn pending_dma_result(&self) -> Option<super::PendingDmaResult> {
+        match self {
+            Self::QueuePort(device) => device.pending_dma_result(),
         }
     }
 

@@ -23,7 +23,9 @@ use pdma_model_contract::ids::BufferId;
 use pdma_model_contract::trace::TraceEvent;
 use state::{RunnerShared, RunnerState, publish, summary, wake};
 use std::sync::Arc;
-pub use types::{AsyncRunSnapshot, AsyncRunSummary, AsyncStallReason, AsyncStepStatus};
+pub use types::{
+    AsyncRunSnapshot, AsyncRunSummary, AsyncStallReason, AsyncStepStatus, PendingDmaResult,
+};
 use worker::run_worker;
 
 /// Cloneable host-facing handle for an async hardware runner.
@@ -221,6 +223,11 @@ impl AsyncDeviceHandle {
     /// Returns the committed DMA allocator generation.
     pub async fn dma_generation(&self) -> u64 {
         self.shared.state.lock().await.dma_space.generation()
+    }
+
+    /// Returns the one cached DMA completion or event before bus publication.
+    pub async fn pending_dma_result(&self) -> Option<PendingDmaResult> {
+        self.shared.state.lock().await.backend.pending_dma_result()
     }
 
     /// Enables deterministic trace capture.

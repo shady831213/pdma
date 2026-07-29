@@ -1,5 +1,6 @@
 mod broadcast;
 mod copy;
+pub(in crate::runner) mod dma_bus_api;
 mod io;
 mod irq;
 mod irq_api;
@@ -11,6 +12,7 @@ mod step;
 mod vector_add;
 
 use super::backend::ModelStepStatus;
+use super::bus::control::BusControlState;
 use crate::dma_space::DmaSpace;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use irq::PdmaIrqController;
@@ -35,6 +37,7 @@ struct QueueContext {
 pub(in crate::runner) struct NativeExecution<'a> {
     pub(in crate::runner) device: &'a mut QueuePortDeviceModel,
     pub(in crate::runner) dma_space: &'a mut DmaSpace,
+    pub(in crate::runner) bus_control: &'a mut BusControlState,
 }
 
 #[derive(Debug)]
@@ -74,13 +77,6 @@ impl QueuePortDeviceModel {
         self.create_queue_with_io(config, io)
     }
 
-    pub(super) fn create_dma_bus_queue(
-        &mut self,
-        config: QueueConfig,
-    ) -> ModelResult<QueueConfigHandle> {
-        self.create_queue_with_io(config, io::QueueIo::dma_bus())
-    }
-
     fn create_queue_with_io(
         &mut self,
         config: QueueConfig,
@@ -93,18 +89,6 @@ impl QueuePortDeviceModel {
         self.queues.push(QueueContext { entry, io });
         self.completions.push(completions);
         Ok(QueueConfigHandle::new(self.epoch, entry))
-    }
-
-    pub(super) fn submit_decoded_dma_command(
-        &mut self,
-        queue: QueueConfigHandle,
-        command: ExternalCommand,
-    ) -> ModelResult<()> {
-        self.validate_epoch(queue.epoch())?;
-        let queue_id = queue.queue_id();
-        self.queue_mut(queue_id)?
-            .io
-            .submit_decoded_dma(queue_id, command)
     }
 
     pub(super) fn submit_command(
@@ -173,24 +157,34 @@ impl QueuePortDeviceModel {
         Ok(event)
     }
 
-    pub(super) fn step(&mut self, dma_space: &mut DmaSpace) -> ModelResult<ModelStepStatus> {
+    pub(super) fn step(
+        &mut self,
+        dma_space: &mut DmaSpace,
+        bus_control: &mut BusControlState,
+    ) -> ModelResult<ModelStepStatus> {
         step::step(NativeExecution {
             device: self,
             dma_space,
+            bus_control,
         })
     }
 
-    pub(super) fn has_work(&self, dma_space: &DmaSpace) -> bool {
+    pub(super) fn has_work(&self, dma_space: &DmaSpace, bus_control: &BusControlState) -> bool {
         self.pending_retirement.is_some()
             || !self.runnable.is_empty()
-            || self
-                .queues
-                .iter()
-                .any(|queue| queue.io.has_pending(dma_space))
+            || self.queues.iter().any(|queue| {
+                queue
+                    .io
+                    .has_pending(dma_space, bus_control, queue.entry.queue_id())
+            })
     }
 
     pub(super) const fn epoch(&self) -> DeviceEpoch {
         self.epoch
+    }
+
+    pub(in crate::runner) fn next_queue_id(&self) -> QueueId {
+        QueueId::new(self.queues.len())
     }
 
     fn validate_epoch(&self, actual: DeviceEpoch) -> ModelResult<()> {
@@ -256,9 +250,15 @@ impl QueuePortDeviceModel {
     fn requeue_if_command_pending(
         &mut self,
         dma_space: &DmaSpace,
+        bus_control: &BusControlState,
         queue_id: QueueId,
     ) -> ModelResult<()> {
-        if self.queue(queue_id)?.io.has_pending(dma_space) && !self.runnable.contains(&queue_id) {
+        if self
+            .queue(queue_id)?
+            .io
+            .has_pending(dma_space, bus_control, queue_id)
+            && !self.runnable.contains(&queue_id)
+        {
             self.runnable.push_back(queue_id);
         }
         Ok(())

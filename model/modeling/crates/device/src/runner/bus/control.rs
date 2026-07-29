@@ -6,13 +6,13 @@ use pdma_model_contract::abi::{
     DeviceEpoch, EpochQueue, QueueActivation, RingCursor, RingCursors, RingLayout, RingRecord,
 };
 
-pub(super) mod transactions;
+pub(in crate::runner) mod transactions;
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ActiveQueue {
-    pub(super) activation: QueueActivation,
-    pub(super) submission: RingCursors,
-    pub(super) captured_submission_producer: RingCursor,
+pub(in crate::runner) struct ActiveQueue {
+    pub(in crate::runner) activation: QueueActivation,
+    pub(in crate::runner) submission: RingCursors,
+    pub(in crate::runner) captured_submission_producer: RingCursor,
     pub(super) completion: RingCursors,
     pub(super) event: RingCursors,
 }
@@ -77,14 +77,17 @@ impl BusControlState {
         self.queues.clear();
     }
 
-    pub(super) fn queue(&self, queue: EpochQueue) -> Result<&ActiveQueue, BusControlError> {
+    pub(in crate::runner) fn queue(
+        &self,
+        queue: EpochQueue,
+    ) -> Result<&ActiveQueue, BusControlError> {
         self.validate_queue(queue)?;
         self.queues
             .get(queue.queue_id().raw())
             .ok_or(BusControlError::InvalidQueue)
     }
 
-    pub(super) fn queue_mut(
+    pub(in crate::runner) fn queue_mut(
         &mut self,
         queue: EpochQueue,
     ) -> Result<&mut ActiveQueue, BusControlError> {
@@ -141,7 +144,15 @@ pub(super) fn activate(
         .queues
         .try_reserve_exact(1)
         .map_err(|_| BusControlError::InvalidTransaction)?;
+    let prepared = runner
+        .backend
+        .prepare_dma_bus_queue(activation.config())
+        .map_err(|_| BusControlError::InvalidTransaction)?;
     runner.dma_space.commit(proposal)?;
+    let native = runner.backend.install_dma_bus_queue(prepared);
+    if native.queue_id() != activation.queue().queue_id() {
+        return Err(BusControlError::InvalidTransaction);
+    }
     runner.bus_control.queues.push(queue);
     Ok(queue.status())
 }
@@ -155,6 +166,9 @@ fn validate_activation(
         return Err(BusControlError::StaleEpoch);
     }
     if activation.queue().queue_id() != QueueId::new(runner.bus_control.queues.len()) {
+        return Err(BusControlError::InvalidQueue);
+    }
+    if activation.queue().queue_id() != runner.backend.next_queue_id() {
         return Err(BusControlError::InvalidQueue);
     }
     if proposal.generation() != runner.dma_space.generation() || proposal.regions().len() != 3 {

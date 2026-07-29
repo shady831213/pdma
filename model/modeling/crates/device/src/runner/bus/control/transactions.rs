@@ -88,7 +88,14 @@ pub(in crate::runner::bus) fn control(
             })
         }
         QueueControl::CaptureSubmissionProducer(update) => {
-            update_queue(state, update, |queue, cursor| {
+            if state
+                .backend
+                .validate_dma_bus_queue(update.queue())
+                .is_err()
+            {
+                return (Err(BusControlError::InvalidQueue), false);
+            }
+            let (result, changed) = update_queue(state, update, |queue, cursor| {
                 if cursor < queue.captured_submission_producer
                     || cursor > queue.submission.producer()
                 {
@@ -97,7 +104,11 @@ pub(in crate::runner::bus) fn control(
                 let changed = cursor != queue.captured_submission_producer;
                 queue.captured_submission_producer = cursor;
                 Ok(changed)
-            })
+            });
+            if result.is_ok() && state.backend.ring_dma_bus_doorbell(update.queue()).is_err() {
+                return (Err(BusControlError::InvalidQueue), false);
+            }
+            (result, changed)
         }
         QueueControl::PublishSubmissionConsumer(update) => {
             update_queue(state, update, |queue, cursor| {
@@ -140,6 +151,20 @@ pub(in crate::runner::bus) fn control(
             })
         }
     }
+}
+
+pub(in crate::runner) fn advance_submission_consumer_raw(
+    control: &mut super::BusControlState,
+    queue_id: pdma_model_contract::QueueId,
+) -> Result<(), BusControlError> {
+    let queue = pdma_model_contract::abi::EpochQueue::new(control.epoch(), queue_id);
+    let active = control.queue_mut(queue)?;
+    let next = active.submission.consumer().checked_increment(1)?;
+    if next > active.captured_submission_producer {
+        return Err(BusControlError::InvalidTransaction);
+    }
+    active.submission = active.submission.update_consumer(next)?;
+    Ok(())
 }
 
 fn update_queue(

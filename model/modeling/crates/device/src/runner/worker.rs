@@ -13,9 +13,12 @@ async fn run_one(shared: &RunnerShared) -> bool {
             return publish_and_continue(shared, state.generation, false);
         }
         let RunnerState {
-            backend, dma_space, ..
+            backend,
+            dma_space,
+            bus_control,
+            ..
         } = &mut *state;
-        match backend.step(dma_space) {
+        match backend.step(dma_space, bus_control) {
             Ok(ModelStepStatus::Progressed) => {
                 state.steps = state.steps.saturating_add(1);
                 state.last_status = AsyncStepStatus::Progressed;

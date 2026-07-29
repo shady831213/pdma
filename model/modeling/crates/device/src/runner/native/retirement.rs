@@ -1,7 +1,9 @@
 use super::QueuePortDeviceModel;
 use crate::dma_space::DmaSpace;
 use crate::runner::AsyncStallReason;
+use crate::runner::PendingDmaResult;
 use crate::runner::backend::ModelStepStatus;
+use crate::runner::bus::control::BusControlState;
 use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::{EventRecord, MemoryFault};
@@ -32,11 +34,27 @@ pub(super) enum PendingRetirement {
         record: EventRecord,
         source: ModelError,
     },
+    DmaEvent(pdma_model_contract::abi::AbiEvent),
+}
+
+impl PendingRetirement {
+    pub(super) const fn dma_result(self) -> Option<PendingDmaResult> {
+        match self {
+            Self::Completion(success) => Some(PendingDmaResult::Completion(CompletionRecord::new(
+                success.queue,
+                success.command,
+                CompletionStatus::Success,
+            ))),
+            Self::DmaEvent(event) => Some(PendingDmaResult::Event(event)),
+            Self::Event { .. } => None,
+        }
+    }
 }
 
 pub(super) fn publish_completion(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &mut BusControlState,
     success: SuccessRetirement,
 ) -> ModelResult<ModelStepStatus> {
     let completion =
@@ -45,7 +63,7 @@ pub(super) fn publish_completion(
         .trace
         .execution_succeeded(success.queue, success.operation, success.command);
     if completion_publication_is_full(device, success.queue, success.completion_ring)? {
-        consume_command(device, dma_space, success.queue)?;
+        consume_command(device, dma_space, bus_control, success.queue)?;
         device.pending_retirement = Some(PendingRetirement::Completion(success));
         device
             .trace
@@ -59,18 +77,19 @@ pub(super) fn publish_completion(
         .push(completion)?;
     device.trace.completion_published(completion);
     device.latch_irq_source(IrqSource::Completion(success.completion_ring));
-    retire_command(device, dma_space, success.queue)?;
+    retire_command(device, dma_space, bus_control, success.queue)?;
     Ok(ModelStepStatus::Progressed)
 }
 
 pub(super) fn validate_success_completion_route(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &mut BusControlState,
     queue_id: QueueId,
     completion_ring_id: CompletionRingId,
 ) -> ModelResult<()> {
     if let Err(source) = device.completion(completion_ring_id).map(|_| ()) {
-        retire_command(device, dma_space, queue_id)?;
+        retire_command(device, dma_space, bus_control, queue_id)?;
         return Err(source);
     }
     Ok(())
@@ -79,25 +98,33 @@ pub(super) fn validate_success_completion_route(
 pub(super) fn retry_pending_retirement(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &BusControlState,
 ) -> ModelResult<ModelStepStatus> {
     let Some(pending) = device.pending_retirement else {
         return Ok(ModelStepStatus::Idle);
     };
     match pending {
         PendingRetirement::Completion(success) => {
-            retry_pending_completion(device, dma_space, success)
+            retry_pending_completion(device, dma_space, bus_control, success)
         }
         PendingRetirement::Event {
             queue_id,
             record,
             source,
-        } => retry_pending_event(device, dma_space, queue_id, record, source),
+        } => retry_pending_event(device, dma_space, bus_control, queue_id, record, source),
+        PendingRetirement::DmaEvent(_) => {
+            device.trace.stall(None, "FaultRetirementPendingRetry");
+            Ok(ModelStepStatus::Stalled(
+                AsyncStallReason::FaultRetirementPendingRetry,
+            ))
+        }
     }
 }
 
 fn retry_pending_completion(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &BusControlState,
     pending: SuccessRetirement,
 ) -> ModelResult<ModelStepStatus> {
     let completion =
@@ -116,13 +143,14 @@ fn retry_pending_completion(
     device.trace.completion_published(completion);
     device.latch_irq_source(IrqSource::Completion(pending.completion_ring));
     device.pending_retirement = None;
-    device.requeue_if_command_pending(dma_space, pending.queue)?;
+    device.requeue_if_command_pending(dma_space, bus_control, pending.queue)?;
     Ok(ModelStepStatus::Progressed)
 }
 
 fn retry_pending_event(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &BusControlState,
     queue_id: QueueId,
     record: EventRecord,
     source: ModelError,
@@ -139,19 +167,20 @@ fn retry_pending_event(
     device.trace.event_published(record);
     device.latch_irq_source(IrqSource::Event(queue_id));
     device.pending_retirement = None;
-    device.requeue_if_command_pending(dma_space, queue_id)?;
+    device.requeue_if_command_pending(dma_space, bus_control, queue_id)?;
     Err(source)
 }
 
 pub(super) fn publish_fault(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &mut BusControlState,
     fault: FaultRetirement,
 ) -> ModelResult<ModelStepStatus> {
     let event = EventRecord::from_memory_fault(fault.queue_id, fault.command_id, fault.fault);
     device.trace.execution_faulted(event);
     if event_publication_is_full(device, fault.queue_id)? {
-        consume_command(device, dma_space, fault.queue_id)?;
+        consume_command(device, dma_space, bus_control, fault.queue_id)?;
         device.pending_retirement = Some(PendingRetirement::Event {
             queue_id: fault.queue_id,
             record: event,
@@ -167,7 +196,7 @@ pub(super) fn publish_fault(
     device.events.push_back(event);
     device.trace.event_published(event);
     device.latch_irq_source(IrqSource::Event(fault.queue_id));
-    retire_command(device, dma_space, fault.queue_id)?;
+    retire_command(device, dma_space, bus_control, fault.queue_id)?;
     Err(fault.fault.source())
 }
 
@@ -195,17 +224,32 @@ fn event_publication_is_full(
 fn retire_command(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &mut BusControlState,
     queue_id: QueueId,
 ) -> ModelResult<()> {
-    consume_command(device, dma_space, queue_id)?;
-    device.requeue_if_command_pending(dma_space, queue_id)
+    consume_command(device, dma_space, bus_control, queue_id)?;
+    device.requeue_if_command_pending(dma_space, bus_control, queue_id)
 }
 
 fn consume_command(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
+    bus_control: &mut BusControlState,
     queue_id: QueueId,
 ) -> ModelResult<()> {
-    device.queue_mut(queue_id)?.io.consume(dma_space);
-    Ok(())
+    device
+        .queue_mut(queue_id)?
+        .io
+        .consume(dma_space, bus_control, queue_id)
+}
+
+pub(super) fn cache_dma_fault(
+    device: &mut QueuePortDeviceModel,
+    dma_space: &DmaSpace,
+    bus_control: &mut BusControlState,
+    event: pdma_model_contract::abi::AbiEvent,
+) -> ModelResult<ModelStepStatus> {
+    consume_command(device, dma_space, bus_control, event.queue_id())?;
+    device.pending_retirement = Some(PendingRetirement::DmaEvent(event));
+    Ok(ModelStepStatus::Progressed)
 }

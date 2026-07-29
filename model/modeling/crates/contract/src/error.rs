@@ -60,6 +60,8 @@ pub enum ModelError {
     },
     /// A DMA object cannot fit in the modeled address space or backing storage.
     DmaAllocationExhausted,
+    /// Internal DMA submission cursor state is inconsistent.
+    DmaSubmissionState,
     /// The driver has no locally reclaimed command slots.
     DriverQueueFull,
     /// The device still had runnable work after the caller's step budget expired.
@@ -113,6 +115,7 @@ impl fmt::Display for ModelError {
                 )
             }
             Self::DmaAllocationExhausted => f.write_str("DMA allocation is exhausted"),
+            Self::DmaSubmissionState => f.write_str("DMA submission state is inconsistent"),
             Self::DriverQueueFull => f.write_str("driver command ring shadow is full"),
             Self::StepBudgetExhausted { max_steps } => {
                 write!(f, "device still has work after {max_steps} steps")

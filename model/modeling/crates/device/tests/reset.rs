@@ -54,15 +54,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
         Err(ModelError::StaleDeviceEpoch { .. })
     ));
     assert!(matches!(
-        device.submit_decoded_dma_command(
-            old_bus_queue,
-            ExternalCommand::Copy(CopyCommand::new(
-                CommandId::new(1),
-                old_bus_queue.queue_id(),
-                old_bus_queue.completion_ring_id(),
-                CopyRequest::new(source, destination, 4),
-            )),
-        ),
+        device.ring_doorbell(old_bus_queue),
         Err(ModelError::StaleDeviceEpoch { .. })
     ));
     let new_queue = device.create_queue(config())?;

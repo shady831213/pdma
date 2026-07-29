@@ -3,11 +3,19 @@ mod memory;
 mod semantic;
 
 use crate::dma_space::DmaSpace;
+use crate::runner::bus::control::BusControlState;
+use pdma_model_contract::abi::AbiEvent;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::{CommandId, QueueId};
 
 pub(in crate::runner::native) use memory::QueueMemoryResolver;
+
+#[derive(Debug, Clone)]
+pub(super) enum QueueFetch {
+    Command(ExternalCommand),
+    Fault(AbiEvent),
+}
 
 #[derive(Debug)]
 pub(super) enum QueueIo {
@@ -31,35 +39,45 @@ impl QueueIo {
         }
     }
 
-    pub(super) fn submit_decoded_dma(
-        &mut self,
+    pub(super) fn fetch(
+        &self,
+        dma_space: &DmaSpace,
+        bus_control: &BusControlState,
         queue_id: QueueId,
-        command: ExternalCommand,
+        completion_ring: pdma_model_contract::CompletionRingId,
+    ) -> ModelResult<Option<QueueFetch>> {
+        match self {
+            Self::Semantic(io) => Ok(io.fetch(dma_space).map(QueueFetch::Command)),
+            Self::DmaBus(_) => {
+                dma_bus::DmaBusQueueIo::fetch(dma_space, bus_control, queue_id, completion_ring)
+            }
+        }
+    }
+
+    pub(super) fn consume(
+        &mut self,
+        dma_space: &DmaSpace,
+        bus_control: &mut BusControlState,
+        queue_id: QueueId,
     ) -> ModelResult<()> {
         match self {
-            Self::Semantic(_) => Err(ModelError::UnknownQueue(queue_id)),
-            Self::DmaBus(io) => io.submit_decoded(command),
+            Self::Semantic(io) => {
+                io.consume(dma_space);
+                Ok(())
+            }
+            Self::DmaBus(_) => dma_bus::DmaBusQueueIo::consume(bus_control, queue_id),
         }
     }
 
-    pub(super) fn fetch(&self, dma_space: &DmaSpace) -> Option<ExternalCommand> {
-        match self {
-            Self::Semantic(io) => io.fetch(dma_space),
-            Self::DmaBus(io) => io.fetch(dma_space),
-        }
-    }
-
-    pub(super) fn consume(&mut self, dma_space: &DmaSpace) {
-        match self {
-            Self::Semantic(io) => io.consume(dma_space),
-            Self::DmaBus(io) => io.consume(dma_space),
-        }
-    }
-
-    pub(super) const fn has_pending(&self, dma_space: &DmaSpace) -> bool {
+    pub(super) fn has_pending(
+        &self,
+        dma_space: &DmaSpace,
+        bus_control: &BusControlState,
+        queue_id: QueueId,
+    ) -> bool {
         match self {
             Self::Semantic(io) => io.has_pending(dma_space),
-            Self::DmaBus(io) => io.has_pending(dma_space),
+            Self::DmaBus(_) => dma_bus::DmaBusQueueIo::has_pending(bus_control, queue_id),
         }
     }
 

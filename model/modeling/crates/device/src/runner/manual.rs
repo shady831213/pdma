@@ -1,4 +1,5 @@
 use super::backend::{DeviceModel, ModelStepStatus};
+use super::bus::control::BusControlState;
 use super::{AsyncRunSummary, AsyncStepStatus};
 use crate::dma_space::{DmaSpace, DmaSpaceError, DmaStage};
 use pdma_model_contract::ResourceConfig;
@@ -18,6 +19,7 @@ use pdma_model_contract::trace::TraceEvent;
 pub struct SyncDevice {
     pub(in crate::runner) backend: DeviceModel,
     dma_space: DmaSpace,
+    bus_control: BusControlState,
     steps: usize,
     last_status: AsyncStepStatus,
 }
@@ -33,6 +35,7 @@ impl SyncDevice {
         Self {
             backend: DeviceModel::queue_port_with_resource_config(config),
             dma_space: DmaSpace::new(),
+            bus_control: BusControlState::new(),
             steps: 0,
             last_status: AsyncStepStatus::Idle,
         }
@@ -109,15 +112,6 @@ impl SyncDevice {
         self.backend.submit_command(queue, command)
     }
 
-    /// Injects one already-decoded DMA command without modeling raw descriptor fetch.
-    pub fn submit_decoded_dma_command(
-        &mut self,
-        queue: QueueConfigHandle,
-        command: ExternalCommand,
-    ) -> ModelResult<()> {
-        self.backend.submit_decoded_dma_command(queue, command)
-    }
-
     /// Captures a software doorbell for one queue.
     pub fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
         self.backend.ring_doorbell(queue)
@@ -192,7 +186,10 @@ impl SyncDevice {
     pub fn run_until_idle(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
         let start_steps = self.steps;
         while self.steps - start_steps < max_steps {
-            match self.backend.step(&mut self.dma_space)? {
+            match self
+                .backend
+                .step(&mut self.dma_space, &mut self.bus_control)?
+            {
                 ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;
@@ -215,7 +212,10 @@ impl SyncDevice {
         let start_steps = self.steps;
         let mut stalls = 0;
         while self.steps - start_steps < max_steps {
-            match self.backend.step(&mut self.dma_space)? {
+            match self
+                .backend
+                .step(&mut self.dma_space, &mut self.bus_control)?
+            {
                 ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;
@@ -241,7 +241,7 @@ impl SyncDevice {
                 }
             }
         }
-        if self.backend.has_work(&self.dma_space) {
+        if self.backend.has_work(&self.dma_space, &self.bus_control) {
             Err(ModelError::StepBudgetExhausted { max_steps })
         } else {
             Ok(AsyncRunSummary {
@@ -283,7 +283,7 @@ impl SyncDevice {
         max_steps: usize,
         start_steps: usize,
     ) -> ModelResult<AsyncRunSummary> {
-        if self.backend.has_work(&self.dma_space) {
+        if self.backend.has_work(&self.dma_space, &self.bus_control) {
             Err(ModelError::StepBudgetExhausted { max_steps })
         } else {
             Ok(AsyncRunSummary {

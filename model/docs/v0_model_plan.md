@@ -44,7 +44,7 @@ This file tracks executable v0 model progress. White-board documents explain arc
 
 No active implementation slice remains. The v0 model is complete through the v0.8
 vector-routed IRQ context slice recorded in `model/docs/pdma_arch_spec_v0.md`.
-The scenario suite has 54 tests: 49 software-bearing tests each use exactly one complete
+The scenario suite has 56 tests: 51 software-bearing tests each use exactly one complete
 `run_main`, while five named pure device/manual observability tests intentionally use
 none, as enumerated in the architecture specification.
 

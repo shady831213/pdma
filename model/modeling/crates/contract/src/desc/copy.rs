@@ -1,28 +1,46 @@
 //! Linear and strided copy descriptor schema.
 
-use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use crate::{
+    dma::DmaRangeStart,
+    ids::{BufferId, CommandId, CompletionRingId, QueueId},
+};
 
 /// SDK/driver-facing linear copy request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CopyRequest {
-    src: BufferId,
-    dst: BufferId,
+    src: DmaRangeStart,
+    dst: DmaRangeStart,
     len: usize,
 }
 
 impl CopyRequest {
     /// Creates a linear copy request.
     pub const fn new(src: BufferId, dst: BufferId, len: usize) -> Self {
+        Self::with_starts(DmaRangeStart::new(src, 0), DmaRangeStart::new(dst, 0), len)
+    }
+
+    /// Creates a linear copy request with explicit range starts.
+    pub const fn with_starts(src: DmaRangeStart, dst: DmaRangeStart, len: usize) -> Self {
         Self { src, dst, len }
     }
 
     /// Source buffer handle.
     pub const fn src(self) -> BufferId {
-        self.src
+        self.src.object()
     }
 
     /// Destination buffer handle.
     pub const fn dst(self) -> BufferId {
+        self.dst.object()
+    }
+
+    /// Source DMA range start.
+    pub const fn src_start(self) -> DmaRangeStart {
+        self.src
+    }
+
+    /// Destination DMA range start.
+    pub const fn dst_start(self) -> DmaRangeStart {
         self.dst
     }
 
@@ -40,8 +58,8 @@ impl CopyRequest {
 /// SDK/driver-facing 2D strided copy request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StridedCopyRequest {
-    src: BufferId,
-    dst: BufferId,
+    src: DmaRangeStart,
+    dst: DmaRangeStart,
     rows: usize,
     row_bytes: usize,
     src_stride: usize,
@@ -53,6 +71,25 @@ impl StridedCopyRequest {
     pub const fn new(
         src: BufferId,
         dst: BufferId,
+        rows: usize,
+        row_bytes: usize,
+        src_stride: usize,
+        dst_stride: usize,
+    ) -> Self {
+        Self::with_starts(
+            DmaRangeStart::new(src, 0),
+            DmaRangeStart::new(dst, 0),
+            rows,
+            row_bytes,
+            src_stride,
+            dst_stride,
+        )
+    }
+
+    /// Creates a 2D strided copy request with explicit range starts.
+    pub const fn with_starts(
+        src: DmaRangeStart,
+        dst: DmaRangeStart,
         rows: usize,
         row_bytes: usize,
         src_stride: usize,
@@ -70,11 +107,21 @@ impl StridedCopyRequest {
 
     /// Source buffer handle.
     pub const fn src(self) -> BufferId {
-        self.src
+        self.src.object()
     }
 
     /// Destination buffer handle.
     pub const fn dst(self) -> BufferId {
+        self.dst.object()
+    }
+
+    /// Source DMA range start.
+    pub const fn src_start(self) -> DmaRangeStart {
+        self.src
+    }
+
+    /// Destination DMA range start.
+    pub const fn dst_start(self) -> DmaRangeStart {
         self.dst
     }
 

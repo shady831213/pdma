@@ -1,0 +1,225 @@
+mod broadcast;
+mod codec;
+mod copy;
+mod decode;
+mod vector;
+
+use core::fmt;
+
+use super::{AbiDecodeError, AbiEncodeError};
+
+pub use broadcast::{AbiBroadcastCopy, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape};
+pub use copy::{AbiCopy, AbiStridedCopy, CopyIovas, CopyStrides, StridedCopyShape};
+pub use vector::{AbiVectorAdd, VectorIovas};
+
+/// One validated ABI-v1 command descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AbiCommand {
+    /// Linear-copy descriptor.
+    Copy(AbiCopy),
+    /// Strided-copy descriptor.
+    StridedCopy(AbiStridedCopy),
+    /// Indirect-broadcast descriptor.
+    BroadcastCopy(AbiBroadcastCopy),
+    /// Vector-add descriptor.
+    VectorAdd(AbiVectorAdd),
+}
+
+impl AbiCommand {
+    /// Encodes one command into a complete 64-byte descriptor.
+    ///
+    /// # Errors
+    /// Returns a typed error when `bytes` is shorter than one descriptor.
+    pub fn encode(self, bytes: &mut [u8]) -> Result<(), AbiEncodeError> {
+        codec::encode_descriptor(self, bytes)
+    }
+
+    /// Decodes and validates one complete ABI-v1 descriptor.
+    ///
+    /// # Errors
+    /// Returns the first canonical validation failure.
+    pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
+        decode::decode_descriptor(bytes)
+    }
+}
+
+impl BroadcastDestinationEntry {
+    /// Encodes one destination IOVA into an eight-byte list entry.
+    ///
+    /// # Errors
+    /// Returns a typed error when `bytes` is shorter than one entry.
+    pub fn encode(self, bytes: &mut [u8]) -> Result<(), AbiEncodeError> {
+        codec::encode_destination(self, bytes)
+    }
+
+    /// Decodes one eight-byte destination IOVA.
+    ///
+    /// # Errors
+    /// Returns a typed error when `bytes` is shorter than one entry.
+    pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
+        decode::decode_destination(bytes)
+    }
+}
+
+/// Invalid host-side descriptor construction values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptorValueError {
+    /// The indirect destination count is zero or above the advertised maximum.
+    InvalidIndirectCount {
+        /// Supplied count.
+        observed: u32,
+        /// Advertised maximum.
+        maximum: u32,
+    },
+    /// The indirect-list IOVA does not meet the entry alignment.
+    InvalidIndirectAlignment {
+        /// Supplied list IOVA.
+        address: u64,
+        /// Required alignment.
+        alignment: u64,
+    },
+}
+
+/// Failure while decoding an untrusted command descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptorDecodeError {
+    /// A checked scalar codec rejected the source.
+    Codec(AbiDecodeError),
+    /// Canonical descriptor metadata does not contain the required fields.
+    MetadataMismatch,
+    /// Descriptor version differs from ABI v1.
+    InvalidVersion {
+        /// Supplied version.
+        observed: u16,
+        /// Required version.
+        expected: u16,
+    },
+    /// Descriptor record size differs from 64 bytes.
+    InvalidSize {
+        /// Supplied size.
+        observed: u16,
+        /// Required size.
+        expected: u16,
+    },
+    /// Descriptor opcode is not assigned by ABI v1.
+    InvalidOpcode {
+        /// Supplied opcode.
+        observed: u16,
+        /// Highest contiguous ABI-v1 opcode.
+        maximum: u16,
+    },
+    /// Descriptor flags contain bits not accepted by ABI v1.
+    InvalidFlags {
+        /// Supplied flags.
+        observed: u16,
+        /// Accepted flag mask.
+        allowed: u16,
+    },
+    /// An operation-reserved payload word is nonzero.
+    InvalidReserved {
+        /// Reserved word byte offset.
+        offset: u16,
+        /// Supplied word.
+        observed: u64,
+    },
+    /// A fixed-width scalar exceeds its advertised ABI-v1 limit.
+    ValueOutOfRange {
+        /// Scalar byte offset.
+        offset: u16,
+        /// Supplied value.
+        observed: u64,
+        /// Advertised maximum.
+        maximum: u32,
+    },
+    /// The decoded indirect destination count is invalid.
+    InvalidIndirectCount {
+        /// Supplied count.
+        observed: u64,
+        /// Advertised maximum.
+        maximum: u32,
+    },
+    /// The decoded indirect-list IOVA is unaligned.
+    InvalidIndirectAlignment {
+        /// Supplied list IOVA.
+        address: u64,
+        /// Required alignment.
+        alignment: u64,
+    },
+}
+
+impl From<AbiDecodeError> for DescriptorDecodeError {
+    fn from(error: AbiDecodeError) -> Self {
+        Self::Codec(error)
+    }
+}
+
+impl fmt::Display for DescriptorValueError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidIndirectCount { observed, maximum } => {
+                write!(
+                    formatter,
+                    "indirect destination count {observed} is outside 1..={maximum}"
+                )
+            }
+            Self::InvalidIndirectAlignment { address, alignment } => {
+                write!(
+                    formatter,
+                    "indirect list address {address:#x} is not aligned to {alignment}"
+                )
+            }
+        }
+    }
+}
+
+impl fmt::Display for DescriptorDecodeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Codec(error) => error.fmt(formatter),
+            Self::MetadataMismatch => formatter.write_str("descriptor metadata is incomplete"),
+            Self::InvalidVersion { observed, expected } => {
+                write!(formatter, "descriptor version {observed} is not {expected}")
+            }
+            Self::InvalidSize { observed, expected } => {
+                write!(formatter, "descriptor size {observed} is not {expected}")
+            }
+            Self::InvalidOpcode { observed, maximum } => {
+                write!(
+                    formatter,
+                    "descriptor opcode {observed} is outside 1..={maximum}"
+                )
+            }
+            Self::InvalidFlags { observed, allowed } => {
+                write!(
+                    formatter,
+                    "descriptor flags {observed:#x} exceed mask {allowed:#x}"
+                )
+            }
+            Self::InvalidReserved { offset, observed } => {
+                write!(
+                    formatter,
+                    "descriptor reserved word at {offset} is {observed:#x}"
+                )
+            }
+            Self::ValueOutOfRange {
+                offset,
+                observed,
+                maximum,
+            } => write!(
+                formatter,
+                "descriptor value {observed} at {offset} exceeds {maximum}"
+            ),
+            Self::InvalidIndirectCount { observed, maximum } => write!(
+                formatter,
+                "indirect destination count {observed} is outside 1..={maximum}"
+            ),
+            Self::InvalidIndirectAlignment { address, alignment } => write!(
+                formatter,
+                "indirect list address {address:#x} is not aligned to {alignment}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DescriptorValueError {}
+impl std::error::Error for DescriptorDecodeError {}

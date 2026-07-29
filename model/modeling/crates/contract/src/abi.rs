@@ -2,11 +2,17 @@
 
 mod address;
 mod codec;
+mod descriptor;
 mod error;
 mod metadata;
 
 pub use address::{AbiId, DmaAddress, DmaRegion};
 pub use codec::{copy_u64_le, read_u16_le, read_u64_le, write_u16_le, write_u64_le};
+pub use descriptor::{
+    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
+    BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
+    DescriptorValueError, StridedCopyShape, VectorIovas,
+};
 pub use error::{AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError};
 pub use metadata::{
     ABI_VERSION, AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION, COMPLETION_ALIGNMENT,

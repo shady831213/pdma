@@ -13,6 +13,8 @@ pub const DESCRIPTOR_SIZE: u16 = 64;
 pub const COMPLETION_SIZE: u16 = 32;
 /// Event record width in bytes.
 pub const EVENT_SIZE: u16 = 64;
+/// Indirect destination-list entry width in bytes.
+pub const INDIRECT_DESTINATION_ENTRY_SIZE: u16 = 8;
 
 /// Required descriptor base alignment.
 pub const DESCRIPTOR_ALIGNMENT: u64 = 64;
@@ -313,6 +315,9 @@ const EVENT_FIELDS: [FieldSpec; 13] = [
     FieldSpec::new("index", 56, 8),
 ];
 
+const INDIRECT_DESTINATION_ENTRY_FIELDS: [FieldSpec; 1] =
+    [FieldSpec::new("destination_iova", 0, 8)];
+
 /// Canonical ABI-v1 descriptor record.
 pub const DESCRIPTOR: RecordSpec = RecordSpec {
     size: DESCRIPTOR_SIZE,
@@ -332,4 +337,11 @@ pub const EVENT: RecordSpec = RecordSpec {
     size: EVENT_SIZE,
     alignment: EVENT_ALIGNMENT,
     fields: &EVENT_FIELDS,
+};
+
+/// Canonical ABI-v1 indirect destination-list entry.
+pub const INDIRECT_DESTINATION_ENTRY: RecordSpec = RecordSpec {
+    size: INDIRECT_DESTINATION_ENTRY_SIZE,
+    alignment: INDIRECT_ENTRY_ALIGNMENT,
+    fields: &INDIRECT_DESTINATION_ENTRY_FIELDS,
 };

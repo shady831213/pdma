@@ -2,13 +2,20 @@
 
 mod address;
 mod codec;
+mod control;
 mod descriptor;
 mod error;
 mod metadata;
 mod record;
+mod ring;
 
 pub use address::{AbiId, DmaAddress, DmaRegion};
 pub use codec::{copy_u64_le, read_u16_le, read_u64_le, write_u16_le, write_u64_le};
+pub use control::{
+    AbiDiscovery, AbiLimits, ControlRequest, DeviceEpoch, DeviceRunState, DeviceStatus,
+    DiscoveryRequest, EpochIrqRoute, EpochIrqSource, EpochQueue, IrqControl, QueueActivation,
+    QueueControl, QueueCursorUpdate, QueueRingRegions, WholeDeviceReset,
+};
 pub use descriptor::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
     BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
@@ -33,3 +40,4 @@ pub use record::{
     decode_completion, decode_event, encode_completion, encode_event, encode_semantic_event,
     select_canonical_fault,
 };
+pub use ring::{RingCursor, RingCursors, RingLayout, RingRecord};

@@ -2,6 +2,10 @@
 
 use core::fmt;
 
+mod control;
+
+pub use control::AbiControlError;
+
 /// Failure while constructing a model DMA address capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbiAddressError {
@@ -118,21 +122,6 @@ pub enum AbiDecodeError {
     InvalidRecordMetadata,
 }
 
-/// Failure while validating a typed ABI control request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AbiControlError {
-    /// The requested ABI version is not supported.
-    UnsupportedVersion {
-        /// Requested ABI version.
-        requested: u16,
-    },
-    /// A control request contains feature bits not assigned by ABI v1.
-    UnknownFeatureBits {
-        /// Unassigned bits after masking known features.
-        bits: u64,
-    },
-}
-
 impl fmt::Display for AbiAddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -215,23 +204,6 @@ impl fmt::Display for AbiDecodeError {
     }
 }
 
-impl fmt::Display for AbiControlError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnsupportedVersion { requested } => {
-                write!(f, "ABI version {requested} is not supported")
-            }
-            Self::UnknownFeatureBits { bits } => {
-                write!(
-                    f,
-                    "control request contains unknown ABI feature bits {bits:#x}"
-                )
-            }
-        }
-    }
-}
-
 impl std::error::Error for AbiAddressError {}
 impl std::error::Error for AbiEncodeError {}
 impl std::error::Error for AbiDecodeError {}
-impl std::error::Error for AbiControlError {}

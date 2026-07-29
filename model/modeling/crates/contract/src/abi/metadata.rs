@@ -187,6 +187,11 @@ impl RecordSpec {
 pub struct AbiV1Features(u64);
 
 impl AbiV1Features {
+    /// Returns every discovery feature implemented by ABI v1.
+    pub const fn all() -> Self {
+        Self(KNOWN_FEATURE_MASK)
+    }
+
     /// Returns the validated fixed-width feature mask.
     pub const fn bits(self) -> u64 {
         self.0

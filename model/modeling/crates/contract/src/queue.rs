@@ -60,6 +60,13 @@ impl QueueConfig {
         self.completion_depth
     }
 
+    /// Queue-local event ring depth derived by ABI v1.
+    pub const fn event_depth(self) -> usize {
+        match self.event_routing {
+            EventRouting::QueueLocal => self.completion_depth,
+        }
+    }
+
     /// Event routing policy.
     pub const fn event_routing(self) -> EventRouting {
         self.event_routing
@@ -149,6 +156,11 @@ impl QueueConfigHandle {
     /// Completion ring depth.
     pub const fn completion_depth(self) -> usize {
         self.config().completion_depth()
+    }
+
+    /// Queue-local event ring depth derived by ABI v1.
+    pub const fn event_depth(self) -> usize {
+        self.config().event_depth()
     }
 
     /// Event routing policy.

@@ -5,6 +5,7 @@ mod codec;
 mod descriptor;
 mod error;
 mod metadata;
+mod record;
 
 pub use address::{AbiId, DmaAddress, DmaRegion};
 pub use codec::{copy_u64_le, read_u16_le, read_u64_le, write_u16_le, write_u64_le};
@@ -24,4 +25,11 @@ pub use metadata::{
     MAX_RING_DEPTH, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES, NamedValue, OPCODES,
     OpcodeSpec, RecordSpec, STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE, SUCCESS_STATUS,
     VECTOR_ADD_FEATURE, VECTOR_ADD_OPCODE, validate_abi_version,
+};
+pub use record::{
+    AbiBounds, AbiEvent, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultCandidate,
+    AbiFaultDetails, AbiFaultOrder, AbiFaultSelectionError, AbiFaultSite, AbiHeaderField,
+    AbiOperandFaultStep, AbiOperandVisit, AbiReservedField, AbiScalarField, AbiStrideOffset,
+    decode_completion, decode_event, encode_completion, encode_event, encode_semantic_event,
+    select_canonical_fault,
 };

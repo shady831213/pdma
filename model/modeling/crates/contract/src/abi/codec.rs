@@ -20,6 +20,16 @@ pub fn read_u16_le(bytes: &[u8], range: Range<usize>) -> Result<u16, AbiDecodeEr
     Ok(u16::from_le_bytes(encoded))
 }
 
+pub(super) fn read_u32_le(bytes: &[u8], range: Range<usize>) -> Result<u32, AbiDecodeError> {
+    let field = decode_field(bytes, range, 4)?;
+    let encoded = <[u8; 4]>::try_from(field).map_err(|_| AbiDecodeError::InvalidFieldRange {
+        start: 0,
+        end: field.len(),
+        width: 4,
+    })?;
+    Ok(u32::from_le_bytes(encoded))
+}
+
 /// Reads a little-endian `u64` from an exact checked range.
 pub fn read_u64_le(bytes: &[u8], range: Range<usize>) -> Result<u64, AbiDecodeError> {
     let field = decode_field(bytes, range, 8)?;

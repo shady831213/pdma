@@ -48,6 +48,12 @@ pub enum AbiEncodeError {
         /// Supplied model identifier.
         value: usize,
     },
+    /// A semantic-only event has no IOVA fault locator.
+    MissingEventIova,
+    /// An event tuple does not follow the ABI-v1 auxiliary-field rules.
+    NonCanonicalEventDetails,
+    /// Canonical metadata does not describe the required record fields.
+    InvalidRecordMetadata,
 }
 
 /// Failure while decoding untrusted fixed-width ABI bytes.
@@ -79,6 +85,37 @@ pub enum AbiDecodeError {
         /// Supplied wire identifier.
         value: u64,
     },
+    /// A fixed ABI header field has an unsupported value.
+    InvalidRecordField {
+        /// Canonical field name.
+        field: &'static str,
+        /// Observed numeric value.
+        value: u64,
+    },
+    /// A completion status is not assigned by ABI v1.
+    UnknownCompletionStatus {
+        /// Unassigned status value.
+        value: u16,
+    },
+    /// An event kind is not assigned by ABI v1.
+    UnknownEventKind {
+        /// Unassigned kind value.
+        value: u16,
+    },
+    /// An event stage is not assigned by ABI v1.
+    UnknownEventStage {
+        /// Unassigned stage value.
+        value: u16,
+    },
+    /// An event access is not assigned by ABI v1.
+    UnknownEventAccess {
+        /// Unassigned access value.
+        value: u16,
+    },
+    /// An event tuple does not follow the ABI-v1 auxiliary-field rules.
+    NonCanonicalEventDetails,
+    /// Canonical metadata does not describe the required record fields.
+    InvalidRecordMetadata,
 }
 
 /// Failure while validating a typed ABI control request.
@@ -133,6 +170,11 @@ impl fmt::Display for AbiEncodeError {
                     "model identifier {value} is not representable as an ABI u64"
                 )
             }
+            Self::MissingEventIova => write!(f, "event has no ABI IOVA fault locator"),
+            Self::NonCanonicalEventDetails => {
+                write!(f, "event auxiliary fields are not canonical for ABI v1")
+            }
+            Self::InvalidRecordMetadata => write!(f, "canonical ABI record metadata is invalid"),
         }
     }
 }
@@ -156,6 +198,19 @@ impl fmt::Display for AbiDecodeError {
                     "ABI identifier {value} is not representable by the model"
                 )
             }
+            Self::InvalidRecordField { field, value } => {
+                write!(f, "ABI record field {field} has invalid value {value}")
+            }
+            Self::UnknownCompletionStatus { value } => {
+                write!(f, "unknown ABI completion status {value}")
+            }
+            Self::UnknownEventKind { value } => write!(f, "unknown ABI event kind {value}"),
+            Self::UnknownEventStage { value } => write!(f, "unknown ABI event stage {value}"),
+            Self::UnknownEventAccess { value } => write!(f, "unknown ABI event access {value}"),
+            Self::NonCanonicalEventDetails => {
+                write!(f, "event auxiliary fields are not canonical for ABI v1")
+            }
+            Self::InvalidRecordMetadata => write!(f, "canonical ABI record metadata is invalid"),
         }
     }
 }

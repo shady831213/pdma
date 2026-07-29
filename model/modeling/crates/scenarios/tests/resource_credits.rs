@@ -14,6 +14,11 @@ use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
+async fn async_runner_vector_add_stalls_with_one_read_slot() {
+    vector_read::run_vector_add_one_read_slot_scenario().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_stalls_without_read_slots() {
     // Given: an async copy on a device with no read slots.
     let (runner, worker) =

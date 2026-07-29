@@ -8,6 +8,11 @@ use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]
+async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
+    retry::run_strided_completion_retry_scenario().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     // Given: async runner handle, AsyncDriver, padded source rows, and sentinel destination bytes.
     let (runner, worker) = AsyncDevice::queue_port();

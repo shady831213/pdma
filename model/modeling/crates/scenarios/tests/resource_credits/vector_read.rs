@@ -1,7 +1,7 @@
 use super::*;
 
-#[tokio::test(flavor = "current_thread")]
-async fn async_runner_vector_add_stalls_with_one_read_slot() {
+#[allow(clippy::expect_used, clippy::redundant_pub_crate)]
+pub(super) async fn run_vector_add_one_read_slot_scenario() {
     // Given: an async vector-add command on a device with only one read slot.
     let (runner, worker) =
         AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(1));

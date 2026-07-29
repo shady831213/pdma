@@ -1,7 +1,7 @@
 use super::*;
 
-#[tokio::test(flavor = "current_thread")]
-async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
+#[allow(clippy::expect_used, clippy::redundant_pub_crate)]
+pub(super) async fn run_strided_completion_retry_scenario() {
     // Given: two strided copies sharing a one-slot completion ring.
     let (runner, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());

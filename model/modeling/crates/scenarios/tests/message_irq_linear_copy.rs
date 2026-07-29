@@ -87,7 +87,8 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
-            let source = IrqSource::Completion(driver.completion_ring_id());
+            let source_capability = driver.completion_irq_source();
+            let source = source_capability.source();
             let handler = stateful_irq_handler(LinearCopyHandler {
                 driver: driver.clone(),
                 port: main_port.clone(),
@@ -96,10 +97,10 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
             });
             delivery.register_handler(vector, handler)?;
             main_port
-                .configure_irq_route(source, IrqRoute::Message(vector))
+                .configure_irq_route(source_capability, IrqRoute::Message(vector))
                 .await?;
-            main_port.enable_irq_source(source).await?;
-            main_port.unmask_irq_source(source).await?;
+            main_port.enable_irq_source(source_capability).await?;
+            main_port.unmask_irq_source(source_capability).await?;
 
             let src = driver.allocate_buffer_on(&mut main_port, 4).await;
             let dst = driver.allocate_buffer_on(&mut main_port, 4).await;

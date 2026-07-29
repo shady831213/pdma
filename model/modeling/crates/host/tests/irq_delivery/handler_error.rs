@@ -1,6 +1,5 @@
 use pdma_model_contract::{
-    CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector, ModelError, ModelResult,
-    TraceEventKind,
+    CopyRequest, IrqNotification, IrqRoute, IrqVector, ModelError, ModelResult, TraceEventKind,
 };
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
@@ -31,7 +30,7 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
     let (mut driver, src, dst) = cpu
         .run_main(async {
             let driver = AsyncDriver::setup_on(&mut device_port, 4, 4).await?;
-            let source = IrqSource::Completion(driver.completion_ring_id());
+            let source = driver.completion_irq_source();
             device_port
                 .configure_irq_route(source, IrqRoute::Message(IrqVector::new(9)))
                 .await?;

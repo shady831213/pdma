@@ -1,7 +1,6 @@
 use pdma_model_contract::{
-    BufferId, CompletionRecord, CompletionRingId, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult, QueueConfig, QueueConfigHandle,
-    QueueId,
+    BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
+    IrqRoute, IrqSnapshot, ModelError, ModelResult, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::AsyncDeviceHandle;
 use pdma_model_host::AsyncDevicePort;
@@ -186,56 +185,63 @@ impl AsyncDevicePort for BlockingPort {
 
     async fn submit_command(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
         command: ExternalCommand,
     ) -> ModelResult<()> {
         self.control.submit.enter().await?;
         self.control.submit.record_inner_call();
-        self.inner.submit_command(queue_id, command).await
+        self.inner.submit_command(queue, command).await
     }
 
-    async fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
+    async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
         self.control.doorbell.enter().await?;
         self.control.doorbell.record_inner_call();
-        self.inner.ring_doorbell(queue_id).await
+        self.inner.ring_doorbell(queue).await
     }
 
     async fn poll_completion(
         &mut self,
-        completion_ring_id: CompletionRingId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
         self.control.completion.enter().await?;
         self.control.completion.record_inner_call();
-        self.inner.poll_completion(completion_ring_id).await
+        self.inner.poll_completion(queue).await
     }
 
-    async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
+    async fn poll_queue_event(
+        &mut self,
+        queue: QueueConfigHandle,
+    ) -> ModelResult<Option<EventRecord>> {
         self.control.event.enter().await?;
         self.control.event.record_inner_call();
-        self.inner.poll_queue_event(queue_id).await
+        self.inner.poll_queue_event(queue).await
     }
 
-    async fn configure_irq_route(&mut self, source: IrqSource, route: IrqRoute) -> ModelResult<()> {
+    async fn configure_irq_route(
+        &mut self,
+        source: EpochIrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
         self.inner.configure_irq_route(source, route).await
     }
 
-    async fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.inner.enable_irq_source(source).await
     }
 
-    async fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.inner.disable_irq_source(source).await
     }
 
-    async fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.inner.mask_irq_source(source).await
     }
 
-    async fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.inner.unmask_irq_source(source).await
     }
 
-    async fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.inner.ack_irq_source(source).await
     }
 

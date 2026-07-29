@@ -86,8 +86,10 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
-            let completion_source = IrqSource::Completion(driver.completion_ring_id());
-            let event_source = IrqSource::Event(driver.queue_id());
+            let completion_capability = driver.completion_irq_source();
+            let event_capability = driver.event_irq_source();
+            let completion_source = completion_capability.source();
+            let event_source = event_capability.source();
             let completion_handler = stateful_irq_handler(DriverHandler {
                 identity: HandlerIdentity::Completion,
                 calls: 0,
@@ -109,8 +111,8 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
                 registry.register(event_vector, event_handler)
             })?;
             for (source, vector) in [
-                (completion_source, completion_vector),
-                (event_source, event_vector),
+                (completion_capability, completion_vector),
+                (event_capability, event_vector),
             ] {
                 main_port
                     .configure_irq_route(source, IrqRoute::Message(vector))

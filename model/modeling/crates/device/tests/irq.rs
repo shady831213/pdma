@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{
-    ModelError, ResourceConfig,
+    DeviceEpoch, EpochIrqSource, ModelError, ResourceConfig,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::{CommandId, CompletionRingId, QueueId},
     irq::IrqSource,
@@ -26,7 +26,7 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
         ))
         .await
         .expect("queue setup is valid");
-    let source = IrqSource::Completion(queue.completion_ring_id());
+    let source = queue.completion_irq_source();
     handle
         .enable_irq_source(source)
         .await
@@ -50,16 +50,13 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
             CopyRequest::new(src, dst, 4),
         ));
         handle
-            .submit_command(queue.queue_id(), command)
+            .submit_command(queue, command)
             .await
             .expect("copy submission has ring space");
     }
 
     // When: the first completion publishes, the second stalls, and software acks before draining.
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
+    handle.ring_doorbell(queue).await.expect("doorbell rings");
     let first_snapshot = runner.wait_for_progress_after(0).await;
     tokio::task::yield_now().await;
     let stalled_snapshot = runner.snapshot().await;
@@ -73,7 +70,7 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
         .expect("completion IRQ source exists");
     let retained_irq = handle.irq_snapshot().await;
     let first_completion = handle
-        .poll_completion(queue.completion_ring_id())
+        .poll_completion(queue)
         .await
         .expect("completion ring exists")
         .expect("first completion was published");
@@ -89,12 +86,12 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
     assert_eq!(first_snapshot.steps, 1);
     assert!(stalled_snapshot.stalls >= 1);
     assert!(first_irq.asserted());
-    assert_eq!(first_irq.cause().source(), source);
+    assert_eq!(first_irq.cause().source(), source.source());
     assert!(retained_irq.is_some_and(pdma_model_contract::IrqSnapshot::asserted));
     assert_eq!(first_completion.command_id(), CommandId::new(0));
     assert_eq!(retry_snapshot.steps, 2);
     assert!(retry_irq.asserted());
-    assert_eq!(retry_irq.cause().source(), source);
+    assert_eq!(retry_irq.cause().source(), source.source());
     assert_eq!(summary.steps, 2);
 }
 
@@ -115,10 +112,12 @@ async fn invalid_irq_source_control_returns_error_without_creating_state() {
         .expect("queue setup is valid");
     let unknown_completion = IrqSource::Completion(CompletionRingId::new(99));
     let unknown_event = IrqSource::Event(QueueId::new(99));
+    let unknown_completion_cap = EpochIrqSource::new(DeviceEpoch::initial(), unknown_completion);
+    let unknown_event_cap = EpochIrqSource::new(DeviceEpoch::initial(), unknown_event);
 
     // When: software controls unknown IRQ sources.
-    let completion_result = handle.enable_irq_source(unknown_completion).await;
-    let event_result = handle.mask_irq_source(unknown_event).await;
+    let completion_result = handle.enable_irq_source(unknown_completion_cap).await;
+    let event_result = handle.mask_irq_source(unknown_event_cap).await;
 
     // Then: both controls fail and no pending IRQ state is created.
     assert_eq!(
@@ -130,6 +129,71 @@ async fn invalid_irq_source_control_returns_error_without_creating_state() {
         Err(ModelError::UnknownIrqSource(unknown_event))
     );
     assert_eq!(handle.irq_snapshot().await, None);
+    runner.request_shutdown().await;
+    worker.await.expect("runner joins cleanly");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn stale_irq_capability_commits_nothing() {
+    // Given: one real IRQ source and a same-source capability from a later device epoch.
+    let (runner, worker) = AsyncDevice::queue_port();
+    let worker = tokio::spawn(worker.run());
+    let handle = runner.handle();
+    let queue = handle
+        .create_queue(QueueConfig::new(
+            1,
+            1,
+            EventRouting::QueueLocal,
+            SoftwareOwnerId::new(0),
+        ))
+        .await
+        .expect("queue setup is valid");
+    let source = queue.completion_irq_source();
+    handle
+        .enable_irq_source(source)
+        .await
+        .expect("current IRQ capability enables");
+    let stale_epoch = DeviceEpoch::initial()
+        .next()
+        .expect("initial epoch can advance");
+    let stale = EpochIrqSource::new(stale_epoch, source.source());
+    handle.enable_tracing().await;
+    let before = handle.trace_events().await;
+    let snapshot_before = handle.irq_snapshot().await;
+
+    // When: every stale IRQ control reaches its device commit boundary.
+    let configure = handle
+        .configure_irq_route(
+            stale,
+            pdma_model_contract::IrqRoute::Message(pdma_model_contract::IrqVector::new(7)),
+        )
+        .await;
+    let enable = handle.enable_irq_source(stale).await;
+    let disable = handle.disable_irq_source(stale).await;
+    let mask = handle.mask_irq_source(stale).await;
+    let unmask = handle.unmask_irq_source(stale).await;
+    let ack = handle.ack_irq_source(stale).await;
+
+    // Then: every control fails before trace, cause, message, or ack state changes.
+    let expected = Err(ModelError::StaleDeviceEpoch {
+        expected: DeviceEpoch::initial(),
+        actual: stale_epoch,
+    });
+    assert_ne!(source, stale);
+    assert_eq!(configure, expected);
+    assert_eq!(enable, expected);
+    assert_eq!(disable, expected);
+    assert_eq!(mask, expected);
+    assert_eq!(unmask, expected);
+    assert_eq!(ack, expected);
+    assert_eq!(handle.trace_events().await, before);
+    assert_eq!(handle.irq_snapshot().await, snapshot_before);
+    println!(
+        "IRQ epochs current={} stale={} controls={configure:?}/{enable:?}/{disable:?}/{mask:?}/\
+         {unmask:?}/{ack:?} trace_unchanged=true snapshot_unchanged=true",
+        source.epoch().raw(),
+        stale_epoch.raw(),
+    );
     runner.request_shutdown().await;
     worker.await.expect("runner joins cleanly");
 }
@@ -151,7 +215,7 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
         ))
         .await
         .expect("queue setup is valid");
-    let source = IrqSource::Event(queue.queue_id());
+    let source = queue.event_irq_source();
     handle
         .enable_irq_source(source)
         .await
@@ -170,16 +234,13 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
             CopyRequest::new(src, dst, 8),
         ));
         handle
-            .submit_command(queue.queue_id(), command)
+            .submit_command(queue, command)
             .await
             .expect("faulting copy submission has ring space");
     }
 
     // When: the first event publishes, the second stalls, and software acks before draining.
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
+    handle.ring_doorbell(queue).await.expect("doorbell rings");
     let first_error = runner.wait_for_error_after(0).await;
     tokio::task::yield_now().await;
     let stalled_snapshot = runner.snapshot().await;
@@ -190,7 +251,7 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
         .expect("event IRQ source exists");
     let retained_irq = handle.irq_snapshot().await;
     let first_event = handle
-        .poll_queue_event(queue.queue_id())
+        .poll_queue_event(queue)
         .await
         .expect("queue exists")
         .expect("first event was published");
@@ -203,11 +264,11 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
     assert_eq!(first_error.errors, 1);
     assert!(stalled_snapshot.stalls >= 1);
     assert!(first_irq.asserted());
-    assert_eq!(first_irq.cause().source(), source);
+    assert_eq!(first_irq.cause().source(), source.source());
     assert!(retained_irq.is_some_and(pdma_model_contract::IrqSnapshot::asserted));
     assert_eq!(first_event.command_id(), CommandId::new(0));
     assert_eq!(retry_error.errors, 2);
     assert!(retry_irq.asserted());
-    assert_eq!(retry_irq.cause().source(), source);
+    assert_eq!(retry_irq.cause().source(), source.source());
     assert_eq!(summary.errors, 2);
 }

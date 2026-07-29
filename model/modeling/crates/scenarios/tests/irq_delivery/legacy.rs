@@ -2,7 +2,7 @@ use super::{
     assertions::{assert_line_lifecycle, assert_line_observation, receive_observations},
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
-use pdma_model_contract::{CopyRequest, IrqLine, IrqRoute, IrqSource, IrqVector, ModelResult};
+use pdma_model_contract::{CopyRequest, IrqLine, IrqRoute, IrqVector, ModelResult};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 use tokio::sync::{mpsc, oneshot};
@@ -43,8 +43,9 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
-            let completion_source = IrqSource::Completion(driver.completion_ring_id());
-            let event_source = IrqSource::Event(driver.queue_id());
+            let completion_capability = driver.completion_irq_source();
+            let completion_source = completion_capability.source();
+            let event_source = driver.event_irq_source().source();
             bootstrap_tx
                 .send(DriverBootstrap {
                     driver: driver.clone(),
@@ -54,10 +55,10 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
                 .expect("delivery receives its capability clone");
             ready_rx.await.expect("line handler is registered");
             main_port
-                .configure_irq_route(completion_source, IrqRoute::Line(IrqLine::new(vector)))
+                .configure_irq_route(completion_capability, IrqRoute::Line(IrqLine::new(vector)))
                 .await?;
-            main_port.enable_irq_source(completion_source).await?;
-            main_port.unmask_irq_source(completion_source).await?;
+            main_port.enable_irq_source(completion_capability).await?;
+            main_port.unmask_irq_source(completion_capability).await?;
             let src = driver.allocate_buffer_on(&mut main_port, 4).await;
             let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
             driver

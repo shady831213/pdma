@@ -1,15 +1,14 @@
 use super::AsyncStallReason;
 use super::native::QueuePortDeviceModel;
 use crate::dma_space::DmaSpace;
-use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::ModelResult;
+use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::{DeviceEpoch, EpochIrqSource, ResourceConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ModelStepStatus {
@@ -56,39 +55,44 @@ impl DeviceModel {
 
     pub(super) fn submit_command(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
         command: ExternalCommand,
     ) -> ModelResult<()> {
+        self.validate_epoch(queue.epoch())?;
         match self {
-            Self::QueuePort(device) => device.submit_command(queue_id, command),
+            Self::QueuePort(device) => device.submit_command(queue, command),
         }
     }
 
-    pub(super) fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
+    pub(super) fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
+        self.validate_epoch(queue.epoch())?;
         match self {
-            Self::QueuePort(device) => device.ring_doorbell(queue_id),
+            Self::QueuePort(device) => device.ring_doorbell(queue),
         }
     }
 
     pub(super) fn poll_completion(
         &mut self,
-        completion_ring_id: CompletionRingId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
+        self.validate_epoch(queue.epoch())?;
         match self {
-            Self::QueuePort(device) => device.poll_completion(completion_ring_id),
+            Self::QueuePort(device) => device.poll_completion(queue),
         }
     }
 
     pub(super) fn poll_queue_event(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<EventRecord>> {
+        self.validate_epoch(queue.epoch())?;
         match self {
-            Self::QueuePort(device) => device.poll_queue_event(queue_id),
+            Self::QueuePort(device) => device.poll_queue_event(queue),
         }
     }
 
-    pub(super) fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(super) fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
         match self {
             Self::QueuePort(device) => device.enable_irq_source(source),
         }
@@ -96,33 +100,38 @@ impl DeviceModel {
 
     pub(super) fn configure_irq_route(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
         route: IrqRoute,
     ) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
         match self {
             Self::QueuePort(device) => device.configure_irq_route(source, route),
         }
     }
 
-    pub(super) fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(super) fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
         match self {
             Self::QueuePort(device) => device.disable_irq_source(source),
         }
     }
 
-    pub(super) fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(super) fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
         match self {
             Self::QueuePort(device) => device.mask_irq_source(source),
         }
     }
 
-    pub(super) fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(super) fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
         match self {
             Self::QueuePort(device) => device.unmask_irq_source(source),
         }
     }
 
-    pub(super) fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(super) fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
         match self {
             Self::QueuePort(device) => device.ack_irq_source(source),
         }
@@ -167,6 +176,17 @@ impl DeviceModel {
     pub(super) fn trace_json(&self) -> String {
         match self {
             Self::QueuePort(device) => device.trace_json(),
+        }
+    }
+
+    fn validate_epoch(&self, actual: DeviceEpoch) -> ModelResult<()> {
+        let expected = match self {
+            Self::QueuePort(device) => device.epoch(),
+        };
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(ModelError::StaleDeviceEpoch { expected, actual })
         }
     }
 }

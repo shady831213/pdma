@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::{
-    CopyRequest, EventRouting, IrqSource, ModelResult, QueueConfig, SoftwareOwnerId,
+    CopyRequest, EventRouting, ModelResult, QueueConfig, SoftwareOwnerId,
     desc::{CopyCommand, ExternalCommand},
     ids::CommandId,
 };
@@ -19,7 +19,7 @@ fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelRes
             SoftwareOwnerId::new(0),
         ))
         .expect("queue setup is valid");
-    let source = IrqSource::Completion(queue.completion_ring_id());
+    let source = queue.completion_irq_source();
     device
         .enable_irq_source(source)
         .expect("completion IRQ source exists");
@@ -37,13 +37,13 @@ fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelRes
     assert!(device.wait_irq_notification().is_some());
     assert!(
         device
-            .poll_completion(queue.completion_ring_id())
+            .poll_completion(queue)
             .expect("completion ring exists")
             .is_some()
     );
     assert_eq!(
         device
-            .poll_completion(queue.completion_ring_id())
+            .poll_completion(queue)
             .expect("completion ring exists"),
         None
     );
@@ -60,7 +60,7 @@ fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelRes
         .irq_snapshot()
         .expect("the relatched completion keeps the Line pending");
     assert!(snapshot.asserted());
-    assert_eq!(snapshot.cause().source(), source);
+    assert_eq!(snapshot.cause().source(), source.source());
     Ok(())
 }
 
@@ -74,7 +74,7 @@ fn line_ack_cannot_create_a_cause_for_a_disabled_source() -> ModelResult<()> {
         EventRouting::QueueLocal,
         SoftwareOwnerId::new(0),
     ))?;
-    let source = IrqSource::Completion(queue.completion_ring_id());
+    let source = queue.completion_irq_source();
     let src = device.allocate_buffer(4);
     let dst = device.allocate_buffer(4);
     device.write_buffer(src, 0, &[1, 2, 3, 4])?;
@@ -100,7 +100,7 @@ fn submit_copy(
     command_id: usize,
 ) -> ModelResult<()> {
     device.submit_command(
-        queue.queue_id(),
+        queue,
         ExternalCommand::Copy(CopyCommand::new(
             CommandId::new(command_id),
             queue.queue_id(),
@@ -108,5 +108,5 @@ fn submit_copy(
             CopyRequest::new(src, dst, 4),
         )),
     )?;
-    device.ring_doorbell(queue.queue_id())
+    device.ring_doorbell(queue)
 }

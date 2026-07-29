@@ -9,8 +9,8 @@ pub use irq::DriverIrqRecord;
 
 use core::DriverCore;
 use pdma_model_contract::{
-    BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, ModelResult,
-    QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
+    BufferId, CompletionRecord, CompletionRingId, EpochIrqSource, EventRecord, EventRouting,
+    ModelResult, QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
 };
 
 use crate::AsyncDevicePort;
@@ -154,6 +154,16 @@ macro_rules! impl_driver_data_plane {
             /// Queue configuration handle owned by this driver instance.
             pub const fn queue_config_handle(&self) -> QueueConfigHandle {
                 self.core.queue_config_handle()
+            }
+
+            /// Epoch-qualified completion interrupt source owned by this driver.
+            pub const fn completion_irq_source(&self) -> EpochIrqSource {
+                self.core.queue_config_handle().completion_irq_source()
+            }
+
+            /// Epoch-qualified event interrupt source owned by this driver.
+            pub const fn event_irq_source(&self) -> EpochIrqSource {
+                self.core.queue_config_handle().event_irq_source()
             }
         }
     };

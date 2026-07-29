@@ -1,6 +1,4 @@
-use pdma_model_contract::{
-    CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector, ModelResult,
-};
+use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqVector, ModelResult};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use tokio::sync::mpsc;
@@ -28,7 +26,7 @@ async fn shutdown_wins_over_a_ready_notification() -> ModelResult<()> {
     let (mut driver, src, dst) = cpu
         .run_main(async {
             let driver = AsyncDriver::setup_on(&mut device_port, 4, 4).await?;
-            let source = IrqSource::Completion(driver.completion_ring_id());
+            let source = driver.completion_irq_source();
             device_port
                 .configure_irq_route(source, IrqRoute::Message(IrqVector::new(8)))
                 .await?;

@@ -1,7 +1,7 @@
 use super::AsyncDevicePort;
 use pdma_model_contract::{
-    BufferId, CompletionRecord, CompletionRingId, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, IrqSource, ModelResult, QueueConfig, QueueConfigHandle, QueueId,
+    BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
+    IrqRoute, IrqSnapshot, ModelResult, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::AsyncDeviceHandle;
 
@@ -24,48 +24,55 @@ impl AsyncDevicePort for AsyncDeviceHandle {
 
     async fn submit_command(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
         command: ExternalCommand,
     ) -> ModelResult<()> {
-        Self::submit_command(self, queue_id, command).await
+        Self::submit_command(self, queue, command).await
     }
 
-    async fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
-        Self::ring_doorbell(self, queue_id).await
+    async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
+        Self::ring_doorbell(self, queue).await
     }
 
     async fn poll_completion(
         &mut self,
-        completion_ring_id: CompletionRingId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
-        Self::poll_completion(self, completion_ring_id).await
+        Self::poll_completion(self, queue).await
     }
 
-    async fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
-        Self::poll_queue_event(self, queue_id).await
+    async fn poll_queue_event(
+        &mut self,
+        queue: QueueConfigHandle,
+    ) -> ModelResult<Option<EventRecord>> {
+        Self::poll_queue_event(self, queue).await
     }
 
-    async fn configure_irq_route(&mut self, source: IrqSource, route: IrqRoute) -> ModelResult<()> {
+    async fn configure_irq_route(
+        &mut self,
+        source: EpochIrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
         Self::configure_irq_route(self, source, route).await
     }
 
-    async fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         Self::enable_irq_source(self, source).await
     }
 
-    async fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         Self::disable_irq_source(self, source).await
     }
 
-    async fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         Self::mask_irq_source(self, source).await
     }
 
-    async fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         Self::unmask_irq_source(self, source).await
     }
 
-    async fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         Self::ack_irq_source(self, source).await
     }
 

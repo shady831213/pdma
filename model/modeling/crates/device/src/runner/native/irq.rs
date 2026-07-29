@@ -1,11 +1,12 @@
 use pdma_model_contract::{
-    IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
-    ModelError, ModelResult,
+    DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification,
+    IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult,
 };
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub(super) struct PdmaIrqController {
+    epoch: DeviceEpoch,
     line: IrqLine,
     sources: BTreeMap<IrqSource, PdmaIrqSourceState>,
 }
@@ -22,8 +23,9 @@ struct PdmaIrqSourceState {
 }
 
 impl PdmaIrqController {
-    pub(super) const fn new(line: IrqLine) -> Self {
+    pub(super) const fn new(epoch: DeviceEpoch, line: IrqLine) -> Self {
         Self {
+            epoch,
             line,
             sources: BTreeMap::new(),
         }
@@ -86,7 +88,7 @@ impl PdmaIrqController {
             .unwrap_or(pending);
         let line = state.line()?;
         Some(IrqSnapshot::new(
-            IrqCause::new(line, state.source),
+            IrqCause::new(line, EpochIrqSource::new(self.epoch, state.source)),
             asserted,
         ))
     }
@@ -95,7 +97,7 @@ impl PdmaIrqController {
         if let Some(state) = self.sources.values().find(|state| state.asserts_line()) {
             if let Some(line) = state.line() {
                 return Some(IrqNotification::Line(IrqSnapshot::new(
-                    IrqCause::new(line, state.source),
+                    IrqCause::new(line, EpochIrqSource::new(self.epoch, state.source)),
                     true,
                 )));
             }
@@ -103,7 +105,7 @@ impl PdmaIrqController {
         self.sources
             .values_mut()
             .find(|state| state.can_deliver_message())
-            .and_then(PdmaIrqSourceState::take_message)
+            .and_then(|state| state.take_message(self.epoch))
             .map(IrqNotification::Message)
     }
 
@@ -173,7 +175,7 @@ impl PdmaIrqSourceState {
             && self.pending_messages != 0
     }
 
-    const fn take_message(&mut self) -> Option<IrqMessage> {
+    const fn take_message(&mut self, epoch: DeviceEpoch) -> Option<IrqMessage> {
         if !self.can_deliver_message() {
             return None;
         }
@@ -181,7 +183,11 @@ impl PdmaIrqSourceState {
             IrqRoute::Line(_) => return None,
             IrqRoute::Message(vector) => vector,
         };
-        let message = IrqMessage::new(IrqMessageId::new(self.next_message_id), vector, self.source);
+        let message = IrqMessage::new(
+            IrqMessageId::new(self.next_message_id),
+            vector,
+            EpochIrqSource::new(epoch, self.source),
+        );
         self.next_message_id = self.next_message_id.saturating_add(1);
         self.pending_messages -= 1;
         Some(message)

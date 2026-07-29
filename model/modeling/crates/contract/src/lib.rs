@@ -16,6 +16,7 @@ pub mod queue;
 pub mod resources;
 pub mod trace;
 
+pub use abi::{DeviceEpoch, EpochIrqSource};
 pub use completion::{CompletionRecord, CompletionStatus};
 pub use desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,

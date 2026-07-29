@@ -3,7 +3,7 @@
 use pdma_model_contract::{
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::CommandId,
-    irq::{IrqMessageId, IrqNotification, IrqRoute, IrqSource, IrqVector},
+    irq::{IrqMessageId, IrqNotification, IrqRoute, IrqVector},
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::AsyncDevice;
@@ -23,7 +23,7 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
         ))
         .await
         .expect("queue setup is valid");
-    let source = IrqSource::Completion(queue.completion_ring_id());
+    let source = queue.completion_irq_source();
     let vector = IrqVector::new(11);
     handle
         .configure_irq_route(source, IrqRoute::Message(vector))
@@ -47,7 +47,7 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
     for (command_id, dst) in [first_dst, second_dst].into_iter().enumerate() {
         handle
             .submit_command(
-                queue.queue_id(),
+                queue,
                 ExternalCommand::Copy(CopyCommand::new(
                     CommandId::new(command_id),
                     queue.queue_id(),
@@ -60,10 +60,7 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
     }
 
     // When: both copies retire and software waits for two IRQ notifications.
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
+    handle.ring_doorbell(queue).await.expect("doorbell rings");
     let first = handle
         .wait_irq_notification()
         .await
@@ -81,13 +78,13 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
         IrqNotification::Message(message)
             if message.id() == IrqMessageId::new(0)
                 && message.vector() == vector
-                && message.source() == source
+                && message.source() == source.source()
     ));
     assert!(matches!(
         second,
         IrqNotification::Message(message)
             if message.id() == IrqMessageId::new(1)
                 && message.vector() == vector
-                && message.source() == source
+                && message.source() == source.source()
     ));
 }

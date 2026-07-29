@@ -4,6 +4,7 @@ mod backend;
 mod irq;
 mod manual;
 mod native;
+mod queue_api;
 mod state;
 mod types;
 mod wait;
@@ -14,12 +15,8 @@ use backend::DeviceModel;
 pub use manual::SyncDevice;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::abi::{DmaAddress, DmaRegion};
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::ids::BufferId;
 use pdma_model_contract::trace::TraceEvent;
 use state::{RunnerShared, RunnerState, publish, summary, wake};
 use std::sync::Arc;
@@ -106,12 +103,6 @@ impl AsyncDeviceHandle {
             state.generation
         };
         publish(&self.shared, generation);
-    }
-
-    /// Provisions one command queue and one bound completion ring.
-    pub async fn create_queue(&self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        self.with_backend(|backend| backend.create_queue(config))
-            .await
     }
 
     /// Allocates a device-visible memory buffer.
@@ -223,37 +214,6 @@ impl AsyncDeviceHandle {
             state.generation
         };
         publish(&self.shared, generation);
-    }
-
-    /// Pushes one command into a queue's command ring.
-    pub async fn submit_command(
-        &self,
-        queue_id: QueueId,
-        command: ExternalCommand,
-    ) -> ModelResult<()> {
-        self.with_backend(|backend| backend.submit_command(queue_id, command))
-            .await
-    }
-
-    /// Captures a software doorbell for one queue.
-    pub async fn ring_doorbell(&self, queue_id: QueueId) -> ModelResult<()> {
-        self.with_backend(|backend| backend.ring_doorbell(queue_id))
-            .await
-    }
-
-    /// Pops one completion from a completion ring.
-    pub async fn poll_completion(
-        &self,
-        completion_ring_id: CompletionRingId,
-    ) -> ModelResult<Option<CompletionRecord>> {
-        self.with_backend(|backend| backend.poll_completion(completion_ring_id))
-            .await
-    }
-
-    /// Pops one event for a queue-local event path.
-    pub async fn poll_queue_event(&self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
-        self.with_backend(|backend| backend.poll_queue_event(queue_id))
-            .await
     }
 
     /// Enables deterministic trace capture.

@@ -1,9 +1,13 @@
 //! IRQ contract vocabulary tests.
 
 use pdma_model_contract::{
-    CompletionRingId, IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute,
-    IrqSnapshot, IrqSource, IrqVector, ModelError, QueueId,
+    CompletionRingId, DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId,
+    IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector, ModelError, QueueId,
 };
+
+const fn current(source: IrqSource) -> EpochIrqSource {
+    EpochIrqSource::new(DeviceEpoch::initial(), source)
+}
 
 #[test]
 fn irq_line_identifies_system_vector() {
@@ -25,8 +29,8 @@ fn irq_source_distinguishes_completion_and_event_paths() {
     let event = IrqSource::Event(QueueId::new(7));
 
     // When: both sources are carried as IRQ causes.
-    let completion_cause = IrqCause::new(IrqLine::new(IrqVector::new(0)), completion);
-    let event_cause = IrqCause::new(IrqLine::new(IrqVector::new(1)), event);
+    let completion_cause = IrqCause::new(IrqLine::new(IrqVector::new(0)), current(completion));
+    let event_cause = IrqCause::new(IrqLine::new(IrqVector::new(1)), current(event));
 
     // Then: source identity remains typed and comparable.
     assert_eq!(completion_cause.source(), completion);
@@ -39,7 +43,7 @@ fn irq_snapshot_records_line_pending_and_asserted_state() {
     // Given: a pending completion IRQ on an asserted line.
     let cause = IrqCause::new(
         IrqLine::new(IrqVector::new(4)),
-        IrqSource::Completion(CompletionRingId::new(1)),
+        current(IrqSource::Completion(CompletionRingId::new(1))),
     );
 
     // When: software observes an IRQ snapshot.
@@ -71,8 +75,8 @@ fn irq_message_preserves_each_discrete_delivery_identity() {
     // Given: two message-signaled notifications for the same PDMA source and vector.
     let source = IrqSource::Event(QueueId::new(4));
     let vector = IrqVector::new(7);
-    let first = IrqMessage::new(IrqMessageId::new(0), vector, source);
-    let second = IrqMessage::new(IrqMessageId::new(1), vector, source);
+    let first = IrqMessage::new(IrqMessageId::new(0), vector, current(source));
+    let second = IrqMessage::new(IrqMessageId::new(1), vector, current(source));
 
     // When: both are carried across the common IRQ notification boundary.
     let first_notification = IrqNotification::Message(first);
@@ -92,13 +96,13 @@ fn irq_notification_resolves_line_and_message_vectors() {
     let message_vector = IrqVector::new(11);
     let source = IrqSource::Event(QueueId::new(2));
     let line = IrqNotification::Line(IrqSnapshot::new(
-        IrqCause::new(IrqLine::new(line_vector), source),
+        IrqCause::new(IrqLine::new(line_vector), current(source)),
         true,
     ));
     let message = IrqNotification::Message(IrqMessage::new(
         IrqMessageId::new(0),
         message_vector,
-        source,
+        current(source),
     ));
 
     // When/Then: the common boundary resolves the configured vector for either route.

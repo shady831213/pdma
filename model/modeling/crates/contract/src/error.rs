@@ -1,5 +1,6 @@
 //! Shared typed errors for checked model contract operations.
 
+use crate::abi::DeviceEpoch;
 use crate::ids::{BufferId, CompletionRingId, QueueId};
 use crate::irq::{IrqSource, IrqVector};
 use core::fmt;
@@ -11,6 +12,13 @@ pub type ModelResult<T> = Result<T, ModelError>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ModelError {
+    /// A resettable device capability belongs to another generation.
+    StaleDeviceEpoch {
+        /// Device generation required at the commit boundary.
+        expected: DeviceEpoch,
+        /// Device generation carried by the supplied capability.
+        actual: DeviceEpoch,
+    },
     /// A ring capacity of zero was requested.
     ZeroCapacity,
     /// A producer attempted to push into a full ring.
@@ -62,6 +70,14 @@ pub enum ModelError {
 impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::StaleDeviceEpoch { expected, actual } => {
+                write!(
+                    f,
+                    "stale device epoch {}, expected {}",
+                    actual.raw(),
+                    expected.raw()
+                )
+            }
             Self::ZeroCapacity => f.write_str("ring capacity must be greater than zero"),
             Self::RingFull => f.write_str("ring is full"),
             Self::UnknownBuffer(id) => write!(f, "unknown buffer {}", id.raw()),

@@ -1,5 +1,6 @@
 //! Shared IRQ contract vocabulary.
 
+use crate::abi::{DeviceEpoch, EpochIrqSource};
 use crate::ids::{CompletionRingId, QueueId};
 
 /// Host-system interrupt vector identity.
@@ -34,7 +35,7 @@ pub enum IrqSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IrqCause {
     line: IrqLine,
-    source: IrqSource,
+    source: EpochIrqSource,
 }
 
 /// Snapshot of one pending interrupt cause and line delivery state.
@@ -53,7 +54,7 @@ pub struct IrqMessageId(usize);
 pub struct IrqMessage {
     id: IrqMessageId,
     vector: IrqVector,
-    source: IrqSource,
+    source: EpochIrqSource,
 }
 
 /// Device IRQ observation delivered across the host boundary.
@@ -72,6 +73,24 @@ impl IrqNotification {
             Self::Line(snapshot) => snapshot.cause().line().vector(),
             Self::Message(message) => message.vector(),
         }
+    }
+
+    /// Epoch-qualified PDMA-local source carried by this observation.
+    pub const fn source_capability(self) -> EpochIrqSource {
+        match self {
+            Self::Line(snapshot) => snapshot.cause().source_capability(),
+            Self::Message(message) => message.source_capability(),
+        }
+    }
+
+    /// PDMA-local source identity used for correlation.
+    pub const fn source(self) -> IrqSource {
+        self.source_capability().source()
+    }
+
+    /// Device generation carried by this observation.
+    pub const fn epoch(self) -> DeviceEpoch {
+        self.source_capability().epoch()
     }
 }
 
@@ -101,7 +120,7 @@ impl IrqLine {
 
 impl IrqCause {
     /// Creates a latched cause for `source` on `line`.
-    pub const fn new(line: IrqLine, source: IrqSource) -> Self {
+    pub const fn new(line: IrqLine, source: EpochIrqSource) -> Self {
         Self { line, source }
     }
 
@@ -112,6 +131,11 @@ impl IrqCause {
 
     /// PDMA-local source that caused the interrupt.
     pub const fn source(self) -> IrqSource {
+        self.source.source()
+    }
+
+    /// Epoch-qualified source capability captured by this cause.
+    pub const fn source_capability(self) -> EpochIrqSource {
         self.source
     }
 }
@@ -147,7 +171,7 @@ impl IrqMessageId {
 
 impl IrqMessage {
     /// Creates one message-signaled delivery observation.
-    pub const fn new(id: IrqMessageId, vector: IrqVector, source: IrqSource) -> Self {
+    pub const fn new(id: IrqMessageId, vector: IrqVector, source: EpochIrqSource) -> Self {
         Self { id, vector, source }
     }
 
@@ -163,6 +187,11 @@ impl IrqMessage {
 
     /// PDMA-local source that emitted the message.
     pub const fn source(self) -> IrqSource {
+        self.source.source()
+    }
+
+    /// Epoch-qualified source capability captured by this message.
+    pub const fn source_capability(self) -> EpochIrqSource {
         self.source
     }
 }

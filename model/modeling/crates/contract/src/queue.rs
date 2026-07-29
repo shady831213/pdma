@@ -1,6 +1,8 @@
 //! Queue configuration and directory records.
 
+use crate::abi::{DeviceEpoch, EpochIrqSource};
 use crate::ids::{CompletionRingId, QueueId};
+use crate::irq::IrqSource;
 
 /// Software owner identity for a configured queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,13 +121,19 @@ impl QueueDirectoryEntry {
 /// Driver-visible handle to a configured queue directory entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QueueConfigHandle {
+    epoch: DeviceEpoch,
     entry: QueueDirectoryEntry,
 }
 
 impl QueueConfigHandle {
     /// Creates a queue configuration handle from a directory entry.
-    pub const fn new(entry: QueueDirectoryEntry) -> Self {
-        Self { entry }
+    pub const fn new(epoch: DeviceEpoch, entry: QueueDirectoryEntry) -> Self {
+        Self { epoch, entry }
+    }
+
+    /// Device generation that owns this queue.
+    pub const fn epoch(self) -> DeviceEpoch {
+        self.epoch
     }
 
     /// Directory entry backing this handle.
@@ -141,6 +149,19 @@ impl QueueConfigHandle {
     /// Completion ring bound to this queue.
     pub const fn completion_ring_id(self) -> CompletionRingId {
         self.entry.completion_ring_id()
+    }
+
+    /// Epoch-qualified completion interrupt source.
+    pub const fn completion_irq_source(self) -> EpochIrqSource {
+        EpochIrqSource::new(
+            self.epoch,
+            IrqSource::Completion(self.entry.completion_ring_id()),
+        )
+    }
+
+    /// Epoch-qualified queue-event interrupt source.
+    pub const fn event_irq_source(self) -> EpochIrqSource {
+        EpochIrqSource::new(self.epoch, IrqSource::Event(self.entry.queue_id()))
     }
 
     /// Original queue configuration.

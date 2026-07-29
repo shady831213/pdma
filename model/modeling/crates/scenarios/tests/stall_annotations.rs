@@ -180,7 +180,7 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
                 .expect("faulting copy submission has ring space");
             let first_snapshot = runner.wait_for_stall_after(0).await;
             handle
-                .ring_doorbell(driver.queue_id())
+                .ring_doorbell(driver.queue_config_handle())
                 .await
                 .expect("doorbell rings after first stall");
             let second_snapshot = runner.wait_for_stall_after(first_snapshot.stalls).await;

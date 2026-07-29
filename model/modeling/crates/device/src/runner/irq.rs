@@ -1,42 +1,47 @@
 //! Async device IRQ control surface.
 
 use super::AsyncDeviceHandle;
+use pdma_model_contract::abi::EpochIrqSource;
 use pdma_model_contract::error::ModelResult;
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 
 impl AsyncDeviceHandle {
     /// Configures the delivery route of an inactive PDMA-local IRQ source.
-    pub async fn configure_irq_route(&self, source: IrqSource, route: IrqRoute) -> ModelResult<()> {
+    pub async fn configure_irq_route(
+        &self,
+        source: EpochIrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
         self.with_backend(|backend| backend.configure_irq_route(source, route))
             .await
     }
 
     /// Enables a PDMA-local IRQ source.
-    pub async fn enable_irq_source(&self, source: IrqSource) -> ModelResult<()> {
+    pub async fn enable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.enable_irq_source(source))
             .await
     }
 
     /// Disables a PDMA-local IRQ source.
-    pub async fn disable_irq_source(&self, source: IrqSource) -> ModelResult<()> {
+    pub async fn disable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.disable_irq_source(source))
             .await
     }
 
     /// Masks a PDMA-local IRQ source without clearing pending state.
-    pub async fn mask_irq_source(&self, source: IrqSource) -> ModelResult<()> {
+    pub async fn mask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.mask_irq_source(source))
             .await
     }
 
     /// Unmasks a PDMA-local IRQ source.
-    pub async fn unmask_irq_source(&self, source: IrqSource) -> ModelResult<()> {
+    pub async fn unmask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.unmask_irq_source(source))
             .await
     }
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
-    pub async fn ack_irq_source(&self, source: IrqSource) -> ModelResult<()> {
+    pub async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
         self.with_backend(|backend| backend.ack_irq_source(source))
             .await
     }

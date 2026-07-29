@@ -38,16 +38,13 @@ async fn async_runner_retires_copy_after_handle_submission() {
         CopyRequest::new(src, dst, 4),
     ));
     handle
-        .submit_command(queue.queue_id(), command)
+        .submit_command(queue, command)
         .await
         .expect("copy submission has ring space");
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
+    handle.ring_doorbell(queue).await.expect("doorbell rings");
     let snapshot = runner.wait_for_progress_after(0).await;
     let completion = handle
-        .poll_completion(queue.completion_ring_id())
+        .poll_completion(queue)
         .await
         .expect("completion ring exists")
         .expect("completion was published");
@@ -94,42 +91,39 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
             CopyRequest::new(src, dst, 4),
         ));
         handle
-            .submit_command(queue.queue_id(), command)
+            .submit_command(queue, command)
             .await
             .expect("copy submission has ring space");
     }
 
     // When: the second completion stalls, software doorbells the queue again, and retirement retries.
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
+    handle.ring_doorbell(queue).await.expect("doorbell rings");
     let first_snapshot = runner.wait_for_progress_after(0).await;
     tokio::task::yield_now().await;
     let stalled_snapshot = runner.snapshot().await;
     handle
-        .ring_doorbell(queue.queue_id())
+        .ring_doorbell(queue)
         .await
         .expect("second doorbell rings while retirement is pending");
     let first_completion = handle
-        .poll_completion(queue.completion_ring_id())
+        .poll_completion(queue)
         .await
         .expect("completion ring exists")
         .expect("first completion was published");
     let retry_snapshot = runner.wait_for_progress_after(1).await;
     let second_completion = handle
-        .poll_completion(queue.completion_ring_id())
+        .poll_completion(queue)
         .await
         .expect("completion ring exists")
         .expect("second completion was published");
     let third_snapshot = runner.wait_for_progress_after(2).await;
     let third_completion = handle
-        .poll_completion(queue.completion_ring_id())
+        .poll_completion(queue)
         .await
         .expect("completion ring exists")
         .expect("third completion was published");
     handle
-        .ring_doorbell(queue.queue_id())
+        .ring_doorbell(queue)
         .await
         .expect("empty queue doorbell is accepted");
     let final_snapshot = runner.wait_for_change_after(third_snapshot).await;
@@ -189,16 +183,13 @@ async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_si
 
     // When: the malformed command is submitted, doorbelled, and doorbelled again after the error.
     handle
-        .submit_command(queue.queue_id(), malformed)
+        .submit_command(queue, malformed)
         .await
         .expect("malformed command still fits the command ring");
-    handle
-        .ring_doorbell(queue.queue_id())
-        .await
-        .expect("doorbell rings");
+    handle.ring_doorbell(queue).await.expect("doorbell rings");
     let error_snapshot = runner.wait_for_error_after(0).await;
     handle
-        .ring_doorbell(queue.queue_id())
+        .ring_doorbell(queue)
         .await
         .expect("second doorbell rings after malformed command handling");
     let final_snapshot = runner.wait_for_change_after(error_snapshot).await;
@@ -207,10 +198,7 @@ async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_si
 
     // Then: destination memory is untouched, no valid completion is published, and no retry zombie remains.
     assert_eq!(handle.read_buffer(dst, 0, 4).await, Ok(vec![0, 0, 0, 0]));
-    assert_eq!(
-        handle.poll_completion(queue.completion_ring_id()).await,
-        Ok(None)
-    );
+    assert_eq!(handle.poll_completion(queue).await, Ok(None));
     assert_eq!(error_snapshot.errors, 1);
     assert_eq!(final_snapshot.errors, 1);
     assert_eq!(summary.errors, 1);

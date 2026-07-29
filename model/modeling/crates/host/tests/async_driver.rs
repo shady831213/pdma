@@ -12,8 +12,8 @@ mod semantics;
 pub mod support;
 
 use pdma_model_contract::{
-    ModelError,
-    desc::CopyRequest,
+    DeviceEpoch, ExternalCommand, ModelError, QueueConfigHandle,
+    desc::{CopyCommand, CopyRequest},
     ids::{CommandId, CompletionRingId},
     irq::IrqSource,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
@@ -113,13 +113,15 @@ async fn irq_controls_are_available_through_async_device_port() {
             SoftwareOwnerId::new(0),
         ))
         .expect("queue setup is valid");
-    let valid_source = IrqSource::Completion(queue.completion_ring_id());
+    let valid_source = queue.completion_irq_source();
     let unknown_source = IrqSource::Completion(CompletionRingId::new(99));
+    let unknown_capability =
+        pdma_model_contract::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
 
     // When: host code controls IRQ state through the AsyncDevicePort abstraction.
     let enable_result = AsyncDevicePort::enable_irq_source(&mut device, valid_source).await;
     let unmask_result = AsyncDevicePort::unmask_irq_source(&mut device, valid_source).await;
-    let invalid_result = AsyncDevicePort::enable_irq_source(&mut device, unknown_source).await;
+    let invalid_result = AsyncDevicePort::enable_irq_source(&mut device, unknown_capability).await;
     let wait_result = AsyncDevicePort::wait_irq(&device).await;
 
     // Then: valid controls succeed, unknown controls fail, and wait-line access is callable.
@@ -130,4 +132,91 @@ async fn irq_controls_are_available_through_async_device_port() {
         Err(ModelError::UnknownIrqSource(unknown_source))
     );
     assert_eq!(wait_result, None);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn stale_queue_and_result_capabilities_commit_nothing() {
+    // Given: one real queue and a same-ID capability from a later device epoch.
+    let mut device = SyncDevice::new();
+    let queue = device
+        .create_queue(QueueConfig::new(
+            2,
+            2,
+            EventRouting::QueueLocal,
+            SoftwareOwnerId::new(0),
+        ))
+        .expect("queue setup is valid");
+    let stale_epoch = queue.epoch().next().expect("initial epoch can advance");
+    let stale_queue = QueueConfigHandle::new(stale_epoch, queue.directory_entry());
+    let source = device.allocate_buffer(1);
+    let destination = device.allocate_buffer(1);
+    let command = ExternalCommand::Copy(CopyCommand::new(
+        CommandId::new(0),
+        queue.queue_id(),
+        queue.completion_ring_id(),
+        CopyRequest::new(source, destination, 1),
+    ));
+    device.enable_tracing();
+    let before_submit = device.trace_events();
+
+    // When: stale queue capabilities reach submission and doorbell commit boundaries.
+    let stale_submit =
+        AsyncDevicePort::submit_command(&mut device, stale_queue, command.clone()).await;
+    let stale_doorbell = AsyncDevicePort::ring_doorbell(&mut device, stale_queue).await;
+
+    // Then: both fail with the typed epoch error and leave trace and queue cursors unchanged.
+    assert_ne!(queue, stale_queue);
+    assert_eq!(
+        stale_submit,
+        Err(ModelError::StaleDeviceEpoch {
+            expected: DeviceEpoch::initial(),
+            actual: stale_epoch,
+        })
+    );
+    assert_eq!(
+        stale_doorbell,
+        Err(ModelError::StaleDeviceEpoch {
+            expected: DeviceEpoch::initial(),
+            actual: stale_epoch,
+        })
+    );
+    assert_eq!(device.trace_events(), before_submit);
+    AsyncDevicePort::submit_command(&mut device, queue, command)
+        .await
+        .expect("current queue capability submits");
+    AsyncDevicePort::ring_doorbell(&mut device, queue)
+        .await
+        .expect("current queue capability rings");
+    device
+        .run_until_idle(1)
+        .expect("current command retires exactly once");
+    let before_result_poll = device.trace_events();
+    let stale_completion = AsyncDevicePort::poll_completion(&mut device, stale_queue).await;
+    let stale_event = AsyncDevicePort::poll_queue_event(&mut device, stale_queue).await;
+    assert_eq!(
+        stale_completion,
+        Err(ModelError::StaleDeviceEpoch {
+            expected: DeviceEpoch::initial(),
+            actual: stale_epoch,
+        })
+    );
+    assert_eq!(
+        stale_event,
+        Err(ModelError::StaleDeviceEpoch {
+            expected: DeviceEpoch::initial(),
+            actual: stale_epoch,
+        })
+    );
+    assert_eq!(device.trace_events(), before_result_poll);
+    let current_completion = AsyncDevicePort::poll_completion(&mut device, queue)
+        .await
+        .expect("current result capability is valid");
+    assert!(current_completion.is_some());
+    println!(
+        "queue epochs current={} stale={} stale_submit={stale_submit:?} \
+         stale_doorbell={stale_doorbell:?} stale_completion={stale_completion:?} \
+         stale_event={stale_event:?} trace_unchanged=true record_retained=true",
+        queue.epoch().raw(),
+        stale_epoch.raw(),
+    );
 }

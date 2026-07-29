@@ -12,7 +12,6 @@ use super::backend::ModelStepStatus;
 use crate::dma_space::DmaSpace;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use irq::PdmaIrqController;
-use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
@@ -21,6 +20,7 @@ use pdma_model_contract::ids::{CompletionRingId, QueueId};
 use pdma_model_contract::irq::{IrqLine, IrqVector};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::{DeviceEpoch, ResourceConfig};
 use ring::NativeRing;
 use std::collections::VecDeque;
 
@@ -32,6 +32,7 @@ struct QueueContext {
 
 #[derive(Debug)]
 pub(super) struct QueuePortDeviceModel {
+    epoch: DeviceEpoch,
     queues: Vec<QueueContext>,
     completions: Vec<NativeRing<CompletionRecord>>,
     events: VecDeque<EventRecord>,
@@ -49,12 +50,13 @@ impl QueuePortDeviceModel {
 
     pub(super) fn with_resource_config(resource_config: ResourceConfig) -> Self {
         Self {
+            epoch: DeviceEpoch::initial(),
             queues: Vec::new(),
             completions: Vec::new(),
             events: VecDeque::new(),
             runnable: VecDeque::new(),
             pending_retirement: None,
-            irq: PdmaIrqController::new(IrqLine::new(IrqVector::new(0))),
+            irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
             resource_config,
             trace: TraceSink::default(),
         }
@@ -68,14 +70,16 @@ impl QueuePortDeviceModel {
         let entry = QueueDirectoryEntry::new(queue_id, completion_id, config);
         self.queues.push(QueueContext { entry, commands });
         self.completions.push(completions);
-        Ok(QueueConfigHandle::new(entry))
+        Ok(QueueConfigHandle::new(self.epoch, entry))
     }
 
     pub(super) fn submit_command(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
         command: ExternalCommand,
     ) -> ModelResult<()> {
+        self.validate_epoch(queue.epoch())?;
+        let queue_id = queue.queue_id();
         let operation = operation_from_external(&command);
         let submitted_command = command_id(&command);
         self.queue_mut(queue_id)?.commands.push(command).map(|()| {
@@ -84,7 +88,9 @@ impl QueuePortDeviceModel {
         })
     }
 
-    pub(super) fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
+    pub(super) fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
+        self.validate_epoch(queue.epoch())?;
+        let queue_id = queue.queue_id();
         self.queue(queue_id)?;
         if !self.runnable.contains(&queue_id) {
             self.runnable.push_back(queue_id);
@@ -95,8 +101,10 @@ impl QueuePortDeviceModel {
 
     pub(super) fn poll_completion(
         &mut self,
-        completion_ring_id: CompletionRingId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
+        self.validate_epoch(queue.epoch())?;
+        let completion_ring_id = queue.completion_ring_id();
         let completion = self
             .completion_mut(completion_ring_id)
             .map(NativeRing::pop)?;
@@ -108,8 +116,10 @@ impl QueuePortDeviceModel {
 
     pub(super) fn poll_queue_event(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<EventRecord>> {
+        self.validate_epoch(queue.epoch())?;
+        let queue_id = queue.queue_id();
         self.queue(queue_id)?;
         let Some(index) = self
             .events
@@ -135,6 +145,21 @@ impl QueuePortDeviceModel {
         self.pending_retirement.is_some()
             || !self.runnable.is_empty()
             || self.queues.iter().any(|queue| !queue.commands.is_empty())
+    }
+
+    pub(super) const fn epoch(&self) -> DeviceEpoch {
+        self.epoch
+    }
+
+    fn validate_epoch(&self, actual: DeviceEpoch) -> ModelResult<()> {
+        if actual == self.epoch {
+            Ok(())
+        } else {
+            Err(ModelError::StaleDeviceEpoch {
+                expected: self.epoch,
+                actual,
+            })
+        }
     }
 
     pub(super) const fn enable_tracing(&mut self) {

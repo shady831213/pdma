@@ -83,12 +83,12 @@ impl DriverCore {
     ) -> ModelResult<CommandId> {
         let command_id = reservation.command_id();
         self.accounting
-            .poll_valid(device.submit_command(self.queue_config.queue_id(), command))
+            .poll_valid(device.submit_command(self.queue_config, command))
             .await?;
         // Acceptance transfers rollback ownership from the local reservation.
         reservation.disarm();
         self.accounting
-            .poll_valid(device.ring_doorbell(self.queue_config.queue_id()))
+            .poll_valid(device.ring_doorbell(self.queue_config))
             .await?;
         Ok(command_id)
     }

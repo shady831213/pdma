@@ -3,12 +3,13 @@
 mod async_device;
 mod sync_device;
 
+use pdma_model_contract::abi::EpochIrqSource;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
+use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 
 /// Async device-facing operations required by the host driver actor.
@@ -52,7 +53,7 @@ pub trait AsyncDevicePort: Send + Sync {
     /// used by driver reservation rollback.
     fn submit_command(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
         command: ExternalCommand,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
@@ -62,7 +63,10 @@ pub trait AsyncDevicePort: Send + Sync {
     ///
     /// Runnable state and the doorbell trace commit only when the future returns `Ok(())`.
     /// Dropping it while pending leaves both unchanged.
-    fn ring_doorbell(&mut self, queue_id: QueueId) -> impl Future<Output = ModelResult<()>> + Send;
+    fn ring_doorbell(
+        &mut self,
+        queue: QueueConfigHandle,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Pops one completion from a completion ring.
     ///
@@ -72,7 +76,7 @@ pub trait AsyncDevicePort: Send + Sync {
     /// leaves the record present; `Ok(Some(_))` is the driver's completion-reclaim commit point.
     fn poll_completion(
         &mut self,
-        completion_ring_id: CompletionRingId,
+        queue: QueueConfigHandle,
     ) -> impl Future<Output = ModelResult<Option<CompletionRecord>>> + Send;
 
     /// Pops one event from a queue-local event path.
@@ -83,43 +87,45 @@ pub trait AsyncDevicePort: Send + Sync {
     /// leaves the record present; `Ok(Some(_))` is the driver's event-reclaim commit point.
     fn poll_queue_event(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
     ) -> impl Future<Output = ModelResult<Option<EventRecord>>> + Send;
 
     /// Configures the delivery route of an inactive PDMA-local IRQ source.
     fn configure_irq_route(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
         route: IrqRoute,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Enables a PDMA-local IRQ source.
     fn enable_irq_source(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Disables a PDMA-local IRQ source.
     fn disable_irq_source(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Masks a PDMA-local IRQ source without clearing pending state.
     fn mask_irq_source(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Unmasks a PDMA-local IRQ source.
     fn unmask_irq_source(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
-    fn ack_irq_source(&mut self, source: IrqSource)
-    -> impl Future<Output = ModelResult<()>> + Send;
+    fn ack_irq_source(
+        &mut self,
+        source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send;
 
     /// Returns the current pending IRQ snapshot, if any.
     fn irq_snapshot(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send;

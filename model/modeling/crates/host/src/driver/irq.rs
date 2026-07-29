@@ -22,11 +22,16 @@ impl AsyncDriver {
         device: &mut impl AsyncDevicePort,
         notification: IrqNotification,
     ) -> ModelResult<Vec<DriverIrqRecord>> {
-        let source = match notification {
-            IrqNotification::Line(snapshot) => snapshot.cause().source(),
-            IrqNotification::Message(message) => message.source(),
-        };
-        let records = match source {
+        self.core.accounting.validate()?;
+        let source = notification.source_capability();
+        let expected_epoch = self.core.queue_config.epoch();
+        if source.epoch() != expected_epoch {
+            return Err(ModelError::StaleDeviceEpoch {
+                expected: expected_epoch,
+                actual: source.epoch(),
+            });
+        }
+        let records = match source.source() {
             IrqSource::Completion(completion_ring_id)
                 if completion_ring_id == self.completion_ring_id() =>
             {
@@ -35,7 +40,7 @@ impl AsyncDriver {
             IrqSource::Event(queue_id) if queue_id == self.queue_id() => {
                 self.drain_events(device).await?
             }
-            _ => return Err(ModelError::UnknownIrqSource(source)),
+            _ => return Err(ModelError::UnknownIrqSource(source.source())),
         };
         device.ack_irq_source(source).await?;
         Ok(records)

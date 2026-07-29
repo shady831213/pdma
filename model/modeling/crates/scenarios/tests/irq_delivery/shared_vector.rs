@@ -5,7 +5,7 @@ use super::{
     },
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
-use pdma_model_contract::{CopyRequest, IrqRoute, IrqSource, IrqVector, ModelResult};
+use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector, ModelResult};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 use tokio::sync::{mpsc, oneshot};
@@ -45,8 +45,10 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
-            let completion_source = IrqSource::Completion(driver.completion_ring_id());
-            let event_source = IrqSource::Event(driver.queue_id());
+            let completion_capability = driver.completion_irq_source();
+            let event_capability = driver.event_irq_source();
+            let completion_source = completion_capability.source();
+            let event_source = event_capability.source();
             bootstrap_tx
                 .send(DriverBootstrap {
                     driver: driver.clone(),
@@ -55,7 +57,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
                 })
                 .expect("delivery receives a shared accounting capability");
             ready_rx.await.expect("shared vector is registered");
-            for source in [completion_source, event_source] {
+            for source in [completion_capability, event_capability] {
                 main_port
                     .configure_irq_route(source, IrqRoute::Message(vector))
                     .await?;
@@ -147,8 +149,9 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 2, 4).await?;
-            let completion_source = IrqSource::Completion(driver.completion_ring_id());
-            let event_source = IrqSource::Event(driver.queue_id());
+            let completion_source = driver.completion_irq_source().source();
+            let event_capability = driver.event_irq_source();
+            let event_source = event_capability.source();
             bootstrap_tx
                 .send(DriverBootstrap {
                     driver: driver.clone(),
@@ -158,9 +161,9 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
                 .expect("delivery receives its capability clone");
             ready_rx.await.expect("shared handler is registered");
             main_port
-                .configure_irq_route(event_source, IrqRoute::Message(vector))
+                .configure_irq_route(event_capability, IrqRoute::Message(vector))
                 .await?;
-            main_port.enable_irq_source(event_source).await?;
+            main_port.enable_irq_source(event_capability).await?;
             let src = driver.allocate_buffer_on(&mut main_port, 4).await;
             let dst = driver.allocate_buffer_on(&mut main_port, 4).await;
             for _ in 0..2 {
@@ -172,7 +175,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
                 .send(())
                 .expect("harness observes both submissions");
             unmask_rx.await.expect("harness releases pending messages");
-            main_port.unmask_irq_source(event_source).await?;
+            main_port.unmask_irq_source(event_capability).await?;
             done_rx.recv().await.expect("first message is serviced");
             done_rx.recv().await.expect("redundant message is serviced");
             Ok::<_, pdma_model_contract::ModelError>(main_port.irq_snapshot().await)

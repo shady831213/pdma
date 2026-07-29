@@ -93,13 +93,13 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
                 CopyRequest::new(src, dst, 4),
             );
             handle
-                .submit_command(driver.queue_id(), ExternalCommand::Copy(command))
+                .submit_command(driver.queue_config_handle(), ExternalCommand::Copy(command))
                 .await
                 .expect("direct submission has ring space");
             handle.enable_tracing().await;
             handle.clear_trace().await;
             handle
-                .ring_doorbell(driver.queue_id())
+                .ring_doorbell(driver.queue_config_handle())
                 .await
                 .expect("doorbell targets an existing queue");
             driver.queue_id()

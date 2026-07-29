@@ -2,13 +2,14 @@ use super::backend::{DeviceModel, ModelStepStatus};
 use super::{AsyncRunSummary, AsyncStepStatus};
 use crate::dma_space::{DmaSpace, DmaSpaceError, DmaStage};
 use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::abi::EpochIrqSource;
 use pdma_model_contract::abi::{DmaAddress, DmaRegion};
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
+use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 
@@ -95,57 +96,64 @@ impl SyncDevice {
     /// Pushes one command into a queue's command ring.
     pub fn submit_command(
         &mut self,
-        queue_id: QueueId,
+        queue: QueueConfigHandle,
         command: ExternalCommand,
     ) -> ModelResult<()> {
-        self.backend.submit_command(queue_id, command)
+        self.backend.submit_command(queue, command)
     }
 
     /// Captures a software doorbell for one queue.
-    pub fn ring_doorbell(&mut self, queue_id: QueueId) -> ModelResult<()> {
-        self.backend.ring_doorbell(queue_id)
+    pub fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
+        self.backend.ring_doorbell(queue)
     }
 
     /// Pops one completion from a completion ring.
     pub fn poll_completion(
         &mut self,
-        completion_ring_id: CompletionRingId,
+        queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
-        self.backend.poll_completion(completion_ring_id)
+        self.backend.poll_completion(queue)
     }
 
     /// Pops one event for a queue-local event path.
-    pub fn poll_queue_event(&mut self, queue_id: QueueId) -> ModelResult<Option<EventRecord>> {
-        self.backend.poll_queue_event(queue_id)
+    pub fn poll_queue_event(
+        &mut self,
+        queue: QueueConfigHandle,
+    ) -> ModelResult<Option<EventRecord>> {
+        self.backend.poll_queue_event(queue)
     }
 
     /// Enables a PDMA-local IRQ source.
-    pub fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.backend.enable_irq_source(source)
     }
 
     /// Configures the delivery route of an inactive PDMA-local IRQ source.
-    pub fn configure_irq_route(&mut self, source: IrqSource, route: IrqRoute) -> ModelResult<()> {
+    pub fn configure_irq_route(
+        &mut self,
+        source: EpochIrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
         self.backend.configure_irq_route(source, route)
     }
 
     /// Disables a PDMA-local IRQ source.
-    pub fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.backend.disable_irq_source(source)
     }
 
     /// Masks a PDMA-local IRQ source without clearing pending state.
-    pub fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.backend.mask_irq_source(source)
     }
 
     /// Unmasks a PDMA-local IRQ source.
-    pub fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.backend.unmask_irq_source(source)
     }
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
-    pub fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.backend.ack_irq_source(source)
     }
 

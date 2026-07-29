@@ -1,5 +1,5 @@
 use super::support::{DriverBootstrap, HandlerIdentity, Milestone};
-use pdma_model_contract::{CopyRequest, IrqRoute, IrqSource, IrqVector, ModelResult};
+use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector, ModelResult};
 use pdma_model_device::AsyncDeviceHandle;
 use pdma_model_host::{AsyncDriver, CpuLocal, SoftwareCpu};
 use tokio::{
@@ -39,8 +39,10 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<ModelResult<MainOutcom
             .cpu
             .run_main(async move {
                 let mut driver = AsyncDriver::setup_on(&mut program.port, 1, 4).await?;
-                let completion_source = IrqSource::Completion(driver.completion_ring_id());
-                let event_source = IrqSource::Event(driver.queue_id());
+                let completion_capability = driver.completion_irq_source();
+                let event_capability = driver.event_irq_source();
+                let completion_source = completion_capability.source();
+                let event_source = event_capability.source();
                 assert!(
                     program
                         .bootstrap
@@ -54,8 +56,8 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<ModelResult<MainOutcom
                 );
                 assert!(program.ready.await.is_ok(), "every vector is registered");
                 for (source, vector) in [
-                    (completion_source, program.vector_a),
-                    (event_source, program.vector_b),
+                    (completion_capability, program.vector_a),
+                    (event_capability, program.vector_b),
                 ] {
                     program
                         .port

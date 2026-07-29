@@ -56,7 +56,7 @@ impl DriverCore {
     ) -> ModelResult<Option<CompletionRecord>> {
         let completion = self
             .accounting
-            .poll_valid(device.poll_completion(self.queue_config.completion_ring_id()))
+            .poll_valid(device.poll_completion(self.queue_config))
             .await?;
         if completion.is_some() {
             self.accounting.reclaim()?;
@@ -71,7 +71,7 @@ impl DriverCore {
         let event = match self.queue_config.event_routing() {
             EventRouting::QueueLocal => {
                 self.accounting
-                    .poll_valid(device.poll_queue_event(self.queue_config.queue_id()))
+                    .poll_valid(device.poll_queue_event(self.queue_config))
                     .await?
             }
         };

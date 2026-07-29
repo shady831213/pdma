@@ -57,7 +57,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
     let (mut driver, src, first_dst, second_dst) = cpu
         .run_main(async {
             let driver = AsyncDriver::setup_on(&mut device_port, 4, 4).await?;
-            let source = IrqSource::Completion(driver.completion_ring_id());
+            let source = driver.completion_irq_source();
             device_port
                 .configure_irq_route(source, IrqRoute::Message(IrqVector::new(7)))
                 .await?;

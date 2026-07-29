@@ -1,10 +1,15 @@
 use super::QueuePortDeviceModel;
 use pdma_model_contract::{
-    IrqNotification, IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult,
+    EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult,
 };
 
 impl QueuePortDeviceModel {
-    pub(in crate::runner) fn enable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(in crate::runner) fn enable_irq_source(
+        &mut self,
+        source: EpochIrqSource,
+    ) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
         self.validate_irq_source(source)?;
         let was_asserted = self.irq.line_asserted();
         self.irq.enable(source);
@@ -14,14 +19,21 @@ impl QueuePortDeviceModel {
 
     pub(in crate::runner) fn configure_irq_route(
         &mut self,
-        source: IrqSource,
+        source: EpochIrqSource,
         route: IrqRoute,
     ) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
         self.validate_irq_source(source)?;
         self.irq.configure_route(source, route)
     }
 
-    pub(in crate::runner) fn disable_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(in crate::runner) fn disable_irq_source(
+        &mut self,
+        source: EpochIrqSource,
+    ) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
         self.validate_irq_source(source)?;
         let was_asserted = self.irq.line_asserted();
         self.irq.disable(source);
@@ -29,7 +41,9 @@ impl QueuePortDeviceModel {
         Ok(())
     }
 
-    pub(in crate::runner) fn mask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(in crate::runner) fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
         self.validate_irq_source(source)?;
         let was_asserted = self.irq.line_asserted();
         self.irq.mask(source);
@@ -37,7 +51,12 @@ impl QueuePortDeviceModel {
         Ok(())
     }
 
-    pub(in crate::runner) fn unmask_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(in crate::runner) fn unmask_irq_source(
+        &mut self,
+        source: EpochIrqSource,
+    ) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
         self.validate_irq_source(source)?;
         let was_asserted = self.irq.line_asserted();
         self.irq.unmask(source);
@@ -45,7 +64,9 @@ impl QueuePortDeviceModel {
         Ok(())
     }
 
-    pub(in crate::runner) fn ack_irq_source(&mut self, source: IrqSource) -> ModelResult<()> {
+    pub(in crate::runner) fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
         self.validate_irq_source(source)?;
         let records_pending = self.irq_records_pending(source)?;
         let was_asserted = self.irq.line_asserted();

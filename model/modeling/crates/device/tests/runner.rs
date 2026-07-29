@@ -8,8 +8,30 @@ use pdma_model_contract::{
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
+#[path = "runner/dma_io.rs"]
+pub mod dma_io;
 #[path = "runner/semantic_dma.rs"]
 pub mod semantic_dma;
+#[path = "runner/shared_io.rs"]
+pub mod shared_io;
+
+#[test]
+fn dma_bus_queue_selection_routes_decoded_command_through_shared_memory_resolver()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: one live DMA-bus queue and one already-decoded command.
+    // When: the command enters the shared execution core before DMA publication exists.
+    // Then: the helper proves one execution through queue-selected memory and no semantic result.
+    dma_io::assert_dma_bus_decoded_command_uses_shared_core()
+}
+
+#[test]
+fn semantic_frontend_resource_and_publication_stalls_do_not_consume_or_reexecute()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: two semantic queues sharing constrained execution and publication resources.
+    // When: one command resource-stalls while another waits in global pending retirement.
+    // Then: the helper proves the first remains queued and the second executes exactly once.
+    shared_io::assert_semantic_stall_commit_points()
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn semantic_nonzero_start_unknown_object_and_range_overflow_publish_no_success() {

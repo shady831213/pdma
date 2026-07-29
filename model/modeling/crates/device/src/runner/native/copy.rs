@@ -1,5 +1,5 @@
 use super::NativeExecution;
-use super::memory::SemanticMemory;
+use super::io::QueueMemoryResolver;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::ModelStepStatus;
@@ -23,20 +23,21 @@ pub(super) fn retire_copy(
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution { device, dma_space } = execution;
     let request = command.request();
-    let memory = SemanticMemory::new(queue_id, command.command_id());
+    let memory = device.memory_resolver(queue_id, command.command_id())?;
     let bytes = match memory.read(dma_space, request.src_start(), request.len()) {
         Ok(bytes) => bytes,
-        Err(fault) => return publish_fault(device, fault),
+        Err(fault) => return publish_fault(device, dma_space, fault),
     };
     if let Err(fault) = memory.validate(dma_space, request.dst_start(), request.len()) {
-        return publish_fault(device, fault);
+        return publish_fault(device, dma_space, fault);
     }
-    validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
+    validate_success_completion_route(device, dma_space, queue_id, command.completion_ring_id())?;
     if let Err(fault) = memory.write(dma_space, request.dst_start(), &bytes) {
-        return publish_fault(device, fault);
+        return publish_fault(device, dma_space, fault);
     }
     publish_completion(
         device,
+        dma_space,
         SuccessRetirement {
             queue: queue_id,
             command: command.command_id(),
@@ -52,31 +53,32 @@ pub(super) fn retire_strided_copy(
     command: StridedCopyCommand,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution { device, dma_space } = execution;
-    let memory = SemanticMemory::new(queue_id, command.command_id());
+    let memory = device.memory_resolver(queue_id, command.command_id())?;
     let chunks = match strided_chunks(dma_space, memory, command) {
         Ok(chunks) => chunks,
-        Err(fault) => return publish_fault(device, fault),
+        Err(fault) => return publish_fault(device, dma_space, fault),
     };
     for chunk in &chunks {
         if let Err(fault) = memory.validate(dma_space, chunk.src, chunk.len) {
-            return publish_fault(device, fault);
+            return publish_fault(device, dma_space, fault);
         }
         if let Err(fault) = memory.validate(dma_space, chunk.dst, chunk.len) {
-            return publish_fault(device, fault);
+            return publish_fault(device, dma_space, fault);
         }
     }
-    validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
+    validate_success_completion_route(device, dma_space, queue_id, command.completion_ring_id())?;
     for chunk in chunks {
         let bytes = match memory.read(dma_space, chunk.src, chunk.len) {
             Ok(bytes) => bytes,
-            Err(fault) => return publish_fault(device, fault),
+            Err(fault) => return publish_fault(device, dma_space, fault),
         };
         if let Err(fault) = memory.write(dma_space, chunk.dst, &bytes) {
-            return publish_fault(device, fault);
+            return publish_fault(device, dma_space, fault);
         }
     }
     publish_completion(
         device,
+        dma_space,
         SuccessRetirement {
             queue: queue_id,
             command: command.command_id(),
@@ -88,7 +90,7 @@ pub(super) fn retire_strided_copy(
 
 fn strided_chunks(
     dma_space: &crate::dma_space::DmaSpace,
-    memory: SemanticMemory,
+    memory: QueueMemoryResolver,
     command: StridedCopyCommand,
 ) -> Result<Vec<NativeCopyChunk>, FaultRetirement> {
     let request = command.request();

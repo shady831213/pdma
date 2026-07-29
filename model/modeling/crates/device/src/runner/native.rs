@@ -1,8 +1,8 @@
 mod broadcast;
 mod copy;
+mod io;
 mod irq;
 mod irq_api;
-mod memory;
 mod resources;
 mod retirement;
 mod ring;
@@ -25,12 +25,15 @@ use pdma_model_contract::{DeviceEpoch, ResourceConfig};
 use ring::NativeRing;
 use std::collections::VecDeque;
 
-pub(super) use memory::NativeExecution;
-
 #[derive(Debug)]
 struct QueueContext {
     entry: QueueDirectoryEntry,
-    commands: NativeRing<ExternalCommand>,
+    io: io::QueueIo,
+}
+
+pub(in crate::runner) struct NativeExecution<'a> {
+    pub(in crate::runner) device: &'a mut QueuePortDeviceModel,
+    pub(in crate::runner) dma_space: &'a mut DmaSpace,
 }
 
 #[derive(Debug)]
@@ -66,14 +69,41 @@ impl QueuePortDeviceModel {
     }
 
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        let commands = NativeRing::with_capacity(config.command_depth())?;
+        let io = io::QueueIo::semantic(config.command_depth())?;
+        self.create_queue_with_io(config, io)
+    }
+
+    pub(super) fn create_dma_bus_queue(
+        &mut self,
+        config: QueueConfig,
+    ) -> ModelResult<QueueConfigHandle> {
+        self.create_queue_with_io(config, io::QueueIo::dma_bus())
+    }
+
+    fn create_queue_with_io(
+        &mut self,
+        config: QueueConfig,
+        io: io::QueueIo,
+    ) -> ModelResult<QueueConfigHandle> {
         let completions = NativeRing::with_capacity(config.completion_depth())?;
         let queue_id = QueueId::new(self.queues.len());
         let completion_id = CompletionRingId::new(self.completions.len());
         let entry = QueueDirectoryEntry::new(queue_id, completion_id, config);
-        self.queues.push(QueueContext { entry, commands });
+        self.queues.push(QueueContext { entry, io });
         self.completions.push(completions);
         Ok(QueueConfigHandle::new(self.epoch, entry))
+    }
+
+    pub(super) fn submit_decoded_dma_command(
+        &mut self,
+        queue: QueueConfigHandle,
+        command: ExternalCommand,
+    ) -> ModelResult<()> {
+        self.validate_epoch(queue.epoch())?;
+        let queue_id = queue.queue_id();
+        self.queue_mut(queue_id)?
+            .io
+            .submit_decoded_dma(queue_id, command)
     }
 
     pub(super) fn submit_command(
@@ -85,10 +115,15 @@ impl QueuePortDeviceModel {
         let queue_id = queue.queue_id();
         let operation = operation_from_external(&command);
         let submitted_command = command_id(&command);
-        self.queue_mut(queue_id)?.commands.push(command).map(|()| {
-            self.trace
-                .command_submitted(queue_id, operation, submitted_command);
-        })
+        self.queue_mut(queue_id)?
+            .io
+            .semantic_mut()
+            .ok_or(ModelError::UnknownQueue(queue_id))?
+            .submit(command)
+            .map(|()| {
+                self.trace
+                    .command_submitted(queue_id, operation, submitted_command);
+            })
     }
 
     pub(super) fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
@@ -144,10 +179,13 @@ impl QueuePortDeviceModel {
         })
     }
 
-    pub(super) fn has_work(&self) -> bool {
+    pub(super) fn has_work(&self, dma_space: &DmaSpace) -> bool {
         self.pending_retirement.is_some()
             || !self.runnable.is_empty()
-            || self.queues.iter().any(|queue| !queue.commands.is_empty())
+            || self
+                .queues
+                .iter()
+                .any(|queue| queue.io.has_pending(dma_space))
     }
 
     pub(super) const fn epoch(&self) -> DeviceEpoch {
@@ -214,10 +252,25 @@ impl QueuePortDeviceModel {
             .ok_or(ModelError::UnknownCompletionRing(id))
     }
 
-    fn requeue_if_command_pending(&mut self, queue_id: QueueId) -> ModelResult<()> {
-        if !self.queue(queue_id)?.commands.is_empty() && !self.runnable.contains(&queue_id) {
+    fn requeue_if_command_pending(
+        &mut self,
+        dma_space: &DmaSpace,
+        queue_id: QueueId,
+    ) -> ModelResult<()> {
+        if self.queue(queue_id)?.io.has_pending(dma_space) && !self.runnable.contains(&queue_id) {
             self.runnable.push_back(queue_id);
         }
         Ok(())
+    }
+
+    fn memory_resolver(
+        &self,
+        queue_id: QueueId,
+        command_id: pdma_model_contract::CommandId,
+    ) -> ModelResult<io::QueueMemoryResolver> {
+        Ok(self
+            .queue(queue_id)?
+            .io
+            .memory_resolver(queue_id, command_id))
     }
 }

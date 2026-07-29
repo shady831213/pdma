@@ -11,15 +11,15 @@ use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 
 pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatus> {
-    let device = &mut *execution.device;
+    let NativeExecution { device, dma_space } = execution;
     if device.pending_retirement.is_some() {
-        return retirement::retry_pending_retirement(device);
+        return retirement::retry_pending_retirement(device, dma_space);
     }
     let Some(queue_id) = device.runnable.pop_front() else {
         device.trace.idle();
         return Ok(ModelStepStatus::Idle);
     };
-    let Some(command) = device.queue(queue_id)?.commands.front().cloned() else {
+    let Some(command) = device.queue(queue_id)?.io.fetch(dma_space) else {
         return Ok(ModelStepStatus::Progressed);
     };
     let operation = operation_from_external(&command);
@@ -27,7 +27,7 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
         .trace
         .scheduled(queue_id, operation, command_id(&command));
     if !ResourceDemand::for_command(&command).fits(device.resource_config) {
-        device.requeue_if_command_pending(queue_id)?;
+        device.requeue_if_command_pending(dma_space, queue_id)?;
         device
             .trace
             .stall(Some(queue_id), "ExecutionResourcePressure");
@@ -36,15 +36,23 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
         ));
     }
     match command {
-        ExternalCommand::Copy(copy_command) => copy::retire_copy(execution, queue_id, copy_command),
+        ExternalCommand::Copy(copy_command) => copy::retire_copy(
+            NativeExecution { device, dma_space },
+            queue_id,
+            copy_command,
+        ),
         ExternalCommand::StridedCopy(strided) => {
-            copy::retire_strided_copy(execution, queue_id, strided)
+            copy::retire_strided_copy(NativeExecution { device, dma_space }, queue_id, strided)
         }
-        ExternalCommand::BroadcastCopy(broadcast_command) => {
-            broadcast::retire_broadcast_copy(execution, queue_id, &broadcast_command)
-        }
-        ExternalCommand::VectorAdd(vector_add) => {
-            vector_add::retire_vector_add(execution, queue_id, vector_add)
-        }
+        ExternalCommand::BroadcastCopy(broadcast_command) => broadcast::retire_broadcast_copy(
+            NativeExecution { device, dma_space },
+            queue_id,
+            &broadcast_command,
+        ),
+        ExternalCommand::VectorAdd(vector_add) => vector_add::retire_vector_add(
+            NativeExecution { device, dma_space },
+            queue_id,
+            vector_add,
+        ),
     }
 }

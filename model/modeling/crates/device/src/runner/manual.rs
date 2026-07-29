@@ -43,6 +43,11 @@ impl SyncDevice {
         self.backend.create_queue(config)
     }
 
+    /// Provisions a model-only queue using the decoded DMA-bus frontend seam.
+    pub fn create_dma_bus_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+        self.backend.create_dma_bus_queue(config)
+    }
+
     /// Allocates a device-visible memory buffer.
     pub fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
         self.allocate_dma_region(len).map(DmaRegion::object)
@@ -107,6 +112,15 @@ impl SyncDevice {
         command: ExternalCommand,
     ) -> ModelResult<()> {
         self.backend.submit_command(queue, command)
+    }
+
+    /// Injects one already-decoded DMA command without modeling raw descriptor fetch.
+    pub fn submit_decoded_dma_command(
+        &mut self,
+        queue: QueueConfigHandle,
+        command: ExternalCommand,
+    ) -> ModelResult<()> {
+        self.backend.submit_decoded_dma_command(queue, command)
     }
 
     /// Captures a software doorbell for one queue.
@@ -232,7 +246,7 @@ impl SyncDevice {
                 }
             }
         }
-        if self.backend.has_work() {
+        if self.backend.has_work(&self.dma_space) {
             Err(ModelError::StepBudgetExhausted { max_steps })
         } else {
             Ok(AsyncRunSummary {
@@ -274,7 +288,7 @@ impl SyncDevice {
         max_steps: usize,
         start_steps: usize,
     ) -> ModelResult<AsyncRunSummary> {
-        if self.backend.has_work() {
+        if self.backend.has_work(&self.dma_space) {
             Err(ModelError::StepBudgetExhausted { max_steps })
         } else {
             Ok(AsyncRunSummary {

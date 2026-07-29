@@ -41,15 +41,35 @@ impl DeviceModel {
         }
     }
 
-    pub(super) fn has_work(&self) -> bool {
+    pub(super) fn has_work(&self, dma_space: &DmaSpace) -> bool {
         match self {
-            Self::QueuePort(device) => device.has_work(),
+            Self::QueuePort(device) => device.has_work(dma_space),
         }
     }
 
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         match self {
             Self::QueuePort(device) => device.create_queue(config),
+        }
+    }
+
+    pub(super) fn create_dma_bus_queue(
+        &mut self,
+        config: QueueConfig,
+    ) -> ModelResult<QueueConfigHandle> {
+        match self {
+            Self::QueuePort(device) => device.create_dma_bus_queue(config),
+        }
+    }
+
+    pub(super) fn submit_decoded_dma_command(
+        &mut self,
+        queue: QueueConfigHandle,
+        command: ExternalCommand,
+    ) -> ModelResult<()> {
+        self.validate_epoch(queue.epoch())?;
+        match self {
+            Self::QueuePort(device) => device.submit_decoded_dma_command(queue, command),
         }
     }
 

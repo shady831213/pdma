@@ -1,7 +1,9 @@
 use super::NativeExecution;
+use super::memory::SemanticMemory;
 use super::retirement::validate_success_completion_route;
-use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
+use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::ModelStepStatus;
+use pdma_model_contract::DmaRangeStart;
 use pdma_model_contract::desc::BroadcastCopyCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::trace::TraceOperation;
@@ -13,35 +15,26 @@ pub(super) fn retire_broadcast_copy(
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution { device, dma_space } = execution;
     let request = command.request();
+    let memory = SemanticMemory::new(queue_id, command.command_id());
+    let source = DmaRangeStart::new(request.src(), request.src_offset());
+    for destination in request.destinations() {
+        if let Err(fault) = memory.validate(dma_space, source, request.len()) {
+            return publish_fault(device, fault);
+        }
+        let destination = DmaRangeStart::new(destination.dst(), destination.dst_offset());
+        if let Err(fault) = memory.validate(dma_space, destination, request.len()) {
+            return publish_fault(device, fault);
+        }
+    }
     validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     for destination in request.destinations() {
-        let bytes = match dma_space.read_object(request.src(), request.src_offset(), request.len())
-        {
+        let bytes = match memory.read(dma_space, source, request.len()) {
             Ok(bytes) => bytes,
-            Err(source) => {
-                return publish_fault(
-                    device,
-                    FaultRetirement {
-                        queue_id,
-                        command_id: command.command_id(),
-                        buffer: request.src(),
-                        source,
-                    },
-                );
-            }
+            Err(fault) => return publish_fault(device, fault),
         };
-        if let Err(source) =
-            dma_space.write_object(destination.dst(), destination.dst_offset(), &bytes)
-        {
-            return publish_fault(
-                device,
-                FaultRetirement {
-                    queue_id,
-                    command_id: command.command_id(),
-                    buffer: destination.dst(),
-                    source,
-                },
-            );
+        let destination = DmaRangeStart::new(destination.dst(), destination.dst_offset());
+        if let Err(fault) = memory.write(dma_space, destination, &bytes) {
+            return publish_fault(device, fault);
         }
     }
     publish_completion(

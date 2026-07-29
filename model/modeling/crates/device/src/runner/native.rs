@@ -2,6 +2,7 @@ mod broadcast;
 mod copy;
 mod irq;
 mod irq_api;
+mod memory;
 mod resources;
 mod retirement;
 mod ring;
@@ -23,6 +24,8 @@ use pdma_model_contract::trace::TraceEvent;
 use pdma_model_contract::{DeviceEpoch, ResourceConfig};
 use ring::NativeRing;
 use std::collections::VecDeque;
+
+pub(super) use memory::NativeExecution;
 
 #[derive(Debug)]
 struct QueueContext {
@@ -217,9 +220,4 @@ impl QueuePortDeviceModel {
         }
         Ok(())
     }
-}
-
-pub(super) struct NativeExecution<'a> {
-    device: &'a mut QueuePortDeviceModel,
-    dma_space: &'a mut DmaSpace,
 }

@@ -8,6 +8,19 @@ use pdma_model_contract::{
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
+#[path = "runner/semantic_dma.rs"]
+pub mod semantic_dma;
+
+#[tokio::test(flavor = "current_thread")]
+async fn semantic_nonzero_start_unknown_object_and_range_overflow_publish_no_success() {
+    // Given: real async and sync semantic queue-port frontends with mapped DMA objects.
+    // When: explicit-start copy/strided commands and mapped, unknown, and overflowing faults run.
+    // Then: the helper asserts exact bytes, typed address correlation, and no false success.
+    semantic_dma::exercise_semantic_dma_ranges_and_faults()
+        .await
+        .expect("semantic DMA behavior");
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retires_copy_after_handle_submission() {
     // Given: a queue-port async runner, an async handle, one queue, source/destination buffers, and a source write.

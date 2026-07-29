@@ -1,6 +1,7 @@
 use super::NativeExecution;
+use super::memory::SemanticMemory;
 use super::retirement::validate_success_completion_route;
-use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
+use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::desc::VectorAddCommand;
 use pdma_model_contract::error::ModelResult;
@@ -14,52 +15,31 @@ pub(super) fn retire_vector_add(
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution { device, dma_space } = execution;
     let request = command.request();
-    let src_a = match dma_space.read_object(request.src_a(), request.src_a_offset(), request.len())
-    {
+    let memory = SemanticMemory::new(queue_id, command.command_id());
+    let left_source =
+        pdma_model_contract::DmaRangeStart::new(request.src_a(), request.src_a_offset());
+    let src_a = match memory.read(dma_space, left_source, request.len()) {
         Ok(bytes) => bytes,
-        Err(source) => {
-            return publish_fault(
-                device,
-                FaultRetirement {
-                    queue_id,
-                    command_id: command.command_id(),
-                    buffer: request.src_a(),
-                    source,
-                },
-            );
-        }
+        Err(fault) => return publish_fault(device, fault),
     };
-    let src_b = match dma_space.read_object(request.src_b(), request.src_b_offset(), request.len())
-    {
+    let right_source =
+        pdma_model_contract::DmaRangeStart::new(request.src_b(), request.src_b_offset());
+    let src_b = match memory.read(dma_space, right_source, request.len()) {
         Ok(bytes) => bytes,
-        Err(source) => {
-            return publish_fault(
-                device,
-                FaultRetirement {
-                    queue_id,
-                    command_id: command.command_id(),
-                    buffer: request.src_b(),
-                    source,
-                },
-            );
-        }
+        Err(fault) => return publish_fault(device, fault),
     };
     let sum = src_a
         .iter()
         .zip(src_b.iter())
         .map(|(left, right)| left.wrapping_add(*right))
         .collect::<Vec<_>>();
+    let destination = pdma_model_contract::DmaRangeStart::new(request.dst(), request.dst_offset());
+    if let Err(fault) = memory.validate(dma_space, destination, request.len()) {
+        return publish_fault(device, fault);
+    }
     validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
-    if let Err(source) = dma_space.write_object(request.dst(), request.dst_offset(), &sum) {
-        return publish_fault(
-            device,
-            FaultRetirement {
-                queue_id,
-                command_id: command.command_id(),
-                buffer: request.dst(),
-                source,
-            },
-        );
+    if let Err(fault) = memory.write(dma_space, destination, &sum) {
+        return publish_fault(device, fault);
     }
     publish_completion(
         device,

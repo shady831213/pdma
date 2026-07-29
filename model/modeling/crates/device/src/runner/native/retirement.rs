@@ -3,8 +3,8 @@ use crate::runner::AsyncStallReason;
 use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
 use pdma_model_contract::error::{ModelError, ModelResult};
-use pdma_model_contract::event::{EventErrorKind, EventRecord};
-use pdma_model_contract::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::event::{EventRecord, MemoryFault};
+use pdma_model_contract::ids::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::irq::IrqSource;
 use pdma_model_contract::trace::TraceOperation;
 
@@ -12,8 +12,7 @@ use pdma_model_contract::trace::TraceOperation;
 pub(super) struct FaultRetirement {
     pub(super) queue_id: QueueId,
     pub(super) command_id: CommandId,
-    pub(super) buffer: BufferId,
-    pub(super) source: ModelError,
+    pub(super) fault: MemoryFault,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -140,19 +139,14 @@ pub(super) fn publish_fault(
     device: &mut QueuePortDeviceModel,
     fault: FaultRetirement,
 ) -> ModelResult<ModelStepStatus> {
-    let event = EventRecord::new(
-        fault.queue_id,
-        fault.command_id,
-        event_error_kind(fault.source)?,
-        fault.buffer,
-    );
+    let event = EventRecord::from_memory_fault(fault.queue_id, fault.command_id, fault.fault);
     device.trace.execution_faulted(event);
     if event_publication_is_full(device) {
         retire_command_without_requeue(device, fault.queue_id)?;
         device.pending_retirement = Some(PendingRetirement::Event {
             queue_id: fault.queue_id,
             record: event,
-            source: fault.source,
+            source: fault.fault.source(),
         });
         device
             .trace
@@ -165,7 +159,7 @@ pub(super) fn publish_fault(
     device.trace.event_published(event);
     device.latch_irq_source(IrqSource::Event(fault.queue_id));
     retire_command(device, fault.queue_id)?;
-    Err(fault.source)
+    Err(fault.fault.source())
 }
 
 fn completion_publication_is_full(
@@ -193,13 +187,4 @@ fn retire_command_without_requeue(
     let queue = device.queue_mut(queue_id)?;
     let _retired = queue.commands.pop();
     Ok(())
-}
-
-const fn event_error_kind(error: ModelError) -> ModelResult<EventErrorKind> {
-    match error {
-        ModelError::UnknownBuffer(_) => Ok(EventErrorKind::UnknownBuffer),
-        ModelError::RangeOverflow => Ok(EventErrorKind::RangeOverflow),
-        ModelError::OutOfBounds { len, end, .. } => Ok(EventErrorKind::OutOfBounds { len, end }),
-        _ => Err(error),
-    }
 }

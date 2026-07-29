@@ -1,18 +1,18 @@
 use super::NativeExecution;
+use super::memory::SemanticMemory;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::desc::{CopyCommand, StridedCopyCommand};
-use pdma_model_contract::error::{ModelError, ModelResult};
-use pdma_model_contract::ids::{BufferId, QueueId};
+use pdma_model_contract::dma::DmaRangeStart;
+use pdma_model_contract::error::ModelResult;
+use pdma_model_contract::ids::QueueId;
 use pdma_model_contract::trace::TraceOperation;
 
 #[derive(Debug, Clone, Copy)]
 struct NativeCopyChunk {
-    src: BufferId,
-    dst: BufferId,
-    src_offset: usize,
-    dst_offset: usize,
+    src: DmaRangeStart,
+    dst: DmaRangeStart,
     len: usize,
 }
 
@@ -23,31 +23,17 @@ pub(super) fn retire_copy(
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution { device, dma_space } = execution;
     let request = command.request();
-    let bytes = match dma_space.read_object(request.src(), 0, request.len()) {
+    let memory = SemanticMemory::new(queue_id, command.command_id());
+    let bytes = match memory.read(dma_space, request.src_start(), request.len()) {
         Ok(bytes) => bytes,
-        Err(source) => {
-            return publish_fault(
-                device,
-                FaultRetirement {
-                    queue_id,
-                    command_id: command.command_id(),
-                    buffer: request.src(),
-                    source,
-                },
-            );
-        }
+        Err(fault) => return publish_fault(device, fault),
     };
+    if let Err(fault) = memory.validate(dma_space, request.dst_start(), request.len()) {
+        return publish_fault(device, fault);
+    }
     validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
-    if let Err(source) = dma_space.write_object(request.dst(), 0, &bytes) {
-        return publish_fault(
-            device,
-            FaultRetirement {
-                queue_id,
-                command_id: command.command_id(),
-                buffer: request.dst(),
-                source,
-            },
-        );
+    if let Err(fault) = memory.write(dma_space, request.dst_start(), &bytes) {
+        return publish_fault(device, fault);
     }
     publish_completion(
         device,
@@ -66,36 +52,27 @@ pub(super) fn retire_strided_copy(
     command: StridedCopyCommand,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution { device, dma_space } = execution;
-    let chunks = match strided_chunks(queue_id, command) {
+    let memory = SemanticMemory::new(queue_id, command.command_id());
+    let chunks = match strided_chunks(dma_space, memory, command) {
         Ok(chunks) => chunks,
         Err(fault) => return publish_fault(device, fault),
     };
+    for chunk in &chunks {
+        if let Err(fault) = memory.validate(dma_space, chunk.src, chunk.len) {
+            return publish_fault(device, fault);
+        }
+        if let Err(fault) = memory.validate(dma_space, chunk.dst, chunk.len) {
+            return publish_fault(device, fault);
+        }
+    }
     validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     for chunk in chunks {
-        let bytes = match dma_space.read_object(chunk.src, chunk.src_offset, chunk.len) {
+        let bytes = match memory.read(dma_space, chunk.src, chunk.len) {
             Ok(bytes) => bytes,
-            Err(source) => {
-                return publish_fault(
-                    device,
-                    FaultRetirement {
-                        queue_id,
-                        command_id: command.command_id(),
-                        buffer: chunk.src,
-                        source,
-                    },
-                );
-            }
+            Err(fault) => return publish_fault(device, fault),
         };
-        if let Err(source) = dma_space.write_object(chunk.dst, chunk.dst_offset, &bytes) {
-            return publish_fault(
-                device,
-                FaultRetirement {
-                    queue_id,
-                    command_id: command.command_id(),
-                    buffer: chunk.dst,
-                    source,
-                },
-            );
+        if let Err(fault) = memory.write(dma_space, chunk.dst, &bytes) {
+            return publish_fault(device, fault);
         }
     }
     publish_completion(
@@ -110,33 +87,20 @@ pub(super) fn retire_strided_copy(
 }
 
 fn strided_chunks(
-    queue_id: QueueId,
+    dma_space: &crate::dma_space::DmaSpace,
+    memory: SemanticMemory,
     command: StridedCopyCommand,
 ) -> Result<Vec<NativeCopyChunk>, FaultRetirement> {
     let request = command.request();
     let mut chunks = Vec::new();
     for row in 0..request.rows() {
-        let src_offset = row
-            .checked_mul(request.src_stride())
-            .ok_or_else(|| FaultRetirement {
-                queue_id,
-                command_id: command.command_id(),
-                buffer: request.src(),
-                source: ModelError::RangeOverflow,
-            })?;
-        let dst_offset = row
-            .checked_mul(request.dst_stride())
-            .ok_or_else(|| FaultRetirement {
-                queue_id,
-                command_id: command.command_id(),
-                buffer: request.dst(),
-                source: ModelError::RangeOverflow,
-            })?;
+        let src =
+            memory.strided_start(dma_space, request.src_start(), row, request.src_stride())?;
+        let dst =
+            memory.strided_start(dma_space, request.dst_start(), row, request.dst_stride())?;
         chunks.push(NativeCopyChunk {
-            src: request.src(),
-            dst: request.dst(),
-            src_offset,
-            dst_offset,
+            src,
+            dst,
             len: request.row_bytes(),
         });
     }

@@ -1,6 +1,8 @@
 use super::backend::{DeviceModel, ModelStepStatus};
 use super::{AsyncRunSummary, AsyncStepStatus};
+use crate::dma_space::{DmaSpace, DmaSpaceError, DmaStage};
 use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::abi::{DmaAddress, DmaRegion};
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
@@ -14,6 +16,7 @@ use pdma_model_contract::trace::TraceEvent;
 #[derive(Debug)]
 pub struct SyncDevice {
     backend: DeviceModel,
+    dma_space: DmaSpace,
     steps: usize,
     last_status: AsyncStepStatus,
 }
@@ -28,6 +31,7 @@ impl SyncDevice {
     pub fn with_resource_config(config: ResourceConfig) -> Self {
         Self {
             backend: DeviceModel::queue_port_with_resource_config(config),
+            dma_space: DmaSpace::new(),
             steps: 0,
             last_status: AsyncStepStatus::Idle,
         }
@@ -40,17 +44,52 @@ impl SyncDevice {
 
     /// Allocates a device-visible memory buffer.
     pub fn allocate_buffer(&mut self, len: usize) -> BufferId {
-        self.backend.allocate_buffer(len)
+        self.dma_space.allocate_legacy(len)
     }
 
     /// Writes bytes into a checked device buffer range.
     pub fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        self.backend.write_buffer(id, offset, data)
+        self.dma_space.write_object(id, offset, data)
     }
 
     /// Reads bytes from a checked device buffer range.
     pub fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
-        self.backend.read_buffer(id, offset, len)
+        self.dma_space.read_object(id, offset, len)
+    }
+
+    /// Proposes DMA regions without changing mappings, bytes, or allocator generation.
+    pub fn stage_dma_regions(&self, lengths: &[u64]) -> Result<DmaStage, DmaSpaceError> {
+        self.dma_space.stage(lengths)
+    }
+
+    /// Atomically commits every region in a stage.
+    pub fn commit_dma_stage(&mut self, stage: DmaStage) -> Result<Vec<DmaRegion>, DmaSpaceError> {
+        self.dma_space.commit(stage)
+    }
+
+    /// Reads one checked IOVA extent.
+    pub fn read_iova(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, DmaSpaceError> {
+        self.dma_space.read_iova(address, length)
+    }
+
+    /// Writes one checked IOVA extent.
+    pub fn write_iova(&mut self, address: DmaAddress, data: &[u8]) -> Result<(), DmaSpaceError> {
+        self.dma_space.write_iova(address, data)
+    }
+
+    /// Resolves a semantic object to its committed DMA region.
+    pub fn region_for_object(&self, object: BufferId) -> Option<DmaRegion> {
+        self.dma_space.region_for_object(object)
+    }
+
+    /// Returns the committed DMA allocator generation.
+    pub const fn dma_generation(&self) -> u64 {
+        self.dma_space.generation()
+    }
+
+    /// Reconstructs only the resettable queue-port backend while retaining DMA storage.
+    pub fn replace_queue_port_backend(&mut self, config: ResourceConfig) {
+        self.backend = DeviceModel::queue_port_with_resource_config(config);
     }
 
     /// Pushes one command into a queue's command ring.
@@ -129,7 +168,7 @@ impl SyncDevice {
     pub fn run_until_idle(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
         let start_steps = self.steps;
         while self.steps - start_steps < max_steps {
-            match self.backend.step()? {
+            match self.backend.step(&mut self.dma_space)? {
                 ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;
@@ -152,7 +191,7 @@ impl SyncDevice {
         let start_steps = self.steps;
         let mut stalls = 0;
         while self.steps - start_steps < max_steps {
-            match self.backend.step()? {
+            match self.backend.step(&mut self.dma_space)? {
                 ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;

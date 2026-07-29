@@ -1,4 +1,4 @@
-use super::QueuePortDeviceModel;
+use super::NativeExecution;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::runner::backend::ModelStepStatus;
@@ -17,12 +17,13 @@ struct NativeCopyChunk {
 }
 
 pub(super) fn retire_copy(
-    device: &mut QueuePortDeviceModel,
+    execution: NativeExecution<'_>,
     queue_id: QueueId,
     command: CopyCommand,
 ) -> ModelResult<ModelStepStatus> {
+    let NativeExecution { device, dma_space } = execution;
     let request = command.request();
-    let bytes = match device.memory.read_checked(request.src(), 0, request.len()) {
+    let bytes = match dma_space.read_object(request.src(), 0, request.len()) {
         Ok(bytes) => bytes,
         Err(source) => {
             return publish_fault(
@@ -37,7 +38,7 @@ pub(super) fn retire_copy(
         }
     };
     validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
-    if let Err(source) = device.memory.write_checked(request.dst(), 0, &bytes) {
+    if let Err(source) = dma_space.write_object(request.dst(), 0, &bytes) {
         return publish_fault(
             device,
             FaultRetirement {
@@ -60,20 +61,18 @@ pub(super) fn retire_copy(
 }
 
 pub(super) fn retire_strided_copy(
-    device: &mut QueuePortDeviceModel,
+    execution: NativeExecution<'_>,
     queue_id: QueueId,
     command: StridedCopyCommand,
 ) -> ModelResult<ModelStepStatus> {
+    let NativeExecution { device, dma_space } = execution;
     let chunks = match strided_chunks(queue_id, command) {
         Ok(chunks) => chunks,
         Err(fault) => return publish_fault(device, fault),
     };
     validate_success_completion_route(device, queue_id, command.completion_ring_id())?;
     for chunk in chunks {
-        let bytes = match device
-            .memory
-            .read_checked(chunk.src, chunk.src_offset, chunk.len)
-        {
+        let bytes = match dma_space.read_object(chunk.src, chunk.src_offset, chunk.len) {
             Ok(bytes) => bytes,
             Err(source) => {
                 return publish_fault(
@@ -87,10 +86,7 @@ pub(super) fn retire_strided_copy(
                 );
             }
         };
-        if let Err(source) = device
-            .memory
-            .write_checked(chunk.dst, chunk.dst_offset, &bytes)
-        {
+        if let Err(source) = dma_space.write_object(chunk.dst, chunk.dst_offset, &bytes) {
             return publish_fault(
                 device,
                 FaultRetirement {

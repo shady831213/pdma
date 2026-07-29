@@ -1,11 +1,12 @@
 use super::AsyncStallReason;
 use super::native::QueuePortDeviceModel;
+use crate::dma_space::DmaSpace;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
+use pdma_model_contract::ids::{CompletionRingId, QueueId};
 use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
@@ -35,9 +36,9 @@ impl DeviceModel {
         }
     }
 
-    pub(super) fn step(&mut self) -> ModelResult<ModelStepStatus> {
+    pub(super) fn step(&mut self, dma_space: &mut DmaSpace) -> ModelResult<ModelStepStatus> {
         match self {
-            Self::QueuePort(device) => device.step(),
+            Self::QueuePort(device) => device.step(dma_space),
         }
     }
 
@@ -50,34 +51,6 @@ impl DeviceModel {
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         match self {
             Self::QueuePort(device) => device.create_queue(config),
-        }
-    }
-
-    pub(super) fn allocate_buffer(&mut self, len: usize) -> BufferId {
-        match self {
-            Self::QueuePort(device) => device.allocate_buffer(len),
-        }
-    }
-
-    pub(super) fn write_buffer(
-        &mut self,
-        id: BufferId,
-        offset: usize,
-        data: &[u8],
-    ) -> ModelResult<()> {
-        match self {
-            Self::QueuePort(device) => device.write_buffer(id, offset, data),
-        }
-    }
-
-    pub(super) fn read_buffer(
-        &self,
-        id: BufferId,
-        offset: usize,
-        len: usize,
-    ) -> ModelResult<Vec<u8>> {
-        match self {
-            Self::QueuePort(device) => device.read_buffer(id, offset, len),
         }
     }
 

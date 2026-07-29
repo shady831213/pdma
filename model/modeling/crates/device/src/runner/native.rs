@@ -2,7 +2,6 @@ mod broadcast;
 mod copy;
 mod irq;
 mod irq_api;
-mod memory;
 mod resources;
 mod retirement;
 mod ring;
@@ -10,15 +9,15 @@ mod step;
 mod vector_add;
 
 use super::backend::ModelStepStatus;
+use crate::dma_space::DmaSpace;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use irq::PdmaIrqController;
-use memory::NativeMemory;
 use pdma_model_contract::ResourceConfig;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{BufferId, CompletionRingId, QueueId};
+use pdma_model_contract::ids::{CompletionRingId, QueueId};
 use pdma_model_contract::irq::{IrqLine, IrqVector};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use pdma_model_contract::trace::TraceEvent;
@@ -33,7 +32,6 @@ struct QueueContext {
 
 #[derive(Debug)]
 pub(super) struct QueuePortDeviceModel {
-    memory: NativeMemory,
     queues: Vec<QueueContext>,
     completions: Vec<NativeRing<CompletionRecord>>,
     events: VecDeque<EventRecord>,
@@ -51,7 +49,6 @@ impl QueuePortDeviceModel {
 
     pub(super) fn with_resource_config(resource_config: ResourceConfig) -> Self {
         Self {
-            memory: NativeMemory::default(),
             queues: Vec::new(),
             completions: Vec::new(),
             events: VecDeque::new(),
@@ -72,28 +69,6 @@ impl QueuePortDeviceModel {
         self.queues.push(QueueContext { entry, commands });
         self.completions.push(completions);
         Ok(QueueConfigHandle::new(entry))
-    }
-
-    pub(super) fn allocate_buffer(&mut self, len: usize) -> BufferId {
-        self.memory.allocate(len)
-    }
-
-    pub(super) fn write_buffer(
-        &mut self,
-        id: BufferId,
-        offset: usize,
-        data: &[u8],
-    ) -> ModelResult<()> {
-        self.memory.write_checked(id, offset, data)
-    }
-
-    pub(super) fn read_buffer(
-        &self,
-        id: BufferId,
-        offset: usize,
-        len: usize,
-    ) -> ModelResult<Vec<u8>> {
-        self.memory.read_checked(id, offset, len)
     }
 
     pub(super) fn submit_command(
@@ -149,8 +124,11 @@ impl QueuePortDeviceModel {
         Ok(event)
     }
 
-    pub(super) fn step(&mut self) -> ModelResult<ModelStepStatus> {
-        step::step(self)
+    pub(super) fn step(&mut self, dma_space: &mut DmaSpace) -> ModelResult<ModelStepStatus> {
+        step::step(NativeExecution {
+            device: self,
+            dma_space,
+        })
     }
 
     pub(super) fn has_work(&self) -> bool {
@@ -214,4 +192,9 @@ impl QueuePortDeviceModel {
         }
         Ok(())
     }
+}
+
+pub(super) struct NativeExecution<'a> {
+    device: &'a mut QueuePortDeviceModel,
+    dma_space: &'a mut DmaSpace,
 }

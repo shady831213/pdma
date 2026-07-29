@@ -1,4 +1,4 @@
-use super::QueuePortDeviceModel;
+use super::NativeExecution;
 use super::broadcast;
 use super::copy;
 use super::resources::ResourceDemand;
@@ -10,7 +10,8 @@ use crate::trace::{command_id, operation_from_external};
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
 
-pub(super) fn step(device: &mut QueuePortDeviceModel) -> ModelResult<ModelStepStatus> {
+pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatus> {
+    let device = &mut *execution.device;
     if device.pending_retirement.is_some() {
         return retirement::retry_pending_retirement(device);
     }
@@ -35,15 +36,15 @@ pub(super) fn step(device: &mut QueuePortDeviceModel) -> ModelResult<ModelStepSt
         ));
     }
     match command {
-        ExternalCommand::Copy(copy_command) => copy::retire_copy(device, queue_id, copy_command),
+        ExternalCommand::Copy(copy_command) => copy::retire_copy(execution, queue_id, copy_command),
         ExternalCommand::StridedCopy(strided) => {
-            copy::retire_strided_copy(device, queue_id, strided)
+            copy::retire_strided_copy(execution, queue_id, strided)
         }
         ExternalCommand::BroadcastCopy(broadcast_command) => {
-            broadcast::retire_broadcast_copy(device, queue_id, &broadcast_command)
+            broadcast::retire_broadcast_copy(execution, queue_id, &broadcast_command)
         }
         ExternalCommand::VectorAdd(vector_add) => {
-            vector_add::retire_vector_add(device, queue_id, vector_add)
+            vector_add::retire_vector_add(execution, queue_id, vector_add)
         }
     }
 }

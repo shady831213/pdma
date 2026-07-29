@@ -9,9 +9,11 @@ mod types;
 mod wait;
 mod worker;
 
+use crate::dma_space::{DmaSpaceError, DmaStage};
 use backend::DeviceModel;
 pub use manual::SyncDevice;
 use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::abi::{DmaAddress, DmaRegion};
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::error::ModelResult;
@@ -116,7 +118,7 @@ impl AsyncDeviceHandle {
     pub async fn allocate_buffer(&self, len: usize) -> BufferId {
         let (id, generation) = {
             let mut state = self.shared.state.lock().await;
-            let id = state.backend.allocate_buffer(len);
+            let id = state.dma_space.allocate_legacy(len);
             wake(&mut state);
             (id, state.generation)
         };
@@ -126,8 +128,14 @@ impl AsyncDeviceHandle {
 
     /// Writes bytes into a checked device buffer range.
     pub async fn write_buffer(&self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        self.with_backend(|backend| backend.write_buffer(id, offset, data))
-            .await
+        let (result, generation) = {
+            let mut state = self.shared.state.lock().await;
+            let result = state.dma_space.write_object(id, offset, data);
+            wake(&mut state);
+            (result, state.generation)
+        };
+        publish(&self.shared, generation);
+        result
     }
 
     /// Reads bytes from a checked device buffer range.
@@ -141,8 +149,80 @@ impl AsyncDeviceHandle {
             .state
             .lock()
             .await
-            .backend
-            .read_buffer(id, offset, len)
+            .dma_space
+            .read_object(id, offset, len)
+    }
+
+    /// Proposes DMA regions without changing mappings, bytes, or allocator generation.
+    pub async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<DmaStage, DmaSpaceError> {
+        self.shared.state.lock().await.dma_space.stage(lengths)
+    }
+
+    /// Atomically commits every region in a stage.
+    pub async fn commit_dma_stage(
+        &self,
+        proposal: DmaStage,
+    ) -> Result<Vec<DmaRegion>, DmaSpaceError> {
+        let (result, generation) = {
+            let mut state = self.shared.state.lock().await;
+            let result = state.dma_space.commit(proposal);
+            wake(&mut state);
+            (result, state.generation)
+        };
+        publish(&self.shared, generation);
+        result
+    }
+
+    /// Reads one checked IOVA extent.
+    pub async fn read_iova(
+        &self,
+        address: DmaAddress,
+        length: u64,
+    ) -> Result<Vec<u8>, DmaSpaceError> {
+        self.shared
+            .state
+            .lock()
+            .await
+            .dma_space
+            .read_iova(address, length)
+    }
+
+    /// Writes one checked IOVA extent.
+    pub async fn write_iova(&self, address: DmaAddress, data: &[u8]) -> Result<(), DmaSpaceError> {
+        let (result, generation) = {
+            let mut state = self.shared.state.lock().await;
+            let result = state.dma_space.write_iova(address, data);
+            wake(&mut state);
+            (result, state.generation)
+        };
+        publish(&self.shared, generation);
+        result
+    }
+
+    /// Resolves a semantic object to its committed DMA region.
+    pub async fn region_for_object(&self, object: BufferId) -> Option<DmaRegion> {
+        self.shared
+            .state
+            .lock()
+            .await
+            .dma_space
+            .region_for_object(object)
+    }
+
+    /// Returns the committed DMA allocator generation.
+    pub async fn dma_generation(&self) -> u64 {
+        self.shared.state.lock().await.dma_space.generation()
+    }
+
+    /// Reconstructs only the resettable queue-port backend while retaining DMA storage.
+    pub async fn replace_queue_port_backend(&self, config: ResourceConfig) {
+        let generation = {
+            let mut state = self.shared.state.lock().await;
+            state.backend = DeviceModel::queue_port_with_resource_config(config);
+            wake(&mut state);
+            state.generation
+        };
+        publish(&self.shared, generation);
     }
 
     /// Pushes one command into a queue's command ring.

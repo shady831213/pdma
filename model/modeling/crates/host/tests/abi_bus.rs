@@ -10,7 +10,8 @@ use pdma_model_contract::{
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, DmaSpaceError};
 use pdma_model_host::{
-    AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusQueueStatus, BusSubmission, QueueControlWrite,
+    AsyncPdmaBus, BusControlErrorAdapter, BusDmaErrorAdapter, BusDmaStage, BusDmaWrite,
+    BusQueueStatus, BusSubmission, QueueControlWrite,
 };
 use std::fmt;
 use std::sync::{Arc, Mutex};

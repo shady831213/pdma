@@ -212,7 +212,10 @@ async fn probe_pending_irq_and_stale_epoch(
             EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0)),
         )
         .await,
-        Err(BusControlError::StaleEpoch)
+        Err(BusControlError::StaleEpoch {
+            expected: DeviceEpoch::new(1),
+            actual: DeviceEpoch::initial(),
+        })
     );
     assert_eq!(bus.dma_generation().await, 2);
     assert_eq!(

@@ -5,7 +5,7 @@ pub(super) mod control;
 use super::{AsyncDeviceHandle, publish, wake};
 use crate::dma_space::{DmaSpaceError, DmaStage};
 use pdma_model_contract::abi::{
-    AbiControlError, DmaAddress, QueueActivation, QueueControl, RingCursor,
+    AbiControlError, DeviceEpoch, DmaAddress, QueueActivation, QueueControl, RingCursor,
 };
 use std::fmt;
 
@@ -64,8 +64,13 @@ pub enum BusControlError {
     Dma(DmaSpaceError),
     /// Typed ABI cursor or layout validation failed.
     Abi(AbiControlError),
-    /// The supplied device epoch is stale.
-    StaleEpoch,
+    /// The supplied device epoch differs from the current device epoch.
+    StaleEpoch {
+        /// Current device epoch.
+        expected: DeviceEpoch,
+        /// Supplied stale capability epoch.
+        actual: DeviceEpoch,
+    },
     /// The queue identity does not name the next or active queue.
     InvalidQueue,
     /// A staged region, write, or queue layout does not match the transaction.
@@ -77,7 +82,12 @@ impl fmt::Display for BusControlError {
         match self {
             Self::Dma(error) => write!(formatter, "{error}"),
             Self::Abi(error) => write!(formatter, "{error}"),
-            Self::StaleEpoch => formatter.write_str("stale device epoch"),
+            Self::StaleEpoch { expected, actual } => {
+                write!(
+                    formatter,
+                    "stale device epoch: expected {expected:?}, actual {actual:?}"
+                )
+            }
             Self::InvalidQueue => formatter.write_str("invalid queue identity"),
             Self::InvalidTransaction => formatter.write_str("invalid atomic queue transaction"),
         }

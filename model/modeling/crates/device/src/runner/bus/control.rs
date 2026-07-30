@@ -99,7 +99,10 @@ impl BusControlState {
 
     fn validate_queue(&self, queue: EpochQueue) -> Result<(), BusControlError> {
         if queue.epoch() != self.epoch {
-            Err(BusControlError::StaleEpoch)
+            Err(BusControlError::StaleEpoch {
+                expected: self.epoch,
+                actual: queue.epoch(),
+            })
         } else if queue.queue_id().raw() >= self.queues.len() {
             Err(BusControlError::InvalidQueue)
         } else {
@@ -163,7 +166,10 @@ fn validate_activation(
     activation: QueueActivation,
 ) -> Result<(), BusControlError> {
     if activation.queue().epoch() != runner.bus_control.epoch {
-        return Err(BusControlError::StaleEpoch);
+        return Err(BusControlError::StaleEpoch {
+            expected: runner.bus_control.epoch,
+            actual: activation.queue().epoch(),
+        });
     }
     if activation.queue().queue_id() != QueueId::new(runner.bus_control.queues.len()) {
         return Err(BusControlError::InvalidQueue);

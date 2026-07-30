@@ -37,6 +37,18 @@ impl fmt::Display for FakeError {
 
 impl std::error::Error for FakeError {}
 
+impl BusDmaErrorAdapter for FakeError {
+    fn into_model_error(self, _buffer: Option<BufferId>) -> ModelError {
+        ModelError::DmaSubmissionState
+    }
+}
+
+impl BusControlErrorAdapter for FakeError {
+    fn into_model_error(self, _queue: EpochQueue) -> ModelError {
+        ModelError::DmaSubmissionState
+    }
+}
+
 #[derive(Debug, Default)]
 struct FakeState {
     sequence: Vec<Sequence>,

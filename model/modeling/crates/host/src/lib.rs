@@ -17,4 +17,4 @@ pub use irq_delivery::{
     IrqDeliverySummary, IrqHandler, IrqHandlerFuture, IrqHandlerRegistry, NoHandler,
     StatefulIrqHandler, irq_handler, stateful_irq_handler,
 };
-pub use port::AsyncDevicePort;
+pub use port::{AsyncDevicePort, BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};

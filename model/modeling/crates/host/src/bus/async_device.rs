@@ -3,7 +3,7 @@ use super::{
     QueueControlWrite,
 };
 use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl};
-use pdma_model_contract::{IrqNotification, ModelResult};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
 use pdma_model_device::{
     AsyncDeviceHandle, BusControlError, DmaSpaceError, DmaWrite, QueueStatus, SubmissionAcceptance,
 };
@@ -101,6 +101,42 @@ impl AsyncPdmaBus for AsyncDeviceHandle {
         Self::control_queue(self, request.into_control())
             .await
             .map(Into::into)
+    }
+
+    async fn configure_irq_route(
+        &self,
+        source: EpochIrqSource,
+        route: IrqRoute,
+    ) -> ModelResult<()> {
+        Self::configure_irq_route(self, source, route).await
+    }
+
+    async fn enable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
+        Self::enable_irq_source(self, source).await
+    }
+
+    async fn disable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
+        Self::disable_irq_source(self, source).await
+    }
+
+    async fn mask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
+        Self::mask_irq_source(self, source).await
+    }
+
+    async fn unmask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
+        Self::unmask_irq_source(self, source).await
+    }
+
+    async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
+        Self::ack_irq_source(self, source).await
+    }
+
+    async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
+        Self::irq_snapshot(self).await
+    }
+
+    async fn wait_irq(&self) -> Option<IrqSnapshot> {
+        Self::wait_irq(self).await
     }
 
     async fn wait_irq_notification(&self) -> Option<IrqNotification> {

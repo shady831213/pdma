@@ -35,7 +35,10 @@ fn reset_runner(
     let backend_epoch = state.backend.epoch();
     let control_epoch = state.bus_control.epoch();
     if request.expected_epoch() != backend_epoch || control_epoch != backend_epoch {
-        return Err(BusControlError::StaleEpoch);
+        return Err(BusControlError::StaleEpoch {
+            expected: backend_epoch,
+            actual: request.expected_epoch(),
+        });
     }
     let next_backend = backend_epoch.next()?;
     let next_control = control_epoch.next()?;
@@ -53,7 +56,10 @@ fn reset_backend(
 ) -> Result<DeviceEpoch, BusControlError> {
     let current = backend.epoch();
     if request.expected_epoch() != current {
-        return Err(BusControlError::StaleEpoch);
+        return Err(BusControlError::StaleEpoch {
+            expected: current,
+            actual: request.expected_epoch(),
+        });
     }
     let next = current.next()?;
     backend.reset(next);

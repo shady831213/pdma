@@ -78,12 +78,15 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
     );
     assert!(handle.snapshot().await.generation() > snapshot.generation());
     assert_eq!(handle.dma_generation().await, old_dma_generation);
-    assert!(matches!(
+    assert_eq!(
         handle
             .control_queue(QueueControl::ReadStatus(old_status.queue()))
             .await,
-        Err(pdma_model_device::BusControlError::StaleEpoch)
-    ));
+        Err(pdma_model_device::BusControlError::StaleEpoch {
+            expected: DeviceEpoch::new(1),
+            actual: DeviceEpoch::initial(),
+        })
+    );
     let new_rings = handle.stage_dma_regions(&[128, 64, 128]).await?;
     let new_status = handle
         .activate_queue(

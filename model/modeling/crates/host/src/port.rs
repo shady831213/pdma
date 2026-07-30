@@ -1,7 +1,10 @@
 //! Async host/device port used by actor-style driver turns.
 
 mod async_device;
+mod bus_device;
 mod sync_device;
+
+pub use bus_device::{BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};
 
 use pdma_model_contract::abi::EpochIrqSource;
 use pdma_model_contract::completion::CompletionRecord;

@@ -6,7 +6,7 @@ use pdma_model_contract::abi::{
     DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate,
     RingCursor, RingCursors,
 };
-use pdma_model_contract::{IrqNotification, ModelResult};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
 use std::error::Error;
 
 /// Opaque staging capability produced by an asynchronous device handle.
@@ -275,6 +275,65 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         request: QueueControlWrite,
     ) -> impl Future<Output = Result<BusQueueStatus, Self::ControlError>> + Send;
+
+    /// Configures one inactive PDMA-local IRQ source.
+    fn configure_irq_route(
+        &self,
+        _source: EpochIrqSource,
+        _route: IrqRoute,
+    ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Enables one PDMA-local IRQ source.
+    fn enable_irq_source(
+        &self,
+        _source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Disables one PDMA-local IRQ source.
+    fn disable_irq_source(
+        &self,
+        _source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Masks one PDMA-local IRQ source.
+    fn mask_irq_source(
+        &self,
+        _source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Unmasks one PDMA-local IRQ source.
+    fn unmask_irq_source(
+        &self,
+        _source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Acknowledges one PDMA-local IRQ source.
+    fn ack_irq_source(
+        &self,
+        _source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Returns the current asserted line snapshot.
+    fn irq_snapshot(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send {
+        async { None }
+    }
+
+    /// Waits for one asserted line snapshot.
+    fn wait_irq(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send {
+        async { None }
+    }
 
     /// Waits for one epoch-bearing line or message notification.
     fn wait_irq_notification(&self) -> impl Future<Output = Option<IrqNotification>> + Send;

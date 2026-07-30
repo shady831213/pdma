@@ -1,92 +1,60 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
-    CommandId, CompletionRecord, CompletionStatus, CopyRequest, IrqNotification, IrqRoute,
-    IrqSource, IrqVector, ModelError, ModelResult, TraceEvent, TraceEventKind,
-};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
+#[path = "message_irq_linear_copy/support.rs"]
+pub mod support;
+
+use pdma_model_contract::abi::EpochQueue;
+use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector, ModelError, ModelResult};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDriver, CpuLocal, DriverIrqRecord, IrqDelivery, SoftwareCpu, StatefulIrqHandler,
+    AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, IrqDelivery, SoftwareCpu,
     stateful_irq_handler,
 };
+use support::{
+    LinearCopyHandler, MainOutcome, ScenarioResult, SoftwarePhase, assert_outcome, start_trace,
+};
 use tokio::sync::oneshot;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SoftwarePhase {
-    MainBeforeSubmit,
-    Handler,
-    MainAfterHandler,
-}
-
-#[derive(Debug)]
-struct HandlerReport {
-    notification: IrqNotification,
-    records: Vec<DriverIrqRecord>,
-}
-
-struct LinearCopyHandler {
-    driver: AsyncDriver,
-    port: AsyncDeviceHandle,
-    phase: CpuLocal<SoftwarePhase>,
-    report: Option<oneshot::Sender<HandlerReport>>,
-}
-
-impl StatefulIrqHandler for LinearCopyHandler {
-    async fn handle(&mut self, notification: IrqNotification) -> ModelResult<()> {
-        self.phase.with(|phase| *phase = SoftwarePhase::Handler)?;
-        let records = self
-            .driver
-            .service_irq_on(&mut self.port, notification)
-            .await?;
-        // This report is scenario evidence, not part of IRQ handler mechanics.
-        if let Some(report) = self.report.take() {
-            drop(report.send(HandlerReport {
-                notification,
-                records,
-            }));
-        }
-        Ok(())
-    }
-}
-
-struct MainOutcome {
-    command: CommandId,
-    source: IrqSource,
-    report: HandlerReport,
-    copied: Vec<u8>,
-    phase: SoftwarePhase,
-}
-
-struct ScenarioResult {
-    vector: IrqVector,
-    outcome: MainOutcome,
-    deliveries: usize,
-    device_steps: usize,
-    device_trace: Vec<TraceEvent>,
-}
 
 #[tokio::test(flavor = "current_thread")]
 async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelResult<()> {
     // Given: independent device, software-main, host-delivery, and handler actors.
     let (device, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());
-    let port = device.handle();
-    start_trace(&port).await;
+    let raw_port = device.handle();
+    start_trace(&raw_port).await;
     let cpu = SoftwareCpu::new();
     let phase = cpu.local(SoftwarePhase::MainBeforeSubmit);
     let vector = IrqVector::new(64);
     // Test-only rendezvous: main consumes the handler's observation to prove main-handler-main.
     let (report_tx, report_rx) = oneshot::channel();
-    let (delivery, delivery_runner) = IrqDelivery::new(port.clone(), cpu.clone()).defer();
-    let delivery_task = tokio::spawn(delivery_runner.run());
+    let (port_tx, port_rx) = oneshot::channel();
+    let (bootstrap_tx, bootstrap_rx) = oneshot::channel();
+    let delivery_cpu = cpu.clone();
+    let delivery_task = tokio::spawn(async move {
+        let delivery_port = port_rx
+            .await
+            .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+        let (bootstrap, runner) = IrqDelivery::new(delivery_port, delivery_cpu).defer();
+        bootstrap_tx
+            .send(bootstrap)
+            .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+        runner.run().await
+    });
 
     // When: one complete software program configures MSI-style delivery and submits a copy.
     // The program never raises an IRQ itself: completion publication in the device worker
     // latches the source, and host delivery schedules the registered handler.
-    let mut main_port = port.clone();
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
+            let mut main_port = BusDevicePort::new(raw_port)?;
+            port_tx
+                .send(main_port.clone())
+                .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+            let delivery = bootstrap_rx
+                .await
+                .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
+            let queue = driver.queue_config_handle();
             let source_capability = driver.completion_irq_source();
             let source = source_capability.source();
             let handler = stateful_irq_handler(LinearCopyHandler {
@@ -102,21 +70,17 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
             main_port.enable_irq_source(source_capability).await?;
             main_port.unmask_irq_source(source_capability).await?;
 
-            let src = driver
-                .allocate_buffer_on(&mut main_port, 4)
-                .await
-                .expect("allocation");
-            let dst = driver
-                .allocate_buffer_on(&mut main_port, 4)
-                .await
-                .expect("allocation");
+            let src = driver.allocate_buffer_on(&mut main_port, 4).await?;
+            let dst = driver.allocate_buffer_on(&mut main_port, 4).await?;
             driver
                 .write_buffer_on(&mut main_port, src, &[1, 2, 3, 4])
                 .await?;
             let command = driver
                 .submit_copy_on(&mut main_port, CopyRequest::new(src, dst, 4))
                 .await?;
-            let report = report_rx.await.expect("handler returns the completion");
+            let report = report_rx
+                .await
+                .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
             let phase = phase.with(|phase| {
                 assert_eq!(*phase, SoftwarePhase::Handler);
                 *phase = SoftwarePhase::MainAfterHandler;
@@ -125,6 +89,7 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
             let copied = driver.read_buffer_on(&main_port, dst, 4).await?;
             Ok::<_, ModelError>(MainOutcome {
                 command,
+                queue,
                 source,
                 report,
                 copied,
@@ -138,70 +103,19 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
     device.request_shutdown().await;
     let delivery_summary = delivery_task.await.expect("host delivery joins cleanly")?;
     let device_summary = worker.await.expect("device worker joins cleanly");
+    let queue = EpochQueue::new(outcome.queue.epoch(), outcome.queue.queue_id());
+    let queue_status = AsyncPdmaBus::read_queue_status(&device.handle(), queue)
+        .await
+        .expect("queue status remains observable");
 
     // Then: device-triggered message delivery runs handler atomically and returns to main.
     assert_outcome(&ScenarioResult {
         vector,
         outcome,
+        queue_status,
         deliveries: delivery_summary.deliveries(),
         device_steps: device_summary.steps,
-        device_trace: port.trace_events().await,
+        device_trace: device.handle().trace_events().await,
     });
     Ok(())
-}
-
-async fn start_trace(port: &AsyncDeviceHandle) {
-    port.enable_tracing().await;
-    port.clear_trace().await;
-}
-
-fn assert_outcome(result: &ScenarioResult) {
-    assert!(matches!(
-        result.outcome.report.notification,
-        IrqNotification::Message(message)
-            if message.vector() == result.vector
-                && message.source() == result.outcome.source
-    ));
-    assert_eq!(result.outcome.report.records.len(), 1);
-    let completions = result
-        .outcome
-        .report
-        .records
-        .iter()
-        .filter_map(|record| match record {
-            DriverIrqRecord::Completion(completion) => Some(*completion),
-            DriverIrqRecord::Event(_) => None,
-        })
-        .collect::<Vec<CompletionRecord>>();
-    assert_eq!(completions.len(), 1);
-    assert_eq!(
-        completions
-            .first()
-            .map(|completion| (completion.command_id(), completion.status())),
-        Some((result.outcome.command, CompletionStatus::Success))
-    );
-    assert_eq!(result.outcome.copied, vec![1, 2, 3, 4]);
-    assert_eq!(result.outcome.phase, SoftwarePhase::MainAfterHandler);
-    assert_eq!(result.deliveries, 1);
-    assert_eq!(result.device_steps, 1);
-    assert_trace_order(&result.device_trace);
-}
-
-fn assert_trace_order(events: &[TraceEvent]) {
-    let expected = [
-        TraceEventKind::CompletionPublished,
-        TraceEventKind::IrqSourceLatched,
-        TraceEventKind::IrqMessageEmitted,
-        TraceEventKind::CompletionPolled,
-        TraceEventKind::IrqDeviceAck,
-    ];
-    let observed = events
-        .iter()
-        .map(TraceEvent::kind)
-        .filter(|kind| expected.contains(kind))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        observed, expected,
-        "completion publication must cause the device-to-handler IRQ lifecycle"
-    );
 }

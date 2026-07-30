@@ -115,7 +115,8 @@ impl AsyncDeviceHandle {
         self.allocate_dma_region(len).await.map(DmaRegion::object)
     }
 
-    pub(crate) async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
+    /// Allocates one raw device-visible DMA region.
+    pub async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
         let (region, generation) = {
             let mut state = self.shared.state.lock().await;
             let region = u64::try_from(len)
@@ -203,10 +204,14 @@ impl AsyncDeviceHandle {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result = state.dma_space.write_iova(address, data);
-            wake(&mut state);
+            if result.is_ok() {
+                wake(&mut state);
+            }
             (result, state.generation)
         };
-        publish(&self.shared, generation);
+        if result.is_ok() {
+            publish(&self.shared, generation);
+        }
         result
     }
 

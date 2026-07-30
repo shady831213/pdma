@@ -1,0 +1,109 @@
+use super::{
+    AsyncDeviceBusStage, AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusQueueStatus, BusSubmission,
+    QueueControlWrite,
+};
+use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl};
+use pdma_model_contract::{IrqNotification, ModelResult};
+use pdma_model_device::{
+    AsyncDeviceHandle, BusControlError, DmaSpaceError, DmaWrite, QueueStatus, SubmissionAcceptance,
+};
+
+impl BusDmaStage for AsyncDeviceBusStage {
+    fn proposed_regions(&self) -> &[DmaRegion] {
+        self.0.regions()
+    }
+}
+
+impl From<QueueStatus> for BusQueueStatus {
+    fn from(status: QueueStatus) -> Self {
+        Self::new(
+            status.queue(),
+            status.submission(),
+            status.captured_submission_producer(),
+            status.completion(),
+            status.event(),
+        )
+    }
+}
+
+impl From<BusDmaWrite> for DmaWrite {
+    fn from(write: BusDmaWrite) -> Self {
+        let (address, bytes) = write.into_parts();
+        Self::new(address, bytes)
+    }
+}
+
+impl AsyncPdmaBus for AsyncDeviceHandle {
+    type Stage = AsyncDeviceBusStage;
+    type DmaError = DmaSpaceError;
+    type ControlError = BusControlError;
+
+    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
+        Self::allocate_dma_region(self, len).await
+    }
+
+    async fn stage_dma_regions(
+        &self,
+        lengths: &[u64],
+    ) -> Result<AsyncDeviceBusStage, DmaSpaceError> {
+        Self::stage_dma_regions(self, lengths)
+            .await
+            .map(AsyncDeviceBusStage)
+    }
+
+    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, DmaSpaceError> {
+        Self::read_iova(self, address, length).await
+    }
+
+    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), DmaSpaceError> {
+        Self::write_iova(self, address, bytes).await
+    }
+
+    async fn bootstrap_queue(
+        &self,
+        stage: AsyncDeviceBusStage,
+        activation: QueueActivation,
+    ) -> Result<BusQueueStatus, BusControlError> {
+        Self::activate_queue(self, stage.0, activation)
+            .await
+            .map(Into::into)
+    }
+
+    async fn accept_submission(
+        &self,
+        request: BusSubmission<AsyncDeviceBusStage>,
+    ) -> Result<BusQueueStatus, BusControlError> {
+        let (queue, producer, descriptor, indirect) = request.into_parts();
+        let translated = SubmissionAcceptance::new(
+            queue,
+            producer,
+            descriptor.into(),
+            indirect.map(|(stage, write)| (stage.0, write.into())),
+        );
+        Self::accept_submission(self, translated)
+            .await
+            .map(Into::into)
+    }
+
+    async fn read_queue_status(
+        &self,
+        queue: EpochQueue,
+    ) -> Result<BusQueueStatus, BusControlError> {
+        Self::control_queue(self, QueueControl::ReadStatus(queue))
+            .await
+            .map(Into::into)
+    }
+
+    async fn write_queue_control(
+        &self,
+        request: QueueControlWrite,
+    ) -> Result<BusQueueStatus, BusControlError> {
+        Self::control_queue(self, request.into_control())
+            .await
+            .map(Into::into)
+    }
+
+    async fn wait_irq_notification(&self) -> Option<IrqNotification> {
+        Self::wait_irq_notification(self).await
+    }
+}

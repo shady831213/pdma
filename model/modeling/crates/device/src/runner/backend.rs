@@ -145,10 +145,14 @@ impl DeviceModel {
         }
     }
 
-    pub(super) fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    pub(super) fn ack_irq_source(
+        &mut self,
+        bus_control: &BusControlState,
+        source: EpochIrqSource,
+    ) -> ModelResult<()> {
         self.validate_epoch(source.epoch())?;
         match self {
-            Self::QueuePort(device) => device.ack_irq_source(source),
+            Self::QueuePort(device) => device.ack_irq_source(bus_control, source),
         }
     }
 

@@ -35,6 +35,12 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
         .await?;
     fixture
         .handle
+        .control_queue(QueueControl::PublishCompletionProducer(
+            QueueCursorUpdate::new(fixture.queue, RingCursor::new(2)),
+        ))
+        .await?;
+    fixture
+        .handle
         .control_queue(QueueControl::CaptureSubmissionProducer(
             QueueCursorUpdate::new(fixture.queue, RingCursor::new(1)),
         ))

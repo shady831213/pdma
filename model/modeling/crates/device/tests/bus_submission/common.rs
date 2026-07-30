@@ -83,6 +83,19 @@ pub(super) async fn run_descriptor(
 ) -> TestResult<RunResult> {
     fixture
         .handle
+        .control_queue(QueueControl::PublishCompletionProducer(
+            QueueCursorUpdate::new(fixture.queue, RingCursor::new(2)),
+        ))
+        .await?;
+    fixture
+        .handle
+        .control_queue(QueueControl::PublishEventProducer(QueueCursorUpdate::new(
+            fixture.queue,
+            RingCursor::new(2),
+        )))
+        .await?;
+    fixture
+        .handle
         .accept_submission(SubmissionAcceptance::new(
             fixture.queue,
             RingCursor::new(0),

@@ -142,6 +142,16 @@ impl TraceSink {
         );
     }
 
+    pub(crate) fn dma_event_published(&mut self, record: pdma_model_contract::abi::AbiEvent) {
+        self.push(
+            TraceEventKind::EventPublished,
+            None,
+            Some(record.queue_id()),
+            Some(record.command_id()),
+            "ABI event",
+        );
+    }
+
     pub(crate) fn event_poll(&mut self, queue_id: QueueId, record: Option<EventRecord>) {
         match record {
             Some(event) => self.push(

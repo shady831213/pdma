@@ -42,8 +42,17 @@ impl AsyncDeviceHandle {
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
     pub async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        self.with_backend(|backend| backend.ack_irq_source(source))
-            .await
+        let (result, generation) = {
+            let mut state = self.shared.state.lock().await;
+            let result = {
+                let state = &mut *state;
+                state.backend.ack_irq_source(&state.bus_control, source)
+            };
+            super::wake(&mut state);
+            (result, state.generation)
+        };
+        super::publish(&self.shared, generation);
+        result
     }
 
     /// Returns the current pending IRQ snapshot, if any.

@@ -1,4 +1,5 @@
 use super::QueuePortDeviceModel;
+use crate::runner::bus::control::BusControlState;
 use pdma_model_contract::{
     EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult,
 };
@@ -64,11 +65,15 @@ impl QueuePortDeviceModel {
         Ok(())
     }
 
-    pub(in crate::runner) fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    pub(in crate::runner) fn ack_irq_source(
+        &mut self,
+        bus_control: &BusControlState,
+        source: EpochIrqSource,
+    ) -> ModelResult<()> {
         self.validate_epoch(source.epoch())?;
         let source = source.source();
         self.validate_irq_source(source)?;
-        let records_pending = self.irq_records_pending(source)?;
+        let records_pending = self.irq_records_pending(bus_control, source)?;
         let was_asserted = self.irq.line_asserted();
         self.irq.ack(source, records_pending);
         self.trace.irq_device_ack(source);
@@ -117,12 +122,40 @@ impl QueuePortDeviceModel {
         }
     }
 
-    fn irq_records_pending(&self, source: IrqSource) -> ModelResult<bool> {
+    fn irq_records_pending(
+        &self,
+        bus_control: &BusControlState,
+        source: IrqSource,
+    ) -> ModelResult<bool> {
         match source {
-            IrqSource::Completion(id) => self.completion(id).map(|ring| !ring.is_empty()),
+            IrqSource::Completion(id) => {
+                let queue = self
+                    .queues
+                    .iter()
+                    .find(|queue| queue.entry.completion_ring_id() == id)
+                    .ok_or(ModelError::UnknownIrqSource(source))?;
+                if queue.io.is_dma_bus() {
+                    let active = bus_control
+                        .queue(pdma_model_contract::abi::EpochQueue::new(
+                            self.epoch,
+                            queue.entry.queue_id(),
+                        ))
+                        .map_err(|_| ModelError::DmaSubmissionState)?;
+                    Ok(active.completion.producer() != active.completion.consumer())
+                } else {
+                    self.completion(id).map(|ring| !ring.is_empty())
+                }
+            }
             IrqSource::Event(id) => {
-                self.queue(id)?;
-                Ok(self.events.iter().any(|event| event.queue_id() == id))
+                let queue = self.queue(id)?;
+                if queue.io.is_dma_bus() {
+                    let active = bus_control
+                        .queue(pdma_model_contract::abi::EpochQueue::new(self.epoch, id))
+                        .map_err(|_| ModelError::DmaSubmissionState)?;
+                    Ok(active.event.producer() != active.event.consumer())
+                } else {
+                    Ok(self.events.iter().any(|event| event.queue_id() == id))
+                }
             }
         }
     }

@@ -81,11 +81,29 @@ impl QueueIo {
         }
     }
 
-    pub(super) const fn publication_requires_retry(&self) -> bool {
-        match self {
-            Self::Semantic(_) => false,
-            Self::DmaBus(_) => true,
-        }
+    pub(super) const fn is_dma_bus(&self) -> bool {
+        matches!(self, Self::DmaBus(_))
+    }
+
+    pub(super) fn publish_dma_completion(
+        &self,
+        dma_space: &mut DmaSpace,
+        bus_control: &mut BusControlState,
+        queue_id: QueueId,
+        record: pdma_model_contract::CompletionRecord,
+    ) -> bool {
+        matches!(self, Self::DmaBus(_))
+            && dma_bus::DmaBusQueueIo::publish_completion(dma_space, bus_control, queue_id, record)
+    }
+
+    pub(super) fn publish_dma_event(
+        &self,
+        dma_space: &mut DmaSpace,
+        bus_control: &mut BusControlState,
+        event: AbiEvent,
+    ) -> bool {
+        matches!(self, Self::DmaBus(_))
+            && dma_bus::DmaBusQueueIo::publish_event(dma_space, bus_control, event)
     }
 
     pub(super) const fn memory_resolver(

@@ -54,6 +54,11 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
             QueueCursorUpdate::new(queue, RingCursor::new(2)),
         ))
         .await?;
+    handle
+        .control_queue(QueueControl::PublishCompletionProducer(
+            QueueCursorUpdate::new(queue, RingCursor::new(2)),
+        ))
+        .await?;
     let worker = tokio::spawn(worker.run());
     handle.wait_for_stall_after(0).await;
     let status = handle

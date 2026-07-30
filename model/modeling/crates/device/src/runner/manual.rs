@@ -164,7 +164,7 @@ impl SyncDevice {
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
     pub fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.backend.ack_irq_source(source)
+        self.backend.ack_irq_source(&self.bus_control, source)
     }
 
     /// Returns the current pending IRQ snapshot, if any.

@@ -1,3 +1,4 @@
+mod publication;
 mod submission;
 
 use super::QueueFetch;
@@ -29,5 +30,28 @@ impl DmaBusQueueIo {
 
     pub(super) fn has_pending(bus_control: &BusControlState, queue_id: QueueId) -> bool {
         submission::has_pending(bus_control, queue_id)
+    }
+
+    pub(super) fn publish_completion(
+        dma_space: &mut DmaSpace,
+        bus_control: &mut BusControlState,
+        queue_id: QueueId,
+        record: pdma_model_contract::CompletionRecord,
+    ) -> bool {
+        matches!(
+            publication::completion(dma_space, bus_control, queue_id, record),
+            publication::PublicationOutcome::Published
+        )
+    }
+
+    pub(super) fn publish_event(
+        dma_space: &mut DmaSpace,
+        bus_control: &mut BusControlState,
+        event: pdma_model_contract::abi::AbiEvent,
+    ) -> bool {
+        matches!(
+            publication::event(dma_space, bus_control, event),
+            publication::PublicationOutcome::Published
+        )
     }
 }

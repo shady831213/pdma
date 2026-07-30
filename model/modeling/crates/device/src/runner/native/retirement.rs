@@ -1,3 +1,5 @@
+mod dma;
+
 use super::QueuePortDeviceModel;
 use crate::dma_space::DmaSpace;
 use crate::runner::AsyncStallReason;
@@ -53,7 +55,7 @@ impl PendingRetirement {
 
 pub(super) fn publish_completion(
     device: &mut QueuePortDeviceModel,
-    dma_space: &DmaSpace,
+    dma_space: &mut DmaSpace,
     bus_control: &mut BusControlState,
     success: SuccessRetirement,
 ) -> ModelResult<ModelStepStatus> {
@@ -62,7 +64,12 @@ pub(super) fn publish_completion(
     device
         .trace
         .execution_succeeded(success.queue, success.operation, success.command);
-    if completion_publication_is_full(device, success.queue, success.completion_ring)? {
+    if let Some(result) =
+        dma::publish_completion(device, dma_space, bus_control, success, completion)
+    {
+        return result;
+    }
+    if completion_publication_is_full(device, success.completion_ring)? {
         consume_command(device, dma_space, bus_control, success.queue)?;
         device.pending_retirement = Some(PendingRetirement::Completion(success));
         device
@@ -97,8 +104,8 @@ pub(super) fn validate_success_completion_route(
 
 pub(super) fn retry_pending_retirement(
     device: &mut QueuePortDeviceModel,
-    dma_space: &DmaSpace,
-    bus_control: &BusControlState,
+    dma_space: &mut DmaSpace,
+    bus_control: &mut BusControlState,
 ) -> ModelResult<ModelStepStatus> {
     let Some(pending) = device.pending_retirement else {
         return Ok(ModelStepStatus::Idle);
@@ -112,24 +119,25 @@ pub(super) fn retry_pending_retirement(
             record,
             source,
         } => retry_pending_event(device, dma_space, bus_control, queue_id, record, source),
-        PendingRetirement::DmaEvent(_) => {
-            device.trace.stall(None, "FaultRetirementPendingRetry");
-            Ok(ModelStepStatus::Stalled(
-                AsyncStallReason::FaultRetirementPendingRetry,
-            ))
+        PendingRetirement::DmaEvent(event) => {
+            dma::retry_event(device, dma_space, bus_control, event)
         }
     }
 }
 
 fn retry_pending_completion(
     device: &mut QueuePortDeviceModel,
-    dma_space: &DmaSpace,
-    bus_control: &BusControlState,
+    dma_space: &mut DmaSpace,
+    bus_control: &mut BusControlState,
     pending: SuccessRetirement,
 ) -> ModelResult<ModelStepStatus> {
     let completion =
         CompletionRecord::new(pending.queue, pending.command, CompletionStatus::Success);
-    if completion_publication_is_full(device, pending.queue, pending.completion_ring)? {
+    if let Some(result) = dma::retry_completion(device, dma_space, bus_control, pending, completion)
+    {
+        return result;
+    }
+    if completion_publication_is_full(device, pending.completion_ring)? {
         device
             .trace
             .stall(Some(pending.queue), "CompletionPublicationPressure");
@@ -202,12 +210,8 @@ pub(super) fn publish_fault(
 
 fn completion_publication_is_full(
     device: &QueuePortDeviceModel,
-    queue_id: QueueId,
     completion_ring_id: CompletionRingId,
 ) -> ModelResult<bool> {
-    if device.queue(queue_id)?.io.publication_requires_retry() {
-        return Ok(true);
-    }
     let completion = device.completion(completion_ring_id)?;
     Ok(completion.is_full()
         || completion.len() >= device.resource_config.completion_publication_slots())
@@ -217,8 +221,8 @@ fn event_publication_is_full(
     device: &QueuePortDeviceModel,
     queue_id: QueueId,
 ) -> ModelResult<bool> {
-    Ok(device.queue(queue_id)?.io.publication_requires_retry()
-        || device.events.len() >= device.resource_config.event_publication_slots())
+    device.queue(queue_id)?;
+    Ok(device.events.len() >= device.resource_config.event_publication_slots())
 }
 
 fn retire_command(

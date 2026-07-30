@@ -13,8 +13,8 @@ pub(in crate::runner) struct ActiveQueue {
     pub(in crate::runner) activation: QueueActivation,
     pub(in crate::runner) submission: RingCursors,
     pub(in crate::runner) captured_submission_producer: RingCursor,
-    pub(super) completion: RingCursors,
-    pub(super) event: RingCursors,
+    pub(in crate::runner) completion: RingCursors,
+    pub(in crate::runner) event: RingCursors,
 }
 
 /// Complete typed shadow state for one active DMA queue.

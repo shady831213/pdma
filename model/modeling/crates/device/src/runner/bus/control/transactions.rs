@@ -71,7 +71,7 @@ fn validate_indirect(
     }
 }
 
-pub(in crate::runner::bus) fn control(
+pub(in crate::runner) fn control(
     state: &mut RunnerState,
     request: QueueControl,
 ) -> (Result<QueueStatus, BusControlError>, bool) {

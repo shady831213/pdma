@@ -78,7 +78,10 @@ async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
     let unsupported_version = MmioResult::UnsupportedVersion.code().to_le_bytes().to_vec();
     assert_eq!(global_result, Ok(unsupported_version));
     let not_executed = MmioResult::NotExecuted.code().to_le_bytes().to_vec();
-    assert_eq!(queue_result, Ok(not_executed.clone()));
+    assert_eq!(
+        queue_result,
+        Ok(MmioResult::InvalidRingDepth.code().to_le_bytes().to_vec())
+    );
     assert_eq!(irq_result, Ok(not_executed));
     assert_eq!(
         handle.read_mmio(0x028, 8).await,

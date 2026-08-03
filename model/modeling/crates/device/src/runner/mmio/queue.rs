@@ -1,6 +1,11 @@
 use super::bank::{CommandBank, MmioScalar, narrow_u32};
 use crate::runner::state::RunnerState;
-use pdma_model_contract::abi::mmio::{QueueResponseBank, ResponseUpdate};
+use pdma_model_contract::abi::mmio::QueueResponseBank;
+
+#[path = "queue_config.rs"]
+mod queue_config;
+#[path = "queue_control.rs"]
+mod queue_control;
 
 #[derive(Clone, Copy)]
 pub(super) enum QueueRegister {
@@ -52,6 +57,23 @@ pub(super) struct QueueBank {
     command: CommandBank<QueueResponseBank>,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct QueueStaging {
+    expected_epoch: u64,
+    id: u64,
+    expected_cursor: u64,
+    new_cursor: u64,
+    cfg_sq_depth: u32,
+    cfg_cq_depth: u32,
+    cfg_software_owner: u64,
+    sq_base: u64,
+    sq_depth: u32,
+    cq_base: u64,
+    cq_depth: u32,
+    eq_base: u64,
+    eq_depth: u32,
+}
+
 impl QueueBank {
     pub(super) fn new() -> Self {
         Self {
@@ -69,6 +91,24 @@ impl QueueBank {
             eq_base: 0,
             eq_depth: 0,
             command: CommandBank::new(),
+        }
+    }
+
+    const fn staging(&self) -> QueueStaging {
+        QueueStaging {
+            expected_epoch: self.expected_epoch,
+            id: self.id,
+            expected_cursor: self.expected_cursor,
+            new_cursor: self.new_cursor,
+            cfg_sq_depth: self.cfg_sq_depth,
+            cfg_cq_depth: self.cfg_cq_depth,
+            cfg_software_owner: self.cfg_software_owner,
+            sq_base: self.sq_base,
+            sq_depth: self.sq_depth,
+            cq_base: self.cq_base,
+            cq_depth: self.cq_depth,
+            eq_base: self.eq_base,
+            eq_depth: self.eq_depth,
         }
     }
 }
@@ -109,15 +149,35 @@ pub(super) const fn read(state: &RunnerState, register: QueueRegister) -> MmioSc
     }
 }
 
+fn status_response(
+    status: crate::runner::QueueStatus,
+) -> Result<QueueResponseBank, pdma_model_contract::abi::mmio::MmioResultDetails> {
+    Ok(QueueResponseBank {
+        epoch: status.queue().epoch().raw(),
+        queue_id: u64::try_from(status.queue().queue_id().raw()).map_err(|_| {
+            queue_control::fail(
+                pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction,
+                [0; 3],
+            )
+        })?,
+        sq_producer: status.submission().producer().raw(),
+        sq_captured: status.captured_submission_producer().raw(),
+        sq_consumer: status.submission().consumer().raw(),
+        cq_producer: status.completion().producer().raw(),
+        cq_consumer: status.completion().consumer().raw(),
+        eq_producer: status.event().producer().raw(),
+        eq_consumer: status.event().consumer().raw(),
+    })
+}
+
 pub(super) fn write(state: &mut RunnerState, register: QueueRegister, value: u64) {
-    let bank = &mut state.mmio.queue;
     match register {
-        QueueRegister::ExpectedEpoch => bank.expected_epoch = value,
-        QueueRegister::Id => bank.id = value,
-        QueueRegister::ExpectedCursor => bank.expected_cursor = value,
-        QueueRegister::NewCursor => bank.new_cursor = value,
-        QueueRegister::CfgSqDepth => bank.cfg_sq_depth = narrow_u32(value),
-        QueueRegister::CfgCqDepth => bank.cfg_cq_depth = narrow_u32(value),
+        QueueRegister::ExpectedEpoch => state.mmio.queue.expected_epoch = value,
+        QueueRegister::Id => state.mmio.queue.id = value,
+        QueueRegister::ExpectedCursor => state.mmio.queue.expected_cursor = value,
+        QueueRegister::NewCursor => state.mmio.queue.new_cursor = value,
+        QueueRegister::CfgSqDepth => state.mmio.queue.cfg_sq_depth = narrow_u32(value),
+        QueueRegister::CfgCqDepth => state.mmio.queue.cfg_cq_depth = narrow_u32(value),
         QueueRegister::CfgEventPolicy
         | QueueRegister::Result
         | QueueRegister::Detail0
@@ -132,16 +192,20 @@ pub(super) fn write(state: &mut RunnerState, register: QueueRegister, value: u64
         | QueueRegister::RspCqConsumer
         | QueueRegister::RspEqProducer
         | QueueRegister::RspEqConsumer => {}
-        QueueRegister::CfgSoftwareOwner => bank.cfg_software_owner = value,
-        QueueRegister::SqBase => bank.sq_base = value,
-        QueueRegister::SqDepth => bank.sq_depth = narrow_u32(value),
-        QueueRegister::CqBase => bank.cq_base = value,
-        QueueRegister::CqDepth => bank.cq_depth = narrow_u32(value),
-        QueueRegister::EqBase => bank.eq_base = value,
-        QueueRegister::EqDepth => bank.eq_depth = narrow_u32(value),
+        QueueRegister::CfgSoftwareOwner => state.mmio.queue.cfg_software_owner = value,
+        QueueRegister::SqBase => state.mmio.queue.sq_base = value,
+        QueueRegister::SqDepth => state.mmio.queue.sq_depth = narrow_u32(value),
+        QueueRegister::CqBase => state.mmio.queue.cq_base = value,
+        QueueRegister::CqDepth => state.mmio.queue.cq_depth = narrow_u32(value),
+        QueueRegister::EqBase => state.mmio.queue.eq_base = value,
+        QueueRegister::EqDepth => state.mmio.queue.eq_depth = narrow_u32(value),
         QueueRegister::Command => {
-            let result = bank.command.result;
-            bank.command.complete(result, ResponseUpdate::Preserve);
+            let staging = state.mmio.queue.staging();
+            let (result, response, changed) = queue_control::execute(state, staging, value);
+            state.mmio.queue.command.complete(result, response);
+            if changed {
+                crate::runner::state::wake(state);
+            }
         }
     }
 }

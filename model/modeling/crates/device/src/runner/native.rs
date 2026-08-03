@@ -4,6 +4,7 @@ pub(in crate::runner) mod dma_bus_api;
 mod io;
 mod irq;
 mod irq_api;
+pub(in crate::runner) mod probe;
 mod reset;
 mod resources;
 mod retirement;
@@ -16,15 +17,11 @@ use super::bus::control::BusControlState;
 use crate::dma_space::DmaSpace;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use irq::PdmaIrqController;
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::{ModelError, ModelResult};
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{CompletionRingId, QueueId};
-use pdma_model_contract::irq::{IrqLine, IrqVector};
-use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
-use pdma_model_contract::trace::TraceEvent;
-use pdma_model_contract::{DeviceEpoch, ResourceConfig};
+use pdma_model_contract::{
+    CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, ExternalCommand, IrqLine,
+    IrqVector, ModelError, ModelResult, QueueConfig, QueueConfigHandle, QueueDirectoryEntry,
+    QueueId, ResourceConfig, TraceEvent,
+};
 use ring::NativeRing;
 use std::collections::VecDeque;
 

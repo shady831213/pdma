@@ -2,7 +2,7 @@ use super::NativeExecution;
 use super::broadcast;
 use super::copy;
 use super::io::QueueFetch;
-use super::resources::ResourceDemand;
+use super::probe::{RunStateProbe, probe_run_state};
 use super::retirement;
 use super::vector_add;
 use crate::runner::AsyncStallReason;
@@ -17,11 +17,25 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
         dma_space,
         bus_control,
     } = execution;
+    let blocked_resource = match probe_run_state(device, dma_space, bus_control) {
+        RunStateProbe::Idle => {
+            device.trace.idle();
+            return Ok(ModelStepStatus::Idle);
+        }
+        RunStateProbe::Running => None,
+        RunStateProbe::Blocked {
+            reason: AsyncStallReason::ExecutionResourcePressure,
+            ..
+        } => Some(AsyncStallReason::ExecutionResourcePressure),
+        RunStateProbe::Blocked { queue, reason } => {
+            device.trace.stall(Some(queue), stall_name(reason));
+            return Ok(ModelStepStatus::Stalled(reason));
+        }
+    };
     if device.pending_retirement.is_some() {
         return retirement::retry_pending_retirement(device, dma_space, bus_control);
     }
     let Some(queue_id) = device.runnable.pop_front() else {
-        device.trace.idle();
         return Ok(ModelStepStatus::Idle);
     };
     let entry = device.queue(queue_id)?.entry;
@@ -44,14 +58,10 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
     device
         .trace
         .scheduled(queue_id, operation, command_id(&command));
-    if !ResourceDemand::for_command(&command).fits(device.resource_config) {
+    if let Some(reason) = blocked_resource {
         device.requeue_if_command_pending(dma_space, bus_control, queue_id)?;
-        device
-            .trace
-            .stall(Some(queue_id), "ExecutionResourcePressure");
-        return Ok(ModelStepStatus::Stalled(
-            AsyncStallReason::ExecutionResourcePressure,
-        ));
+        device.trace.stall(Some(queue_id), stall_name(reason));
+        return Ok(ModelStepStatus::Stalled(reason));
     }
     match command {
         ExternalCommand::Copy(copy_command) => copy::retire_copy(
@@ -90,5 +100,14 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
             queue_id,
             vector_add,
         ),
+    }
+}
+
+const fn stall_name(reason: AsyncStallReason) -> &'static str {
+    match reason {
+        AsyncStallReason::ExecutionResourcePressure => "ExecutionResourcePressure",
+        AsyncStallReason::CompletionPublicationPressure => "CompletionPublicationPressure",
+        AsyncStallReason::EventPublicationPressure => "EventPublicationPressure",
+        AsyncStallReason::FaultRetirementPendingRetry => "FaultRetirementPendingRetry",
     }
 }

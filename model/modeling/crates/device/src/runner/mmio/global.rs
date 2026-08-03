@@ -1,6 +1,12 @@
 use super::bank::{CommandBank, MmioScalar, narrow_u32};
+use crate::runner::native::probe::{RunStateProbe, probe_run_state};
 use crate::runner::state::RunnerState;
-use pdma_model_contract::abi::mmio::ResponseUpdate;
+use pdma_model_contract::abi::mmio::{
+    GlobalCommand, MmioResult, MmioResultDetails, ResponseUpdate,
+};
+use pdma_model_contract::abi::{
+    AbiControlError, AbiDiscovery, AbiLimits, DeviceRunState, DiscoveryRequest,
+};
 
 #[derive(Clone, Copy)]
 pub(super) enum GlobalRegister {
@@ -94,8 +100,7 @@ pub(super) fn write(state: &mut RunnerState, register: GlobalRegister, value: u6
         GlobalRegister::ReqFeatures => bank.req_features = value,
         GlobalRegister::ResetExpectedEpoch => bank.reset_expected_epoch = value,
         GlobalRegister::Command => {
-            let result = bank.command.result;
-            bank.command.complete(result, ResponseUpdate::Preserve);
+            execute(state, narrow_u32(value));
         }
         GlobalRegister::Magic
         | GlobalRegister::MmioAbiVersion
@@ -113,4 +118,140 @@ pub(super) fn write(state: &mut RunnerState, register: GlobalRegister, value: u6
         | GlobalRegister::MaxStridedRows
         | GlobalRegister::MaxStride => {}
     }
+}
+
+fn execute(state: &mut RunnerState, raw: u32) {
+    let Ok(command) = GlobalCommand::try_from(raw) else {
+        complete_failure(
+            state,
+            details(MmioResult::UnknownCommand, [u64::from(raw), 0, 0]),
+        );
+        return;
+    };
+    match command {
+        GlobalCommand::Discover => discover(state),
+        GlobalCommand::ReadLimits => read_limits(state),
+        GlobalCommand::ReadStatus => read_status(state),
+        GlobalCommand::Reset => complete_failure(
+            state,
+            details(
+                MmioResult::InvalidTransaction,
+                [u64::from(command.code()), 0, 0],
+            ),
+        ),
+    }
+}
+
+fn discover(state: &mut RunnerState) {
+    let request = {
+        let bank = &state.mmio.global;
+        DiscoveryRequest::try_new(low_u16(bank.req_abi_version), bank.req_features)
+    };
+    match request {
+        Ok(_) => {
+            let discovery = AbiDiscovery::v1();
+            complete_success(
+                state,
+                GlobalResponseRegisters {
+                    abi_version: u32::from(discovery.version()),
+                    features: discovery.features().bits(),
+                    ..GlobalResponseRegisters::default()
+                },
+            );
+        }
+        Err(error) => complete_failure(state, map_discovery_error(error)),
+    }
+}
+
+fn read_limits(state: &mut RunnerState) {
+    let limits = AbiLimits::v1();
+    complete_success(
+        state,
+        GlobalResponseRegisters {
+            max_ring_depth: limits.max_ring_depth(),
+            max_indirect_destinations: limits.max_indirect_destinations(),
+            max_transfer_bytes: limits.max_transfer_bytes(),
+            max_strided_rows: limits.max_strided_rows(),
+            max_stride: limits.max_stride(),
+            ..GlobalResponseRegisters::default()
+        },
+    );
+}
+
+fn read_status(state: &mut RunnerState) {
+    let run_state = match &state.backend {
+        crate::runner::backend::DeviceModel::QueuePort(device) => {
+            probe_run_state(device, &state.dma_space, &state.bus_control)
+        }
+    };
+    let run_state = match run_state {
+        RunStateProbe::Idle => DeviceRunState::Idle,
+        RunStateProbe::Running => DeviceRunState::Running,
+        RunStateProbe::Blocked { .. } => DeviceRunState::Blocked,
+    };
+    let encoded = match run_state {
+        DeviceRunState::Idle => 0,
+        DeviceRunState::Running => 1,
+        DeviceRunState::Blocked => 2,
+    };
+    complete_success(
+        state,
+        GlobalResponseRegisters {
+            run_state: encoded,
+            epoch: state.backend.epoch().raw(),
+            ..GlobalResponseRegisters::default()
+        },
+    );
+}
+
+fn complete_success(state: &mut RunnerState, response: GlobalResponseRegisters) {
+    state.mmio.global.command.complete(
+        details(MmioResult::Ok, [0; 3]),
+        ResponseUpdate::Replace(response),
+    );
+}
+
+fn complete_failure(state: &mut RunnerState, result: MmioResultDetails) {
+    state
+        .mmio
+        .global
+        .command
+        .complete(result, ResponseUpdate::Preserve);
+}
+
+fn map_discovery_error(error: AbiControlError) -> MmioResultDetails {
+    match error {
+        AbiControlError::UnsupportedVersion { requested } => {
+            details(MmioResult::UnsupportedVersion, [u64::from(requested), 0, 0])
+        }
+        AbiControlError::UnknownFeatureBits { bits } => {
+            details(MmioResult::UnknownFeatureBits, [bits, 0, 0])
+        }
+        AbiControlError::InvalidRingDepth { .. }
+        | AbiControlError::RingExtentOverflow { .. }
+        | AbiControlError::MisalignedRing { .. }
+        | AbiControlError::RingExtentMismatch { .. }
+        | AbiControlError::UnexpectedRingRecord { .. }
+        | AbiControlError::QueueDepthMismatch { .. }
+        | AbiControlError::EventDepthMismatch { .. }
+        | AbiControlError::CursorRegression { .. }
+        | AbiControlError::CursorUpdateRegression { .. }
+        | AbiControlError::CursorDistanceExceeded { .. }
+        | AbiControlError::CursorIncrementOverflow { .. }
+        | AbiControlError::DeviceEpochOverflow { .. }
+        | AbiControlError::UnknownStatusValue { .. } => {
+            details(MmioResult::InvalidTransaction, [1, 0, 0])
+        }
+    }
+}
+
+const fn details(result: MmioResult, values: [u64; 3]) -> MmioResultDetails {
+    MmioResultDetails {
+        result,
+        details: values,
+    }
+}
+
+fn low_u16(value: u32) -> u16 {
+    u16::try_from(value).unwrap_or_default()
 }

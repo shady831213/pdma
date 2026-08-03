@@ -126,7 +126,26 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, BusControlError> {
         let (result, generation) = {
             let mut runner = self.shared.state.lock().await;
-            let result = control::activate(&mut runner, proposal, activation);
+            let result = control::activate_staged(&mut runner, proposal, activation);
+            if result.is_ok() {
+                wake(&mut runner);
+            }
+            (result, runner.generation)
+        };
+        if result.is_ok() {
+            publish(&self.shared, generation);
+        }
+        result
+    }
+
+    /// Activates one queue over three exact mappings already committed in DMA space.
+    pub async fn activate_mapped_queue(
+        &self,
+        activation: QueueActivation,
+    ) -> Result<QueueStatus, BusControlError> {
+        let (result, generation) = {
+            let mut runner = self.shared.state.lock().await;
+            let result = control::activate_mapped(&mut runner, activation);
             if result.is_ok() {
                 wake(&mut runner);
             }

@@ -74,17 +74,11 @@ impl DmaSpace {
 
     /// Installs an entire staged batch or leaves mappings and bytes unchanged.
     pub fn commit(&mut self, stage: DmaStage) -> Result<Vec<DmaRegion>, DmaSpaceError> {
-        if stage.generation != self.generation {
-            return Err(DmaSpaceError::StaleStage {
-                expected_generation: stage.generation,
-                actual_generation: self.generation,
-            });
-        }
+        self.validate_stage(&stage)?;
         let next_generation = self
             .generation
             .checked_add(1)
             .ok_or(DmaSpaceError::AddressExhausted)?;
-        self.validate_proposal(&stage)?;
         let mut additions = Vec::new();
         additions
             .try_reserve_exact(stage.regions.len())
@@ -107,6 +101,16 @@ impl DmaSpace {
         self.next_iova = stage.next_iova;
         self.generation = next_generation;
         Ok(committed)
+    }
+
+    pub(crate) fn validate_stage(&self, stage: &DmaStage) -> Result<(), DmaSpaceError> {
+        if stage.generation != self.generation {
+            return Err(DmaSpaceError::StaleStage {
+                expected_generation: stage.generation,
+                actual_generation: self.generation,
+            });
+        }
+        self.validate_proposal(stage)
     }
 
     /// Allocates and commits one region.

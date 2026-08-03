@@ -1,11 +1,7 @@
 use super::BusControlError;
-use crate::dma_space::DmaStage;
-use crate::runner::state::RunnerState;
-use pdma_model_contract::QueueId;
-use pdma_model_contract::abi::{
-    DeviceEpoch, EpochQueue, QueueActivation, RingCursor, RingCursors, RingLayout, RingRecord,
-};
+use pdma_model_contract::abi::{DeviceEpoch, EpochQueue, QueueActivation, RingCursor, RingCursors};
 
+pub(in crate::runner) mod activation;
 pub(in crate::runner) mod transactions;
 
 #[derive(Debug, Clone, Copy)]
@@ -135,92 +131,4 @@ impl ActiveQueue {
     }
 }
 
-pub(super) fn activate(
-    runner: &mut RunnerState,
-    proposal: DmaStage,
-    activation: QueueActivation,
-) -> Result<QueueStatus, BusControlError> {
-    validate_activation(runner, &proposal, activation)?;
-    let queue = ActiveQueue::new(activation)?;
-    runner
-        .bus_control
-        .queues
-        .try_reserve_exact(1)
-        .map_err(|_| BusControlError::InvalidTransaction)?;
-    let prepared = runner
-        .backend
-        .prepare_dma_bus_queue(activation.config())
-        .map_err(|_| BusControlError::InvalidTransaction)?;
-    runner.dma_space.commit(proposal)?;
-    let native = runner.backend.install_dma_bus_queue(prepared);
-    if native.queue_id() != activation.queue().queue_id() {
-        return Err(BusControlError::InvalidTransaction);
-    }
-    runner.bus_control.queues.push(queue);
-    Ok(queue.status())
-}
-
-fn validate_activation(
-    runner: &RunnerState,
-    proposal: &DmaStage,
-    activation: QueueActivation,
-) -> Result<(), BusControlError> {
-    if activation.queue().epoch() != runner.bus_control.epoch {
-        return Err(BusControlError::StaleEpoch {
-            expected: runner.bus_control.epoch,
-            actual: activation.queue().epoch(),
-        });
-    }
-    if activation.queue().queue_id() != QueueId::new(runner.bus_control.queues.len()) {
-        return Err(BusControlError::InvalidQueue);
-    }
-    if activation.queue().queue_id() != runner.backend.next_queue_id() {
-        return Err(BusControlError::InvalidQueue);
-    }
-    if proposal.generation() != runner.dma_space.generation() || proposal.regions().len() != 3 {
-        return Err(BusControlError::InvalidTransaction);
-    }
-    let rings = activation.rings();
-    let expected = [
-        rings.submission().region(),
-        rings.completion().region(),
-        rings.event().region(),
-    ];
-    if proposal.regions() != expected
-        || usize::try_from(rings.event().depth()) != Ok(activation.config().completion_depth())
-        || u64::try_from(activation.config().software_owner().raw()).is_err()
-    {
-        return Err(BusControlError::InvalidTransaction);
-    }
-    validate_layout(rings.submission(), RingRecord::Submission)?;
-    validate_layout(rings.completion(), RingRecord::Completion)?;
-    validate_layout(rings.event(), RingRecord::Event)?;
-    let [submission, completion, event] = expected;
-    if regions_overlap(submission, completion)
-        || regions_overlap(submission, event)
-        || regions_overlap(completion, event)
-    {
-        return Err(BusControlError::InvalidTransaction);
-    }
-    Ok(())
-}
-
-fn validate_layout(layout: RingLayout, record: RingRecord) -> Result<(), BusControlError> {
-    if layout.record() != record
-        || layout.extent() != layout.region().length()
-        || layout.region().base().raw() % record.alignment() != 0
-    {
-        Err(BusControlError::InvalidTransaction)
-    } else {
-        Ok(())
-    }
-}
-
-const fn regions_overlap(
-    left: pdma_model_contract::abi::DmaRegion,
-    right: pdma_model_contract::abi::DmaRegion,
-) -> bool {
-    let left_end = left.base().raw().saturating_add(left.length());
-    let right_end = right.base().raw().saturating_add(right.length());
-    left.base().raw() < right_end && right.base().raw() < left_end
-}
+pub(super) use activation::{activate_mapped, activate_staged};

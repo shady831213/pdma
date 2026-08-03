@@ -12,6 +12,12 @@ pub(in crate::runner) struct PreparedDmaBusQueue {
     completion: NativeRing<CompletionRecord>,
 }
 
+impl PreparedDmaBusQueue {
+    pub(in crate::runner) const fn queue_id(&self) -> QueueId {
+        self.context.entry.queue_id()
+    }
+}
+
 impl QueuePortDeviceModel {
     pub(in crate::runner) fn create_dma_bus_queue(
         &mut self,

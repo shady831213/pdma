@@ -14,17 +14,15 @@ async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged
     let invalid_activation = activation(&invalid, QueueId::new(1))?;
 
     // When: stale and wrong-ID bootstrap transactions are rejected.
-    assert!(
+    assert_eq!(
         handle
             .activate_queue(stale.clone(), activation(&stale, QueueId::new(0))?)
-            .await
-            .is_err()
+            .await,
+        Err(BusControlError::InvalidTransaction)
     );
-    assert!(
-        handle
-            .activate_queue(invalid, invalid_activation)
-            .await
-            .is_err()
+    assert_eq!(
+        handle.activate_queue(invalid, invalid_activation).await,
+        Err(BusControlError::InvalidQueue)
     );
 
     // Then: only the independent winner exists and the original ID/base remains reusable.

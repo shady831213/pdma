@@ -4,6 +4,7 @@ mod backend;
 mod bus;
 mod irq;
 mod manual;
+mod mmio;
 mod native;
 mod queue_api;
 mod reset;

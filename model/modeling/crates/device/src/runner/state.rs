@@ -2,6 +2,7 @@ use super::{AsyncRunSnapshot, AsyncRunSummary, AsyncStepStatus};
 use crate::dma_space::DmaSpace;
 use crate::runner::backend::DeviceModel;
 use crate::runner::bus::control::BusControlState;
+use crate::runner::mmio::RegisterBanks;
 use tokio::sync::{Mutex, watch};
 
 #[derive(Debug)]
@@ -15,6 +16,7 @@ pub(super) struct RunnerState {
     pub(super) backend: DeviceModel,
     pub(super) dma_space: DmaSpace,
     pub(super) bus_control: BusControlState,
+    pub(super) mmio: RegisterBanks,
     pub(super) steps: usize,
     pub(super) errors: usize,
     pub(super) stalls: usize,
@@ -25,11 +27,12 @@ pub(super) struct RunnerState {
 }
 
 impl RunnerState {
-    pub(super) const fn new(backend: DeviceModel) -> Self {
+    pub(super) fn new(backend: DeviceModel) -> Self {
         Self {
             backend,
             dma_space: DmaSpace::new(),
             bus_control: BusControlState::new(),
+            mmio: RegisterBanks::new(),
             steps: 0,
             errors: 0,
             stalls: 0,

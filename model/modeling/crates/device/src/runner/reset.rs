@@ -47,6 +47,7 @@ fn reset_runner(
     }
     state.backend.reset(next_backend);
     state.bus_control.reset(next_control);
+    super::mmio::reset::register_banks(state);
     Ok(next_backend)
 }
 

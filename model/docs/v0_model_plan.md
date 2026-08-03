@@ -13,9 +13,9 @@ This file tracks executable v0 model progress. White-board documents explain arc
   atomic segment is one poll, and only a real pending result admits IRQ execution before
   the next main poll; a complete handler future remains atomic and non-nested.
 - Prefer native behavioral operation derivation over cycle-accurate timing.
-- Keep the ABI-v1 descriptor/record data contract explicit and fixed-width; it is rendered
-  into the checked-in generated C11 data header. Numeric register/MMIO maps and callable
-  C APIs remain deferred.
+- Keep the completed ABI-v1 descriptor/record data contract explicit and fixed-width; it
+  is rendered into the checked-in generated C11 data header. The exact 4 KiB numeric
+  MMIO model is the active correction slice; callable C APIs remain deferred.
 - Validate every model slice with `cargo fmt --check`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps --document-private-items`.
 
 ## Progress Ledger
@@ -41,25 +41,26 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | v0 architecture specification draft | Done | `model/docs/pdma_arch_spec_v0.md` | The original v0 behavior was documented with ABI, register, cycle timing, interrupt, and reset details deferred at that milestone. |
 | v0.7 host-owned IRQ delivery | Done | `model/docs/v0_7_model_plan.md`, `crates/scenarios/tests/irq_delivery.rs` | Line and Message routes, device-local IRQ state, one complete software main, poll-boundary CPU serialization, whole-handler atomicity, driver drain/ack, final delivery summaries, and IRQ trace are validated; concrete MSI/MSI-X transport remains deferred. |
 | v0.8 vector-routed IRQ contexts | Done | `model/docs/v0_8_model_plan.md`, host/context/driver/IRQ tests, `crates/scenarios/tests/irq_delivery/` | Line and Message notifications dispatch through a fixed per-vector host registry; CPU-local state and shared cancel-safe driver accounting survive repeated main/handler switches without device-owned callbacks. |
-| v0.9 ABI register-contract | Done | `model/docs/v0_9_model_plan.md`, ABI/bus/reset tests, `include/pdma_model_abi.h`, `crates/scenarios/tests/message_irq_linear_copy.rs` | ABI v1 is the canonical path for new E2E: fixed-width data records, checked host DMA, atomic queue/control procedures, whole-device epoch reset, and one shared semantic/DMA execution and retirement core. |
+| v0.9 ABI register-contract | Partial | `model/docs/v0_9_model_plan.md`, ABI/bus/reset tests, `include/pdma_model_abi.h`, `crates/scenarios/tests/message_irq_linear_copy.rs` | The historical descriptor/completion/event ABI record is complete, but the overall memory-and-bus-exact objective is partial pending the approved exact 4 KiB numeric MMIO model. |
 
 ## Active Next Slice
 
-No active implementation slice remains. The v0 model is complete through the v0.9 ABI
-register-contract slice recorded in `model/docs/pdma_arch_spec_v0.md`.
+The active correction slice is the approved exact 4 KiB numeric MMIO model. v0.9 remains
+PARTIAL until that memory-and-bus-exact objective is implemented and validated; the
+historical descriptor/completion/event ABI record remains complete.
 The scenario suite has 56 tests: 51 software-bearing tests each use exactly one complete
 `run_main`, while five named pure device/manual observability tests intentionally use
 none, as enumerated in the architecture specification.
 
 ## Planned Slices
 
-None. All v0 slices are validated and the architecture spec is drafted.
+No additional slice is planned ahead of the active exact 4 KiB numeric MMIO correction.
 
 ## Deferred Until v0 Mechanisms Stabilize
 
 - Cycle accuracy, RTL timing, power, or frequency modeling.
-- Numeric register/MMIO maps and callable C APIs; the generated ABI-v1 C data header is
-  complete and must be regenerated from Rust metadata rather than edited.
+- Callable C APIs; the completed generated ABI-v1 C data header must be regenerated from
+  Rust metadata rather than edited.
 - RISC-V scheduler backend through Terminus.
 - High-dimensional transfer operations, gather/scatter, transpose, and reduce trees.
 - Real Linux DMAengine, DPDK DMAdev, or kernel driver integration.

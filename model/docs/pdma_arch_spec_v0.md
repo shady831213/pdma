@@ -3,11 +3,12 @@
 ## Purpose and Scope
 
 This document records the validated behavioral contract of the PDMA executable model
-through v0.9. It is the source of truth for what the Rust model proves today.
-White-board architecture documents are background only. The spec deliberately defers
-anything that is not exercised by the current scenario tests, including cycle timing,
-numeric register/MMIO maps, callable C APIs, concrete PCIe/MSI-X transport, and real
-operating-system integration.
+through the historical v0.9 descriptor-layout ABI baseline. The overall v0.9
+memory-and-bus-exact objective is **PARTIAL**: the approved active correction slice is an
+exact 4 KiB numeric MMIO model, which is not implemented yet. White-board architecture
+documents are background only. This spec deliberately defers anything not exercised by
+the current scenario tests, including cycle timing, callable C APIs, concrete PCIe/MSI-X
+transport, and real operating-system integration.
 
 The intended readers are implementers who will extend the model, port it to a cycle-accurate or RTL context, or write future drivers against a more concrete ABI.
 
@@ -253,6 +254,11 @@ submitting. No handler waits for initialization while holding the CPU. The depth
 alternation story proves repeated `main -> handler A -> main -> handler B -> main`
 switches and a later submission through main's retained capability.
 
+## Historical Completed Descriptor-Layout ABI Baseline
+
+The following ABI-v1 descriptor, completion, and event record remains the completed
+historical baseline while the exact 4 KiB numeric MMIO correction is active.
+
 ## ABI-v1 and Command Boundary
 
 ABI-v1 is the canonical interface for new end-to-end system scenarios. `AsyncPdmaBus`
@@ -388,8 +394,9 @@ Each device-worker turn advances at most one native command or retirement retry.
 The following items are explicitly outside the v0 behavioral contract:
 
 - Cycle accuracy, RTL timing, power, or frequency modeling.
-- Numeric register/MMIO maps and a callable C API. The ABI-v1 data header is already
-  generated and checked from Rust metadata.
+- Callable C API. The ABI-v1 data header is already generated and checked from Rust
+  metadata; the exact 4 KiB numeric MMIO model is active correction work, not an
+  implemented contract.
 - RISC-V scheduler backend through Terminus.
 - High-dimensional transfer operations, gather/scatter, transpose, and reduce trees.
 - Real Linux DMAengine, DPDK DMAdev, or kernel driver integration.

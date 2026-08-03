@@ -1,6 +1,8 @@
 # PDMA MODELING WORKSPACE
 
-Scope: Rust workspace with the completed v0.9 ABI register-contract model.
+Scope: Rust workspace with the historical completed v0.9 descriptor-layout ABI
+register-contract baseline; the overall v0.9 memory-and-bus-exact objective is PARTIAL
+while the approved exact 4 KiB numeric MMIO correction is active.
 
 ## OVERVIEW
 
@@ -97,19 +99,20 @@ cargo doc --workspace --no-deps --document-private-items
 
 ## CURRENT STATE
 
-v0.9 ABI Register-Contract Model is complete. `model/docs/v0_9_model_plan.md` records
-the ABI-v1 canonical E2E path, shared execution/retirement core, checked DMA/control
-transactions, whole-device reset epochs, and generated-header policy. v0.8 records the
-still-binding vector-to-handler, CPU-local, cancel-safe accounting, bootstrap, and
-main/handler alternation boundaries; v0.7 is historical. No next implementation slice is
-selected in this workspace knowledge base.
+v0.9 is **PARTIAL**: `model/docs/v0_9_model_plan.md` records the completed historical
+descriptor/completion/event ABI baseline, while the approved exact 4 KiB numeric MMIO
+model remains active correction work and is not implemented yet. The ABI-v1 canonical E2E
+path, shared execution/retirement core, checked DMA/control transactions, whole-device
+reset epochs, and generated-header policy remain valid. v0.8 records the still-binding
+vector-to-handler, CPU-local, cancel-safe accounting, bootstrap, and main/handler
+alternation boundaries; v0.7 is historical.
 
 ## DO NOT
 
-- Do not add numeric register/MMIO maps, callable C APIs, Terminus, PCIe/MSI-X numeric
-  maps or table/PBA behavior, SR-IOV, FLR, per-queue reset, a second executor/driver/E2E,
-  or cycle timing without an explicitly selected new slice. Do not hand-edit the generated
-  ABI data header.
+- The exact 4 KiB numeric MMIO model is the explicitly selected correction slice. Do not
+  add callable C APIs, Terminus, PCIe/MSI-X numeric maps or table/PBA behavior, SR-IOV,
+  FLR, per-queue reset, a second executor/driver/E2E, or cycle timing, and do not expand
+  the MMIO slice beyond its approved scope or hand-edit the generated ABI data header.
 - Do not modify retired sync crates except for deliberate rollback-snapshot maintenance requested by the user.
 - Do not add `unsafe`, `unwrap`, `expect`, `panic`, `todo`, or indexing/slicing in production code.
 - Do not grow any Rust source beyond 250 pure LOC; split before adding behavior.

@@ -2,11 +2,23 @@
 
 ## Status
 
-**COMPLETE.** v0.9 is the completed ABI register-contract slice after the v0.8
-vector-routed IRQ model. This ledger records the validated final contract and its
-evidence; it is not an active implementation plan.
+**PARTIAL.** The historical v0.9 descriptor-layout ABI register-contract slice is
+complete after the v0.8 vector-routed IRQ model, but the overall v0.9
+memory-and-bus-exact objective remains partial. The approved active correction slice is
+an exact 4 KiB numeric MMIO model; no MMIO implementation exists yet.
 
-## Purpose and Boundaries
+## Active Correction Slice
+
+Implement the approved exact 4 KiB numeric MMIO model while preserving the completed
+descriptor, completion, and event ABI record below and every v0.8 IRQ/CPU-local
+boundary. Numeric MMIO is active work, not a completed v0.9 claim.
+
+## Historical Completed Descriptor-Layout ABI Baseline
+
+The following completed descriptor-layout ABI baseline is retained verbatim for the
+active correction slice.
+
+### Purpose and Boundaries
 
 v0.9 establishes one stable, version-1 PDMA data ABI around the existing deterministic
 execution/resource/retirement model. The ABI path is the canonical path for new
@@ -27,7 +39,7 @@ The slice includes:
 - a generated C data header derived from the canonical Rust metadata plus one migrated
   Message-IRQ end-to-end scenario.
 
-## Locked v1 Protocol
+### Locked v1 Protocol
 
 - All wire fields are explicit fixed-width little-endian values: IDs and IOVAs are
   `u64`; version, opcode, record size, status/kind, and flags are `u16`. Rust layout,
@@ -58,7 +70,7 @@ The slice includes:
   consumes once and retires as an event; host encoding failure is pre-acceptance; no
   successful completion follows a descriptor, list, or memory fault.
 
-## Deferrals
+### Historical Deferrals
 
 v0.9 does not add Terminus, PCIe/MSI-X numeric address/data maps or table/PBA behavior,
 numeric register/MMIO maps, APIC/GIC, OS drivers, a callable C API, firmware/ISA
@@ -68,7 +80,7 @@ broad migration of existing semantic scenarios. The generated C data header is n
 callable API; concrete transport mapping and every header beyond that data header remain
 later work.
 
-## Immutable Pre-edit Baseline
+### Immutable Pre-edit Baseline
 
 The baseline was captured before v0.9 product edits with `cargo test --workspace --
 --list`, normalized to sorted unique names. It contains 137 names: 135 Rust tests and
@@ -92,7 +104,7 @@ name file is evidence-only; this digest is its immutable product-ledger binding.
 
 Plan: .omo/plans/v0-9-abi-register-contract.md
 
-## Completion Evidence and Header Policy
+### Completion Evidence and Header Policy
 
 The final scenario inventory remains exactly 56 tests, 51 `.run_main(` callsites, the
 five zero-entry exceptions above, and four `ManualDriver::setup_on`-family callsites.

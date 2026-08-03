@@ -2,18 +2,19 @@
 
 ## Status
 
-**ACTIVE.** v0.9 is the next implementation slice after the completed v0.8
-vector-routed IRQ model. This ledger records approved work in progress; it does not
-claim that v0.9 is complete.
+**COMPLETE.** v0.9 is the completed ABI register-contract slice after the v0.8
+vector-routed IRQ model. This ledger records the validated final contract and its
+evidence; it is not an active implementation plan.
 
 ## Purpose and Boundaries
 
-v0.9 adds one stable, version-1 PDMA data ABI around the existing deterministic
-execution/resource/retirement model. The ABI path is a new queue-I/O frontend, not a
-second executor. Contract owns ABI vocabulary, device owns DMA/control/reset runtime
-state, host owns bus procedures and software execution, and scenarios own actor wiring
-and assertions. The v0.8 CPU, IRQ, cancellation, publication-before-IRQ, and
-drain-before-ack boundaries remain mandatory.
+v0.9 establishes one stable, version-1 PDMA data ABI around the existing deterministic
+execution/resource/retirement model. The ABI path is the canonical path for new
+end-to-end scenarios, not a second executor; existing semantic scenarios remain valid
+coverage of that same behavior. Contract owns ABI vocabulary, device owns DMA/control/
+reset runtime state, host owns bus procedures and software execution, and scenarios own
+actor wiring and assertions. The v0.8 CPU, IRQ, cancellation, publication-before-IRQ,
+and drain-before-ack boundaries remain mandatory.
 
 The slice includes:
 
@@ -45,19 +46,27 @@ The slice includes:
   record bytes commit before producer/trace/IRQ.
 - Controls are typed transactions, not numeric MMIO selectors: discovery/limits/status,
   atomic queue activation, cursors, PDMA-local IRQ route/control/observation, and
-  whole-device reset. Reset retains host DMA but clears resettable device state, advances
-  `DeviceEpoch`, and makes old queue/IRQ capabilities stale before mutation.
+  whole-device reset. A successful reset checked-advances `DeviceEpoch`, preserves the
+  committed `DmaSpace` mappings, bytes, and allocator generation plus trace history,
+  resource configuration, and lifecycle accounting, and clears queues,
+  completion/event records, runnable work, pending retirement, bus-control queue state,
+  and PDMA-local IRQ state. Queue/source/notification capabilities from the prior epoch
+  are rejected as stale before mutation; rejected stale reset/IRQ operations and epoch
+  overflow mutate nothing. Fresh bootstrap may reuse queue/source numeric IDs only under
+  the new epoch.
 - Every DMA extent and arithmetic operation is checked. A malformed accepted descriptor
   consumes once and retires as an event; host encoding failure is pre-acceptance; no
   successful completion follows a descriptor, list, or memory fault.
 
 ## Deferrals
 
-v0.9 does not add PCIe, MSI/MSI-X tables/PBA, numeric register/MMIO maps, APIC/GIC,
-Terminus, OS drivers, C-callable APIs, firmware/ISA scheduling, timing, RTL, unsafe
-layout casts, serialization dependencies, per-queue reset, a second executor, a second
-driver, or broad migration of existing semantic scenarios. Concrete transport mapping
-and generated headers beyond the ABI data header remain later work.
+v0.9 does not add Terminus, PCIe/MSI-X numeric address/data maps or table/PBA behavior,
+numeric register/MMIO maps, APIC/GIC, OS drivers, a callable C API, firmware/ISA
+scheduling, timing, RTL, unsafe layout casts, serialization dependencies, SR-IOV, FLR,
+per-queue reset, a second executor, a second driver, a second end-to-end scenario, or
+broad migration of existing semantic scenarios. The generated C data header is not a
+callable API; concrete transport mapping and every header beyond that data header remain
+later work.
 
 ## Immutable Pre-edit Baseline
 
@@ -82,3 +91,30 @@ test, and baseline/traced drivers in the manual tracing comparison. The complete
 name file is evidence-only; this digest is its immutable product-ledger binding.
 
 Plan: .omo/plans/v0-9-abi-register-contract.md
+
+## Completion Evidence and Header Policy
+
+The final scenario inventory remains exactly 56 tests, 51 `.run_main(` callsites, the
+five zero-entry exceptions above, and four `ManualDriver::setup_on`-family callsites.
+The final workspace test-name inventory retains every one of Todo 1's 137 baseline names;
+subsequent v0.9 coverage adds names without removing those baseline names.
+The canonical Message-IRQ copy scenario now enters through
+`BusDevicePort<AsyncDeviceHandle>` and proves descriptor/list preparation, producer and
+doorbell capture, one device step, result publication, Message delivery, handler drain
+and acknowledgement, and main resumption. It asserts vector 64, one delivery, all
+submission/completion cursors at one, `MainAfterHandler`, and destination bytes
+`[1, 2, 3, 4]`.
+
+`include/pdma_model_abi.h` is a checked-in generated C11 *data* header rendered from
+canonical Rust ABI metadata. Do not edit it by hand. Whenever that metadata changes,
+regenerate it with `cargo run -p pdma-model-contract --bin pdma-abi-header -- --write
+include/pdma_model_abi.h`, review the generated diff, and require `cargo run -p
+pdma-model-contract --bin pdma-abi-header -- --check include/pdma_model_abi.h` in every
+relevant gate. The check is byte-for-byte and must fail for a stale copy.
+
+Final Todo 19 evidence is recorded under
+`.omo/evidence/v0-9-abi-register-contract/`: `task-19-red.log` pins the active
+pre-edit ledger, digest, inventory, and fresh header; `task-19-full-gates.log` records
+the workspace and manual lifecycle gates; `task-19-full-gates-error.log` records the
+focused/adversarial checks; and `task-19-implementation-report.md` binds them to the
+documentation commit.

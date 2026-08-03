@@ -1,9 +1,10 @@
 # PROJECT KNOWLEDGE BASE
 
 Generated: 2026-07-16
-Baseline commit: pre-v0.8 checkpoint `0c044bd`; v0.8 implementation follows
+Baseline commit: pre-v0.8 checkpoint `0c044bd`; v0.8-v0.9 implementation follows
 Branch: master
-Scope: v0.8 vector-routed IRQ delivery and CPU-local software ownership are complete; preserve their validated boundaries when selecting the next slice.
+Scope: v0.9 ABI register-contract is complete; preserve its ABI/reset boundaries and the
+validated v0.8 IRQ/CPU-local boundaries when selecting any next slice.
 
 ## OVERVIEW
 
@@ -17,7 +18,8 @@ pdma/
 ├── model/docs/v0_5_model_plan.md  # completed v0.5 workspace/boundary plan
 ├── model/docs/v0_6_model_plan.md  # completed v0.6 actor/async transition and v0.6.5 cleanup
 ├── model/docs/v0_7_model_plan.md  # historical v0.7 single-handler IRQ snapshot
-├── model/docs/v0_8_model_plan.md  # completed vector-dispatch/CPU-local IRQ plan
+├── model/docs/v0_8_model_plan.md  # historical vector-dispatch/CPU-local IRQ plan
+├── model/docs/v0_9_model_plan.md  # completed ABI register-contract plan
 └── model/modeling/                # Rust 2024 model workspace
 ```
 
@@ -27,11 +29,11 @@ Ignore generated `model/modeling/target/` content.
 
 | Task | Location | Notes |
 | --- | --- | --- |
-| Review latest completed slice | `model/docs/v0_8_model_plan.md` | Implemented vector dispatch, CPU-local ownership, cancellation, and bootstrap boundaries. |
-| Shared host/device contract | `model/modeling/crates/contract/` | IDs, DMA object/range vocabulary, descriptors, records, config, and IRQ vocabulary. |
-| Device behavior | `model/modeling/crates/device/` | Active queue-port device actor, worker, handle, manual facade, resources, trace sink, and PDMA-local IRQ controller. |
-| Host-side model | `model/modeling/crates/host/` | Driver, device port, host IRQ delivery actor, and SW execution contexts. |
-| System scenarios | `model/modeling/crates/scenarios/` | End-to-end host/device/IRQ-delivery validation stories. |
+| Review latest completed slice | `model/docs/v0_9_model_plan.md` | Implemented ABI-v1 data path, checked DMA/control, reset epochs, and header policy. |
+| Shared host/device contract | `model/modeling/crates/contract/` | IDs, ABI-v1 metadata/codecs, DMA vocabulary, descriptors, records, controls, and IRQ vocabulary. |
+| Device behavior | `model/modeling/crates/device/` | Queue-port actor, checked `DmaSpace`, typed bus control/reset, shared execution/retirement, trace, and PDMA-local IRQ. |
+| Host-side model | `model/modeling/crates/host/` | Driver, `AsyncPdmaBus`, `BusDevicePort`, host IRQ delivery, and SW execution contexts. |
+| System scenarios | `model/modeling/crates/scenarios/` | Host/device/IRQ stories; `message_irq_linear_copy` is the canonical ABI E2E. |
 | Validate workspace | `model/modeling/Cargo.toml` | Workspace lint/profile config. |
 
 ## CODE MAP
@@ -46,9 +48,21 @@ Ignore generated `model/modeling/target/` content.
 
 ## CURRENT STATE
 
-Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft, v0.6 actor/async transition, and v0.6.5 active-model cleanup.
+Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft, v0.6 actor/async transition, v0.6.5 active-model cleanup, v0.8 vector-routed IRQ contexts, and v0.9 ABI register-contract.
 
-v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `pdma-model-contract`, `pdma-model-device`, `pdma-model-host`, and `pdma-model-scenarios` crates. It extends v0.7 with Line/Message vector resolution, a fixed pre-run vector-to-handler registry, CPU-bound single-copy software state, and bootstrap ordering that lets main retain an `AsyncDriver` capability across repeated handler turns. `AsyncDriver` is CPU-bound and exclusively services IRQs; `ManualDriver` is the explicit CPU-unbound observability facade, constructed with `ManualDriver::setup_on` or `ManualDriver::setup_with_config_on`, and has no IRQ service. Both facades forward to one private shared core with clone-shared cancel-safe accounting. The device still owns only PDMA-local IRQ state and never stores or invokes handlers. The old sync stack remains retired under `model/retired/v0_6_sync_reference/`.
+v0.9 ABI Register-Contract Model is complete. ABI-v1 is the canonical path for new E2E
+scenarios: fixed-width data records, checked host DMA, typed queue/IRQ controls, and one
+shared semantic/DMA execution and retirement core, never a second executor. Whole-device
+reset preserves committed DMA mappings/bytes/generation, trace history, resource
+configuration, and lifecycle accounting; it clears resettable queues/results/work/IRQ
+and advances `DeviceEpoch`, so stale queue, IRQ, and notification capabilities fail
+before mutation and require explicit new-epoch bootstrap. The checked-in
+`model/modeling/include/pdma_model_abi.h` is generated from Rust metadata; regenerate
+with `pdma-abi-header -- --write` and gate with `--check`, never manual edits. v0.8
+remains mandatory: `AsyncDriver` is CPU-bound and exclusively services IRQs;
+`ManualDriver` is CPU-unbound observability only; one private core shares cancel-safe
+accounting; the device never stores or invokes handlers. The old sync stack remains
+retired under `model/retired/v0_6_sync_reference/`.
 
 ## CONVENTIONS
 
@@ -71,7 +85,9 @@ v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `p
 - Keep actor construction/spawn/shutdown/join, trace instrumentation/collection, and final assertions in the scenario harness. The disabled-submission trace test is the sole intentional trace-control interleaving inside main.
 - Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 56 total, 51 one-entry software tests, and the same five zero-entry exceptions documented in the architecture spec.
 - Do not register or invoke software handlers from the device loop; handlers belong to host IRQ delivery.
-- Keep operation descriptors conceptual; exact byte layout, register offsets, C ABI, and generated headers stay deferred.
+- For ABI-v1, keep wire bytes fixed-width little-endian and regenerate the checked-in C11
+  data header from canonical Rust metadata. Numeric register/MMIO maps and callable C
+  APIs remain deferred.
 - Keep Rust files below 250 pure LOC; split by responsibility before growing `desc.rs` or `device.rs`.
 - Use English plain short commit messages matching recent history if the user asks to commit.
 
@@ -80,7 +96,10 @@ v0.8 Vector-Routed IRQ Context Model is complete. The canonical workspace has `p
 - Do not work outside the model workspace unless the user explicitly changes scope.
 - Do not stage or document `model/modeling/target/`.
 - Treat `docs/white_boards/**` as exploratory background, not active implementation scope.
-- Do not add unsafe code, descriptor ABI, register maps, or C headers in v0.8 slices.
+- Do not add Terminus, numeric PCIe/MSI-X maps or table/PBA behavior, callable C APIs,
+  SR-IOV, FLR, per-queue reset, timing, a second executor/driver/E2E, unsafe layout
+  casts, or numeric register/MMIO maps without an explicitly selected new slice. Do not
+  hand-edit the generated ABI data header.
 - Do not add a duplicate host enable/mask layer while the modeled system has only one PDMA device; device-local mask/ack remains distinct from host handler dispatch.
 - Do not expose raw CPU identity, mutex guards, async CPU-local borrows, or a manual-driver escape hatch for software-bearing scenarios. Do not give `ManualDriver` IRQ service or weaken `AsyncDriver` CPU validation.
 - Do not publish success completions after memory faults.

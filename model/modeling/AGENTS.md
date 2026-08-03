@@ -1,10 +1,12 @@
 # PDMA MODELING WORKSPACE
 
-Scope: Rust workspace with the completed v0.8 vector-routed IRQ context model.
+Scope: Rust workspace with the completed v0.9 ABI register-contract model.
 
 ## OVERVIEW
 
-`model/modeling` is a Rust 2024 workspace for deterministic, step-based PDMA behavior slices. The old sync reference stack has been retired to `model/retired/v0_6_sync_reference/`; this workspace now contains the active contract, device, host, and scenarios crates.
+`model/modeling` is a Rust 2024 workspace for deterministic, step-based PDMA behavior
+slices. The old sync reference stack has been retired to `model/retired/v0_6_sync_reference/`;
+this workspace now contains the active contract, device, host, and scenarios crates.
 
 ## STRUCTURE
 
@@ -22,10 +24,10 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 
 | Task | Location | Notes |
 | --- | --- | --- |
-| Shared contract | `crates/contract/src/` | No backing memory, runtime, handler traits, or device execution behavior. |
-| Device behavior | `crates/device/src/` | Active queue-port device model, async actor handle/worker, sync/manual drive facade, resources, trace sink, and PDMA-local IRQ controller. |
-| Host-side model | `crates/host/src/` | Host owns CPU-bound `AsyncDriver`, CPU-unbound `ManualDriver`, device port traits, IRQ delivery actor, and SW execution context helpers. |
-| System scenarios | `crates/scenarios/tests/` | Drive behavior through concurrent device worker, SW main future, and IRQ delivery future. |
+| Shared contract | `crates/contract/src/` | ABI-v1 metadata/codecs and vocabulary; no backing memory, runtime, handler traits, or device execution. |
+| Device behavior | `crates/device/src/` | Queue-port model, checked `DmaSpace`, typed bus controls/reset, shared execution/retirement, async worker, trace, and PDMA-local IRQ. |
+| Host-side model | `crates/host/src/` | CPU-bound `AsyncDriver`, manual facade, `AsyncPdmaBus`, `BusDevicePort`, IRQ delivery, and SW context helpers. |
+| System scenarios | `crates/scenarios/tests/` | Concurrent actors; `message_irq_linear_copy` is the canonical ABI Message-IRQ E2E. |
 
 ## CONVENTIONS
 
@@ -67,6 +69,17 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - The scenario invariant is 56 tests: 51 software-bearing tests with one `run_main` and
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
+- ABI-v1 is the canonical frontend for new E2E scenarios. `AsyncPdmaBus` and
+  `BusDevicePort` add checked DMA/control transactions without a second executor; the
+  semantic and ABI frontends share execution and retirement behavior.
+- A successful whole-device reset checked-advances `DeviceEpoch`, preserves committed
+  `DmaSpace` mappings/bytes/generation, trace history, resource configuration, and
+  lifecycle accounting, and clears queue/control/runnable/result/pending-retirement/
+  PDMA-IRQ state. Prior-epoch queue, IRQ, and notification capabilities reject before
+  mutation and require explicit new-epoch bootstrap; epoch overflow does not mutate.
+- `include/pdma_model_abi.h` is a generated C11 data header, not a callable C API. Change
+  it only with `cargo run -p pdma-model-contract --bin pdma-abi-header -- --write
+  include/pdma_model_abi.h`, then require the matching `--check` command in validation.
 - Memory faults publish events and prevent success completions; later queued commands remain runnable where existing tests require it.
 - New public structs need terse docs because `missing_docs` is enabled.
 - Prefer typed request structs/newtypes over long argument lists or clippy suppressions.
@@ -84,15 +97,19 @@ cargo doc --workspace --no-deps --document-private-items
 
 ## CURRENT STATE
 
-v0.8 Vector-Routed IRQ Context Model is complete. `model/docs/v0_8_model_plan.md`
-records vector-to-handler dispatch, CPU-local single-copy state, cancel-safe shared driver
-accounting, bootstrap ordering, and repeated main/handler alternation. The v0.7 plan is a
-historical single-handler snapshot. No next implementation slice is selected in this
-workspace knowledge base.
+v0.9 ABI Register-Contract Model is complete. `model/docs/v0_9_model_plan.md` records
+the ABI-v1 canonical E2E path, shared execution/retirement core, checked DMA/control
+transactions, whole-device reset epochs, and generated-header policy. v0.8 records the
+still-binding vector-to-handler, CPU-local, cancel-safe accounting, bootstrap, and
+main/handler alternation boundaries; v0.7 is historical. No next implementation slice is
+selected in this workspace knowledge base.
 
 ## DO NOT
 
-- Do not add exact descriptor byte layout, register offsets, C ABI, generated headers, or cycle timing.
+- Do not add numeric register/MMIO maps, callable C APIs, Terminus, PCIe/MSI-X numeric
+  maps or table/PBA behavior, SR-IOV, FLR, per-queue reset, a second executor/driver/E2E,
+  or cycle timing without an explicitly selected new slice. Do not hand-edit the generated
+  ABI data header.
 - Do not modify retired sync crates except for deliberate rollback-snapshot maintenance requested by the user.
 - Do not add `unsafe`, `unwrap`, `expect`, `panic`, `todo`, or indexing/slicing in production code.
 - Do not grow any Rust source beyond 250 pure LOC; split before adding behavior.

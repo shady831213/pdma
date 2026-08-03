@@ -3,11 +3,11 @@
 ## Purpose and Scope
 
 This document records the validated behavioral contract of the PDMA executable model
-through v0.8. It is the source of truth for what the Rust model proves today.
+through v0.9. It is the source of truth for what the Rust model proves today.
 White-board architecture documents are background only. The spec deliberately defers
 anything that is not exercised by the current scenario tests, including cycle timing,
-descriptor byte layouts, register offsets, the C ABI, generated headers, concrete PCIe
-MSI/MSI-X transport, reset behavior, and real operating-system integration.
+numeric register/MMIO maps, callable C APIs, concrete PCIe/MSI-X transport, and real
+operating-system integration.
 
 The intended readers are implementers who will extend the model, port it to a cycle-accurate or RTL context, or write future drivers against a more concrete ABI.
 
@@ -36,6 +36,12 @@ The v0 model validates the following end-to-end behaviors:
   main/handler switches.
 - Shared driver accounting with explicit cancellation semantics before and after device
   command acceptance.
+- ABI-v1 fixed-width little-endian descriptor, completion, event, IOVA, ring, and typed
+  control vocabulary, with a checked-in C11 data header generated from Rust metadata.
+- Checked host-owned `DmaSpace`, atomic ABI queue activation/submission controls, and a
+  transport-neutral host bus. This ABI path is canonical for new end-to-end scenarios.
+- Whole-device reset with checked epoch advancement, stale-capability rejection before
+  mutation, and fresh bootstrap under the new epoch.
 
 The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
 
@@ -93,7 +99,24 @@ The device model, implemented under `model/modeling/crates/device/src/runner/`, 
   and preserve every discrete Message trigger.
 
 The device never stores or invokes software handlers. It does not expose wall-clock or
-cycle timing and does not model reset.
+cycle timing. Its semantic and ABI queue frontends converge on one execution and
+retirement core: both use the same deterministic scheduling, resource, operation, result
+publication, and PDMA-local IRQ behavior rather than a second executor.
+
+### Whole-Device Reset and Epoch Semantics
+
+`WholeDeviceReset` succeeds only when its expected epoch matches both device and bus
+control epochs, then checked-advances both together. Success preserves committed
+`DmaSpace` regions, bytes, and allocator generation, trace history, resource
+configuration, and lifecycle accounting. It clears device queues, completion/event
+records, runnable work, pending retirement, bus-control queue/cursor state, and
+PDMA-local IRQ routes, causes, and queued notifications. A fresh bootstrap may reuse
+numeric queue and source IDs, but only with the new `DeviceEpoch`.
+
+Every queue, IRQ source, and notification capability is epoch-bearing. A stale
+capability, stale reset request, or stale notification acknowledgement fails before
+mutation; an epoch-overflow reset also leaves state unchanged. Reset therefore cannot
+publish discarded stalled or pending-retirement work later.
 
 ## Queue Directory, Queue Configuration, Command Ring, Completion Ring, and Event Ring Ownership
 
@@ -230,9 +253,35 @@ submitting. No handler waits for initialization while holding the CPU. The depth
 alternation story proves repeated `main -> handler A -> main -> handler B -> main`
 switches and a later submission through main's retained capability.
 
+## ABI-v1 and Command Boundary
+
+ABI-v1 is the canonical interface for new end-to-end system scenarios. `AsyncPdmaBus`
+exposes raw DMA allocation/read/write, typed control transactions, and epoch-bearing IRQ
+notification waiting; CPU-bound `BusDevicePort` maps the existing driver operations onto
+that ABI, validates its captured `SoftwareCpu` before every nested poll, and never
+retains a host-state guard across an await. Atomic queue bootstrap commits its three
+rings and activation together; atomic submission commits any indirect mapping, record
+bytes, and producer together, while doorbell capture is a separate commit.
+`DmaRegion` is the only host object-to-IOVA handoff and committed regions are never
+unmapped in v0.9. Existing semantic tests continue to exercise the same core and are not
+duplicated as a second E2E path.
+
+The ABI is fixed-width little-endian data, never Rust layout: v1 descriptors are 64
+bytes, completions 32 bytes, and events 64 bytes. `include/pdma_model_abi.h` is a
+checked-in generated C11 data header, not a callable C API. It is rendered from Rust
+metadata with `cargo run -p pdma-model-contract --bin pdma-abi-header -- --write
+include/pdma_model_abi.h`; gates must run the corresponding `--check` command and reject
+any byte mismatch.
+
 ## Conceptual Command Boundary
 
-External commands live in `model/modeling/crates/contract/src/desc.rs` and represent the conceptual driver-visible descriptor surface. The `ExternalCommand` enum carries `Copy`, `StridedCopy`, `BroadcastCopy`, and `VectorAdd` variants, each with queue ID, completion ring ID, command ID, and request payload. The active native runner matches these variants exhaustively and derives operation-specific chunks or resource demand internally. Exact serialized descriptor layout remains deferred, so these Rust values define behavior rather than an ABI.
+External commands live in `model/modeling/crates/contract/src/desc.rs` and represent the
+conceptual driver-visible descriptor surface. The `ExternalCommand` enum carries `Copy`,
+`StridedCopy`, `BroadcastCopy`, and `VectorAdd` variants, each with queue ID, completion
+ring ID, command ID, and request payload. The active native runner matches these variants
+exhaustively and derives operation-specific chunks or resource demand internally. ABI-v1
+encodes the equivalent command data through the fixed registry; Rust layout itself is
+never ABI data.
 
 ## Supported v0 Operations
 
@@ -307,6 +356,10 @@ binary contains four tests and four `run_main` calls. The standalone
 `message_irq_linear_copy` test adds one complete nominal Message-IRQ path in one file:
 software handler registration, configuration and submission, device completion/IRQ
 emission, host delivery, handler drain/acknowledgment, and resumed-main observation.
+It uses `BusDevicePort<AsyncDeviceHandle>` as the canonical ABI E2E and asserts the
+nine-stage lifecycle from submission through device acknowledgement, vector 64, one
+delivery and one device step, cursor producer/consumer values, `MainAfterHandler`, and
+destination `[1, 2, 3, 4]`.
 The persistent stateful-handler adapter keeps await-spanning handler-owned capabilities
 in one registry entry and handler-future boxing at the host type-erasure boundary.
 Cross-context test phase remains `CpuLocal`; the handler does not take and restore its
@@ -335,11 +388,12 @@ Each device-worker turn advances at most one native command or retirement retry.
 The following items are explicitly outside the v0 behavioral contract:
 
 - Cycle accuracy, RTL timing, power, or frequency modeling.
-- Exact descriptor byte layout and register offsets.
-- C ABI and generated headers.
-- RISC-V scheduler backend through `terminus`.
+- Numeric register/MMIO maps and a callable C API. The ABI-v1 data header is already
+  generated and checked from Rust metadata.
+- RISC-V scheduler backend through Terminus.
 - High-dimensional transfer operations, gather/scatter, transpose, and reduce trees.
 - Real Linux DMAengine, DPDK DMAdev, or kernel driver integration.
-- Concrete PCIe MSI/MSI-X transport, APIC/GIC integration, or device reset behavior.
+- Concrete PCIe/MSI-X numeric address/data transport, MSI-X table/PBA behavior, APIC/GIC
+  integration, SR-IOV, FLR, or per-queue reset.
 
 These may be addressed once the v0 mechanisms above are stable and the deferred details are validated with new scenario tests.

@@ -7,6 +7,7 @@ mod descriptor;
 mod error;
 pub mod header;
 mod metadata;
+pub mod mmio;
 mod record;
 mod ring;
 

@@ -22,6 +22,31 @@ struct PdmaIrqSourceState {
     next_message_id: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(in crate::runner) struct IrqSourceObservation {
+    pub(in crate::runner) route: IrqRoute,
+    pub(in crate::runner) pending_messages: usize,
+    state: u8,
+}
+
+impl IrqSourceObservation {
+    pub(in crate::runner) const fn enabled(self) -> bool {
+        self.state & 1 != 0
+    }
+    pub(in crate::runner) const fn masked(self) -> bool {
+        self.state & 2 != 0
+    }
+    pub(in crate::runner) const fn cause_pending(self) -> bool {
+        self.state & 4 != 0
+    }
+    pub(in crate::runner) const fn deliverable(self) -> bool {
+        self.state & 8 != 0
+    }
+    pub(in crate::runner) const fn line_asserted(self) -> bool {
+        self.state & 16 != 0
+    }
+}
+
 impl PdmaIrqController {
     pub(super) const fn new(epoch: DeviceEpoch, line: IrqLine) -> Self {
         Self {
@@ -109,6 +134,25 @@ impl PdmaIrqController {
             .map(IrqNotification::Message)
     }
 
+    pub(super) fn observe(&self, source: IrqSource) -> IrqSourceObservation {
+        let state = self
+            .sources
+            .get(&source)
+            .copied()
+            .unwrap_or_else(|| PdmaIrqSourceState::new(source, self.line));
+        IrqSourceObservation {
+            route: state.route,
+            pending_messages: state.pending_messages,
+            state: state.observation_bits(),
+        }
+    }
+
+    pub(super) fn notification_ready(&self) -> bool {
+        self.sources
+            .values()
+            .any(|state| state.asserts_line() || state.can_deliver_message())
+    }
+
     pub(super) fn line_asserted(&self) -> bool {
         self.sources.values().any(PdmaIrqSourceState::asserts_line)
     }
@@ -122,6 +166,13 @@ impl PdmaIrqController {
 }
 
 impl PdmaIrqSourceState {
+    const fn observation_bits(self) -> u8 {
+        flag(self.enabled, 1)
+            | flag(self.masked, 2)
+            | flag(self.cause_pending, 4)
+            | flag(self.asserts_line() || self.can_deliver_message(), 8)
+            | flag(self.asserts_line(), 16)
+    }
     const fn new(source: IrqSource, line: IrqLine) -> Self {
         Self {
             source,
@@ -192,6 +243,10 @@ impl PdmaIrqSourceState {
         self.pending_messages -= 1;
         Some(message)
     }
+}
+
+const fn flag(value: bool, mask: u8) -> u8 {
+    if value { mask } else { 0 }
 }
 
 #[cfg(test)]

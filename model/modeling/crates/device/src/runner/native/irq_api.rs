@@ -1,4 +1,4 @@
-use super::QueuePortDeviceModel;
+use super::{QueuePortDeviceModel, irq::IrqSourceObservation};
 use crate::runner::bus::control::BusControlState;
 use pdma_model_contract::{
     EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult,
@@ -99,6 +99,23 @@ impl QueuePortDeviceModel {
             self.trace.irq_message_emitted(message.source());
         }
         notification
+    }
+
+    pub(in crate::runner) fn observe_irq_source(
+        &self,
+        bus_control: &BusControlState,
+        source: EpochIrqSource,
+    ) -> ModelResult<(IrqSourceObservation, bool)> {
+        self.validate_epoch(source.epoch())?;
+        let source = source.source();
+        self.validate_irq_source(source)?;
+        let records_pending = self.irq_records_pending(bus_control, source)?;
+        let observation = self.irq.observe(source);
+        Ok((observation, records_pending))
+    }
+
+    pub(in crate::runner) fn irq_notification_ready(&self) -> bool {
+        self.irq.notification_ready()
     }
 
     fn trace_line_transition(&mut self, was_asserted: bool) {

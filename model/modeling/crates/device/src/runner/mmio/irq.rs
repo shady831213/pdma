@@ -1,6 +1,13 @@
 use super::bank::{CommandBank, MmioScalar, narrow_u32};
+use super::reset::details;
+use crate::runner::backend::DeviceModel;
+use crate::runner::irq::{
+    IrqSourceView, decode_route, decode_source, encode_route, encode_source, map_mmio_error,
+    observe_irq_source, usize_to_u64,
+};
 use crate::runner::state::RunnerState;
-use pdma_model_contract::abi::mmio::ResponseUpdate;
+use pdma_model_contract::abi::mmio::{IrqCommand, MmioResult, MmioResultDetails, ResponseUpdate};
+use pdma_model_contract::{IrqNotification, ModelError};
 
 #[derive(Clone, Copy)]
 pub(super) enum IrqRegister {
@@ -98,8 +105,7 @@ pub(super) fn write(state: &mut RunnerState, register: IrqRegister, value: u64) 
         IrqRegister::RouteKind => bank.route_kind = narrow_u32(value),
         IrqRegister::RouteVector => bank.route_vector = value,
         IrqRegister::Command => {
-            let result = bank.command.result;
-            bank.command.complete(result, ResponseUpdate::Preserve);
+            execute(state, narrow_u32(value));
         }
         IrqRegister::Result
         | IrqRegister::Detail0
@@ -114,5 +120,127 @@ pub(super) fn write(state: &mut RunnerState, register: IrqRegister, value: u64) 
         | IrqRegister::RspVector
         | IrqRegister::RspMessageId
         | IrqRegister::RspPendingMessages => {}
+    }
+}
+
+fn execute(state: &mut RunnerState, raw_command: u32) {
+    let bank = &state.mmio.irq;
+    let staged = (
+        bank.expected_epoch,
+        bank.source_kind,
+        bank.source_id,
+        bank.route_kind,
+        bank.route_vector,
+    );
+    let outcome = IrqCommand::try_from(raw_command)
+        .map_err(|_| details(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]))
+        .and_then(|command| execute_command(state, command, staged));
+    let (result, update) = match outcome {
+        Ok(Some(response)) => (
+            details(MmioResult::Ok, [0; 3]),
+            ResponseUpdate::Replace(response),
+        ),
+        Ok(None) => (details(MmioResult::Empty, [0; 3]), ResponseUpdate::Empty),
+        Err(result) => (result, ResponseUpdate::Preserve),
+    };
+    state.mmio.irq.command.complete(result, update);
+}
+
+fn execute_command(
+    state: &mut RunnerState,
+    command: IrqCommand,
+    staged: (u64, u32, u64, u32, u64),
+) -> Result<Option<IrqResponseRegisters>, MmioResultDetails> {
+    let (epoch, source_kind, source_id, route_kind, route_vector) = staged;
+    if command == IrqCommand::SnapshotLine {
+        return snapshot_line(state);
+    }
+    if command == IrqCommand::ClaimNotification {
+        return claim_notification(state);
+    }
+    let source = decode_source(epoch, source_kind, source_id).ok_or_else(|| {
+        details(
+            MmioResult::InvalidIrqSource,
+            [u64::from(source_kind), source_id, 0],
+        )
+    })?;
+    let DeviceModel::QueuePort(device) = &mut state.backend;
+    let result = match command {
+        IrqCommand::ConfigureRoute => decode_route(route_kind, route_vector)
+            .ok_or(ModelError::DmaSubmissionState)
+            .and_then(|route| device.configure_irq_route(source, route)),
+        IrqCommand::Enable => device.enable_irq_source(source),
+        IrqCommand::Disable => device.disable_irq_source(source),
+        IrqCommand::Mask => device.mask_irq_source(source),
+        IrqCommand::Unmask => device.unmask_irq_source(source),
+        IrqCommand::Acknowledge => device.ack_irq_source(&state.bus_control, source),
+        IrqCommand::ObserveSource => Ok(()),
+        IrqCommand::SnapshotLine | IrqCommand::ClaimNotification => {
+            Err(ModelError::DmaSubmissionState)
+        }
+    };
+    result.map_err(|error| map_mmio_error(error, command, source))?;
+    observe_irq_source(state, source)
+        .map(source_response)
+        .map(Some)
+        .map_err(|error| map_mmio_error(error, command, source))
+}
+
+fn snapshot_line(state: &RunnerState) -> Result<Option<IrqResponseRegisters>, MmioResultDetails> {
+    let Some(snapshot) = state.backend.irq_snapshot() else {
+        return Ok(None);
+    };
+    let source = snapshot.cause().source_capability();
+    observe_irq_source(state, source)
+        .map(|view| Some(line_response(view, snapshot.cause().line().vector().raw())))
+        .map_err(|error| map_mmio_error(error, IrqCommand::SnapshotLine, source))
+}
+
+fn claim_notification(
+    state: &mut RunnerState,
+) -> Result<Option<IrqResponseRegisters>, MmioResultDetails> {
+    let notification = state.backend.take_irq_notification();
+    let Some(notification) = notification else {
+        return Ok(None);
+    };
+    let source = notification.source_capability();
+    let view = observe_irq_source(state, source)
+        .map_err(|error| map_mmio_error(error, IrqCommand::ClaimNotification, source))?;
+    Ok(Some(match notification {
+        IrqNotification::Line(snapshot) => {
+            line_response(view, snapshot.cause().line().vector().raw())
+        }
+        IrqNotification::Message(message) => {
+            let mut response = source_response(view);
+            response.notification_kind = 2;
+            response.vector = usize_to_u64(message.vector().raw());
+            response.message_id = usize_to_u64(message.id().raw());
+            response
+        }
+    }))
+}
+
+fn source_response(view: IrqSourceView) -> IrqResponseRegisters {
+    let (source_kind, source_id) = encode_source(view.source.source());
+    let (route_kind, vector) = encode_route(view.route);
+    IrqResponseRegisters {
+        epoch: view.source.epoch().raw(),
+        source_id,
+        source_kind,
+        state: view.status.bits(),
+        route_kind,
+        notification_kind: 0,
+        vector,
+        message_id: 0,
+        pending_messages: usize_to_u64(view.pending_messages),
+    }
+}
+
+fn line_response(view: IrqSourceView, vector: usize) -> IrqResponseRegisters {
+    IrqResponseRegisters {
+        notification_kind: 1,
+        vector: usize_to_u64(vector),
+        pending_messages: 0,
+        ..source_response(view)
     }
 }

@@ -8,7 +8,8 @@ impl AsyncDeviceHandle {
     pub async fn reset(&self, request: WholeDeviceReset) -> Result<DeviceEpoch, BusControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = reset_runner(&mut state, request);
+            let result = super::mmio::reset::execute(&mut state, request.expected_epoch().raw())
+                .typed_result();
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -28,7 +29,7 @@ impl SyncDevice {
     }
 }
 
-fn reset_runner(
+pub(in crate::runner) fn reset_runner(
     state: &mut RunnerState,
     request: WholeDeviceReset,
 ) -> Result<DeviceEpoch, BusControlError> {
@@ -72,7 +73,45 @@ mod tests {
     use super::*;
     use crate::runner::backend::DeviceModel;
     use pdma_model_contract::abi::AbiControlError;
+    use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
     use pdma_model_contract::ids::BufferId;
+
+    #[test]
+    fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
+        // Given: a runner at its initial epoch.
+        let mut state = RunnerState::new(DeviceModel::queue_port());
+
+        // When: the raw reset seam receives the current epoch.
+        let success = super::super::mmio::reset::execute(&mut state, 0);
+
+        // Then: it advances both identities and returns the new epoch.
+        assert_eq!(
+            success,
+            super::super::mmio::reset::ResetOutcome::Success(DeviceEpoch::new(1))
+        );
+        assert_eq!(state.backend.epoch(), DeviceEpoch::new(1));
+        assert_eq!(state.bus_control.epoch(), DeviceEpoch::new(1));
+
+        // When: the same raw epoch is submitted again.
+        let stale_outcome = super::super::mmio::reset::execute(&mut state, 0);
+
+        // Then: exact stale details are returned before either identity changes.
+        assert_eq!(
+            stale_outcome,
+            super::super::mmio::reset::ResetOutcome::Rejected(
+                BusControlError::StaleEpoch {
+                    expected: DeviceEpoch::new(1),
+                    actual: DeviceEpoch::initial(),
+                },
+                MmioResultDetails {
+                    result: MmioResult::StaleEpoch,
+                    details: [1, 0, 0],
+                }
+            )
+        );
+        assert_eq!(state.backend.epoch(), DeviceEpoch::new(1));
+        assert_eq!(state.bus_control.epoch(), DeviceEpoch::new(1));
+    }
 
     #[test]
     fn epoch_overflow_preserves_complete_runner_state() {
@@ -110,6 +149,24 @@ mod tests {
         );
         assert_eq!((state.steps, state.errors, state.stalls), (7, 3, 2));
         assert!(state.shutdown_requested);
+        assert_eq!(state.generation, generation);
+
+        // When: the raw reset seam receives the same exhausted expected epoch.
+        let raw = super::super::mmio::reset::execute(&mut state, u64::MAX);
+
+        // Then: it reports exact overflow details and still commits no mutation.
+        assert_eq!(
+            raw,
+            super::super::mmio::reset::ResetOutcome::Rejected(
+                BusControlError::Abi(AbiControlError::DeviceEpochOverflow { current: u64::MAX }),
+                pdma_model_contract::abi::mmio::MmioResultDetails {
+                    result: pdma_model_contract::abi::mmio::MmioResult::DeviceEpochOverflow,
+                    details: [u64::MAX, 0, 0],
+                }
+            )
+        );
+        assert_eq!(state.backend.epoch(), exhausted);
+        assert_eq!(state.bus_control.epoch(), exhausted);
         assert_eq!(state.generation, generation);
     }
 }

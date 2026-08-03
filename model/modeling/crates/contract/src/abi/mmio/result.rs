@@ -4,8 +4,14 @@ macro_rules! numeric_enum {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum $name { $(#[doc = "Assigned command encoding."] $variant),+ }
         impl $name {
+            /// Every assigned command in numeric order.
+            pub const ALL: &'static [Self] = &[$(Self::$variant),+];
             /// Returns the stable numeric encoding.
             pub const fn code(self) -> u32 { match self { $(Self::$variant => $code),+ } }
+            /// Returns the canonical uppercase command name.
+            pub const fn name(self) -> &'static str {
+                match self { $(Self::$variant => $variant_doc),+ }
+            }
         }
         impl TryFrom<u32> for $name {
             type Error = $error;
@@ -74,6 +80,10 @@ macro_rules! result_registry {
             pub const ALL: [Self; 32] = [$(Self::$variant),+];
             /// Returns the stable numeric result code.
             pub const fn code(self) -> u32 { match self { $(Self::$variant => $code),+ } }
+            /// Returns the canonical uppercase result name.
+            pub const fn name(self) -> &'static str {
+                match self { $(Self::$variant => $doc),+ }
+            }
             /// Reports whether this code represents an error.
             pub const fn is_error(self) -> bool { self.code() >= 0x100 }
         }

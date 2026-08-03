@@ -26,4 +26,4 @@ pub use result::{
     GlobalCommand, IrqCommand, MmioResult, MmioResultDetails, QueueCommand, ResponseUpdate,
     UnknownCommand, UnknownResult, apply_response_update,
 };
-pub use status::{IrqSourceStatus, IrqSourceStatusError};
+pub use status::{IrqSourceStatus, IrqSourceStatusError, IrqStateBit};

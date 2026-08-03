@@ -1,6 +1,7 @@
 //! Deterministic C data-header rendering from canonical ABI metadata.
 
 mod constants;
+mod mmio;
 mod records;
 
 /// Renders the complete generated C11 data header for ABI v1.
@@ -16,6 +17,7 @@ pub fn render_c_header() -> String {
     constants::push(&mut output);
     output.push('\n');
     records::push(&mut output);
+    mmio::push(&mut output);
     output.push_str("#endif /* PDMA_MODEL_ABI_H */\n");
     output
 }

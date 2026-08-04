@@ -7,11 +7,12 @@ use pdma_model_contract::abi::EpochQueue;
 use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector, ModelError, ModelResult};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, IrqDelivery, SoftwareCpu,
-    stateful_irq_handler,
+    AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, IrqDelivery, MmioDeviceBus,
+    SoftwareCpu, stateful_irq_handler,
 };
 use support::{
-    LinearCopyHandler, MainOutcome, ScenarioResult, SoftwarePhase, assert_outcome, start_trace,
+    LinearCopyHandler, MainOutcome, RecordingMmioTransport, ScenarioResult, SoftwarePhase,
+    assert_outcome, start_trace,
 };
 use tokio::sync::oneshot;
 
@@ -20,8 +21,11 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
     // Given: independent device, software-main, host-delivery, and handler actors.
     let (device, worker) = AsyncDevice::queue_port();
     let worker = tokio::spawn(worker.run());
-    let raw_port = device.handle();
-    start_trace(&raw_port).await;
+    let handle = device.handle();
+    start_trace(&handle).await;
+    let transport = RecordingMmioTransport::new(handle.clone());
+    let raw_port = MmioDeviceBus::new(transport.clone());
+    let harness_port = raw_port.clone();
     let cpu = SoftwareCpu::new();
     let phase = cpu.local(SoftwarePhase::MainBeforeSubmit);
     let vector = IrqVector::new(64);
@@ -104,7 +108,7 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
     let delivery_summary = delivery_task.await.expect("host delivery joins cleanly")?;
     let device_summary = worker.await.expect("device worker joins cleanly");
     let queue = EpochQueue::new(outcome.queue.epoch(), outcome.queue.queue_id());
-    let queue_status = AsyncPdmaBus::read_queue_status(&device.handle(), queue)
+    let queue_status = AsyncPdmaBus::read_queue_status(&harness_port, queue)
         .await
         .expect("queue status remains observable");
 
@@ -115,7 +119,8 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
         queue_status,
         deliveries: delivery_summary.deliveries(),
         device_steps: device_summary.steps,
-        device_trace: device.handle().trace_events().await,
+        device_trace: handle.trace_events().await,
+        mmio_accesses: transport.accesses(),
     });
     Ok(())
 }

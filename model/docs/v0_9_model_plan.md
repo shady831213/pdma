@@ -2,48 +2,21 @@
 
 ## Status
 
-**COMPLETE.** The historical descriptor-layout ABI baseline and the exact 4 KiB numeric
-MMIO correction are implemented and validated without changing the v0.8 vector-routed
-IRQ, CPU-local, or single-executor boundaries.
+**PARTIAL.** The historical v0.9 descriptor-layout ABI register-contract slice is
+complete after the v0.8 vector-routed IRQ model, but the overall v0.9
+memory-and-bus-exact objective remains partial. The approved active correction slice is
+an exact 4 KiB numeric MMIO model; no MMIO implementation exists yet.
 
-## Completed Exact MMIO Correction
+## Active Correction Slice
 
-The exact `0x1000`-byte region has one canonical 66-register little-endian registry,
-exact 4/8-byte access validation, 4 global, 9 queue, and 9 IRQ commands, and 32 result
-codes. One registry drives the Rust decoder and generated C11 constants. Structural
-faults mutate nothing; semantic failures replace only result/details and preserve the
-prior response; successful commands atomically replace their response bank. Raw reset
-uses the shared reset core and publishes the new-epoch receipt after clearing resettable
-device/register/IRQ state while preserving the reset-persistent partition.
-
-Standalone raw activation consumes three exact mappings already committed in
-`DmaSpace` through the shared prepared mapped-activation core. It is distinct from the
-two closed ordered batches: bootstrap combines three staged ring mappings with
-activation, while submission combines optional indirect DMA, the exact descriptor
-write, and producer publication. The separate doorbell remains a later commit point;
-there is no hidden raw payload or second acceptance/execution path.
-
-The clone-shared `MmioDeviceBus` serializes selector windows and performs non-consuming
-IRQ readiness followed by exactly one raw claim. The canonical Message-IRQ linear copy
-uses MMIO from setup through ACK/final status and explicitly records batch-carried
-ACTIVATE(1), batch-carried PUBLISH_SQ_PRODUCER(3), the direct IRQ command sequence, one
-device step, one delivery, and the existing lifecycle/cursor/destination outcome.
-
-The fresh final inventory has 260 sorted unique names with SHA-256
-`33eb6c1a55931897fb7b397015deebdb856ca8cec1399456d93de0236133c72d`. All 189 names in
-the exact pre-MMIO Todo 1 baseline (SHA-256
-`bb903a3f87d76ac34eafa0bdff605d29c02362d1a7ac8da7c897068d598d360b`) remain. The
-scenario invariant remains 56 tests, 51 `run_main` callsites, five named zero-entry
-exceptions, and four manual setup callsites.
-
-System physical placement, PCIe/MSI-X address/data and table/PBA behavior, APIC/GIC and
-OS integration, callable C APIs, Terminus, SR-IOV, FLR, per-queue reset, timing/RTL, and
-additional executors, drivers, or canonical E2E scenarios remain deferred.
+Implement the approved exact 4 KiB numeric MMIO model while preserving the completed
+descriptor, completion, and event ABI record below and every v0.8 IRQ/CPU-local
+boundary. Numeric MMIO is active work, not a completed v0.9 claim.
 
 ## Historical Completed Descriptor-Layout ABI Baseline
 
-The following completed descriptor-layout ABI baseline is retained verbatim from the
-pre-MMIO correction state.
+The following completed descriptor-layout ABI baseline is retained verbatim for the
+active correction slice.
 
 ### Purpose and Boundaries
 

@@ -115,7 +115,7 @@ async fn stale_typed_reset_rejects_before_any_mutation() -> TestResult {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn global_reset_dispatch_is_deferred_and_non_mutating_for_task_ten() -> TestResult {
+async fn global_reset_dispatch_returns_post_reset_receipt_and_preserves_dma() -> TestResult {
     // Given: a published global response, staged queue/IRQ banks, and committed DMA.
     let (device, _worker) = AsyncDevice::queue_port();
     let handle = device.handle();
@@ -125,25 +125,22 @@ async fn global_reset_dispatch_is_deferred_and_non_mutating_for_task_ten() -> Te
     write_u64(&handle, 0x108, 7).await?;
     write_u64(&handle, 0x208, 5).await?;
 
-    // When: raw global RESET reaches the intentionally deferred Task 10 dispatch boundary.
+    // When: raw global RESET executes through the shared whole-device reset core.
     raw_reset(&handle, 0).await?;
 
-    // Then: it reports the boundary exactly, preserves the response, and mutates no state.
-    assert_eq!(
-        read_u32(&handle, 0x024).await?,
-        MmioResult::InvalidTransaction.code()
-    );
+    // Then: it posts the new epoch, clears resettable banks, and preserves committed DMA.
+    assert_eq!(read_u32(&handle, 0x024).await?, MmioResult::Ok.code());
     assert_eq!(
         (
             read_u64(&handle, 0x028).await?,
             read_u64(&handle, 0x030).await?,
             read_u64(&handle, 0x038).await?
         ),
-        (4, 0, 0)
+        (0, 0, 0)
     );
-    assert_eq!(read_u64(&handle, 0x050).await?, 0);
-    assert_eq!(read_u64(&handle, 0x108).await?, 7);
-    assert_eq!(read_u64(&handle, 0x208).await?, 5);
+    assert_eq!(read_u64(&handle, 0x050).await?, 1);
+    assert_eq!(read_u64(&handle, 0x108).await?, 0);
+    assert_eq!(read_u64(&handle, 0x208).await?, 0);
     assert_eq!(handle.read_buffer(buffer, 0, 1).await?, [0xa5]);
     Ok(())
 }

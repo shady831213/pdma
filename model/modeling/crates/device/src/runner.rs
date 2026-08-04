@@ -2,6 +2,7 @@
 
 mod backend;
 mod bus;
+mod global_api;
 mod irq;
 mod manual;
 mod mmio;

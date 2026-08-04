@@ -4,9 +4,10 @@ use crate::runner::state::RunnerState;
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, MmioResult, MmioResultDetails, ResponseUpdate,
 };
-use pdma_model_contract::abi::{
-    AbiControlError, AbiDiscovery, AbiLimits, DeviceRunState, DiscoveryRequest,
-};
+use pdma_model_contract::abi::{AbiLimits, DeviceRunState, DiscoveryRequest};
+
+#[path = "global/error.rs"]
+mod error;
 
 #[derive(Clone, Copy)]
 pub(super) enum GlobalRegister {
@@ -132,13 +133,24 @@ fn execute(state: &mut RunnerState, raw: u32) {
         GlobalCommand::Discover => discover(state),
         GlobalCommand::ReadLimits => read_limits(state),
         GlobalCommand::ReadStatus => read_status(state),
-        GlobalCommand::Reset => complete_failure(
-            state,
-            details(
-                MmioResult::InvalidTransaction,
-                [u64::from(command.code()), 0, 0],
-            ),
-        ),
+        GlobalCommand::Reset => reset(state),
+    }
+}
+
+fn reset(state: &mut RunnerState) {
+    let expected_epoch = state.mmio.global.reset_expected_epoch;
+    match super::reset::execute(state, expected_epoch) {
+        super::reset::ResetOutcome::Success(epoch) => {
+            complete_success(
+                state,
+                GlobalResponseRegisters {
+                    epoch: epoch.raw(),
+                    ..GlobalResponseRegisters::default()
+                },
+            );
+            crate::runner::state::wake(state);
+        }
+        super::reset::ResetOutcome::Rejected(_, result) => complete_failure(state, result),
     }
 }
 
@@ -148,8 +160,8 @@ fn discover(state: &mut RunnerState) {
         DiscoveryRequest::try_new(low_u16(bank.req_abi_version), bank.req_features)
     };
     match request {
-        Ok(_) => {
-            let discovery = AbiDiscovery::v1();
+        Ok(request) => {
+            let discovery = crate::runner::global_api::discover(request);
             complete_success(
                 state,
                 GlobalResponseRegisters {
@@ -159,7 +171,7 @@ fn discover(state: &mut RunnerState) {
                 },
             );
         }
-        Err(error) => complete_failure(state, map_discovery_error(error)),
+        Err(error) => complete_failure(state, error::map_discovery(error)),
     }
 }
 
@@ -217,32 +229,6 @@ fn complete_failure(state: &mut RunnerState, result: MmioResultDetails) {
         .global
         .command
         .complete(result, ResponseUpdate::Preserve);
-}
-
-fn map_discovery_error(error: AbiControlError) -> MmioResultDetails {
-    match error {
-        AbiControlError::UnsupportedVersion { requested } => {
-            details(MmioResult::UnsupportedVersion, [u64::from(requested), 0, 0])
-        }
-        AbiControlError::UnknownFeatureBits { bits } => {
-            details(MmioResult::UnknownFeatureBits, [bits, 0, 0])
-        }
-        AbiControlError::InvalidRingDepth { .. }
-        | AbiControlError::RingExtentOverflow { .. }
-        | AbiControlError::MisalignedRing { .. }
-        | AbiControlError::RingExtentMismatch { .. }
-        | AbiControlError::UnexpectedRingRecord { .. }
-        | AbiControlError::QueueDepthMismatch { .. }
-        | AbiControlError::EventDepthMismatch { .. }
-        | AbiControlError::CursorRegression { .. }
-        | AbiControlError::CursorUpdateRegression { .. }
-        | AbiControlError::CursorDistanceExceeded { .. }
-        | AbiControlError::CursorIncrementOverflow { .. }
-        | AbiControlError::DeviceEpochOverflow { .. }
-        | AbiControlError::UnknownStatusValue { .. } => {
-            details(MmioResult::InvalidTransaction, [1, 0, 0])
-        }
-    }
 }
 
 const fn details(result: MmioResult, values: [u64; 3]) -> MmioResultDetails {

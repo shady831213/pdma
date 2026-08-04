@@ -25,8 +25,15 @@ impl AsyncDeviceHandle {
     /// Applies one exact byte-bearing MMIO transaction.
     pub async fn write_mmio(&self, offset: u32, bytes: &[u8]) -> Result<(), MmioAccessError> {
         let (register, value) = decode_write(offset, bytes)?;
-        let mut state = self.shared.state.lock().await;
-        dispatch::write(&mut state, register, value);
+        let generation = {
+            let mut state = self.shared.state.lock().await;
+            let previous = state.generation;
+            dispatch::write(&mut state, register, value);
+            (state.generation != previous).then_some(state.generation)
+        };
+        if let Some(generation) = generation {
+            super::publish(&self.shared, generation);
+        }
         Ok(())
     }
 }

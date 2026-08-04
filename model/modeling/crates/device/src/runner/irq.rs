@@ -13,7 +13,7 @@ use pdma_model_contract::irq::{
 };
 use pdma_model_contract::{CompletionRingId, DeviceEpoch, QueueId};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) struct IrqSourceView {
     pub(in crate::runner) source: EpochIrqSource,
     pub(in crate::runner) route: IrqRoute,
@@ -123,6 +123,29 @@ impl AsyncDeviceHandle {
     pub async fn irq_notification_ready(&self) -> bool {
         let state = self.shared.state.lock().await;
         irq_notification_ready(&state)
+    }
+
+    /// Waits for notification readiness without consuming it, or returns false on shutdown.
+    pub async fn wait_irq_notification_ready(&self) -> bool {
+        let mut changes = self.shared.changed.subscribe();
+        loop {
+            let current = {
+                let state = self.shared.state.lock().await;
+                if state.shutdown_requested {
+                    return false;
+                }
+                if irq_notification_ready(&state) {
+                    return true;
+                }
+                state.generation
+            };
+            if *changes.borrow_and_update() != current {
+                continue;
+            }
+            if changes.changed().await.is_err() {
+                return false;
+            }
+        }
     }
 
     /// Returns the complete non-consuming state bits for one IRQ source.

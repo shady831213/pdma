@@ -108,14 +108,15 @@ Plan: .omo/plans/v0-9-abi-register-contract.md
 
 The final scenario inventory remains exactly 56 tests, 51 `.run_main(` callsites, the
 five zero-entry exceptions above, and four `ManualDriver::setup_on`-family callsites.
-The final workspace test-name inventory retains every one of Todo 1's 137 baseline names;
-subsequent v0.9 coverage adds names without removing those baseline names.
-The canonical Message-IRQ copy scenario now enters through
-`BusDevicePort<AsyncDeviceHandle>` and proves descriptor/list preparation, producer and
-doorbell capture, one device step, result publication, Message delivery, handler drain
-and acknowledgement, and main resumption. It asserts vector 64, one delivery, all
-submission/completion cursors at one, `MainAfterHandler`, and destination bytes
-`[1, 2, 3, 4]`.
+The historical ABI inventory retains its 137-name pre-ABI baseline. The later exact-MMIO
+Todo 1 baseline contains 189 names with SHA-256
+`bb903a3f87d76ac34eafa0bdff605d29c02362d1a7ac8da7c897068d598d360b`; exact-MMIO
+coverage removes none of those 189 names.
+The canonical Message-IRQ copy scenario now uses `BusDevicePort<ScenarioBus>` backed by
+`MmioDeviceBus<RecordingMmioTransport>`. Its ordered batches carry ACTIVATE and producer
+publication, while queue/IRQ commands and final raw status observation traverse direct
+MMIO. It preserves the nine-stage lifecycle, vector 64, one delivery and device step,
+all required cursor values, `MainAfterHandler`, and destination bytes `[1, 2, 3, 4]`.
 
 `include/pdma_model_abi.h` is a checked-in generated C11 *data* header rendered from
 canonical Rust ABI metadata. Do not edit it by hand. Whenever that metadata changes,

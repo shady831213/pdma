@@ -362,9 +362,11 @@ binary contains four tests and four `run_main` calls. The standalone
 `message_irq_linear_copy` test adds one complete nominal Message-IRQ path in one file:
 software handler registration, configuration and submission, device completion/IRQ
 emission, host delivery, handler drain/acknowledgment, and resumed-main observation.
-It uses `BusDevicePort<AsyncDeviceHandle>` as the canonical ABI E2E and asserts the
-nine-stage lifecycle from submission through device acknowledgement, vector 64, one
-delivery and one device step, cursor producer/consumer values, `MainAfterHandler`, and
+It uses `BusDevicePort<ScenarioBus>` backed by
+`MmioDeviceBus<RecordingMmioTransport>` as the canonical ABI E2E. Ordered batches carry
+ACTIVATE and producer publication; direct MMIO carries queue/IRQ commands and the final
+raw status read. The scenario asserts the nine-stage lifecycle through acknowledgement,
+vector 64, one delivery and device step, cursor values, `MainAfterHandler`, and
 destination `[1, 2, 3, 4]`.
 The persistent stateful-handler adapter keeps await-spanning handler-owned capabilities
 in one registry entry and handler-future boxing at the host type-erasure boundary.

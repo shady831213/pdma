@@ -2,11 +2,9 @@
 
 ## Purpose and Scope
 
-This document records the validated behavioral contract of the PDMA executable model
-through the historical v0.9 descriptor-layout ABI baseline. The overall v0.9
-memory-and-bus-exact objective is **PARTIAL**: the approved active correction slice is an
-exact 4 KiB numeric MMIO model, which is not implemented yet. White-board architecture
-documents are background only. This spec deliberately defers anything not exercised by
+This document records the validated behavioral contract through the COMPLETE v0.9
+historical data ABI and exact 4 KiB numeric MMIO memory-and-bus contract. White-board
+architecture documents are background only. This spec defers anything not exercised by
 the current scenario tests, including cycle timing, callable C APIs, concrete PCIe/MSI-X
 transport, and real operating-system integration.
 
@@ -43,8 +41,33 @@ The v0 model validates the following end-to-end behaviors:
   transport-neutral host bus. This ABI path is canonical for new end-to-end scenarios.
 - Whole-device reset with checked epoch advancement, stale-capability rejection before
   mutation, and fresh bootstrap under the new epoch.
+- One exact 4 KiB little-endian MMIO region with 66 canonical registers, shared decoding,
+  generated C constants, command banks, and stable response semantics.
+- One MMIO-backed host bus whose selector locks, mapped activation, two closed ordered
+  batches, and non-consuming IRQ readiness reuse existing typed boundaries.
 
 The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
+
+## Exact MMIO and Ordered Commit Contract
+
+Offsets `0x000..=0xfff` contain exact 4/8-byte little-endian registers. Wrong widths,
+misalignment, cross-register extents, reserved offsets/bits, and permission faults return
+the closed transport error before mutation. The 66-entry registry is the only
+offset/access/reset/mask authority and drives Rust decoding and C11 constants. Global,
+queue, and IRQ families have 4, 9, and 9 commands and share 32 result codes.
+
+Standalone activation validates three exact mappings already committed in `DmaSpace`
+and uses the prepared mapped-activation seam; it commits no DMA. The closed bootstrap
+batch combines three staged rings with activation, while the closed submission batch
+combines optional indirect DMA and descriptor bytes with producer publication. Both
+validate the projected transaction before one synchronous commit. Doorbell capture is a
+later command, preserving bytes-before-producer-before-runnable ordering.
+
+`MmioDeviceBus` owns clone-shared selector locks. Notification readiness is
+non-consuming; the adapter issues exactly one claim after wake and retries an EMPTY
+race. The canonical scenario uses `BusDevicePort<ScenarioBus>` backed by
+`MmioDeviceBus<RecordingMmioTransport>` and proves raw MMIO from setup through
+completion drain, ACK, and final status, including both batch-carried queue commands.
 
 ## Software/Driver Responsibility Boundary
 
@@ -257,7 +280,7 @@ switches and a later submission through main's retained capability.
 ## Historical Completed Descriptor-Layout ABI Baseline
 
 The following ABI-v1 descriptor, completion, and event record remains the completed
-historical baseline while the exact 4 KiB numeric MMIO correction is active.
+historical baseline alongside the completed exact MMIO contract.
 
 ## ABI-v1 and Command Boundary
 
@@ -396,9 +419,8 @@ Each device-worker turn advances at most one native command or retirement retry.
 The following items are explicitly outside the v0 behavioral contract:
 
 - Cycle accuracy, RTL timing, power, or frequency modeling.
-- Callable C API. The ABI-v1 data header is already generated and checked from Rust
-  metadata; the exact 4 KiB numeric MMIO model is active correction work, not an
-  implemented contract.
+- Callable C API. The ABI-v1 data/MMIO constants header is generated and checked from
+  Rust metadata, but exposes no callable interface.
 - RISC-V scheduler backend through Terminus.
 - High-dimensional transfer operations, gather/scatter, transpose, and reduce trees.
 - Real Linux DMAengine, DPDK DMAdev, or kernel driver integration.

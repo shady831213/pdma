@@ -14,8 +14,8 @@ This file tracks executable v0 model progress. White-board documents explain arc
   the next main poll; a complete handler future remains atomic and non-nested.
 - Prefer native behavioral operation derivation over cycle-accurate timing.
 - Keep the completed ABI-v1 descriptor/record data contract explicit and fixed-width; it
-  is rendered into the checked-in generated C11 data header. The exact 4 KiB numeric
-  MMIO model is the active correction slice; callable C APIs remain deferred.
+  and the exact MMIO registry are rendered into the checked-in generated C11 data header;
+  callable C APIs remain deferred.
 - Validate every model slice with `cargo fmt --check`, `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps --document-private-items`.
 
 ## Progress Ledger
@@ -41,20 +41,19 @@ This file tracks executable v0 model progress. White-board documents explain arc
 | v0 architecture specification draft | Done | `model/docs/pdma_arch_spec_v0.md` | The original v0 behavior was documented with ABI, register, cycle timing, interrupt, and reset details deferred at that milestone. |
 | v0.7 host-owned IRQ delivery | Done | `model/docs/v0_7_model_plan.md`, `crates/scenarios/tests/irq_delivery.rs` | Line and Message routes, device-local IRQ state, one complete software main, poll-boundary CPU serialization, whole-handler atomicity, driver drain/ack, final delivery summaries, and IRQ trace are validated; concrete MSI/MSI-X transport remains deferred. |
 | v0.8 vector-routed IRQ contexts | Done | `model/docs/v0_8_model_plan.md`, host/context/driver/IRQ tests, `crates/scenarios/tests/irq_delivery/` | Line and Message notifications dispatch through a fixed per-vector host registry; CPU-local state and shared cancel-safe driver accounting survive repeated main/handler switches without device-owned callbacks. |
-| v0.9 ABI register-contract | Partial | `model/docs/v0_9_model_plan.md`, ABI/bus/reset tests, `include/pdma_model_abi.h`, `crates/scenarios/tests/message_irq_linear_copy.rs` | The historical descriptor/completion/event ABI record is complete, but the overall memory-and-bus-exact objective is partial pending the approved exact 4 KiB numeric MMIO model. |
+| v0.9 memory-and-bus-exact ABI | Done | `model/docs/v0_9_model_plan.md`, MMIO/ABI/bus/reset tests, `include/pdma_model_abi.h`, `crates/scenarios/tests/message_irq_linear_copy.rs` | Historical data ABI plus the exact registry, endpoint, host adapter, ordered batches, reset/IRQ semantics, and canonical E2E share one execution/retirement core. |
 
 ## Active Next Slice
 
-The active correction slice is the approved exact 4 KiB numeric MMIO model. v0.9 remains
-PARTIAL until that memory-and-bus-exact objective is implemented and validated; the
-historical descriptor/completion/event ABI record remains complete.
+No correction slice is active. v0.9 is COMPLETE: its historical data ABI and exact
+4 KiB numeric MMIO memory-and-bus contract are implemented and validated.
 The scenario suite has 56 tests: 51 software-bearing tests each use exactly one complete
 `run_main`, while five named pure device/manual observability tests intentionally use
 none, as enumerated in the architecture specification.
 
 ## Planned Slices
 
-No additional slice is planned ahead of the active exact 4 KiB numeric MMIO correction.
+No additional v0 slice is currently planned.
 
 ## Deferred Until v0 Mechanisms Stabilize
 

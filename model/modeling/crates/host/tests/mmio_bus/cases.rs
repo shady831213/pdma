@@ -2,7 +2,7 @@ use super::{Access, RecordingTransport, activation, expected_queue_transcript};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
 use pdma_model_contract::abi::{DeviceEpoch, EpochQueue, QueueCursorUpdate, RingCursor};
-use pdma_model_contract::{CompletionRingId, EpochIrqSource, IrqSource, QueueId};
+use pdma_model_contract::{CompletionRingId, EpochIrqSource, IrqSource, IrqVector, QueueId};
 use pdma_model_device::{AsyncDevice, MmioBatchError};
 use pdma_model_host::{
     AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusSubmission, MmioDeviceBus, QueueControlWrite,
@@ -199,5 +199,78 @@ async fn injected_access_result_and_batch_failures_are_exact_and_release_locks()
         Err(pdma_model_host::MmioBusControlError::MalformedResponse)
     );
     assert!(recovered.is_ok());
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn notification_wait_claims_once_through_the_raw_irq_window() -> TestResult {
+    // Given: readiness exposes one Message notification without consuming it.
+    let transport = RecordingTransport::new();
+    transport.set_message_notification(41, 7);
+    let bus = MmioDeviceBus::new(transport.clone());
+
+    // When: the MMIO bus waits for and claims the notification.
+    let notification = bus
+        .wait_irq_notification()
+        .await
+        .ok_or("expected notification")?;
+
+    // Then: one raw claim, result read, and exact response reads produced that identity.
+    assert_eq!(notification.vector().raw(), 41);
+    assert_eq!(
+        notification.source(),
+        IrqSource::Completion(CompletionRingId::new(0))
+    );
+    assert_eq!(
+        transport.accesses(),
+        vec![
+            Access::Write(0x220, 9_u32.to_le_bytes().to_vec()),
+            Access::Read(0x224, 4),
+            Access::Read(0x240, 8),
+            Access::Read(0x248, 8),
+            Access::Read(0x250, 4),
+            Access::Read(0x254, 4),
+            Access::Read(0x258, 4),
+            Access::Read(0x25c, 4),
+            Access::Read(0x260, 8),
+            Access::Read(0x268, 8),
+            Access::Read(0x270, 8),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn notification_wait_retries_empty_race_and_shutdown_never_claims() -> TestResult {
+    // Given: one readiness wake races with a claimant before the bus acquires the window.
+    let transport = RecordingTransport::new();
+    transport.set_message_notification(55, 3);
+    transport.empty_next_claim();
+    let bus = MmioDeviceBus::new(transport.clone());
+
+    // When: the first claim reports EMPTY and the next readiness turn claims the message.
+    let notification = bus
+        .wait_irq_notification()
+        .await
+        .ok_or("expected raced notification")?;
+    let accesses = transport.accesses();
+    transport.clear();
+    let shutdown = bus.wait_irq_notification().await;
+
+    // Then: the selector was released between two claims and shutdown issued no third claim.
+    assert_eq!(notification.vector(), IrqVector::new(55));
+    assert_eq!(
+        accesses.get(..4),
+        Some(
+            &[
+                Access::Write(0x220, 9_u32.to_le_bytes().to_vec()),
+                Access::Read(0x224, 4),
+                Access::Write(0x220, 9_u32.to_le_bytes().to_vec()),
+                Access::Read(0x224, 4),
+            ][..]
+        )
+    );
+    assert_eq!(shutdown, None);
+    assert!(transport.accesses().is_empty());
     Ok(())
 }

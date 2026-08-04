@@ -144,14 +144,14 @@ where
     }
 
     async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        None
+        irq::snapshot(self).await
     }
 
     async fn wait_irq(&self) -> Option<IrqSnapshot> {
-        None
+        irq::wait_line(self).await
     }
 
     async fn wait_irq_notification(&self) -> Option<IrqNotification> {
-        self.transport.wait_irq_notification().await
+        irq::wait_notification(self).await
     }
 }

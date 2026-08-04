@@ -4,6 +4,27 @@ use pdma_model_contract::{
     DeviceEpoch, EpochIrqSource, IrqRoute, IrqSource, ModelError, ModelResult,
 };
 
+#[path = "irq/notification.rs"]
+mod notification;
+
+pub(super) async fn snapshot<T: MmioDeviceTransport>(
+    bus: &MmioDeviceBus<T>,
+) -> Option<pdma_model_contract::IrqSnapshot> {
+    notification::snapshot(bus).await
+}
+
+pub(super) async fn wait_line<T: MmioDeviceTransport>(
+    bus: &MmioDeviceBus<T>,
+) -> Option<pdma_model_contract::IrqSnapshot> {
+    notification::wait_line(bus).await
+}
+
+pub(super) async fn wait_notification<T: MmioDeviceTransport>(
+    bus: &MmioDeviceBus<T>,
+) -> Option<pdma_model_contract::IrqNotification> {
+    notification::wait_notification(bus).await
+}
+
 pub(super) async fn source_command<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
     source: EpochIrqSource,
@@ -92,7 +113,7 @@ fn encode_route(route: IrqRoute) -> ModelResult<(u32, u64)> {
     }
 }
 
-async fn write_u32<T: MmioDeviceTransport>(
+pub(super) async fn write_u32<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
     offset: u32,
     value: u32,
@@ -114,7 +135,10 @@ async fn write_u64<T: MmioDeviceTransport>(
         .map_err(|_| ModelError::DmaSubmissionState)
 }
 
-async fn read_u32<T: MmioDeviceTransport>(bus: &MmioDeviceBus<T>, offset: u32) -> ModelResult<u32> {
+pub(super) async fn read_u32<T: MmioDeviceTransport>(
+    bus: &MmioDeviceBus<T>,
+    offset: u32,
+) -> ModelResult<u32> {
     let bytes = bus
         .transport
         .read_mmio(offset, MmioByteCount::from(4_u8))
@@ -125,7 +149,10 @@ async fn read_u32<T: MmioDeviceTransport>(bus: &MmioDeviceBus<T>, offset: u32) -
         .map_err(|_| ModelError::DmaSubmissionState)
 }
 
-async fn read_u64<T: MmioDeviceTransport>(bus: &MmioDeviceBus<T>, offset: u32) -> ModelResult<u64> {
+pub(super) async fn read_u64<T: MmioDeviceTransport>(
+    bus: &MmioDeviceBus<T>,
+    offset: u32,
+) -> ModelResult<u64> {
     let bytes = bus
         .transport
         .read_mmio(offset, MmioByteCount::from(8_u8))

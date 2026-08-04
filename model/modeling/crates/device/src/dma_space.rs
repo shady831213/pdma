@@ -2,6 +2,7 @@
 
 mod access;
 mod error;
+mod prepared;
 mod stage;
 mod validation;
 

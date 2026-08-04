@@ -52,7 +52,7 @@ impl<R: Copy + Default> CommandBank<R> {
 #[derive(Debug)]
 pub(in crate::runner) struct RegisterBanks {
     pub(super) global: GlobalBank,
-    pub(super) queue: QueueBank,
+    pub(in crate::runner) queue: QueueBank,
     pub(super) irq: IrqBank,
 }
 

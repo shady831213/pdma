@@ -3,6 +3,19 @@ use crate::runner::bus::{DmaWrite, SubmissionAcceptance};
 use crate::runner::state::RunnerState;
 use pdma_model_contract::abi::{QueueControl, QueueCursorUpdate, RingCursor, RingRecord};
 
+#[derive(Clone, Copy)]
+pub(in crate::runner) struct PreparedSubmissionPublication {
+    queue: pdma_model_contract::abi::EpochQueue,
+    submission: pdma_model_contract::abi::RingCursors,
+    status: QueueStatus,
+}
+
+impl PreparedSubmissionPublication {
+    pub(in crate::runner) const fn status(&self) -> QueueStatus {
+        self.status
+    }
+}
+
 pub(in crate::runner::bus) fn accept_submission(
     state: &mut RunnerState,
     request: SubmissionAcceptance,
@@ -69,6 +82,40 @@ fn validate_indirect(
     } else {
         Ok(())
     }
+}
+
+pub(in crate::runner) fn prepare_submission_publication(
+    state: &RunnerState,
+    request: &SubmissionAcceptance,
+) -> Result<PreparedSubmissionPublication, BusControlError> {
+    let queue = *state.bus_control.queue(request.queue)?;
+    if queue.submission.producer() != request.expected_producer || queue.submission.is_full() {
+        return Err(BusControlError::InvalidTransaction);
+    }
+    let next = request.expected_producer.checked_increment(1)?;
+    let submission = queue.submission.update_producer(next)?;
+    validate_descriptor(&queue, &request.descriptor)?;
+    validate_indirect(state, request.indirect.as_ref())?;
+    let mut projected = queue;
+    projected.submission = submission;
+    Ok(PreparedSubmissionPublication {
+        queue: request.queue,
+        submission,
+        status: projected.status(),
+    })
+}
+
+pub(in crate::runner) fn install_submission_publication(
+    state: &mut RunnerState,
+    prepared: &PreparedSubmissionPublication,
+) -> QueueStatus {
+    for (index, queue) in state.bus_control.queues.iter_mut().enumerate() {
+        if index == prepared.queue.queue_id().raw() {
+            queue.submission = prepared.submission;
+            break;
+        }
+    }
+    prepared.status
 }
 
 pub(in crate::runner) fn control(

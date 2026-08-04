@@ -2,10 +2,14 @@ use super::bank::{CommandBank, MmioScalar, narrow_u32};
 use crate::runner::state::RunnerState;
 use pdma_model_contract::abi::mmio::QueueResponseBank;
 
+#[path = "queue/batch.rs"]
+mod batch;
 #[path = "queue_config.rs"]
 mod queue_config;
 #[path = "queue_control.rs"]
 mod queue_control;
+pub(in crate::runner) use batch::{BootstrapBatchStaging, SubmissionBatchStaging};
+pub(in crate::runner) use queue_control::map_bus as map_bus_error;
 
 #[derive(Clone, Copy)]
 pub(super) enum QueueRegister {
@@ -40,7 +44,7 @@ pub(super) enum QueueRegister {
 }
 
 #[derive(Debug)]
-pub(super) struct QueueBank {
+pub(in crate::runner) struct QueueBank {
     expected_epoch: u64,
     id: u64,
     expected_cursor: u64,
@@ -149,7 +153,7 @@ pub(super) const fn read(state: &RunnerState, register: QueueRegister) -> MmioSc
     }
 }
 
-fn status_response(
+pub(in crate::runner) fn status_response(
     status: crate::runner::QueueStatus,
 ) -> Result<QueueResponseBank, pdma_model_contract::abi::mmio::MmioResultDetails> {
     Ok(QueueResponseBank {

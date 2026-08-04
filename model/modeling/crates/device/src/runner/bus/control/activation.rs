@@ -12,6 +12,12 @@ pub(in crate::runner) struct PreparedQueueActivation {
     native: PreparedDmaBusQueue,
 }
 
+impl PreparedQueueActivation {
+    pub(in crate::runner) const fn status(&self) -> QueueStatus {
+        self.shadow.status()
+    }
+}
+
 pub(in crate::runner) fn activate_staged(
     runner: &mut RunnerState,
     stage: DmaStage,

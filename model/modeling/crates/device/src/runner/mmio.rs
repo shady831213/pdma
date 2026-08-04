@@ -2,7 +2,7 @@ mod bank;
 mod dispatch;
 mod global;
 mod irq;
-mod queue;
+pub(in crate::runner) mod queue;
 pub(super) mod reset;
 
 pub(super) use bank::RegisterBanks;

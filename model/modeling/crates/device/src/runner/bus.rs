@@ -1,5 +1,6 @@
 //! Atomic DMA-backed queue control transactions.
 
+mod batch;
 pub(super) mod control;
 
 use super::{AsyncDeviceHandle, publish, wake};
@@ -108,6 +109,9 @@ impl From<AbiControlError> for BusControlError {
     }
 }
 
+pub use batch::{
+    DmaBatchContext, MmioBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
+};
 pub use control::QueueStatus;
 
 impl super::AsyncRunSnapshot {

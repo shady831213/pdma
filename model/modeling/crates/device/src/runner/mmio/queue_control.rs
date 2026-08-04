@@ -124,7 +124,7 @@ fn invalid_transaction(command: QueueCommand) -> MmioResultDetails {
     )
 }
 
-pub(super) fn map_bus(
+pub(in crate::runner) fn map_bus(
     error: BusControlError,
     queue_id: u64,
     command: u32,

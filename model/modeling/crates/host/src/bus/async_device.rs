@@ -1,11 +1,12 @@
 use super::{
-    AsyncDeviceBusStage, AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusQueueStatus, BusSubmission,
+    AsyncDeviceBusStage, AsyncPdmaBus, BusDmaStage, BusQueueStatus, BusSubmission,
     QueueControlWrite,
 };
+use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl};
 use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
 use pdma_model_device::{
-    AsyncDeviceHandle, BusControlError, DmaSpaceError, DmaWrite, QueueStatus, SubmissionAcceptance,
+    AsyncDeviceHandle, BusControlError, DmaSpaceError, QueueStatus, SubmissionAcceptance,
 };
 
 impl BusDmaStage for AsyncDeviceBusStage {
@@ -23,13 +24,6 @@ impl From<QueueStatus> for BusQueueStatus {
             status.completion(),
             status.event(),
         )
-    }
-}
-
-impl From<BusDmaWrite> for DmaWrite {
-    fn from(write: BusDmaWrite) -> Self {
-        let (address, bytes) = write.into_parts();
-        Self::new(address, bytes)
     }
 }
 
@@ -129,6 +123,10 @@ impl AsyncPdmaBus for AsyncDeviceHandle {
 
     async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
         Self::ack_irq_source(self, source).await
+    }
+
+    async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
+        Self::observe_irq_source(self, source).await
     }
 
     async fn irq_snapshot(&self) -> Option<IrqSnapshot> {

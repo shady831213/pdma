@@ -1,51 +1,19 @@
 //! Transport-neutral asynchronous PDMA bus contract.
 
 mod async_device;
+mod mmio_device;
+mod stage;
 
+pub use mmio_device::{MmioBusControlError, MmioDeviceBus, MmioDeviceTransport};
+pub use stage::{AsyncDeviceBusStage, BusDmaStage, BusDmaWrite};
+
+use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::abi::{
     DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate,
     RingCursor, RingCursors,
 };
 use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
 use std::error::Error;
-
-/// Opaque staging capability produced by an asynchronous device handle.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AsyncDeviceBusStage(pdma_model_device::DmaStage);
-
-/// Read-only capability for an uncommitted DMA allocation batch.
-pub trait BusDmaStage: Send {
-    /// Returns the proposed regions without exposing allocator state.
-    fn proposed_regions(&self) -> &[DmaRegion];
-}
-
-/// One byte-opaque write included in an atomic bus transaction.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BusDmaWrite {
-    address: DmaAddress,
-    bytes: Vec<u8>,
-}
-
-impl BusDmaWrite {
-    /// Creates a write at one exact IOVA.
-    pub const fn new(address: DmaAddress, bytes: Vec<u8>) -> Self {
-        Self { address, bytes }
-    }
-
-    /// Target IOVA.
-    pub const fn address(&self) -> DmaAddress {
-        self.address
-    }
-
-    /// Opaque bytes written at acceptance.
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    fn into_parts(self) -> (DmaAddress, Vec<u8>) {
-        (self.address, self.bytes)
-    }
-}
 
 /// One all-or-none raw submission acceptance request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -322,6 +290,14 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send {
+        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+    }
+
+    /// Observes one PDMA-local IRQ source without consuming it.
+    fn observe_irq_source(
+        &self,
+        _source: EpochIrqSource,
+    ) -> impl Future<Output = ModelResult<IrqSourceStatus>> + Send {
         async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
     }
 

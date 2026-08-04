@@ -8,7 +8,7 @@ mod port;
 
 pub use bus::{
     AsyncDeviceBusStage, AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusQueueStatus, BusSubmission,
-    QueueControlWrite,
+    MmioBusControlError, MmioDeviceBus, MmioDeviceTransport, QueueControlWrite,
 };
 pub use context::{CpuLocal, SoftwareCpu};
 pub use driver::{AsyncDriver, DriverIrqRecord, ManualDriver};

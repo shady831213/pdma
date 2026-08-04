@@ -3,10 +3,8 @@
 Generated: 2026-07-16
 Baseline commit: pre-v0.8 checkpoint `0c044bd`; v0.8-v0.9 implementation follows
 Branch: master
-Scope: the historical v0.9 ABI register-contract is complete, but the overall v0.9
-memory-and-bus-exact objective is PARTIAL. The approved active correction slice is the
-exact 4 KiB numeric MMIO model; preserve its ABI/reset boundaries and the validated v0.8
-IRQ/CPU-local boundaries.
+Scope: v0.9 is COMPLETE, including its historical data ABI and exact 4 KiB numeric MMIO
+memory-and-bus contract. Preserve its ABI/reset and validated v0.8 IRQ/CPU boundaries.
 
 ## OVERVIEW
 
@@ -21,7 +19,7 @@ pdma/
 ├── model/docs/v0_6_model_plan.md  # completed v0.6 actor/async transition and v0.6.5 cleanup
 ├── model/docs/v0_7_model_plan.md  # historical v0.7 single-handler IRQ snapshot
 ├── model/docs/v0_8_model_plan.md  # historical vector-dispatch/CPU-local IRQ plan
-├── model/docs/v0_9_model_plan.md  # PARTIAL v0.9 plan; exact 4 KiB MMIO correction active
+├── model/docs/v0_9_model_plan.md  # completed v0.9 data ABI and exact 4 KiB MMIO model
 └── model/modeling/                # Rust 2024 model workspace
 ```
 
@@ -31,7 +29,7 @@ Ignore generated `model/modeling/target/` content.
 
 | Task | Location | Notes |
 | --- | --- | --- |
-| Review active correction slice | `model/docs/v0_9_model_plan.md` | Historical ABI-v1 data path, checked DMA/control, reset epochs, and header policy are complete; exact 4 KiB numeric MMIO remains active. |
+| Review completed v0.9 | `model/docs/v0_9_model_plan.md` | Historical ABI plus exact MMIO registry/endpoint/adapter/batches, reset epochs, and header policy. |
 | Shared host/device contract | `model/modeling/crates/contract/` | IDs, ABI-v1 metadata/codecs, DMA vocabulary, descriptors, records, controls, and IRQ vocabulary. |
 | Device behavior | `model/modeling/crates/device/` | Queue-port actor, checked `DmaSpace`, typed bus control/reset, shared execution/retirement, trace, and PDMA-local IRQ. |
 | Host-side model | `model/modeling/crates/host/` | Driver, `AsyncPdmaBus`, `BusDevicePort`, host IRQ delivery, and SW execution contexts. |
@@ -52,12 +50,12 @@ Ignore generated `model/modeling/target/` content.
 
 Completed slices: scaffold, typed IDs, checked memory, generic ring, driver setup, device loop, linear copy, strided copy, event ring, queue config, deterministic arbitration, broadcast copy, vector-add, Resource Credit Model, Backpressure/Stall Annotation Layer, Trace Sink, v0 architecture specification draft, v0.6 actor/async transition, v0.6.5 active-model cleanup, v0.8 vector-routed IRQ contexts, and the historical v0.9 descriptor-layout ABI register-contract.
 
-v0.9 is **PARTIAL**: its historical descriptor/completion/event ABI register-contract is
-complete, while the overall memory-and-bus-exact objective awaits the approved exact 4
-KiB numeric MMIO model. No MMIO implementation exists yet. ABI-v1 remains the canonical
-path for new E2E scenarios: fixed-width data records, checked host DMA, typed queue/IRQ
-controls, and one shared semantic/DMA execution and retirement core, never a second
-executor. Whole-device reset preserves committed DMA mappings/bytes/generation, trace
+v0.9 is **COMPLETE**: the historical data ABI is paired with one canonical 66-register,
+4 KiB little-endian MMIO contract, device endpoint, clone-shared host adapter, and
+generated C constants. Raw activation uses exact committed mappings through the shared
+prepared core; two closed ordered batches combine DMA preparation with activation or
+producer publication. ABI and MMIO retain one execution/retirement core. Whole-device
+reset preserves committed DMA mappings/bytes/generation, trace
 history, resource configuration, and lifecycle accounting; it clears resettable
 queues/results/work/IRQ and advances `DeviceEpoch`, so stale queue, IRQ, and notification
 capabilities fail before mutation and require explicit new-epoch bootstrap. The
@@ -90,8 +88,7 @@ retired under `model/retired/v0_6_sync_reference/`.
 - Pure device/manual observability tests have no artificial `run_main`; the validated scenario invariant is 56 total, 51 one-entry software tests, and the same five zero-entry exceptions documented in the architecture spec.
 - Do not register or invoke software handlers from the device loop; handlers belong to host IRQ delivery.
 - For ABI-v1, keep wire bytes fixed-width little-endian and regenerate the checked-in C11
-  data header from canonical Rust metadata. The exact 4 KiB numeric MMIO model is the
-  active correction slice; callable C APIs remain deferred.
+  data/MMIO header from canonical Rust metadata. Callable C APIs remain deferred.
 - Keep Rust files below 250 pure LOC; split by responsibility before growing `desc.rs` or `device.rs`.
 - Use English plain short commit messages matching recent history if the user asks to commit.
 
@@ -102,8 +99,7 @@ retired under `model/retired/v0_6_sync_reference/`.
 - Treat `docs/white_boards/**` as exploratory background, not active implementation scope.
 - Do not add Terminus, numeric PCIe/MSI-X maps or table/PBA behavior, callable C APIs,
   SR-IOV, FLR, per-queue reset, timing, a second executor/driver/E2E, or unsafe layout
-  casts. The exact 4 KiB numeric MMIO model is the explicitly selected correction slice;
-  do not expand it beyond the approved scope or hand-edit the generated ABI data header.
+  casts. Do not expand the completed exact MMIO scope or hand-edit the generated header.
 - Do not add a duplicate host enable/mask layer while the modeled system has only one PDMA device; device-local mask/ack remains distinct from host handler dispatch.
 - Do not expose raw CPU identity, mutex guards, async CPU-local borrows, or a manual-driver escape hatch for software-bearing scenarios. Do not give `ManualDriver` IRQ service or weaken `AsyncDriver` CPU validation.
 - Do not publish success completions after memory faults.

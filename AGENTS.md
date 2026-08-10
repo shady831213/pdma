@@ -31,6 +31,7 @@ Ignore generated `model/modeling/target/` content.
 | --- | --- | --- |
 | Review completed v0.9 | `model/docs/v0_9_model_plan.md` | Historical ABI plus exact MMIO registry/endpoint/adapter/batches, reset epochs, and header policy. |
 | Shared host/device contract | `model/modeling/crates/contract/` | IDs, ABI-v1 metadata/codecs, DMA vocabulary, descriptors, records, controls, and IRQ vocabulary. |
+| Reusable schema facility | `model/modeling/crates/hardware-interface-schema/` | Runtime-neutral record/register schema metadata, codecs, exact-start lookup, format-neutral exporters, and default-off generic C11 fragments. |
 | Device behavior | `model/modeling/crates/device/` | Queue-port actor, checked `DmaSpace`, typed bus control/reset, shared execution/retirement, trace, and PDMA-local IRQ. |
 | Host-side model | `model/modeling/crates/host/` | Driver, `AsyncPdmaBus`, `BusDevicePort`, host IRQ delivery, and SW execution contexts. |
 | System scenarios | `model/modeling/crates/scenarios/` | Host/device/IRQ stories; `message_irq_linear_copy` is the canonical ABI E2E. |
@@ -65,6 +66,12 @@ v0.8 remains mandatory: `AsyncDriver` is CPU-bound and exclusively services IRQs
 `ManualDriver` is CPU-unbound observability only; one private core shares cancel-safe
 accounting; the device never stores or invokes handlers. The old sync stack remains
 retired under `model/retired/v0_6_sync_reference/`.
+
+The reusable `hardware-interface-schema` crate is extracted infrastructure, not a new
+PDMA hardware/runtime boundary: PDMA still owns rings, register storage and MMIO effects,
+DMA, reset epochs, IRQ state machines, callbacks, actors, and executor behavior. Its
+generic `export-c-header` backend is default-off and explicitly enabled only by the PDMA
+contract for the existing generated data header; the crate remains `publish = false`.
 
 ## CONVENTIONS
 

@@ -7,7 +7,8 @@ MMIO memory-and-bus contract.
 
 `model/modeling` is a Rust 2024 workspace for deterministic, step-based PDMA behavior
 slices. The old sync reference stack has been retired to `model/retired/v0_6_sync_reference/`;
-this workspace now contains the active contract, device, host, and scenarios crates.
+this workspace now contains the active contract, device, host, scenarios, and reusable
+hardware-interface-schema crates.
 
 ## STRUCTURE
 
@@ -15,6 +16,8 @@ this workspace now contains the active contract, device, host, and scenarios cra
 crates/
 ├── contract/         # shared host/device contract, DMA-visible vocabulary, and IRQ types
 ├── device/           # active hardware runner plus PDMA-local IRQ controller
+├── hardware-interface-schema/ # reusable runtime-neutral record/register schema facade
+├── hardware-interface-schema-macros/ # proc-macro implementation for the schema facade
 ├── host/             # driver, device port, and host-owned IRQ delivery actor
 └── scenarios/        # active host/device/IRQ-delivery validation stories
 ```
@@ -26,6 +29,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 | Task | Location | Notes |
 | --- | --- | --- |
 | Shared contract | `crates/contract/src/` | ABI-v1 metadata/codecs and vocabulary; no backing memory, runtime, handler traits, or device execution. |
+| Reusable schemas | `crates/hardware-interface-schema/` | Runtime-neutral record/register metadata, scalar codecs, exact-start lookup, format-neutral exports, and default-off generic C11 fragments. |
 | Device behavior | `crates/device/src/` | Queue-port model, checked `DmaSpace`, typed bus controls/reset, shared execution/retirement, async worker, trace, and PDMA-local IRQ. |
 | Host-side model | `crates/host/src/` | CPU-bound `AsyncDriver`, manual facade, `AsyncPdmaBus`, `BusDevicePort`, IRQ delivery, and SW context helpers. |
 | System scenarios | `crates/scenarios/tests/` | Concurrent actors; `message_irq_linear_copy` is the canonical ABI Message-IRQ E2E. |
@@ -105,6 +109,12 @@ ordered batches share prepared commit seams while all frontends retain one
 execution/retirement core. v0.8 records the still-binding
 vector-to-handler, CPU-local, cancel-safe accounting, bootstrap, and main/handler
 alternation boundaries; v0.7 is historical.
+
+`hardware-interface-schema` is reusable infrastructure, not a PDMA runtime replacement:
+it owns schema metadata and exports, while PDMA continues to own ring publication,
+storage/MMIO effects, DMA, reset, IRQ, actor, and executor behavior. The crate is
+`publish = false`; its `export-c-header` backend is default-off and enabled explicitly
+by the PDMA contract for the existing exact generated data header.
 
 ## DO NOT
 

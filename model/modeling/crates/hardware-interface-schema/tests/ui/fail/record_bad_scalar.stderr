@@ -1,0 +1,5 @@
+error: scalar type must be u8, u16, u32, or u64
+ --> tests/ui/fail/record_bad_scalar.rs:3:12
+  |
+3 |     value: i32 { id: 1, offset: 0, endian: Little },
+  |            ^^^

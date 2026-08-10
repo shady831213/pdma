@@ -1,0 +1,5 @@
+error: writable mask does not fit register width
+ --> tests/ui/fail/register_mask_overflow.rs:4:40
+  |
+4 |         reset: Zero(0), writable_mask: 0x100 },
+  |                                        ^^^^^

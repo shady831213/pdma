@@ -1,0 +1,5 @@
+error: register extends beyond map size
+ --> tests/ui/fail/map_extent.rs:3:44
+  |
+3 |     value: { id: 1, name: "value", offset: 2, width: 4, access: ReadOnly,
+  |                                            ^

@@ -1,166 +1,68 @@
-use super::{MmioAccess, MmioReset, RegisterId, RegisterSpec, RegisterValues};
+use hardware_interface_schema::register_schema;
 
-macro_rules! r {
-    ($id:ident,$name:literal,$offset:literal,$width:literal,$access:ident,$reset:ident,$value:expr,$mask:expr) => {
-        RegisterSpec::new(
-            RegisterId::$id,
-            $name,
-            RegisterValues {
-                offset: $offset,
-                width: $width,
-                access: MmioAccess::$access,
-                reset: MmioReset::$reset,
-                reset_value: $value,
-                writable_mask: $mask,
-            },
-        )
-    };
+use super::{PdmaMmioMapRegisterId, RegisterSpec};
+
+register_schema! {
+    pub registers GlobalRegisters<PdmaMmioMapRegisterId> {
+        g_magic: { id: 0, name: "G_MAGIC", offset: 0x000, width: 4, access: ReadOnly,
+            reset: Constant(0x414d_4450), writable_mask: 0 },
+        g_mmio_abi_version: { id: 1, name: "G_MMIO_ABI_VERSION", offset: 0x004, width: 4,
+            access: ReadOnly, reset: Constant(1), writable_mask: 0 },
+        g_req_abi_version: { id: 2, name: "G_REQ_ABI_VERSION", offset: 0x008, width: 4,
+            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff },
+        g_req_features: { id: 3, name: "G_REQ_FEATURES", offset: 0x010, width: 8,
+            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
+        g_reset_expected_epoch: { id: 4, name: "G_RESET_EXPECTED_EPOCH", offset: 0x018,
+            width: 8, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
+        g_command: { id: 5, name: "G_COMMAND", offset: 0x020, width: 4, access: WriteOnly,
+            reset: Zero(0), writable_mask: 0xffff_ffff },
+        g_result: { id: 6, name: "G_RESULT", offset: 0x024, width: 4, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        g_detail0: { id: 7, name: "G_DETAIL0", offset: 0x028, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        g_detail1: { id: 8, name: "G_DETAIL1", offset: 0x030, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        g_detail2: { id: 9, name: "G_DETAIL2", offset: 0x038, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        g_rsp_abi_version: { id: 10, name: "G_RSP_ABI_VERSION", offset: 0x040, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_rsp_run_state: { id: 11, name: "G_RSP_RUN_STATE", offset: 0x044, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_rsp_features: { id: 12, name: "G_RSP_FEATURES", offset: 0x048, width: 8,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_rsp_epoch: { id: 13, name: "G_RSP_EPOCH", offset: 0x050, width: 8,
+            access: ReadOnly, reset: PostReset(0), writable_mask: 0 },
+        g_max_ring_depth: { id: 14, name: "G_MAX_RING_DEPTH", offset: 0x058, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_max_indirect_destinations: { id: 15, name: "G_MAX_INDIRECT_DESTINATIONS",
+            offset: 0x05c, width: 4, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_max_transfer_bytes: { id: 16, name: "G_MAX_TRANSFER_BYTES", offset: 0x060,
+            width: 4, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_max_strided_rows: { id: 17, name: "G_MAX_STRIDED_ROWS", offset: 0x064, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        g_max_stride: { id: 18, name: "G_MAX_STRIDE", offset: 0x068, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+    }
 }
 
 pub(super) const REGISTERS: [RegisterSpec; 19] = [
-    r!(
-        GMagic,
-        "G_MAGIC",
-        0x000,
-        4,
-        ReadOnly,
-        Constant,
-        0x414d_4450,
-        0
-    ),
-    r!(
-        GMmioAbiVersion,
-        "G_MMIO_ABI_VERSION",
-        0x004,
-        4,
-        ReadOnly,
-        Constant,
-        1,
-        0
-    ),
-    r!(
-        GReqAbiVersion,
-        "G_REQ_ABI_VERSION",
-        0x008,
-        4,
-        ReadWrite,
-        Zero,
-        0,
-        0xffff
-    ),
-    r!(
-        GReqFeatures,
-        "G_REQ_FEATURES",
-        0x010,
-        8,
-        ReadWrite,
-        Zero,
-        0,
-        u64::MAX
-    ),
-    r!(
-        GResetExpectedEpoch,
-        "G_RESET_EXPECTED_EPOCH",
-        0x018,
-        8,
-        ReadWrite,
-        Zero,
-        0,
-        u64::MAX
-    ),
-    r!(
-        GCommand,
-        "G_COMMAND",
-        0x020,
-        4,
-        WriteOnly,
-        Zero,
-        0,
-        0xffff_ffff
-    ),
-    r!(GResult, "G_RESULT", 0x024, 4, ReadOnly, Zero, 0, 0),
-    r!(GDetail0, "G_DETAIL0", 0x028, 8, ReadOnly, Zero, 0, 0),
-    r!(GDetail1, "G_DETAIL1", 0x030, 8, ReadOnly, Zero, 0, 0),
-    r!(GDetail2, "G_DETAIL2", 0x038, 8, ReadOnly, Zero, 0, 0),
-    r!(
-        GRspAbiVersion,
-        "G_RSP_ABI_VERSION",
-        0x040,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        GRspRunState,
-        "G_RSP_RUN_STATE",
-        0x044,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        GRspFeatures,
-        "G_RSP_FEATURES",
-        0x048,
-        8,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        GRspEpoch,
-        "G_RSP_EPOCH",
-        0x050,
-        8,
-        ReadOnly,
-        PostReset,
-        0,
-        0
-    ),
-    r!(
-        GMaxRingDepth,
-        "G_MAX_RING_DEPTH",
-        0x058,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        GMaxIndirectDestinations,
-        "G_MAX_INDIRECT_DESTINATIONS",
-        0x05c,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        GMaxTransferBytes,
-        "G_MAX_TRANSFER_BYTES",
-        0x060,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        GMaxStridedRows,
-        "G_MAX_STRIDED_ROWS",
-        0x064,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(GMaxStride, "G_MAX_STRIDE", 0x068, 4, ReadOnly, Zero, 0, 0),
+    RegisterSpec::from_schema(GlobalRegisters::G_MAGIC),
+    RegisterSpec::from_schema(GlobalRegisters::G_MMIO_ABI_VERSION),
+    RegisterSpec::from_schema(GlobalRegisters::G_REQ_ABI_VERSION),
+    RegisterSpec::from_schema(GlobalRegisters::G_REQ_FEATURES),
+    RegisterSpec::from_schema(GlobalRegisters::G_RESET_EXPECTED_EPOCH),
+    RegisterSpec::from_schema(GlobalRegisters::G_COMMAND),
+    RegisterSpec::from_schema(GlobalRegisters::G_RESULT),
+    RegisterSpec::from_schema(GlobalRegisters::G_DETAIL0),
+    RegisterSpec::from_schema(GlobalRegisters::G_DETAIL1),
+    RegisterSpec::from_schema(GlobalRegisters::G_DETAIL2),
+    RegisterSpec::from_schema(GlobalRegisters::G_RSP_ABI_VERSION),
+    RegisterSpec::from_schema(GlobalRegisters::G_RSP_RUN_STATE),
+    RegisterSpec::from_schema(GlobalRegisters::G_RSP_FEATURES),
+    RegisterSpec::from_schema(GlobalRegisters::G_RSP_EPOCH),
+    RegisterSpec::from_schema(GlobalRegisters::G_MAX_RING_DEPTH),
+    RegisterSpec::from_schema(GlobalRegisters::G_MAX_INDIRECT_DESTINATIONS),
+    RegisterSpec::from_schema(GlobalRegisters::G_MAX_TRANSFER_BYTES),
+    RegisterSpec::from_schema(GlobalRegisters::G_MAX_STRIDED_ROWS),
+    RegisterSpec::from_schema(GlobalRegisters::G_MAX_STRIDE),
 ];

@@ -1,0 +1,5 @@
+error: bank stride must be nonzero
+ --> tests/ui/fail/map_zero_stride.rs:3:40
+  |
+3 |     lane: { count: 2, base: 0, stride: 0, members: {
+  |                                        ^

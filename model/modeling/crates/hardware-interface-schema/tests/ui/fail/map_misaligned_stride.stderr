@@ -1,0 +1,5 @@
+error: bank stride is misaligned
+ --> tests/ui/fail/map_misaligned_stride.rs:3:40
+  |
+3 |     lane: { count: 2, base: 0, stride: 6, members: {
+  |                                        ^

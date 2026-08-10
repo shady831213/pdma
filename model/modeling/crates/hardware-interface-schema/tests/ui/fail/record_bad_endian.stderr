@@ -1,0 +1,5 @@
+error: endian must be Little or Big
+ --> tests/ui/fail/record_bad_endian.rs:3:44
+  |
+3 |     value: u32 { id: 1, offset: 0, endian: Native },
+  |                                            ^^^^^^

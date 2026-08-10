@@ -1,0 +1,5 @@
+error: expected identifier, found keyword `struct`
+ --> tests/ui/fail/parser_token.rs:2:22
+  |
+2 | record_schema! { pub struct Nope {} }
+  |                      ^^^^^^

@@ -12,8 +12,8 @@ pub use access::{decode_read, decode_write};
 pub use codec::{decode_u32, decode_u64, encode_u32, encode_u64};
 pub use error::MmioAccessError;
 pub use register::{
-    MMIO_REGION_SIZE, MMIO_REGISTERS, MmioAccess, MmioByteCount, MmioReset, RegisterId,
-    RegisterRegistry, RegisterSpec,
+    MMIO_REGION_SIZE, MMIO_REGISTERS, MmioAccess, MmioByteCount, MmioReset, PdmaMmioMap,
+    PdmaMmioMapRegisterId, RegisterId, RegisterRegistry, RegisterSpec,
 };
 pub use response::{
     GlobalLimitsResponse, GlobalResetResponse, GlobalResponse, GlobalResponseBank,

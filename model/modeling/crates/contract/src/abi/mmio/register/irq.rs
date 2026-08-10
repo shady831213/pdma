@@ -1,139 +1,68 @@
-use super::{MmioAccess, MmioReset, RegisterId, RegisterSpec, RegisterValues};
+use hardware_interface_schema::register_schema;
 
-macro_rules! r {
-    ($id:ident,$name:literal,$offset:literal,$width:literal,$access:ident,$reset:ident,$value:expr,$mask:expr) => {
-        RegisterSpec::new(
-            RegisterId::$id,
-            $name,
-            RegisterValues {
-                offset: $offset,
-                width: $width,
-                access: MmioAccess::$access,
-                reset: MmioReset::$reset,
-                reset_value: $value,
-                writable_mask: $mask,
-            },
-        )
-    };
+use super::{PdmaMmioMapRegisterId, RegisterSpec};
+
+register_schema! {
+    pub registers IrqRegisters<PdmaMmioMapRegisterId> {
+        i_expected_epoch: { id: 47, name: "I_EXPECTED_EPOCH", offset: 0x200, width: 8,
+            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
+        i_source_id: { id: 48, name: "I_SOURCE_ID", offset: 0x208, width: 8,
+            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
+        i_source_kind: { id: 49, name: "I_SOURCE_KIND", offset: 0x210, width: 4,
+            access: ReadWrite, reset: Zero(0), writable_mask: 1 },
+        i_route_kind: { id: 50, name: "I_ROUTE_KIND", offset: 0x214, width: 4,
+            access: ReadWrite, reset: Zero(0), writable_mask: 1 },
+        i_route_vector: { id: 51, name: "I_ROUTE_VECTOR", offset: 0x218, width: 8,
+            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
+        i_command: { id: 52, name: "I_COMMAND", offset: 0x220, width: 4, access: WriteOnly,
+            reset: Zero(0), writable_mask: 0xffff_ffff },
+        i_result: { id: 53, name: "I_RESULT", offset: 0x224, width: 4, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        i_detail0: { id: 54, name: "I_DETAIL0", offset: 0x228, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        i_detail1: { id: 55, name: "I_DETAIL1", offset: 0x230, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        i_detail2: { id: 56, name: "I_DETAIL2", offset: 0x238, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        i_rsp_epoch: { id: 57, name: "I_RSP_EPOCH", offset: 0x240, width: 8, access: ReadOnly,
+            reset: Zero(0), writable_mask: 0 },
+        i_rsp_source_id: { id: 58, name: "I_RSP_SOURCE_ID", offset: 0x248, width: 8,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_source_kind: { id: 59, name: "I_RSP_SOURCE_KIND", offset: 0x250, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_state: { id: 60, name: "I_RSP_STATE", offset: 0x254, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_route_kind: { id: 61, name: "I_RSP_ROUTE_KIND", offset: 0x258, width: 4,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_notification_kind: { id: 62, name: "I_RSP_NOTIFICATION_KIND", offset: 0x25c,
+            width: 4, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_vector: { id: 63, name: "I_RSP_VECTOR", offset: 0x260, width: 8,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_message_id: { id: 64, name: "I_RSP_MESSAGE_ID", offset: 0x268, width: 8,
+            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+        i_rsp_pending_messages: { id: 65, name: "I_RSP_PENDING_MESSAGES", offset: 0x270,
+            width: 8, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
+    }
 }
 
 pub(super) const REGISTERS: [RegisterSpec; 19] = [
-    r!(
-        IExpectedEpoch,
-        "I_EXPECTED_EPOCH",
-        0x200,
-        8,
-        ReadWrite,
-        Zero,
-        0,
-        u64::MAX
-    ),
-    r!(
-        ISourceId,
-        "I_SOURCE_ID",
-        0x208,
-        8,
-        ReadWrite,
-        Zero,
-        0,
-        u64::MAX
-    ),
-    r!(
-        ISourceKind,
-        "I_SOURCE_KIND",
-        0x210,
-        4,
-        ReadWrite,
-        Zero,
-        0,
-        1
-    ),
-    r!(IRouteKind, "I_ROUTE_KIND", 0x214, 4, ReadWrite, Zero, 0, 1),
-    r!(
-        IRouteVector,
-        "I_ROUTE_VECTOR",
-        0x218,
-        8,
-        ReadWrite,
-        Zero,
-        0,
-        u64::MAX
-    ),
-    r!(
-        ICommand,
-        "I_COMMAND",
-        0x220,
-        4,
-        WriteOnly,
-        Zero,
-        0,
-        0xffff_ffff
-    ),
-    r!(IResult, "I_RESULT", 0x224, 4, ReadOnly, Zero, 0, 0),
-    r!(IDetail0, "I_DETAIL0", 0x228, 8, ReadOnly, Zero, 0, 0),
-    r!(IDetail1, "I_DETAIL1", 0x230, 8, ReadOnly, Zero, 0, 0),
-    r!(IDetail2, "I_DETAIL2", 0x238, 8, ReadOnly, Zero, 0, 0),
-    r!(IRspEpoch, "I_RSP_EPOCH", 0x240, 8, ReadOnly, Zero, 0, 0),
-    r!(
-        IRspSourceId,
-        "I_RSP_SOURCE_ID",
-        0x248,
-        8,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        IRspSourceKind,
-        "I_RSP_SOURCE_KIND",
-        0x250,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(IRspState, "I_RSP_STATE", 0x254, 4, ReadOnly, Zero, 0, 0),
-    r!(
-        IRspRouteKind,
-        "I_RSP_ROUTE_KIND",
-        0x258,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        IRspNotificationKind,
-        "I_RSP_NOTIFICATION_KIND",
-        0x25c,
-        4,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(IRspVector, "I_RSP_VECTOR", 0x260, 8, ReadOnly, Zero, 0, 0),
-    r!(
-        IRspMessageId,
-        "I_RSP_MESSAGE_ID",
-        0x268,
-        8,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
-    r!(
-        IRspPendingMessages,
-        "I_RSP_PENDING_MESSAGES",
-        0x270,
-        8,
-        ReadOnly,
-        Zero,
-        0,
-        0
-    ),
+    RegisterSpec::from_schema(IrqRegisters::I_EXPECTED_EPOCH),
+    RegisterSpec::from_schema(IrqRegisters::I_SOURCE_ID),
+    RegisterSpec::from_schema(IrqRegisters::I_SOURCE_KIND),
+    RegisterSpec::from_schema(IrqRegisters::I_ROUTE_KIND),
+    RegisterSpec::from_schema(IrqRegisters::I_ROUTE_VECTOR),
+    RegisterSpec::from_schema(IrqRegisters::I_COMMAND),
+    RegisterSpec::from_schema(IrqRegisters::I_RESULT),
+    RegisterSpec::from_schema(IrqRegisters::I_DETAIL0),
+    RegisterSpec::from_schema(IrqRegisters::I_DETAIL1),
+    RegisterSpec::from_schema(IrqRegisters::I_DETAIL2),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_EPOCH),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_SOURCE_ID),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_SOURCE_KIND),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_STATE),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_ROUTE_KIND),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_NOTIFICATION_KIND),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_VECTOR),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_MESSAGE_ID),
+    RegisterSpec::from_schema(IrqRegisters::I_RSP_PENDING_MESSAGES),
 ];

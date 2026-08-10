@@ -1,15 +1,20 @@
 use std::fmt::Write as _;
 
-use super::super::mmio::{
-    GlobalCommand, IrqCommand, IrqStateBit, MMIO_REGISTERS, MmioAccess, MmioReset, MmioResult,
-    QueueCommand,
+use hardware_interface_schema::{
+    export::backends::c_header::RegisterMapCHeaderModel,
+    register::{Access, ResetKind},
 };
 
-pub(super) fn push(output: &mut String) {
+use super::super::mmio::{
+    GlobalCommand, IrqCommand, IrqStateBit, MmioAccess, MmioReset, MmioResult,
+    PdmaMmioMapRegisterId, QueueCommand,
+};
+
+pub(super) fn push(output: &mut String, model: &RegisterMapCHeaderModel<PdmaMmioMapRegisterId>) {
     push_access_and_reset(output);
-    for register in MMIO_REGISTERS.iter() {
+    for register in model.fixed() {
         let prefix = format!("PDMA_MODEL_MMIO_{}", register.name());
-        push_u32(output, &format!("{prefix}_OFFSET"), register.offset());
+        push_usize(output, &format!("{prefix}_OFFSET"), register.offset());
         let _ = writeln!(
             output,
             "#define {prefix}_WIDTH UINT32_C({})",
@@ -18,12 +23,12 @@ pub(super) fn push(output: &mut String) {
         push_u32(
             output,
             &format!("{prefix}_ACCESS"),
-            register.access().code(),
+            access_code(register.access()),
         );
         push_u32(
             output,
             &format!("{prefix}_RESET_CLASS"),
-            register.reset().code(),
+            reset_code(register.reset_kind()),
         );
         push_u64(
             output,
@@ -109,6 +114,26 @@ fn push_u32(output: &mut String, name: &str, value: u32) {
     let _ = writeln!(output, "#define {name} UINT32_C({value})");
 }
 
+fn push_usize(output: &mut String, name: &str, value: usize) {
+    let _ = writeln!(output, "#define {name} UINT32_C({value})");
+}
+
 fn push_u64(output: &mut String, name: &str, value: u64) {
     let _ = writeln!(output, "#define {name} UINT64_C({value})");
+}
+
+const fn access_code(access: Access) -> u32 {
+    match access {
+        Access::ReadOnly => 0,
+        Access::ReadWrite => 1,
+        Access::WriteOnly => 2,
+    }
+}
+
+const fn reset_code(reset: ResetKind) -> u32 {
+    match reset {
+        ResetKind::Constant => 0,
+        ResetKind::Zero => 1,
+        ResetKind::PostReset => 2,
+    }
 }

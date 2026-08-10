@@ -10,6 +10,7 @@ mod metadata;
 pub mod mmio;
 mod record;
 mod ring;
+mod schema;
 
 pub use address::{AbiId, DmaAddress, DmaRegion};
 pub use codec::{copy_u64_le, read_u16_le, read_u64_le, write_u16_le, write_u64_le};
@@ -44,3 +45,7 @@ pub use record::{
     select_canonical_fault,
 };
 pub use ring::{RingCursor, RingCursors, RingLayout, RingRecord};
+pub use schema::{
+    CompletionSchema, CompletionSchemaView, DescriptorSchema, DescriptorSchemaView, EventSchema,
+    EventSchemaView, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
+};

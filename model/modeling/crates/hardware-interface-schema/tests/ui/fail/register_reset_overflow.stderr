@@ -1,0 +1,5 @@
+error: reset value does not fit register width
+ --> tests/ui/fail/register_reset_overflow.rs:4:25
+  |
+4 |         reset: Constant(0x100), writable_mask: 0 },
+  |                         ^^^^^

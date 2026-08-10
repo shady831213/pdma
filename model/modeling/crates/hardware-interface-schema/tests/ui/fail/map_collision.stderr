@@ -1,0 +1,5 @@
+error: expanded register declarations collide
+ --> tests/ui/fail/map_collision.rs:7:48
+  |
+7 |         value: { id: 2, name: "value", offset: 0, width: 4, access: ReadOnly,
+  |                                                ^

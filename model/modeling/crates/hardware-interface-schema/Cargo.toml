@@ -1,0 +1,22 @@
+[package]
+name = "hardware-interface-schema"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Reusable hardware interface schema vocabulary and scalar codecs"
+
+[dependencies]
+hardware-interface-schema-macros = { path = "../hardware-interface-schema-macros" }
+
+[dev-dependencies]
+trybuild = "1"
+
+[features]
+default = []
+export-c-header = []
+
+[lints]
+workspace = true

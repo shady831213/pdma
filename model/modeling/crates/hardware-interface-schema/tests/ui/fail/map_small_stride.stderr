@@ -1,0 +1,5 @@
+error: bank stride is smaller than member extent
+ --> tests/ui/fail/map_small_stride.rs:3:40
+  |
+3 |     lane: { count: 2, base: 0, stride: 4, members: {
+  |                                        ^

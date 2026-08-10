@@ -2,6 +2,8 @@
 members = [
     "crates/contract",
     "crates/device",
+    "crates/hardware-interface-schema",
+    "crates/hardware-interface-schema-macros",
     "crates/host",
     "crates/scenarios",
 ]

@@ -1,0 +1,5 @@
+error: record field extends beyond declared size
+ --> tests/ui/fail/record_extent.rs:3:33
+  |
+3 |     value: u32 { id: 1, offset: 2, endian: Little },
+  |                                 ^

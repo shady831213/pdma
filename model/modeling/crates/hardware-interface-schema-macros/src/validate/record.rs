@@ -2,7 +2,11 @@ use std::collections::HashSet;
 
 use proc_macro2::Span;
 
+use syn::spanned::Spanned;
+
 use crate::syntax::{FieldShape, RecordDecl};
+
+mod names;
 
 pub(crate) fn check(decl: &RecordDecl) -> syn::Result<()> {
     if decl.alignment.0 == 0 || !decl.alignment.0.is_power_of_two() {
@@ -11,10 +15,19 @@ pub(crate) fn check(decl: &RecordDecl) -> syn::Result<()> {
             "record alignment must be a nonzero power of two",
         ));
     }
+    validate_ids_and_names(decl)?;
+    names::check(decl)?;
+    let ranges = validate_fields(decl)?;
+    validate_records(decl, &ranges)
+}
+
+fn validate_ids_and_names(decl: &RecordDecl) -> syn::Result<()> {
     let mut ids = HashSet::new();
     for field in &decl.fields {
         match &field.shape {
-            FieldShape::Scalar { id, .. } => insert_id(&mut ids, *id)?,
+            FieldShape::Scalar { id, .. } | FieldShape::Reference { id, .. } => {
+                insert_id(&mut ids, *id)?;
+            }
             FieldShape::Array { ids: field_ids, .. } => {
                 for id in field_ids.iter().copied() {
                     insert_id(&mut ids, id)?;
@@ -22,13 +35,28 @@ pub(crate) fn check(decl: &RecordDecl) -> syn::Result<()> {
             }
         }
     }
+    for record in &decl.records {
+        insert_id(&mut ids, record.id)?;
+    }
     let mut names = HashSet::new();
     for field in &decl.fields {
         if !names.insert(field.name.to_string()) {
             return Err(syn::Error::new(field.name.span(), "duplicate field name"));
         }
     }
-    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    for record in &decl.records {
+        if !names.insert(record.name.to_string()) {
+            return Err(syn::Error::new(
+                record.name.span(),
+                "duplicate placement name",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_fields(decl: &RecordDecl) -> syn::Result<Vec<(usize, usize)>> {
+    let mut ranges = Vec::new();
     for field in &decl.fields {
         validate_endian(field.endian.to_string().as_str(), field.endian.span())?;
         match &field.shape {
@@ -84,6 +112,30 @@ pub(crate) fn check(decl: &RecordDecl) -> syn::Result<()> {
                     )?;
                 }
             }
+            FieldShape::Reference { .. } => ranges.push((field.offset.0, field.offset.0)),
+        }
+    }
+    Ok(ranges)
+}
+
+fn validate_records(decl: &RecordDecl, ranges: &[(usize, usize)]) -> syn::Result<()> {
+    for record in &decl.records {
+        if record
+            .definition
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == decl.name)
+        {
+            return Err(syn::Error::new(
+                record.definition.span(),
+                "record definition recursively references itself",
+            ));
+        }
+        if ranges.iter().any(|&(start, _)| start == record.offset.0) {
+            return Err(syn::Error::new(
+                record.offset.1,
+                "nested record placement collides with a scalar placement",
+            ));
         }
     }
     Ok(())

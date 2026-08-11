@@ -1,10 +1,16 @@
+mod field;
 mod map;
 mod record;
 mod register;
+mod register_field;
 
-pub(crate) use map::MapDecl;
-pub(crate) use record::{FieldShape, RecordDecl, ScalarType};
-pub(crate) use register::{AccessValue, RegisterDecl, RegistersDecl};
+pub(crate) use field::FieldDefinitionDecl;
+pub(crate) use map::{MapDecl, RegisterPlacementDecl};
+pub(crate) use record::{FieldShape, RecordDecl, RecordPlacementDecl, ScalarType};
+pub(crate) use register::{
+    AccessValue, RegisterDecl, RegisterDefinitionDecl, RegisterInput, RegistersDecl,
+};
+pub(crate) use register_field::RegisterFieldDefinitionDecl;
 
 use syn::{Ident, LitInt, Result, Token, parse::ParseStream};
 

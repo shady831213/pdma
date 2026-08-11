@@ -9,6 +9,8 @@ use crate::{
     validate,
 };
 
+mod composable;
+
 pub(crate) fn run(input: TokenStream) -> TokenStream {
     parse2::<MapDecl>(input)
         .and_then(|decl| expand(&decl))
@@ -16,6 +18,11 @@ pub(crate) fn run(input: TokenStream) -> TokenStream {
 }
 
 fn expand(decl: &MapDecl) -> syn::Result<TokenStream> {
+    if !decl.referenced_fixed.is_empty()
+        || decl.banks.iter().any(|bank| !bank.referenced.is_empty())
+    {
+        return composable::expand(decl);
+    }
     validate::map::check(decl)?;
     let facade = crate_path::facade()?;
     let visibility = &decl.visibility;

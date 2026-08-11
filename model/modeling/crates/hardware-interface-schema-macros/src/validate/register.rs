@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::syntax::RegisterDecl;
+use crate::syntax::{RegisterDecl, RegisterDefinitionDecl};
 
 pub(crate) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()> {
     let mut ids = HashSet::new();
@@ -10,11 +10,18 @@ pub(crate) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()
         }
     }
     let mut names = HashSet::new();
+    let mut generated = HashSet::new();
     for register in registers {
         if !names.insert(register.name.value()) {
             return Err(syn::Error::new(
                 register.name.span(),
                 "duplicate register name",
+            ));
+        }
+        if !generated.insert(generated_ident(&register.symbol.to_string())) {
+            return Err(syn::Error::new(
+                register.symbol.span(),
+                "generated register identifier collision",
             ));
         }
     }
@@ -39,6 +46,65 @@ pub(crate) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()
         ranges.push((register.offset.0, end));
     }
     Ok(())
+}
+
+pub(crate) fn check_definition(register: &RegisterDefinitionDecl) -> syn::Result<()> {
+    if !matches!(register.width.0, 1 | 2 | 4 | 8) {
+        return Err(syn::Error::new(
+            register.width.1,
+            "register width must be 1, 2, 4, or 8",
+        ));
+    }
+    if !matches!(register.endian.to_string().as_str(), "Little" | "Big") {
+        return Err(syn::Error::new(
+            register.endian.span(),
+            "endian must be Little or Big",
+        ));
+    }
+    if !fits(register.mask.0, register.width.0) {
+        return Err(syn::Error::new(
+            register.mask.1,
+            "writable mask does not fit register width",
+        ));
+    }
+    if !fits(register.reset.value.0, register.width.0) {
+        return Err(syn::Error::new(
+            register.reset.value.1,
+            "reset value does not fit register width",
+        ));
+    }
+    let mut ids = HashSet::new();
+    let mut names = HashSet::new();
+    let mut generated = HashSet::new();
+    for field in &register.fields {
+        if !ids.insert(field.id.0) {
+            return Err(syn::Error::new(field.id.1, "duplicate register field ID"));
+        }
+        if !names.insert(field.name.to_string()) {
+            return Err(syn::Error::new(
+                field.name.span(),
+                "duplicate register field name",
+            ));
+        }
+        if !generated.insert(generated_ident(&field.name.to_string())) {
+            return Err(syn::Error::new(
+                field.name.span(),
+                "generated register field identifier collision",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn generated_ident(name: &str) -> String {
+    name.split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().chain(chars).collect()
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn validate_values(register: &RegisterDecl) -> syn::Result<()> {

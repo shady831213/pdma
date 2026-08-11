@@ -1,5 +1,5 @@
 use syn::{
-    Ident, Path, Result, Token, Visibility, braced, bracketed,
+    Ident, LitStr, Path, Result, Token, Visibility, braced, bracketed,
     parse::{Parse, ParseStream},
 };
 
@@ -10,6 +10,7 @@ pub(crate) struct MapDecl {
     pub(crate) name: Ident,
     pub(crate) size: (usize, proc_macro2::Span),
     pub(crate) fixed: Vec<RegisterDecl>,
+    pub(crate) referenced_fixed: Vec<RegisterPlacementDecl>,
     pub(crate) fixed_groups: Vec<FixedRegisterGroup>,
     pub(crate) banks: Vec<RegisterGroup>,
 }
@@ -25,6 +26,20 @@ pub(crate) struct RegisterGroup {
     pub(crate) base: (usize, proc_macro2::Span),
     pub(crate) stride: (usize, proc_macro2::Span),
     pub(crate) registers: Vec<RegisterDecl>,
+    pub(crate) referenced: Vec<RegisterPlacementDecl>,
+}
+
+pub(crate) struct RegisterPlacementDecl {
+    pub(crate) symbol: Ident,
+    pub(crate) definition: Path,
+    pub(crate) id: (u16, proc_macro2::Span),
+    pub(crate) name: LitStr,
+    pub(crate) offset: (usize, proc_macro2::Span),
+}
+
+enum MapMemberDecl {
+    Inline(RegisterDecl),
+    Reference(RegisterPlacementDecl),
 }
 
 impl Parse for MapDecl {
@@ -40,10 +55,15 @@ impl Parse for MapDecl {
         key(&body, "fixed")?;
         let fixed_body;
         braced!(fixed_body in body);
-        let fixed = fixed_body
-            .parse_terminated(RegisterDecl::parse, Token![,])?
-            .into_iter()
-            .collect();
+        let fixed_members = fixed_body.parse_terminated(MapMemberDecl::parse, Token![,])?;
+        let mut fixed = Vec::new();
+        let mut referenced_fixed = Vec::new();
+        for member in fixed_members {
+            match member {
+                MapMemberDecl::Inline(register) => fixed.push(register),
+                MapMemberDecl::Reference(register) => referenced_fixed.push(register),
+            }
+        }
         body.parse::<Token![,]>()?;
         let section: Ident = body.parse()?;
         body.parse::<Token![:]>()?;
@@ -71,11 +91,13 @@ impl Parse for MapDecl {
             .parse_terminated(RegisterGroup::parse, Token![,])?
             .into_iter()
             .collect();
+        let _ = body.parse::<Token![,]>();
         Ok(Self {
             visibility,
             name,
             size,
             fixed,
+            referenced_fixed,
             fixed_groups,
             banks,
         })
@@ -114,16 +136,62 @@ impl Parse for RegisterGroup {
         key(&body, "members")?;
         let members;
         braced!(members in body);
-        let registers = members
-            .parse_terminated(RegisterDecl::parse, Token![,])?
-            .into_iter()
-            .collect();
+        let parsed = members.parse_terminated(MapMemberDecl::parse, Token![,])?;
+        let mut registers = Vec::new();
+        let mut referenced = Vec::new();
+        for member in parsed {
+            match member {
+                MapMemberDecl::Inline(register) => registers.push(register),
+                MapMemberDecl::Reference(register) => referenced.push(register),
+            }
+        }
         Ok(Self {
             name,
             count,
             base,
             stride,
             registers,
+            referenced,
+        })
+    }
+}
+
+impl Parse for MapMemberDecl {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let fork = input.fork();
+        let _: Ident = fork.parse()?;
+        fork.parse::<Token![:]>()?;
+        if fork.peek(syn::token::Brace) {
+            input.parse().map(Self::Inline)
+        } else {
+            input.parse().map(Self::Reference)
+        }
+    }
+}
+
+impl Parse for RegisterPlacementDecl {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let symbol = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let definition = input.parse()?;
+        let body;
+        braced!(body in input);
+        key(&body, "id")?;
+        let (raw_id, span) = usize_lit(&body)?;
+        let id =
+            u16::try_from(raw_id).map_err(|_| syn::Error::new(span, "register ID must fit u16"))?;
+        body.parse::<Token![,]>()?;
+        key(&body, "name")?;
+        let name = body.parse()?;
+        body.parse::<Token![,]>()?;
+        key(&body, "offset")?;
+        let offset = usize_lit(&body)?;
+        Ok(Self {
+            symbol,
+            definition,
+            id: (id, span),
+            name,
+            offset,
         })
     }
 }

@@ -4,13 +4,18 @@ use syn::parse2;
 
 use crate::{
     crate_path,
-    syntax::{AccessValue, RegisterDecl, RegistersDecl},
+    syntax::{AccessValue, RegisterDecl, RegisterInput, RegistersDecl},
     validate,
 };
 
+mod definition;
+
 pub(crate) fn run(input: TokenStream) -> TokenStream {
-    parse2::<RegistersDecl>(input)
-        .and_then(|decl| expand(&decl))
+    parse2::<RegisterInput>(input)
+        .and_then(|decl| match decl {
+            RegisterInput::Legacy(decl) => expand(&decl),
+            RegisterInput::Definition(decl) => definition::expand(&decl),
+        })
         .unwrap_or_else(syn::Error::into_compile_error)
 }
 

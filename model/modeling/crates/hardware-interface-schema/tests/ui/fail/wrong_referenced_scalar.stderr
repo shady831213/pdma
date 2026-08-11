@@ -1,0 +1,65 @@
+error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     size: 4, alignment: 4,
+10 | |     fields: { value: Control { id: 1, offset: 0 }, },
+11 | |     records: {},
+12 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: the trait `FieldSchema` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0599]: no associated function or constant named `DEFINITION` found for struct `Control` in the current scope
+  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
+   |
+ 3 | register_schema! { pub register Control {
+   | --------------------------------------- associated function or constant `DEFINITION` not found for this struct
+...
+10 |     fields: { value: Control { id: 1, offset: 0 }, },
+   |                      ^^^^^^^ associated function or constant not found in `Control`
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `DEFINITION`, perhaps you need to implement it:
+           candidate #1: `FieldSchema`
+
+error[E0599]: no associated function or constant named `DEFINITION` found for struct `Control` in the current scope
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 3 |   register_schema! { pub register Control {
+   |   --------------------------------------- associated function or constant `DEFINITION` not found for this struct
+...
+ 8 |   record_schema! { pub record Bad {
+   |  _^
+ 9 | |     size: 4, alignment: 4,
+10 | |     fields: { value: Control { id: 1, offset: 0 }, },
+11 | |     records: {},
+12 | | } }
+   | |___^ associated function or constant not found in `Control`
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `DEFINITION`, perhaps you need to implement it:
+           candidate #1: `FieldSchema`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: you are looking for the module in `std`, not the primitive type
+   |
+ 8 | std::record_schema! { pub record Bad {
+   | +++++
+
+error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
+   |
+10 |     fields: { value: Control { id: 1, offset: 0 }, },
+   |                      ^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `FieldSchema` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

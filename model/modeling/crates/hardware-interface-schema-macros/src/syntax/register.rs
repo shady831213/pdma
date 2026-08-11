@@ -12,6 +12,29 @@ pub(crate) struct RegistersDecl {
     pub(crate) registers: Vec<RegisterDecl>,
 }
 
+pub(crate) enum RegisterInput {
+    Legacy(RegistersDecl),
+    Definition(RegisterDefinitionDecl),
+}
+
+pub(crate) struct RegisterDefinitionDecl {
+    pub(crate) visibility: Visibility,
+    pub(crate) name: Ident,
+    pub(crate) width: (usize, proc_macro2::Span),
+    pub(crate) endian: Ident,
+    pub(crate) access: AccessValue,
+    pub(crate) reset: ResetValue,
+    pub(crate) mask: (u64, proc_macro2::Span),
+    pub(crate) fields: Vec<RegisterFieldDecl>,
+}
+
+pub(crate) struct RegisterFieldDecl {
+    pub(crate) name: Ident,
+    pub(crate) definition: Path,
+    pub(crate) id: (u16, proc_macro2::Span),
+    pub(crate) lsb: (usize, proc_macro2::Span),
+}
+
 #[derive(Clone)]
 pub(crate) struct RegisterDecl {
     pub(crate) symbol: Ident,
@@ -65,6 +88,89 @@ impl Parse for RegistersDecl {
     }
 }
 
+impl Parse for RegisterInput {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let fork = input.fork();
+        let _: Visibility = fork.parse()?;
+        let keyword: Ident = fork.parse()?;
+        match keyword.to_string().as_str() {
+            "registers" => input.parse().map(Self::Legacy),
+            "register" => input.parse().map(Self::Definition),
+            _ => Err(syn::Error::new(
+                keyword.span(),
+                "expected `register` or `registers`",
+            )),
+        }
+    }
+}
+
+impl Parse for RegisterDefinitionDecl {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let visibility = input.parse()?;
+        keyword(input, "register")?;
+        let name = input.parse()?;
+        let body;
+        braced!(body in input);
+        key(&body, "width")?;
+        let width = usize_lit(&body)?;
+        body.parse::<Token![,]>()?;
+        key(&body, "endian")?;
+        let endian = body.parse()?;
+        body.parse::<Token![,]>()?;
+        key(&body, "access")?;
+        let access_ident: Ident = body.parse()?;
+        let access = parse_access(&access_ident)?;
+        body.parse::<Token![,]>()?;
+        key(&body, "reset")?;
+        let reset = parse_reset(&body)?;
+        body.parse::<Token![,]>()?;
+        key(&body, "writable_mask")?;
+        let mask = u64_lit(&body)?;
+        body.parse::<Token![,]>()?;
+        key(&body, "fields")?;
+        let fields_body;
+        braced!(fields_body in body);
+        let fields = fields_body
+            .parse_terminated(RegisterFieldDecl::parse, Token![,])?
+            .into_iter()
+            .collect();
+        let _ = body.parse::<Token![,]>();
+        Ok(Self {
+            visibility,
+            name,
+            width,
+            endian,
+            access,
+            reset,
+            mask,
+            fields,
+        })
+    }
+}
+
+impl Parse for RegisterFieldDecl {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let name = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let definition = input.parse()?;
+        let body;
+        braced!(body in input);
+        key(&body, "id")?;
+        let (raw_id, span) = usize_lit(&body)?;
+        let id = u16::try_from(raw_id)
+            .map_err(|_| syn::Error::new(span, "register field ID must fit u16"))?;
+        body.parse::<Token![,]>()?;
+        key(&body, "lsb")?;
+        let lsb = usize_lit(&body)?;
+        Ok(Self {
+            name,
+            definition,
+            id: (id, span),
+            lsb,
+        })
+    }
+}
+
 impl Parse for RegisterDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let symbol = input.parse()?;
@@ -92,16 +198,7 @@ impl Parse for RegisterDecl {
         let access = parse_access(&access_ident)?;
         body.parse::<Token![,]>()?;
         key(&body, "reset")?;
-        let kind: Ident = body.parse()?;
-        if !matches!(kind.to_string().as_str(), "Constant" | "Zero" | "PostReset") {
-            return Err(syn::Error::new(
-                kind.span(),
-                "reset kind must be Constant, Zero, or PostReset",
-            ));
-        }
-        let reset_body;
-        syn::parenthesized!(reset_body in body);
-        let value = u64_lit(&reset_body)?;
+        let reset = parse_reset(&body)?;
         body.parse::<Token![,]>()?;
         key(&body, "writable_mask")?;
         let mask = u64_lit(&body)?;
@@ -112,7 +209,7 @@ impl Parse for RegisterDecl {
             offset,
             width,
             access,
-            reset: ResetValue { kind, value },
+            reset,
             mask,
         })
     }
@@ -128,4 +225,18 @@ fn parse_access(ident: &Ident) -> Result<AccessValue> {
             "access must be ReadOnly, ReadWrite, or WriteOnly",
         )),
     }
+}
+
+fn parse_reset(input: ParseStream<'_>) -> Result<ResetValue> {
+    let kind: Ident = input.parse()?;
+    if !matches!(kind.to_string().as_str(), "Constant" | "Zero" | "PostReset") {
+        return Err(syn::Error::new(
+            kind.span(),
+            "reset kind must be Constant, Zero, or PostReset",
+        ));
+    }
+    let reset_body;
+    syn::parenthesized!(reset_body in input);
+    let value = u64_lit(&reset_body)?;
+    Ok(ResetValue { kind, value })
 }

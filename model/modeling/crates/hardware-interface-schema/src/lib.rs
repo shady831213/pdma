@@ -17,6 +17,38 @@ pub mod scalar;
 
 pub use codec::{SchemaCodecError, read_scalar, write_scalar};
 pub use endian::Endian;
-pub use hardware_interface_schema_macros::{record_schema, register_map, register_schema};
-pub use record::{FieldSpec, RecordSpec, RecordValidationError};
+pub use hardware_interface_schema_macros::{
+    field_schema, record_schema, register_field_schema, register_map, register_schema,
+};
+pub use record::{
+    FieldDefinition, FieldSpec, RecordGraphError, RecordPlacement, RecordSpec,
+    RecordValidationError, ResolvedMember, ResolvedMemberKind, ResolvedRecord,
+};
+pub use register::{
+    Access, RegisterDefinition, RegisterDefinitionError, RegisterFieldDefinition,
+    RegisterFieldSpec, RegisterSpec, RegisterValidationError, RegisterValueError,
+    RegisterValueView, RegisterValueViewMut, ResetKind,
+};
+pub use register_map::{
+    RegisterLocation, RegisterMapError, RegisterMapSpec, RegisterMapValidationError,
+    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterMap,
+};
 pub use scalar::{Scalar, ScalarKind};
+
+/// Typed contract implemented by markers generated with [`field_schema!`].
+pub trait FieldSchema {
+    /// Rust scalar encoded by the definition.
+    type Scalar: Scalar;
+
+    /// Reusable scalar definition.
+    const DEFINITION: FieldDefinition;
+
+    /// Reads a scalar from the start of a checked byte slice.
+    fn read(bytes: &[u8]) -> Result<Self::Scalar, SchemaCodecError>;
+
+    /// Writes a scalar at the start of a checked byte slice.
+    fn write(bytes: &mut [u8], value: Self::Scalar) -> Result<(), SchemaCodecError>;
+}
+
+/// Failure while inserting a value through a generated register-field marker.
+pub type RegisterCodecError = RegisterValueError;

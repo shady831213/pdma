@@ -1,28 +1,31 @@
 mod error;
+mod layout;
+mod resolve;
+mod resolved;
 mod validation;
 
-pub use error::RegisterMapValidationError;
-
-use crate::register::RegisterSpec;
+pub use crate::register::RegisterSpec;
+pub use error::{RegisterMapError, RegisterMapValidationError};
+pub use resolved::{ResolvedRegister, ResolvedRegisterMap};
 
 /// One immutable repeated register-bank declaration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RepeatedRegisterBank<I: 'static> {
+pub struct RepeatedRegisterBank<I: 'static, F: 'static = u16> {
     name: &'static str,
     base: usize,
     count: usize,
     stride: usize,
-    registers: &'static [RegisterSpec<I>],
+    registers: &'static [RegisterSpec<I, F>],
 }
 
-impl<I: Copy> RepeatedRegisterBank<I> {
+impl<I: Copy, F: Copy> RepeatedRegisterBank<I, F> {
     /// Creates a bank whose register offsets are relative to each instance base.
     pub const fn new(
         name: &'static str,
         base: usize,
         count: usize,
         stride: usize,
-        registers: &'static [RegisterSpec<I>],
+        registers: &'static [RegisterSpec<I, F>],
     ) -> Self {
         Self {
             name,
@@ -53,19 +56,19 @@ impl<I: Copy> RepeatedRegisterBank<I> {
         self.stride
     }
 
-    /// Returns the bank-relative register declarations.
-    pub const fn registers(self) -> &'static [RegisterSpec<I>] {
+    /// Returns the bank-relative register placements.
+    pub const fn registers(self) -> &'static [RegisterSpec<I, F>] {
         self.registers
     }
 }
 
-/// A typed exact-start lookup result.
+/// A typed exact-start lookup result for the legacy metadata surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegisterLocation<I> {
+pub enum RegisterLocation<I: 'static, F: 'static = u16> {
     /// A fixed map-relative register.
     Fixed {
-        /// Register declaration.
-        register: RegisterSpec<I>,
+        /// Register placement.
+        register: RegisterSpec<I, F>,
         /// Expanded map-relative start.
         offset: usize,
     },
@@ -75,30 +78,42 @@ pub enum RegisterLocation<I> {
         bank_name: &'static str,
         /// Zero-based bank instance.
         instance: usize,
-        /// Bank-relative register declaration.
-        register: RegisterSpec<I>,
+        /// Bank-relative register placement.
+        register: RegisterSpec<I, F>,
         /// Expanded map-relative start.
         offset: usize,
     },
 }
 
-/// An immutable map extent, fixed registers, and repeated banks.
+/// An immutable named map extent, fixed placements, and repeated banks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RegisterMapSpec<I: 'static> {
+pub struct RegisterMapSpec<I: 'static, F: 'static = u16> {
+    name: &'static str,
     size: usize,
-    registers: &'static [RegisterSpec<I>],
-    register_groups: &'static [&'static [RegisterSpec<I>]],
-    banks: &'static [RepeatedRegisterBank<I>],
+    registers: &'static [RegisterSpec<I, F>],
+    register_groups: &'static [&'static [RegisterSpec<I, F>]],
+    banks: &'static [RepeatedRegisterBank<I, F>],
 }
 
-impl<I: Copy + Eq + 'static> RegisterMapSpec<I> {
-    /// Creates an unvalidated const-friendly register map.
+impl<I: Copy + 'static, F: Copy + 'static> RegisterMapSpec<I, F> {
+    /// Creates an unnamed legacy-compatible map.
     pub const fn new(
         size: usize,
-        registers: &'static [RegisterSpec<I>],
-        banks: &'static [RepeatedRegisterBank<I>],
+        registers: &'static [RegisterSpec<I, F>],
+        banks: &'static [RepeatedRegisterBank<I, F>],
+    ) -> Self {
+        Self::named("", size, registers, banks)
+    }
+
+    /// Creates a named map suitable for deterministic resolution.
+    pub const fn named(
+        name: &'static str,
+        size: usize,
+        registers: &'static [RegisterSpec<I, F>],
+        banks: &'static [RepeatedRegisterBank<I, F>],
     ) -> Self {
         Self {
+            name,
             size,
             registers,
             register_groups: &[],
@@ -106,14 +121,19 @@ impl<I: Copy + Eq + 'static> RegisterMapSpec<I> {
         }
     }
 
-    /// Adds independently declared fixed-register groups to the map.
+    /// Adds independently declared fixed-register groups.
     #[must_use]
     pub const fn with_register_groups(
         mut self,
-        groups: &'static [&'static [RegisterSpec<I>]],
+        groups: &'static [&'static [RegisterSpec<I, F>]],
     ) -> Self {
         self.register_groups = groups;
         self
+    }
+
+    /// Returns the map name.
+    pub const fn name(self) -> &'static str {
+        self.name
     }
 
     /// Returns the map extent in bytes.
@@ -121,59 +141,44 @@ impl<I: Copy + Eq + 'static> RegisterMapSpec<I> {
         self.size
     }
 
-    /// Returns fixed map-relative register declarations.
-    pub const fn registers(self) -> &'static [RegisterSpec<I>] {
+    /// Returns fixed map-relative placements.
+    pub const fn registers(self) -> &'static [RegisterSpec<I, F>] {
         self.registers
     }
 
     /// Returns independently declared fixed-register groups.
-    pub const fn register_groups(self) -> &'static [&'static [RegisterSpec<I>]] {
+    pub const fn register_groups(self) -> &'static [&'static [RegisterSpec<I, F>]] {
         self.register_groups
     }
 
     /// Returns repeated-bank declarations.
-    pub const fn banks(self) -> &'static [RepeatedRegisterBank<I>] {
+    pub const fn banks(self) -> &'static [RepeatedRegisterBank<I, F>] {
         self.banks
     }
 
-    /// Finds a register only when `offset` is its exact expanded start.
-    #[must_use]
-    pub fn locate(self, offset: usize) -> Option<RegisterLocation<I>> {
-        if let Some(register) = self
-            .registers
-            .iter()
-            .copied()
-            .find(|register| register.offset() == offset)
-        {
-            return Some(RegisterLocation::Fixed { register, offset });
-        }
-        if let Some(register) = self
-            .register_groups
-            .iter()
-            .flat_map(|group| group.iter())
-            .copied()
-            .find(|register| register.offset() == offset)
-        {
+    /// Finds a register only at its exact expanded start.
+    pub fn locate(self, offset: usize) -> Option<RegisterLocation<I, F>> {
+        if let Some(register) = self.fixed().find(|register| register.offset() == offset) {
             return Some(RegisterLocation::Fixed { register, offset });
         }
         for bank in self.banks.iter().copied() {
-            if bank.stride == 0 || offset < bank.base {
+            if bank.stride() == 0 || offset < bank.base() {
                 continue;
             }
-            let relative = offset - bank.base;
-            let instance = relative / bank.stride;
-            if instance >= bank.count {
+            let relative = offset - bank.base();
+            let instance = relative / bank.stride();
+            if instance >= bank.count() {
                 continue;
             }
-            let member_offset = relative % bank.stride;
+            let member_offset = relative % bank.stride();
             if let Some(register) = bank
-                .registers
+                .registers()
                 .iter()
                 .copied()
                 .find(|register| register.offset() == member_offset)
             {
                 return Some(RegisterLocation::Repeated {
-                    bank_name: bank.name,
+                    bank_name: bank.name(),
                     instance,
                     register,
                     offset,
@@ -181,5 +186,20 @@ impl<I: Copy + Eq + 'static> RegisterMapSpec<I> {
             }
         }
         None
+    }
+
+    pub(super) fn fixed(self) -> impl Iterator<Item = RegisterSpec<I, F>> {
+        self.registers.iter().copied().chain(
+            self.register_groups
+                .iter()
+                .flat_map(|group| group.iter().copied()),
+        )
+    }
+}
+
+impl<I: Copy + Eq + core::fmt::Debug, F: Copy + Eq + core::fmt::Debug> RegisterMapSpec<I, F> {
+    /// Validates and resolves every fixed and repeated register instance.
+    pub fn resolve(self) -> Result<ResolvedRegisterMap<I, F>, RegisterMapError<I, F>> {
+        resolve::resolve(self)
     }
 }

@@ -262,7 +262,7 @@ impl<I: Copy + Eq + 'static> RegisterMapSpec<I> {
 }
 
 #[derive(Clone, Copy)]
-struct Expanded<I> {
+struct Expanded<I: 'static> {
     register: RegisterSpec<I>,
     instance: Option<usize>,
     offset: usize,

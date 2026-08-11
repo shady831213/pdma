@@ -3,8 +3,43 @@
 use std::collections::{BTreeSet, HashSet};
 
 use hardware_interface_schema::{
-    SchemaCodecError, record_schema, register_map, register_map::RegisterLocation, register_schema,
+    RegisterValueError, SchemaCodecError, field_schema, record_schema, register_field_schema,
+    register_map, register_map::RegisterLocation, register_schema,
 };
+
+field_schema! { pub field LeU32 { scalar: u32, endian: Little } }
+record_schema! { pub record Header {
+    size: 8, alignment: 4,
+    fields: {
+        sequence: LeU32 { id: 1, offset: 0 },
+        flags: u16 { id: 2, offset: 4, endian: Little },
+    }, records: {},
+} }
+record_schema! { pub record Pair {
+    size: 16, alignment: 8, fields: {},
+    records: {
+        left: Header { id: 1, offset: 0 },
+        right: Header { id: 2, offset: 8 },
+    },
+} }
+register_field_schema! { pub register_field Enable { bit_width: 1 } }
+register_schema! { pub register Control {
+    width: 4, endian: Little, access: ReadWrite,
+    reset: Constant(0), writable_mask: 1,
+    fields: { enable: Enable { id: 1, lsb: 0 }, },
+} }
+register_schema! { pub register BeStatus {
+    width: 2, endian: Big, access: ReadWrite,
+    reset: Constant(0), writable_mask: 0xffff,
+    fields: {},
+} }
+register_map! { pub map ComposableMap {
+    size: 64,
+    fixed: { control: Control { id: 1, name: "control", offset: 0 }, },
+    banks: { channel: { count: 2, base: 16, stride: 16, members: {
+        status: BeStatus { id: 2, name: "status", offset: 0 },
+    } }, },
+} }
 
 record_schema! {
     pub record Telemetry {
@@ -120,4 +155,71 @@ fn views_reject_short_buffers_when_constructed() {
             actual: 15
         })
     );
+}
+
+#[test]
+fn nested_record_views_when_definition_is_placed_twice_use_exact_bytes()
+-> Result<(), SchemaCodecError> {
+    let mut bytes = [0_u8; 16];
+    let mut pair = PairViewMut::new(&mut bytes)?;
+    pair.left_mut()?.set_sequence(0x1122_3344)?;
+    pair.right_mut()?.set_flags(0x5566)?;
+    assert_eq!(
+        bytes,
+        [
+            0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0, 0, 0, 0, 0, 0x66, 0x55, 0, 0
+        ]
+    );
+    let pair = PairView::new(&bytes)?;
+    assert_eq!(pair.left()?.sequence()?, 0x1122_3344);
+    assert_eq!(pair.right()?.flags()?, 0x5566);
+    assert_eq!(Pair::LEFT_DEFINITION.name(), "Header");
+    Ok(())
+}
+
+#[test]
+fn register_map_views_when_le_and_be_definitions_are_placed_use_exact_bytes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut bytes = [0_u8; 64];
+    let mut map = ComposableMapViewMut::new(&mut bytes)?;
+    map.control_mut()?.set_enable(1)?;
+    map.channel_status_mut(0)?.set_value(0x1234)?;
+    map.channel_status_mut(1)?.set_value(0xabcd)?;
+    assert_eq!(&bytes[..4], &[1, 0, 0, 0]);
+    assert_eq!(&bytes[16..18], &[0x12, 0x34]);
+    assert_eq!(&bytes[32..34], &[0xab, 0xcd]);
+    let map = ComposableMapView::new(&bytes)?;
+    assert_eq!(map.control()?.enable()?, 1);
+    assert_eq!(map.channel_status(1)?.value()?, 0xabcd);
+    Ok(())
+}
+
+#[test]
+fn generated_checked_views_when_buffers_or_values_are_invalid_do_not_mutate()
+-> Result<(), RegisterValueError> {
+    let mut raw = 0_u64;
+    Enable::insert(&mut raw, 1)?;
+    assert_eq!(Enable::extract(raw), 1);
+    assert!(matches!(
+        Enable::insert(&mut raw, 2),
+        Err(RegisterValueError::FieldValueOverflow { .. })
+    ));
+    assert_eq!(raw, 1);
+    let mut short = [0x5a_u8; 3];
+    assert!(matches!(
+        ControlViewMut::new(&mut short),
+        Err(RegisterValueError::BufferTooShort {
+            required: 4,
+            actual: 3
+        })
+    ));
+    assert_eq!(short, [0x5a; 3]);
+    let mut value = [0_u8; 4];
+    let mut control = ControlViewMut::new(&mut value)?;
+    assert!(matches!(
+        control.set_enable(2),
+        Err(RegisterValueError::FieldValueOverflow { .. })
+    ));
+    assert_eq!(value, [0; 4]);
+    Ok(())
 }

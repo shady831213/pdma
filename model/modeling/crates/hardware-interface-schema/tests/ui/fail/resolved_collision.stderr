@@ -1,0 +1,5 @@
+error: nested record placement collides with a scalar placement
+  --> tests/ui/fail/resolved_collision.rs:11:46
+   |
+11 |     records: { child: Child { id: 2, offset: 0 }, },
+   |                                              ^

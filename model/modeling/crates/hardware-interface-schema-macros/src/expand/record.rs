@@ -8,6 +8,8 @@ use crate::{
     validate,
 };
 
+mod composable;
+
 pub(crate) fn run(input: TokenStream) -> TokenStream {
     parse2::<RecordDecl>(input)
         .and_then(|decl| expand(&decl))
@@ -15,6 +17,14 @@ pub(crate) fn run(input: TokenStream) -> TokenStream {
 }
 
 fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
+    if !decl.records.is_empty()
+        || decl
+            .fields
+            .iter()
+            .any(|field| matches!(field.shape, FieldShape::Reference { .. }))
+    {
+        return composable::expand(decl);
+    }
     validate::record::check(decl)?;
     let facade = crate_path::facade()?;
     let visibility = &decl.visibility;
@@ -46,9 +56,10 @@ fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
                 let id = id.0;
                 variants.push(quote!(#[doc = "Stable generated field ID."] #variant));
                 specs.push(quote!(#facade::FieldSpec::new(#id, #field_name, #base, #facade::ScalarKind::#kind).with_endian(#facade::Endian::#endian)));
-                getters.push(quote!(#[doc = "Reads the field value."] pub fn #method(&self) -> ::core::result::Result<#ty, #facade::SchemaCodecError> { #facade::read_scalar(&self.bytes[#base..], #facade::Endian::#endian) }));
+                let required = base + scalar.width();
+                getters.push(quote!(#[doc = "Reads the field value."] pub fn #method(&self) -> ::core::result::Result<#ty, #facade::SchemaCodecError> { let bytes = self.bytes.get(#base..).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #required, actual: self.bytes.len() })?; #facade::read_scalar(bytes, #facade::Endian::#endian) }));
                 let setter = format_ident!("set_{}", method);
-                setters.push(quote!(#[doc = "Writes the field value."] pub fn #setter(&mut self, value: #ty) -> ::core::result::Result<(), #facade::SchemaCodecError> { #facade::write_scalar(&mut self.bytes[#base..], #facade::Endian::#endian, value) }));
+                setters.push(quote!(#[doc = "Writes the field value."] pub fn #setter(&mut self, value: #ty) -> ::core::result::Result<(), #facade::SchemaCodecError> { let actual = self.bytes.len(); let bytes = self.bytes.get_mut(#base..).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #required, actual })?; #facade::write_scalar(bytes, #facade::Endian::#endian, value) }));
             }
             FieldShape::Array {
                 scalar,
@@ -68,9 +79,15 @@ fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
                     variants.push(quote!(#[doc = "Stable generated field ID."] #variant));
                     specs.push(quote!(#facade::FieldSpec::new(#id, #field_name, #offset, #facade::ScalarKind::#kind).with_endian(#facade::Endian::#endian)));
                 }
-                getters.push(quote!(#[doc = "Reads one indexed array field value."] pub fn #method(&self, index: usize) -> ::core::result::Result<#ty, #facade::SchemaCodecError> { if index >= #count_value { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count_value, actual: index }); } let offset = #base + index * #stride_value; #facade::read_scalar(&self.bytes[offset..], #facade::Endian::#endian) }));
+                getters.push(quote!(#[doc = "Reads one indexed array field value."] pub fn #method(&self, index: usize) -> ::core::result::Result<#ty, #facade::SchemaCodecError> { if index >= #count_value { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count_value, actual: index }); } let offset = index.checked_mul(#stride_value).and_then(|part| #base.checked_add(part)).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #count_value, actual: index })?; let bytes = self.bytes.get(offset..).ok_or(#facade::SchemaCodecError::BufferTooShort { required: offset, actual: self.bytes.len() })?; #facade::read_scalar(bytes, #facade::Endian::#endian) }));
                 let setter = format_ident!("set_{}", method);
-                setters.push(quote!(#[doc = "Writes one indexed array field value."] pub fn #setter(&mut self, index: usize, value: #ty) -> ::core::result::Result<(), #facade::SchemaCodecError> { if index >= #count_value { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count_value, actual: index }); } let offset = #base + index * #stride_value; #facade::write_scalar(&mut self.bytes[offset..], #facade::Endian::#endian, value) }));
+                setters.push(quote!(#[doc = "Writes one indexed array field value."] pub fn #setter(&mut self, index: usize, value: #ty) -> ::core::result::Result<(), #facade::SchemaCodecError> { if index >= #count_value { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count_value, actual: index }); } let offset = index.checked_mul(#stride_value).and_then(|part| #base.checked_add(part)).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #count_value, actual: index })?; let actual = self.bytes.len(); let bytes = self.bytes.get_mut(offset..).ok_or(#facade::SchemaCodecError::BufferTooShort { required: offset, actual })?; #facade::write_scalar(bytes, #facade::Endian::#endian, value) }));
+            }
+            FieldShape::Reference { definition, .. } => {
+                return Err(syn::Error::new_spanned(
+                    definition,
+                    "referenced fields require composable record expansion",
+                ));
             }
         }
     }
@@ -82,10 +99,10 @@ fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
         impl #marker { #(#constants)* #[doc = "Complete fixed-record specification."] pub const SPEC: #facade::RecordSpec = #facade::RecordSpec::new(#size, #alignment, &[#(#specs),*]); }
         #[doc = "Checked immutable byte view for the generated record."]
         #[derive(Debug, PartialEq, Eq)] #visibility struct #view_name<'a> { bytes: &'a [u8] }
-        impl<'a> #view_name<'a> { #[doc = "Checks the byte extent and creates a view."] pub fn new(bytes: &'a [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { if bytes.len() < #size { return Err(#facade::SchemaCodecError::BufferTooShort { required: #size, actual: bytes.len() }); } Ok(Self { bytes }) } #(#getters)* }
+        impl<'a> #view_name<'a> { #[doc = "Checks the byte extent and creates a view."] pub fn new(bytes: &'a [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get(..#size).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #size, actual })?; Ok(Self { bytes }) } #(#getters)* }
         #[doc = "Checked mutable byte view for the generated record."]
         #[derive(Debug)] #visibility struct #view_mut_name<'a> { bytes: &'a mut [u8] }
-        impl<'a> #view_mut_name<'a> { #[doc = "Checks the byte extent and creates a mutable view."] pub fn new(bytes: &'a mut [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { if bytes.len() < #size { return Err(#facade::SchemaCodecError::BufferTooShort { required: #size, actual: bytes.len() }); } Ok(Self { bytes }) } #(#getters)* #(#setters)* }
+        impl<'a> #view_mut_name<'a> { #[doc = "Checks the byte extent and creates a mutable view."] pub fn new(bytes: &'a mut [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get_mut(..#size).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #size, actual })?; Ok(Self { bytes }) } #(#getters)* #(#setters)* }
     })
 }
 

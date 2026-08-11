@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: nested record placement extends beyond its containing extent
+  --> tests/ui/fail/nested_record_parent_extent.rs:11:46
+   |
+11 |     records: { child: Child { id: 2, offset: 6 }, },
+   |                                              ^ evaluation of `_` failed here

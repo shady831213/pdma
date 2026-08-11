@@ -1,0 +1,5 @@
+error: duplicate placement name
+  --> tests/ui/fail/duplicate_placement_name.rs:11:16
+   |
+11 |     records: { child: Child { id: 2, offset: 1 }, },
+   |                ^^^^^

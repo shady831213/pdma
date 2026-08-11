@@ -1,0 +1,5 @@
+error: generated placement identifier collision
+ --> tests/ui/fail/generated_identifier_collision.rs:9:9
+  |
+9 |         FOO: Word { id: 2, offset: 4 },
+  |         ^^^

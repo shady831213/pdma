@@ -1,0 +1,5 @@
+error: duplicate field ID
+ --> tests/ui/fail/duplicate_placement_id.rs:8:28
+  |
+8 |         second: Byte { id: 1, offset: 1 },
+  |                            ^

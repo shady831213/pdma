@@ -13,6 +13,12 @@ pub(crate) mod validate;
 
 use proc_macro::TokenStream;
 
+/// Declares one reusable typed scalar field definition.
+#[proc_macro]
+pub fn field_schema(input: TokenStream) -> TokenStream {
+    expand::field::run(input.into()).into()
+}
+
 /// Declares a fixed byte-record schema and checked scalar views.
 #[proc_macro]
 pub fn record_schema(input: TokenStream) -> TokenStream {
@@ -23,6 +29,12 @@ pub fn record_schema(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn register_schema(input: TokenStream) -> TokenStream {
     expand::register::run(input.into()).into()
+}
+
+/// Declares one reusable register bit-field definition.
+#[proc_macro]
+pub fn register_field_schema(input: TokenStream) -> TokenStream {
+    expand::register_field::run(input.into()).into()
 }
 
 /// Declares a fixed and repeated-bank register map with exact-start lookup.

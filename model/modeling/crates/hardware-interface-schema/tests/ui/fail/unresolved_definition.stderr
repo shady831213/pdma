@@ -1,0 +1,11 @@
+error[E0425]: cannot find type `MissingDefinition` in this scope
+ --> tests/ui/fail/unresolved_definition.rs:5:22
+  |
+5 |     fields: { value: MissingDefinition { id: 1, offset: 0 }, },
+  |                      ^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0433]: cannot find type `MissingDefinition` in this scope
+ --> tests/ui/fail/unresolved_definition.rs:5:22
+  |
+5 |     fields: { value: MissingDefinition { id: 1, offset: 0 }, },
+  |                      ^^^^^^^^^^^^^^^^^ use of undeclared type `MissingDefinition`

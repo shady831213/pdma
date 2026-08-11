@@ -4,10 +4,44 @@ use core::convert::Infallible;
 
 use his::{
     export::{Artifact, ArtifactSink, Exporter},
-    record_schema, register_map,
+    field_schema, record_schema, register_field_schema, register_map,
     register_map::RegisterLocation,
     register_schema,
 };
+
+field_schema! { pub field DownLeU32 { scalar: u32, endian: Little } }
+record_schema! { pub record DownHeader {
+    size: 8, alignment: 4,
+    fields: {
+        sequence: DownLeU32 { id: 1, offset: 0 },
+        flags: u16 { id: 2, offset: 4, endian: Little },
+    }, records: {},
+} }
+record_schema! { pub record DownPair {
+    size: 16, alignment: 8, fields: {},
+    records: {
+        left: DownHeader { id: 1, offset: 0 },
+        right: DownHeader { id: 2, offset: 8 },
+    },
+} }
+register_field_schema! { pub register_field DownEnable { bit_width: 1 } }
+register_schema! { pub register DownControl {
+    width: 4, endian: Little, access: ReadWrite,
+    reset: Constant(0), writable_mask: 1,
+    fields: { enable: DownEnable { id: 1, lsb: 0 }, },
+} }
+register_schema! { pub register DownStatus {
+    width: 2, endian: Big, access: ReadWrite,
+    reset: Constant(0), writable_mask: 0xffff,
+    fields: {},
+} }
+register_map! { pub map DownMap {
+    size: 32,
+    fixed: { control: DownControl { id: 1, name: "control", offset: 0 }, },
+    banks: { lane: { count: 1, base: 16, stride: 16, members: {
+        status: DownStatus { id: 2, name: "status", offset: 0 },
+    } }, },
+} }
 
 record_schema! {
     pub record TelemetryRecord {
@@ -114,6 +148,29 @@ pub fn output_line() -> Option<String> {
         artifact.media_type,
         TelemetryRecord::SPEC.size(),
         TelemetryMap::SPEC.size(),
+    ))
+}
+
+/// Exercises all five composable macros and returns their literal downstream observables.
+#[must_use]
+pub fn composable_output_line() -> Option<String> {
+    let mut nested = [0_u8; 16];
+    let mut pair = DownPairViewMut::new(&mut nested).ok()?;
+    pair.left_mut().ok()?.set_sequence(0x1122_3344).ok()?;
+    pair.right_mut().ok()?.set_flags(0x5566).ok()?;
+    let left = DownPairView::new(&nested).ok()?.left().ok()?.sequence().ok()?;
+
+    let mut registers = [0_u8; 32];
+    let mut map = DownMapViewMut::new(&mut registers).ok()?;
+    map.control_mut().ok()?.set_enable(1).ok()?;
+    map.lane_status_mut(0).ok()?.set_value(0x1234).ok()?;
+    let map = DownMapView::new(&registers).ok()?;
+    let enable = map.control().ok()?.enable().ok()?;
+    let status = map.lane_status(0).ok()?.value().ok()?;
+    Some(format!(
+        "nested={nested:02x?};le={:02x?};be={:02x?};left={left:#010x};enable={enable};status={status:#06x}",
+        &registers[..4],
+        &registers[16..18],
     ))
 }
 

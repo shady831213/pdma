@@ -1,0 +1,42 @@
+error[E0308]: mismatched types
+ --> tests/ui/fail/wrong_register_field.rs:7:23
+  |
+4 | / register_schema! { pub register Bad {
+5 | |     width: 4, endian: Little, access: ReadWrite,
+6 | |     reset: Constant(0), writable_mask: 1,
+7 | |     fields: { enable: LeU32 { id: 1, lsb: 0 }, },
+  | |                       ^^^^^ expected `RegisterFieldDefinition`, found `FieldDefinition`
+8 | | } }
+  | |___- expected because of the type of the constant
+
+error[E0599]: no method named `bit_width` found for struct `FieldDefinition` in the current scope
+ --> tests/ui/fail/wrong_register_field.rs:7:23
+  |
+7 |     fields: { enable: LeU32 { id: 1, lsb: 0 }, },
+  |                       ^^^^^
+  |
+help: there is a method `width` with a similar name
+  |
+7 -     fields: { enable: LeU32 { id: 1, lsb: 0 }, },
+7 +     fields: { enable: width { id: 1, lsb: 0 }, },
+  |
+
+error[E0308]: mismatched types
+ --> tests/ui/fail/wrong_register_field.rs:4:1
+  |
+4 | / register_schema! { pub register Bad {
+5 | |     width: 4, endian: Little, access: ReadWrite,
+6 | |     reset: Constant(0), writable_mask: 1,
+7 | |     fields: { enable: LeU32 { id: 1, lsb: 0 }, },
+8 | | } }
+  | |   ^
+  | |   |
+  | |___expected `RegisterFieldDefinition`, found `FieldDefinition`
+  |     arguments to this function are incorrect
+  |
+note: associated function defined here
+ --> src/register/field.rs
+  |
+  |     pub const fn place(
+  |                  ^^^^^
+  = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

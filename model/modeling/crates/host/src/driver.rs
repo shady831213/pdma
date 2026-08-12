@@ -1,5 +1,7 @@
 //! SDK/driver-like async submission and completion polling model.
 
+use crate::ModelResult;
+
 mod accounting;
 mod core;
 mod irq;
@@ -10,7 +12,7 @@ pub use irq::DriverIrqRecord;
 use core::DriverCore;
 use pdma_model_contract::{
     BufferId, CompletionRecord, CompletionRingId, EpochIrqSource, EventRecord, EventRouting,
-    ModelResult, QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
+    QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
 };
 
 use crate::AsyncDevicePort;

@@ -222,4 +222,19 @@ impl fmt::Display for DescriptorDecodeError {
 }
 
 impl std::error::Error for DescriptorValueError {}
-impl std::error::Error for DescriptorDecodeError {}
+impl std::error::Error for DescriptorDecodeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Codec(error) => Some(error),
+            Self::MetadataMismatch
+            | Self::InvalidVersion { .. }
+            | Self::InvalidSize { .. }
+            | Self::InvalidOpcode { .. }
+            | Self::InvalidFlags { .. }
+            | Self::InvalidReserved { .. }
+            | Self::ValueOutOfRange { .. }
+            | Self::InvalidIndirectCount { .. }
+            | Self::InvalidIndirectAlignment { .. } => None,
+        }
+    }
+}

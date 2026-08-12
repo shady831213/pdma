@@ -1,7 +1,9 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::ModelError;
+
 use pdma_model_contract::{
-    EventRouting, ModelError, QueueConfig, QueueId, SoftwareOwnerId,
+    EventRouting, QueueConfig, QueueId, SoftwareOwnerId,
     desc::{CopyRequest, StridedCopyRequest},
 };
 use pdma_model_device::AsyncDevice;

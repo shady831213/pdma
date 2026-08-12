@@ -1,5 +1,7 @@
+use hardware_interface_schema::register_map::RegisterLocation;
+
 use super::{
-    MMIO_REGION_SIZE, MMIO_REGISTERS, MmioAccess, MmioAccessError, MmioByteCount, RegisterId,
+    MMIO_REGION_SIZE, MmioAccess, MmioAccessError, MmioByteCount, PdmaMmioMap, RegisterId,
     RegisterSpec,
 };
 
@@ -14,30 +16,32 @@ fn register_for(
     width: MmioByteCount,
     operation: Operation,
 ) -> Result<RegisterSpec, MmioAccessError> {
-    if width != 4 && width != 8 {
-        return Err(MmioAccessError::WrongWidth {
-            offset,
-            expected: 0,
-            actual: width,
-        });
-    }
+    let width_usize = match width {
+        4 => 4,
+        8 => 8,
+        _ => {
+            return Err(MmioAccessError::WrongWidth {
+                offset,
+                expected: 0,
+                actual: width,
+            });
+        }
+    };
     if u128::from(offset) + width > MMIO_REGION_SIZE {
         return Err(MmioAccessError::UnmappedOffset { offset });
     }
     if u128::from(offset) % width != 0 {
         return Err(MmioAccessError::Misaligned { offset, width });
     }
-    let Some(register) = MMIO_REGISTERS
-        .iter()
-        .copied()
-        .find(|entry| entry.offset() == offset)
-    else {
+    let Some(RegisterLocation::Fixed { register, .. }) = PdmaMmioMap::locate(
+        usize::try_from(offset).map_err(|_| MmioAccessError::UnmappedOffset { offset })?,
+    ) else {
         return Err(MmioAccessError::ReservedOffset { offset });
     };
-    if register.width() != width {
+    if register.width() != width_usize {
         return Err(MmioAccessError::WrongWidth {
             offset,
-            expected: register.width(),
+            expected: widened(register.width()),
             actual: width,
         });
     }
@@ -58,6 +62,10 @@ fn register_for(
         }
         (Operation::Read, MmioAccess::ReadOnly | MmioAccess::ReadWrite) => Ok(register),
     }
+}
+
+const fn widened(value: usize) -> MmioByteCount {
+    value as MmioByteCount
 }
 
 const fn write_width(bytes: &[u8]) -> MmioByteCount {

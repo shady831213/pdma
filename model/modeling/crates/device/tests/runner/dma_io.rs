@@ -1,8 +1,9 @@
 use pdma_model_contract::{
-    CommandId, ExternalCommand, ModelError,
+    CommandId, ExternalCommand,
     desc::{CopyCommand, CopyRequest},
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
+use pdma_model_device::ModelError;
 use pdma_model_device::SyncDevice;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

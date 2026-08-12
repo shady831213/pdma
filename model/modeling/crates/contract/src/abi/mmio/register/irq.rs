@@ -1,68 +1,23 @@
 use hardware_interface_schema::register_schema;
 
-use super::{PdmaMmioMapRegisterId, RegisterSpec};
+use super::{U32Value, U64Value};
 
-register_schema! {
-    pub registers IrqRegisters<PdmaMmioMapRegisterId> {
-        i_expected_epoch: { id: 47, name: "I_EXPECTED_EPOCH", offset: 0x200, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        i_source_id: { id: 48, name: "I_SOURCE_ID", offset: 0x208, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        i_source_kind: { id: 49, name: "I_SOURCE_KIND", offset: 0x210, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 1 },
-        i_route_kind: { id: 50, name: "I_ROUTE_KIND", offset: 0x214, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 1 },
-        i_route_vector: { id: 51, name: "I_ROUTE_VECTOR", offset: 0x218, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        i_command: { id: 52, name: "I_COMMAND", offset: 0x220, width: 4, access: WriteOnly,
-            reset: Zero(0), writable_mask: 0xffff_ffff },
-        i_result: { id: 53, name: "I_RESULT", offset: 0x224, width: 4, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        i_detail0: { id: 54, name: "I_DETAIL0", offset: 0x228, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        i_detail1: { id: 55, name: "I_DETAIL1", offset: 0x230, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        i_detail2: { id: 56, name: "I_DETAIL2", offset: 0x238, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        i_rsp_epoch: { id: 57, name: "I_RSP_EPOCH", offset: 0x240, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        i_rsp_source_id: { id: 58, name: "I_RSP_SOURCE_ID", offset: 0x248, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_source_kind: { id: 59, name: "I_RSP_SOURCE_KIND", offset: 0x250, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_state: { id: 60, name: "I_RSP_STATE", offset: 0x254, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_route_kind: { id: 61, name: "I_RSP_ROUTE_KIND", offset: 0x258, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_notification_kind: { id: 62, name: "I_RSP_NOTIFICATION_KIND", offset: 0x25c,
-            width: 4, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_vector: { id: 63, name: "I_RSP_VECTOR", offset: 0x260, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_message_id: { id: 64, name: "I_RSP_MESSAGE_ID", offset: 0x268, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        i_rsp_pending_messages: { id: 65, name: "I_RSP_PENDING_MESSAGES", offset: 0x270,
-            width: 8, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-    }
-}
-
-pub(super) const REGISTERS: [RegisterSpec; 19] = [
-    RegisterSpec::from_schema(IrqRegisters::I_EXPECTED_EPOCH),
-    RegisterSpec::from_schema(IrqRegisters::I_SOURCE_ID),
-    RegisterSpec::from_schema(IrqRegisters::I_SOURCE_KIND),
-    RegisterSpec::from_schema(IrqRegisters::I_ROUTE_KIND),
-    RegisterSpec::from_schema(IrqRegisters::I_ROUTE_VECTOR),
-    RegisterSpec::from_schema(IrqRegisters::I_COMMAND),
-    RegisterSpec::from_schema(IrqRegisters::I_RESULT),
-    RegisterSpec::from_schema(IrqRegisters::I_DETAIL0),
-    RegisterSpec::from_schema(IrqRegisters::I_DETAIL1),
-    RegisterSpec::from_schema(IrqRegisters::I_DETAIL2),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_EPOCH),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_SOURCE_ID),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_SOURCE_KIND),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_STATE),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_ROUTE_KIND),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_NOTIFICATION_KIND),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_VECTOR),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_MESSAGE_ID),
-    RegisterSpec::from_schema(IrqRegisters::I_RSP_PENDING_MESSAGES),
-];
+register_schema! { pub register IExpectedEpoch { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register ISourceId { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register ISourceKind { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 1, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRouteKind { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 1, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRouteVector { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register ICommand { width: 4, endian: Little, access: WriteOnly, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IResult { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IDetail0 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IDetail1 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IDetail2 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspEpoch { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspSourceId { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspSourceKind { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspState { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspRouteKind { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspNotificationKind { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspVector { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspMessageId { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register IRspPendingMessages { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }

@@ -1,6 +1,6 @@
 use super::common::{TestResult, activate, allocate, encode, fixture, run_descriptor};
 use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd, BroadcastIovas,
     BroadcastShape, CopyIovas, CopyStrides, QueueControl, QueueCursorUpdate, RingCursor,
     StridedCopyShape, VectorIovas,
@@ -131,10 +131,10 @@ pub(super) async fn multi_queue_arbitration() -> TestResult {
 async fn command(
     case: OperationCase,
     handle: &pdma_model_device::AsyncDeviceHandle,
-    source_a: pdma_model_contract::abi::DmaRegion,
-    source_b: pdma_model_contract::abi::DmaRegion,
-    destination_a: pdma_model_contract::abi::DmaRegion,
-    destination_b: pdma_model_contract::abi::DmaRegion,
+    source_a: pdma_model_contract::bridge::DmaRegion,
+    source_b: pdma_model_contract::bridge::DmaRegion,
+    destination_a: pdma_model_contract::bridge::DmaRegion,
+    destination_b: pdma_model_contract::bridge::DmaRegion,
 ) -> TestResult<(AbiCommand, Vec<u8>, Vec<u8>)> {
     match case {
         OperationCase::Copy => Ok((

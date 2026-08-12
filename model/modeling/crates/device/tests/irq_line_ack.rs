@@ -1,7 +1,9 @@
 #![allow(missing_docs)]
 
+use pdma_model_device::ModelResult;
+
 use pdma_model_contract::{
-    CopyRequest, EventRouting, ModelResult, QueueConfig, SoftwareOwnerId,
+    CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId,
     desc::{CopyCommand, ExternalCommand},
     ids::CommandId,
 };

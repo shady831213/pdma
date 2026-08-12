@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Shared PDMA model contract vocabulary"
 
 [dependencies]
+hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema", features = ["export-c-header"] }
 
 [lints]

@@ -1,7 +1,9 @@
 //! ABI-v1 numeric registry and checked boundary conformance.
 
+use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::BufferId;
-use pdma_model_contract::abi::{
+use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
+use pdma_model_contract::{
     ABI_VERSION, AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError, AbiId,
     AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK,
     COMPLETION_SIZE, COPY_OPCODE, DESCRIPTOR, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_FLAGS_MASK,
@@ -10,17 +12,19 @@ use pdma_model_contract::abi::{
     FEATURES, FieldSpec, INDIRECT_BROADCAST_FEATURE, INDIRECT_ENTRY_ALIGNMENT, IOVA64_FEATURE,
     KNOWN_FEATURE_MASK, MAX_INDIRECT_DESTINATIONS, MAX_RING_DEPTH, MAX_STRIDE, MAX_STRIDED_ROWS,
     MAX_TRANSFER_BYTES, OPCODES, OpcodeSpec, STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE,
-    SUCCESS_STATUS, VECTOR_ADD_FEATURE, VECTOR_ADD_OPCODE, copy_u64_le, read_u16_le, read_u64_le,
-    validate_abi_version, write_u16_le, write_u64_le,
+    SUCCESS_STATUS, VECTOR_ADD_FEATURE, VECTOR_ADD_OPCODE, copy_u64_le, validate_abi_version,
 };
 
-fn assert_fields_cover_record(fields: &[FieldSpec], record_size: u16) {
+fn assert_fields_cover_record(fields: &[FieldSpec], record_size: usize) {
     for (index, field) in fields.iter().enumerate() {
         assert!(field.width() > 0);
-        assert!(field.end() <= record_size);
+        let end = field.offset().checked_add(field.width());
+        assert!(end.is_some_and(|value| value <= record_size));
         for other in fields.iter().skip(index + 1) {
+            let other_end = other.offset().checked_add(other.width());
             assert!(
-                field.end() <= other.offset() || other.end() <= field.offset(),
+                end.is_some_and(|value| value <= other.offset())
+                    || other_end.is_some_and(|value| value <= field.offset()),
                 "{} overlaps {}",
                 field.name(),
                 other.name()
@@ -29,10 +33,10 @@ fn assert_fields_cover_record(fields: &[FieldSpec], record_size: u16) {
     }
 }
 
-fn assert_field_ranges(fields: &[FieldSpec], expected: &[(u16, u16)]) {
+fn assert_field_ranges(fields: &[FieldSpec], expected: &[(usize, usize)]) {
     assert_eq!(fields.len(), expected.len());
     for (field, &(start, end)) in fields.iter().zip(expected) {
-        assert_eq!((field.offset(), field.end()), (start, end));
+        assert_eq!(field.range(), Some(start..end));
     }
 }
 
@@ -107,13 +111,15 @@ fn abi_v1_registry_is_exact() {
     // Given: independent literal expectations for the public ABI v1 registry.
     let expected_features = [1_u64, 2, 4, 8, 16, 32, 64, 128];
     let sentinel = 0x0123_4567_89ab_cdef_u64;
-    let mut bytes = [0_u8; 10];
+    let mut bytes = [0_u8; 64];
 
     // When: callers consume canonical metadata and the checked LE helpers.
-    write_u16_le(&mut bytes, 0..2, 0x2301).expect("two-byte range is valid");
-    write_u64_le(&mut bytes, 2..10, sentinel).expect("eight-byte range is valid");
-    let decoded_version = read_u16_le(&bytes, 0..2).expect("two-byte range is valid");
-    let decoded_sentinel = read_u64_le(&bytes, 2..10).expect("eight-byte range is valid");
+    let mut view = DescriptorSchemaViewMut::new(&mut bytes).expect("descriptor is exact");
+    view.set_version(0x2301).expect("descriptor is exact");
+    view.set_command_id(sentinel).expect("descriptor is exact");
+    let view = DescriptorSchemaView::new(&bytes).expect("descriptor is exact");
+    let decoded_version = view.version().expect("descriptor is exact");
+    let decoded_sentinel = view.command_id().expect("descriptor is exact");
 
     // Then: numeric assignments, bounds, and byte order exactly match the contract.
     assert_eq!(ABI_VERSION, 1);
@@ -173,8 +179,11 @@ fn abi_v1_registry_is_exact() {
     );
     assert_record_registry();
     assert_eq!(
-        bytes,
-        [0x01, 0x23, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01]
+        (&bytes[..2], &bytes[8..16]),
+        (
+            &[0x01, 0x23][..],
+            &[0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01][..]
+        )
     );
     assert_eq!(decoded_version, 0x2301);
     assert_eq!(decoded_sentinel, sentinel);
@@ -196,7 +205,6 @@ fn rejects_unknown_features_and_unrepresentable_ids() {
     let oversized_id = u128::from(u64::MAX) + 1;
     let short = [0_u8; 7];
     let mut short_output = [0_u8; 7];
-    let invalid_range = read_u16_le(&short, 2..5);
     let address_error = DmaAddress::try_from(oversized_id);
     let region_error = DmaRegion::try_new(BufferId::new(3), DmaAddress::new(u64::MAX), 1);
     let version_error = validate_abi_version(2);
@@ -204,8 +212,8 @@ fn rejects_unknown_features_and_unrepresentable_ids() {
     // When: each untrusted value crosses its typed ABI boundary.
     let feature_error = AbiV1Features::try_from(unknown_features);
     let id_error = AbiId::try_from(oversized_id);
-    let read_error = read_u64_le(&short, 0..8);
-    let write_error = write_u64_le(&mut short_output, 0..8, 7);
+    let read_error = DescriptorSchemaView::new(&short);
+    let write_error = DescriptorSchemaViewMut::new(&mut short_output);
 
     // Then: every malformed input is rejected without indexing or truncation.
     assert_eq!(
@@ -220,26 +228,18 @@ fn rejects_unknown_features_and_unrepresentable_ids() {
     );
     assert_eq!(
         read_error,
-        Err(AbiDecodeError::BufferTooShort {
-            required: 8,
+        Err(SchemaCodecError::BufferTooShort {
+            required: 64,
             actual: 7
         })
     );
-    assert_eq!(
+    assert!(matches!(
         write_error,
-        Err(AbiEncodeError::BufferTooShort {
-            required: 8,
+        Err(SchemaCodecError::BufferTooShort {
+            required: 64,
             actual: 7
         })
-    );
-    assert_eq!(
-        invalid_range,
-        Err(AbiDecodeError::InvalidFieldRange {
-            start: 2,
-            end: 5,
-            width: 2,
-        })
-    );
+    ));
     assert_eq!(
         address_error,
         Err(AbiAddressError::UnrepresentableAddress {

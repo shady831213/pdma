@@ -5,11 +5,11 @@ mod names;
 use crate::{
     export::{Artifact, ArtifactSink, Exporter},
     register::{Access, ResetKind},
-    register_map::RegisterMapSpec,
+    register_map::ResolvedRegisterMap,
 };
 
 use super::{
-    C_MEDIA_TYPE, FragmentConfig,
+    C_MEDIA_TYPE, CHeaderExportError, FragmentConfig,
     model::{RegisterCHeaderBank, RegisterCHeaderModel, RegisterMapCHeaderModel},
 };
 use names::{BankNames, map_names};
@@ -30,14 +30,31 @@ impl RegisterMapCHeaderExporter {
     }
 }
 
-impl<I: Copy + Eq + 'static> Exporter<RegisterMapSpec<I>> for RegisterMapCHeaderExporter {
-    type Error = core::convert::Infallible;
+impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> Exporter<ResolvedRegisterMap<I, F>>
+    for RegisterMapCHeaderExporter
+{
+    type Error = CHeaderExportError;
 
-    fn export<Sink>(&self, schema: &RegisterMapSpec<I>, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        schema: &ResolvedRegisterMap<I, F>,
+        sink: &mut Sink,
+    ) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
-        let model = RegisterMapCHeaderModel::from_spec(*schema);
+        let model = RegisterMapCHeaderModel::from_resolved(schema);
+        let paths_and_names = schema
+            .registers()
+            .iter()
+            .map(|register| {
+                (
+                    register.path().into(),
+                    super::naming::c_identifier(register.path()),
+                )
+            })
+            .collect::<Vec<_>>();
+        super::naming::reject_collisions(&paths_and_names)?;
         sink.emit(Artifact {
             logical_name: self.config.logical_name.clone(),
             media_type: String::from(C_MEDIA_TYPE),
@@ -46,7 +63,10 @@ impl<I: Copy + Eq + 'static> Exporter<RegisterMapSpec<I>> for RegisterMapCHeader
     }
 }
 
-fn render<I: Copy + Eq + 'static>(model: &RegisterMapCHeaderModel<I>, prefix: &str) -> String {
+fn render<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug>(
+    model: &RegisterMapCHeaderModel<I, F>,
+    prefix: &str,
+) -> String {
     let mut output = String::new();
     push_map_constants(&mut output, prefix, model.size());
     let names = map_names(model);
@@ -87,10 +107,10 @@ fn push_map_constants(output: &mut String, prefix: &str, size: usize) {
     let _ = writeln!(output, "#define {prefix}_RESET_POST_RESET UINT32_C(2)");
 }
 
-fn push_register<I: Copy>(
+fn push_register<I: Copy, F: Copy>(
     output: &mut String,
     names: RegisterNames<'_>,
-    register: RegisterCHeaderModel<I>,
+    register: RegisterCHeaderModel<I, F>,
 ) {
     let RegisterNames {
         prefix,
@@ -129,10 +149,10 @@ fn push_register<I: Copy>(
     );
 }
 
-fn push_bank<I: Copy>(
+fn push_bank<I: Copy, F: Copy>(
     output: &mut String,
     prefix: &str,
-    bank: &RegisterCHeaderBank<I>,
+    bank: &RegisterCHeaderBank<I, F>,
     names: &BankNames,
 ) {
     let bank_name = format!("{prefix}_{}", names.name);

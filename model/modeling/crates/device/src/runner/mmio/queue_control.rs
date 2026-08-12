@@ -7,7 +7,7 @@ use pdma_model_contract::QueueId;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseBank, ResponseUpdate,
 };
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiControlError, DeviceEpoch, EpochQueue, QueueControl, QueueCursorUpdate, RingCursor,
 };
 

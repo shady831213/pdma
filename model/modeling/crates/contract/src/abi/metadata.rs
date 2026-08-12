@@ -1,29 +1,42 @@
 //! Canonical numeric registry for PDMA ABI version 1.
 
-use core::ops::Range;
-
+use super::schema::{
+    CompletionSchema, DescriptorSchema, EventSchema, IndirectDestinationEntrySchema,
+};
 use super::{AbiControlError, AbiDecodeError};
+
+/// Canonical generated record metadata.
+pub type RecordSpec = hardware_interface_schema::RecordSpec;
+/// Canonical generated field metadata.
+pub type FieldSpec = hardware_interface_schema::FieldSpec;
 
 /// ABI version implemented by this registry.
 pub const ABI_VERSION: u16 = 1;
 
 /// Descriptor record width in bytes.
-pub const DESCRIPTOR_SIZE: u16 = 64;
+pub const DESCRIPTOR_SIZE: u16 = fixed_record_size(DescriptorSchema::SPEC.size());
 /// Completion record width in bytes.
-pub const COMPLETION_SIZE: u16 = 32;
+pub const COMPLETION_SIZE: u16 = fixed_record_size(CompletionSchema::SPEC.size());
 /// Event record width in bytes.
-pub const EVENT_SIZE: u16 = 64;
+pub const EVENT_SIZE: u16 = fixed_record_size(EventSchema::SPEC.size());
 /// Indirect destination-list entry width in bytes.
-pub const INDIRECT_DESTINATION_ENTRY_SIZE: u16 = 8;
+pub const INDIRECT_DESTINATION_ENTRY_SIZE: u16 =
+    fixed_record_size(IndirectDestinationEntrySchema::SPEC.size());
 
 /// Required descriptor base alignment.
-pub const DESCRIPTOR_ALIGNMENT: u64 = 64;
+pub const DESCRIPTOR_ALIGNMENT: u64 = DescriptorSchema::SPEC.alignment() as u64;
 /// Required completion-ring base alignment.
-pub const COMPLETION_ALIGNMENT: u64 = 32;
+pub const COMPLETION_ALIGNMENT: u64 = CompletionSchema::SPEC.alignment() as u64;
 /// Required event-ring base alignment.
-pub const EVENT_ALIGNMENT: u64 = 64;
+pub const EVENT_ALIGNMENT: u64 = EventSchema::SPEC.alignment() as u64;
 /// Required indirect destination-entry alignment.
-pub const INDIRECT_ENTRY_ALIGNMENT: u64 = 8;
+pub const INDIRECT_ENTRY_ALIGNMENT: u64 = IndirectDestinationEntrySchema::SPEC.alignment() as u64;
+
+const fn fixed_record_size(size: usize) -> u16 {
+    assert!(size <= u16::MAX as usize);
+    let bytes = size.to_le_bytes();
+    u16::from_le_bytes([bytes[0], bytes[1]])
+}
 
 /// Maximum representable ring depth.
 pub const MAX_RING_DEPTH: u32 = u32::MAX;
@@ -113,74 +126,6 @@ impl OpcodeSpec {
     /// Assigned opcode value.
     pub const fn value(self) -> u16 {
         self.value
-    }
-}
-
-/// One fixed byte range in a canonical record.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FieldSpec {
-    name: &'static str,
-    offset: u16,
-    width: u16,
-}
-
-impl FieldSpec {
-    const fn new(name: &'static str, offset: u16, width: u16) -> Self {
-        Self {
-            name,
-            offset,
-            width,
-        }
-    }
-
-    /// Generator-facing field name.
-    pub const fn name(self) -> &'static str {
-        self.name
-    }
-
-    /// Starting byte offset.
-    pub const fn offset(self) -> u16 {
-        self.offset
-    }
-
-    /// Fixed field width.
-    pub const fn width(self) -> u16 {
-        self.width
-    }
-
-    /// Exclusive byte end.
-    pub const fn end(self) -> u16 {
-        self.offset + self.width
-    }
-
-    /// Byte range for checked codec access.
-    pub fn range(self) -> Range<usize> {
-        usize::from(self.offset)..usize::from(self.end())
-    }
-}
-
-/// Canonical record size, alignment, and ordered field table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RecordSpec {
-    size: u16,
-    alignment: u64,
-    fields: &'static [FieldSpec],
-}
-
-impl RecordSpec {
-    /// Encoded record width.
-    pub const fn size(self) -> u16 {
-        self.size
-    }
-
-    /// Required ring-base alignment.
-    pub const fn alignment(self) -> u64 {
-        self.alignment
-    }
-
-    /// Ordered canonical fields.
-    pub const fn fields(self) -> &'static [FieldSpec] {
-        self.fields
     }
 }
 
@@ -275,73 +220,14 @@ pub const EVENT_ACCESSES: [NamedValue; 3] = [
     NamedValue::new("WRITE", 2),
 ];
 
-const DESCRIPTOR_FIELDS: [FieldSpec; 11] = [
-    FieldSpec::new("version", 0, 2),
-    FieldSpec::new("opcode", 2, 2),
-    FieldSpec::new("flags", 4, 2),
-    FieldSpec::new("size", 6, 2),
-    FieldSpec::new("command_id", 8, 8),
-    FieldSpec::new("word0", 16, 8),
-    FieldSpec::new("word1", 24, 8),
-    FieldSpec::new("word2", 32, 8),
-    FieldSpec::new("word3", 40, 8),
-    FieldSpec::new("word4", 48, 8),
-    FieldSpec::new("word5", 56, 8),
-];
-
-const COMPLETION_FIELDS: [FieldSpec; 7] = [
-    FieldSpec::new("version", 0, 2),
-    FieldSpec::new("size", 2, 2),
-    FieldSpec::new("status", 4, 2),
-    FieldSpec::new("flags", 6, 2),
-    FieldSpec::new("origin_queue_id", 8, 8),
-    FieldSpec::new("command_id", 16, 8),
-    FieldSpec::new("reserved", 24, 8),
-];
-
-const EVENT_FIELDS: [FieldSpec; 13] = [
-    FieldSpec::new("version", 0, 2),
-    FieldSpec::new("size", 2, 2),
-    FieldSpec::new("kind", 4, 2),
-    FieldSpec::new("flags", 6, 2),
-    FieldSpec::new("origin_queue_id", 8, 8),
-    FieldSpec::new("command_id", 16, 8),
-    FieldSpec::new("fault_locator", 24, 8),
-    FieldSpec::new("detail0", 32, 8),
-    FieldSpec::new("detail1", 40, 8),
-    FieldSpec::new("stage", 48, 2),
-    FieldSpec::new("access", 50, 2),
-    FieldSpec::new("reserved", 52, 4),
-    FieldSpec::new("index", 56, 8),
-];
-
-const INDIRECT_DESTINATION_ENTRY_FIELDS: [FieldSpec; 1] =
-    [FieldSpec::new("destination_iova", 0, 8)];
-
 /// Canonical ABI-v1 descriptor record.
-pub const DESCRIPTOR: RecordSpec = RecordSpec {
-    size: DESCRIPTOR_SIZE,
-    alignment: DESCRIPTOR_ALIGNMENT,
-    fields: &DESCRIPTOR_FIELDS,
-};
+pub const DESCRIPTOR: RecordSpec = DescriptorSchema::SPEC;
 
 /// Canonical ABI-v1 completion record.
-pub const COMPLETION: RecordSpec = RecordSpec {
-    size: COMPLETION_SIZE,
-    alignment: COMPLETION_ALIGNMENT,
-    fields: &COMPLETION_FIELDS,
-};
+pub const COMPLETION: RecordSpec = CompletionSchema::SPEC;
 
 /// Canonical ABI-v1 event record.
-pub const EVENT: RecordSpec = RecordSpec {
-    size: EVENT_SIZE,
-    alignment: EVENT_ALIGNMENT,
-    fields: &EVENT_FIELDS,
-};
+pub const EVENT: RecordSpec = EventSchema::SPEC;
 
 /// Canonical ABI-v1 indirect destination-list entry.
-pub const INDIRECT_DESTINATION_ENTRY: RecordSpec = RecordSpec {
-    size: INDIRECT_DESTINATION_ENTRY_SIZE,
-    alignment: INDIRECT_ENTRY_ALIGNMENT,
-    fields: &INDIRECT_DESTINATION_ENTRY_FIELDS,
-};
+pub const INDIRECT_DESTINATION_ENTRY: RecordSpec = IndirectDestinationEntrySchema::SPEC;

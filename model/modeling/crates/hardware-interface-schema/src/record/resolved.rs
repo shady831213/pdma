@@ -82,6 +82,7 @@ impl<I: Copy> ResolvedMember<I> {
 pub struct ResolvedRecord<I: 'static = u16> {
     pub(super) root: &'static str,
     pub(super) size: usize,
+    pub(super) alignment: usize,
     pub(super) members: Vec<ResolvedMember<I>>,
 }
 
@@ -89,6 +90,16 @@ impl<I: Copy> ResolvedRecord<I> {
     /// Returns the root definition name.
     pub const fn root(&self) -> &'static str {
         self.root
+    }
+
+    /// Returns the root record byte size.
+    pub const fn size(&self) -> usize {
+        self.size
+    }
+
+    /// Returns the root record byte alignment.
+    pub const fn alignment(&self) -> usize {
+        self.alignment
     }
 
     /// Returns resolved members in depth-first declaration order.

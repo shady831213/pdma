@@ -1,9 +1,9 @@
 use super::{DmaSpace, DmaSpaceError};
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::dma::DmaRangeStart;
-use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::{EventErrorKind, MemoryFault};
 use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::{DmaAddress, DmaRegion, bridge::fault_address};
 
 impl DmaSpace {
     /// Resolves a semantic DMA object to its committed region.
@@ -29,7 +29,7 @@ impl DmaSpace {
         length: usize,
     ) -> ModelResult<Vec<u8>> {
         self.read_range(DmaRangeStart::new(object, offset), length)
-            .map_err(MemoryFault::source)
+            .map_err(|fault| ModelError::from_memory_fault(fault.buffer(), fault.error_kind()))
     }
 
     pub(crate) fn read_range(
@@ -57,7 +57,7 @@ impl DmaSpace {
         data: &[u8],
     ) -> ModelResult<()> {
         self.write_range(DmaRangeStart::new(object, offset), data)
-            .map_err(MemoryFault::source)
+            .map_err(|fault| ModelError::from_memory_fault(fault.buffer(), fault.error_kind()))
     }
 
     pub(crate) fn write_range(
@@ -67,21 +67,13 @@ impl DmaSpace {
     ) -> Result<(), MemoryFault> {
         let end = self.validate_range(start, data.len())?;
         let object = start.object();
-        let backing = self.regions.get_mut(object.raw()).ok_or_else(|| {
-            MemoryFault::new(
-                ModelError::UnknownBuffer(object),
-                object,
-                EventErrorKind::UnknownBuffer,
-            )
-        })?;
+        let backing = self
+            .regions
+            .get_mut(object.raw())
+            .ok_or_else(|| MemoryFault::new(object, EventErrorKind::UnknownBuffer))?;
         let buffer_len = backing.bytes.len();
         let range = backing.bytes.get_mut(start.offset()..end).ok_or_else(|| {
             MemoryFault::new(
-                ModelError::OutOfBounds {
-                    buffer: object,
-                    len: buffer_len,
-                    end,
-                },
                 object,
                 EventErrorKind::OutOfBounds {
                     len: buffer_len,
@@ -114,22 +106,20 @@ impl DmaSpace {
     }
 
     pub(crate) fn range_overflow_fault(&self, start: DmaRangeStart) -> MemoryFault {
-        let source = ModelError::RangeOverflow;
         let Some(backing) = self.regions.get(start.object().raw()) else {
-            return MemoryFault::new(source, start.object(), EventErrorKind::RangeOverflow);
+            return MemoryFault::new(start.object(), EventErrorKind::RangeOverflow);
         };
         let locator = u64::try_from(start.offset())
             .ok()
             .and_then(|offset| backing.region.base().checked_add(offset).ok())
             .filter(|address| *address < backing.region.exclusive_end());
         locator.map_or_else(
-            || MemoryFault::new(source, start.object(), EventErrorKind::RangeOverflow),
+            || MemoryFault::new(start.object(), EventErrorKind::RangeOverflow),
             |address| {
-                MemoryFault::with_iova(
-                    source,
+                MemoryFault::with_address(
                     start.object(),
                     EventErrorKind::RangeOverflow,
-                    address,
+                    fault_address(address),
                 )
             },
         )
@@ -195,24 +185,19 @@ impl DmaSpace {
     }
 
     const fn unknown_fault(object: BufferId) -> MemoryFault {
-        MemoryFault::new(
-            ModelError::UnknownBuffer(object),
-            object,
-            EventErrorKind::UnknownBuffer,
-        )
+        MemoryFault::new(object, EventErrorKind::UnknownBuffer)
     }
 
     fn out_of_bounds_fault(&self, object: BufferId, len: usize, end: usize) -> MemoryFault {
-        let source = ModelError::OutOfBounds {
-            buffer: object,
-            len,
-            end,
-        };
         let error_kind = EventErrorKind::OutOfBounds { len, end };
         self.regions.get(object.raw()).map_or_else(
-            || MemoryFault::new(source, object, error_kind),
+            || MemoryFault::new(object, error_kind),
             |backing| {
-                MemoryFault::with_iova(source, object, error_kind, backing.region.exclusive_end())
+                MemoryFault::with_address(
+                    object,
+                    error_kind,
+                    fault_address(backing.region.exclusive_end()),
+                )
             },
         )
     }

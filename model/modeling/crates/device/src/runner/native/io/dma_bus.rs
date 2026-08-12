@@ -4,7 +4,7 @@ mod submission;
 use super::QueueFetch;
 use crate::dma_space::DmaSpace;
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::error::{ModelError, ModelResult};
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::{CompletionRingId, QueueId};
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl DmaBusQueueIo {
     pub(super) fn publish_event(
         dma_space: &mut DmaSpace,
         bus_control: &mut BusControlState,
-        event: pdma_model_contract::abi::AbiEvent,
+        event: pdma_model_contract::bridge::AbiEvent,
     ) -> bool {
         matches!(
             publication::event(dma_space, bus_control, event),

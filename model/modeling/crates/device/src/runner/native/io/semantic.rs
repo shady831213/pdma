@@ -1,7 +1,7 @@
 use super::super::ring::NativeRing;
+use crate::ModelResult;
 use crate::dma_space::DmaSpace;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::ModelResult;
 
 #[derive(Debug)]
 pub(in crate::runner::native) struct SemanticQueueIo {

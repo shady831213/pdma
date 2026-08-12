@@ -2,10 +2,10 @@ use super::NativeExecution;
 use super::io::QueueMemoryResolver;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
+use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::desc::{CopyCommand, StridedCopyCommand};
 use pdma_model_contract::dma::DmaRangeStart;
-use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::QueueId;
 use pdma_model_contract::trace::TraceOperation;
 

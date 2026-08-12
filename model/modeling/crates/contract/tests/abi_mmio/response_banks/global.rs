@@ -54,7 +54,13 @@ fn global_response_bank_has_literal_le_bytes_for_all_commands() {
     // When: each closed global command response populates a response bank.
     // Then: every raw byte is literal LE and every irrelevant field is zero.
     for (response, expected) in responses {
-        assert_eq!(response.bank().to_le_bytes(), expected);
+        assert_eq!(
+            response
+                .bank()
+                .to_le_bytes()
+                .expect("generated response view must encode"),
+            expected
+        );
     }
     println!("typed global response bank: 4 command shapes with literal LE bytes and zero-fill");
 }

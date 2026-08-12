@@ -1,0 +1,23 @@
+[package]
+name = "downstream-contract-layers"
+version = "0.1.0"
+edition = "2024"
+publish = false
+default-run = "downstream-contract-layers"
+
+[dependencies]
+pdma-model-contract = { path = "../../.." }
+
+[features]
+negative-direct = []
+
+[[bin]]
+name = "downstream-contract-layers"
+path = "src/main.rs"
+
+[[bin]]
+name = "direct-composition"
+path = "src/bin/direct_composition.rs"
+required-features = ["negative-direct"]
+
+[workspace]

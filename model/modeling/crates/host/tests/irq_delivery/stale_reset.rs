@@ -1,3 +1,5 @@
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -5,8 +7,7 @@ use std::sync::{
 
 use pdma_model_contract::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
-    IrqNotification, IrqRoute, IrqSnapshot, ModelError, ModelResult, QueueConfig,
-    QueueConfigHandle,
+    IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_host::{
     AsyncDevicePort, AsyncDriver, IrqDelivery, SoftwareCpu, StatefulIrqHandler,

@@ -3,7 +3,7 @@ use crate::runner::bus::BusControlError;
 use crate::runner::reset::reset_runner;
 use crate::runner::state::RunnerState;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::abi::{AbiControlError, DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::{AbiControlError, DeviceEpoch, WholeDeviceReset};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) enum ResetOutcome {

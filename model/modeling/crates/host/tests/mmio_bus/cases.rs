@@ -1,8 +1,8 @@
 use super::{Access, RecordingTransport, activation, expected_queue_transcript};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::abi::{DeviceEpoch, EpochQueue, QueueCursorUpdate, RingCursor};
 use pdma_model_contract::{CompletionRingId, EpochIrqSource, IrqSource, IrqVector, QueueId};
+use pdma_model_contract::{DeviceEpoch, EpochQueue, QueueCursorUpdate, RingCursor};
 use pdma_model_device::{AsyncDevice, MmioBatchError};
 use pdma_model_host::{
     AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusSubmission, MmioDeviceBus, QueueControlWrite,

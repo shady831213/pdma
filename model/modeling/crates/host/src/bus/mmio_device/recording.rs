@@ -1,7 +1,7 @@
 use super::super::{AsyncDeviceBusStage, BusDmaStage, BusSubmission};
-use pdma_model_contract::ModelResult;
+use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, QueueActivation};
+use pdma_model_contract::{DmaAddress, DmaRegion, QueueActivation};
 use pdma_model_device::{DmaSpaceError, MmioBatchError, QueueResponseBytes};
 
 /// Device-facing operations used by the MMIO bus and literal recording transports.
@@ -62,7 +62,7 @@ impl MmioDeviceTransport for pdma_model_device::AsyncDeviceHandle {
     type Stage = AsyncDeviceBusStage;
 
     async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
-        self.allocate_dma_region(len).await
+        self.allocate_dma_region(len).await.map_err(Into::into)
     }
     async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, DmaSpaceError> {
         self.stage_dma_regions(lengths)

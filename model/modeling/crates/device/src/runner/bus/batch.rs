@@ -3,7 +3,7 @@ use crate::dma_space::DmaSpaceError;
 use crate::runner::bus::control::{activation, transactions};
 use crate::runner::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging, status_response};
 use crate::runner::state::{publish, wake};
-use pdma_model_contract::abi::QueueActivation;
+use pdma_model_contract::bridge::QueueActivation;
 
 #[path = "batch/error.rs"]
 mod error;
@@ -37,7 +37,7 @@ pub struct SubmissionBatch(SubmissionAcceptance);
 impl SubmissionBatch {
     /// Creates the fixed optional-indirect, descriptor, publication, response-read grammar.
     pub const fn new(
-        queue: pdma_model_contract::abi::EpochQueue,
+        queue: pdma_model_contract::semantic::EpochQueue,
         expected_producer: pdma_model_contract::abi::RingCursor,
         descriptor: super::DmaWrite,
         indirect: Option<(crate::DmaStage, super::DmaWrite)>,
@@ -116,7 +116,9 @@ fn prepare_bootstrap(
     state.dma_space.install_prepared(prepared_dma);
     activation::install(state, prepared_queue);
     state.mmio.queue.complete_bootstrap_batch(staging, response);
-    Ok(response.to_le_bytes())
+    response
+        .to_le_bytes()
+        .map_err(|_| MmioBatchError::InvalidShape)
 }
 
 fn prepare_submission(
@@ -154,7 +156,9 @@ fn prepare_submission(
         .mmio
         .queue
         .complete_submission_batch(staging, response);
-    Ok(response.to_le_bytes())
+    response
+        .to_le_bytes()
+        .map_err(|_| MmioBatchError::InvalidShape)
 }
 
 fn command_error(error: BusControlError, queue_id: usize, command: u32) -> MmioBatchError {

@@ -8,7 +8,7 @@ async fn mapped_activation_reuses_reset_persistent_mappings_only_at_current_epoc
     let committed = handle.commit_dma_stage(ring_stage).await?;
     let generation = handle.dma_generation().await;
     let current = handle
-        .reset(pdma_model_contract::abi::WholeDeviceReset::new(
+        .reset(pdma_model_contract::semantic::WholeDeviceReset::new(
             DeviceEpoch::initial(),
         ))
         .await?;

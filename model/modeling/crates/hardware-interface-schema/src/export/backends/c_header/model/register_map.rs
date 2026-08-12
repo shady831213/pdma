@@ -1,13 +1,11 @@
 use crate::{
     register::{Access, RegisterSpec, ResetKind},
-    register_map::{RegisterMapSpec, RepeatedRegisterBank},
+    register_map::{ResolvedRegisterBank, ResolvedRegisterMap},
 };
-
-use super::{FragmentModelError, identity::validate_rows};
 
 /// One keyed register row consumed by C-header renderers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RegisterCHeaderModel<I> {
+pub struct RegisterCHeaderModel<I, F = u16> {
     id: I,
     name: &'static str,
     offset: usize,
@@ -16,12 +14,11 @@ pub struct RegisterCHeaderModel<I> {
     reset_kind: ResetKind,
     reset_value: u64,
     writable_mask: u64,
+    field_id: core::marker::PhantomData<fn() -> F>,
 }
 
-impl<I: Copy> RegisterCHeaderModel<I> {
-    /// Projects one register schema into typed C-header metadata.
-    #[must_use]
-    pub const fn from_spec(register: RegisterSpec<I>) -> Self {
+impl<I: Copy, F: Copy> RegisterCHeaderModel<I, F> {
+    const fn from_resolved(register: RegisterSpec<I, F>) -> Self {
         Self {
             id: register.id(),
             name: register.name(),
@@ -31,6 +28,7 @@ impl<I: Copy> RegisterCHeaderModel<I> {
             reset_kind: register.reset_kind(),
             reset_value: register.reset_value(),
             writable_mask: register.writable_mask(),
+            field_id: core::marker::PhantomData,
         }
     }
 
@@ -77,16 +75,16 @@ impl<I: Copy> RegisterCHeaderModel<I> {
 
 /// One complete repeated register-bank model.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisterCHeaderBank<I> {
+pub struct RegisterCHeaderBank<I, F = u16> {
     name: &'static str,
     base: usize,
     count: usize,
     stride: usize,
-    registers: Vec<RegisterCHeaderModel<I>>,
+    registers: Vec<RegisterCHeaderModel<I, F>>,
 }
 
-impl<I: Copy> RegisterCHeaderBank<I> {
-    fn from_spec(bank: RepeatedRegisterBank<I>) -> Self {
+impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
+    fn from_resolved(bank: &ResolvedRegisterBank<I, F>) -> Self {
         Self {
             name: bank.name(),
             base: bank.base(),
@@ -96,7 +94,7 @@ impl<I: Copy> RegisterCHeaderBank<I> {
                 .registers()
                 .iter()
                 .copied()
-                .map(RegisterCHeaderModel::from_spec)
+                .map(RegisterCHeaderModel::from_resolved)
                 .collect(),
         }
     }
@@ -122,40 +120,40 @@ impl<I: Copy> RegisterCHeaderBank<I> {
     }
 
     /// Returns every bank-relative register row.
-    pub fn registers(&self) -> &[RegisterCHeaderModel<I>] {
+    pub fn registers(&self) -> &[RegisterCHeaderModel<I, F>] {
         &self.registers
     }
 }
 
 /// Complete ordered typed model for one register-map C fragment.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisterMapCHeaderModel<I> {
+pub struct RegisterMapCHeaderModel<I, F = u16> {
     size: usize,
-    fixed: Vec<RegisterCHeaderModel<I>>,
-    banks: Vec<RegisterCHeaderBank<I>>,
+    fixed: Vec<RegisterCHeaderModel<I, F>>,
+    banks: Vec<RegisterCHeaderBank<I, F>>,
 }
 
-impl<I: Copy + Eq + 'static> RegisterMapCHeaderModel<I> {
-    /// Projects a register map into a complete typed C fragment model.
+impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeaderModel<I, F> {
+    /// Projects a resolved register map into a complete typed C fragment model.
     #[must_use]
-    pub fn from_spec(schema: RegisterMapSpec<I>) -> Self {
+    pub fn from_resolved(schema: &ResolvedRegisterMap<I, F>) -> Self {
         let fixed = schema
             .registers()
             .iter()
-            .chain(
-                schema
-                    .register_groups()
-                    .iter()
-                    .flat_map(|group| group.iter()),
-            )
-            .copied()
-            .map(RegisterCHeaderModel::from_spec)
+            .filter(|register| register.instance().is_none())
+            .map(|register| {
+                RegisterCHeaderModel::from_resolved(RegisterSpec::place(
+                    register.id(),
+                    register.name(),
+                    register.offset(),
+                    register.definition(),
+                ))
+            })
             .collect();
         let banks = schema
             .banks()
             .iter()
-            .copied()
-            .map(RegisterCHeaderBank::from_spec)
+            .map(RegisterCHeaderBank::from_resolved)
             .collect();
         Self {
             size: schema.size(),
@@ -164,59 +162,18 @@ impl<I: Copy + Eq + 'static> RegisterMapCHeaderModel<I> {
         }
     }
 
-    /// Validates caller-supplied rows against their source map.
-    ///
-    /// # Errors
-    /// Returns the first duplicate, unknown, missing, reordered, or mismatched row.
-    pub fn try_from_parts(
-        schema: RegisterMapSpec<I>,
-        fixed: Vec<RegisterCHeaderModel<I>>,
-        banks: Vec<RegisterCHeaderBank<I>>,
-    ) -> Result<Self, FragmentModelError> {
-        let expected = Self::from_spec(schema);
-        validate_rows(&expected.fixed, &fixed, |register| register.id())?;
-        let expected_bank_names: Vec<_> = expected
-            .banks
-            .iter()
-            .map(RegisterCHeaderBank::name)
-            .collect();
-        let actual_bank_names: Vec<_> = banks.iter().map(RegisterCHeaderBank::name).collect();
-        validate_rows(&expected_bank_names, &actual_bank_names, |name| *name)?;
-        for (index, (expected_bank, actual_bank)) in expected.banks.iter().zip(&banks).enumerate() {
-            if expected_bank.base != actual_bank.base
-                || expected_bank.count != actual_bank.count
-                || expected_bank.stride != actual_bank.stride
-            {
-                return Err(FragmentModelError::MismatchedRow { index });
-            }
-            validate_rows(
-                expected_bank.registers(),
-                actual_bank.registers(),
-                |register| register.id(),
-            )?;
-        }
-        Ok(Self {
-            size: expected.size,
-            fixed,
-            banks,
-        })
-    }
-
     /// Returns the register-map extent.
     pub const fn size(&self) -> usize {
         self.size
     }
 
     /// Returns all fixed and fixed-group rows in canonical order.
-    pub fn fixed(&self) -> &[RegisterCHeaderModel<I>] {
+    pub fn fixed(&self) -> &[RegisterCHeaderModel<I, F>] {
         &self.fixed
     }
 
     /// Returns all repeated bank models in canonical order.
-    pub fn banks(&self) -> &[RegisterCHeaderBank<I>] {
+    pub fn banks(&self) -> &[RegisterCHeaderBank<I, F>] {
         &self.banks
     }
 }
-
-#[cfg(test)]
-mod tests;

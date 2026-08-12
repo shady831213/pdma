@@ -1,8 +1,11 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
+
 use pdma_model_contract::{
     CommandId, CompletionStatus, CopyRequest, EventErrorKind, IrqNotification, IrqRoute, IrqSource,
-    IrqVector, ModelError, ModelResult,
+    IrqVector,
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 use pdma_model_host::{

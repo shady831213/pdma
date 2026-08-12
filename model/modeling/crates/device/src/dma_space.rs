@@ -9,8 +9,8 @@ mod validation;
 pub use error::DmaSpaceError;
 pub use stage::DmaStage;
 
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
 use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::{DmaAddress, DmaRegion};
 
 const FIRST_IOVA: u64 = 0x1_0000;
 const IOVA_ALIGNMENT: u64 = 64;

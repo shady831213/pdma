@@ -6,14 +6,16 @@
 //! files, include guards, and integration. See the crate-level optional-C11 example for
 //! the feature declaration and executable `RecordCHeaderExporter` workflow.
 
+mod error;
 mod model;
 mod naming;
 mod record;
 mod register_map;
 
+pub use error::CHeaderExportError;
 pub use model::{
-    FragmentModelError, RecordCHeaderField, RecordCHeaderModel, RegisterCHeaderBank,
-    RegisterCHeaderModel, RegisterMapCHeaderModel,
+    RecordCHeaderField, RecordCHeaderModel, RegisterCHeaderBank, RegisterCHeaderModel,
+    RegisterMapCHeaderModel,
 };
 pub use record::RecordCHeaderExporter;
 pub use register_map::RegisterMapCHeaderExporter;

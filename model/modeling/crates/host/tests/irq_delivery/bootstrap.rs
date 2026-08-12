@@ -1,7 +1,7 @@
 use crate::{NotificationPort, message};
-use pdma_model_contract::{
-    CompletionRingId, IrqSource, IrqVector, ModelError, ModelResult, QueueId,
-};
+use pdma_model_contract::{CompletionRingId, IrqSource, IrqVector, QueueId};
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{IrqDelivery, SoftwareCpu, irq_handler};
 use tokio::sync::mpsc;
 

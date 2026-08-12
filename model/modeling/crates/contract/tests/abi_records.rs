@@ -1,6 +1,7 @@
 //! ABI-v1 completion and event record boundary scenarios.
 
-use pdma_model_contract::abi::{
+use pdma_model_contract::bridge::BridgeError;
+use pdma_model_contract::{
     AbiBounds, AbiDecodeError, AbiEncodeError, AbiEvent, AbiEventAccess, AbiEventKind,
     AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
     AbiFaultSelectionError, AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit,
@@ -122,7 +123,7 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
     let mixed_operations = select_canonical_fault([copy_source_unmapped(), vector_source_a()]);
 
     // Then: each malformed class is rejected and no object identifier is serialized.
-    assert_eq!(missing_iova, Err(AbiEncodeError::MissingEventIova));
+    assert_eq!(missing_iova, Err(BridgeError::MissingEventLocator));
     assert_eq!(
         unknown_status,
         Err(AbiDecodeError::UnknownCompletionStatus { value: 9 })

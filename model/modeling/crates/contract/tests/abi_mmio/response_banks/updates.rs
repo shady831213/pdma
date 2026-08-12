@@ -43,16 +43,27 @@ fn typed_response_failures_preserve_prior_bytes() {
     // When: each command reaches a semantic failure update.
     // Then: the raw response bytes remain exactly unchanged.
     assert_eq!(
-        apply_global_response_update(global, GlobalResponseUpdate::Preserve).to_le_bytes(),
-        global.to_le_bytes()
+        apply_global_response_update(global, GlobalResponseUpdate::Preserve)
+            .to_le_bytes()
+            .expect("generated response view must encode"),
+        global
+            .to_le_bytes()
+            .expect("generated response view must encode")
     );
     assert_eq!(
-        apply_queue_response_update(queue, QueueResponseUpdate::Preserve).to_le_bytes(),
-        queue.to_le_bytes()
+        apply_queue_response_update(queue, QueueResponseUpdate::Preserve)
+            .to_le_bytes()
+            .expect("generated response view must encode"),
+        queue
+            .to_le_bytes()
+            .expect("generated response view must encode")
     );
     assert_eq!(
-        apply_irq_response_update(irq, IrqResponseUpdate::Preserve).to_le_bytes(),
+        apply_irq_response_update(irq, IrqResponseUpdate::Preserve)
+            .to_le_bytes()
+            .expect("generated response view must encode"),
         irq.to_le_bytes()
+            .expect("generated response view must encode")
     );
     println!("typed response semantic failures preserve prior global, queue, and IRQ bank bytes");
 }

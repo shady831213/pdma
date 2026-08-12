@@ -1,5 +1,7 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::ModelError;
+
 include!("async_driver/allocation.rs");
 #[path = "async_driver/cancellation.rs"]
 mod cancellation;
@@ -13,7 +15,7 @@ mod semantics;
 pub mod support;
 
 use pdma_model_contract::{
-    DeviceEpoch, ExternalCommand, ModelError, QueueConfigHandle,
+    DeviceEpoch, ExternalCommand, QueueConfigHandle,
     desc::{CopyCommand, CopyRequest},
     ids::{CommandId, CompletionRingId},
     irq::IrqSource,

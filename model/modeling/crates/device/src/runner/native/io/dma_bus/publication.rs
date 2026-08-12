@@ -1,6 +1,6 @@
 use crate::dma_space::DmaSpace;
 use crate::runner::bus::control::{ActiveQueue, BusControlState};
-use pdma_model_contract::abi::{AbiEvent, DmaAddress, EpochQueue, encode_completion, encode_event};
+use pdma_model_contract::{AbiEvent, DmaAddress, EpochQueue, encode_completion, encode_event};
 use pdma_model_contract::{CompletionRecord, QueueId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

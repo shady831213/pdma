@@ -1,8 +1,9 @@
 use super::accounting::SharedAccounting;
 use crate::AsyncDevicePort;
+use crate::ModelResult;
 use pdma_model_contract::{
-    BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, ModelResult,
-    QueueConfig, QueueConfigHandle, QueueId,
+    BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, QueueConfig,
+    QueueConfigHandle, QueueId,
 };
 
 #[derive(Debug, Clone)]

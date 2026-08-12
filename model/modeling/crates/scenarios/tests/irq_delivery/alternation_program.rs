@@ -1,6 +1,7 @@
 use super::support::{DriverBootstrap, HandlerIdentity, Milestone};
-use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector, ModelResult};
+use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDeviceHandle;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, CpuLocal, SoftwareCpu};
 use tokio::{
     sync::{mpsc, oneshot},

@@ -1,25 +1,19 @@
+use hardware_interface_schema::ResolvedRecord;
 use hardware_interface_schema::export::backends::c_header::{
     RecordCHeaderModel, RegisterMapCHeaderModel,
 };
 
-use super::super::{
-    CompletionSchema, DescriptorSchema, EventSchema, IndirectDestinationEntrySchema,
-    mmio::{PdmaMmioMap, PdmaMmioMapRegisterId},
-};
+use super::{super::mmio::PdmaMmioMapRegisterId, PdmaHeaderSchemas};
 
 pub(super) struct GenericFragments {
     pub(super) records: [RecordCHeaderModel; 4],
     pub(super) mmio: RegisterMapCHeaderModel<PdmaMmioMapRegisterId>,
 }
 
-pub(super) fn render_fragments() -> GenericFragments {
+pub(super) fn project(schemas: &PdmaHeaderSchemas) -> GenericFragments {
+    let project_record = |record: &ResolvedRecord| RecordCHeaderModel::from_resolved(record);
     GenericFragments {
-        records: [
-            RecordCHeaderModel::from_spec(DescriptorSchema::SPEC),
-            RecordCHeaderModel::from_spec(CompletionSchema::SPEC),
-            RecordCHeaderModel::from_spec(EventSchema::SPEC),
-            RecordCHeaderModel::from_spec(IndirectDestinationEntrySchema::SPEC),
-        ],
-        mmio: RegisterMapCHeaderModel::from_spec(PdmaMmioMap::SPEC),
+        records: schemas.records.each_ref().map(project_record),
+        mmio: RegisterMapCHeaderModel::from_resolved(&schemas.mmio),
     }
 }

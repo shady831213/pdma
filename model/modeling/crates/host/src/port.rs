@@ -6,14 +6,14 @@ mod sync_device;
 
 pub use bus_device::{BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};
 
-use pdma_model_contract::abi::EpochIrqSource;
+use crate::ModelResult;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::BufferId;
 use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::EpochIrqSource;
 
 /// Async device-facing operations required by the host driver actor.
 pub trait AsyncDevicePort: Send + Sync {

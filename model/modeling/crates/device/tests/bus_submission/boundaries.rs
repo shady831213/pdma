@@ -1,6 +1,6 @@
 use super::common::{TestResult, activate, allocate, encode};
 use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiCommand, AbiCopy, AbiId, CopyIovas, QueueControl, QueueCursorUpdate, RingCursor,
 };
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};

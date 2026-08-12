@@ -7,6 +7,7 @@ pub use types::{
     AbiReservedField, AbiScalarField,
 };
 
+use crate::abi::DescriptorSchema;
 use crate::abi::record::{AbiEventAccess, AbiEventStage};
 use types::{Operation, OrderKey};
 
@@ -54,13 +55,13 @@ const fn reserved_operation(field: AbiReservedField) -> Operation {
 
 const fn reserved_offset(field: AbiReservedField) -> u64 {
     match field {
-        AbiReservedField::CopyOffset40 => 40,
+        AbiReservedField::CopyOffset40 => DescriptorSchema::WORD3_OFFSET as u64,
         AbiReservedField::CopyOffset48
         | AbiReservedField::BroadcastOffset48
-        | AbiReservedField::VectorOffset48 => 48,
+        | AbiReservedField::VectorOffset48 => DescriptorSchema::WORD4_OFFSET as u64,
         AbiReservedField::CopyOffset56
         | AbiReservedField::BroadcastOffset56
-        | AbiReservedField::VectorOffset56 => 56,
+        | AbiReservedField::VectorOffset56 => DescriptorSchema::WORD5_OFFSET as u64,
     }
 }
 
@@ -82,12 +83,14 @@ const fn scalar_rank(field: AbiScalarField) -> u64 {
     match field {
         AbiScalarField::CopyLength
         | AbiScalarField::StridedRows
-        | AbiScalarField::BroadcastLength => 32,
+        | AbiScalarField::BroadcastLength => DescriptorSchema::WORD2_OFFSET as u64,
         AbiScalarField::StridedRowBytes
         | AbiScalarField::BroadcastDestinationCount
-        | AbiScalarField::VectorLength => 40,
-        AbiScalarField::StridedSourceStride | AbiScalarField::BroadcastListAlignment => 48,
-        AbiScalarField::StridedDestinationStride => 56,
+        | AbiScalarField::VectorLength => DescriptorSchema::WORD3_OFFSET as u64,
+        AbiScalarField::StridedSourceStride | AbiScalarField::BroadcastListAlignment => {
+            DescriptorSchema::WORD4_OFFSET as u64
+        }
+        AbiScalarField::StridedDestinationStride => DescriptorSchema::WORD5_OFFSET as u64,
     }
 }
 

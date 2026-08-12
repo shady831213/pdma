@@ -62,7 +62,13 @@ fn queue_response_bank_publishes_all_nine_words_for_every_command() {
             ],
             QUEUE_WORDS
         );
-        assert_eq!(response.bank().to_le_bytes(), expected);
+        assert_eq!(
+            response
+                .bank()
+                .to_le_bytes()
+                .expect("generated response view must encode"),
+            expected
+        );
     }
     println!("typed queue response bank: 9 command shapes publish all nine literal LE u64 words");
 }

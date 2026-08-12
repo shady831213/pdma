@@ -1,11 +1,12 @@
 use super::{AsyncPdmaBus, BusDevicePort, BusDmaErrorAdapter};
 use crate::BusDmaStage;
-use pdma_model_contract::abi::{
-    DeviceEpoch, DmaAddress, DmaRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
+use crate::ModelError;
+use crate::ModelResult;
+use pdma_model_contract::{
+    BufferId, CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 use pdma_model_contract::{
-    BufferId, CompletionRingId, ModelError, ModelResult, QueueConfig, QueueConfigHandle,
-    QueueDirectoryEntry, QueueId,
+    DeviceEpoch, DmaAddress, DmaRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
 };
 
 #[derive(Debug, Clone)]

@@ -1,95 +1,32 @@
 use hardware_interface_schema::register_schema;
 
-use super::{PdmaMmioMapRegisterId, RegisterSpec};
+use super::{U32Value, U64Value};
 
-register_schema! {
-    pub registers QueueRegisters<PdmaMmioMapRegisterId> {
-        q_expected_epoch: { id: 19, name: "Q_EXPECTED_EPOCH", offset: 0x100, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_id: { id: 20, name: "Q_ID", offset: 0x108, width: 8, access: ReadWrite,
-            reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_expected_cursor: { id: 21, name: "Q_EXPECTED_CURSOR", offset: 0x110, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_new_cursor: { id: 22, name: "Q_NEW_CURSOR", offset: 0x118, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_cfg_sq_depth: { id: 23, name: "Q_CFG_SQ_DEPTH", offset: 0x120, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff },
-        q_cfg_cq_depth: { id: 24, name: "Q_CFG_CQ_DEPTH", offset: 0x124, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff },
-        q_cfg_event_policy: { id: 25, name: "Q_CFG_EVENT_POLICY", offset: 0x128, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0 },
-        q_cfg_software_owner: { id: 26, name: "Q_CFG_SOFTWARE_OWNER", offset: 0x130,
-            width: 8, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_sq_base: { id: 27, name: "Q_SQ_BASE", offset: 0x138, width: 8, access: ReadWrite,
-            reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_sq_depth: { id: 28, name: "Q_SQ_DEPTH", offset: 0x140, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff },
-        q_cq_base: { id: 29, name: "Q_CQ_BASE", offset: 0x148, width: 8, access: ReadWrite,
-            reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_cq_depth: { id: 30, name: "Q_CQ_DEPTH", offset: 0x150, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff },
-        q_eq_base: { id: 31, name: "Q_EQ_BASE", offset: 0x158, width: 8, access: ReadWrite,
-            reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        q_eq_depth: { id: 32, name: "Q_EQ_DEPTH", offset: 0x160, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff },
-        q_command: { id: 33, name: "Q_COMMAND", offset: 0x168, width: 4, access: WriteOnly,
-            reset: Zero(0), writable_mask: 0xffff_ffff },
-        q_result: { id: 34, name: "Q_RESULT", offset: 0x16c, width: 4, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        q_detail0: { id: 35, name: "Q_DETAIL0", offset: 0x170, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        q_detail1: { id: 36, name: "Q_DETAIL1", offset: 0x178, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        q_detail2: { id: 37, name: "Q_DETAIL2", offset: 0x180, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        q_rsp_epoch: { id: 38, name: "Q_RSP_EPOCH", offset: 0x188, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        q_rsp_id: { id: 39, name: "Q_RSP_ID", offset: 0x190, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        q_rsp_sq_producer: { id: 40, name: "Q_RSP_SQ_PRODUCER", offset: 0x198, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        q_rsp_sq_captured: { id: 41, name: "Q_RSP_SQ_CAPTURED", offset: 0x1a0, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        q_rsp_sq_consumer: { id: 42, name: "Q_RSP_SQ_CONSUMER", offset: 0x1a8, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        q_rsp_cq_producer: { id: 43, name: "Q_RSP_CQ_PRODUCER", offset: 0x1b0, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        q_rsp_cq_consumer: { id: 44, name: "Q_RSP_CQ_CONSUMER", offset: 0x1b8, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        q_rsp_eq_producer: { id: 45, name: "Q_RSP_EQ_PRODUCER", offset: 0x1c0, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        q_rsp_eq_consumer: { id: 46, name: "Q_RSP_EQ_CONSUMER", offset: 0x1c8, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-    }
-}
-
-pub(super) const REGISTERS: [RegisterSpec; 28] = [
-    RegisterSpec::from_schema(QueueRegisters::Q_EXPECTED_EPOCH),
-    RegisterSpec::from_schema(QueueRegisters::Q_ID),
-    RegisterSpec::from_schema(QueueRegisters::Q_EXPECTED_CURSOR),
-    RegisterSpec::from_schema(QueueRegisters::Q_NEW_CURSOR),
-    RegisterSpec::from_schema(QueueRegisters::Q_CFG_SQ_DEPTH),
-    RegisterSpec::from_schema(QueueRegisters::Q_CFG_CQ_DEPTH),
-    RegisterSpec::from_schema(QueueRegisters::Q_CFG_EVENT_POLICY),
-    RegisterSpec::from_schema(QueueRegisters::Q_CFG_SOFTWARE_OWNER),
-    RegisterSpec::from_schema(QueueRegisters::Q_SQ_BASE),
-    RegisterSpec::from_schema(QueueRegisters::Q_SQ_DEPTH),
-    RegisterSpec::from_schema(QueueRegisters::Q_CQ_BASE),
-    RegisterSpec::from_schema(QueueRegisters::Q_CQ_DEPTH),
-    RegisterSpec::from_schema(QueueRegisters::Q_EQ_BASE),
-    RegisterSpec::from_schema(QueueRegisters::Q_EQ_DEPTH),
-    RegisterSpec::from_schema(QueueRegisters::Q_COMMAND),
-    RegisterSpec::from_schema(QueueRegisters::Q_RESULT),
-    RegisterSpec::from_schema(QueueRegisters::Q_DETAIL0),
-    RegisterSpec::from_schema(QueueRegisters::Q_DETAIL1),
-    RegisterSpec::from_schema(QueueRegisters::Q_DETAIL2),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_EPOCH),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_ID),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_SQ_PRODUCER),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_SQ_CAPTURED),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_SQ_CONSUMER),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_CQ_PRODUCER),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_CQ_CONSUMER),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_EQ_PRODUCER),
-    RegisterSpec::from_schema(QueueRegisters::Q_RSP_EQ_CONSUMER),
-];
+register_schema! { pub register QExpectedEpoch { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QId { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QExpectedCursor { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QNewCursor { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCfgSqDepth { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCfgCqDepth { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCfgEventPolicy { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCfgSoftwareOwner { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QSqBase { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QSqDepth { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCqBase { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCqDepth { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QEqBase { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QEqDepth { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QCommand { width: 4, endian: Little, access: WriteOnly, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QResult { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QDetail0 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QDetail1 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QDetail2 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspEpoch { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspId { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspSqProducer { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspSqCaptured { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspSqConsumer { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspCqProducer { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspCqConsumer { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspEqProducer { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register QRspEqConsumer { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }

@@ -6,8 +6,9 @@ use super::super::QueueFetch;
 use crate::dma_space::DmaSpace;
 use crate::runner::bus::BusControlError;
 use crate::runner::bus::control::{BusControlState, transactions};
-use pdma_model_contract::abi::{AbiCommand, AbiEvent, DeviceEpoch, EpochQueue, RingRecord};
-use pdma_model_contract::error::{ModelError, ModelResult};
+use crate::{ModelError, ModelResult};
+use pdma_model_contract::abi::DescriptorSchemaView;
+use pdma_model_contract::{AbiCommand, AbiEvent, DeviceEpoch, EpochQueue, RingRecord};
 use pdma_model_contract::{CommandId, CompletionRingId, QueueId};
 
 pub(super) fn fetch(
@@ -63,7 +64,9 @@ pub(super) fn has_pending(control: &BusControlState, queue_id: QueueId) -> bool 
 }
 
 fn command_id(bytes: &[u8]) -> ModelResult<CommandId> {
-    let raw = pdma_model_contract::abi::read_u64_le(bytes, 8..16)
+    let view = DescriptorSchemaView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
+    let raw = view
+        .command_id()
         .map_err(|_| ModelError::DmaSubmissionState)?;
     usize::try_from(raw)
         .map(CommandId::new)

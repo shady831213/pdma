@@ -14,6 +14,7 @@ mod types;
 mod wait;
 mod worker;
 
+use crate::ModelResult;
 use crate::dma_space::{DmaSpaceError, DmaStage};
 use backend::DeviceModel;
 pub use bus::{
@@ -22,10 +23,9 @@ pub use bus::{
 };
 pub use manual::SyncDevice;
 use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
-use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::BufferId;
 use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::{DmaAddress, DmaRegion};
 use state::{RunnerShared, RunnerState, publish, summary, wake};
 use std::sync::Arc;
 pub use types::{
@@ -125,12 +125,12 @@ impl AsyncDeviceHandle {
         let (region, generation) = {
             let mut state = self.shared.state.lock().await;
             let region = u64::try_from(len)
-                .map_err(|_| pdma_model_contract::error::ModelError::DmaAllocationExhausted)
+                .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                 .and_then(|length| {
                     state
                         .dma_space
                         .allocate(length)
-                        .map_err(|_| pdma_model_contract::error::ModelError::DmaAllocationExhausted)
+                        .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                 });
             if region.is_ok() {
                 wake(&mut state);

@@ -1,11 +1,14 @@
 //! Host-owned IRQ delivery actor.
 
+use crate::ModelError;
+use crate::ModelResult;
+
 mod bootstrap;
 mod trace;
 
 use crate::{AsyncDevicePort, SoftwareCpu};
 pub use bootstrap::{IrqDeliveryBootstrap, IrqDeliveryRunner};
-use pdma_model_contract::{IrqNotification, IrqVector, ModelError, ModelResult, TraceEvent};
+use pdma_model_contract::{IrqNotification, IrqVector, TraceEvent};
 use std::{
     collections::{BTreeMap, btree_map::Entry},
     fmt,

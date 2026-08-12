@@ -1,5 +1,5 @@
 use super::TestResult;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiCommand, AbiCopy, AbiId, CopyIovas, DeviceEpoch, DmaAddress, EpochQueue, QueueActivation,
     QueueControl, QueueCursorUpdate, QueueRingRegions, RingCursor, RingLayout, RingRecord,
 };
@@ -145,8 +145,8 @@ impl Fixture {
 pub(super) async fn allocate_pair(
     handle: &AsyncDeviceHandle,
 ) -> TestResult<(
-    pdma_model_contract::abi::DmaRegion,
-    pdma_model_contract::abi::DmaRegion,
+    pdma_model_contract::bridge::DmaRegion,
+    pdma_model_contract::bridge::DmaRegion,
 )> {
     let stage = handle.stage_dma_regions(&[4, 4]).await?;
     let [source, destination] = stage.regions() else {

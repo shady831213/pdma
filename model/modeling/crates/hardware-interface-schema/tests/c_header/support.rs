@@ -5,6 +5,7 @@ use std::{
     process::{Command, Output},
 };
 
+use hardware_interface_schema::export::backends::c_header::CHeaderExportError;
 use hardware_interface_schema::export::{Exporter, InMemoryArtifactSink};
 
 pub type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -22,9 +23,9 @@ pub fn render<S, E>(
     schema: &S,
 ) -> TestResult<hardware_interface_schema::export::Artifact>
 where
-    E: Exporter<S, Error = core::convert::Infallible>,
+    E: Exporter<S, Error = CHeaderExportError>,
 {
-    let mut sink = InMemoryArtifactSink::new();
+    let mut sink = InMemoryArtifactSink::<CHeaderExportError>::new();
     exporter.export(schema, &mut sink)?;
     let mut artifacts = sink.into_artifacts().into_iter();
     let artifact = artifacts
@@ -127,3 +128,11 @@ int main(void) {
 ";
 
 pub const PREFIX_C_MAIN: &[u8] = b"int main(void) { return 0; }\n";
+
+pub const NESTED_C_MAIN: &[u8] = br"
+int main(void) {
+    if (C_NESTED_C_ITEMSQX5B0QX5DQX2EVALUE_OFFSET != UINT64_C(4)) return 1;
+    if (C_NESTED_C_ITEMSQX5B1QX5DQX2EVALUE_OFFSET != UINT64_C(8)) return 2;
+    return 0;
+}
+";

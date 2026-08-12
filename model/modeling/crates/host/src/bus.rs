@@ -1,5 +1,7 @@
 //! Transport-neutral asynchronous PDMA bus contract.
 
+use crate::ModelResult;
+
 mod async_device;
 mod mmio_device;
 mod stage;
@@ -8,11 +10,11 @@ pub use mmio_device::{MmioBusControlError, MmioDeviceBus, MmioDeviceTransport};
 pub use stage::{AsyncDeviceBusStage, BusDmaStage, BusDmaWrite};
 
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate,
     RingCursor, RingCursors,
 };
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use std::error::Error;
 
 /// One all-or-none raw submission acceptance request.
@@ -250,7 +252,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         _source: EpochIrqSource,
         _route: IrqRoute,
     ) -> impl Future<Output = ModelResult<()>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Enables one PDMA-local IRQ source.
@@ -258,7 +260,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Disables one PDMA-local IRQ source.
@@ -266,7 +268,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Masks one PDMA-local IRQ source.
@@ -274,7 +276,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Unmasks one PDMA-local IRQ source.
@@ -282,7 +284,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Acknowledges one PDMA-local IRQ source.
@@ -290,7 +292,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<()>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Observes one PDMA-local IRQ source without consuming it.
@@ -298,7 +300,7 @@ pub trait AsyncPdmaBus: Send + Sync {
         &self,
         _source: EpochIrqSource,
     ) -> impl Future<Output = ModelResult<IrqSourceStatus>> + Send {
-        async { Err(pdma_model_contract::ModelError::DmaSubmissionState) }
+        async { Err(crate::ModelError::DmaSubmissionState) }
     }
 
     /// Returns the current asserted line snapshot.

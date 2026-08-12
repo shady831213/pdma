@@ -1,8 +1,9 @@
 use super::{Access, RecordingStage, RecordingTransport};
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, QueueActivation};
-use pdma_model_contract::{BufferId, IrqNotification, ModelResult};
+use pdma_model_contract::{BufferId, IrqNotification};
+use pdma_model_contract::{DmaAddress, DmaRegion, QueueActivation};
 use pdma_model_device::{DmaSpaceError, MmioBatchError, QueueResponseBytes};
+use pdma_model_host::ModelResult;
 use pdma_model_host::{BusDmaStage, BusSubmission, MmioDeviceTransport};
 use std::sync::atomic::Ordering;
 
@@ -16,7 +17,7 @@ impl MmioDeviceTransport for RecordingTransport {
     type Stage = RecordingStage;
 
     async fn allocate_dma_region(&self, _len: usize) -> ModelResult<DmaRegion> {
-        Err(pdma_model_contract::ModelError::DmaAllocationExhausted)
+        Err(pdma_model_host::ModelError::DmaAllocationExhausted)
     }
 
     async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, DmaSpaceError> {

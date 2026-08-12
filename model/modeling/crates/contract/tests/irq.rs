@@ -2,7 +2,7 @@
 
 use pdma_model_contract::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId,
-    IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector, ModelError, QueueId,
+    IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector, QueueId,
 };
 
 const fn current(source: IrqSource) -> EpochIrqSource {
@@ -108,43 +108,4 @@ fn irq_notification_resolves_line_and_message_vectors() {
     // When/Then: the common boundary resolves the configured vector for either route.
     assert_eq!(line.vector(), line_vector);
     assert_eq!(message.vector(), message_vector);
-}
-
-#[test]
-fn irq_registry_errors_preserve_the_rejected_vector() {
-    // Given: one vector rejected for duplicate registration or missing registration.
-    let vector = IrqVector::new(13);
-    let duplicate = ModelError::DuplicateIrqVector(vector);
-    let unregistered = ModelError::UnregisteredIrqVector(vector);
-
-    // When/Then: equality retains the typed vector and display distinguishes the failures.
-    assert_eq!(duplicate, ModelError::DuplicateIrqVector(vector));
-    assert_eq!(unregistered, ModelError::UnregisteredIrqVector(vector));
-    assert_ne!(duplicate, unregistered);
-    assert_eq!(duplicate.to_string(), "IRQ vector 13 already has a handler");
-    assert_eq!(
-        unregistered.to_string(),
-        "IRQ vector 13 has no registered handler"
-    );
-}
-
-#[test]
-fn software_cpu_errors_have_distinct_identities() {
-    // Given: the three CPU-local invariant failures.
-    let errors = [
-        ModelError::SoftwareCpuInactive,
-        ModelError::SoftwareCpuMismatch,
-        ModelError::SoftwareCpuStateBusy,
-    ];
-
-    // When/Then: equality and display keep every invariant failure distinct.
-    assert_ne!(errors[0], errors[1]);
-    assert_ne!(errors[1], errors[2]);
-    assert_ne!(errors[0], errors[2]);
-    assert_eq!(errors[0].to_string(), "software CPU context is inactive");
-    assert_eq!(
-        errors[1].to_string(),
-        "software CPU context does not match this state"
-    );
-    assert_eq!(errors[2].to_string(), "software CPU-local state is busy");
 }

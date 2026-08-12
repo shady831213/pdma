@@ -1,5 +1,7 @@
 use crate::CpuLocal;
-use pdma_model_contract::{CommandId, ModelError, ModelResult};
+use crate::ModelError;
+use crate::ModelResult;
+use pdma_model_contract::CommandId;
 use std::{
     future::{Future, poll_fn},
     sync::{

@@ -1,162 +1,193 @@
 use super::{MmioAccess, MmioReset, RegisterId, RegisterLiteral};
-macro_rules! r {
-    ($id:ident,$name:literal,$offset:literal,$width:literal,$access:ident,$reset:ident,$value:expr,$mask:expr) => {
-        (
-            RegisterId::$id,
-            $name,
-            $offset,
-            $width,
-            MmioAccess::$access,
-            MmioReset::$reset,
-            $value,
-            $mask,
-        )
-    };
-}
 pub(super) const REGISTERS: [RegisterLiteral; 19] = [
-    r!(
-        GMagic,
+    (
+        RegisterId::GMagic,
         "G_MAGIC",
         0x000,
         4,
-        ReadOnly,
-        Constant,
+        MmioAccess::ReadOnly,
+        MmioReset::Constant,
         0x414d_4450,
-        0
+        0,
     ),
-    r!(
-        GMmioAbiVersion,
+    (
+        RegisterId::GMmioAbiVersion,
         "G_MMIO_ABI_VERSION",
         0x004,
         4,
-        ReadOnly,
-        Constant,
+        MmioAccess::ReadOnly,
+        MmioReset::Constant,
         1,
-        0
+        0,
     ),
-    r!(
-        GReqAbiVersion,
+    (
+        RegisterId::GReqAbiVersion,
         "G_REQ_ABI_VERSION",
         0x008,
         4,
-        ReadWrite,
-        Zero,
+        MmioAccess::ReadWrite,
+        MmioReset::Zero,
         0,
-        0xffff
+        0xffff,
     ),
-    r!(
-        GReqFeatures,
+    (
+        RegisterId::GReqFeatures,
         "G_REQ_FEATURES",
         0x010,
         8,
-        ReadWrite,
-        Zero,
+        MmioAccess::ReadWrite,
+        MmioReset::Zero,
         0,
-        u64::MAX
+        u64::MAX,
     ),
-    r!(
-        GResetExpectedEpoch,
+    (
+        RegisterId::GResetExpectedEpoch,
         "G_RESET_EXPECTED_EPOCH",
         0x018,
         8,
-        ReadWrite,
-        Zero,
+        MmioAccess::ReadWrite,
+        MmioReset::Zero,
         0,
-        u64::MAX
+        u64::MAX,
     ),
-    r!(
-        GCommand,
+    (
+        RegisterId::GCommand,
         "G_COMMAND",
         0x020,
         4,
-        WriteOnly,
-        Zero,
+        MmioAccess::WriteOnly,
+        MmioReset::Zero,
         0,
-        0xffff_ffff
+        0xffff_ffff,
     ),
-    r!(GResult, "G_RESULT", 0x024, 4, ReadOnly, Zero, 0, 0),
-    r!(GDetail0, "G_DETAIL0", 0x028, 8, ReadOnly, Zero, 0, 0),
-    r!(GDetail1, "G_DETAIL1", 0x030, 8, ReadOnly, Zero, 0, 0),
-    r!(GDetail2, "G_DETAIL2", 0x038, 8, ReadOnly, Zero, 0, 0),
-    r!(
-        GRspAbiVersion,
+    (
+        RegisterId::GResult,
+        "G_RESULT",
+        0x024,
+        4,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
+        0,
+        0,
+    ),
+    (
+        RegisterId::GDetail0,
+        "G_DETAIL0",
+        0x028,
+        8,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
+        0,
+        0,
+    ),
+    (
+        RegisterId::GDetail1,
+        "G_DETAIL1",
+        0x030,
+        8,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
+        0,
+        0,
+    ),
+    (
+        RegisterId::GDetail2,
+        "G_DETAIL2",
+        0x038,
+        8,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
+        0,
+        0,
+    ),
+    (
+        RegisterId::GRspAbiVersion,
         "G_RSP_ABI_VERSION",
         0x040,
         4,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(
-        GRspRunState,
+    (
+        RegisterId::GRspRunState,
         "G_RSP_RUN_STATE",
         0x044,
         4,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(
-        GRspFeatures,
+    (
+        RegisterId::GRspFeatures,
         "G_RSP_FEATURES",
         0x048,
         8,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(
-        GRspEpoch,
+    (
+        RegisterId::GRspEpoch,
         "G_RSP_EPOCH",
         0x050,
         8,
-        ReadOnly,
-        PostReset,
+        MmioAccess::ReadOnly,
+        MmioReset::PostReset,
         0,
-        0
+        0,
     ),
-    r!(
-        GMaxRingDepth,
+    (
+        RegisterId::GMaxRingDepth,
         "G_MAX_RING_DEPTH",
         0x058,
         4,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(
-        GMaxIndirectDestinations,
+    (
+        RegisterId::GMaxIndirectDestinations,
         "G_MAX_INDIRECT_DESTINATIONS",
         0x05c,
         4,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(
-        GMaxTransferBytes,
+    (
+        RegisterId::GMaxTransferBytes,
         "G_MAX_TRANSFER_BYTES",
         0x060,
         4,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(
-        GMaxStridedRows,
+    (
+        RegisterId::GMaxStridedRows,
         "G_MAX_STRIDED_ROWS",
         0x064,
         4,
-        ReadOnly,
-        Zero,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
         0,
-        0
+        0,
     ),
-    r!(GMaxStride, "G_MAX_STRIDE", 0x068, 4, ReadOnly, Zero, 0, 0),
+    (
+        RegisterId::GMaxStride,
+        "G_MAX_STRIDE",
+        0x068,
+        4,
+        MmioAccess::ReadOnly,
+        MmioReset::Zero,
+        0,
+        0,
+    ),
 ];

@@ -1,8 +1,8 @@
-use pdma_model_contract::abi::{EpochQueue, RingCursor};
-use pdma_model_contract::{
-    BufferId, CommandId, CopyRequest, IrqNotification, IrqRoute, IrqVector, ModelError, ModelResult,
-};
+use pdma_model_contract::{BufferId, CommandId, CopyRequest, IrqNotification, IrqRoute, IrqVector};
+use pdma_model_contract::{EpochQueue, RingCursor};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{
     AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, DriverIrqRecord, IrqDelivery,
     QueueControlWrite, SoftwareCpu, StatefulIrqHandler, stateful_irq_handler,

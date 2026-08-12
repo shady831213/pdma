@@ -1,7 +1,7 @@
 #[path = "support/recording.rs"]
 mod recording;
 
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     DeviceEpoch, DmaRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
 };
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};

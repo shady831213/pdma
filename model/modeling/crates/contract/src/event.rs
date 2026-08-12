@@ -1,7 +1,5 @@
 //! Event records returned from the PDMA device to the driver.
 
-use crate::abi::DmaAddress;
-use crate::error::ModelError;
 use crate::ids::{BufferId, CommandId, QueueId};
 
 /// Software-visible recoverable command error kind.
@@ -23,41 +21,32 @@ pub enum EventErrorKind {
 /// Memory fault metadata carried from an engine to the event unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryFault {
-    source: ModelError,
     buffer: BufferId,
     error_kind: EventErrorKind,
-    fault_iova: Option<DmaAddress>,
+    fault_address: Option<FaultAddress>,
 }
 
 impl MemoryFault {
     /// Creates a memory fault from the original model error and faulting buffer.
-    pub const fn new(source: ModelError, buffer: BufferId, error_kind: EventErrorKind) -> Self {
+    pub const fn new(buffer: BufferId, error_kind: EventErrorKind) -> Self {
         Self {
-            source,
             buffer,
             error_kind,
-            fault_iova: None,
+            fault_address: None,
         }
     }
 
     /// Creates a memory fault with an address when a fixed-width fault locator is known.
-    pub const fn with_iova(
-        source: ModelError,
+    pub const fn with_address(
         buffer: BufferId,
         error_kind: EventErrorKind,
-        fault_iova: DmaAddress,
+        fault_address: FaultAddress,
     ) -> Self {
         Self {
-            source,
             buffer,
             error_kind,
-            fault_iova: Some(fault_iova),
+            fault_address: Some(fault_address),
         }
-    }
-
-    /// Original model error that should be returned to the caller.
-    pub const fn source(self) -> ModelError {
-        self.source
     }
 
     /// Buffer associated with the memory fault.
@@ -71,8 +60,8 @@ impl MemoryFault {
     }
 
     /// Fixed-width fault locator when the semantic object maps to a known address.
-    pub const fn fault_iova(self) -> Option<DmaAddress> {
-        self.fault_iova
+    pub const fn fault_address(self) -> Option<FaultAddress> {
+        self.fault_address
     }
 }
 
@@ -92,18 +81,7 @@ impl EventRecord {
         error_kind: EventErrorKind,
         buffer: BufferId,
     ) -> Self {
-        let source = match error_kind {
-            EventErrorKind::UnknownBuffer => ModelError::UnknownBuffer(buffer),
-            EventErrorKind::RangeOverflow => ModelError::RangeOverflow,
-            EventErrorKind::OutOfBounds { len, end } => {
-                ModelError::OutOfBounds { buffer, len, end }
-            }
-        };
-        Self::from_memory_fault(
-            queue_id,
-            command_id,
-            MemoryFault::new(source, buffer, error_kind),
-        )
+        Self::from_memory_fault(queue_id, command_id, MemoryFault::new(buffer, error_kind))
     }
 
     /// Creates an event from a typed semantic memory fault.
@@ -140,7 +118,22 @@ impl EventRecord {
     }
 
     /// Fixed-width fault locator when one is known for the semantic object.
-    pub const fn fault_iova(self) -> Option<DmaAddress> {
-        self.fault.fault_iova()
+    pub const fn fault_address(self) -> Option<FaultAddress> {
+        self.fault.fault_address()
+    }
+}
+/// Runtime-neutral semantic address associated with a memory fault.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FaultAddress(u64);
+
+impl FaultAddress {
+    /// Creates a semantic address from its complete numeric value.
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the complete numeric value.
+    pub const fn raw(self) -> u64 {
+        self.0
     }
 }

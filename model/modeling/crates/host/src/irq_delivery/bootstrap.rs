@@ -3,7 +3,9 @@ use super::{
     IrqHandlerRegistry, NoHandler,
 };
 use crate::AsyncDevicePort;
-use pdma_model_contract::{IrqVector, ModelError, ModelResult};
+use crate::ModelError;
+use crate::ModelResult;
+use pdma_model_contract::IrqVector;
 use tokio::sync::oneshot;
 
 type RunnableDelivery<P> = IrqDelivery<P, HasHandlers<'static>>;

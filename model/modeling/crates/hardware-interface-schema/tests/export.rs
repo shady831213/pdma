@@ -3,7 +3,7 @@
 use core::convert::Infallible;
 
 use hardware_interface_schema::{
-    RecordSpec,
+    RecordSpec, ResolvedRecord,
     export::{Artifact, ArtifactSink, Exporter, InMemoryArtifactSink},
 };
 
@@ -53,10 +53,10 @@ impl ArtifactSink for CountingSink {
 
 struct LocalExporter;
 
-impl Exporter<RecordSpec> for LocalExporter {
+impl Exporter<ResolvedRecord> for LocalExporter {
     type Error = LocalExportError;
 
-    fn export<Sink>(&self, _schema: &RecordSpec, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(&self, _schema: &ResolvedRecord, sink: &mut Sink) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
@@ -78,10 +78,10 @@ impl Exporter<RecordSpec> for LocalExporter {
 
 struct RejectingExporter;
 
-impl Exporter<RecordSpec> for RejectingExporter {
+impl Exporter<ResolvedRecord> for RejectingExporter {
     type Error = LocalExportError;
 
-    fn export<Sink>(&self, _schema: &RecordSpec, _sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(&self, _schema: &ResolvedRecord, _sink: &mut Sink) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
@@ -91,10 +91,10 @@ impl Exporter<RecordSpec> for RejectingExporter {
 
 struct InfallibleLocalExporter;
 
-impl Exporter<RecordSpec> for InfallibleLocalExporter {
+impl Exporter<ResolvedRecord> for InfallibleLocalExporter {
     type Error = Infallible;
 
-    fn export<Sink>(&self, _schema: &RecordSpec, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(&self, _schema: &ResolvedRecord, sink: &mut Sink) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
@@ -114,7 +114,7 @@ const fn record_schema() -> RecordSpec {
 #[test]
 fn downstream_local_exporter_and_sink_preserve_owned_artifacts_in_emission_order() {
     // Given
-    let schema = record_schema();
+    let schema = record_schema().resolve().expect("fixture must resolve");
     let exporter = LocalExporter;
     let mut sink = LocalCollectingSink::default();
 
@@ -143,7 +143,7 @@ fn downstream_local_exporter_and_sink_preserve_owned_artifacts_in_emission_order
 #[test]
 fn in_memory_sink_preserves_owned_odd_contents_after_exporter_locals_drop() {
     // Given
-    let schema = record_schema();
+    let schema = record_schema().resolve().expect("fixture must resolve");
     let exporter = InfallibleLocalExporter;
     let mut sink = InMemoryArtifactSink::new();
 
@@ -165,7 +165,7 @@ fn in_memory_sink_preserves_owned_odd_contents_after_exporter_locals_drop() {
 #[test]
 fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
     // Given
-    let schema = record_schema();
+    let schema = record_schema().resolve().expect("fixture must resolve");
     let exporter = LocalExporter;
     let mut sink = RejectingSink;
 
@@ -179,7 +179,7 @@ fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
 #[test]
 fn exporter_rejection_does_not_invoke_the_sink() {
     // Given
-    let schema = record_schema();
+    let schema = record_schema().resolve().expect("fixture must resolve");
     let exporter = RejectingExporter;
     let mut sink = CountingSink::default();
 

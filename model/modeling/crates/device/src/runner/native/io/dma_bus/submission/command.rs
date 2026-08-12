@@ -1,15 +1,15 @@
 use super::resolve;
 use crate::dma_space::DmaSpace;
-use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiEvent, AbiFault, AbiOperandVisit, AbiStridedCopy,
-    AbiVectorAdd, BroadcastDestinationEntry,
-};
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,
     CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand,
     VectorAddRequest, VectorBufferRange,
 };
-use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::{
+    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiEvent, AbiFault, AbiOperandVisit, AbiStridedCopy,
+    AbiVectorAdd, BroadcastDestinationEntry,
+};
 use pdma_model_contract::{BufferId, CommandId, CompletionRingId, DmaRangeStart, QueueId};
 
 pub(super) fn resolve(

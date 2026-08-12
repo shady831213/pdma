@@ -12,7 +12,7 @@ fn legacy_render_when_checked_against_the_tracked_c_header_is_byte_exact() {
     let legacy = std::str::from_utf8(LEGACY_HEADER).expect("legacy C header must be UTF-8");
 
     // When: the established public renderer produces the complete header.
-    let rendered = render_c_header();
+    let rendered = render_c_header().expect("canonical schemas must resolve");
 
     // Then: every symbol, section, guard, preamble, and ordering byte remains frozen.
     assert_eq!(LEGACY_HEADER.len(), LEGACY_HEADER_BYTES);

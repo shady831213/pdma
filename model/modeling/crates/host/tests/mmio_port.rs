@@ -1,9 +1,11 @@
 //! MMIO-backed host-port CPU, reset, and DMA-persistence boundaries.
 
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
+
 use pdma_model_contract::abi::mmio::{MmioByteCount, MmioResult};
 use pdma_model_contract::{
-    CopyRequest, EventRouting, IrqNotification, IrqRoute, IrqVector, ModelError, ModelResult,
-    QueueConfig, SoftwareOwnerId,
+    CopyRequest, EventRouting, IrqNotification, IrqRoute, IrqVector, QueueConfig, SoftwareOwnerId,
 };
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
@@ -34,7 +36,7 @@ async fn message_delivery_uses_non_consuming_readiness_and_one_raw_claim() -> Mo
             driver
                 .submit_copy_on(&mut port, CopyRequest::new(input, output, 4))
                 .await?;
-            Ok(source)
+            Ok::<_, ModelError>(source)
         })
         .await?;
 

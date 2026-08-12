@@ -1,9 +1,7 @@
 use super::{MmioBusControlError, MmioDeviceBus, MmioDeviceTransport};
 use crate::{BusQueueStatus, BusSubmission, QueueControlWrite};
 use pdma_model_contract::abi::mmio::{MmioByteCount, MmioResult, MmioResultDetails};
-use pdma_model_contract::abi::{
-    EpochQueue, QueueActivation, QueueRingRegions, RingCursor, RingCursors,
-};
+use pdma_model_contract::{EpochQueue, QueueActivation, QueueRingRegions, RingCursor, RingCursors};
 
 pub(super) async fn bootstrap<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
@@ -126,7 +124,7 @@ fn decode_status(
         return Err(MmioBusControlError::MalformedResponse);
     };
     let queue = EpochQueue::new(
-        pdma_model_contract::abi::DeviceEpoch::new(*epoch),
+        pdma_model_contract::semantic::DeviceEpoch::new(*epoch),
         pdma_model_contract::QueueId::new(
             usize::try_from(*id).map_err(|_| MmioBusControlError::MalformedResponse)?,
         ),
@@ -152,7 +150,7 @@ fn decode_status(
 }
 
 fn cursors(
-    layout: pdma_model_contract::abi::RingLayout,
+    layout: pdma_model_contract::bridge::RingLayout,
     producer: RingCursor,
     consumer: RingCursor,
 ) -> Result<RingCursors, MmioBusControlError> {

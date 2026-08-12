@@ -3,8 +3,9 @@ use super::{
     assertions::{assert_distinct_observations, receive_observations, trace_count},
     support::{DistinctDelivery, HandlerChannels, spawn_distinct_delivery},
 };
-use pdma_model_contract::{IrqVector, ModelResult, TraceEventKind};
+use pdma_model_contract::{IrqVector, TraceEventKind};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelResult;
 use pdma_model_host::SoftwareCpu;
 use tokio::sync::{mpsc, oneshot};
 

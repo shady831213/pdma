@@ -3,7 +3,9 @@ use super::super::{
     naming::{c_identifier, disambiguate_identifiers},
 };
 
-pub(super) fn map_names<I: Copy + Eq + 'static>(model: &RegisterMapCHeaderModel<I>) -> MapNames {
+pub(super) fn map_names<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug>(
+    model: &RegisterMapCHeaderModel<I, F>,
+) -> MapNames {
     let bank_names = disambiguate_identifiers(
         model
             .banks()

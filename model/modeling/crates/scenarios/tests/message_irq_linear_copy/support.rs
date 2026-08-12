@@ -1,3 +1,4 @@
+use pdma_model_host::ModelResult;
 #[path = "assertions.rs"]
 mod assertions;
 #[path = "recording.rs"]
@@ -7,7 +8,7 @@ pub use assertions::assert_outcome;
 pub use recording::{MmioAccessRecord, RecordingMmioTransport, ScenarioBus};
 
 use pdma_model_contract::{
-    CommandId, IrqNotification, IrqSource, IrqVector, ModelResult, QueueConfigHandle, TraceEvent,
+    CommandId, IrqNotification, IrqSource, IrqVector, QueueConfigHandle, TraceEvent,
 };
 use pdma_model_host::{
     AsyncDriver, BusDevicePort, BusQueueStatus, CpuLocal, DriverIrqRecord, StatefulIrqHandler,

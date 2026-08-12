@@ -1,5 +1,5 @@
 use super::{TestResult, read_u64, write_u32, write_u64};
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     DeviceEpoch, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
     RingCursor, RingLayout, RingRecord,
 };
@@ -57,7 +57,7 @@ async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestR
 
 async fn activate_raw(
     handle: &AsyncDeviceHandle,
-    regions: &[pdma_model_contract::abi::DmaRegion],
+    regions: &[pdma_model_contract::bridge::DmaRegion],
 ) -> TestResult {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
@@ -86,7 +86,7 @@ async fn read_response(handle: &AsyncDeviceHandle) -> TestResult<[u64; 9]> {
     Ok(response)
 }
 
-fn activation(regions: &[pdma_model_contract::abi::DmaRegion]) -> TestResult<QueueActivation> {
+fn activation(regions: &[pdma_model_contract::bridge::DmaRegion]) -> TestResult<QueueActivation> {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
     };

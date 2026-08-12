@@ -1,11 +1,13 @@
 use super::{AsyncPdmaBus, BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};
+use crate::ModelError;
+use crate::ModelResult;
 use crate::QueueControlWrite;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiEventKind, DmaAddress, QueueCursorUpdate, RingCursor, decode_completion, decode_event,
 };
 use pdma_model_contract::{
-    BufferId, CompletionRecord, EpochIrqSource, EventErrorKind, EventRecord, IrqRoute, ModelError,
-    ModelResult, QueueConfigHandle,
+    BufferId, CompletionRecord, EpochIrqSource, EventErrorKind, EventRecord, IrqRoute,
+    QueueConfigHandle,
 };
 use std::{future::poll_fn, task::Poll};
 
@@ -121,7 +123,7 @@ where
 async fn commit_consumer<B>(
     port: &BusDevicePort<B>,
     handle: QueueConfigHandle,
-    queue: pdma_model_contract::abi::EpochQueue,
+    queue: pdma_model_contract::semantic::EpochQueue,
     expected_consumer: RingCursor,
     request: QueueControlWrite,
 ) -> ModelResult<()>
@@ -169,7 +171,7 @@ where
 }
 
 fn slot_address(
-    layout: pdma_model_contract::abi::RingLayout,
+    layout: pdma_model_contract::bridge::RingLayout,
     cursor: RingCursor,
 ) -> ModelResult<DmaAddress> {
     let offset = layout
@@ -185,7 +187,7 @@ fn slot_address(
 
 fn semantic_event<B>(
     port: &BusDevicePort<B>,
-    event: pdma_model_contract::abi::AbiEvent,
+    event: pdma_model_contract::bridge::AbiEvent,
 ) -> ModelResult<EventRecord> {
     let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
     let locator = DmaAddress::new(locator);

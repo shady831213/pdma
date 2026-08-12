@@ -1,10 +1,11 @@
 //! Driver-side PDMA IRQ source demultiplexing.
 
+use crate::ModelError;
+use crate::ModelResult;
+
 use super::AsyncDriver;
 use crate::AsyncDevicePort;
-use pdma_model_contract::{
-    CompletionRecord, EventRecord, IrqNotification, IrqSource, ModelError, ModelResult,
-};
+use pdma_model_contract::{CompletionRecord, EventRecord, IrqNotification, IrqSource};
 
 /// One record drained by the PDMA software handler.
 #[derive(Debug, Clone, PartialEq, Eq)]

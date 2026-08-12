@@ -1,6 +1,6 @@
 use pdma_model_contract::BufferId;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
+use pdma_model_contract::{DmaAddress, DmaRegion};
 use pdma_model_device::{DmaBatchContext, DmaSpaceError, MmioBatchError};
 
 #[test]

@@ -6,7 +6,7 @@ mod irq;
 mod queue;
 
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount, MmioResult};
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     DeviceEpoch, DeviceRunState, DeviceStatus, DiscoveryRequest, WholeDeviceReset,
 };
 use pdma_model_device::AsyncDevice;

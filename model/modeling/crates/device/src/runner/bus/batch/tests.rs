@@ -1,9 +1,7 @@
 use super::{QueueBootstrapBatch, QueueResponseBytes};
 use crate::runner::AsyncDevice;
 use pdma_model_contract::abi::mmio::MmioByteCount;
-use pdma_model_contract::abi::{
-    DeviceEpoch, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
-};
+use pdma_model_contract::{DeviceEpoch, QueueActivation, QueueRingRegions, RingLayout, RingRecord};
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use std::future::{Future, poll_fn};
 

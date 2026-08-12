@@ -10,7 +10,7 @@ use std::{
     process,
 };
 
-use pdma_model_contract::abi::header::render_c_header;
+use pdma_model_contract::abi::header::{PdmaCHeaderExporter, PdmaHeaderSchemas};
 
 struct TemporaryOutput {
     path: PathBuf,
@@ -69,6 +69,7 @@ enum HeaderError {
         to: PathBuf,
         source: io::Error,
     },
+    Render(pdma_model_contract::abi::header::HeaderRenderError),
     Sync {
         path: PathBuf,
         source: io::Error,
@@ -108,6 +109,7 @@ impl fmt::Display for HeaderError {
                 to.display(),
                 from.display()
             ),
+            Self::Render(source) => write!(formatter, "cannot render header: {source}"),
             Self::Sync { path, source } => {
                 write!(formatter, "cannot sync {}: {source}", path.display())
             }
@@ -133,7 +135,8 @@ fn main() {
 
 fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), HeaderError> {
     let command = parse_command(arguments)?;
-    let rendered = render_c_header();
+    let schemas = PdmaHeaderSchemas::resolve().map_err(HeaderError::Render)?;
+    let rendered = PdmaCHeaderExporter::new().render(&schemas);
     match command {
         Command::Check(path) => check(&path, &rendered),
         Command::Write(path) => write_atomically(&path, rendered.as_bytes()),

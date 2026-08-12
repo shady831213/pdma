@@ -1,10 +1,7 @@
 use super::support::{TestResult, response, result, write_u32};
 use pdma_model_contract::{
-    CommandId, DeviceEpoch, ExternalCommand, QueueId, ResourceConfig,
-    abi::{
-        EpochQueue, QueueActivation, QueueControl, QueueRingRegions, RingLayout, RingRecord,
-        WholeDeviceReset,
-    },
+    CommandId, DeviceEpoch, EpochQueue, ExternalCommand, QueueActivation, QueueControl, QueueId,
+    QueueRingRegions, ResourceConfig, RingLayout, RingRecord, WholeDeviceReset,
     desc::{CopyCommand, CopyRequest},
     ids::BufferId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},

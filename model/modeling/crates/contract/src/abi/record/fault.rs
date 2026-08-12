@@ -13,8 +13,8 @@ use super::{
     AbiStrideOffset,
 };
 use crate::abi::{
-    ABI_VERSION, DESCRIPTOR_SIZE, DmaAddress, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS,
-    MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
+    ABI_VERSION, DESCRIPTOR_SIZE, DescriptorSchema, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
+    MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
 };
 
 /// Canonical address-aware fault carried by one ABI event.
@@ -47,7 +47,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(ABI_VERSION),
-                descriptor_site(0),
+                descriptor_site(DescriptorSchema::VERSION_OFFSET as u64),
             ),
         )
     }
@@ -60,7 +60,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(DESCRIPTOR_SIZE),
-                descriptor_site(6),
+                descriptor_site(DescriptorSchema::SIZE_OFFSET as u64),
             ),
         )
     }
@@ -73,7 +73,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(VECTOR_ADD_OPCODE),
-                descriptor_site(2),
+                descriptor_site(DescriptorSchema::OPCODE_OFFSET as u64),
             ),
         )
     }
@@ -83,7 +83,11 @@ impl AbiFault {
         Self::from_parts(
             AbiEventKind::InvalidFlags,
             locator,
-            AbiFaultDetails::new(u64::from(observed), 0, descriptor_site(4)),
+            AbiFaultDetails::new(
+                u64::from(observed),
+                0,
+                descriptor_site(DescriptorSchema::FLAGS_OFFSET as u64),
+            ),
         )
     }
 

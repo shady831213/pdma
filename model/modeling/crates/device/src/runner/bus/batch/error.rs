@@ -1,6 +1,6 @@
 use crate::dma_space::DmaSpaceError;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
+use pdma_model_contract::{DmaAddress, DmaRegion};
 
 /// Attempted extent used to retain contextual DMA failure details.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,5 +1,7 @@
 //! MMIO-backed transport adapter for the existing asynchronous PDMA bus.
 
+use crate::ModelResult;
+
 #[path = "mmio_device/dma.rs"]
 mod dma;
 #[path = "mmio_device/error.rs"]
@@ -16,8 +18,8 @@ pub use recording::MmioDeviceTransport;
 
 use super::AsyncPdmaBus;
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
+use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -32,7 +34,7 @@ pub struct MmioDeviceBus<T = pdma_model_device::AsyncDeviceHandle> {
 
 #[derive(Debug, Default)]
 struct QueueWindow {
-    layouts: BTreeMap<EpochQueue, pdma_model_contract::abi::QueueRingRegions>,
+    layouts: BTreeMap<EpochQueue, pdma_model_contract::bridge::QueueRingRegions>,
 }
 
 impl<T: Clone> Clone for MmioDeviceBus<T> {

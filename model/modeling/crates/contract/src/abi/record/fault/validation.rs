@@ -1,8 +1,8 @@
 use super::AbiFault;
 use crate::abi::record::{AbiEventAccess, AbiEventKind, AbiEventStage};
 use crate::abi::{
-    DESCRIPTOR_SIZE, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES,
-    VECTOR_ADD_OPCODE,
+    DESCRIPTOR_SIZE, DescriptorSchema, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS,
+    MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
 };
 
 pub(super) fn is_canonical(fault: AbiFault) -> bool {
@@ -12,17 +12,32 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
         AbiEventKind::UnmappedIova => operand && tuple.3 == 0,
         AbiEventKind::RangeOverflow => operand && range_overflow(tuple),
         AbiEventKind::OutOfBounds => operand && tuple.3 > tuple.1,
-        AbiEventKind::InvalidVersion => descriptor(tuple, 1, 0),
-        AbiEventKind::InvalidSize => descriptor(tuple, u64::from(DESCRIPTOR_SIZE), 6),
+        AbiEventKind::InvalidVersion => {
+            descriptor(tuple, 1, DescriptorSchema::VERSION_OFFSET as u64)
+        }
+        AbiEventKind::InvalidSize => descriptor(
+            tuple,
+            u64::from(DESCRIPTOR_SIZE),
+            DescriptorSchema::SIZE_OFFSET as u64,
+        ),
         AbiEventKind::InvalidOpcode => {
             (tuple.2 == 0 || tuple.2 > u64::from(VECTOR_ADD_OPCODE))
-                && descriptor(tuple, u64::from(VECTOR_ADD_OPCODE), 2)
+                && descriptor(
+                    tuple,
+                    u64::from(VECTOR_ADD_OPCODE),
+                    DescriptorSchema::OPCODE_OFFSET as u64,
+                )
         }
-        AbiEventKind::InvalidFlags => descriptor(tuple, 0, 4),
+        AbiEventKind::InvalidFlags => descriptor(tuple, 0, DescriptorSchema::FLAGS_OFFSET as u64),
         AbiEventKind::InvalidReserved => {
             tuple.2 != 0
                 && tuple.3 == 0
-                && matches!(tuple.6, 40 | 48 | 56)
+                && matches!(
+                    tuple.6,
+                    value if value == DescriptorSchema::WORD3_OFFSET as u64
+                        || value == DescriptorSchema::WORD4_OFFSET as u64
+                        || value == DescriptorSchema::WORD5_OFFSET as u64
+                )
                 && descriptor_context(tuple)
         }
         AbiEventKind::InvalidIndirectCount => {
@@ -41,7 +56,13 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
         AbiEventKind::ValueOutOfRange => {
             tuple.2 > tuple.3
                 && tuple.3 == u64::from(MAX_TRANSFER_BYTES)
-                && matches!(tuple.6, 32 | 40 | 48 | 56)
+                && matches!(
+                    tuple.6,
+                    value if value == DescriptorSchema::WORD2_OFFSET as u64
+                        || value == DescriptorSchema::WORD3_OFFSET as u64
+                        || value == DescriptorSchema::WORD4_OFFSET as u64
+                        || value == DescriptorSchema::WORD5_OFFSET as u64
+                )
                 && descriptor_context(tuple)
         }
     }

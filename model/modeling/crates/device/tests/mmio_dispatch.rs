@@ -1,7 +1,7 @@
 //! Device MMIO dispatcher integration coverage.
 
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::abi::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::AsyncDevice;
 
 #[path = "mmio_dispatch/malformed.rs"]

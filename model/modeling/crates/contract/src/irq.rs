@@ -1,7 +1,7 @@
 //! Shared IRQ contract vocabulary.
 
-use crate::abi::{DeviceEpoch, EpochIrqSource};
 use crate::ids::{CompletionRingId, QueueId};
+use crate::{DeviceEpoch, EpochIrqSource};
 
 /// Host-system interrupt vector identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

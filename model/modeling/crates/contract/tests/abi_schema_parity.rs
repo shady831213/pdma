@@ -3,12 +3,11 @@
 #[path = "abi_schema_parity/support.rs"]
 pub(crate) mod support;
 
-use pdma_model_contract::abi::{
-    AbiCommand, AbiDecodeError, BroadcastDestinationEntry, COMPLETION, CompletionSchema,
-    CompletionSchemaView, DESCRIPTOR, DescriptorSchema, DescriptorSchemaView, EVENT, EventSchema,
-    EventSchemaView, INDIRECT_DESTINATION_ENTRY, IndirectDestinationEntrySchema,
-    IndirectDestinationEntrySchemaView, decode_completion, decode_event, encode_completion,
-    encode_event,
+use pdma_model_contract::{
+    AbiCommand, AbiDecodeError, BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
+    DescriptorSchema, DescriptorSchemaView, EventSchema, EventSchemaView,
+    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView, decode_completion,
+    decode_event, encode_completion, encode_event,
 };
 use pdma_model_contract::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 use support::{
@@ -17,23 +16,19 @@ use support::{
 };
 
 #[test]
-fn schemas_when_migrated_preserve_every_legacy_record_layout() {
+fn canonical_schemas_match_every_frozen_record_layout() {
     // Given: literal ABI-v1 layouts spanning every canonical DMA-visible record.
     let schemas = [
-        (DESCRIPTOR, DescriptorSchema::SPEC, &DESCRIPTOR_FIELDS[..]),
-        (COMPLETION, CompletionSchema::SPEC, &COMPLETION_FIELDS[..]),
-        (EVENT, EventSchema::SPEC, &EVENT_FIELDS[..]),
-        (
-            INDIRECT_DESTINATION_ENTRY,
-            IndirectDestinationEntrySchema::SPEC,
-            &INDIRECT_FIELDS[..],
-        ),
+        (DescriptorSchema::SPEC, &DESCRIPTOR_FIELDS[..]),
+        (CompletionSchema::SPEC, &COMPLETION_FIELDS[..]),
+        (EventSchema::SPEC, &EVENT_FIELDS[..]),
+        (IndirectDestinationEntrySchema::SPEC, &INDIRECT_FIELDS[..]),
     ];
 
     // When: legacy metadata is paired with generated reusable-schema metadata.
-    for (legacy, generic, expected) in schemas {
-        assert_schema_parity(legacy, generic, expected);
-        assert_eq!(generic.validate(), Ok(()));
+    for (schema, expected) in schemas {
+        assert_schema_parity(schema, expected);
+        assert_eq!(schema.validate(), Ok(()));
     }
 
     // Then: all generated views expose the same little-endian scalar boundaries.

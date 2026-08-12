@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use pdma_model_contract::abi::{
     header::render_c_header,
-    mmio::{MMIO_REGISTERS, MmioAccess, MmioReset},
+    mmio::{MmioAccess, MmioReset, PdmaMmioMap},
 };
 
 const COMMANDS: [(&str, u32); 22] = [
@@ -101,7 +101,7 @@ const REGISTER_SENTINELS: [&str; 18] = [
 #[test]
 fn generated_header_matches_every_literal_mmio_macro() {
     // Given: independent literal register, command, result, and state-bit expectations.
-    let header = render_c_header();
+    let header = render_c_header().expect("canonical schemas must resolve");
 
     // When: the complete generated MMIO section is inspected.
     let mmio_defines = header
@@ -121,9 +121,14 @@ fn generated_header_matches_every_literal_mmio_macro() {
         assert!(header.lines().any(|actual| actual == expected));
     }
 
-    for register in MMIO_REGISTERS.iter() {
+    for register in PdmaMmioMap::SPEC.registers() {
         let name = register.name();
-        assert_u32(&header, &format!("{name}_OFFSET"), register.offset());
+        assert_define(
+            &header,
+            &format!("{name}_OFFSET"),
+            "UINT32_C",
+            register.offset(),
+        );
         assert_define(
             &header,
             &format!("{name}_WIDTH"),
@@ -138,7 +143,7 @@ fn generated_header_matches_every_literal_mmio_macro() {
         assert_u32(
             &header,
             &format!("{name}_RESET_CLASS"),
-            reset_code(register.reset()),
+            reset_code(register.reset_kind()),
         );
         assert_u64(
             &header,

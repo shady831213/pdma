@@ -1,9 +1,12 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
+
 use pdma_model_contract::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
     IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
-    IrqVector, ModelError, ModelResult, QueueConfig, QueueConfigHandle, desc::CopyRequest,
+    IrqVector, QueueConfig, QueueConfigHandle, desc::CopyRequest,
 };
 use pdma_model_device::SyncDevice;
 use pdma_model_host::{AsyncDevicePort, AsyncDriver, SoftwareCpu};

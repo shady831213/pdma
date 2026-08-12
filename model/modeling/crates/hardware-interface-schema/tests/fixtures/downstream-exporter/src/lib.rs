@@ -112,21 +112,63 @@ impl ArtifactSink for TelemetrySink {
 #[derive(Debug, Default)]
 pub struct TelemetryExporter;
 
-impl Exporter<his::register_map::RegisterMapSpec<TelemetryMapRegisterId>> for TelemetryExporter {
+/// Application-owned pair of already resolved schema graphs.
+#[derive(Debug)]
+pub struct TelemetryResolved {
+    record: his::ResolvedRecord,
+    map: his::ResolvedRegisterMap<TelemetryMapRegisterId>,
+}
+
+/// Exports fresh resolved graphs through an application-owned sink.
+pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
+    let resolved = TelemetryResolved {
+        record: DownPair::SPEC.resolve().ok()?,
+        map: TelemetryMap::SPEC.resolve().ok()?,
+    };
+    TelemetryExporter.export(&resolved, sink).ok()
+}
+
+impl Exporter<TelemetryResolved> for TelemetryExporter {
     type Error = Infallible;
 
     fn export<Sink>(
         &self,
-        _schema: &his::register_map::RegisterMapSpec<TelemetryMapRegisterId>,
+        schema: &TelemetryResolved,
         sink: &mut Sink,
     ) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
+        let records = schema
+            .record
+            .members()
+            .iter()
+            .map(|member| {
+                format!(
+                    "{}@{}+{}",
+                    member.path(),
+                    member.absolute_offset(),
+                    member.range().len()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let registers = schema
+            .map
+            .registers()
+            .iter()
+            .map(|register| format!("{}@{}", register.path(), register.offset()))
+            .collect::<Vec<_>>()
+            .join(",");
         sink.emit(Artifact {
             logical_name: String::from("acme-telemetry-layout.txt"),
             media_type: String::from("text/vnd.acme.telemetry-layout"),
-            contents: b"record=12,map=128".to_vec(),
+            contents: format!(
+                "record_size={};record={records};map_size={};registers={registers}",
+                schema.record.size(),
+                schema.map.size()
+            )
+            .into_bytes(),
         })
     }
 }
@@ -134,20 +176,18 @@ impl Exporter<his::register_map::RegisterMapSpec<TelemetryMapRegisterId>> for Te
 /// Returns the stable terminal report derived from the custom artifact and schema locations.
 #[must_use]
 pub fn output_line() -> Option<String> {
-    let exporter = TelemetryExporter;
     let mut sink = TelemetrySink::default();
-    exporter.export(&TelemetryMap::SPEC, &mut sink).ok()?;
+    export_resolved(&mut sink)?;
     let artifact = sink.artifacts().first()?;
     let content = core::str::from_utf8(&artifact.contents).ok()?;
     let fixed = fixed_offset(TelemetryMap::locate(4))?;
     let repeated0 = repeated_offset(TelemetryMap::locate(32), 0)?;
     let repeated1 = repeated_offset(TelemetryMap::locate(64), 1)?;
     Some(format!(
-        "artifact={};media={};content={content};record_size={};map_size={};fixed={fixed};repeated0={repeated0};repeated1={repeated1}",
+        "artifact={};media={};content={content};flat_record_size={};fixed={fixed};repeated0={repeated0};repeated1={repeated1}",
         artifact.logical_name,
         artifact.media_type,
         TelemetryRecord::SPEC.size(),
-        TelemetryMap::SPEC.size(),
     ))
 }
 

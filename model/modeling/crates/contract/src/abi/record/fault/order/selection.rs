@@ -6,6 +6,7 @@ use super::types::{
     AbiScalarField, OrderKey,
 };
 use super::{operand_context, operation_for, order_key, reserved_offset};
+use crate::abi::DescriptorSchema;
 use crate::abi::record::{AbiEventKind, AbiFault};
 
 /// One canonical fault paired with its typed first-match location.
@@ -92,10 +93,22 @@ fn fault_matches_order(fault: AbiFault, order: AbiFaultOrder) -> bool {
 
 fn header_matches(tuple: FaultTuple, field: AbiHeaderField) -> bool {
     let (kind, index) = match field {
-        AbiHeaderField::Version => (AbiEventKind::InvalidVersion, 0),
-        AbiHeaderField::Size => (AbiEventKind::InvalidSize, 6),
-        AbiHeaderField::Opcode => (AbiEventKind::InvalidOpcode, 2),
-        AbiHeaderField::Flags => (AbiEventKind::InvalidFlags, 4),
+        AbiHeaderField::Version => (
+            AbiEventKind::InvalidVersion,
+            DescriptorSchema::VERSION_OFFSET as u64,
+        ),
+        AbiHeaderField::Size => (
+            AbiEventKind::InvalidSize,
+            DescriptorSchema::SIZE_OFFSET as u64,
+        ),
+        AbiHeaderField::Opcode => (
+            AbiEventKind::InvalidOpcode,
+            DescriptorSchema::OPCODE_OFFSET as u64,
+        ),
+        AbiHeaderField::Flags => (
+            AbiEventKind::InvalidFlags,
+            DescriptorSchema::FLAGS_OFFSET as u64,
+        ),
     };
     tuple.0 == kind && tuple.6 == index
 }
@@ -104,12 +117,22 @@ fn scalar_matches(tuple: FaultTuple, field: AbiScalarField) -> bool {
     let (kind, index) = match field {
         AbiScalarField::CopyLength
         | AbiScalarField::StridedRows
-        | AbiScalarField::BroadcastLength => (AbiEventKind::ValueOutOfRange, 32),
-        AbiScalarField::StridedRowBytes | AbiScalarField::VectorLength => {
-            (AbiEventKind::ValueOutOfRange, 40)
-        }
-        AbiScalarField::StridedSourceStride => (AbiEventKind::ValueOutOfRange, 48),
-        AbiScalarField::StridedDestinationStride => (AbiEventKind::ValueOutOfRange, 56),
+        | AbiScalarField::BroadcastLength => (
+            AbiEventKind::ValueOutOfRange,
+            DescriptorSchema::WORD2_OFFSET as u64,
+        ),
+        AbiScalarField::StridedRowBytes | AbiScalarField::VectorLength => (
+            AbiEventKind::ValueOutOfRange,
+            DescriptorSchema::WORD3_OFFSET as u64,
+        ),
+        AbiScalarField::StridedSourceStride => (
+            AbiEventKind::ValueOutOfRange,
+            DescriptorSchema::WORD4_OFFSET as u64,
+        ),
+        AbiScalarField::StridedDestinationStride => (
+            AbiEventKind::ValueOutOfRange,
+            DescriptorSchema::WORD5_OFFSET as u64,
+        ),
         AbiScalarField::BroadcastDestinationCount => (AbiEventKind::InvalidIndirectCount, 0),
         AbiScalarField::BroadcastListAlignment => (AbiEventKind::InvalidIndirectAlignment, 0),
     };

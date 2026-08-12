@@ -1,8 +1,8 @@
 use super::{MmioDeviceBus, MmioDeviceTransport};
+use crate::ModelError;
+use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{IrqSourceStatus, MmioByteCount, MmioResult};
-use pdma_model_contract::{
-    DeviceEpoch, EpochIrqSource, IrqRoute, IrqSource, ModelError, ModelResult,
-};
+use pdma_model_contract::{DeviceEpoch, EpochIrqSource, IrqRoute, IrqSource};
 
 #[path = "irq/notification.rs"]
 mod notification;

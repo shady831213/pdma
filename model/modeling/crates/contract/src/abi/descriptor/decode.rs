@@ -1,13 +1,14 @@
 use crate::abi::{
-    ABI_VERSION, AbiId, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR, DESCRIPTOR_FLAGS_MASK,
-    DmaAddress, FieldSpec, MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS,
-    MAX_TRANSFER_BYTES, STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE, read_u16_le, read_u64_le,
+    ABI_VERSION, AbiId, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
+    DescriptorSchema, DescriptorSchemaView, DmaAddress, IndirectDestinationEntrySchemaView,
+    MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
+    STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE, codec::decode_schema_error,
 };
 
 use super::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
     BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
-    DescriptorValueError, StridedCopyShape, VectorIovas, codec::descriptor_fields,
+    DescriptorValueError, StridedCopyShape, VectorIovas,
 };
 
 struct Payload {
@@ -20,31 +21,31 @@ struct Payload {
 }
 
 pub(super) fn decode_descriptor(bytes: &[u8]) -> Result<AbiCommand, DescriptorDecodeError> {
-    let fields = descriptor_fields()?;
-    let version = read_u16_le(bytes, fields.version.range())?;
-    let opcode = read_u16_le(bytes, fields.opcode.range())?;
-    let flags = read_u16_le(bytes, fields.flags.range())?;
-    let size = read_u16_le(bytes, fields.size.range())?;
-    let command_id = AbiId::new(read_u64_le(bytes, fields.command_id.range())?);
-    let [word0, word1, word2, word3, word4, word5] = fields.words;
+    let view = DescriptorSchemaView::new(bytes).map_err(decode_schema_error)?;
+    let version = view.version().map_err(decode_schema_error)?;
+    let opcode = view.opcode().map_err(decode_schema_error)?;
+    let flags = view.flags().map_err(decode_schema_error)?;
+    let size = view.size().map_err(decode_schema_error)?;
+    let command_id = AbiId::new(view.command_id().map_err(decode_schema_error)?);
     let payload = Payload {
-        word0: read_u64_le(bytes, word0.range())?,
-        word1: read_u64_le(bytes, word1.range())?,
-        word2: read_u64_le(bytes, word2.range())?,
-        word3: read_u64_le(bytes, word3.range())?,
-        word4: read_u64_le(bytes, word4.range())?,
-        word5: read_u64_le(bytes, word5.range())?,
+        word0: view.word0().map_err(decode_schema_error)?,
+        word1: view.word1().map_err(decode_schema_error)?,
+        word2: view.word2().map_err(decode_schema_error)?,
+        word3: view.word3().map_err(decode_schema_error)?,
+        word4: view.word4().map_err(decode_schema_error)?,
+        word5: view.word5().map_err(decode_schema_error)?,
     };
     validate_header(version, size, opcode, flags)?;
-    validate_reserved(opcode, &payload, [word3, word4, word5])?;
-    decode_payload(opcode, command_id, &payload, [word2, word3, word4, word5])
+    validate_reserved(opcode, &payload)?;
+    decode_payload(opcode, command_id, &payload)
 }
 
 pub(super) fn decode_destination(
     bytes: &[u8],
 ) -> Result<BroadcastDestinationEntry, DescriptorDecodeError> {
+    let view = IndirectDestinationEntrySchemaView::new(bytes).map_err(decode_schema_error)?;
     Ok(BroadcastDestinationEntry::new(DmaAddress::new(
-        read_u64_le(bytes, 0..8)?,
+        view.destination_iova().map_err(decode_schema_error)?,
     )))
 }
 
@@ -60,10 +61,10 @@ fn validate_header(
             expected: ABI_VERSION,
         });
     }
-    if size != DESCRIPTOR.size() {
+    if size != DESCRIPTOR_SIZE {
         return Err(DescriptorDecodeError::InvalidSize {
             observed: size,
-            expected: DESCRIPTOR.size(),
+            expected: DESCRIPTOR_SIZE,
         });
     }
     if !(COPY_OPCODE..=VECTOR_ADD_OPCODE).contains(&opcode) {
@@ -81,20 +82,16 @@ fn validate_header(
     Ok(())
 }
 
-fn validate_reserved(
-    opcode: u16,
-    payload: &Payload,
-    [word3, word4, word5]: [FieldSpec; 3],
-) -> Result<(), DescriptorDecodeError> {
+fn validate_reserved(opcode: u16, payload: &Payload) -> Result<(), DescriptorDecodeError> {
     let reserved = match opcode {
         COPY_OPCODE => [
-            Some((payload.word3, word3)),
-            Some((payload.word4, word4)),
-            Some((payload.word5, word5)),
+            Some((payload.word3, DescriptorSchema::WORD3_OFFSET)),
+            Some((payload.word4, DescriptorSchema::WORD4_OFFSET)),
+            Some((payload.word5, DescriptorSchema::WORD5_OFFSET)),
         ],
         BROADCAST_COPY_OPCODE | VECTOR_ADD_OPCODE => [
-            Some((payload.word4, word4)),
-            Some((payload.word5, word5)),
+            Some((payload.word4, DescriptorSchema::WORD4_OFFSET)),
+            Some((payload.word5, DescriptorSchema::WORD5_OFFSET)),
             None,
         ],
         STRIDED_COPY_OPCODE => [None, None, None],
@@ -108,7 +105,7 @@ fn validate_reserved(
     for (observed, field) in reserved.into_iter().flatten() {
         if observed != 0 {
             return Err(DescriptorDecodeError::InvalidReserved {
-                offset: field.offset(),
+                offset: field_offset(field)?,
                 observed,
             });
         }
@@ -120,7 +117,6 @@ fn decode_payload(
     opcode: u16,
     command_id: AbiId,
     payload: &Payload,
-    [word2, word3, word4, word5]: [FieldSpec; 4],
 ) -> Result<AbiCommand, DescriptorDecodeError> {
     match opcode {
         COPY_OPCODE => Ok(AbiCommand::Copy(AbiCopy::new(
@@ -129,7 +125,11 @@ fn decode_payload(
                 DmaAddress::new(payload.word0),
                 DmaAddress::new(payload.word1),
             ),
-            bounded(payload.word2, word2, MAX_TRANSFER_BYTES)?,
+            bounded(
+                payload.word2,
+                DescriptorSchema::WORD2_OFFSET,
+                MAX_TRANSFER_BYTES,
+            )?,
         ))),
         STRIDED_COPY_OPCODE => Ok(AbiCommand::StridedCopy(AbiStridedCopy::new(
             command_id,
@@ -138,15 +138,23 @@ fn decode_payload(
                 DmaAddress::new(payload.word1),
             ),
             StridedCopyShape::new(
-                bounded(payload.word2, word2, MAX_STRIDED_ROWS)?,
-                bounded(payload.word3, word3, MAX_TRANSFER_BYTES)?,
+                bounded(
+                    payload.word2,
+                    DescriptorSchema::WORD2_OFFSET,
+                    MAX_STRIDED_ROWS,
+                )?,
+                bounded(
+                    payload.word3,
+                    DescriptorSchema::WORD3_OFFSET,
+                    MAX_TRANSFER_BYTES,
+                )?,
                 CopyStrides::new(
-                    bounded(payload.word4, word4, MAX_STRIDE)?,
-                    bounded(payload.word5, word5, MAX_STRIDE)?,
+                    bounded(payload.word4, DescriptorSchema::WORD4_OFFSET, MAX_STRIDE)?,
+                    bounded(payload.word5, DescriptorSchema::WORD5_OFFSET, MAX_STRIDE)?,
                 ),
             ),
         ))),
-        BROADCAST_COPY_OPCODE => decode_broadcast(command_id, payload, word2),
+        BROADCAST_COPY_OPCODE => decode_broadcast(command_id, payload),
         VECTOR_ADD_OPCODE => Ok(AbiCommand::VectorAdd(AbiVectorAdd::new(
             command_id,
             VectorIovas::new(
@@ -154,7 +162,11 @@ fn decode_payload(
                 DmaAddress::new(payload.word1),
                 DmaAddress::new(payload.word2),
             ),
-            bounded(payload.word3, word3, MAX_TRANSFER_BYTES)?,
+            bounded(
+                payload.word3,
+                DescriptorSchema::WORD3_OFFSET,
+                MAX_TRANSFER_BYTES,
+            )?,
         ))),
         _ => Err(DescriptorDecodeError::InvalidOpcode {
             observed: opcode,
@@ -166,9 +178,12 @@ fn decode_payload(
 fn decode_broadcast(
     command_id: AbiId,
     payload: &Payload,
-    length_field: FieldSpec,
 ) -> Result<AbiCommand, DescriptorDecodeError> {
-    let length = bounded(payload.word2, length_field, MAX_TRANSFER_BYTES)?;
+    let length = bounded(
+        payload.word2,
+        DescriptorSchema::WORD2_OFFSET,
+        MAX_TRANSFER_BYTES,
+    )?;
     let count =
         u32::try_from(payload.word3).map_err(|_| DescriptorDecodeError::InvalidIndirectCount {
             observed: payload.word3,
@@ -196,10 +211,15 @@ fn decode_broadcast(
     })
 }
 
-fn bounded(observed: u64, field: FieldSpec, maximum: u32) -> Result<u32, DescriptorDecodeError> {
+fn bounded(observed: u64, offset: usize, maximum: u32) -> Result<u32, DescriptorDecodeError> {
+    let offset = field_offset(offset)?;
     u32::try_from(observed).map_err(|_| DescriptorDecodeError::ValueOutOfRange {
-        offset: field.offset(),
+        offset,
         observed,
         maximum,
     })
+}
+
+fn field_offset(offset: usize) -> Result<u16, DescriptorDecodeError> {
+    u16::try_from(offset).map_err(|_| DescriptorDecodeError::MetadataMismatch)
 }

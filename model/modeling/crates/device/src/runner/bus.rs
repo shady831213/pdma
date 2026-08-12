@@ -5,7 +5,7 @@ pub(super) mod control;
 
 use super::{AsyncDeviceHandle, publish, wake};
 use crate::dma_space::{DmaSpaceError, DmaStage};
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiControlError, DeviceEpoch, DmaAddress, QueueActivation, QueueControl, RingCursor,
 };
 use std::fmt;
@@ -35,7 +35,7 @@ impl DmaWrite {
 /// One all-or-none host submission acceptance request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmissionAcceptance {
-    pub(super) queue: pdma_model_contract::abi::EpochQueue,
+    pub(super) queue: pdma_model_contract::semantic::EpochQueue,
     pub(super) expected_producer: RingCursor,
     pub(super) descriptor: DmaWrite,
     pub(super) indirect: Option<(DmaStage, DmaWrite)>,
@@ -44,7 +44,7 @@ pub struct SubmissionAcceptance {
 impl SubmissionAcceptance {
     /// Creates an acceptance request from already prepared opaque bytes.
     pub const fn new(
-        queue: pdma_model_contract::abi::EpochQueue,
+        queue: pdma_model_contract::semantic::EpochQueue,
         expected_producer: RingCursor,
         descriptor: DmaWrite,
         indirect: Option<(DmaStage, DmaWrite)>,

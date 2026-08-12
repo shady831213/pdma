@@ -1,4 +1,6 @@
-use super::{AsyncPdmaBus, BusDevicePort, EpochIrqSource, IrqRoute, ModelError, ModelResult};
+use super::{AsyncPdmaBus, BusDevicePort, EpochIrqSource, IrqRoute};
+use crate::ModelError;
+use crate::ModelResult;
 
 pub(in super::super) async fn configure<B>(
     port: &BusDevicePort<B>,

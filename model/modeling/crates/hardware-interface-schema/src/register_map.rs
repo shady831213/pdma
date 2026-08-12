@@ -6,7 +6,7 @@ mod validation;
 
 pub use crate::register::RegisterSpec;
 pub use error::{RegisterMapError, RegisterMapValidationError};
-pub use resolved::{ResolvedRegister, ResolvedRegisterMap};
+pub use resolved::{ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap};
 
 /// One immutable repeated register-bank declaration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

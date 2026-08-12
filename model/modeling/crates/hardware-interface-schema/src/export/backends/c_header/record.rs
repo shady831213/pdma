@@ -1,12 +1,12 @@
 use std::fmt::Write as _;
 
 use crate::{
-    Endian, RecordSpec, ScalarKind,
+    Endian, ResolvedRecord, ScalarKind,
     export::{Artifact, ArtifactSink, Exporter},
 };
 
 use super::{
-    C_MEDIA_TYPE, FragmentConfig,
+    C_MEDIA_TYPE, CHeaderExportError, FragmentConfig,
     model::{RecordCHeaderField, RecordCHeaderModel},
     naming::{c_identifier, disambiguate_identifiers},
 };
@@ -27,14 +27,20 @@ impl RecordCHeaderExporter {
     }
 }
 
-impl Exporter<RecordSpec> for RecordCHeaderExporter {
-    type Error = core::convert::Infallible;
+impl Exporter<ResolvedRecord> for RecordCHeaderExporter {
+    type Error = CHeaderExportError;
 
-    fn export<Sink>(&self, schema: &RecordSpec, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(&self, schema: &ResolvedRecord, sink: &mut Sink) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
-        let model = RecordCHeaderModel::from_spec(*schema);
+        let model = RecordCHeaderModel::from_resolved(schema);
+        let paths_and_names = model
+            .fields()
+            .iter()
+            .map(|field| (field.path().into(), c_identifier(field.name())))
+            .collect::<Vec<_>>();
+        super::naming::reject_collisions(&paths_and_names)?;
         sink.emit(Artifact {
             logical_name: self.config.logical_name.clone(),
             media_type: String::from(C_MEDIA_TYPE),
@@ -60,14 +66,14 @@ fn render(model: &RecordCHeaderModel, prefix: &str) -> String {
             .map(|field| c_identifier(field.name()))
             .collect(),
     );
-    for (field, name) in model.fields().iter().copied().zip(names) {
+    for (field, name) in model.fields().iter().zip(names) {
         output.push('\n');
         push_field(&mut output, prefix, &name, field);
     }
     output
 }
 
-fn push_field(output: &mut String, prefix: &str, field_name: &str, field: RecordCHeaderField) {
+fn push_field(output: &mut String, prefix: &str, field_name: &str, field: &RecordCHeaderField) {
     let metadata = format!("{prefix}_{field_name}");
     let names = FieldNames {
         prefix,
@@ -93,7 +99,7 @@ fn push_field(output: &mut String, prefix: &str, field_name: &str, field: Record
     push_store(output, names, field);
 }
 
-fn push_load(output: &mut String, names: FieldNames<'_>, field: RecordCHeaderField) {
+fn push_load(output: &mut String, names: FieldNames<'_>, field: &RecordCHeaderField) {
     let c_type = c_type(field.scalar());
     let FieldNames {
         prefix,
@@ -131,7 +137,7 @@ fn push_load(output: &mut String, names: FieldNames<'_>, field: RecordCHeaderFie
     output.push_str(");\n}\n");
 }
 
-fn push_store(output: &mut String, names: FieldNames<'_>, field: RecordCHeaderField) {
+fn push_store(output: &mut String, names: FieldNames<'_>, field: &RecordCHeaderField) {
     let c_type = c_type(field.scalar());
     let FieldNames {
         prefix,
@@ -167,7 +173,7 @@ struct FieldNames<'a> {
     metadata: &'a str,
 }
 
-const fn shift(field: RecordCHeaderField, byte_index: usize) -> usize {
+const fn shift(field: &RecordCHeaderField, byte_index: usize) -> usize {
     match field.endian() {
         Endian::Little => byte_index * 8,
         Endian::Big => (field.width() - byte_index - 1) * 8,

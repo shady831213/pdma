@@ -84,28 +84,32 @@ fn push_access_and_reset(output: &mut String) {
     push_u32(
         output,
         "PDMA_MODEL_MMIO_ACCESS_RO",
-        MmioAccess::ReadOnly.code(),
+        access_code(MmioAccess::ReadOnly),
     );
     push_u32(
         output,
         "PDMA_MODEL_MMIO_ACCESS_RW",
-        MmioAccess::ReadWrite.code(),
+        access_code(MmioAccess::ReadWrite),
     );
     push_u32(
         output,
         "PDMA_MODEL_MMIO_ACCESS_WO",
-        MmioAccess::WriteOnly.code(),
+        access_code(MmioAccess::WriteOnly),
     );
     push_u32(
         output,
         "PDMA_MODEL_MMIO_RESET_CONST",
-        MmioReset::Constant.code(),
+        reset_code(MmioReset::Constant),
     );
-    push_u32(output, "PDMA_MODEL_MMIO_RESET_R0", MmioReset::Zero.code());
+    push_u32(
+        output,
+        "PDMA_MODEL_MMIO_RESET_R0",
+        reset_code(MmioReset::Zero),
+    );
     push_u32(
         output,
         "PDMA_MODEL_MMIO_RESET_POST",
-        MmioReset::PostReset.code(),
+        reset_code(MmioReset::PostReset),
     );
     output.push('\n');
 }

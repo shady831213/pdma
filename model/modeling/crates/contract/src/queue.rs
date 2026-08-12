@@ -1,8 +1,8 @@
 //! Queue configuration and directory records.
 
-use crate::abi::{DeviceEpoch, EpochIrqSource};
 use crate::ids::{CompletionRingId, QueueId};
 use crate::irq::IrqSource;
+use crate::{DeviceEpoch, EpochIrqSource};
 
 /// Software owner identity for a configured queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

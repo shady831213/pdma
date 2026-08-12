@@ -42,12 +42,12 @@ pub(super) fn push(output: &mut String, models: &[RecordCHeaderModel; 4]) {
 fn push_record(output: &mut String, record: &CRecord, model: &RecordCHeaderModel) {
     let prefix = format!("PDMA_MODEL_ABI_{}", record.macro_stem);
     for field in model.fields() {
-        push_field_constants(output, &prefix, *field);
+        push_field_constants(output, &prefix, field);
     }
     output.push('\n');
     let _ = writeln!(output, "typedef struct {} {{", record.c_type);
     for field in model.fields() {
-        let field_macro = field_macro(&prefix, *field);
+        let field_macro = field_macro(&prefix, field);
         let _ = writeln!(output, "    uint8_t {}[{field_macro}_SIZE];", field.name());
     }
     let _ = writeln!(output, "}} {};", record.c_type);
@@ -67,14 +67,14 @@ fn push_record(output: &mut String, record: &CRecord, model: &RecordCHeaderModel
             FieldAssertion {
                 type_name: record.c_type,
                 prefix: &prefix,
-                field: *field,
+                field,
             },
         );
     }
     output.push('\n');
 }
 
-fn push_field_constants(output: &mut String, prefix: &str, field: RecordCHeaderField) {
+fn push_field_constants(output: &mut String, prefix: &str, field: &RecordCHeaderField) {
     let name = field_macro(prefix, field);
     let _ = writeln!(output, "#define {name}_OFFSET UINT16_C({})", field.offset());
     let _ = writeln!(output, "#define {name}_SIZE UINT16_C({})", field.width());
@@ -101,7 +101,7 @@ fn push_field_assertions(output: &mut String, assertion: FieldAssertion<'_>) {
     );
 }
 
-fn field_macro(prefix: &str, field: RecordCHeaderField) -> String {
+fn field_macro(prefix: &str, field: &RecordCHeaderField) -> String {
     format!("{prefix}_{}", field.name().to_ascii_uppercase())
 }
 
@@ -109,5 +109,5 @@ fn field_macro(prefix: &str, field: RecordCHeaderField) -> String {
 struct FieldAssertion<'a> {
     type_name: &'a str,
     prefix: &'a str,
-    field: RecordCHeaderField,
+    field: &'a RecordCHeaderField,
 }

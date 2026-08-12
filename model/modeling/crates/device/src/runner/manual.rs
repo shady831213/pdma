@@ -2,17 +2,17 @@ use super::backend::{DeviceModel, ModelStepStatus};
 use super::bus::control::BusControlState;
 use super::{AsyncRunSummary, AsyncStepStatus};
 use crate::dma_space::{DmaSpace, DmaSpaceError, DmaStage};
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::abi::EpochIrqSource;
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::ids::BufferId;
 use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::{DmaAddress, DmaRegion};
 
 /// Synchronous device surface for deterministic bounded steps without a worker task.
 #[derive(Debug)]

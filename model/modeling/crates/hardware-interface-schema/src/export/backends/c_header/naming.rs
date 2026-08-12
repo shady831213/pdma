@@ -52,6 +52,36 @@ pub(super) fn disambiguate_identifiers(identifiers: Vec<String>) -> Vec<String> 
         .collect()
 }
 
+pub(super) fn reject_collisions(
+    paths_and_names: &[(String, String)],
+) -> Result<(), super::CHeaderExportError> {
+    for (second_index, (second_path, second_name)) in paths_and_names.iter().enumerate() {
+        if let Some((first_index, (first_path, _))) = paths_and_names
+            .iter()
+            .take(second_index)
+            .enumerate()
+            .find(|(_, (_, first_name))| same_significant_prefix(first_name, second_name))
+        {
+            return Err(super::CHeaderExportError::NameCollision {
+                first_path: first_path.clone(),
+                second_path: second_path.clone(),
+                first_index,
+                second_index,
+            });
+        }
+    }
+    Ok(())
+}
+
+const C11_SIGNIFICANT_IDENTIFIER_BYTES: usize = 63;
+
+fn same_significant_prefix(first: &str, second: &str) -> bool {
+    first
+        .bytes()
+        .take(C11_SIGNIFICANT_IDENTIFIER_BYTES)
+        .eq(second.bytes().take(C11_SIGNIFICANT_IDENTIFIER_BYTES))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{c_identifier, disambiguate_identifiers};

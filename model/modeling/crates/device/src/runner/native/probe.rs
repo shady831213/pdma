@@ -6,7 +6,7 @@ use crate::dma_space::DmaSpace;
 use crate::runner::AsyncStallReason;
 use crate::runner::bus::control::BusControlState;
 use pdma_model_contract::QueueId;
-use pdma_model_contract::abi::EpochQueue;
+use pdma_model_contract::semantic::EpochQueue;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) enum RunStateProbe {

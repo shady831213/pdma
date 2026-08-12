@@ -1,4 +1,4 @@
-use pdma_model_contract::error::{ModelError, ModelResult};
+use crate::{ModelError, ModelResult};
 
 #[derive(Debug)]
 pub(super) struct NativeRing<T> {

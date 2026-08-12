@@ -1,68 +1,23 @@
 use hardware_interface_schema::register_schema;
 
-use super::{PdmaMmioMapRegisterId, RegisterSpec};
+use super::{U32Value, U64Value};
 
-register_schema! {
-    pub registers GlobalRegisters<PdmaMmioMapRegisterId> {
-        g_magic: { id: 0, name: "G_MAGIC", offset: 0x000, width: 4, access: ReadOnly,
-            reset: Constant(0x414d_4450), writable_mask: 0 },
-        g_mmio_abi_version: { id: 1, name: "G_MMIO_ABI_VERSION", offset: 0x004, width: 4,
-            access: ReadOnly, reset: Constant(1), writable_mask: 0 },
-        g_req_abi_version: { id: 2, name: "G_REQ_ABI_VERSION", offset: 0x008, width: 4,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff },
-        g_req_features: { id: 3, name: "G_REQ_FEATURES", offset: 0x010, width: 8,
-            access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        g_reset_expected_epoch: { id: 4, name: "G_RESET_EXPECTED_EPOCH", offset: 0x018,
-            width: 8, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff },
-        g_command: { id: 5, name: "G_COMMAND", offset: 0x020, width: 4, access: WriteOnly,
-            reset: Zero(0), writable_mask: 0xffff_ffff },
-        g_result: { id: 6, name: "G_RESULT", offset: 0x024, width: 4, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        g_detail0: { id: 7, name: "G_DETAIL0", offset: 0x028, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        g_detail1: { id: 8, name: "G_DETAIL1", offset: 0x030, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        g_detail2: { id: 9, name: "G_DETAIL2", offset: 0x038, width: 8, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        g_rsp_abi_version: { id: 10, name: "G_RSP_ABI_VERSION", offset: 0x040, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_rsp_run_state: { id: 11, name: "G_RSP_RUN_STATE", offset: 0x044, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_rsp_features: { id: 12, name: "G_RSP_FEATURES", offset: 0x048, width: 8,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_rsp_epoch: { id: 13, name: "G_RSP_EPOCH", offset: 0x050, width: 8,
-            access: ReadOnly, reset: PostReset(0), writable_mask: 0 },
-        g_max_ring_depth: { id: 14, name: "G_MAX_RING_DEPTH", offset: 0x058, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_max_indirect_destinations: { id: 15, name: "G_MAX_INDIRECT_DESTINATIONS",
-            offset: 0x05c, width: 4, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_max_transfer_bytes: { id: 16, name: "G_MAX_TRANSFER_BYTES", offset: 0x060,
-            width: 4, access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_max_strided_rows: { id: 17, name: "G_MAX_STRIDED_ROWS", offset: 0x064, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-        g_max_stride: { id: 18, name: "G_MAX_STRIDE", offset: 0x068, width: 4,
-            access: ReadOnly, reset: Zero(0), writable_mask: 0 },
-    }
-}
-
-pub(super) const REGISTERS: [RegisterSpec; 19] = [
-    RegisterSpec::from_schema(GlobalRegisters::G_MAGIC),
-    RegisterSpec::from_schema(GlobalRegisters::G_MMIO_ABI_VERSION),
-    RegisterSpec::from_schema(GlobalRegisters::G_REQ_ABI_VERSION),
-    RegisterSpec::from_schema(GlobalRegisters::G_REQ_FEATURES),
-    RegisterSpec::from_schema(GlobalRegisters::G_RESET_EXPECTED_EPOCH),
-    RegisterSpec::from_schema(GlobalRegisters::G_COMMAND),
-    RegisterSpec::from_schema(GlobalRegisters::G_RESULT),
-    RegisterSpec::from_schema(GlobalRegisters::G_DETAIL0),
-    RegisterSpec::from_schema(GlobalRegisters::G_DETAIL1),
-    RegisterSpec::from_schema(GlobalRegisters::G_DETAIL2),
-    RegisterSpec::from_schema(GlobalRegisters::G_RSP_ABI_VERSION),
-    RegisterSpec::from_schema(GlobalRegisters::G_RSP_RUN_STATE),
-    RegisterSpec::from_schema(GlobalRegisters::G_RSP_FEATURES),
-    RegisterSpec::from_schema(GlobalRegisters::G_RSP_EPOCH),
-    RegisterSpec::from_schema(GlobalRegisters::G_MAX_RING_DEPTH),
-    RegisterSpec::from_schema(GlobalRegisters::G_MAX_INDIRECT_DESTINATIONS),
-    RegisterSpec::from_schema(GlobalRegisters::G_MAX_TRANSFER_BYTES),
-    RegisterSpec::from_schema(GlobalRegisters::G_MAX_STRIDED_ROWS),
-    RegisterSpec::from_schema(GlobalRegisters::G_MAX_STRIDE),
-];
+register_schema! { pub register GMagic { width: 4, endian: Little, access: ReadOnly, reset: Constant(0x414d_4450), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GMmioAbiVersion { width: 4, endian: Little, access: ReadOnly, reset: Constant(1), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GReqAbiVersion { width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GReqFeatures { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GResetExpectedEpoch { width: 8, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 0xffff_ffff_ffff_ffff, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GCommand { width: 4, endian: Little, access: WriteOnly, reset: Zero(0), writable_mask: 0xffff_ffff, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GResult { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GDetail0 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GDetail1 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GDetail2 { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GRspAbiVersion { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GRspRunState { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GRspFeatures { width: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GRspEpoch { width: 8, endian: Little, access: ReadOnly, reset: PostReset(0), writable_mask: 0, fields: { bits: U64Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GMaxRingDepth { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GMaxIndirectDestinations { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GMaxTransferBytes { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GMaxStridedRows { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }
+register_schema! { pub register GMaxStride { width: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: U32Value { id: 0, lsb: 0 }, }, } }

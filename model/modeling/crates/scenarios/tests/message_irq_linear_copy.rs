@@ -1,10 +1,13 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
+
 #[path = "message_irq_linear_copy/support.rs"]
 pub mod support;
 
-use pdma_model_contract::abi::EpochQueue;
-use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector, ModelError, ModelResult};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, IrqDelivery, MmioDeviceBus,

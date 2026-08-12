@@ -1,4 +1,4 @@
-use pdma_model_contract::abi::DmaRegion;
+use pdma_model_contract::bridge::DmaRegion;
 use pdma_model_contract::{DeviceEpoch, QueueId};
 use pdma_model_device::AsyncDeviceHandle;
 

@@ -1,5 +1,6 @@
-use pdma_model_contract::{BufferId, CommandId, CopyRequest, ModelError};
+use pdma_model_contract::{BufferId, CommandId, CopyRequest};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus, SyncDevice};
+use pdma_model_host::ModelError;
 use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
 
 #[tokio::test(flavor = "current_thread")]

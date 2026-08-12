@@ -1,11 +1,13 @@
 use super::{AsyncPdmaBus, BusDevicePort, BusDmaErrorAdapter};
+use crate::ModelError;
+use crate::ModelResult;
 use crate::{BusDmaStage, BusDmaWrite, BusSubmission, QueueControlWrite};
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
     BroadcastDestinationEntry, BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DmaAddress,
     QueueCursorUpdate, RingRecord, StridedCopyShape, VectorIovas,
 };
-use pdma_model_contract::{BufferId, ExternalCommand, ModelError, ModelResult, QueueConfigHandle};
+use pdma_model_contract::{BufferId, ExternalCommand, QueueConfigHandle};
 
 pub(super) async fn submit<B>(
     port: &BusDevicePort<B>,
@@ -30,7 +32,7 @@ where
             status: observed,
             ..current
         });
-        Ok(())
+        Ok::<(), ModelError>(())
     })??;
     let queue = port.state.with(|state| state.queue(handle))??;
     let (abi, indirect) = encode_command(port, command).await?;
@@ -68,7 +70,7 @@ where
             return Err(ModelError::DmaSubmissionState);
         }
         state.queue = Some(super::state::QueueState { status, ..active });
-        Ok(())
+        Ok::<(), ModelError>(())
     })?
 }
 
@@ -93,7 +95,7 @@ where
             status: observed,
             ..current
         });
-        Ok(())
+        Ok::<(), ModelError>(())
     })??;
     let queue = port.state.with(|state| state.queue(handle))??;
     let status = port

@@ -23,11 +23,15 @@ async fn closed_batches_commit_exact_order_and_codec() -> TestResult {
     // Then: both fixed reads equal the canonical 72-byte little-endian codec.
     assert_eq!(
         bootstrap_bytes,
-        support::response(bootstrap_status).to_le_bytes()
+        support::response(bootstrap_status)
+            .to_le_bytes()
+            .expect("generated queue response view must encode")
     );
     assert_eq!(
         submission_bytes,
-        support::response(submission_status).to_le_bytes()
+        support::response(submission_status)
+            .to_le_bytes()
+            .expect("generated queue response view must encode")
     );
     assert_eq!(
         submission_status.submission().producer(),
@@ -68,7 +72,12 @@ async fn submission_batch_commits_one_exact_indirect_region_before_descriptor() 
 
     // Then: the entire ordered transaction is visible together.
     let status = support::queue_status(&handle, queue).await?;
-    assert_eq!(response, support::response(status).to_le_bytes());
+    assert_eq!(
+        response,
+        support::response(status)
+            .to_le_bytes()
+            .expect("generated queue response view must encode")
+    );
     assert_eq!(handle.read_iova(region.base(), 16).await?, vec![0x33; 16]);
     assert_eq!(
         handle.read_iova(submission.base(), 64).await?,

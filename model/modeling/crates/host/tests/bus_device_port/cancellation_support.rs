@@ -1,12 +1,14 @@
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiBroadcastCopy, AbiCommand, AbiId, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape,
     DmaAddress, DmaRegion, EpochQueue, RingRecord,
 };
 use pdma_model_contract::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, BufferId, CommandId,
-    ExternalCommand, ModelError, ModelResult,
+    ExternalCommand,
 };
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{
     AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, BusQueueStatus, SoftwareCpu,
 };

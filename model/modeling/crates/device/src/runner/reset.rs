@@ -1,7 +1,7 @@
 use super::bus::BusControlError;
 use super::state::{RunnerState, publish, wake};
 use super::{AsyncDeviceHandle, SyncDevice};
-use pdma_model_contract::abi::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
 
 impl AsyncDeviceHandle {
     /// Atomically resets device-owned state and advances recovery identity.

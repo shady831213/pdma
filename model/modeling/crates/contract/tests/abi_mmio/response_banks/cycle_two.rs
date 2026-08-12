@@ -23,7 +23,10 @@ fn reset_response_is_epoch_only_with_literal_zero_fill() {
     // When: RESET populates its closed response shape.
     // Then: only epoch is populated and every non-epoch global field is literally zero.
     assert_eq!(
-        response.bank().to_le_bytes(),
+        response
+            .bank()
+            .to_le_bytes()
+            .expect("generated response view must encode"),
         [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03,
             0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -52,7 +55,8 @@ fn queue_response_bank_has_named_fields_and_literal_architecture_order() {
     assert_eq!(bank.epoch, 0x0102_0304_0506_0708);
     assert_eq!(bank.queue_id, 0x1112_1314_1516_1718);
     assert_eq!(
-        bank.to_le_bytes(),
+        bank.to_le_bytes()
+            .expect("generated response view must encode"),
         [
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13,
             0x12, 0x11, 0x28, 0x27, 0x26, 0x25, 0x24, 0x23, 0x22, 0x21, 0x38, 0x37, 0x36, 0x35,
@@ -84,7 +88,10 @@ fn message_claim_encodes_post_claim_source_status_and_message_route() {
     // When: CLAIM_NOTIFICATION encodes a Message success.
     // Then: post-claim state and Message route occupy their literal IRQ response fields.
     assert_eq!(
-        response.bank().to_le_bytes(),
+        response
+            .bank()
+            .to_le_bytes()
+            .expect("generated response view must encode"),
         [
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13,
             0x12, 0x11, 0x24, 0x23, 0x22, 0x21, 0x3b, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0x38, 0x37,

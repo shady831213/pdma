@@ -3,6 +3,8 @@ use pdma_model_contract::{
     CompletionRecord, CopyRequest, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
     IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use std::future::{Future, pending, poll_fn};
 use std::task::Poll;
 

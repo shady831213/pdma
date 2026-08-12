@@ -1,8 +1,8 @@
 use super::ring::NativeRing;
 use super::{QueueContext, QueuePortDeviceModel, io, retirement};
-use pdma_model_contract::abi::EpochQueue;
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::error::{ModelError, ModelResult};
+use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::{
     CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };

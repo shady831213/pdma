@@ -1,7 +1,7 @@
 //! Checked DMA allocation, atomic staging, access, and backend-persistence tests.
 
-use pdma_model_contract::abi::{DeviceEpoch, DmaAddress, DmaRegion, WholeDeviceReset};
 use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::{DeviceEpoch, DmaAddress, DmaRegion, WholeDeviceReset};
 use pdma_model_device::{DmaSpace, DmaSpaceError, SyncDevice};
 
 #[test]

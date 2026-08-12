@@ -1,6 +1,6 @@
 use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
 use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiCommand, AbiCopy, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId, CopyIovas, DmaAddress,
     MAX_TRANSFER_BYTES, RingCursor,
 };

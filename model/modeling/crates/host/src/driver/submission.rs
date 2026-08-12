@@ -1,9 +1,9 @@
 use super::{AsyncDriver, ManualDriver, core::DriverCore};
 use crate::AsyncDevicePort;
+use crate::ModelResult;
 use pdma_model_contract::{
     BroadcastCopyCommand, BroadcastCopyRequest, CommandId, CopyCommand, CopyRequest,
-    ExternalCommand, ModelResult, StridedCopyCommand, StridedCopyRequest, VectorAddCommand,
-    VectorAddRequest,
+    ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
 };
 
 impl DriverCore {

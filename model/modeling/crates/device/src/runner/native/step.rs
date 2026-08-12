@@ -5,11 +5,11 @@ use super::io::QueueFetch;
 use super::probe::{RunStateProbe, probe_run_state};
 use super::retirement;
 use super::vector_add;
+use crate::ModelResult;
 use crate::runner::AsyncStallReason;
 use crate::runner::backend::ModelStepStatus;
 use crate::trace::{command_id, operation_from_external};
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::ModelResult;
 
 pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatus> {
     let NativeExecution {

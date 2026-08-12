@@ -1,7 +1,9 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::ModelError;
+
 use pdma_model_contract::{
-    CompletionStatus, ModelError, TraceEvent, TraceEventKind,
+    CompletionStatus, TraceEvent, TraceEventKind,
     desc::CopyRequest,
     ids::{CommandId, QueueId},
 };

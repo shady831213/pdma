@@ -16,11 +16,12 @@ use super::backend::ModelStepStatus;
 use super::bus::control::BusControlState;
 use crate::dma_space::DmaSpace;
 use crate::trace::{TraceSink, command_id, operation_from_external};
+use crate::{ModelError, ModelResult};
 use irq::PdmaIrqController;
 use pdma_model_contract::{
     CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, ExternalCommand, IrqLine,
-    IrqVector, ModelError, ModelResult, QueueConfig, QueueConfigHandle, QueueDirectoryEntry,
-    QueueId, ResourceConfig, TraceEvent,
+    IrqVector, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId, ResourceConfig,
+    TraceEvent,
 };
 use ring::NativeRing;
 use std::collections::VecDeque;

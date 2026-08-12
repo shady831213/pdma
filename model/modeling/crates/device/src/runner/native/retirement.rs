@@ -6,8 +6,8 @@ use crate::runner::AsyncStallReason;
 use crate::runner::PendingDmaResult;
 use crate::runner::backend::ModelStepStatus;
 use crate::runner::bus::control::BusControlState;
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
-use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::{EventRecord, MemoryFault};
 use pdma_model_contract::ids::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::irq::IrqSource;
@@ -36,7 +36,7 @@ pub(super) enum PendingRetirement {
         record: EventRecord,
         source: ModelError,
     },
-    DmaEvent(pdma_model_contract::abi::AbiEvent),
+    DmaEvent(pdma_model_contract::bridge::AbiEvent),
 }
 
 impl PendingRetirement {
@@ -192,7 +192,7 @@ pub(super) fn publish_fault(
         device.pending_retirement = Some(PendingRetirement::Event {
             queue_id: fault.queue_id,
             record: event,
-            source: fault.fault.source(),
+            source: ModelError::from_memory_fault(fault.fault.buffer(), fault.fault.error_kind()),
         });
         device
             .trace
@@ -205,7 +205,10 @@ pub(super) fn publish_fault(
     device.trace.event_published(event);
     device.latch_irq_source(IrqSource::Event(fault.queue_id));
     retire_command(device, dma_space, bus_control, fault.queue_id)?;
-    Err(fault.fault.source())
+    Err(ModelError::from_memory_fault(
+        fault.fault.buffer(),
+        fault.fault.error_kind(),
+    ))
 }
 
 fn completion_publication_is_full(
@@ -251,7 +254,7 @@ pub(super) fn cache_dma_fault(
     device: &mut QueuePortDeviceModel,
     dma_space: &DmaSpace,
     bus_control: &mut BusControlState,
-    event: pdma_model_contract::abi::AbiEvent,
+    event: pdma_model_contract::bridge::AbiEvent,
 ) -> ModelResult<ModelStepStatus> {
     consume_command(device, dma_space, bus_control, event.queue_id())?;
     device.pending_retirement = Some(PendingRetirement::DmaEvent(event));

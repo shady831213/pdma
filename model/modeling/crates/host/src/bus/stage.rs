@@ -1,4 +1,4 @@
-use pdma_model_contract::abi::{DmaAddress, DmaRegion};
+use pdma_model_contract::{DmaAddress, DmaRegion};
 
 /// Opaque staging capability produced by an asynchronous device handle.
 #[derive(Debug, Clone, PartialEq, Eq)]

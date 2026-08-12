@@ -1,6 +1,8 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{EventErrorKind, ModelError, desc::CopyRequest};
+use pdma_model_host::ModelError;
+
+use pdma_model_contract::{EventErrorKind, desc::CopyRequest};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 

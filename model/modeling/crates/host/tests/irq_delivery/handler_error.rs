@@ -1,7 +1,7 @@
-use pdma_model_contract::{
-    CopyRequest, IrqNotification, IrqRoute, IrqVector, ModelError, ModelResult, TraceEventKind,
-};
+use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqVector, TraceEventKind};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use tokio::sync::oneshot;
 

@@ -1,7 +1,9 @@
 #![allow(missing_docs)]
 
+use pdma_model_device::ModelError;
+
 use pdma_model_contract::{
-    DeviceEpoch, EpochIrqSource, ModelError, ResourceConfig,
+    DeviceEpoch, EpochIrqSource, ResourceConfig,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::{CommandId, CompletionRingId, QueueId},
     irq::IrqSource,

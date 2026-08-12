@@ -1,8 +1,9 @@
 use crate::{NotificationPort, line, message};
 use pdma_model_contract::{
-    CompletionRingId, IrqNotification, IrqSource, IrqVector, ModelError, ModelResult, QueueId,
-    TraceEventKind,
+    CompletionRingId, IrqNotification, IrqSource, IrqVector, QueueId, TraceEventKind,
 };
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::{mpsc, oneshot};

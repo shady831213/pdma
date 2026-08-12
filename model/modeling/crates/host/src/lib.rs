@@ -3,6 +3,7 @@
 mod bus;
 mod context;
 mod driver;
+mod error;
 mod irq_delivery;
 mod port;
 
@@ -12,6 +13,7 @@ pub use bus::{
 };
 pub use context::{CpuLocal, SoftwareCpu};
 pub use driver::{AsyncDriver, DriverIrqRecord, ManualDriver};
+pub use error::{ModelError, ModelResult};
 pub use irq_delivery::{
     HasHandlers, IrqDelivery, IrqDeliveryBootstrap, IrqDeliveryHandle, IrqDeliveryRunner,
     IrqDeliverySummary, IrqHandler, IrqHandlerFuture, IrqHandlerRegistry, NoHandler,

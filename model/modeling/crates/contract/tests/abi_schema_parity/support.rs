@@ -1,8 +1,6 @@
 #![allow(clippy::redundant_pub_crate)]
 
-pub(crate) use hardware_interface_schema::{
-    Endian, RecordSpec as GenericRecordSpec, ScalarKind, SchemaCodecError,
-};
+pub(crate) use hardware_interface_schema::{Endian, RecordSpec, ScalarKind, SchemaCodecError};
 
 pub(crate) const COPY: [u8; 64] = [
     1, 0, 1, 0, 0, 0, 64, 0, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 1, 0x80, 0x70, 0x60, 0x50,
@@ -61,29 +59,16 @@ pub(crate) const EVENT_FIELDS: [Field; 13] = [
 ];
 pub(crate) const INDIRECT_FIELDS: [Field; 1] = [("destination_iova", 0, 8, ScalarKind::U64)];
 
-pub(crate) fn assert_schema_parity(
-    legacy: pdma_model_contract::abi::RecordSpec,
-    generic: GenericRecordSpec,
-    expected: &[Field],
-) {
-    assert_eq!(usize::from(legacy.size()), generic.size());
-    assert_eq!(Ok(legacy.alignment()), u64::try_from(generic.alignment()));
-    assert_eq!(legacy.fields().len(), expected.len());
-    assert_eq!(generic.fields().len(), expected.len());
-    for ((legacy, generic), &(name, offset, width, scalar)) in
-        legacy.fields().iter().zip(generic.fields()).zip(expected)
-    {
-        assert_eq!(
-            (legacy.name(), legacy.offset(), legacy.width()),
-            (name, offset, width)
-        );
+pub(crate) fn assert_schema_parity(schema: RecordSpec, expected: &[Field]) {
+    assert_eq!(schema.fields().len(), expected.len());
+    for (field, &(name, offset, width, scalar)) in schema.fields().iter().zip(expected) {
         assert_eq!(
             (
-                generic.name(),
-                generic.offset(),
-                generic.width(),
-                generic.scalar(),
-                generic.endian()
+                field.name(),
+                field.offset(),
+                field.width(),
+                field.scalar(),
+                field.endian()
             ),
             (
                 name,

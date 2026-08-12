@@ -37,18 +37,20 @@ pub trait Exporter<S> {
         Sink: ArtifactSink<Error = Self::Error>;
 }
 
-/// An infallible in-memory sink for tests and callers that collect artifacts themselves.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct InMemoryArtifactSink {
+/// An in-memory sink parameterized by an exporter's error type.
+#[derive(Debug, PartialEq, Eq)]
+pub struct InMemoryArtifactSink<E = Infallible> {
     artifacts: Vec<Artifact>,
+    error: core::marker::PhantomData<fn() -> E>,
 }
 
-impl InMemoryArtifactSink {
+impl<E> InMemoryArtifactSink<E> {
     /// Creates an empty in-memory artifact collection.
     #[must_use]
     pub const fn new() -> Self {
         Self {
             artifacts: Vec::new(),
+            error: core::marker::PhantomData,
         }
     }
 
@@ -65,8 +67,14 @@ impl InMemoryArtifactSink {
     }
 }
 
-impl ArtifactSink for InMemoryArtifactSink {
-    type Error = Infallible;
+impl<E> Default for InMemoryArtifactSink<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<E> ArtifactSink for InMemoryArtifactSink<E> {
+    type Error = E;
 
     fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error> {
         self.artifacts.push(artifact);

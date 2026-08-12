@@ -224,7 +224,8 @@ fn main() {
 
     let exporter = RecordCHeaderExporter::new("header.fragment.h", "demo header");
     let mut sink = InMemoryArtifactSink::new();
-    assert!(exporter.export(&Header::SPEC, &mut sink).is_ok());
+    let resolved = Header::SPEC.resolve().expect("example schema must resolve");
+    assert!(exporter.export(&resolved, &mut sink).is_ok());
     let artifacts = sink.into_artifacts();
     assert_eq!(artifacts.len(), 1);
     assert_eq!(artifacts[0].logical_name, "header.fragment.h");

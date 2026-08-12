@@ -2,7 +2,6 @@
 
 mod address;
 mod codec;
-mod control;
 mod descriptor;
 mod error;
 pub mod header;
@@ -12,13 +11,8 @@ mod record;
 mod ring;
 mod schema;
 
-pub use address::{AbiId, DmaAddress, DmaRegion};
-pub use codec::{copy_u64_le, read_u16_le, read_u64_le, write_u16_le, write_u64_le};
-pub use control::{
-    AbiDiscovery, AbiLimits, ControlRequest, DeviceEpoch, DeviceRunState, DeviceStatus,
-    DiscoveryRequest, EpochIrqRoute, EpochIrqSource, EpochQueue, IrqControl, QueueActivation,
-    QueueControl, QueueCursorUpdate, QueueRingRegions, WholeDeviceReset,
-};
+pub use address::{AbiId, DmaAddress};
+pub use codec::copy_u64_le;
 pub use descriptor::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
     BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
@@ -38,14 +32,18 @@ pub use metadata::{
     VECTOR_ADD_OPCODE, validate_abi_version,
 };
 pub use record::{
-    AbiBounds, AbiEvent, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultCandidate,
-    AbiFaultDetails, AbiFaultOrder, AbiFaultSelectionError, AbiFaultSite, AbiHeaderField,
-    AbiOperandFaultStep, AbiOperandVisit, AbiReservedField, AbiScalarField, AbiStrideOffset,
-    decode_completion, decode_event, encode_completion, encode_event, encode_semantic_event,
+    AbiBounds, AbiCompletion, AbiEvent as ExactAbiEvent, AbiEventAccess, AbiEventKind,
+    AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
+    AbiFaultSelectionError, AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit,
+    AbiReservedField, AbiScalarField, AbiStrideOffset,
+    decode_completion as decode_exact_completion, decode_event as decode_exact_event,
+    encode_completion as encode_exact_completion, encode_event as encode_exact_event,
     select_canonical_fault,
 };
 pub use ring::{RingCursor, RingCursors, RingLayout, RingRecord};
 pub use schema::{
-    CompletionSchema, CompletionSchemaView, DescriptorSchema, DescriptorSchemaView, EventSchema,
-    EventSchemaView, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
+    CompletionSchema, CompletionSchemaView, CompletionSchemaViewMut, DescriptorSchema,
+    DescriptorSchemaView, DescriptorSchemaViewMut, EventSchema, EventSchemaView,
+    EventSchemaViewMut, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
+    IndirectDestinationEntrySchemaViewMut,
 };

@@ -1,5 +1,7 @@
-use pdma_model_contract::{IrqNotification, IrqSource, IrqVector, ModelError, ModelResult};
+use pdma_model_contract::{IrqNotification, IrqSource, IrqVector};
 use pdma_model_device::AsyncDeviceHandle;
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{
     AsyncDriver, CpuLocal, DriverIrqRecord, IrqDelivery, IrqDeliveryHandle, IrqDeliverySummary,
     IrqHandler, IrqHandlerFuture, SoftwareCpu,

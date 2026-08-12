@@ -1,7 +1,7 @@
-use pdma_model_contract::ModelResult;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, QueueActivation};
+use pdma_model_contract::{DmaAddress, DmaRegion, QueueActivation};
 use pdma_model_device::{AsyncDeviceHandle, DmaSpaceError, MmioBatchError, QueueResponseBytes};
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDeviceBusStage, BusSubmission, MmioDeviceBus, MmioDeviceTransport};
 use std::sync::{Arc, Mutex};
 

@@ -15,6 +15,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "hardware-interface-runtime"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "hardware-interface-schema"
 version = "0.1.0"
 dependencies = [
@@ -64,6 +71,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "pdma-model-contract"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-runtime",
  "hardware-interface-schema",
 ]
 
@@ -79,6 +87,7 @@ dependencies = [
 name = "pdma-model-host"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-runtime",
  "pdma-model-contract",
  "pdma-model-device",
  "tokio",

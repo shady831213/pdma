@@ -1,9 +1,11 @@
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
 use pdma_model_contract::{
     BufferId, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot,
-    IrqSource, IrqVector, ModelError, ModelResult,
+    IrqSource, IrqVector,
 };
+use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, DmaSpaceError};
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{
     AsyncDevicePort, AsyncPdmaBus, BusDevicePort, BusQueueStatus, BusSubmission, IrqDelivery,
     SoftwareCpu, StatefulIrqHandler, stateful_irq_handler,
@@ -233,7 +235,7 @@ pub async fn verify_handler_turn_rejects_pending_port_repoll() -> ModelResult<()
             IrqMessageId::new(0),
             vector,
             EpochIrqSource::new(
-                pdma_model_contract::abi::DeviceEpoch::initial(),
+                pdma_model_contract::semantic::DeviceEpoch::initial(),
                 IrqSource::Completion(pdma_model_contract::CompletionRingId::new(0)),
             ),
         )))

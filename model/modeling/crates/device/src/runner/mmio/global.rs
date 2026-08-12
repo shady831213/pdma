@@ -4,7 +4,7 @@ use crate::runner::state::RunnerState;
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, MmioResult, MmioResultDetails, ResponseUpdate,
 };
-use pdma_model_contract::abi::{AbiLimits, DeviceRunState, DiscoveryRequest};
+use pdma_model_contract::{AbiLimits, DeviceRunState, DiscoveryRequest};
 
 #[path = "global/error.rs"]
 mod error;

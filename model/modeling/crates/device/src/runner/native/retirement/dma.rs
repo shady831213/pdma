@@ -1,11 +1,12 @@
 use super::{PendingRetirement, SuccessRetirement, consume_command, retire_command};
+use crate::ModelResult;
 use crate::dma_space::DmaSpace;
 use crate::runner::AsyncStallReason;
 use crate::runner::backend::ModelStepStatus;
 use crate::runner::bus::control::BusControlState;
 use crate::runner::native::QueuePortDeviceModel;
-use pdma_model_contract::abi::AbiEvent;
-use pdma_model_contract::{CompletionRecord, IrqSource, ModelResult};
+use pdma_model_contract::bridge::AbiEvent;
+use pdma_model_contract::{CompletionRecord, IrqSource};
 
 pub(super) fn publish_completion(
     device: &mut QueuePortDeviceModel,

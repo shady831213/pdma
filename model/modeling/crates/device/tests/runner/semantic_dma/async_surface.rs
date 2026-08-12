@@ -101,7 +101,12 @@ impl Fixture {
             EventErrorKind::OutOfBounds { len: 8, end: 9 }
         );
         assert_eq!(event.buffer(), self.source);
-        assert_eq!(event.fault_iova(), Some(self.source_end));
+        assert_eq!(
+            event.fault_address(),
+            Some(pdma_model_contract::FaultAddress::new(
+                self.source_end.raw()
+            ))
+        );
         self.assert_no_success_or_bytes().await?;
         eprintln!("mapped fault={event:?}");
         Ok(snapshot.errors)
@@ -118,7 +123,7 @@ impl Fixture {
         let event = self.next_event().await?;
         assert_eq!(event.error_kind(), EventErrorKind::UnknownBuffer);
         assert_eq!(event.buffer(), BufferId::new(99));
-        assert_eq!(event.fault_iova(), None);
+        assert_eq!(event.fault_address(), None);
         self.assert_no_success_or_bytes().await?;
         eprintln!("unknown-object fault={event:?}");
         Ok(snapshot.errors)
@@ -135,7 +140,7 @@ impl Fixture {
         let event = self.next_event().await?;
         assert_eq!(event.error_kind(), EventErrorKind::RangeOverflow);
         assert_eq!(event.buffer(), self.source);
-        assert_eq!(event.fault_iova(), None);
+        assert_eq!(event.fault_address(), None);
         self.assert_no_success_or_bytes().await?;
         eprintln!("range-overflow fault={event:?}");
         Ok(())

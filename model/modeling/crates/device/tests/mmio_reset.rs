@@ -1,14 +1,16 @@
 #![allow(missing_docs)]
 
+use pdma_model_device::ModelError;
+
 #[path = "mmio_reset/support.rs"]
 pub mod support;
 
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::abi::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_contract::{
-    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, ModelError, QueueConfig,
-    QueueId, SoftwareOwnerId,
+    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig, QueueId,
+    SoftwareOwnerId,
 };
+use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, BusControlError};
 use support::{TestResult, raw_reset, read_u32, read_u64, write_u64};
 

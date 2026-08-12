@@ -38,6 +38,7 @@ pub(super) fn resolve<I: Copy + Eq + fmt::Debug>(
     Ok(ResolvedRecord {
         root: root.name(),
         size: root.size(),
+        alignment: root.alignment(),
         members: candidates
             .into_iter()
             .map(|candidate| candidate.member)

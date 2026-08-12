@@ -3,7 +3,7 @@ use crate::dma_space::DmaStage;
 use crate::runner::native::dma_bus_api::PreparedDmaBusQueue;
 use crate::runner::state::RunnerState;
 use pdma_model_contract::QueueId;
-use pdma_model_contract::abi::{DmaRegion, QueueActivation, RingLayout, RingRecord};
+use pdma_model_contract::{DmaRegion, QueueActivation, RingLayout, RingRecord};
 
 struct ValidatedMappedActivation(QueueActivation);
 

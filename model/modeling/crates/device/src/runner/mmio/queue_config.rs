@@ -3,7 +3,7 @@ use super::{QueueStaging, status_response};
 use crate::runner::bus::control;
 use crate::runner::state::RunnerState;
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiControlError, DmaAddress, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
 };
 use pdma_model_contract::{DeviceEpoch, EventRouting, QueueConfig, QueueId, SoftwareOwnerId};

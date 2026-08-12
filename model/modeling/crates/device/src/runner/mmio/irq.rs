@@ -1,12 +1,12 @@
 use super::bank::{CommandBank, MmioScalar, narrow_u32};
 use super::reset::details;
+use crate::ModelError;
 use crate::runner::backend::DeviceModel;
 use crate::runner::irq::{
     IrqSourceView, decode_route, decode_source, encode_route, encode_source, map_mmio_error,
     observe_irq_source, usize_to_u64,
 };
 use crate::runner::state::RunnerState;
-use pdma_model_contract::ModelError;
 use pdma_model_contract::abi::mmio::{IrqCommand, MmioResult, MmioResultDetails, ResponseUpdate};
 
 #[path = "irq/notification.rs"]

@@ -1,6 +1,6 @@
 //! ABI-v1 ring arithmetic and typed control vocabulary.
 
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiAddressError, AbiControlError, AbiDiscovery, AbiLimits, ControlRequest, DeviceEpoch,
     DeviceRunState, DeviceStatus, DiscoveryRequest, DmaAddress, DmaRegion, EpochIrqRoute,
     EpochIrqSource, IrqControl, QueueActivation, QueueControl, QueueRingRegions, RingCursor,

@@ -1,5 +1,60 @@
 use crate::register::{RegisterDefinition, RegisterSpec};
 
+/// One resolved repeated-bank declaration and its ordered template members.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedRegisterBank<I: 'static = u16, F: 'static = u16> {
+    pub(super) path: String,
+    pub(super) name: &'static str,
+    pub(super) declaration_index: usize,
+    pub(super) base: usize,
+    pub(super) count: usize,
+    pub(super) stride: usize,
+    pub(super) registers: Vec<RegisterSpec<I, F>>,
+    pub(super) expanded_registers: Vec<ResolvedRegister<I, F>>,
+}
+
+impl<I: Copy, F: Copy> ResolvedRegisterBank<I, F> {
+    /// Returns the root-qualified bank path.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    /// Returns the declared bank name.
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// Returns the first member's declaration index.
+    pub const fn declaration_index(&self) -> usize {
+        self.declaration_index
+    }
+
+    /// Returns the first instance base.
+    pub const fn base(&self) -> usize {
+        self.base
+    }
+
+    /// Returns the instance count.
+    pub const fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Returns the distance between instance bases.
+    pub const fn stride(&self) -> usize {
+        self.stride
+    }
+
+    /// Returns template members in declaration order.
+    pub fn registers(&self) -> &[RegisterSpec<I, F>] {
+        &self.registers
+    }
+
+    /// Returns expanded instances in declaration and instance order.
+    pub fn expanded_registers(&self) -> &[ResolvedRegister<I, F>] {
+        &self.expanded_registers
+    }
+}
+
 /// One fixed or repeated register instance with a deterministic path and absolute offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRegister<I: 'static = u16, F: 'static = u16> {
@@ -59,6 +114,7 @@ pub struct ResolvedRegisterMap<I: 'static = u16, F: 'static = u16> {
     pub(super) root: &'static str,
     pub(super) size: usize,
     pub(super) registers: Vec<ResolvedRegister<I, F>>,
+    pub(super) banks: Vec<ResolvedRegisterBank<I, F>>,
 }
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
@@ -75,6 +131,11 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
     /// Returns resolved instances in deterministic order.
     pub fn registers(&self) -> &[ResolvedRegister<I, F>] {
         &self.registers
+    }
+
+    /// Returns repeated banks in declaration order.
+    pub fn banks(&self) -> &[ResolvedRegisterBank<I, F>] {
+        &self.banks
     }
 
     /// Finds a register only at its exact expanded start.

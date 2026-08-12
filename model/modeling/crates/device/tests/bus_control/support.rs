@@ -1,5 +1,5 @@
-use pdma_model_contract::abi::{QueueActivation, QueueRingRegions, RingLayout, RingRecord};
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::{QueueActivation, QueueRingRegions, RingLayout, RingRecord};
 use pdma_model_device::AsyncDeviceHandle;
 
 /// Creates a fresh asynchronous queue-port handle.

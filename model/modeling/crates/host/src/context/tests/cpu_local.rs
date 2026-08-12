@@ -1,5 +1,5 @@
 use super::super::SoftwareCpu;
-use pdma_model_contract::ModelError;
+use crate::ModelError;
 use std::{future::Future, pin::Pin, task::Poll};
 use tokio::sync::oneshot;
 

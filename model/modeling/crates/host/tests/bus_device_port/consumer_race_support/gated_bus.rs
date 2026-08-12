@@ -1,7 +1,8 @@
 use super::ConsumerLane;
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
+use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_device::{AsyncDeviceHandle, BusControlError, DmaSpaceError};
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncPdmaBus, BusQueueStatus, BusSubmission, QueueControlWrite};
 use std::{
     future::{Future, poll_fn},

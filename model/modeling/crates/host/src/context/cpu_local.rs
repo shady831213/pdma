@@ -1,13 +1,11 @@
-use super::{SoftwareCpuToken, current_software_cpu};
-use pdma_model_contract::{ModelError, ModelResult};
-use std::{fmt, sync::Arc};
-use tokio::sync::Mutex;
+use crate::ModelError;
+use crate::ModelResult;
+use hardware_interface_runtime::{CpuContextError, CpuLocal as RuntimeCpuLocal};
+use std::fmt;
 
-/// One mutable value bound to a modeled software CPU.
+/// Compatibility adapter for runtime CPU-local state.
 ///
-/// Cloning this capability shares the same value; it does not clone `T`.
-/// Access is synchronous and limited to the closure passed to [`Self::with`].
-/// A reference therefore cannot escape:
+/// Cloning shares the same value and access remains synchronous. A reference cannot escape:
 ///
 /// ```compile_fail
 /// use pdma_model_host::SoftwareCpu;
@@ -18,7 +16,7 @@ use tokio::sync::Mutex;
 /// # let _ = leaked;
 /// ```
 ///
-/// Nor can a future retain a borrow across an await:
+/// A future cannot retain a borrow across an await:
 ///
 /// ```compile_fail
 /// use pdma_model_host::SoftwareCpu;
@@ -31,46 +29,36 @@ use tokio::sync::Mutex;
 /// });
 /// # let _ = future;
 /// ```
-pub struct CpuLocal<T> {
-    // Owner token authorizes synchronous access from one modeled CPU.
-    owner: Arc<SoftwareCpuToken>,
-    // Canonical state stays shared across all capability clones.
-    state: Arc<Mutex<T>>,
-}
+pub struct CpuLocal<T>(RuntimeCpuLocal<T>);
 
 impl<T> CpuLocal<T> {
-    pub(super) fn new(owner: Arc<SoftwareCpuToken>, value: T) -> Self {
-        Self {
-            owner,
-            state: Arc::new(Mutex::new(value)),
-        }
+    pub(super) const fn from_runtime(local: RuntimeCpuLocal<T>) -> Self {
+        Self(local)
     }
 
     pub(crate) fn capture_active(value: T) -> ModelResult<Self> {
-        let owner = current_software_cpu().ok_or(ModelError::SoftwareCpuInactive)?;
-        Ok(Self::new(owner, value))
+        RuntimeCpuLocal::capture_active(value)
+            .map(Self)
+            .map_err(map_context_error)
     }
 
     /// Applies one synchronous operation while the owning CPU is active.
     pub fn with<R>(&self, operation: impl FnOnce(&mut T) -> R) -> ModelResult<R> {
-        let active = current_software_cpu().ok_or(ModelError::SoftwareCpuInactive)?;
-        if !Arc::ptr_eq(&active, &self.owner) {
-            return Err(ModelError::SoftwareCpuMismatch);
-        }
-        let mut state = self
-            .state
-            .try_lock()
-            .map_err(|_| ModelError::SoftwareCpuStateBusy)?;
-        Ok(operation(&mut state))
+        self.0.with(operation).map_err(map_context_error)
+    }
+}
+
+const fn map_context_error(error: CpuContextError) -> ModelError {
+    match error {
+        CpuContextError::Inactive => ModelError::SoftwareCpuInactive,
+        CpuContextError::Mismatch => ModelError::SoftwareCpuMismatch,
+        CpuContextError::StateBusy => ModelError::SoftwareCpuStateBusy,
     }
 }
 
 impl<T> Clone for CpuLocal<T> {
     fn clone(&self) -> Self {
-        Self {
-            owner: Arc::clone(&self.owner),
-            state: Arc::clone(&self.state),
-        }
+        Self(self.0.clone())
     }
 }
 

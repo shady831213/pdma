@@ -1,11 +1,11 @@
 use super::fault::canonical;
 use crate::dma_space::DmaSpace;
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::DmaRangeStart;
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultOrder, AbiFaultSite,
     AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DmaAddress, DmaRegion,
 };
-use pdma_model_contract::error::{ModelError, ModelResult};
 
 pub(super) fn direct(
     dma_space: &DmaSpace,

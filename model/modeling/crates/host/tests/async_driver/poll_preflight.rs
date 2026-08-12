@@ -1,7 +1,7 @@
-use pdma_model_contract::{
-    BufferId, CommandId, CopyRequest, ModelError, ModelResult, TraceEventKind,
-};
+use pdma_model_contract::{BufferId, CommandId, CopyRequest, TraceEventKind};
 use pdma_model_device::{AsyncStepStatus, SyncDevice};
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 struct PollFixture {
@@ -101,7 +101,7 @@ async fn event_fixture() -> ModelResult<PollFixture> {
         .await?;
     assert!(matches!(
         device.run_until_idle(8),
-        Err(ModelError::UnknownBuffer(_))
+        Err(pdma_model_device::ModelError::UnknownBuffer(_))
     ));
     device.clear_trace();
     Ok(PollFixture {

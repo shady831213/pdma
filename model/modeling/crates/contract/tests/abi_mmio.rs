@@ -6,31 +6,32 @@ pub mod register_literals;
 mod response_banks;
 
 use pdma_model_contract::abi::mmio::{
-    GlobalCommand, IrqCommand, IrqSourceStatus, MMIO_REGION_SIZE, MMIO_REGISTERS, MmioAccess,
-    MmioAccessError, MmioReset, MmioResult, QueueCommand, RegisterId, ResponseUpdate,
+    GlobalCommand, IrqCommand, IrqSourceStatus, MMIO_REGION_SIZE, MmioAccess, MmioAccessError,
+    MmioReset, MmioResult, PdmaMmioMap, QueueCommand, RegisterId, ResponseUpdate,
     apply_response_update, decode_read, decode_write, encode_u32, encode_u64,
 };
 
 #[test]
 fn literal_register_inventory_is_exact() {
     assert_eq!(MMIO_REGION_SIZE, 0x1000);
-    assert_eq!(MMIO_REGISTERS.len(), register_literals::len());
-    for (actual, expected) in MMIO_REGISTERS.iter().zip(register_literals::iter()) {
+    let registers = PdmaMmioMap::SPEC.registers();
+    assert_eq!(registers.len(), register_literals::len());
+    for (actual, expected) in registers.iter().zip(register_literals::iter()) {
         assert_eq!(
             (
                 actual.id(),
                 actual.name(),
-                actual.offset(),
-                actual.width(),
+                u32::try_from(actual.offset()).expect("literal offset fits u32"),
+                u128::try_from(actual.width()).expect("literal width fits u128"),
                 actual.access(),
-                actual.reset(),
+                actual.reset_kind(),
                 actual.reset_value(),
                 actual.writable_mask()
             ),
             expected
         );
-        assert_eq!(u128::from(actual.offset()) % actual.width(), 0);
-        assert!(u128::from(actual.offset()) + actual.width() <= MMIO_REGION_SIZE);
+        assert_eq!(actual.offset() % actual.width(), 0);
+        assert!(actual.offset() + actual.width() <= PdmaMmioMap::SPEC.size());
     }
     println!(
         "literal MMIO registers checked: {}",
@@ -42,17 +43,17 @@ fn literal_register_inventory_is_exact() {
 fn command_and_result_numbers_are_exact() {
     assert_eq!(
         [
-            MmioAccess::ReadOnly.code(),
-            MmioAccess::ReadWrite.code(),
-            MmioAccess::WriteOnly.code()
+            access_code(MmioAccess::ReadOnly),
+            access_code(MmioAccess::ReadWrite),
+            access_code(MmioAccess::WriteOnly)
         ],
         [0, 1, 2]
     );
     assert_eq!(
         [
-            MmioReset::Constant.code(),
-            MmioReset::Zero.code(),
-            MmioReset::PostReset.code()
+            reset_code(MmioReset::Constant),
+            reset_code(MmioReset::Zero),
+            reset_code(MmioReset::PostReset)
         ],
         [0, 1, 2]
     );
@@ -100,6 +101,22 @@ fn command_and_result_numbers_are_exact() {
     ];
     assert_eq!(MmioResult::ALL.map(MmioResult::code), codes);
     println!("literal MMIO results checked: {}", codes.len());
+}
+
+const fn access_code(access: MmioAccess) -> u32 {
+    match access {
+        MmioAccess::ReadOnly => 0,
+        MmioAccess::ReadWrite => 1,
+        MmioAccess::WriteOnly => 2,
+    }
+}
+
+const fn reset_code(reset: MmioReset) -> u32 {
+    match reset {
+        MmioReset::Constant => 0,
+        MmioReset::Zero => 1,
+        MmioReset::PostReset => 2,
+    }
 }
 
 #[test]

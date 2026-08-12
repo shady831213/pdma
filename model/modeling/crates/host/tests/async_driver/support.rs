@@ -1,9 +1,11 @@
 use pdma_model_contract::{
     BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, ModelError, ModelResult, QueueConfig, QueueConfigHandle,
+    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::AsyncDeviceHandle;
 use pdma_model_host::AsyncDevicePort;
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use std::sync::{
     Arc,
     atomic::{AtomicU8, AtomicUsize, Ordering},
@@ -181,21 +183,27 @@ impl AsyncDevicePort for BlockingPort {
     async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         self.control.create.enter().await?;
         self.control.create.record_inner_call();
-        self.inner.create_queue(config).await
+        self.inner.create_queue(config).await.map_err(Into::into)
     }
 
     async fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
         self.control.allocation.enter().await?;
         self.control.allocation.record_inner_call();
-        self.inner.allocate_buffer(len).await
+        self.inner.allocate_buffer(len).await.map_err(Into::into)
     }
 
     async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        self.inner.write_buffer(id, offset, data).await
+        self.inner
+            .write_buffer(id, offset, data)
+            .await
+            .map_err(Into::into)
     }
 
     async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
-        self.inner.read_buffer(id, offset, len).await
+        self.inner
+            .read_buffer(id, offset, len)
+            .await
+            .map_err(Into::into)
     }
 
     async fn submit_command(
@@ -205,13 +213,16 @@ impl AsyncDevicePort for BlockingPort {
     ) -> ModelResult<()> {
         self.control.submit.enter().await?;
         self.control.submit.record_inner_call();
-        self.inner.submit_command(queue, command).await
+        self.inner
+            .submit_command(queue, command)
+            .await
+            .map_err(Into::into)
     }
 
     async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
         self.control.doorbell.enter().await?;
         self.control.doorbell.record_inner_call();
-        self.inner.ring_doorbell(queue).await
+        self.inner.ring_doorbell(queue).await.map_err(Into::into)
     }
 
     async fn poll_completion(
@@ -220,7 +231,7 @@ impl AsyncDevicePort for BlockingPort {
     ) -> ModelResult<Option<CompletionRecord>> {
         self.control.completion.enter().await?;
         self.control.completion.record_inner_call();
-        self.inner.poll_completion(queue).await
+        self.inner.poll_completion(queue).await.map_err(Into::into)
     }
 
     async fn poll_queue_event(
@@ -229,7 +240,7 @@ impl AsyncDevicePort for BlockingPort {
     ) -> ModelResult<Option<EventRecord>> {
         self.control.event.enter().await?;
         self.control.event.record_inner_call();
-        self.inner.poll_queue_event(queue).await
+        self.inner.poll_queue_event(queue).await.map_err(Into::into)
     }
 
     async fn configure_irq_route(
@@ -237,27 +248,39 @@ impl AsyncDevicePort for BlockingPort {
         source: EpochIrqSource,
         route: IrqRoute,
     ) -> ModelResult<()> {
-        self.inner.configure_irq_route(source, route).await
+        self.inner
+            .configure_irq_route(source, route)
+            .await
+            .map_err(Into::into)
     }
 
     async fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.enable_irq_source(source).await
+        self.inner
+            .enable_irq_source(source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.disable_irq_source(source).await
+        self.inner
+            .disable_irq_source(source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.mask_irq_source(source).await
+        self.inner.mask_irq_source(source).await.map_err(Into::into)
     }
 
     async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.unmask_irq_source(source).await
+        self.inner
+            .unmask_irq_source(source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.ack_irq_source(source).await
+        self.inner.ack_irq_source(source).await.map_err(Into::into)
     }
 
     async fn irq_snapshot(&self) -> Option<IrqSnapshot> {

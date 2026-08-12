@@ -1,5 +1,6 @@
-use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqVector, ModelResult};
+use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use tokio::sync::mpsc;
 
@@ -43,7 +44,7 @@ async fn shutdown_wins_over_a_ready_notification() -> ModelResult<()> {
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;
-            Ok::<_, pdma_model_contract::ModelError>((driver, src, dst))
+            Ok::<_, pdma_model_host::ModelError>((driver, src, dst))
         })
         .await?;
     let (calls_tx, mut calls_rx) = mpsc::unbounded_channel();

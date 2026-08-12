@@ -2,9 +2,10 @@ use super::{
     AsyncDeviceBusStage, AsyncPdmaBus, BusDmaStage, BusQueueStatus, BusSubmission,
     QueueControlWrite,
 };
+use crate::ModelResult;
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::abi::{DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, ModelResult};
+use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_device::{
     AsyncDeviceHandle, BusControlError, DmaSpaceError, QueueStatus, SubmissionAcceptance,
 };
@@ -33,7 +34,9 @@ impl AsyncPdmaBus for AsyncDeviceHandle {
     type ControlError = BusControlError;
 
     async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
-        Self::allocate_dma_region(self, len).await
+        Self::allocate_dma_region(self, len)
+            .await
+            .map_err(Into::into)
     }
 
     async fn stage_dma_regions(
@@ -102,31 +105,43 @@ impl AsyncPdmaBus for AsyncDeviceHandle {
         source: EpochIrqSource,
         route: IrqRoute,
     ) -> ModelResult<()> {
-        Self::configure_irq_route(self, source, route).await
+        Self::configure_irq_route(self, source, route)
+            .await
+            .map_err(Into::into)
     }
 
     async fn enable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        Self::enable_irq_source(self, source).await
+        Self::enable_irq_source(self, source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn disable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        Self::disable_irq_source(self, source).await
+        Self::disable_irq_source(self, source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn mask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        Self::mask_irq_source(self, source).await
+        Self::mask_irq_source(self, source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn unmask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        Self::unmask_irq_source(self, source).await
+        Self::unmask_irq_source(self, source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        Self::ack_irq_source(self, source).await
+        Self::ack_irq_source(self, source).await.map_err(Into::into)
     }
 
     async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
-        Self::observe_irq_source(self, source).await
+        Self::observe_irq_source(self, source)
+            .await
+            .map_err(Into::into)
     }
 
     async fn irq_snapshot(&self) -> Option<IrqSnapshot> {

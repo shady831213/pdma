@@ -1,10 +1,11 @@
 use pdma_model_contract::{
-    CommandId, CompletionStatus, ExternalCommand, ModelError, QueueConfigHandle, ResourceConfig,
+    CommandId, CompletionStatus, ExternalCommand, QueueConfigHandle, ResourceConfig,
     TraceEventKind,
     desc::{CopyCommand, CopyRequest, VectorAddCommand, VectorAddRequest, VectorBufferRange},
     ids::BufferId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
+use pdma_model_device::ModelError;
 use pdma_model_device::{AsyncStallReason, AsyncStepStatus, SyncDevice};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

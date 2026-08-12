@@ -3,14 +3,14 @@
 use super::AsyncDeviceHandle;
 use super::backend::DeviceModel;
 use super::state::RunnerState;
-use pdma_model_contract::abi::EpochIrqSource;
+use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqSourceStatus, IrqStateBit, MmioResult, MmioResultDetails,
 };
-use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::irq::{
     IrqLine, IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector,
 };
+use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::{CompletionRingId, DeviceEpoch, QueueId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,8 +41,8 @@ pub(in crate::runner) fn observe_irq_source(
             bits |= bit.mask();
         }
     }
-    let status = IrqSourceStatus::try_from(bits)
-        .map_err(|_| pdma_model_contract::error::ModelError::DmaSubmissionState)?;
+    let status =
+        IrqSourceStatus::try_from(bits).map_err(|_| crate::ModelError::DmaSubmissionState)?;
     Ok(IrqSourceView {
         source,
         route: observed.route,
@@ -95,19 +95,19 @@ pub(in crate::runner) fn usize_to_u64(value: usize) -> u64 {
 }
 
 pub(in crate::runner) fn map_mmio_error(
-    error: pdma_model_contract::ModelError,
+    error: crate::ModelError,
     command: IrqCommand,
     source: EpochIrqSource,
 ) -> MmioResultDetails {
     let (kind, id) = encode_source(source.source());
     let (result, details) = match error {
-        pdma_model_contract::ModelError::StaleDeviceEpoch { expected, actual } => {
+        crate::ModelError::StaleDeviceEpoch { expected, actual } => {
             (MmioResult::StaleEpoch, [expected.raw(), actual.raw(), 0])
         }
-        pdma_model_contract::ModelError::UnknownIrqSource(_) => {
+        crate::ModelError::UnknownIrqSource(_) => {
             (MmioResult::InvalidIrqSource, [u64::from(kind), id, 0])
         }
-        pdma_model_contract::ModelError::IrqSourceActive(_) => {
+        crate::ModelError::IrqSourceActive(_) => {
             (MmioResult::IrqSourceActive, [u64::from(kind), id, 0])
         }
         _ => (

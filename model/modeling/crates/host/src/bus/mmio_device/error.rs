@@ -1,7 +1,7 @@
 use crate::BusControlErrorAdapter;
-use pdma_model_contract::ModelError;
+use crate::ModelError;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
-use pdma_model_contract::abi::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::{DeviceEpoch, EpochQueue};
 use pdma_model_device::MmioBatchError;
 
 /// Exact failure returned by an MMIO queue procedure.

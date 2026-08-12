@@ -1,4 +1,4 @@
-use pdma_model_contract::abi::{DeviceEpoch, DmaRegion};
+use pdma_model_contract::{DeviceEpoch, DmaRegion};
 use pdma_model_contract::{
     EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqSource, IrqVector,
 };

@@ -45,7 +45,13 @@ fn irq_response_bank_has_source_and_distinct_empty_shapes() {
     // Then: source fields are literal LE, irrelevant notification/message fields are zero, and
     // the two EMPTY outcomes remain distinct typed variants with all response fields zero.
     for response in responses {
-        assert_eq!(response.bank().to_le_bytes(), expected);
+        assert_eq!(
+            response
+                .bank()
+                .to_le_bytes()
+                .expect("generated response view must encode"),
+            expected
+        );
     }
     assert_eq!(
         IrqResponse::SnapshotLineEmpty.bank(),
@@ -91,7 +97,9 @@ fn irq_response_bank_has_literal_notification_bytes_for_both_claim_kinds() {
     // When: a line snapshot and a message notification are encoded.
     // Then: each command-specific response uses its literal notification shape and zero fill.
     assert_eq!(
-        line.bank().to_le_bytes(),
+        line.bank()
+            .to_le_bytes()
+            .expect("generated response view must encode"),
         [
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13,
             0x12, 0x11, 0x24, 0x23, 0x22, 0x21, 0x3b, 0, 0, 0, 0x34, 0x33, 0x32, 0x31, 1, 0, 0, 0,
@@ -100,7 +108,10 @@ fn irq_response_bank_has_literal_notification_bytes_for_both_claim_kinds() {
         ]
     );
     assert_eq!(
-        message.bank().to_le_bytes(),
+        message
+            .bank()
+            .to_le_bytes()
+            .expect("generated response view must encode"),
         [
             0x68, 0x67, 0x66, 0x65, 0x64, 0x63, 0x62, 0x61, 0x78, 0x77, 0x76, 0x75, 0x74, 0x73,
             0x72, 0x71, 0x84, 0x83, 0x82, 0x81, 0x3b, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0x98, 0x97,

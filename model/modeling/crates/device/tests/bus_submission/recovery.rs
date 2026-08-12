@@ -1,5 +1,5 @@
 use super::common::{TestResult, activate_on, allocate, encode, fixture};
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiCommand, AbiCopy, AbiId, CopyIovas, QueueControl, QueueCursorUpdate, RingCursor,
     WholeDeviceReset,
 };
@@ -54,7 +54,7 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
     let epoch = fixture
         .handle
         .reset(WholeDeviceReset::new(
-            pdma_model_contract::abi::DeviceEpoch::initial(),
+            pdma_model_contract::semantic::DeviceEpoch::initial(),
         ))
         .await?;
     assert_eq!(fixture.handle.pending_dma_result().await, None);

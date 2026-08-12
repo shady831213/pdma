@@ -2,8 +2,9 @@ use super::{
     assertions::{assert_line_lifecycle, assert_line_observation, receive_observations},
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
-use pdma_model_contract::{CopyRequest, IrqLine, IrqRoute, IrqVector, ModelResult};
+use pdma_model_contract::{CopyRequest, IrqLine, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 use tokio::sync::{mpsc, oneshot};
 
@@ -74,7 +75,7 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
                 .submit_copy_on(&mut main_port, CopyRequest::new(src, dst, 4))
                 .await?;
             done_rx.recv().await.expect("line handler completes");
-            Ok::<_, pdma_model_contract::ModelError>((
+            Ok::<_, pdma_model_host::ModelError>((
                 main_port.read_buffer(dst, 0, 4).await?,
                 main_port.irq_snapshot().await,
             ))

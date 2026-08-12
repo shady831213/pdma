@@ -1,13 +1,15 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::abi::{
-    EpochQueue, QueueActivation, QueueControl, QueueRingRegions, RingLayout, RingRecord,
-    WholeDeviceReset,
-};
+use pdma_model_device::ModelError;
+
 use pdma_model_contract::{
     CommandId, CopyCommand, CopyRequest, DeviceEpoch, EpochIrqSource, EventRouting,
-    ExternalCommand, IrqRoute, IrqSource, IrqVector, ModelError, QueueConfig, QueueId,
-    ResourceConfig, SoftwareOwnerId,
+    ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueId, ResourceConfig,
+    SoftwareOwnerId,
+};
+use pdma_model_contract::{
+    EpochQueue, QueueActivation, QueueControl, QueueRingRegions, RingLayout, RingRecord,
+    WholeDeviceReset,
 };
 use pdma_model_device::{AsyncStallReason, AsyncStepStatus, SyncDevice};
 

@@ -1,6 +1,8 @@
 use super::support::BlockingPort;
-use pdma_model_contract::{CommandId, CopyRequest, ModelError, ModelResult};
+use pdma_model_contract::{CommandId, CopyRequest};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 use tokio::sync::oneshot;
 

@@ -1,8 +1,7 @@
 use crate::{NotificationPort, message};
-use pdma_model_contract::{
-    CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector, ModelResult,
-};
+use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use tokio::sync::{mpsc, oneshot};
 
@@ -78,7 +77,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;
-            Ok::<_, pdma_model_contract::ModelError>((driver, src, first_dst, second_dst))
+            Ok::<_, pdma_model_host::ModelError>((driver, src, first_dst, second_dst))
         })
         .await?;
     let (started_tx, mut started_rx) = mpsc::unbounded_channel();
@@ -101,7 +100,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
         driver
             .submit_copy_on(&mut device_port, CopyRequest::new(src, second_dst, 4))
             .await?;
-        Ok::<_, pdma_model_contract::ModelError>(())
+        Ok::<_, pdma_model_host::ModelError>(())
     })
     .await?;
     assert_eq!(started_rx.recv().await, Some(1));

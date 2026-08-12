@@ -1,6 +1,8 @@
 use super::support::BlockingPort;
-use pdma_model_contract::{BufferId, CommandId, CopyRequest, ModelError, ModelResult, QueueId};
+use pdma_model_contract::{BufferId, CommandId, CopyRequest, QueueId};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDriver, SoftwareCpu};
 use std::{
     future::{Future, poll_fn},

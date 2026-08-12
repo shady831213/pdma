@@ -1,5 +1,8 @@
 //! Behavioral contract for the ABI-backed asynchronous device port.
 
+use pdma_model_host::ModelError;
+use pdma_model_host::ModelResult;
+
 #[path = "bus_device_port/cancellation_support.rs"]
 /// Test-only ABI cancellation observations retained outside the integration-test root.
 pub mod cancellation_support;
@@ -10,11 +13,11 @@ pub mod consumer_race_support;
 /// Test-only CPU interleaving scenarios.
 pub mod interleaving_support;
 
-use pdma_model_contract::abi::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_contract::{
-    BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, IrqRoute, IrqVector, ModelError,
-    ModelResult, StridedCopyRequest, VectorAddRequest, VectorBufferRange,
+    BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, IrqRoute, IrqVector,
+    StridedCopyRequest, VectorAddRequest, VectorBufferRange,
 };
+use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDevicePort, AsyncDriver, BusDevicePort, SoftwareCpu};
 

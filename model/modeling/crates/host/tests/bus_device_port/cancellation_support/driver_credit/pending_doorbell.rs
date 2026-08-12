@@ -1,4 +1,5 @@
 use super::*;
+use pdma_model_host::ModelResult;
 
 pub(super) struct PendingDoorbellPort {
     port: BusDevicePort<pdma_model_device::AsyncDeviceHandle>,

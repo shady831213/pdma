@@ -1,10 +1,10 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
-use pdma_model_contract::abi::{
-    DeviceEpoch, RingCursor, WholeDeviceReset, decode_completion, decode_event,
-};
 use pdma_model_contract::{
     CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
+};
+use pdma_model_contract::{
+    DeviceEpoch, RingCursor, WholeDeviceReset, decode_completion, decode_event,
 };
 use pdma_model_device::PendingDmaResult;
 

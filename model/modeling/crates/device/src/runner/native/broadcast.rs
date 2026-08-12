@@ -1,10 +1,10 @@
 use super::NativeExecution;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
+use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
 use pdma_model_contract::DmaRangeStart;
 use pdma_model_contract::desc::BroadcastCopyCommand;
-use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::trace::TraceOperation;
 
 pub(super) fn retire_broadcast_copy(

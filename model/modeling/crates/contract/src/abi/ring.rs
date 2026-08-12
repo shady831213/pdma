@@ -1,6 +1,8 @@
+//! Fixed-width ABI-v1 ring values.
+
 use super::{
     AbiControlError, COMPLETION_ALIGNMENT, COMPLETION_SIZE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_SIZE,
-    DmaRegion, EVENT_ALIGNMENT, EVENT_SIZE, MAX_RING_DEPTH,
+    DmaAddress, EVENT_ALIGNMENT, EVENT_SIZE, MAX_RING_DEPTH,
 };
 
 /// Canonical ABI-v1 record carried by a queue ring.
@@ -34,19 +36,21 @@ impl RingRecord {
     }
 }
 
-/// One validated ABI-v1 ring region and its retained full-capacity depth.
+/// One exact ABI-v1 ring address, extent, depth, and record kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RingLayout {
-    region: DmaRegion,
+    base: DmaAddress,
+    length: u64,
     depth: u32,
     extent: u64,
     record: RingRecord,
 }
 
 impl RingLayout {
-    /// Validates depth, extent, alignment, and exact region length.
+    /// Validates an exact ring address, length, depth, and record kind.
     pub fn try_new(
-        region: DmaRegion,
+        base: DmaAddress,
+        length: u64,
         depth: u64,
         record: RingRecord,
     ) -> Result<Self, AbiControlError> {
@@ -58,36 +62,42 @@ impl RingLayout {
                 maximum: MAX_RING_DEPTH,
             })?;
         let extent = Self::checked_extent(u64::from(depth), record.record_size())?;
-        if region.base().raw() % record.alignment() != 0 {
+        if base.raw() % record.alignment() != 0 {
             return Err(AbiControlError::MisalignedRing {
-                base: region.base().raw(),
+                base: base.raw(),
                 alignment: record.alignment(),
             });
         }
-        if region.length() != extent {
+        if length != extent {
             return Err(AbiControlError::RingExtentMismatch {
                 expected: extent,
-                actual: region.length(),
+                actual: length,
             });
         }
         Ok(Self {
-            region,
+            base,
+            length,
             depth,
             extent,
             record,
         })
     }
 
-    /// Multiplies a fixed-width depth by a canonical record width without wrapping.
+    /// Multiplies depth by record width without wrapping.
     pub fn checked_extent(depth: u64, record_size: u16) -> Result<u64, AbiControlError> {
         depth
             .checked_mul(u64::from(record_size))
             .ok_or(AbiControlError::RingExtentOverflow { depth, record_size })
     }
 
-    /// Backing DMA region.
-    pub const fn region(self) -> DmaRegion {
-        self.region
+    /// Exact base IOVA.
+    pub const fn base(self) -> DmaAddress {
+        self.base
+    }
+
+    /// Exact backing byte length.
+    pub const fn length(self) -> u64 {
+        self.length
     }
 
     /// Retained ring capacity.
@@ -95,7 +105,7 @@ impl RingLayout {
         self.depth
     }
 
-    /// Exact byte extent.
+    /// Exact required byte extent.
     pub const fn extent(self) -> u64 {
         self.extent
     }
@@ -138,7 +148,7 @@ impl RingCursor {
     }
 }
 
-/// A validated producer/consumer pair for one ring.
+/// A validated producer/consumer pair for one exact ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RingCursors {
     layout: RingLayout,

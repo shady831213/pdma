@@ -1,8 +1,7 @@
 use super::{QueuePortDeviceModel, irq::IrqSourceObservation};
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::{
-    EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource, ModelError, ModelResult,
-};
+use crate::{ModelError, ModelResult};
+use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
 
 impl QueuePortDeviceModel {
     pub(in crate::runner) fn enable_irq_source(
@@ -153,7 +152,7 @@ impl QueuePortDeviceModel {
                     .ok_or(ModelError::UnknownIrqSource(source))?;
                 if queue.io.is_dma_bus() {
                     let active = bus_control
-                        .queue(pdma_model_contract::abi::EpochQueue::new(
+                        .queue(pdma_model_contract::semantic::EpochQueue::new(
                             self.epoch,
                             queue.entry.queue_id(),
                         ))
@@ -167,7 +166,9 @@ impl QueuePortDeviceModel {
                 let queue = self.queue(id)?;
                 if queue.io.is_dma_bus() {
                     let active = bus_control
-                        .queue(pdma_model_contract::abi::EpochQueue::new(self.epoch, id))
+                        .queue(pdma_model_contract::semantic::EpochQueue::new(
+                            self.epoch, id,
+                        ))
                         .map_err(|_| ModelError::DmaSubmissionState)?;
                     Ok(active.event.producer() != active.event.consumer())
                 } else {

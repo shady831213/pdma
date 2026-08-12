@@ -31,7 +31,7 @@ pub use register::{
 };
 pub use register_map::{
     RegisterLocation, RegisterMapError, RegisterMapSpec, RegisterMapValidationError,
-    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterMap,
+    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
 };
 pub use scalar::{Scalar, ScalarKind};
 

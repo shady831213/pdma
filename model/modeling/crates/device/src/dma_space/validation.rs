@@ -1,5 +1,5 @@
 use super::{DmaSpace, DmaSpaceError, IOVA_ALIGNMENT, reserved_end};
-use pdma_model_contract::abi::DmaRegion;
+use pdma_model_contract::bridge::DmaRegion;
 
 impl DmaSpace {
     /// Validates that a region set is aligned, exactly mapped, and pairwise disjoint.

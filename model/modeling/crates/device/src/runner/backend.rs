@@ -3,9 +3,9 @@ use super::bus::control::BusControlState;
 use super::native::QueuePortDeviceModel;
 use super::native::dma_bus_api::PreparedDmaBusQueue;
 use crate::dma_space::DmaSpace;
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::{ModelError, ModelResult};
 use pdma_model_contract::event::EventRecord;
 use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
@@ -182,7 +182,7 @@ impl DeviceModel {
 
     pub(in crate::runner) fn ring_dma_bus_doorbell(
         &mut self,
-        queue: pdma_model_contract::abi::EpochQueue,
+        queue: pdma_model_contract::semantic::EpochQueue,
     ) -> ModelResult<()> {
         match self {
             Self::QueuePort(device) => device.ring_dma_bus_doorbell(queue),
@@ -209,7 +209,7 @@ impl DeviceModel {
 
     pub(in crate::runner) fn validate_dma_bus_queue(
         &self,
-        queue: pdma_model_contract::abi::EpochQueue,
+        queue: pdma_model_contract::semantic::EpochQueue,
     ) -> ModelResult<()> {
         match self {
             Self::QueuePort(device) => device.validate_dma_bus_queue(queue),

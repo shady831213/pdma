@@ -1,5 +1,5 @@
 use super::BusControlError;
-use pdma_model_contract::abi::{DeviceEpoch, EpochQueue, QueueActivation, RingCursor, RingCursors};
+use pdma_model_contract::{DeviceEpoch, EpochQueue, QueueActivation, RingCursor, RingCursors};
 
 pub(in crate::runner) mod activation;
 pub(in crate::runner) mod transactions;

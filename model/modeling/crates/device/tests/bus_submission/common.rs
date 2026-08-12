@@ -1,4 +1,4 @@
-use pdma_model_contract::abi::{
+use pdma_model_contract::{
     AbiCommand, AbiEvent, DeviceEpoch, DmaAddress, DmaRegion, EpochQueue, QueueActivation,
     QueueControl, QueueCursorUpdate, QueueRingRegions, RingCursor, RingLayout, RingRecord,
 };

@@ -1,14 +1,16 @@
+use crate::ModelError;
+use crate::ModelResult;
 mod poll_irq;
 mod state;
 mod submission;
 
 use super::AsyncDevicePort;
 use crate::{AsyncPdmaBus, CpuLocal};
-use pdma_model_contract::abi::{DeviceEpoch, EpochQueue};
 use pdma_model_contract::{
     BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, ModelError, ModelResult, QueueConfig, QueueConfigHandle,
+    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
+use pdma_model_contract::{DeviceEpoch, EpochQueue};
 use pdma_model_device::{BusControlError, DmaSpaceError};
 use state::PortState;
 use std::future::{Future, poll_fn};

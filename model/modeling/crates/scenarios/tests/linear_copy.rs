@@ -1,6 +1,8 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{CompletionStatus, ModelError, desc::CopyRequest};
+use pdma_model_device::ModelError;
+
+use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
 use pdma_model_device::{AsyncDevice, SyncDevice};
 use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
 

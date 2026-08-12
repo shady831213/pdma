@@ -1,8 +1,9 @@
 //! Async queue capability surface.
 
 use super::AsyncDeviceHandle;
+use crate::ModelResult;
 use pdma_model_contract::{
-    CompletionRecord, EventRecord, ExternalCommand, ModelResult, QueueConfig, QueueConfigHandle,
+    CompletionRecord, EventRecord, ExternalCommand, QueueConfig, QueueConfigHandle,
 };
 
 impl AsyncDeviceHandle {

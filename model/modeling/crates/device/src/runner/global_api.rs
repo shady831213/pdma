@@ -2,7 +2,7 @@ use super::AsyncDeviceHandle;
 use super::backend::DeviceModel;
 use super::native::probe::{RunStateProbe, probe_run_state};
 use super::state::RunnerState;
-use pdma_model_contract::abi::{AbiDiscovery, DeviceRunState, DeviceStatus, DiscoveryRequest};
+use pdma_model_contract::{AbiDiscovery, DeviceRunState, DeviceStatus, DiscoveryRequest};
 
 pub(in crate::runner) const fn discover(_request: DiscoveryRequest) -> AbiDiscovery {
     AbiDiscovery::v1()

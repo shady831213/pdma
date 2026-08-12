@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
-    CompletionStatus, ModelError, ResourceConfig, desc::CopyRequest, ids::CommandId,
-};
+use pdma_model_device::ModelError;
+
+use pdma_model_contract::{CompletionStatus, ResourceConfig, desc::CopyRequest, ids::CommandId};
 use pdma_model_device::{
     AsyncDevice, AsyncRunSummary, AsyncStallReason, AsyncStepStatus, SyncDevice,
 };

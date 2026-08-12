@@ -1,15 +1,19 @@
-use pdma_model_contract::abi::{
+use crate::{ModelError, ModelResult};
+use pdma_model_contract::{
     AbiFault, AbiFaultCandidate, AbiFaultOrder, AbiHeaderField, AbiReservedField, AbiScalarField,
-    DescriptorDecodeError, DmaAddress, select_canonical_fault,
+    BROADCAST_COPY_OPCODE, COPY_OPCODE, DescriptorDecodeError, DescriptorSchema,
+    DescriptorSchemaView, DmaAddress, STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE,
+    select_canonical_fault,
 };
-use pdma_model_contract::error::{ModelError, ModelResult};
 
 pub(super) fn descriptor(
     slot: DmaAddress,
     bytes: &[u8],
     error: DescriptorDecodeError,
 ) -> ModelResult<AbiFault> {
-    let list = read_u64(bytes, 24..32)?;
+    let view = DescriptorSchemaView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
+    let list = view.word1().map_err(|_| ModelError::DmaSubmissionState)?;
+    let opcode = view.opcode().map_err(|_| ModelError::DmaSubmissionState)?;
     let (fault, order) = match error {
         DescriptorDecodeError::InvalidVersion { observed, .. } => (
             AbiFault::invalid_version(slot, observed),
@@ -29,13 +33,13 @@ pub(super) fn descriptor(
         ),
         DescriptorDecodeError::InvalidReserved { offset, observed } => (
             AbiFault::invalid_reserved(slot, u64::from(offset), observed),
-            AbiFaultOrder::Reserved(reserved(read_u16(bytes, 2..4)?, offset)?),
+            AbiFaultOrder::Reserved(reserved(opcode, offset)?),
         ),
         DescriptorDecodeError::ValueOutOfRange {
             offset, observed, ..
         } => (
             AbiFault::value_out_of_range(slot, u64::from(offset), observed),
-            AbiFaultOrder::Scalar(scalar(read_u16(bytes, 2..4)?, offset)?),
+            AbiFaultOrder::Scalar(scalar(opcode, offset)?),
         ),
         DescriptorDecodeError::InvalidIndirectCount { observed, .. } => (
             AbiFault::invalid_indirect_count(DmaAddress::new(list), observed),
@@ -60,36 +64,40 @@ pub(super) fn canonical(fault: AbiFault, order: AbiFaultOrder) -> AbiFault {
     }
 }
 
-const fn reserved(opcode: u16, offset: u16) -> ModelResult<AbiReservedField> {
-    match (opcode, offset) {
-        (1, 40) => Ok(AbiReservedField::CopyOffset40),
-        (1, 48) => Ok(AbiReservedField::CopyOffset48),
-        (1, 56) => Ok(AbiReservedField::CopyOffset56),
-        (3, 48) => Ok(AbiReservedField::BroadcastOffset48),
-        (3, 56) => Ok(AbiReservedField::BroadcastOffset56),
-        (4, 48) => Ok(AbiReservedField::VectorOffset48),
-        (4, 56) => Ok(AbiReservedField::VectorOffset56),
+fn reserved(opcode: u16, offset: u16) -> ModelResult<AbiReservedField> {
+    match (opcode, usize::from(offset)) {
+        (COPY_OPCODE, DescriptorSchema::WORD3_OFFSET) => Ok(AbiReservedField::CopyOffset40),
+        (COPY_OPCODE, DescriptorSchema::WORD4_OFFSET) => Ok(AbiReservedField::CopyOffset48),
+        (COPY_OPCODE, DescriptorSchema::WORD5_OFFSET) => Ok(AbiReservedField::CopyOffset56),
+        (BROADCAST_COPY_OPCODE, DescriptorSchema::WORD4_OFFSET) => {
+            Ok(AbiReservedField::BroadcastOffset48)
+        }
+        (BROADCAST_COPY_OPCODE, DescriptorSchema::WORD5_OFFSET) => {
+            Ok(AbiReservedField::BroadcastOffset56)
+        }
+        (VECTOR_ADD_OPCODE, DescriptorSchema::WORD4_OFFSET) => Ok(AbiReservedField::VectorOffset48),
+        (VECTOR_ADD_OPCODE, DescriptorSchema::WORD5_OFFSET) => Ok(AbiReservedField::VectorOffset56),
         _ => Err(ModelError::DmaSubmissionState),
     }
 }
 
-const fn scalar(opcode: u16, offset: u16) -> ModelResult<AbiScalarField> {
-    match (opcode, offset) {
-        (1, 32) => Ok(AbiScalarField::CopyLength),
-        (2, 32) => Ok(AbiScalarField::StridedRows),
-        (2, 40) => Ok(AbiScalarField::StridedRowBytes),
-        (2, 48) => Ok(AbiScalarField::StridedSourceStride),
-        (2, 56) => Ok(AbiScalarField::StridedDestinationStride),
-        (3, 32) => Ok(AbiScalarField::BroadcastLength),
-        (4, 40) => Ok(AbiScalarField::VectorLength),
+fn scalar(opcode: u16, offset: u16) -> ModelResult<AbiScalarField> {
+    match (opcode, usize::from(offset)) {
+        (COPY_OPCODE, DescriptorSchema::WORD2_OFFSET) => Ok(AbiScalarField::CopyLength),
+        (STRIDED_COPY_OPCODE, DescriptorSchema::WORD2_OFFSET) => Ok(AbiScalarField::StridedRows),
+        (STRIDED_COPY_OPCODE, DescriptorSchema::WORD3_OFFSET) => {
+            Ok(AbiScalarField::StridedRowBytes)
+        }
+        (STRIDED_COPY_OPCODE, DescriptorSchema::WORD4_OFFSET) => {
+            Ok(AbiScalarField::StridedSourceStride)
+        }
+        (STRIDED_COPY_OPCODE, DescriptorSchema::WORD5_OFFSET) => {
+            Ok(AbiScalarField::StridedDestinationStride)
+        }
+        (BROADCAST_COPY_OPCODE, DescriptorSchema::WORD2_OFFSET) => {
+            Ok(AbiScalarField::BroadcastLength)
+        }
+        (VECTOR_ADD_OPCODE, DescriptorSchema::WORD3_OFFSET) => Ok(AbiScalarField::VectorLength),
         _ => Err(ModelError::DmaSubmissionState),
     }
-}
-
-fn read_u16(bytes: &[u8], range: core::ops::Range<usize>) -> ModelResult<u16> {
-    pdma_model_contract::abi::read_u16_le(bytes, range).map_err(|_| ModelError::DmaSubmissionState)
-}
-
-fn read_u64(bytes: &[u8], range: core::ops::Range<usize>) -> ModelResult<u64> {
-    pdma_model_contract::abi::read_u64_le(bytes, range).map_err(|_| ModelError::DmaSubmissionState)
 }

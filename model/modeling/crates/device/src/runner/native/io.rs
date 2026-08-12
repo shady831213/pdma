@@ -2,11 +2,11 @@ mod dma_bus;
 mod memory;
 mod semantic;
 
+use crate::ModelResult;
 use crate::dma_space::DmaSpace;
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::abi::AbiEvent;
+use pdma_model_contract::bridge::AbiEvent;
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::error::ModelResult;
 use pdma_model_contract::ids::{CommandId, QueueId};
 
 pub(in crate::runner::native) use memory::QueueMemoryResolver;

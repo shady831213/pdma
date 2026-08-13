@@ -1,7 +1,7 @@
 use super::NativeExecution;
 use super::broadcast;
 use super::copy;
-use super::io::QueueFetch;
+use super::io::NormalizedFetch;
 use super::probe::{RunStateProbe, probe_run_state};
 use super::retirement;
 use super::vector_add;
@@ -39,19 +39,19 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
         return Ok(ModelStepStatus::Idle);
     };
     let entry = device.queue(queue_id)?.entry;
-    let Some(fetched) = device.queue(queue_id)?.io.fetch(
-        dma_space,
-        bus_control,
-        queue_id,
-        entry.completion_ring_id(),
-    )?
+    let Some(fetched) =
+        device
+            .queue_mut(queue_id)?
+            .frontend
+            .fetch(dma_space, bus_control, entry)?
     else {
         return Ok(ModelStepStatus::Progressed);
     };
+    device.native_steps += 1;
     let command = match fetched {
-        QueueFetch::Command(command) => command,
-        QueueFetch::Fault(event) => {
-            return retirement::cache_dma_fault(device, dma_space, bus_control, event);
+        NormalizedFetch::Command(command) => command,
+        NormalizedFetch::Fault(fault) => {
+            return retirement::cache_frontend_fault(device, bus_control, fault);
         }
     };
     let operation = operation_from_external(&command);

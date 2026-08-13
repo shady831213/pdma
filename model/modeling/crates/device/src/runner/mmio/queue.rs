@@ -1,5 +1,5 @@
 use super::bank::{CommandBank, MmioScalar, narrow_u32};
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::QueueResponseBank;
 
 #[path = "queue/batch.rs"]
@@ -117,7 +117,7 @@ impl QueueBank {
     }
 }
 
-pub(super) const fn read(state: &RunnerState, register: QueueRegister) -> MmioScalar {
+pub(super) const fn read(state: &DeviceCore, register: QueueRegister) -> MmioScalar {
     let bank = &state.mmio.queue;
     let response = bank.command.response;
     let result = bank.command.result;
@@ -174,7 +174,7 @@ pub(in crate::runner) fn status_response(
     })
 }
 
-pub(super) fn write(state: &mut RunnerState, register: QueueRegister, value: u64) {
+pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64) {
     match register {
         QueueRegister::ExpectedEpoch => state.mmio.queue.expected_epoch = value,
         QueueRegister::Id => state.mmio.queue.id = value,

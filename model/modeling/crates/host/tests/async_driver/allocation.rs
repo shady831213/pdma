@@ -6,7 +6,7 @@ use support::BlockingPort;
 #[tokio::test(flavor = "current_thread")]
 async fn fallible_allocation_propagates_through_both_driver_facades() {
     // Given: the CPU-bound and manual driver facades each own a queue on one real device.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let async_driver = SoftwareCpu::new()
         .run_main(AsyncDriver::setup_on(&mut device, 1, 1))
         .await
@@ -45,7 +45,7 @@ async fn fallible_allocation_propagates_through_both_driver_facades() {
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
     // Given: an async driver whose allocation port can pause before the real device call.
-    let (runner, _worker) = AsyncDevice::queue_port();
+    let (runner, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let handle = runner.handle();
     handle.enable_tracing().await;
     let mut port = BlockingPort::new(handle.clone());

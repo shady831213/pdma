@@ -2,13 +2,13 @@
 mod recording;
 
 use pdma_model_contract::{
-    DeviceEpoch, DmaRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
+    DeviceEpoch, PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
 };
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use recording::{Access, RecordingTransport};
 
 fn activation(
-    regions: &[DmaRegion],
+    regions: &[PdmaMemoryRegion],
 ) -> Result<QueueActivation, Box<dyn std::error::Error + Send + Sync>> {
     let [submission, completion, event] = regions else {
         return Err("three regions required".into());

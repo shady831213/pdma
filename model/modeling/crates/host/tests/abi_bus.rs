@@ -8,10 +8,10 @@ use pdma_model_contract::{
     QueueId, SoftwareOwnerId,
 };
 use pdma_model_contract::{
-    DeviceEpoch, DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueCursorUpdate,
+    DeviceEpoch, DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueCursorUpdate,
     QueueRingRegions, RingCursor, RingCursors, RingLayout, RingRecord, WholeDeviceReset,
 };
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, DmaSpaceError};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, PdmaMemoryError};
 use pdma_model_host::{
     AsyncPdmaBus, BusControlErrorAdapter, BusDmaErrorAdapter, BusDmaStage, BusDmaWrite,
     BusQueueStatus, BusSubmission, QueueControlWrite,
@@ -27,8 +27,8 @@ async fn raw_bus_returns_regions_and_records_exact_atomic_dma_control_irq_sequen
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a consumer-defined bus and one complete raw queue transaction program.
     let bus = FakeBus::new();
-    let allocated = bus.allocate_dma_region(32).await?;
-    let rings = bus.stage_dma_regions(&[128, 64, 128]).await?;
+    let allocated = bus.allocate_memory_region(32).await?;
+    let rings = bus.stage_memory_regions(&[128, 64, 128]).await?;
     let proposed = rings.proposed_regions().to_vec();
     let [submission, _, _] = proposed.as_slice() else {
         return Err("recording bus must propose three ring regions".into());
@@ -45,7 +45,7 @@ async fn raw_bus_returns_regions_and_records_exact_atomic_dma_control_irq_sequen
     ))
     .await?;
     let status = bus.read_queue_status(queue).await?;
-    let indirect = bus.stage_dma_regions(&[8]).await?;
+    let indirect = bus.stage_memory_regions(&[8]).await?;
     let [indirect_region] = indirect.proposed_regions() else {
         return Err("recording bus must propose one indirect region".into());
     };

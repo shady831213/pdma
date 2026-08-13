@@ -6,7 +6,11 @@ use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a completed command on a depth-one CPU-bound driver.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
 
     // When: software pops the completion and immediately submits another command.
     let (completion, next) = SoftwareCpu::new()
@@ -45,7 +49,11 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
 #[tokio::test(flavor = "current_thread")]
 async fn event_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a fault event for a depth-one CPU-bound driver.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let mut port = device.handle();
 
@@ -83,7 +91,11 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
 #[tokio::test(flavor = "current_thread")]
 async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
     // Given: two manual driver capabilities for one depth-one queue.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut first = ManualDriver::setup_on(&mut device, 1, 1)
         .await
         .expect("manual setup is valid");

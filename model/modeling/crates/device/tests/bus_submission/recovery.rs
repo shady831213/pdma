@@ -17,7 +17,7 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
     let destination = allocate(&fixture.handle, 4).await?;
     fixture
         .handle
-        .write_iova(source.base(), &[7, 6, 5, 4])
+        .write_memory(source.base(), &[7, 6, 5, 4])
         .await?;
     let descriptor = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(60),
@@ -60,7 +60,7 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
     assert_eq!(fixture.handle.pending_dma_result().await, None);
     assert_eq!(fixture.handle.irq_snapshot().await, None);
     assert_eq!(
-        fixture.handle.read_iova(descriptor_address, 64).await?,
+        fixture.handle.read_memory(descriptor_address, 64).await?,
         descriptor
     );
     let (new_queue, _) =
@@ -93,11 +93,11 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
     let semantic_destination = allocate(&fixture.handle, 4).await?;
     fixture
         .handle
-        .write_iova(source_a.base(), &[1, 2, 3, 4])
+        .write_memory(source_a.base(), &[1, 2, 3, 4])
         .await?;
     fixture
         .handle
-        .write_iova(source_b.base(), &[4, 3, 2, 1])
+        .write_memory(source_b.base(), &[4, 3, 2, 1])
         .await?;
     let vector = pdma_model_contract::abi::AbiVectorAdd::new(
         AbiId::new(70),
@@ -145,7 +145,7 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
         .await?;
     fixture.handle.ring_doorbell(semantic).await?;
     fixture.handle.wait_for_stall_after(0).await;
-    fixture.handle.write_iova(fixture.submission, &[]).await?;
+    fixture.handle.write_memory(fixture.submission, &[]).await?;
     fixture.handle.wait_for_progress_after(0).await;
     assert_semantic_completion(&fixture.handle, semantic).await?;
     let dma_status = fixture
@@ -156,14 +156,14 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
     assert_eq!(
         fixture
             .handle
-            .read_iova(dma_destination.base(), dma_destination.length())
+            .read_memory(dma_destination.base(), dma_destination.length())
             .await?,
         [0; 4]
     );
     assert_eq!(
         fixture
             .handle
-            .read_iova(semantic_destination.base(), semantic_destination.length())
+            .read_memory(semantic_destination.base(), semantic_destination.length())
             .await?,
         [1, 2, 3, 4]
     );

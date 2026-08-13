@@ -53,9 +53,17 @@ async fn setup_copy(
     .await
 }
 
+fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
+    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ))
+}
+
 async fn create_repoll(context: InvalidContext) {
     // Given: CPU-bound setup first-polled to Pending by its owner.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = fresh_device();
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();
     control.block_create();
@@ -78,7 +86,7 @@ async fn create_repoll(context: InvalidContext) {
 
 async fn submit_repoll(context: InvalidContext) -> ModelResult<()> {
     // Given: one reserved command blocked before device acceptance.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = fresh_device();
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();
     let owner = SoftwareCpu::new();
@@ -105,7 +113,7 @@ async fn submit_repoll(context: InvalidContext) -> ModelResult<()> {
 
 async fn doorbell_repoll(context: InvalidContext) -> ModelResult<()> {
     // Given: one command accepted before its doorbell blocks.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = fresh_device();
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();
     let owner = SoftwareCpu::new();
@@ -133,7 +141,7 @@ async fn doorbell_repoll(context: InvalidContext) -> ModelResult<()> {
 
 async fn completion_repoll(context: InvalidContext) -> ModelResult<()> {
     // Given: one completion blocked after its driver's entry validation.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();
@@ -180,7 +188,7 @@ async fn completion_repoll(context: InvalidContext) -> ModelResult<()> {
 
 async fn event_repoll(context: InvalidContext) -> ModelResult<()> {
     // Given: one fault event blocked after its driver's entry validation.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();

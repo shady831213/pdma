@@ -1,10 +1,12 @@
 //! Atomic DMA-backed queue control transactions.
 
 mod batch;
+#[cfg(test)]
+pub(super) use batch::BatchPreparationFault;
 pub(super) mod control;
 
 use super::{AsyncDeviceHandle, publish, wake};
-use crate::dma_space::{DmaSpaceError, DmaStage};
+use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use pdma_model_contract::{
     AbiControlError, DeviceEpoch, DmaAddress, QueueActivation, QueueControl, RingCursor,
 };
@@ -18,7 +20,7 @@ pub struct DmaWrite {
 }
 
 impl DmaWrite {
-    /// Creates a write at an exact IOVA.
+    /// Creates a write at an exact mapped address.
     pub const fn new(address: DmaAddress, bytes: Vec<u8>) -> Self {
         Self { address, bytes }
     }
@@ -38,7 +40,7 @@ pub struct SubmissionAcceptance {
     pub(super) queue: pdma_model_contract::semantic::EpochQueue,
     pub(super) expected_producer: RingCursor,
     pub(super) descriptor: DmaWrite,
-    pub(super) indirect: Option<(DmaStage, DmaWrite)>,
+    pub(super) indirect: Option<(PdmaMemoryStage, DmaWrite)>,
 }
 
 impl SubmissionAcceptance {
@@ -47,7 +49,7 @@ impl SubmissionAcceptance {
         queue: pdma_model_contract::semantic::EpochQueue,
         expected_producer: RingCursor,
         descriptor: DmaWrite,
-        indirect: Option<(DmaStage, DmaWrite)>,
+        indirect: Option<(PdmaMemoryStage, DmaWrite)>,
     ) -> Self {
         Self {
             queue,
@@ -62,7 +64,7 @@ impl SubmissionAcceptance {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BusControlError {
     /// DMA staging or access validation failed.
-    Dma(DmaSpaceError),
+    Dma(PdmaMemoryError),
     /// Typed ABI cursor or layout validation failed.
     Abi(AbiControlError),
     /// The supplied device epoch differs from the current device epoch.
@@ -97,8 +99,8 @@ impl fmt::Display for BusControlError {
 
 impl std::error::Error for BusControlError {}
 
-impl From<DmaSpaceError> for BusControlError {
-    fn from(error: DmaSpaceError) -> Self {
+impl From<PdmaMemoryError> for BusControlError {
+    fn from(error: PdmaMemoryError) -> Self {
         Self::Dma(error)
     }
 }
@@ -125,7 +127,7 @@ impl AsyncDeviceHandle {
     /// Atomically commits three staged ring mappings and one queue activation.
     pub async fn activate_queue(
         &self,
-        proposal: DmaStage,
+        proposal: PdmaMemoryStage,
         activation: QueueActivation,
     ) -> Result<QueueStatus, BusControlError> {
         let (result, generation) = {

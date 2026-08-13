@@ -1,13 +1,13 @@
-use pdma_model_contract::{DmaAddress, DmaRegion};
+use pdma_model_contract::{DmaAddress, PdmaMemoryRegion};
 
 /// Opaque staging capability produced by an asynchronous device handle.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AsyncDeviceBusStage(pub(super) pdma_model_device::DmaStage);
+pub struct AsyncDeviceBusStage(pub(super) pdma_model_device::PdmaMemoryStage);
 
 /// Read-only capability for an uncommitted DMA allocation batch.
 pub trait BusDmaStage: Send {
     /// Returns the proposed regions without exposing allocator state.
-    fn proposed_regions(&self) -> &[DmaRegion];
+    fn proposed_regions(&self) -> &[PdmaMemoryRegion];
 }
 
 /// One byte-opaque write included in an atomic bus transaction.
@@ -18,12 +18,12 @@ pub struct BusDmaWrite {
 }
 
 impl BusDmaWrite {
-    /// Creates a write at one exact IOVA.
+    /// Creates a write at one exact mapped address.
     pub const fn new(address: DmaAddress, bytes: Vec<u8>) -> Self {
         Self { address, bytes }
     }
 
-    /// Target IOVA.
+    /// Target mapped address.
     pub const fn address(&self) -> DmaAddress {
         self.address
     }

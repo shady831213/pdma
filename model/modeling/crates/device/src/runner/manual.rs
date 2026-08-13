@@ -1,9 +1,8 @@
-use super::backend::{DeviceModel, ModelStepStatus};
-use super::bus::control::BusControlState;
-use super::{AsyncRunSummary, AsyncStepStatus};
-use crate::dma_space::{DmaSpace, DmaSpaceError, DmaStage};
+use super::DeviceCore;
+use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::ResourceConfig;
+use hardware_interface_runtime::MemoryAddress;
+use pdma_model_contract::PdmaMemoryRegion;
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::event::EventRecord;
@@ -12,33 +11,20 @@ use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::trace::TraceEvent;
-use pdma_model_contract::{DmaAddress, DmaRegion};
+use std::ops::{Deref, DerefMut};
+
+mod run;
 
 /// Synchronous device surface for deterministic bounded steps without a worker task.
 #[derive(Debug)]
 pub struct SyncDevice {
-    pub(in crate::runner) backend: DeviceModel,
-    dma_space: DmaSpace,
-    bus_control: BusControlState,
-    steps: usize,
-    last_status: AsyncStepStatus,
+    core: DeviceCore,
 }
 
 impl SyncDevice {
-    /// Creates a synchronous device with default resource credits.
-    pub fn new() -> Self {
-        Self::with_resource_config(ResourceConfig::default())
-    }
-
-    /// Creates a synchronous device with explicit resource credits.
-    pub fn with_resource_config(config: ResourceConfig) -> Self {
-        Self {
-            backend: DeviceModel::queue_port_with_resource_config(config),
-            dma_space: DmaSpace::new(),
-            bus_control: BusControlState::new(),
-            steps: 0,
-            last_status: AsyncStepStatus::Idle,
-        }
+    /// Consumes one device core into the synchronous compatibility facade.
+    pub const fn from_core(core: DeviceCore) -> Self {
+        Self { core }
     }
 
     /// Provisions one command queue and one bound completion ring.
@@ -53,10 +39,12 @@ impl SyncDevice {
 
     /// Allocates a device-visible memory buffer.
     pub fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
-        self.allocate_dma_region(len).map(DmaRegion::object)
+        self.allocate_memory_region(len)
+            .map(PdmaMemoryRegion::object)
     }
 
-    fn allocate_dma_region(&mut self, len: usize) -> ModelResult<DmaRegion> {
+    /// Allocates one logical region through the shared core mapping adapter.
+    pub fn allocate_memory_region(&mut self, len: usize) -> ModelResult<PdmaMemoryRegion> {
         let length = u64::try_from(len).map_err(|_| ModelError::DmaAllocationExhausted)?;
         self.dma_space
             .allocate(length)
@@ -74,33 +62,52 @@ impl SyncDevice {
     }
 
     /// Proposes DMA regions without changing mappings, bytes, or allocator generation.
-    pub fn stage_dma_regions(&self, lengths: &[u64]) -> Result<DmaStage, DmaSpaceError> {
+    pub fn stage_memory_regions(
+        &self,
+        lengths: &[u64],
+    ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
         self.dma_space.stage(lengths)
     }
 
     /// Atomically commits every region in a stage.
-    pub fn commit_dma_stage(&mut self, stage: DmaStage) -> Result<Vec<DmaRegion>, DmaSpaceError> {
+    pub fn commit_memory_stage(
+        &mut self,
+        stage: PdmaMemoryStage,
+    ) -> Result<Vec<PdmaMemoryRegion>, PdmaMemoryError> {
         self.dma_space.commit(stage)
     }
 
-    /// Reads one checked IOVA extent.
-    pub fn read_iova(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, DmaSpaceError> {
-        self.dma_space.read_iova(address, length)
+    /// Reads one checked mapped-memory extent.
+    pub fn read_memory(
+        &self,
+        address: impl Into<MemoryAddress>,
+        length: u64,
+    ) -> Result<Vec<u8>, PdmaMemoryError> {
+        self.dma_space.read_memory(address, length)
     }
 
-    /// Writes one checked IOVA extent.
-    pub fn write_iova(&mut self, address: DmaAddress, data: &[u8]) -> Result<(), DmaSpaceError> {
-        self.dma_space.write_iova(address, data)
+    /// Writes one checked mapped-memory extent.
+    pub fn write_memory(
+        &mut self,
+        address: impl Into<MemoryAddress>,
+        data: &[u8],
+    ) -> Result<(), PdmaMemoryError> {
+        self.dma_space.write_memory(address, data)
     }
 
     /// Resolves a semantic object to its committed DMA region.
-    pub fn region_for_object(&self, object: BufferId) -> Option<DmaRegion> {
+    pub fn region_for_object(&self, object: BufferId) -> Option<PdmaMemoryRegion> {
         self.dma_space.region_for_object(object)
     }
 
     /// Returns the committed DMA allocator generation.
-    pub const fn dma_generation(&self) -> u64 {
-        self.dma_space.generation()
+    pub const fn memory_generation(&self) -> u64 {
+        self.core.dma_space.generation()
+    }
+
+    /// Returns the number of logical PDMA mappings.
+    pub fn mapped_region_count(&self) -> usize {
+        self.core.dma_space.mapped_region_count()
     }
 
     /// Pushes one command into a queue's command ring.
@@ -164,7 +171,9 @@ impl SyncDevice {
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
     pub fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.backend.ack_irq_source(&self.bus_control, source)
+        self.core
+            .backend
+            .ack_irq_source(&self.core.bus_control, source)
     }
 
     /// Returns the current pending IRQ snapshot, if any.
@@ -182,85 +191,14 @@ impl SyncDevice {
         self.backend.take_irq_notification()
     }
 
-    /// Runs deterministic synchronous steps until idle or until the step budget expires.
-    pub fn run_until_idle(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
-        let start_steps = self.steps;
-        while self.steps - start_steps < max_steps {
-            match self
-                .backend
-                .step(&mut self.dma_space, &mut self.bus_control)?
-            {
-                ModelStepStatus::Progressed => {
-                    self.steps = self.steps.saturating_add(1);
-                    self.last_status = AsyncStepStatus::Progressed;
-                }
-                ModelStepStatus::Idle => {
-                    self.last_status = AsyncStepStatus::Idle;
-                    return self.idle_or_budget_exhausted(max_steps, start_steps);
-                }
-                ModelStepStatus::Stalled(reason) => {
-                    self.last_status = AsyncStepStatus::Stalled(reason);
-                    return self.idle_or_budget_exhausted(max_steps, start_steps);
-                }
-            }
-        }
-        self.idle_or_budget_exhausted(max_steps, start_steps)
-    }
-
-    /// Runs deterministic synchronous steps until idle, stalled, or budget exhaustion.
-    pub fn run_until_blocked(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
-        let start_steps = self.steps;
-        let mut stalls = 0;
-        while self.steps - start_steps < max_steps {
-            match self
-                .backend
-                .step(&mut self.dma_space, &mut self.bus_control)?
-            {
-                ModelStepStatus::Progressed => {
-                    self.steps = self.steps.saturating_add(1);
-                    self.last_status = AsyncStepStatus::Progressed;
-                }
-                ModelStepStatus::Idle => {
-                    self.last_status = AsyncStepStatus::Idle;
-                    return Ok(AsyncRunSummary {
-                        steps: self.steps - start_steps,
-                        errors: 0,
-                        stalls,
-                        last_status: self.last_status,
-                    });
-                }
-                ModelStepStatus::Stalled(reason) => {
-                    stalls += 1;
-                    self.last_status = AsyncStepStatus::Stalled(reason);
-                    return Ok(AsyncRunSummary {
-                        steps: self.steps - start_steps,
-                        errors: 0,
-                        stalls,
-                        last_status: self.last_status,
-                    });
-                }
-            }
-        }
-        if self.backend.has_work(&self.dma_space, &self.bus_control) {
-            Err(ModelError::StepBudgetExhausted { max_steps })
-        } else {
-            Ok(AsyncRunSummary {
-                steps: self.steps - start_steps,
-                errors: 0,
-                stalls,
-                last_status: AsyncStepStatus::Idle,
-            })
-        }
-    }
-
     /// Enables deterministic trace capture.
     pub const fn enable_tracing(&mut self) {
-        self.backend.enable_tracing();
+        self.core.backend.enable_tracing();
     }
 
     /// Disables trace capture without clearing existing events.
     pub const fn disable_tracing(&mut self) {
-        self.backend.disable_tracing();
+        self.core.backend.disable_tracing();
     }
 
     /// Clears captured trace events and sequence ordinals.
@@ -273,31 +211,27 @@ impl SyncDevice {
         self.backend.trace_events()
     }
 
+    /// Returns normalized frontend fetches that entered the native step core.
+    pub fn native_steps(&self) -> usize {
+        self.backend.native_steps()
+    }
+
     /// Exports captured trace events as Chrome/Perfetto JSON.
     pub fn trace_json(&self) -> String {
         self.backend.trace_json()
     }
+}
 
-    fn idle_or_budget_exhausted(
-        &self,
-        max_steps: usize,
-        start_steps: usize,
-    ) -> ModelResult<AsyncRunSummary> {
-        if self.backend.has_work(&self.dma_space, &self.bus_control) {
-            Err(ModelError::StepBudgetExhausted { max_steps })
-        } else {
-            Ok(AsyncRunSummary {
-                steps: self.steps - start_steps,
-                errors: 0,
-                stalls: 0,
-                last_status: self.last_status,
-            })
-        }
+impl Deref for SyncDevice {
+    type Target = DeviceCore;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
     }
 }
 
-impl Default for SyncDevice {
-    fn default() -> Self {
-        Self::new()
+impl DerefMut for SyncDevice {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.core
     }
 }

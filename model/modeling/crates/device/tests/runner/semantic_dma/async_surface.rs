@@ -31,7 +31,11 @@ pub(super) async fn exercise() -> TestResult {
 
 impl Fixture {
     async fn new() -> TestResult<Self> {
-        let (runner, worker) = AsyncDevice::queue_port();
+        let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        ));
         let worker = tokio::spawn(worker.run());
         let handle = runner.handle();
         let queue = handle

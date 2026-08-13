@@ -9,7 +9,11 @@ use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     // Given: async runner handle, AsyncDriver, source/destination buffers, source write.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let cpu = SoftwareCpu::new();
     let (completion, command_id, snapshot, dst_bytes) = cpu
@@ -60,7 +64,11 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn reports_step_budget_exhaustion_when_work_remains() {
     // Given: one pending copy command.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut driver = ManualDriver::setup_on(&mut device, 4, 4)
         .await
         .expect("queue setup is valid");

@@ -15,7 +15,11 @@ pub mod support;
 #[tokio::test]
 async fn register_families_route_when_access_is_valid() {
     // Given: a device whose MMIO banks are at their construction reset values.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
 
     // When: representative global, queue, and IRQ staging registers are written.
@@ -50,7 +54,11 @@ async fn register_families_route_when_access_is_valid() {
 #[tokio::test]
 async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
     // Given: a newly constructed device register bank.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
 
     // When: representative command writes route into the non-semantic family scaffolds.
@@ -102,7 +110,11 @@ async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
 #[tokio::test]
 async fn whole_device_reset_restores_register_banks() {
     // Given: nonzero values in all three mutable register families.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     handle
         .write_mmio(0x010, &u64::MAX.to_le_bytes())

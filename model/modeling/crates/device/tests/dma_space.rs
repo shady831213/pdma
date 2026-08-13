@@ -1,13 +1,15 @@
 //! Checked DMA allocation, atomic staging, access, and backend-persistence tests.
 
 use pdma_model_contract::ids::BufferId;
-use pdma_model_contract::{DeviceEpoch, DmaAddress, DmaRegion, WholeDeviceReset};
-use pdma_model_device::{DmaSpace, DmaSpaceError, SyncDevice};
+use pdma_model_contract::{DeviceEpoch, DmaAddress, PdmaMemoryRegion, WholeDeviceReset};
+use pdma_model_device::{PdmaMemoryError, PdmaMemoryMappings, SyncDevice};
 
 #[test]
 fn staged_batch_returns_regions_and_commits_all_or_none() {
     // Given an empty checked DMA space.
-    let mut space = DmaSpace::new();
+    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
 
     // When three differently sized regions are staged and committed as one batch.
     let stage = space.stage(&[3, 0, 65]).expect("valid stage");
@@ -40,7 +42,9 @@ fn staged_batch_returns_regions_and_commits_all_or_none() {
 #[test]
 fn committed_region_exposes_object_base_and_length() {
     // Given: a fresh checked DMA space.
-    let mut space = DmaSpace::new();
+    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
 
     // When: one semantic-sized allocation commits.
     let committed = space.allocate(7).expect("allocation");
@@ -50,17 +54,19 @@ fn committed_region_exposes_object_base_and_length() {
     assert_eq!(committed.base(), DmaAddress::new(0x1_0000));
     assert_eq!(committed.length(), 7);
     assert_eq!(space.region_for_object(committed.object()), Some(committed));
-    assert_eq!(space.read_iova(committed.base(), 7), Ok(vec![0; 7]));
+    assert_eq!(space.read_memory(committed.base(), 7), Ok(vec![0; 7]));
     assert_eq!(space.generation(), 1);
 }
 
 #[test]
 fn allocation_exhaustion_preserves_allocator_state() {
     // Given: one committed mapping with sentinel bytes and its next allocation staged.
-    let mut space = DmaSpace::new();
+    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let first = space.allocate(4).expect("first allocation");
     space
-        .write_iova(first.base(), &[1, 2, 3, 4])
+        .write_memory(first.base(), &[1, 2, 3, 4])
         .expect("sentinel write");
     let generation_before = space.generation();
 
@@ -68,15 +74,15 @@ fn allocation_exhaustion_preserves_allocator_state() {
     let exhausted = space.allocate(u64::MAX);
 
     // Then: ID/base/mapping/bytes remain unchanged and the next success advances once.
-    assert_eq!(exhausted, Err(DmaSpaceError::AddressExhausted));
+    assert_eq!(exhausted, Err(PdmaMemoryError::AddressExhausted));
     assert_eq!(space.generation(), generation_before);
-    assert_eq!(space.read_iova(first.base(), 4), Ok(vec![1, 2, 3, 4]));
+    assert_eq!(space.read_memory(first.base(), 4), Ok(vec![1, 2, 3, 4]));
     assert_eq!(space.region_for_object(BufferId::new(1)), None);
     let next = space.allocate(4).expect("next allocation");
     assert_eq!(next.object(), BufferId::new(1));
     assert_eq!(next.base(), DmaAddress::new(0x1_0040));
     assert_eq!(next.length(), 4);
-    assert_eq!(space.read_iova(next.base(), 4), Ok(vec![0; 4]));
+    assert_eq!(space.read_memory(next.base(), 4), Ok(vec![0; 4]));
     assert_eq!(space.generation(), generation_before + 1);
     eprintln!(
         "exhausted={exhausted:?} next_object={} next_base={:#x} next_length={} \
@@ -84,8 +90,8 @@ fn allocation_exhaustion_preserves_allocator_state() {
         next.object().raw(),
         next.base().raw(),
         next.length(),
-        space.read_iova(first.base(), 4).expect("sentinel bytes"),
-        space.read_iova(next.base(), 4).expect("next bytes"),
+        space.read_memory(first.base(), 4).expect("sentinel bytes"),
+        space.read_memory(next.base(), 4).expect("next bytes"),
         space.generation(),
     );
 }
@@ -93,16 +99,20 @@ fn allocation_exhaustion_preserves_allocator_state() {
 #[test]
 fn allocations_and_checked_iova_access_survive_backend_reset() {
     // Given a staged region committed beside a synchronous backend.
-    let mut device = SyncDevice::new();
-    let stage = device.stage_dma_regions(&[8]).expect("valid stage");
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
+    let stage = device.stage_memory_regions(&[8]).expect("valid stage");
     let region = device
-        .commit_dma_stage(stage)
+        .commit_memory_stage(stage)
         .expect("atomic commit")
         .first()
         .copied()
         .expect("one committed region");
     device
-        .write_iova(region.base().checked_add(2).expect("offset"), &[7, 8, 9])
+        .write_memory(region.base().checked_add(2).expect("offset"), &[7, 8, 9])
         .expect("checked write");
 
     // When the whole device resets.
@@ -111,13 +121,13 @@ fn allocations_and_checked_iova_access_survive_backend_reset() {
         .expect("reset advances epoch");
 
     // Then the mapping generation and backing bytes remain unchanged.
-    assert_eq!(device.dma_generation(), 1);
+    assert_eq!(device.memory_generation(), 1);
     assert_eq!(
         device.region_for_object(region.object()),
-        Some(DmaRegion::try_new(region.object(), region.base(), 8).expect("valid region"))
+        Some(PdmaMemoryRegion::try_new(region.object(), region.base(), 8).expect("valid region"))
     );
     assert_eq!(
-        device.read_iova(region.base().checked_add(2).expect("offset"), 3),
+        device.read_memory(region.base().checked_add(2).expect("offset"), 3),
         Ok(vec![7, 8, 9])
     );
     eprintln!(
@@ -125,9 +135,9 @@ fn allocations_and_checked_iova_access_survive_backend_reset() {
         region.object().raw(),
         region.base().raw(),
         region.length(),
-        device.dma_generation(),
+        device.memory_generation(),
         device
-            .read_iova(region.base().checked_add(2).expect("offset"), 3)
+            .read_memory(region.base().checked_add(2).expect("offset"), 3)
             .expect("persisted bytes")
     );
 }
@@ -135,10 +145,12 @@ fn allocations_and_checked_iova_access_survive_backend_reset() {
 #[test]
 fn dropped_and_conflicting_stages_preserve_allocator_mapping_and_bytes() {
     // Given one mapped region with nonzero data and two stages from the same generation.
-    let mut space = DmaSpace::new();
+    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let initial = space.allocate(4).expect("initial allocation");
     space
-        .write_iova(initial.base(), &[1, 2, 3, 4])
+        .write_memory(initial.base(), &[1, 2, 3, 4])
         .expect("write");
     let dropped = space.stage(&[8]).expect("droppable stage");
     let winner = space.stage(&[8]).expect("winning stage");
@@ -152,13 +164,13 @@ fn dropped_and_conflicting_stages_preserve_allocator_mapping_and_bytes() {
     // Then only the winning proposal changes allocation state and no bytes are altered.
     assert_eq!(
         stale,
-        Err(DmaSpaceError::StaleStage {
+        Err(PdmaMemoryError::StaleStage {
             expected_generation: 1,
             actual_generation: 2,
         })
     );
     assert_eq!(space.generation(), 2);
-    assert_eq!(space.read_iova(initial.base(), 4), Ok(vec![1, 2, 3, 4]));
+    assert_eq!(space.read_memory(initial.base(), 4), Ok(vec![1, 2, 3, 4]));
     assert_eq!(
         space.region_for_object(BufferId::new(1)),
         committed.first().copied()
@@ -169,26 +181,28 @@ fn dropped_and_conflicting_stages_preserve_allocator_mapping_and_bytes() {
 #[test]
 fn rejects_exhausted_overlapping_unmapped_and_cross_region_access() {
     // Given two adjacent allocations and a conflicting stale proposal.
-    let mut space = DmaSpace::new();
+    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let first = space.allocate(64).expect("first allocation");
     let stale_proposal = space.stage(&[64]).expect("stale proposal");
     let second = space.allocate(64).expect("second allocation");
     space
-        .write_iova(first.base(), &[0xaa])
+        .write_memory(first.base(), &[0xaa])
         .expect("sentinel write");
-    let malformed_overlap = DmaRegion::try_new(
+    let malformed_overlap = PdmaMemoryRegion::try_new(
         second.object(),
         first.base().checked_add(32).expect("overlap base"),
         second.length(),
     )
     .expect("checked malformed region");
-    let misaligned = DmaRegion::try_new(
+    let misaligned = PdmaMemoryRegion::try_new(
         second.object(),
         second.base().checked_add(1).expect("misaligned base"),
         second.length(),
     )
     .expect("checked misaligned region");
-    let mismatched = DmaRegion::try_new(
+    let mismatched = PdmaMemoryRegion::try_new(
         second.object(),
         second.base().checked_add(64).expect("mismatched base"),
         second.length(),
@@ -201,55 +215,59 @@ fn rejects_exhausted_overlapping_unmapped_and_cross_region_access() {
     let invalid_alignment = space.validate_region_set(&[misaligned]);
     let invalid_mapping = space.validate_region_set(&[mismatched]);
     let stale_conflict = space.commit(stale_proposal);
-    let unmapped = space.read_iova(DmaAddress::new(0), 1);
-    let crossing = space.write_iova(
+    let unmapped = space.read_memory(DmaAddress::new(0), 1);
+    let crossing = space.write_memory(
         first.base().checked_add(63).expect("last byte"),
         &[0xbb, 0xcc],
     );
 
     // Then each request is rejected without changing mappings or bytes.
-    assert_eq!(exhausted, Err(DmaSpaceError::AddressExhausted));
-    assert_eq!(overlapping, Err(DmaSpaceError::OverlappingRegion));
-    assert_eq!(invalid_alignment, Err(DmaSpaceError::InvalidRegion));
-    assert_eq!(invalid_mapping, Err(DmaSpaceError::InvalidRegion));
+    assert_eq!(exhausted, Err(PdmaMemoryError::AddressExhausted));
+    assert_eq!(overlapping, Err(PdmaMemoryError::OverlappingRegion));
+    assert_eq!(invalid_alignment, Err(PdmaMemoryError::InvalidRegion));
+    assert_eq!(invalid_mapping, Err(PdmaMemoryError::InvalidRegion));
     assert_eq!(
         stale_conflict,
-        Err(DmaSpaceError::StaleStage {
+        Err(PdmaMemoryError::StaleStage {
             expected_generation: 1,
             actual_generation: 2,
         })
     );
-    assert_eq!(unmapped, Err(DmaSpaceError::Unmapped));
-    assert_eq!(crossing, Err(DmaSpaceError::CrossesRegion));
-    assert_eq!(space.read_iova(first.base(), 1), Ok(vec![0xaa]));
-    assert_eq!(space.read_iova(second.base(), 1), Ok(vec![0]));
+    assert_eq!(unmapped, Err(PdmaMemoryError::Unmapped));
+    assert_eq!(crossing, Err(PdmaMemoryError::CrossesRegion));
+    assert_eq!(space.read_memory(first.base(), 1), Ok(vec![0xaa]));
+    assert_eq!(space.read_memory(second.base(), 1), Ok(vec![0]));
     eprintln!(
         "generation={} first={:?} second={:?} exhausted={exhausted:?} overlap={overlapping:?} stale={stale_conflict:?} unmapped={unmapped:?} crossing={crossing:?}",
         space.generation(),
-        space.read_iova(first.base(), 1).expect("first sentinel"),
-        space.read_iova(second.base(), 1).expect("second sentinel")
+        space.read_memory(first.base(), 1).expect("first sentinel"),
+        space
+            .read_memory(second.base(), 1)
+            .expect("second sentinel")
     );
 }
 
 #[test]
 fn zero_length_region_accepts_only_empty_iova_access_at_base() {
     // Given a committed zero-length region followed by a non-empty mapping.
-    let mut space = DmaSpace::new();
+    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let empty = space.allocate(0).expect("zero-length allocation");
     let following = space.allocate(1).expect("following allocation");
 
     // When empty and non-empty accesses begin at the zero-length region's base.
-    let empty_read = space.read_iova(empty.base(), 0);
-    let empty_write = space.write_iova(empty.base(), &[]);
-    let non_empty_read = space.read_iova(empty.base(), 1);
+    let empty_read = space.read_memory(empty.base(), 0);
+    let empty_write = space.write_memory(empty.base(), &[]);
+    let non_empty_read = space.read_memory(empty.base(), 1);
 
     // Then only empty access at the exact base succeeds without touching the next mapping.
     assert_eq!(empty_read, Ok(Vec::new()));
     assert_eq!(empty_write, Ok(()));
-    assert_eq!(non_empty_read, Err(DmaSpaceError::CrossesRegion));
-    assert_eq!(space.read_iova(following.base(), 1), Ok(vec![0]));
+    assert_eq!(non_empty_read, Err(PdmaMemoryError::CrossesRegion));
+    assert_eq!(space.read_memory(following.base(), 1), Ok(vec![0]));
     assert_eq!(
-        space.read_iova(empty.base().checked_add(1).expect("reserved byte"), 0),
-        Err(DmaSpaceError::Unmapped)
+        space.read_memory(empty.base().checked_add(1).expect("reserved byte"), 0),
+        Err(PdmaMemoryError::Unmapped)
     );
 }

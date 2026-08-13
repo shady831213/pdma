@@ -1,6 +1,7 @@
 mod broadcast;
+mod context;
 mod copy;
-pub(in crate::runner) mod dma_bus_api;
+pub(in crate::runner) mod exact_api;
 mod io;
 mod irq;
 mod irq_api;
@@ -14,7 +15,7 @@ mod vector_add;
 
 use super::backend::ModelStepStatus;
 use super::bus::control::BusControlState;
-use crate::dma_space::DmaSpace;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use crate::{ModelError, ModelResult};
 use irq::PdmaIrqController;
@@ -23,32 +24,20 @@ use pdma_model_contract::{
     IrqVector, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId, ResourceConfig,
     TraceEvent,
 };
-use ring::NativeRing;
 use std::collections::VecDeque;
 
-#[derive(Debug)]
-struct QueueContext {
-    entry: QueueDirectoryEntry,
-    io: io::QueueIo,
-}
-
-pub(in crate::runner) struct NativeExecution<'a> {
-    pub(in crate::runner) device: &'a mut QueuePortDeviceModel,
-    pub(in crate::runner) dma_space: &'a mut DmaSpace,
-    pub(in crate::runner) bus_control: &'a mut BusControlState,
-}
+use context::{NativeExecution, QueueContext};
 
 #[derive(Debug)]
 pub(super) struct QueuePortDeviceModel {
     epoch: DeviceEpoch,
     queues: Vec<QueueContext>,
-    completions: Vec<NativeRing<CompletionRecord>>,
-    events: VecDeque<EventRecord>,
     runnable: VecDeque<QueueId>,
     pending_retirement: Option<retirement::PendingRetirement>,
     irq: PdmaIrqController,
     resource_config: ResourceConfig,
     trace: TraceSink,
+    native_steps: usize,
 }
 
 impl QueuePortDeviceModel {
@@ -60,32 +49,21 @@ impl QueuePortDeviceModel {
         Self {
             epoch: DeviceEpoch::initial(),
             queues: Vec::new(),
-            completions: Vec::new(),
-            events: VecDeque::new(),
             runnable: VecDeque::new(),
             pending_retirement: None,
             irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
             resource_config,
             trace: TraceSink::default(),
+            native_steps: 0,
         }
     }
 
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        let io = io::QueueIo::semantic(config.command_depth())?;
-        self.create_queue_with_io(config, io)
-    }
-
-    fn create_queue_with_io(
-        &mut self,
-        config: QueueConfig,
-        io: io::QueueIo,
-    ) -> ModelResult<QueueConfigHandle> {
-        let completions = NativeRing::with_capacity(config.completion_depth())?;
+        let frontend = io::semantic(config.command_depth(), config.completion_depth())?;
         let queue_id = QueueId::new(self.queues.len());
-        let completion_id = CompletionRingId::new(self.completions.len());
+        let completion_id = CompletionRingId::new(self.queues.len());
         let entry = QueueDirectoryEntry::new(queue_id, completion_id, config);
-        self.queues.push(QueueContext { entry, io });
-        self.completions.push(completions);
+        self.queues.push(QueueContext { entry, frontend });
         Ok(QueueConfigHandle::new(self.epoch, entry))
     }
 
@@ -99,10 +77,8 @@ impl QueuePortDeviceModel {
         let operation = operation_from_external(&command);
         let submitted_command = command_id(&command);
         self.queue_mut(queue_id)?
-            .io
-            .semantic_mut()
-            .ok_or(ModelError::UnknownQueue(queue_id))?
-            .submit(command)
+            .frontend
+            .submit_compat(queue_id, command)
             .map(|()| {
                 self.trace
                     .command_submitted(queue_id, operation, submitted_command);
@@ -127,8 +103,9 @@ impl QueuePortDeviceModel {
         self.validate_epoch(queue.epoch())?;
         let completion_ring_id = queue.completion_ring_id();
         let completion = self
-            .completion_mut(completion_ring_id)
-            .map(NativeRing::pop)?;
+            .queue_by_completion_mut(completion_ring_id)?
+            .frontend
+            .poll_compat_completion();
         if let Some(record) = completion {
             self.trace.completion_polled(record);
         }
@@ -141,23 +118,21 @@ impl QueuePortDeviceModel {
     ) -> ModelResult<Option<EventRecord>> {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
-        self.queue(queue_id)?;
-        let Some(index) = self
-            .events
-            .iter()
-            .position(|event| event.queue_id() == queue_id)
-        else {
+        let event = self
+            .queue_mut(queue_id)?
+            .frontend
+            .poll_compat_event(queue_id);
+        if event.is_none() {
             self.trace.event_poll(queue_id, None);
             return Ok(None);
-        };
-        let event = self.events.remove(index);
+        }
         self.trace.event_poll(queue_id, event);
         Ok(event)
     }
 
     pub(super) fn step(
         &mut self,
-        dma_space: &mut DmaSpace,
+        dma_space: &mut PdmaMemoryMappings,
         bus_control: &mut BusControlState,
     ) -> ModelResult<ModelStepStatus> {
         step::step(NativeExecution {
@@ -167,13 +142,17 @@ impl QueuePortDeviceModel {
         })
     }
 
-    pub(super) fn has_work(&self, dma_space: &DmaSpace, bus_control: &BusControlState) -> bool {
+    pub(super) fn has_work(
+        &self,
+        _dma_space: &PdmaMemoryMappings,
+        bus_control: &BusControlState,
+    ) -> bool {
         self.pending_retirement.is_some()
             || !self.runnable.is_empty()
             || self.queues.iter().any(|queue| {
                 queue
-                    .io
-                    .has_pending(dma_space, bus_control, queue.entry.queue_id())
+                    .frontend
+                    .has_pending(bus_control, queue.entry.queue_id())
             })
     }
 
@@ -216,6 +195,10 @@ impl QueuePortDeviceModel {
         self.trace.to_json()
     }
 
+    pub(super) const fn native_steps(&self) -> usize {
+        self.native_steps
+    }
+
     fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {
         self.queues
             .iter()
@@ -230,31 +213,46 @@ impl QueuePortDeviceModel {
             .ok_or(ModelError::UnknownQueue(id))
     }
 
-    fn completion_mut(
-        &mut self,
-        id: CompletionRingId,
-    ) -> ModelResult<&mut NativeRing<CompletionRecord>> {
-        self.completions
-            .get_mut(id.raw())
+    fn queue_by_completion(&self, id: CompletionRingId) -> ModelResult<&QueueContext> {
+        self.queues
+            .iter()
+            .find(|queue| queue.entry.completion_ring_id() == id)
             .ok_or(ModelError::UnknownCompletionRing(id))
     }
 
-    fn completion(&self, id: CompletionRingId) -> ModelResult<&NativeRing<CompletionRecord>> {
-        self.completions
-            .get(id.raw())
+    fn queue_by_completion_mut(&mut self, id: CompletionRingId) -> ModelResult<&mut QueueContext> {
+        self.queues
+            .iter_mut()
+            .find(|queue| queue.entry.completion_ring_id() == id)
             .ok_or(ModelError::UnknownCompletionRing(id))
+    }
+
+    fn publish_frontend_fault(
+        &mut self,
+        queue: QueueId,
+        memory: &PdmaMemoryMappings,
+        control: &mut BusControlState,
+    ) -> ModelResult<io::PublicationOutcome> {
+        let context = self
+            .queues
+            .iter_mut()
+            .find(|context| context.entry.queue_id() == queue)
+            .ok_or(ModelError::UnknownQueue(queue))?;
+        Ok(context
+            .frontend
+            .publish_fault(memory, control, &mut self.trace))
     }
 
     fn requeue_if_command_pending(
         &mut self,
-        dma_space: &DmaSpace,
+        _dma_space: &PdmaMemoryMappings,
         bus_control: &BusControlState,
         queue_id: QueueId,
     ) -> ModelResult<()> {
         if self
             .queue(queue_id)?
-            .io
-            .has_pending(dma_space, bus_control, queue_id)
+            .frontend
+            .has_pending(bus_control, queue_id)
             && !self.runnable.contains(&queue_id)
         {
             self.runnable.push_back(queue_id);
@@ -262,14 +260,10 @@ impl QueuePortDeviceModel {
         Ok(())
     }
 
-    fn memory_resolver(
-        &self,
+    const fn memory_resolver(
         queue_id: QueueId,
         command_id: pdma_model_contract::CommandId,
-    ) -> ModelResult<io::QueueMemoryResolver> {
-        Ok(self
-            .queue(queue_id)?
-            .io
-            .memory_resolver(queue_id, command_id))
+    ) -> io::QueueMemoryResolver {
+        io::QueueMemoryResolver::new(queue_id, command_id)
     }
 }

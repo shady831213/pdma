@@ -1,119 +1,114 @@
-mod dma_bus;
+pub(super) mod exact;
 mod memory;
 mod semantic;
 
-use crate::ModelResult;
-use crate::dma_space::DmaSpace;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::bridge::AbiEvent;
+use crate::runner::native::retirement::FaultRetirement;
+use crate::trace::TraceSink;
+use crate::{ModelError, ModelResult};
 use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::ids::{CommandId, QueueId};
+use pdma_model_contract::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
 
 pub(in crate::runner::native) use memory::QueueMemoryResolver;
 
 #[derive(Debug, Clone)]
-pub(super) enum QueueFetch {
+pub(super) enum NormalizedFetch {
     Command(ExternalCommand),
-    Fault(AbiEvent),
+    Fault(NormalizedFault),
 }
 
-#[derive(Debug)]
-pub(super) enum QueueIo {
-    Semantic(semantic::SemanticQueueIo),
-    DmaBus(dma_bus::DmaBusQueueIo),
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(super) struct NormalizedFault {
+    pub(super) queue: QueueId,
 }
 
-impl QueueIo {
-    pub(super) fn semantic(depth: usize) -> ModelResult<Self> {
-        semantic::SemanticQueueIo::new(depth).map(Self::Semantic)
-    }
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(super) enum PublicationOutcome {
+    Published,
+    Retry,
+}
 
-    pub(super) const fn dma_bus() -> Self {
-        Self::DmaBus(dma_bus::DmaBusQueueIo::new())
-    }
+pub(super) trait QueueFrontend: std::fmt::Debug + Send + Sync {
+    fn submit_compat(&mut self, queue: QueueId, command: ExternalCommand) -> ModelResult<()>;
 
-    pub(super) const fn semantic_mut(&mut self) -> Option<&mut semantic::SemanticQueueIo> {
-        match self {
-            Self::Semantic(io) => Some(io),
-            Self::DmaBus(_) => None,
-        }
-    }
-
-    pub(super) fn fetch(
+    fn probe(
         &self,
-        dma_space: &DmaSpace,
-        bus_control: &BusControlState,
-        queue_id: QueueId,
-        completion_ring: pdma_model_contract::CompletionRingId,
-    ) -> ModelResult<Option<QueueFetch>> {
-        match self {
-            Self::Semantic(io) => Ok(io.fetch(dma_space).map(QueueFetch::Command)),
-            Self::DmaBus(_) => {
-                dma_bus::DmaBusQueueIo::fetch(dma_space, bus_control, queue_id, completion_ring)
-            }
-        }
-    }
+        memory: &PdmaMemoryMappings,
+        control: &BusControlState,
+        entry: QueueDirectoryEntry,
+    ) -> ModelResult<Option<NormalizedFetch>>;
 
-    pub(super) fn consume(
+    fn fetch(
         &mut self,
-        dma_space: &DmaSpace,
-        bus_control: &mut BusControlState,
-        queue_id: QueueId,
-    ) -> ModelResult<()> {
-        match self {
-            Self::Semantic(io) => {
-                io.consume(dma_space);
-                Ok(())
-            }
-            Self::DmaBus(_) => dma_bus::DmaBusQueueIo::consume(bus_control, queue_id),
-        }
-    }
+        memory: &PdmaMemoryMappings,
+        control: &BusControlState,
+        entry: QueueDirectoryEntry,
+    ) -> ModelResult<Option<NormalizedFetch>>;
 
-    pub(super) fn has_pending(
+    fn consume(&mut self, control: &mut BusControlState, queue: QueueId) -> ModelResult<()>;
+
+    fn has_pending(&self, control: &BusControlState, queue: QueueId) -> bool;
+
+    fn publish_completion(
+        &mut self,
+        memory: &PdmaMemoryMappings,
+        control: &mut BusControlState,
+        queue: QueueId,
+        record: CompletionRecord,
+    ) -> PublicationOutcome;
+
+    fn stage_execution_fault(&mut self, fault: FaultRetirement) -> ModelResult<ModelError>;
+
+    fn publish_fault(
+        &mut self,
+        memory: &PdmaMemoryMappings,
+        control: &mut BusControlState,
+        trace: &mut TraceSink,
+    ) -> PublicationOutcome;
+
+    fn pending_fault_bytes(&self) -> Option<[u8; 64]>;
+
+    fn poll_compat_completion(&mut self) -> Option<CompletionRecord>;
+
+    fn poll_compat_event(&mut self, queue: QueueId) -> Option<EventRecord>;
+
+    fn completion_blocked(
         &self,
-        dma_space: &DmaSpace,
-        bus_control: &BusControlState,
-        queue_id: QueueId,
-    ) -> bool {
-        match self {
-            Self::Semantic(io) => io.has_pending(dma_space),
-            Self::DmaBus(_) => dma_bus::DmaBusQueueIo::has_pending(bus_control, queue_id),
-        }
-    }
+        control: &BusControlState,
+        queue: QueueId,
+        publication_slots: usize,
+    ) -> bool;
 
-    pub(super) const fn is_dma_bus(&self) -> bool {
-        matches!(self, Self::DmaBus(_))
-    }
-
-    pub(super) fn publish_dma_completion(
+    fn fault_blocked(
         &self,
-        dma_space: &mut DmaSpace,
-        bus_control: &mut BusControlState,
-        queue_id: QueueId,
-        record: pdma_model_contract::CompletionRecord,
-    ) -> bool {
-        matches!(self, Self::DmaBus(_))
-            && dma_bus::DmaBusQueueIo::publish_completion(dma_space, bus_control, queue_id, record)
-    }
+        control: &BusControlState,
+        queue: QueueId,
+        compat_publication_slots: usize,
+    ) -> bool;
 
-    pub(super) fn publish_dma_event(
+    fn records_pending(
         &self,
-        dma_space: &mut DmaSpace,
-        bus_control: &mut BusControlState,
-        event: AbiEvent,
-    ) -> bool {
-        matches!(self, Self::DmaBus(_))
-            && dma_bus::DmaBusQueueIo::publish_event(dma_space, bus_control, event)
-    }
+        control: &BusControlState,
+        queue: QueueId,
+        completion: bool,
+    ) -> ModelResult<bool>;
 
-    pub(super) const fn memory_resolver(
-        &self,
-        queue_id: QueueId,
-        command_id: CommandId,
-    ) -> QueueMemoryResolver {
-        match self {
-            Self::Semantic(_) => QueueMemoryResolver::semantic(queue_id, command_id),
-            Self::DmaBus(_) => QueueMemoryResolver::dma_bus(queue_id, command_id),
-        }
-    }
+    fn accepts_exact_control(&self) -> bool;
+}
+
+pub(super) fn semantic(
+    command_depth: usize,
+    completion_depth: usize,
+) -> ModelResult<Box<dyn QueueFrontend>> {
+    semantic::SemanticFrontend::new(command_depth, completion_depth)
+        .map(|frontend| Box::new(frontend) as Box<dyn QueueFrontend>)
+}
+
+pub(super) fn exact() -> Box<dyn QueueFrontend> {
+    Box::new(exact::ExactFrontend::new())
+}
+
+pub(super) const fn rejected_compat_submission(queue: QueueId) -> ModelError {
+    ModelError::UnknownQueue(queue)
 }

@@ -4,14 +4,16 @@ use super::{
 };
 use crate::ModelResult;
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl};
+use pdma_model_contract::{
+    DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl,
+};
 use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_device::{
-    AsyncDeviceHandle, BusControlError, DmaSpaceError, QueueStatus, SubmissionAcceptance,
+    AsyncDeviceHandle, BusControlError, PdmaMemoryError, QueueStatus, SubmissionAcceptance,
 };
 
 impl BusDmaStage for AsyncDeviceBusStage {
-    fn proposed_regions(&self) -> &[DmaRegion] {
+    fn proposed_regions(&self) -> &[PdmaMemoryRegion] {
         self.0.regions()
     }
 }
@@ -30,30 +32,30 @@ impl From<QueueStatus> for BusQueueStatus {
 
 impl AsyncPdmaBus for AsyncDeviceHandle {
     type Stage = AsyncDeviceBusStage;
-    type DmaError = DmaSpaceError;
+    type DmaError = PdmaMemoryError;
     type ControlError = BusControlError;
 
-    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
-        Self::allocate_dma_region(self, len)
+    async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
+        Self::allocate_memory_region(self, len)
             .await
             .map_err(Into::into)
     }
 
-    async fn stage_dma_regions(
+    async fn stage_memory_regions(
         &self,
         lengths: &[u64],
-    ) -> Result<AsyncDeviceBusStage, DmaSpaceError> {
-        Self::stage_dma_regions(self, lengths)
+    ) -> Result<AsyncDeviceBusStage, PdmaMemoryError> {
+        Self::stage_memory_regions(self, lengths)
             .await
             .map(AsyncDeviceBusStage)
     }
 
-    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, DmaSpaceError> {
-        Self::read_iova(self, address, length).await
+    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, PdmaMemoryError> {
+        Self::read_memory(self, address, length).await
     }
 
-    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), DmaSpaceError> {
-        Self::write_iova(self, address, bytes).await
+    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), PdmaMemoryError> {
+        Self::write_memory(self, address, bytes).await
     }
 
     async fn bootstrap_queue(

@@ -22,7 +22,11 @@ use tokio::sync::oneshot;
 #[tokio::test(flavor = "current_thread")]
 async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelResult<()> {
     // Given: independent device, software-main, host-delivery, and handler actors.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     start_trace(&handle).await;

@@ -1,50 +1,14 @@
+pub(super) use super::core::DeviceCore;
 use super::{AsyncRunSnapshot, AsyncRunSummary, AsyncStepStatus};
-use crate::dma_space::DmaSpace;
-use crate::runner::backend::DeviceModel;
-use crate::runner::bus::control::BusControlState;
-use crate::runner::mmio::RegisterBanks;
 use tokio::sync::{Mutex, watch};
 
 #[derive(Debug)]
 pub(super) struct RunnerShared {
-    pub(super) state: Mutex<RunnerState>,
+    pub(super) state: Mutex<DeviceCore>,
     pub(super) changed: watch::Sender<usize>,
 }
 
-#[derive(Debug)]
-pub(super) struct RunnerState {
-    pub(super) backend: DeviceModel,
-    pub(super) dma_space: DmaSpace,
-    pub(super) bus_control: BusControlState,
-    pub(super) mmio: RegisterBanks,
-    pub(super) steps: usize,
-    pub(super) errors: usize,
-    pub(super) stalls: usize,
-    pub(super) last_status: AsyncStepStatus,
-    pub(super) generation: usize,
-    pub(super) wake_generation: usize,
-    pub(super) shutdown_requested: bool,
-}
-
-impl RunnerState {
-    pub(super) fn new(backend: DeviceModel) -> Self {
-        Self {
-            backend,
-            dma_space: DmaSpace::new(),
-            bus_control: BusControlState::new(),
-            mmio: RegisterBanks::new(),
-            steps: 0,
-            errors: 0,
-            stalls: 0,
-            last_status: AsyncStepStatus::Idle,
-            generation: 0,
-            wake_generation: 0,
-            shutdown_requested: false,
-        }
-    }
-}
-
-pub(super) const fn snapshot(state: &RunnerState) -> AsyncRunSnapshot {
+pub(super) const fn snapshot(state: &DeviceCore) -> AsyncRunSnapshot {
     AsyncRunSnapshot {
         steps: state.steps,
         errors: state.errors,
@@ -56,7 +20,7 @@ pub(super) const fn snapshot(state: &RunnerState) -> AsyncRunSnapshot {
 }
 
 pub(super) const fn snapshot_with_status(
-    state: &RunnerState,
+    state: &DeviceCore,
     last_status: AsyncStepStatus,
 ) -> AsyncRunSnapshot {
     AsyncRunSnapshot {
@@ -65,7 +29,7 @@ pub(super) const fn snapshot_with_status(
     }
 }
 
-pub(super) const fn summary(state: &RunnerState) -> AsyncRunSummary {
+pub(super) const fn summary(state: &DeviceCore) -> AsyncRunSummary {
     AsyncRunSummary {
         steps: state.steps,
         errors: state.errors,
@@ -74,7 +38,7 @@ pub(super) const fn summary(state: &RunnerState) -> AsyncRunSummary {
     }
 }
 
-pub(super) const fn wake(state: &mut RunnerState) {
+pub(super) const fn wake(state: &mut DeviceCore) {
     state.wake_generation = state.wake_generation.saturating_add(1);
     state.generation = state.generation.saturating_add(1);
 }

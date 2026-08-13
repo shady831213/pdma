@@ -1,6 +1,6 @@
 use super::AsyncStepStatus;
 use super::backend::ModelStepStatus;
-use super::state::{RunnerShared, RunnerState, publish};
+use super::state::{DeviceCore, RunnerShared, publish};
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
     while run_one(shared).await {}
@@ -12,7 +12,7 @@ async fn run_one(shared: &RunnerShared) -> bool {
         if state.shutdown_requested {
             return publish_and_continue(shared, state.generation, false);
         }
-        let RunnerState {
+        let DeviceCore {
             backend,
             dma_space,
             bus_control,
@@ -63,7 +63,7 @@ struct WaitState {
     wake_generation: usize,
 }
 
-fn wait_for_wake(shared: &RunnerShared, state: &mut RunnerState) -> WaitState {
+fn wait_for_wake(shared: &RunnerShared, state: &mut DeviceCore) -> WaitState {
     let wake_generation = state.wake_generation;
     state.generation = state.generation.saturating_add(1);
     publish(shared, state.generation);

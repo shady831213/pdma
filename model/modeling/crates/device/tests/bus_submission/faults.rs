@@ -30,7 +30,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     let destination = allocate(&malformed.handle, 4).await?;
     malformed
         .handle
-        .write_iova(source.base(), &[1, 2, 3, 4])
+        .write_memory(source.base(), &[1, 2, 3, 4])
         .await?;
     let mut bytes = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(20),
@@ -43,6 +43,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     assert_eq!(result.consumer, RingCursor::new(1));
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 1);
+    assert_eq!(result.native_steps, 1);
     assert!(!result.irq_pending);
     assert_eq!(
         pending_event(&result)?.fault().tuple(),
@@ -62,7 +63,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     let destination = allocate(&starved.handle, 4).await?;
     starved
         .handle
-        .write_iova(source.base(), &[9, 8, 7, 6])
+        .write_memory(source.base(), &[9, 8, 7, 6])
         .await?;
     let result = run_descriptor(
         starved,
@@ -78,6 +79,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     assert_eq!(result.pending, None);
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 0);
+    assert_eq!(result.native_steps, 2);
     assert!(!result.irq_pending);
     Ok(())
 }
@@ -87,7 +89,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
     let source = allocate(&fixture.handle, 4).await?;
     fixture
         .handle
-        .write_iova(source.base(), &[1, 2, 3, 4])
+        .write_memory(source.base(), &[1, 2, 3, 4])
         .await?;
     let list = allocate(&fixture.handle, 8).await?;
     let (list_base, count) = list_fields(case, list);
@@ -109,7 +111,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
 
 const fn list_fields(
     case: BroadcastFaultCase,
-    list: pdma_model_contract::bridge::DmaRegion,
+    list: pdma_model_contract::bridge::PdmaMemoryRegion,
 ) -> (DmaAddress, u64) {
     match case {
         BroadcastFaultCase::Count => (list.base(), 0),
@@ -123,7 +125,7 @@ const fn list_fields(
 fn expected_tuple(
     case: BroadcastFaultCase,
     base: DmaAddress,
-    list: pdma_model_contract::bridge::DmaRegion,
+    list: pdma_model_contract::bridge::PdmaMemoryRegion,
 ) -> (AbiEventKind, u64, u64, u64, u16, u16, u64) {
     let (kind, locator, detail0, detail1, access) = match case {
         BroadcastFaultCase::Count => (

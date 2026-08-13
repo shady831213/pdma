@@ -7,7 +7,11 @@ use pdma_model_host::ManualDriver;
 #[tokio::test(flavor = "current_thread")]
 async fn async_tracing_preserves_manual_run_until_idle_behavior() {
     // Given: the same copy on a baseline manual device and a traced manual device.
-    let mut baseline_device = SyncDevice::new();
+    let mut baseline_device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut baseline_driver = ManualDriver::setup_on(&mut baseline_device, 4, 4)
         .await
         .expect("queue setup is valid");
@@ -24,7 +28,11 @@ async fn async_tracing_preserves_manual_run_until_idle_behavior() {
         .await
         .expect("source write is in bounds");
 
-    let mut traced_device = SyncDevice::new();
+    let mut traced_device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut traced_driver = ManualDriver::setup_on(&mut traced_device, 4, 4)
         .await
         .expect("queue setup is valid");

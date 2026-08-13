@@ -128,7 +128,7 @@ impl QueuePortDeviceModel {
     fn validate_irq_source(&self, source: IrqSource) -> ModelResult<()> {
         match source {
             IrqSource::Completion(id) => self
-                .completion(id)
+                .queue_by_completion(id)
                 .map(|_| ())
                 .map_err(|_| ModelError::UnknownIrqSource(source)),
             IrqSource::Event(id) => self
@@ -150,30 +150,13 @@ impl QueuePortDeviceModel {
                     .iter()
                     .find(|queue| queue.entry.completion_ring_id() == id)
                     .ok_or(ModelError::UnknownIrqSource(source))?;
-                if queue.io.is_dma_bus() {
-                    let active = bus_control
-                        .queue(pdma_model_contract::semantic::EpochQueue::new(
-                            self.epoch,
-                            queue.entry.queue_id(),
-                        ))
-                        .map_err(|_| ModelError::DmaSubmissionState)?;
-                    Ok(active.completion.producer() != active.completion.consumer())
-                } else {
-                    self.completion(id).map(|ring| !ring.is_empty())
-                }
+                queue
+                    .frontend
+                    .records_pending(bus_control, queue.entry.queue_id(), true)
             }
             IrqSource::Event(id) => {
                 let queue = self.queue(id)?;
-                if queue.io.is_dma_bus() {
-                    let active = bus_control
-                        .queue(pdma_model_contract::semantic::EpochQueue::new(
-                            self.epoch, id,
-                        ))
-                        .map_err(|_| ModelError::DmaSubmissionState)?;
-                    Ok(active.event.producer() != active.event.consumer())
-                } else {
-                    Ok(self.events.iter().any(|event| event.queue_id() == id))
-                }
+                queue.frontend.records_pending(bus_control, id, false)
             }
         }
     }

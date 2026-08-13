@@ -11,7 +11,11 @@ use tokio::sync::{mpsc, oneshot};
 #[tokio::test(flavor = "current_thread")]
 async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() -> ModelResult<()> {
     // Given: a line-routed completion and independently running device, main, and delivery actors.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
     port.enable_tracing().await;

@@ -2,12 +2,14 @@
 
 mod backend;
 mod bus;
+mod core;
 mod global_api;
 mod irq;
 mod manual;
 mod mmio;
 mod native;
 mod queue_api;
+mod register_endpoint;
 mod reset;
 mod state;
 mod types;
@@ -15,18 +17,20 @@ mod wait;
 mod worker;
 
 use crate::ModelResult;
-use crate::dma_space::{DmaSpaceError, DmaStage};
+use crate::dma_space::{PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 use backend::DeviceModel;
 pub use bus::{
     BusControlError, DmaBatchContext, DmaWrite, MmioBatchError, QueueBootstrapBatch,
     QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch,
 };
+pub use core::DeviceCore;
+use hardware_interface_runtime::MemoryAddress;
 pub use manual::SyncDevice;
-use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::bridge::PdmaMemoryRegion;
 use pdma_model_contract::ids::BufferId;
 use pdma_model_contract::trace::TraceEvent;
-use pdma_model_contract::{DmaAddress, DmaRegion};
-use state::{RunnerShared, RunnerState, publish, summary, wake};
+pub use register_endpoint::{MmioRegisterEndpoint, MmioRegisterError};
+use state::{RunnerShared, publish, summary, wake};
 use std::sync::Arc;
 pub use types::{
     AsyncRunSnapshot, AsyncRunSummary, AsyncStallReason, AsyncStepStatus, PendingDmaResult,
@@ -52,24 +56,11 @@ pub struct AsyncDeviceWorker {
 }
 
 impl AsyncDevice {
-    /// Creates an async hardware runner backed by the queue-port device model.
-    pub fn queue_port() -> (Self, AsyncDeviceWorker) {
-        Self::queue_port_with_resource_config(ResourceConfig::default())
-    }
-
-    /// Creates an async hardware runner backed by the queue-port device model with `config` credits.
-    pub fn queue_port_with_resource_config(config: ResourceConfig) -> (Self, AsyncDeviceWorker) {
-        if config == ResourceConfig::default() {
-            Self::from_backend(DeviceModel::queue_port())
-        } else {
-            Self::from_backend(DeviceModel::queue_port_with_resource_config(config))
-        }
-    }
-
-    fn from_backend(backend: DeviceModel) -> (Self, AsyncDeviceWorker) {
+    /// Consumes one device core into the asynchronous facade and worker.
+    pub fn from_core(core: DeviceCore) -> (Self, AsyncDeviceWorker) {
         let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
-            state: tokio::sync::Mutex::new(RunnerState::new(backend)),
+            state: tokio::sync::Mutex::new(core),
             changed,
         });
         let worker = AsyncDeviceWorker {
@@ -104,6 +95,11 @@ impl AsyncDeviceWorker {
 }
 
 impl AsyncDeviceHandle {
+    /// Returns the clone-shared exact register endpoint owned by this device core.
+    pub fn register_endpoint(&self) -> MmioRegisterEndpoint {
+        MmioRegisterEndpoint::new(Arc::clone(&self.shared))
+    }
+
     /// Requests worker shutdown.
     pub async fn request_shutdown(&self) {
         let generation = {
@@ -117,11 +113,13 @@ impl AsyncDeviceHandle {
 
     /// Allocates a device-visible memory buffer.
     pub async fn allocate_buffer(&self, len: usize) -> ModelResult<BufferId> {
-        self.allocate_dma_region(len).await.map(DmaRegion::object)
+        self.allocate_memory_region(len)
+            .await
+            .map(PdmaMemoryRegion::object)
     }
 
     /// Allocates one raw device-visible DMA region.
-    pub async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
+    pub async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
         let (region, generation) = {
             let mut state = self.shared.state.lock().await;
             let region = u64::try_from(len)
@@ -171,15 +169,18 @@ impl AsyncDeviceHandle {
     }
 
     /// Proposes DMA regions without changing mappings, bytes, or allocator generation.
-    pub async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<DmaStage, DmaSpaceError> {
+    pub async fn stage_memory_regions(
+        &self,
+        lengths: &[u64],
+    ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
         self.shared.state.lock().await.dma_space.stage(lengths)
     }
 
     /// Atomically commits every region in a stage.
-    pub async fn commit_dma_stage(
+    pub async fn commit_memory_stage(
         &self,
-        proposal: DmaStage,
-    ) -> Result<Vec<DmaRegion>, DmaSpaceError> {
+        proposal: PdmaMemoryStage,
+    ) -> Result<Vec<PdmaMemoryRegion>, PdmaMemoryError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result = state.dma_space.commit(proposal);
@@ -190,25 +191,29 @@ impl AsyncDeviceHandle {
         result
     }
 
-    /// Reads one checked IOVA extent.
-    pub async fn read_iova(
+    /// Reads one checked mapped-memory extent.
+    pub async fn read_memory(
         &self,
-        address: DmaAddress,
+        address: impl Into<MemoryAddress>,
         length: u64,
-    ) -> Result<Vec<u8>, DmaSpaceError> {
+    ) -> Result<Vec<u8>, PdmaMemoryError> {
         self.shared
             .state
             .lock()
             .await
             .dma_space
-            .read_iova(address, length)
+            .read_memory(address.into(), length)
     }
 
-    /// Writes one checked IOVA extent.
-    pub async fn write_iova(&self, address: DmaAddress, data: &[u8]) -> Result<(), DmaSpaceError> {
+    /// Writes one checked mapped-memory extent.
+    pub async fn write_memory(
+        &self,
+        address: impl Into<MemoryAddress>,
+        data: &[u8],
+    ) -> Result<(), PdmaMemoryError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = state.dma_space.write_iova(address, data);
+            let result = state.dma_space.write_memory(address.into(), data);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -221,7 +226,7 @@ impl AsyncDeviceHandle {
     }
 
     /// Resolves a semantic object to its committed DMA region.
-    pub async fn region_for_object(&self, object: BufferId) -> Option<DmaRegion> {
+    pub async fn region_for_object(&self, object: BufferId) -> Option<PdmaMemoryRegion> {
         self.shared
             .state
             .lock()
@@ -231,7 +236,7 @@ impl AsyncDeviceHandle {
     }
 
     /// Returns the committed DMA allocator generation.
-    pub async fn dma_generation(&self) -> u64 {
+    pub async fn memory_generation(&self) -> u64 {
         self.shared.state.lock().await.dma_space.generation()
     }
 
@@ -258,6 +263,11 @@ impl AsyncDeviceHandle {
     /// Returns captured trace events in deterministic sequence order.
     pub async fn trace_events(&self) -> Vec<TraceEvent> {
         self.shared.state.lock().await.backend.trace_events()
+    }
+
+    /// Returns normalized frontend fetches that entered the native step core.
+    pub async fn native_steps(&self) -> usize {
+        self.shared.state.lock().await.backend.native_steps()
     }
 
     /// Exports captured trace events as Chrome/Perfetto JSON.

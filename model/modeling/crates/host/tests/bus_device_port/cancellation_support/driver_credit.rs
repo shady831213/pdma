@@ -14,7 +14,11 @@ mod pending_doorbell;
 use pending_doorbell::PendingDoorbellPort;
 
 pub(super) async fn verify_after_acceptance_driver_credit() -> ModelResult<()> {
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let cpu = SoftwareCpu::new();
     let (mut port, mut driver, mut retained, source, destination_a, destination_b) = cpu
@@ -76,7 +80,11 @@ pub(super) async fn verify_after_acceptance_driver_credit() -> ModelResult<()> {
 }
 
 pub(super) async fn verify_before_acceptance_driver_credit() -> ModelResult<()> {
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let cpu = SoftwareCpu::new();
     let (mut port, mut driver, mut retained, source, destination) = cpu

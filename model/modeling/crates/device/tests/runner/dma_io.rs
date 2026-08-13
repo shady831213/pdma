@@ -9,7 +9,11 @@ use pdma_model_device::SyncDevice;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 pub(super) fn assert_dma_bus_decoded_command_uses_shared_core() -> TestResult {
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device.create_dma_bus_queue(QueueConfig::new(
         4,
         4,

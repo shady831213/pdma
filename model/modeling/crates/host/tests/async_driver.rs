@@ -27,7 +27,11 @@ use pdma_model_host::{AsyncDevicePort, AsyncDriver, SoftwareCpu};
 #[tokio::test(flavor = "current_thread")]
 async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
     // Given: a fresh manual device and no active modeled software CPU.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut port = support::BlockingPort::new(device.handle());
 
     // When: software-bearing setup is attempted outside run_main.
@@ -48,7 +52,11 @@ async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
 async fn cloned_drivers_share_depth_one_command_credit() {
     // Given: two driver capabilities for one depth-one queue.
     let cpu = SoftwareCpu::new();
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
 
     // When: one capability consumes the only slot and the other submits.
     let (first, second) = cpu
@@ -82,7 +90,11 @@ async fn cloned_drivers_share_depth_one_command_credit() {
 #[tokio::test(flavor = "current_thread")]
 async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
     // Given: a queue-port AsyncDevice, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let mut handle = runner.handle();
     let (first, second) = SoftwareCpu::new()
@@ -119,7 +131,11 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
 #[tokio::test(flavor = "current_thread")]
 async fn irq_controls_are_available_through_async_device_port() {
     // Given: a manual device used through the host port trait.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device
         .create_queue(QueueConfig::new(
             4,
@@ -152,7 +168,11 @@ async fn irq_controls_are_available_through_async_device_port() {
 #[tokio::test(flavor = "current_thread")]
 async fn stale_queue_and_result_capabilities_commit_nothing() {
     // Given: one real queue and a same-ID capability from a later device epoch.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device
         .create_queue(QueueConfig::new(
             2,

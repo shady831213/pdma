@@ -1,14 +1,14 @@
 use super::{Access, RecordingStage, RecordingTransport};
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
 use pdma_model_contract::{BufferId, IrqNotification};
-use pdma_model_contract::{DmaAddress, DmaRegion, QueueActivation};
-use pdma_model_device::{DmaSpaceError, MmioBatchError, QueueResponseBytes};
+use pdma_model_contract::{DmaAddress, PdmaMemoryRegion, QueueActivation};
+use pdma_model_device::{MmioBatchError, PdmaMemoryError, QueueResponseBytes};
 use pdma_model_host::ModelResult;
 use pdma_model_host::{BusDmaStage, BusSubmission, MmioDeviceTransport};
 use std::sync::atomic::Ordering;
 
 impl BusDmaStage for RecordingStage {
-    fn proposed_regions(&self) -> &[DmaRegion] {
+    fn proposed_regions(&self) -> &[PdmaMemoryRegion] {
         &self.0
     }
 }
@@ -16,11 +16,11 @@ impl BusDmaStage for RecordingStage {
 impl MmioDeviceTransport for RecordingTransport {
     type Stage = RecordingStage;
 
-    async fn allocate_dma_region(&self, _len: usize) -> ModelResult<DmaRegion> {
+    async fn allocate_memory_region(&self, _len: usize) -> ModelResult<PdmaMemoryRegion> {
         Err(pdma_model_host::ModelError::DmaAllocationExhausted)
     }
 
-    async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, DmaSpaceError> {
+    async fn stage_memory_regions(&self, lengths: &[u64]) -> Result<Self::Stage, PdmaMemoryError> {
         let bases = [0x1_0000, 0x2_0000, 0x3_0000];
         let regions = lengths
             .iter()
@@ -28,19 +28,23 @@ impl MmioDeviceTransport for RecordingTransport {
             .zip(bases)
             .enumerate()
             .map(|(index, (length, base))| {
-                DmaRegion::try_new(BufferId::new(index), DmaAddress::new(base), length)
-                    .map_err(|_| DmaSpaceError::InvalidRegion)
+                PdmaMemoryRegion::try_new(BufferId::new(index), DmaAddress::new(base), length)
+                    .map_err(|_| PdmaMemoryError::InvalidRegion)
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(RecordingStage(regions))
     }
 
-    async fn read_dma(&self, _address: DmaAddress, _length: u64) -> Result<Vec<u8>, DmaSpaceError> {
-        Err(DmaSpaceError::Unmapped)
+    async fn read_dma(
+        &self,
+        _address: DmaAddress,
+        _length: u64,
+    ) -> Result<Vec<u8>, PdmaMemoryError> {
+        Err(PdmaMemoryError::Unmapped)
     }
 
-    async fn write_dma(&self, _address: DmaAddress, _bytes: &[u8]) -> Result<(), DmaSpaceError> {
-        Err(DmaSpaceError::Unmapped)
+    async fn write_dma(&self, _address: DmaAddress, _bytes: &[u8]) -> Result<(), PdmaMemoryError> {
+        Err(PdmaMemoryError::Unmapped)
     }
 
     async fn bootstrap_batch(

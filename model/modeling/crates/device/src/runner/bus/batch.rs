@@ -1,17 +1,65 @@
 use super::{AsyncDeviceHandle, BusControlError, SubmissionAcceptance};
-use crate::dma_space::DmaSpaceError;
-use crate::runner::bus::control::{activation, transactions};
-use crate::runner::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging, status_response};
-use crate::runner::state::{publish, wake};
+use crate::runner::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
+use crate::runner::register_endpoint::PreparedWrite;
+use crate::runner::state::publish;
+use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::bridge::QueueActivation;
 
 #[path = "batch/error.rs"]
 mod error;
 pub use error::{DmaBatchContext, MmioBatchError};
+#[path = "batch/commit.rs"]
+mod commit;
+use commit::{commit_bootstrap, commit_submission};
 
 #[cfg(test)]
 #[path = "batch/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::runner) enum BatchPreparationFault {
+    Capacity,
+    Overlap,
+    Decode,
+    Access,
+    Mask,
+    Response,
+}
+
+#[cfg(test)]
+pub(super) fn reject_injected(
+    state: &crate::runner::state::DeviceCore,
+    expected: BatchPreparationFault,
+    context: DmaBatchContext,
+) -> Result<(), MmioBatchError> {
+    if state.batch_fault.get() != Some(expected) {
+        return Ok(());
+    }
+    state.batch_fault.set(None);
+    let error = match expected {
+        BatchPreparationFault::Capacity => {
+            MmioBatchError::from_dma(crate::PdmaMemoryError::StorageExhausted, context)
+        }
+        BatchPreparationFault::Overlap => {
+            MmioBatchError::from_dma(crate::PdmaMemoryError::OverlappingRegion, context)
+        }
+        BatchPreparationFault::Decode => MmioBatchError::Access(
+            pdma_model_contract::abi::mmio::MmioAccessError::ReservedOffset { offset: 0x168 },
+        ),
+        BatchPreparationFault::Access => MmioBatchError::Access(
+            pdma_model_contract::abi::mmio::MmioAccessError::WriteToReadOnly { offset: 0x168 },
+        ),
+        BatchPreparationFault::Mask => MmioBatchError::Access(
+            pdma_model_contract::abi::mmio::MmioAccessError::ReservedBits {
+                offset: 0x168,
+                bits: 4,
+            },
+        ),
+        BatchPreparationFault::Response => MmioBatchError::InvalidShape,
+    };
+    Err(error)
+}
 
 /// Exact raw queue response-bank bytes.
 pub type QueueResponseBytes = [u8; 72];
@@ -19,13 +67,13 @@ pub type QueueResponseBytes = [u8; 72];
 /// The one closed queue-bootstrap batch request.
 #[derive(Debug)]
 pub struct QueueBootstrapBatch {
-    stage: crate::DmaStage,
+    stage: crate::PdmaMemoryStage,
     activation: QueueActivation,
 }
 
 impl QueueBootstrapBatch {
     /// Creates the fixed stage, queue-staging, `ACTIVATE`, response-read grammar.
-    pub const fn new(stage: crate::DmaStage, activation: QueueActivation) -> Self {
+    pub const fn new(stage: crate::PdmaMemoryStage, activation: QueueActivation) -> Self {
         Self { stage, activation }
     }
 }
@@ -40,7 +88,7 @@ impl SubmissionBatch {
         queue: pdma_model_contract::semantic::EpochQueue,
         expected_producer: pdma_model_contract::abi::RingCursor,
         descriptor: super::DmaWrite,
-        indirect: Option<(crate::DmaStage, super::DmaWrite)>,
+        indirect: Option<(crate::PdmaMemoryStage, super::DmaWrite)>,
     ) -> Self {
         Self(SubmissionAcceptance::new(
             queue,
@@ -57,14 +105,11 @@ impl AsyncDeviceHandle {
         &self,
         request: QueueBootstrapBatch,
     ) -> Result<QueueResponseBytes, MmioBatchError> {
-        let (response, generation) = {
+        let committed = {
             let mut state = self.shared.state.lock().await;
-            let response = prepare_bootstrap(&mut state, &request)?;
-            wake(&mut state);
-            (response, state.generation)
+            commit_bootstrap(&mut state, &request)?
         };
-        publish(&self.shared, generation);
-        Ok(response)
+        committed.emit(&self.shared)
     }
 
     /// Applies one closed submission batch under one lock after complete projection.
@@ -72,103 +117,50 @@ impl AsyncDeviceHandle {
         &self,
         request: SubmissionBatch,
     ) -> Result<QueueResponseBytes, MmioBatchError> {
-        let (response, generation) = {
+        let committed = {
             let mut state = self.shared.state.lock().await;
-            let response = prepare_submission(&mut state, &request.0)?;
-            wake(&mut state);
-            (response, state.generation)
+            commit_submission(&mut state, &request.0)?
         };
-        publish(&self.shared, generation);
-        Ok(response)
+        committed.emit(&self.shared)
     }
 }
 
-fn prepare_bootstrap(
-    state: &mut crate::runner::state::RunnerState,
-    request: &QueueBootstrapBatch,
-) -> Result<QueueResponseBytes, MmioBatchError> {
-    let regions = request.stage.regions();
-    let rings = request.activation.rings();
-    let expected = [
-        rings.submission().region(),
-        rings.completion().region(),
-        rings.event().region(),
-    ];
-    if regions != expected {
-        return Err(MmioBatchError::InvalidShape);
-    }
-    let staging = bootstrap_staging(request.activation)?;
-    let context = regions
-        .first()
-        .copied()
-        .map_or(DmaBatchContext::None, DmaBatchContext::Region);
-    let mut prepared_dma = state
-        .dma_space
-        .prepare_clone()
-        .map_err(|error| MmioBatchError::from_dma(error, DmaBatchContext::None))?;
-    prepared_dma
-        .commit(request.stage.clone())
-        .map_err(|error| MmioBatchError::from_dma(error, context))?;
-    let prepared_queue = activation::prepare_staged(state, &request.stage, request.activation)
-        .map_err(|error| command_error(error, request.activation.queue().queue_id().raw(), 1))?;
-    let status = prepared_queue.status();
-    let response = status_response(status).map_err(MmioBatchError::Command)?;
-    state.dma_space.install_prepared(prepared_dma);
-    activation::install(state, prepared_queue);
-    state.mmio.queue.complete_bootstrap_batch(staging, response);
-    response
-        .to_le_bytes()
-        .map_err(|_| MmioBatchError::InvalidShape)
+pub(super) struct CommittedBatch {
+    response: QueueResponseBytes,
+    command: PreparedWrite,
+    reservation: ObservationReservation,
+    generation: usize,
 }
 
-fn prepare_submission(
-    state: &mut crate::runner::state::RunnerState,
-    request: &SubmissionAcceptance,
-) -> Result<QueueResponseBytes, MmioBatchError> {
-    validate_submission_shape(state, request)?;
-    let mut prepared_dma = state
-        .dma_space
-        .prepare_clone()
-        .map_err(|error| MmioBatchError::from_dma(error, DmaBatchContext::None))?;
-    if let Some((stage, write)) = &request.indirect {
-        let [region] = stage.regions() else {
-            return Err(MmioBatchError::InvalidShape);
-        };
-        let region = *region;
-        prepared_dma
-            .commit(stage.clone())
-            .map_err(|error| MmioBatchError::from_dma(error, DmaBatchContext::Region(region)))?;
-        prepared_dma
-            .write_iova(write.address(), write.bytes())
-            .map_err(|error| map_access_error(error, write))?;
+impl CommittedBatch {
+    fn emit(
+        self,
+        shared: &crate::runner::state::RunnerShared,
+    ) -> Result<QueueResponseBytes, MmioBatchError> {
+        let observation = self
+            .command
+            .observation(self.reservation.start_sequence(), AccessOrigin::Batch);
+        self.reservation.emit(vec![observation])?;
+        publish(shared, self.generation);
+        Ok(self.response)
     }
-    prepared_dma
-        .write_iova(request.descriptor.address(), request.descriptor.bytes())
-        .map_err(|error| map_access_error(error, &request.descriptor))?;
-    let prepared_cursor = transactions::prepare_submission_publication(state, request)
-        .map_err(|error| command_error(error, request.queue.queue_id().raw(), 3))?;
-    let status = prepared_cursor.status();
-    let response = status_response(status).map_err(MmioBatchError::Command)?;
-    let staging = submission_staging(request);
-    state.dma_space.install_prepared(prepared_dma);
-    transactions::install_submission_publication(state, &prepared_cursor);
-    state
-        .mmio
-        .queue
-        .complete_submission_batch(staging, response);
-    response
-        .to_le_bytes()
-        .map_err(|_| MmioBatchError::InvalidShape)
 }
 
-fn command_error(error: BusControlError, queue_id: usize, command: u32) -> MmioBatchError {
+pub(super) fn command_error(
+    error: BusControlError,
+    queue_id: usize,
+    command: u32,
+) -> MmioBatchError {
     let numeric_id = u64::try_from(queue_id).unwrap_or(u64::MAX);
     MmioBatchError::Command(crate::runner::mmio::queue::map_bus_error(
         error, numeric_id, command, 0,
     ))
 }
 
-fn map_access_error(error: DmaSpaceError, write: &super::DmaWrite) -> MmioBatchError {
+pub(super) fn map_access_error(
+    error: crate::PdmaMemoryError,
+    write: &super::DmaWrite,
+) -> MmioBatchError {
     MmioBatchError::from_dma(
         error,
         DmaBatchContext::Access {
@@ -178,8 +170,8 @@ fn map_access_error(error: DmaSpaceError, write: &super::DmaWrite) -> MmioBatchE
     )
 }
 
-fn validate_submission_shape(
-    _state: &crate::runner::state::RunnerState,
+pub(super) fn validate_submission_shape(
+    _state: &crate::runner::state::DeviceCore,
     request: &SubmissionAcceptance,
 ) -> Result<(), MmioBatchError> {
     if request.descriptor.bytes().len() != 64 {
@@ -189,7 +181,7 @@ fn validate_submission_shape(
         let [region] = stage.regions() else {
             return Err(MmioBatchError::InvalidShape);
         };
-        if write.address() != region.base()
+        if write.address() != region.abi_base()
             || u64::try_from(write.bytes().len()) != Ok(region.length())
         {
             return Err(MmioBatchError::InvalidShape);
@@ -198,7 +190,9 @@ fn validate_submission_shape(
     Ok(())
 }
 
-fn bootstrap_staging(activation: QueueActivation) -> Result<BootstrapBatchStaging, MmioBatchError> {
+pub(super) fn bootstrap_staging(
+    activation: QueueActivation,
+) -> Result<BootstrapBatchStaging, MmioBatchError> {
     let rings = activation.rings();
     Ok(BootstrapBatchStaging {
         expected_epoch: activation.queue().epoch().raw(),
@@ -215,7 +209,7 @@ fn bootstrap_staging(activation: QueueActivation) -> Result<BootstrapBatchStagin
     })
 }
 
-fn submission_staging(request: &SubmissionAcceptance) -> SubmissionBatchStaging {
+pub(super) fn submission_staging(request: &SubmissionAcceptance) -> SubmissionBatchStaging {
     SubmissionBatchStaging {
         expected_epoch: request.queue.epoch().raw(),
         id: u64::try_from(request.queue.queue_id().raw()).unwrap_or(u64::MAX),

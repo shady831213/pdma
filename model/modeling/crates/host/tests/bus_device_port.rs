@@ -101,7 +101,11 @@ async fn submit_all_operations(
 async fn region_handoff_drives_all_operations_and_irq_service_through_one_clone_shared_state()
 -> ModelResult<()> {
     // Given: one real ABI bus and a CPU-bound driver/port pair.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let cpu = SoftwareCpu::new();
     let worker_task = tokio::spawn(async move { worker.run().await });
 
@@ -175,7 +179,11 @@ async fn clone_shared_completion_and_event_consumer_races_reject_stale_main() ->
 #[tokio::test(flavor = "current_thread")]
 async fn wrong_cpu_and_handler_repoll_commit_nothing() -> ModelResult<()> {
     // Given: one owner-bound port before its first raw allocation.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let owner = SoftwareCpu::new();
     let mut port = owner
         .run_main(async { BusDevicePort::new(device.handle()) })
@@ -199,7 +207,11 @@ async fn wrong_cpu_and_handler_repoll_commit_nothing() -> ModelResult<()> {
 #[tokio::test(flavor = "current_thread")]
 async fn reset_stales_all_clones_without_mutex_deadlock() -> ModelResult<()> {
     // Given: two old port clones, a live epoch-zero queue, and persistent mapped bytes.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let cpu = SoftwareCpu::new();
     let (mut old, mut clone, driver, buffer) = cpu

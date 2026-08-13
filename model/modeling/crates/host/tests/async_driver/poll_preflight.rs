@@ -59,7 +59,11 @@ impl PollFixture {
 
 async fn completion_fixture() -> ModelResult<PollFixture> {
     let owner = SoftwareCpu::new();
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     device.enable_tracing();
     let (driver, retry) = owner
         .run_main(async {
@@ -84,7 +88,11 @@ async fn completion_fixture() -> ModelResult<PollFixture> {
 
 async fn event_fixture() -> ModelResult<PollFixture> {
     let owner = SoftwareCpu::new();
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     device.enable_tracing();
     let (driver, retry) = owner
         .run_main(async {

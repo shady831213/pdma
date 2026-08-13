@@ -3,10 +3,10 @@ async fn mapped_activation_reuses_reset_persistent_mappings_only_at_current_epoc
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: exact committed rings retained while whole-device reset advances the epoch.
     let handle = new_handle();
-    let ring_stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let ring_stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let stale_activation = activation(&ring_stage, QueueId::new(0))?;
-    let committed = handle.commit_dma_stage(ring_stage).await?;
-    let generation = handle.dma_generation().await;
+    let committed = handle.commit_memory_stage(ring_stage).await?;
+    let generation = handle.memory_generation().await;
     let current = handle
         .reset(pdma_model_contract::semantic::WholeDeviceReset::new(
             DeviceEpoch::initial(),
@@ -29,7 +29,7 @@ async fn mapped_activation_reuses_reset_persistent_mappings_only_at_current_epoc
     let status = handle.activate_mapped_queue(fresh).await?;
 
     // Then: mappings/generation persisted and the new queue carries only the current epoch.
-    assert_eq!(handle.dma_generation().await, generation);
+    assert_eq!(handle.memory_generation().await, generation);
     for region in &committed {
         assert_eq!(
             handle.region_for_object(region.object()).await,

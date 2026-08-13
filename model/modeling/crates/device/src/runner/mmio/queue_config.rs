@@ -1,14 +1,14 @@
 use super::queue_control::{CommandResult, fail, map_abi};
 use super::{QueueStaging, status_response};
 use crate::runner::bus::control;
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::{
     AbiControlError, DmaAddress, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
 };
 use pdma_model_contract::{DeviceEpoch, EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 
-pub(super) fn activate(state: &mut RunnerState, staging: QueueStaging) -> CommandResult {
+pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> CommandResult {
     let queue_id = usize::try_from(staging.id)
         .map(QueueId::new)
         .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?;
@@ -57,7 +57,7 @@ pub(super) fn activate(state: &mut RunnerState, staging: QueueStaging) -> Comman
 }
 
 fn layout(
-    state: &RunnerState,
+    state: &DeviceCore,
     base: u64,
     depth: u32,
     record: RingRecord,
@@ -88,7 +88,7 @@ fn layout(
         .dma_space
         .region_containing(address)
         .ok_or_else(|| fail(MmioResult::DmaUnmapped, [base, extent, 0]))?;
-    if region.base() != address {
+    if region.abi_base() != address {
         return Err(fail(MmioResult::DmaInvalidRegion, [base, extent, 0]));
     }
     RingLayout::try_new(region, u64::from(depth), record).map_err(|error| map_abi(error, role))

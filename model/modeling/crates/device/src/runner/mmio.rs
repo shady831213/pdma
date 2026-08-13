@@ -1,5 +1,5 @@
 mod bank;
-mod dispatch;
+pub(in crate::runner) mod dispatch;
 mod global;
 mod irq;
 pub(in crate::runner) mod queue;
@@ -19,7 +19,7 @@ impl AsyncDeviceHandle {
     ) -> Result<Vec<u8>, MmioAccessError> {
         let register = decode_read(offset, width)?;
         let state = self.shared.state.lock().await;
-        Ok(dispatch::read(&state, register).encode())
+        Ok(super::register_endpoint::prepare_read(&state, register, offset).response)
     }
 
     /// Applies one exact byte-bearing MMIO transaction.
@@ -28,7 +28,8 @@ impl AsyncDeviceHandle {
         let generation = {
             let mut state = self.shared.state.lock().await;
             let previous = state.generation;
-            dispatch::write(&mut state, register, value);
+            super::register_endpoint::prepare_write(register, value, offset, bytes)
+                .commit(&mut state);
             (state.generation != previous).then_some(state.generation)
         };
         if let Some(generation) = generation {

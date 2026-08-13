@@ -6,7 +6,7 @@ use crate::runner::irq::{
     IrqSourceView, decode_route, decode_source, encode_route, encode_source, map_mmio_error,
     observe_irq_source, usize_to_u64,
 };
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::{IrqCommand, MmioResult, MmioResultDetails, ResponseUpdate};
 
 #[path = "irq/notification.rs"]
@@ -71,7 +71,7 @@ impl IrqBank {
     }
 }
 
-pub(super) const fn read(state: &RunnerState, register: IrqRegister) -> MmioScalar {
+pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScalar {
     let bank = &state.mmio.irq;
     let response = bank.command.response;
     let result = bank.command.result;
@@ -99,7 +99,7 @@ pub(super) const fn read(state: &RunnerState, register: IrqRegister) -> MmioScal
     }
 }
 
-pub(super) fn write(state: &mut RunnerState, register: IrqRegister, value: u64) {
+pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
     let bank = &mut state.mmio.irq;
     match register {
         IrqRegister::ExpectedEpoch => bank.expected_epoch = value,
@@ -126,7 +126,7 @@ pub(super) fn write(state: &mut RunnerState, register: IrqRegister, value: u64) 
     }
 }
 
-fn execute(state: &mut RunnerState, raw_command: u32) {
+fn execute(state: &mut DeviceCore, raw_command: u32) {
     let bank = &state.mmio.irq;
     let staged = (
         bank.expected_epoch,
@@ -169,7 +169,7 @@ struct CommandOutcome {
 }
 
 fn execute_command(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     command: IrqCommand,
     staged: (u64, u32, u64, u32, u64),
 ) -> Result<CommandOutcome, MmioResultDetails> {

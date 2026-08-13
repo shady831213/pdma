@@ -1,18 +1,21 @@
-use pdma_model_contract::{BufferId, CommandId, CopyRequest, IrqNotification, IrqRoute, IrqVector};
+use pdma_model_contract::{CommandId, CopyRequest, IrqNotification, IrqVector};
 use pdma_model_contract::{EpochQueue, RingCursor};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 use pdma_model_host::{
-    AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, DriverIrqRecord, IrqDelivery,
-    QueueControlWrite, SoftwareCpu, StatefulIrqHandler, stateful_irq_handler,
+    AsyncDriver, AsyncPdmaBus, BusDevicePort, DriverIrqRecord, IrqDelivery, QueueControlWrite,
+    SoftwareCpu, StatefulIrqHandler, stateful_irq_handler,
 };
 use tokio::sync::oneshot;
 
 #[path = "consumer_race_support/gated_bus.rs"]
 mod gated_bus;
+#[path = "consumer_race_support/setup.rs"]
+mod setup;
 
 use gated_bus::GatedBus;
+use setup::{PortClones, setup_ports};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Host-consumed publication lane selected for one fresh race fixture.
@@ -35,6 +38,13 @@ impl ConsumerLane {
         match self {
             Self::Completion => driver.completion_irq_source(),
             Self::Event => driver.event_irq_source(),
+        }
+    }
+
+    const fn vector(self) -> IrqVector {
+        match self {
+            Self::Completion => IrqVector::new(93),
+            Self::Event => IrqVector::new(94),
         }
     }
 
@@ -108,58 +118,6 @@ async fn poll_main(
     }
 }
 
-struct PortClones {
-    main_port: BusDevicePort<GatedBus>,
-    main_driver: AsyncDriver,
-    handler_port: BusDevicePort<GatedBus>,
-    handler_driver: AsyncDriver,
-    probe_port: BusDevicePort<GatedBus>,
-    probe_driver: AsyncDriver,
-    source: BufferId,
-    destination: BufferId,
-}
-
-async fn setup_ports(
-    bus: &GatedBus,
-    cpu: &SoftwareCpu,
-    lane: ConsumerLane,
-    vector: IrqVector,
-) -> ModelResult<PortClones> {
-    cpu.run_main(async {
-        let mut port = BusDevicePort::new(bus.clone())?;
-        let mut driver = AsyncDriver::setup_on(&mut port, 1, 2).await?;
-        let source = driver.allocate_buffer_on(&mut port, 4).await?;
-        let destination = driver.allocate_buffer_on(&mut port, 4).await?;
-        driver
-            .write_buffer_on(&mut port, source, &[1, 2, 3, 4])
-            .await?;
-        let irq = lane.source(&driver);
-        port.configure_irq_route(irq, IrqRoute::Message(vector))
-            .await?;
-        port.enable_irq_source(irq).await?;
-        port.unmask_irq_source(irq).await?;
-        let len = match lane {
-            ConsumerLane::Completion => 4,
-            ConsumerLane::Event => 8,
-        };
-        let command = driver
-            .submit_copy_on(&mut port, CopyRequest::new(source, destination, len))
-            .await?;
-        assert_eq!(command, CommandId::new(0));
-        Ok(PortClones {
-            main_port: port.clone(),
-            main_driver: driver.clone(),
-            handler_port: port.clone(),
-            handler_driver: driver.clone(),
-            probe_port: port,
-            probe_driver: driver,
-            source,
-            destination,
-        })
-    })
-    .await
-}
-
 fn print_observation(lane: ConsumerLane) {
     println!(
         "lane={} blocked_cursor=0 handler_cursor=1 final_cursor=1 handler_records=1 handler_command=0 credit_before=full credit_after_handler=command1 final_credit=full matching_polls=2 delegated_writes=1 main=stale",
@@ -172,15 +130,16 @@ fn print_observation(lane: ConsumerLane) {
 /// # Panics
 /// Panics when an intermediate or final test observation violates the race contract.
 pub async fn run_consumer_race(lane: ConsumerLane) -> ModelResult<()> {
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let worker_task = tokio::spawn(worker.run());
     let (bus, notification_sender) = GatedBus::new(handle.clone(), lane);
     let cpu = SoftwareCpu::new();
-    let vector = IrqVector::new(match lane {
-        ConsumerLane::Completion => 93,
-        ConsumerLane::Event => 94,
-    });
+    let vector = lane.vector();
     let PortClones {
         mut main_port,
         mut main_driver,

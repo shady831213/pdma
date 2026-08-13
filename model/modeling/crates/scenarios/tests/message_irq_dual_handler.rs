@@ -73,7 +73,11 @@ struct MainOutcome {
 #[tokio::test(flavor = "current_thread")]
 async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
     // Given: two vectors dispatch to independent persistent handlers on one modeled CPU.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
     let cpu = SoftwareCpu::new();

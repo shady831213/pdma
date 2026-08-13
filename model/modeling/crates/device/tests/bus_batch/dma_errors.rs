@@ -1,7 +1,7 @@
 use pdma_model_contract::BufferId;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::{DmaAddress, DmaRegion};
-use pdma_model_device::{DmaBatchContext, DmaSpaceError, MmioBatchError};
+use pdma_model_contract::{DmaAddress, PdmaMemoryRegion};
+use pdma_model_device::{DmaBatchContext, MmioBatchError, PdmaMemoryError};
 
 #[test]
 fn all_dma_errors_map_exhaustively_with_attempted_context() {
@@ -10,35 +10,35 @@ fn all_dma_errors_map_exhaustively_with_attempted_context() {
         address: DmaAddress::new(0x1234),
         length: 0x40,
     };
-    let region = DmaRegion::try_new(BufferId::new(9), DmaAddress::new(0x2000), 0x80)
+    let region = PdmaMemoryRegion::try_new(BufferId::new(9), DmaAddress::new(0x2000), 0x80)
         .expect("valid context region");
     let cases = [
         (
-            DmaSpaceError::AddressExhausted,
+            PdmaMemoryError::AddressExhausted,
             DmaBatchContext::None,
             MmioResult::DmaAddressExhausted,
             [0, 0, 0],
         ),
         (
-            DmaSpaceError::StorageExhausted,
+            PdmaMemoryError::StorageExhausted,
             DmaBatchContext::None,
             MmioResult::DmaStorageExhausted,
             [0, 0, 0],
         ),
         (
-            DmaSpaceError::OverlappingRegion,
+            PdmaMemoryError::OverlappingRegion,
             DmaBatchContext::Region(region),
             MmioResult::DmaOverlap,
             [0x2000, 0x80, 0],
         ),
         (
-            DmaSpaceError::InvalidRegion,
+            PdmaMemoryError::InvalidRegion,
             DmaBatchContext::Region(region),
             MmioResult::DmaInvalidRegion,
             [0x2000, 0x80, 0],
         ),
         (
-            DmaSpaceError::StaleStage {
+            PdmaMemoryError::StaleStage {
                 expected_generation: 4,
                 actual_generation: 5,
             },
@@ -47,13 +47,13 @@ fn all_dma_errors_map_exhaustively_with_attempted_context() {
             [4, 5, 0],
         ),
         (
-            DmaSpaceError::Unmapped,
+            PdmaMemoryError::Unmapped,
             access,
             MmioResult::DmaUnmapped,
             [0x1234, 0x40, 0],
         ),
         (
-            DmaSpaceError::CrossesRegion,
+            PdmaMemoryError::CrossesRegion,
             access,
             MmioResult::DmaCrossesRegion,
             [0x1234, 0x40, 0],

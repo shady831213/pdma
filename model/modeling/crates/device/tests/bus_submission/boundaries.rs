@@ -6,12 +6,16 @@ use pdma_model_contract::{
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(ResourceConfig::default());
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = runner.handle();
     let (queue, submission) = activate(&handle, pdma_model_contract::QueueId::new(0)).await?;
     let source = allocate(&handle, 4).await?;
     let destination = allocate(&handle, 4).await?;
-    handle.write_iova(source.base(), &[4, 3, 2, 1]).await?;
+    handle.write_memory(source.base(), &[4, 3, 2, 1]).await?;
 
     let mut poisoned = [0_u8; 64];
     poisoned[0..2].copy_from_slice(&2_u16.to_le_bytes());
@@ -45,7 +49,7 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
             None,
         ))
         .await?;
-    let ring = handle.read_iova(submission, 128).await?;
+    let ring = handle.read_memory(submission, 128).await?;
     assert_eq!(ring.get(0..64), Some(poisoned.as_slice()));
     assert_eq!(ring.get(64..128), Some(command.as_slice()));
 
@@ -77,7 +81,7 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
     );
     assert_eq!(
         handle
-            .read_iova(destination.base(), destination.length())
+            .read_memory(destination.base(), destination.length())
             .await?,
         [4, 3, 2, 1]
     );

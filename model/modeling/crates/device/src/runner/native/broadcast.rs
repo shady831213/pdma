@@ -18,7 +18,7 @@ pub(super) fn retire_broadcast_copy(
         bus_control,
     } = execution;
     let request = command.request();
-    let memory = device.memory_resolver(queue_id, command.command_id())?;
+    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
     let source = DmaRangeStart::new(request.src(), request.src_offset());
     for destination in request.destinations() {
         if let Err(fault) = memory.validate(dma_space, source, request.len()) {

@@ -2,8 +2,8 @@ use pdma_model_contract::{
     BufferId, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot,
     IrqSource, IrqVector,
 };
-use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, DmaSpaceError};
+use pdma_model_contract::{DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, PdmaMemoryError};
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 use pdma_model_host::{
@@ -58,22 +58,22 @@ impl InterleavingBus {
 
 impl AsyncPdmaBus for InterleavingBus {
     type Stage = <AsyncDeviceHandle as AsyncPdmaBus>::Stage;
-    type DmaError = DmaSpaceError;
+    type DmaError = PdmaMemoryError;
     type ControlError = BusControlError;
 
-    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
+    async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
         if self.allocation.blocked.load(Ordering::Acquire) {
             self.allocation.entered.store(true, Ordering::Release);
             self.allocation.released.notified().await;
         }
-        AsyncPdmaBus::allocate_dma_region(&self.handle, len).await
+        AsyncPdmaBus::allocate_memory_region(&self.handle, len).await
     }
 
-    fn stage_dma_regions(
+    fn stage_memory_regions(
         &self,
         lengths: &[u64],
     ) -> impl Future<Output = Result<Self::Stage, Self::DmaError>> + Send {
-        AsyncPdmaBus::stage_dma_regions(&self.handle, lengths)
+        AsyncPdmaBus::stage_memory_regions(&self.handle, lengths)
     }
 
     fn read_dma(
@@ -198,7 +198,11 @@ impl StatefulIrqHandler for RepollHandler {
 /// # Panics
 /// Panics when the handler or resumed owner produces an unexpected observation.
 pub async fn verify_handler_turn_rejects_pending_port_repoll() -> ModelResult<()> {
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let (bus, notification_sender) = InterleavingBus::new(device.handle());
     let owner = SoftwareCpu::new();
     let handler_cpu = SoftwareCpu::new();

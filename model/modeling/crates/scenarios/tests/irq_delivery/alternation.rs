@@ -13,7 +13,11 @@ use tokio::sync::{mpsc, oneshot};
 async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_accounting()
 -> ModelResult<()> {
     // Given: one retained main capability and handlers registered for distinct MSI-style vectors.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
     port.enable_tracing().await;

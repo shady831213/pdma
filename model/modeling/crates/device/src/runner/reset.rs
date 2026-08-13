@@ -1,5 +1,5 @@
 use super::bus::BusControlError;
-use super::state::{RunnerState, publish, wake};
+use super::state::{DeviceCore, publish, wake};
 use super::{AsyncDeviceHandle, SyncDevice};
 use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
 
@@ -30,7 +30,7 @@ impl SyncDevice {
 }
 
 pub(in crate::runner) fn reset_runner(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     request: WholeDeviceReset,
 ) -> Result<DeviceEpoch, BusControlError> {
     let backend_epoch = state.backend.epoch();
@@ -71,7 +71,6 @@ fn reset_backend(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runner::backend::DeviceModel;
     use pdma_model_contract::abi::AbiControlError;
     use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
     use pdma_model_contract::ids::BufferId;
@@ -79,7 +78,11 @@ mod tests {
     #[test]
     fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
         // Given: a runner at its initial epoch.
-        let mut state = RunnerState::new(DeviceModel::queue_port());
+        let mut state = DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        );
 
         // When: the raw reset seam receives the current epoch.
         let success = super::super::mmio::reset::execute(&mut state, 0);
@@ -117,7 +120,11 @@ mod tests {
     fn epoch_overflow_preserves_complete_runner_state() {
         // Given: matching exhausted epochs beside persistent DMA and lifecycle accounting.
         let exhausted = DeviceEpoch::new(u64::MAX);
-        let mut state = RunnerState::new(DeviceModel::queue_port());
+        let mut state = DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        );
         state.backend.reset(exhausted);
         state.bus_control.reset(exhausted);
         let region = state.dma_space.allocate(1).expect("DMA allocation");

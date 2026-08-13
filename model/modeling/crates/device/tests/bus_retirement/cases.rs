@@ -8,7 +8,12 @@ use pdma_model_contract::{
 };
 use pdma_model_device::PendingDmaResult;
 
-pub(super) async fn visible_before_irq_and_retry() -> TestResult {
+/// Exercises exact event visibility and retry ordering.
+///
+/// # Panics
+///
+/// Panics when retirement visibility or trace ordering differs from the pinned contract.
+pub async fn visible_before_irq_and_retry() -> TestResult {
     // Given: two DMA copies and one completion slot behind an enabled Line source.
     let mut fixture = Fixture::new(DeviceEpoch::initial(), 1).await?;
     let (source, first) = allocate_pair(&fixture.handle).await?;
@@ -29,13 +34,13 @@ pub(super) async fn visible_before_irq_and_retry() -> TestResult {
     // When: the first result publishes, the second stalls, and consumer advance wakes retry.
     fixture.handle.wait_for_stall_after(0).await;
     let before_retry = fixture.status().await?;
-    let first_bytes = fixture.handle.read_iova(fixture.completion, 32).await?;
+    let first_bytes = fixture.handle.read_memory(fixture.completion, 32).await?;
     let first_record = decode_completion(&first_bytes)?;
     let trace_before_retry = fixture.handle.trace_events().await;
     fixture.consume_completion(1).await?;
     fixture.handle.wait_for_progress_after(1).await;
     let after_retry = fixture.status().await?;
-    let second_bytes = fixture.handle.read_iova(fixture.completion, 32).await?;
+    let second_bytes = fixture.handle.read_memory(fixture.completion, 32).await?;
     let second_record = decode_completion(&second_bytes)?;
     let trace_after_retry = fixture.handle.trace_events().await;
 
@@ -74,16 +79,16 @@ pub(super) async fn visible_before_irq_and_retry() -> TestResult {
 
     let mut event_fixture = Fixture::new(DeviceEpoch::initial(), 1).await?;
     event_fixture.handle.enable_tracing().await;
-    event_fixture.submit_raw(0, [0; 64]).await?;
+    event_fixture.submit_bytes(0, [0; 64]).await?;
     event_fixture.capture(1).await?;
     let event_worker = event_fixture.start()?;
     event_fixture.handle.wait_for_progress_after(1).await;
     let first_event = event_fixture
         .handle
-        .read_iova(event_fixture.event, 64)
+        .read_memory(event_fixture.event, 64)
         .await?;
     assert!(decode_event(&first_event).is_ok());
-    event_fixture.submit_raw(1, [0; 64]).await?;
+    event_fixture.submit_bytes(1, [0; 64]).await?;
     event_fixture.capture(2).await?;
     event_fixture.handle.wait_for_stall_after(0).await;
     let event_status = event_fixture.status().await?;
@@ -108,7 +113,12 @@ pub(super) async fn visible_before_irq_and_retry() -> TestResult {
     Ok(())
 }
 
-pub(super) async fn publication_pressure_keeps_one_pending() -> TestResult {
+/// Exercises one cached completion under publication pressure.
+///
+/// # Panics
+///
+/// Panics when pressure causes reexecution, cursor drift, or early IRQ delivery.
+pub async fn publication_pressure_keeps_one_pending() -> TestResult {
     // Given: a filled result ring behind an enabled but masked Line source.
     let mut fixture = Fixture::new(DeviceEpoch::initial(), 1).await?;
     let (source, first) = allocate_pair(&fixture.handle).await?;
@@ -143,7 +153,7 @@ pub(super) async fn publication_pressure_keeps_one_pending() -> TestResult {
     assert_eq!(
         fixture
             .handle
-            .read_iova(second.base(), second.length())
+            .read_memory(second.base(), second.length())
             .await?,
         [1, 3, 5, 7]
     );
@@ -169,7 +179,12 @@ pub(super) async fn publication_pressure_keeps_one_pending() -> TestResult {
     Ok(())
 }
 
-pub(super) async fn corrupt_masked_and_stale() -> TestResult {
+/// Exercises malformed, masked, and stale exact retirement state.
+///
+/// # Panics
+///
+/// Panics when malformed or stale state mutates the pinned device state.
+pub async fn corrupt_masked_and_stale() -> TestResult {
     // Given: one masked Line result published into host DMA.
     let mut fixture = Fixture::new(DeviceEpoch::initial(), 1).await?;
     let (source, destination) = allocate_pair(&fixture.handle).await?;
@@ -185,9 +200,9 @@ pub(super) async fn corrupt_masked_and_stale() -> TestResult {
     // When: host bytes are corrupt, software leaves consumer unchanged and exercises Line ack.
     fixture
         .handle
-        .write_iova(fixture.completion, &[0xff])
+        .write_memory(fixture.completion, &[0xff])
         .await?;
-    let corrupt = fixture.handle.read_iova(fixture.completion, 32).await?;
+    let corrupt = fixture.handle.read_memory(fixture.completion, 32).await?;
     assert!(decode_completion(&corrupt).is_err());
     assert_eq!(
         fixture.status().await?.completion().consumer(),

@@ -56,7 +56,8 @@ impl BusControlErrorAdapter for MmioBusControlError {
             | Self::Batch(
                 MmioBatchError::InvalidShape
                 | MmioBatchError::Access(_)
-                | MmioBatchError::Command(_),
+                | MmioBatchError::Command(_)
+                | MmioBatchError::Observation(_),
             )
             | Self::Result(_)
             | Self::MalformedResponse => ModelError::DmaSubmissionState,

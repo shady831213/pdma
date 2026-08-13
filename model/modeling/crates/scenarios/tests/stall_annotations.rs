@@ -1,17 +1,20 @@
 #![allow(missing_docs)]
 
-use pdma_model_device::ModelError;
-
 use pdma_model_contract::{CompletionStatus, ResourceConfig, desc::CopyRequest, ids::CommandId};
-use pdma_model_device::{
-    AsyncDevice, AsyncRunSummary, AsyncStallReason, AsyncStepStatus, SyncDevice,
-};
-use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
+use pdma_model_device::{AsyncDevice, AsyncStallReason, AsyncStepStatus};
+use pdma_model_host::{AsyncDriver, SoftwareCpu};
+
+#[path = "stall_annotations/manual.rs"]
+mod manual;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
     // Given: a queue-port async runner with no queued work.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
 
     // When: software observes the runner before submitting commands.
@@ -27,7 +30,11 @@ async fn async_runner_no_work_reports_idle_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_successful_copy_reports_progressed_status() {
     // Given: an async copy on a queue-port async runner with default resources.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let snapshot = SoftwareCpu::new()
         .run_main(async {
@@ -67,8 +74,11 @@ async fn async_runner_successful_copy_reports_progressed_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_resource_stall_reports_execution_reason() {
     // Given: an async copy on a device with no read slots.
-    let (runner, worker) =
-        AsyncDevice::queue_port_with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        ResourceConfig::default().with_read_slots(0),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
@@ -114,9 +124,11 @@ async fn async_runner_resource_stall_reports_execution_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_completion_publication_stall_reports_reason() {
     // Given: two async copies behind a one-slot completion publication path.
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_completion_publication_slots(1),
-    );
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, first_completion) = SoftwareCpu::new()
         .run_main(async {
@@ -184,9 +196,11 @@ async fn async_runner_completion_publication_stall_reports_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     // Given: a faulting async copy behind a one-deep event publication path.
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_event_publication_slots(0),
-    );
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (first_snapshot, second_snapshot, event) = SoftwareCpu::new()
         .run_main(async {
@@ -232,41 +246,4 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     );
     assert_eq!(summary.stalls, 2);
     assert_eq!(event, Ok(None));
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors() {
-    // Given: a manual async device with one copy that cannot acquire execution resources.
-    let mut device = SyncDevice::with_resource_config(ResourceConfig::default().with_read_slots(0));
-    let mut driver = ManualDriver::setup_on(&mut device, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src = driver
-        .allocate_buffer_on(&mut device, 4)
-        .await
-        .expect("allocation");
-    let dst = driver
-        .allocate_buffer_on(&mut device, 4)
-        .await
-        .expect("allocation");
-    driver
-        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
-        .await
-        .expect("copy submission has ring space");
-
-    // When: software runs until blocked and then checks the legacy idle API.
-    let blocked = device.run_until_blocked(1);
-    let idle = device.run_until_idle(1);
-
-    // Then: the blocked API names the stall while the idle API still reports budget exhaustion.
-    assert_eq!(
-        blocked,
-        Ok(AsyncRunSummary {
-            steps: 0,
-            errors: 0,
-            stalls: 1,
-            last_status: AsyncStepStatus::Stalled(AsyncStallReason::ExecutionResourcePressure),
-        })
-    );
-    assert_eq!(idle, Err(ModelError::StepBudgetExhausted { max_steps: 1 }));
 }

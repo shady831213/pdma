@@ -1,6 +1,6 @@
 use super::bank::{CommandBank, MmioScalar, narrow_u32};
 use crate::runner::native::probe::{RunStateProbe, probe_run_state};
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, MmioResult, MmioResultDetails, ResponseUpdate,
 };
@@ -64,7 +64,7 @@ impl GlobalBank {
     }
 }
 
-pub(super) const fn read(state: &RunnerState, register: GlobalRegister) -> MmioScalar {
+pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioScalar {
     let bank = &state.mmio.global;
     let response = bank.command.response;
     let result = bank.command.result;
@@ -94,7 +94,7 @@ pub(super) const fn read(state: &RunnerState, register: GlobalRegister) -> MmioS
     }
 }
 
-pub(super) fn write(state: &mut RunnerState, register: GlobalRegister, value: u64) {
+pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64) {
     let bank = &mut state.mmio.global;
     match register {
         GlobalRegister::ReqAbiVersion => bank.req_abi_version = narrow_u32(value),
@@ -121,7 +121,7 @@ pub(super) fn write(state: &mut RunnerState, register: GlobalRegister, value: u6
     }
 }
 
-fn execute(state: &mut RunnerState, raw: u32) {
+fn execute(state: &mut DeviceCore, raw: u32) {
     let Ok(command) = GlobalCommand::try_from(raw) else {
         complete_failure(
             state,
@@ -137,7 +137,7 @@ fn execute(state: &mut RunnerState, raw: u32) {
     }
 }
 
-fn reset(state: &mut RunnerState) {
+fn reset(state: &mut DeviceCore) {
     let expected_epoch = state.mmio.global.reset_expected_epoch;
     match super::reset::execute(state, expected_epoch) {
         super::reset::ResetOutcome::Success(epoch) => {
@@ -154,7 +154,7 @@ fn reset(state: &mut RunnerState) {
     }
 }
 
-fn discover(state: &mut RunnerState) {
+fn discover(state: &mut DeviceCore) {
     let request = {
         let bank = &state.mmio.global;
         DiscoveryRequest::try_new(low_u16(bank.req_abi_version), bank.req_features)
@@ -175,7 +175,7 @@ fn discover(state: &mut RunnerState) {
     }
 }
 
-fn read_limits(state: &mut RunnerState) {
+fn read_limits(state: &mut DeviceCore) {
     let limits = AbiLimits::v1();
     complete_success(
         state,
@@ -190,7 +190,7 @@ fn read_limits(state: &mut RunnerState) {
     );
 }
 
-fn read_status(state: &mut RunnerState) {
+fn read_status(state: &mut DeviceCore) {
     let run_state = match &state.backend {
         crate::runner::backend::DeviceModel::QueuePort(device) => {
             probe_run_state(device, &state.dma_space, &state.bus_control)
@@ -216,14 +216,14 @@ fn read_status(state: &mut RunnerState) {
     );
 }
 
-fn complete_success(state: &mut RunnerState, response: GlobalResponseRegisters) {
+fn complete_success(state: &mut DeviceCore, response: GlobalResponseRegisters) {
     state.mmio.global.command.complete(
         details(MmioResult::Ok, [0; 3]),
         ResponseUpdate::Replace(response),
     );
 }
 
-fn complete_failure(state: &mut RunnerState, result: MmioResultDetails) {
+fn complete_failure(state: &mut DeviceCore, result: MmioResultDetails) {
     state
         .mmio
         .global

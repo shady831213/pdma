@@ -1,10 +1,10 @@
 use super::{CommandOutcome, line_response, source_response};
 use crate::runner::irq::{map_mmio_error, observe_irq_source, usize_to_u64};
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::IrqNotification;
 use pdma_model_contract::abi::mmio::{IrqCommand, MmioResultDetails};
 
-pub(super) fn snapshot_line(state: &RunnerState) -> Result<CommandOutcome, MmioResultDetails> {
+pub(super) fn snapshot_line(state: &DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
     let Some(snapshot) = state.backend.irq_snapshot() else {
         return Ok(CommandOutcome {
             response: None,
@@ -20,7 +20,7 @@ pub(super) fn snapshot_line(state: &RunnerState) -> Result<CommandOutcome, MmioR
     })
 }
 
-pub(super) fn claim(state: &mut RunnerState) -> Result<CommandOutcome, MmioResultDetails> {
+pub(super) fn claim(state: &mut DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
     let Some(notification) = state.backend.take_irq_notification() else {
         return Ok(CommandOutcome {
             response: None,

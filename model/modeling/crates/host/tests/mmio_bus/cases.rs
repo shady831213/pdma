@@ -15,7 +15,7 @@ async fn queue_recording_pins_literal_access_order_and_typed_observation() -> Te
     // Given: one literal recording transport and a complete queue/observe program.
     let transport = RecordingTransport::new();
     let bus = MmioDeviceBus::new(transport.clone());
-    let stage = bus.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = bus.stage_memory_regions(&[128, 64, 128]).await?;
     let activation = activation(stage.proposed_regions())?;
     let queue = activation.queue();
 
@@ -88,10 +88,14 @@ async fn queue_recording_pins_literal_access_order_and_typed_observation() -> Te
 #[tokio::test(flavor = "current_thread")]
 async fn concrete_adapters_return_identical_typed_irq_status() -> TestResult {
     // Given: one real device bootstrapped only through the MMIO bus batch.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let bus = MmioDeviceBus::new(handle.clone());
-    let stage = bus.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = bus.stage_memory_regions(&[128, 64, 128]).await?;
     let activation = activation(stage.proposed_regions())?;
     bus.bootstrap_queue(stage, activation).await?;
     let source = EpochIrqSource::new(
@@ -113,7 +117,7 @@ async fn selector_lock_is_clone_shared_and_released_on_cancellation() -> TestRes
     // Given: one bootstrapped recording bus with its next queue staging write gated.
     let transport = RecordingTransport::new();
     let bus = MmioDeviceBus::new(transport.clone());
-    let stage = bus.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = bus.stage_memory_regions(&[128, 64, 128]).await?;
     let activation = activation(stage.proposed_regions())?;
     let queue = activation.queue();
     bus.bootstrap_queue(stage, activation).await?;
@@ -148,11 +152,11 @@ async fn injected_access_result_and_batch_failures_are_exact_and_release_locks()
     let batch_transport = RecordingTransport::new();
     batch_transport.fail_next_batch();
     let batch_bus = MmioDeviceBus::new(batch_transport.clone());
-    let batch_stage = batch_bus.stage_dma_regions(&[128, 64, 128]).await?;
+    let batch_stage = batch_bus.stage_memory_regions(&[128, 64, 128]).await?;
     let batch_activation = activation(batch_stage.proposed_regions())?;
     let access_transport = RecordingTransport::new();
     let access_bus = MmioDeviceBus::new(access_transport.clone());
-    let access_stage = access_bus.stage_dma_regions(&[128, 64, 128]).await?;
+    let access_stage = access_bus.stage_memory_regions(&[128, 64, 128]).await?;
     let access_activation = activation(access_stage.proposed_regions())?;
     let queue = access_activation.queue();
     access_bus

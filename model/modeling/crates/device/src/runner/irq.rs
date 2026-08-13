@@ -2,7 +2,7 @@
 
 use super::AsyncDeviceHandle;
 use super::backend::DeviceModel;
-use super::state::RunnerState;
+use super::state::DeviceCore;
 use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqSourceStatus, IrqStateBit, MmioResult, MmioResultDetails,
@@ -22,7 +22,7 @@ pub(in crate::runner) struct IrqSourceView {
 }
 
 pub(in crate::runner) fn observe_irq_source(
-    state: &RunnerState,
+    state: &DeviceCore,
     source: EpochIrqSource,
 ) -> ModelResult<IrqSourceView> {
     let (observed, records_pending) = match &state.backend {
@@ -51,7 +51,7 @@ pub(in crate::runner) fn observe_irq_source(
     })
 }
 
-pub(in crate::runner) fn irq_notification_ready(state: &RunnerState) -> bool {
+pub(in crate::runner) fn irq_notification_ready(state: &DeviceCore) -> bool {
     match &state.backend {
         DeviceModel::QueuePort(device) => device.irq_notification_ready(),
     }

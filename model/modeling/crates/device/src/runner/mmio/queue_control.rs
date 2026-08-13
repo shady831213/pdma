@@ -1,7 +1,7 @@
 use super::{QueueStaging, status_response};
-use crate::dma_space::DmaSpaceError;
+use crate::dma_space::PdmaMemoryError;
 use crate::runner::bus::control::transactions;
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use crate::runner::{BusControlError, QueueStatus};
 use pdma_model_contract::QueueId;
 use pdma_model_contract::abi::mmio::{
@@ -14,7 +14,7 @@ use pdma_model_contract::{
 pub(super) type CommandResult = Result<(QueueResponseBank, bool), MmioResultDetails>;
 
 pub(super) fn execute(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     staging: QueueStaging,
     raw_command: u64,
 ) -> (MmioResultDetails, ResponseUpdate<QueueResponseBank>, bool) {
@@ -36,7 +36,7 @@ pub(super) fn execute(
     }
 }
 
-fn run(state: &mut RunnerState, staging: QueueStaging, command: QueueCommand) -> CommandResult {
+fn run(state: &mut DeviceCore, staging: QueueStaging, command: QueueCommand) -> CommandResult {
     if command == QueueCommand::Activate {
         return super::queue_config::activate(state, staging);
     }
@@ -63,7 +63,7 @@ fn run(state: &mut RunnerState, staging: QueueStaging, command: QueueCommand) ->
 }
 
 fn current_status(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     queue: EpochQueue,
     queue_id: u64,
     command: QueueCommand,
@@ -144,21 +144,21 @@ pub(in crate::runner) fn map_bus(
     }
 }
 
-const fn map_dma(error: DmaSpaceError) -> MmioResultDetails {
+const fn map_dma(error: PdmaMemoryError) -> MmioResultDetails {
     match error {
-        DmaSpaceError::AddressExhausted => fail(MmioResult::DmaAddressExhausted, [0; 3]),
-        DmaSpaceError::StorageExhausted => fail(MmioResult::DmaStorageExhausted, [0; 3]),
-        DmaSpaceError::OverlappingRegion => fail(MmioResult::DmaOverlap, [0; 3]),
-        DmaSpaceError::InvalidRegion => fail(MmioResult::DmaInvalidRegion, [0; 3]),
-        DmaSpaceError::StaleStage {
+        PdmaMemoryError::AddressExhausted => fail(MmioResult::DmaAddressExhausted, [0; 3]),
+        PdmaMemoryError::StorageExhausted => fail(MmioResult::DmaStorageExhausted, [0; 3]),
+        PdmaMemoryError::OverlappingRegion => fail(MmioResult::DmaOverlap, [0; 3]),
+        PdmaMemoryError::InvalidRegion => fail(MmioResult::DmaInvalidRegion, [0; 3]),
+        PdmaMemoryError::StaleStage {
             expected_generation,
             actual_generation,
         } => fail(
             MmioResult::DmaStaleStage,
             [expected_generation, actual_generation, 0],
         ),
-        DmaSpaceError::Unmapped => fail(MmioResult::DmaUnmapped, [0; 3]),
-        DmaSpaceError::CrossesRegion => fail(MmioResult::DmaCrossesRegion, [0; 3]),
+        PdmaMemoryError::Unmapped => fail(MmioResult::DmaUnmapped, [0; 3]),
+        PdmaMemoryError::CrossesRegion => fail(MmioResult::DmaCrossesRegion, [0; 3]),
     }
 }
 

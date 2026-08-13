@@ -8,7 +8,7 @@ mod prepared;
 mod transaction;
 
 pub use prepared::PreparedRegions;
-pub use transaction::{MemoryTransaction, TransactionPreparedRegions};
+pub use transaction::{MemoryTransaction, MemoryTransactionDraft, TransactionPreparedRegions};
 
 /// Clone-shared storage for checked memory regions and bytes.
 #[derive(Clone, Debug)]
@@ -21,6 +21,13 @@ impl SharedMemory {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(Store::new())),
+        }
+    }
+
+    /// Creates an empty store with an explicit installed-region capacity.
+    pub fn with_region_capacity(capacity: usize) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(Store::with_region_capacity(capacity))),
         }
     }
 
@@ -76,6 +83,22 @@ impl SharedMemory {
         drop(store);
         result
     }
+
+    /// Creates an independent fallible snapshot of regions and bytes.
+    pub fn try_snapshot(&self) -> Result<Self, MemoryError> {
+        let source = lock_store(&self.inner);
+        Ok(Self {
+            inner: Arc::new(Mutex::new(source.try_clone()?)),
+        })
+    }
+
+    /// Replaces this store from an independently prepared snapshot.
+    pub fn install_snapshot(&self, snapshot: &Self) {
+        let mut source = lock_store(&snapshot.inner);
+        let prepared = std::mem::replace(&mut *source, Store::new());
+        drop(source);
+        *lock_store(&self.inner) = prepared;
+    }
 }
 
 impl Default for SharedMemory {
@@ -88,6 +111,7 @@ impl Default for SharedMemory {
 struct Store {
     revision: MemoryRevision,
     regions: Vec<StoredRegion>,
+    region_capacity: Option<usize>,
 }
 
 impl Store {
@@ -95,6 +119,15 @@ impl Store {
         Self {
             revision: MemoryRevision::INITIAL,
             regions: Vec::new(),
+            region_capacity: None,
+        }
+    }
+
+    const fn with_region_capacity(capacity: usize) -> Self {
+        Self {
+            revision: MemoryRevision::INITIAL,
+            regions: Vec::new(),
+            region_capacity: Some(capacity),
         }
     }
 
@@ -106,6 +139,23 @@ impl Store {
             .sort_unstable_by_key(|stored| stored.region.base());
         self.regions = prepared.additions;
         self.revision = prepared.next_revision;
+    }
+
+    fn try_clone(&self) -> Result<Self, MemoryError> {
+        let mut regions = Vec::new();
+        regions.try_reserve_exact(self.regions.len()).map_err(|_| {
+            MemoryError::RegionTableExhausted {
+                entries: self.regions.len(),
+            }
+        })?;
+        for stored in &self.regions {
+            regions.push(stored.try_clone()?);
+        }
+        Ok(Self {
+            revision: self.revision,
+            regions,
+            region_capacity: self.region_capacity,
+        })
     }
 
     pub(crate) fn resolve(
@@ -147,6 +197,20 @@ impl StoredRegion {
             })?;
         bytes.resize(region.storage_length(), 0);
         Ok(Self { region, bytes })
+    }
+
+    fn try_clone(&self) -> Result<Self, MemoryError> {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(self.bytes.len())
+            .map_err(|_| MemoryError::StorageExhausted {
+                length: self.region.length(),
+            })?;
+        bytes.extend_from_slice(&self.bytes);
+        Ok(Self {
+            region: self.region,
+            bytes,
+        })
     }
 
     pub(crate) fn range(

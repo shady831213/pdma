@@ -1,7 +1,7 @@
 use super::ConsumerLane;
-use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
+use pdma_model_contract::{DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation};
 use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
-use pdma_model_device::{AsyncDeviceHandle, BusControlError, DmaSpaceError};
+use pdma_model_device::{AsyncDeviceHandle, BusControlError, PdmaMemoryError};
 use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncPdmaBus, BusQueueStatus, BusSubmission, QueueControlWrite};
 use std::{
@@ -93,21 +93,21 @@ impl GatedBus {
 
 impl AsyncPdmaBus for GatedBus {
     type Stage = <AsyncDeviceHandle as AsyncPdmaBus>::Stage;
-    type DmaError = DmaSpaceError;
+    type DmaError = PdmaMemoryError;
     type ControlError = BusControlError;
 
-    fn allocate_dma_region(
+    fn allocate_memory_region(
         &self,
         len: usize,
-    ) -> impl Future<Output = ModelResult<DmaRegion>> + Send {
-        AsyncPdmaBus::allocate_dma_region(&self.handle, len)
+    ) -> impl Future<Output = ModelResult<PdmaMemoryRegion>> + Send {
+        AsyncPdmaBus::allocate_memory_region(&self.handle, len)
     }
 
-    fn stage_dma_regions(
+    fn stage_memory_regions(
         &self,
         lengths: &[u64],
     ) -> impl Future<Output = Result<Self::Stage, Self::DmaError>> + Send {
-        AsyncPdmaBus::stage_dma_regions(&self.handle, lengths)
+        AsyncPdmaBus::stage_memory_regions(&self.handle, lengths)
     }
 
     fn read_dma(

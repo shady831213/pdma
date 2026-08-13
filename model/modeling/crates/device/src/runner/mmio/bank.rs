@@ -5,13 +5,13 @@ use pdma_model_contract::abi::mmio::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum MmioScalar {
+pub(in crate::runner) enum MmioScalar {
     U32(u32),
     U64(u64),
 }
 
 impl MmioScalar {
-    pub(super) fn encode(self) -> Vec<u8> {
+    pub(in crate::runner) fn encode(self) -> Vec<u8> {
         match self {
             Self::U32(value) => encode_u32(value).to_vec(),
             Self::U64(value) => encode_u64(value).to_vec(),

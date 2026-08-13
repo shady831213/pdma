@@ -35,6 +35,14 @@ impl PreparedRegions {
                 entries: usize::MAX,
             },
         )?;
+        if store
+            .region_capacity
+            .is_some_and(|capacity| final_count > capacity)
+        {
+            return Err(MemoryError::RegionTableExhausted {
+                entries: final_count,
+            });
+        }
         let mut additions = Vec::new();
         additions.try_reserve_exact(final_count).map_err(|_| {
             MemoryError::RegionTableExhausted {

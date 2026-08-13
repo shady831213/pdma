@@ -27,19 +27,29 @@ impl MemoryAccess for SharedMemory {
         alignment: MemoryAlignment,
         source: &[u8],
     ) -> Result<(), MemoryAccessError> {
-        let access = CheckedAccess::new(address, alignment, source.len())?;
         let mut store = lock_store(&self.inner);
-        let stored = store.resolve_mut(access.address, access.length)?;
-        let region = stored.region;
-        let range = stored.range(access.address, access.end)?;
-        let destination = stored
-            .bytes
-            .get_mut(range)
-            .ok_or_else(|| access.crossing(region))?;
-        destination.copy_from_slice(source);
+        write_store(&mut store, address, alignment, source)?;
         drop(store);
         Ok(())
     }
+}
+
+pub(super) fn write_store(
+    store: &mut super::Store,
+    address: MemoryAddress,
+    alignment: MemoryAlignment,
+    source: &[u8],
+) -> Result<(), MemoryAccessError> {
+    let access = CheckedAccess::new(address, alignment, source.len())?;
+    let stored = store.resolve_mut(access.address, access.length)?;
+    let region = stored.region;
+    let range = stored.range(access.address, access.end)?;
+    let destination = stored
+        .bytes
+        .get_mut(range)
+        .ok_or_else(|| access.crossing(region))?;
+    destination.copy_from_slice(source);
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

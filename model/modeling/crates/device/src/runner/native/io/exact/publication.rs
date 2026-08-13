@@ -1,16 +1,11 @@
-use crate::dma_space::DmaSpace;
+use super::super::PublicationOutcome;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::{ActiveQueue, BusControlState};
 use pdma_model_contract::{AbiEvent, DmaAddress, EpochQueue, encode_completion, encode_event};
 use pdma_model_contract::{CompletionRecord, QueueId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PublicationOutcome {
-    Published,
-    Retry,
-}
-
 pub(super) fn completion(
-    dma_space: &mut DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     control: &mut BusControlState,
     queue_id: QueueId,
     record: CompletionRecord,
@@ -26,7 +21,7 @@ pub(super) fn completion(
 }
 
 pub(super) fn event(
-    dma_space: &mut DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     control: &mut BusControlState,
     event: AbiEvent,
 ) -> PublicationOutcome {
@@ -47,7 +42,7 @@ enum ResultRing {
 }
 
 fn publish(
-    dma_space: &mut DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     active: &mut ActiveQueue,
     ring: ResultRing,
     bytes: &[u8],
@@ -79,7 +74,7 @@ fn publish(
     let Some(raw) = layout.region().base().raw().checked_add(offset) else {
         return PublicationOutcome::Retry;
     };
-    if dma_space.write_iova(DmaAddress::new(raw), bytes).is_err() {
+    if dma_space.write_memory(DmaAddress::new(raw), bytes).is_err() {
         return PublicationOutcome::Retry;
     }
     match ring {

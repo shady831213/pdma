@@ -9,14 +9,22 @@ use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 #[tokio::test(flavor = "current_thread")]
 async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestResult {
     // Given: independent typed and raw devices with identical committed ring mappings.
-    let (typed_device, _typed_worker) = AsyncDevice::queue_port();
-    let (raw_device, _raw_worker) = AsyncDevice::queue_port();
+    let (typed_device, _typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
+    let (raw_device, _raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let typed = typed_device.handle();
     let raw = raw_device.handle();
-    let typed_stage = typed.stage_dma_regions(&[128, 64, 128]).await?;
-    let raw_stage = raw.stage_dma_regions(&[128, 64, 128]).await?;
-    let typed_regions = typed.commit_dma_stage(typed_stage).await?;
-    let raw_regions = raw.commit_dma_stage(raw_stage).await?;
+    let typed_stage = typed.stage_memory_regions(&[128, 64, 128]).await?;
+    let raw_stage = raw.stage_memory_regions(&[128, 64, 128]).await?;
+    let typed_regions = typed.commit_memory_stage(typed_stage).await?;
+    let raw_regions = raw.commit_memory_stage(raw_stage).await?;
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
 
     // When: both surfaces activate and advance every one of the seven cursor shadows.
@@ -57,7 +65,7 @@ async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestR
 
 async fn activate_raw(
     handle: &AsyncDeviceHandle,
-    regions: &[pdma_model_contract::bridge::DmaRegion],
+    regions: &[pdma_model_contract::bridge::PdmaMemoryRegion],
 ) -> TestResult {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
@@ -86,7 +94,9 @@ async fn read_response(handle: &AsyncDeviceHandle) -> TestResult<[u64; 9]> {
     Ok(response)
 }
 
-fn activation(regions: &[pdma_model_contract::bridge::DmaRegion]) -> TestResult<QueueActivation> {
+fn activation(
+    regions: &[pdma_model_contract::bridge::PdmaMemoryRegion],
+) -> TestResult<QueueActivation> {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
     };

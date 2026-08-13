@@ -1,6 +1,6 @@
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::{DmaAddress, DmaRegion, QueueActivation};
-use pdma_model_device::{AsyncDeviceHandle, DmaSpaceError, MmioBatchError, QueueResponseBytes};
+use pdma_model_contract::{DmaAddress, PdmaMemoryRegion, QueueActivation};
+use pdma_model_device::{AsyncDeviceHandle, MmioBatchError, PdmaMemoryError, QueueResponseBytes};
 use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncDeviceBusStage, BusSubmission, MmioDeviceBus, MmioDeviceTransport};
 use std::sync::{Arc, Mutex};
@@ -72,19 +72,19 @@ pub type ScenarioBus = MmioDeviceBus<RecordingMmioTransport>;
 impl MmioDeviceTransport for RecordingMmioTransport {
     type Stage = AsyncDeviceBusStage;
 
-    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
-        MmioDeviceTransport::allocate_dma_region(&self.handle, len).await
+    async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
+        MmioDeviceTransport::allocate_memory_region(&self.handle, len).await
     }
 
-    async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, DmaSpaceError> {
-        MmioDeviceTransport::stage_dma_regions(&self.handle, lengths).await
+    async fn stage_memory_regions(&self, lengths: &[u64]) -> Result<Self::Stage, PdmaMemoryError> {
+        MmioDeviceTransport::stage_memory_regions(&self.handle, lengths).await
     }
 
-    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, DmaSpaceError> {
+    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, PdmaMemoryError> {
         MmioDeviceTransport::read_dma(&self.handle, address, length).await
     }
 
-    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), DmaSpaceError> {
+    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), PdmaMemoryError> {
         MmioDeviceTransport::write_dma(&self.handle, address, bytes).await
     }
 

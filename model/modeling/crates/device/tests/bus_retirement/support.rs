@@ -22,11 +22,15 @@ pub(super) struct Fixture {
 
 impl Fixture {
     pub(super) async fn new(epoch: DeviceEpoch, result_depth: u64) -> TestResult<Self> {
-        let (runner, worker) = AsyncDevice::queue_port();
+        let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        ));
         let handle = runner.handle();
         let command_depth = 4;
         let stage = handle
-            .stage_dma_regions(&[
+            .stage_memory_regions(&[
                 command_depth * u64::from(RingRecord::Submission.record_size()),
                 result_depth * u64::from(RingRecord::Completion.record_size()),
                 result_depth * u64::from(RingRecord::Event.record_size()),
@@ -103,7 +107,7 @@ impl Fixture {
         Ok(())
     }
 
-    pub(super) async fn submit_raw(&self, producer: u64, bytes: [u8; 64]) -> TestResult {
+    pub(super) async fn submit_bytes(&self, producer: u64, bytes: [u8; 64]) -> TestResult {
         let address = self.submission.checked_add(producer * 64)?;
         self.handle
             .accept_submission(SubmissionAcceptance::new(
@@ -145,15 +149,15 @@ impl Fixture {
 pub(super) async fn allocate_pair(
     handle: &AsyncDeviceHandle,
 ) -> TestResult<(
-    pdma_model_contract::bridge::DmaRegion,
-    pdma_model_contract::bridge::DmaRegion,
+    pdma_model_contract::bridge::PdmaMemoryRegion,
+    pdma_model_contract::bridge::PdmaMemoryRegion,
 )> {
-    let stage = handle.stage_dma_regions(&[4, 4]).await?;
+    let stage = handle.stage_memory_regions(&[4, 4]).await?;
     let [source, destination] = stage.regions() else {
         return Err("operand stage shape".into());
     };
     let pair = (*source, *destination);
-    handle.commit_dma_stage(stage).await?;
-    handle.write_iova(pair.0.base(), &[1, 3, 5, 7]).await?;
+    handle.commit_memory_stage(stage).await?;
+    handle.write_memory(pair.0.base(), &[1, 3, 5, 7]).await?;
     Ok(pair)
 }

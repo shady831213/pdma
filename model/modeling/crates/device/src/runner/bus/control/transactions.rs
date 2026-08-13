@@ -1,6 +1,6 @@
 use super::{ActiveQueue, BusControlError, QueueStatus};
 use crate::runner::bus::{DmaWrite, SubmissionAcceptance};
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::{QueueControl, QueueCursorUpdate, RingCursor, RingRecord};
 
 #[derive(Clone, Copy)]
@@ -17,7 +17,7 @@ impl PreparedSubmissionPublication {
 }
 
 pub(in crate::runner::bus) fn accept_submission(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     request: SubmissionAcceptance,
 ) -> Result<QueueStatus, BusControlError> {
     let queue = *state.bus_control.queue(request.queue)?;
@@ -31,11 +31,13 @@ pub(in crate::runner::bus) fn accept_submission(
 
     if let Some((stage, write)) = request.indirect {
         state.dma_space.commit(stage)?;
-        state.dma_space.write_iova(write.address(), write.bytes())?;
+        state
+            .dma_space
+            .write_memory(write.address(), write.bytes())?;
     }
     state
         .dma_space
-        .write_iova(request.descriptor.address(), request.descriptor.bytes())?;
+        .write_memory(request.descriptor.address(), request.descriptor.bytes())?;
     let active = state.bus_control.queue_mut(request.queue)?;
     active.submission = submission;
     Ok(active.status())
@@ -65,8 +67,8 @@ fn validate_descriptor(queue: &ActiveQueue, write: &DmaWrite) -> Result<(), BusC
 }
 
 fn validate_indirect(
-    state: &RunnerState,
-    indirect: Option<&(crate::dma_space::DmaStage, DmaWrite)>,
+    state: &DeviceCore,
+    indirect: Option<&(crate::dma_space::PdmaMemoryStage, DmaWrite)>,
 ) -> Result<(), BusControlError> {
     let Some((proposal, write)) = indirect else {
         return Ok(());
@@ -75,7 +77,7 @@ fn validate_indirect(
         return Err(BusControlError::InvalidTransaction);
     };
     if proposal.generation() != state.dma_space.generation()
-        || write.address() != region.base()
+        || write.address() != region.abi_base()
         || u64::try_from(write.bytes().len()) != Ok(region.length())
     {
         Err(BusControlError::InvalidTransaction)
@@ -85,7 +87,7 @@ fn validate_indirect(
 }
 
 pub(in crate::runner) fn prepare_submission_publication(
-    state: &RunnerState,
+    state: &DeviceCore,
     request: &SubmissionAcceptance,
 ) -> Result<PreparedSubmissionPublication, BusControlError> {
     let queue = *state.bus_control.queue(request.queue)?;
@@ -106,7 +108,7 @@ pub(in crate::runner) fn prepare_submission_publication(
 }
 
 pub(in crate::runner) fn install_submission_publication(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     prepared: &PreparedSubmissionPublication,
 ) -> QueueStatus {
     for (index, queue) in state.bus_control.queues.iter_mut().enumerate() {
@@ -119,7 +121,7 @@ pub(in crate::runner) fn install_submission_publication(
 }
 
 pub(in crate::runner) fn control(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     request: QueueControl,
 ) -> (Result<QueueStatus, BusControlError>, bool) {
     match request {
@@ -215,7 +217,7 @@ pub(in crate::runner) fn advance_submission_consumer_raw(
 }
 
 fn update_queue(
-    state: &mut RunnerState,
+    state: &mut DeviceCore,
     update: QueueCursorUpdate,
     apply: impl FnOnce(&mut ActiveQueue, RingCursor) -> Result<bool, BusControlError>,
 ) -> (Result<QueueStatus, BusControlError>, bool) {

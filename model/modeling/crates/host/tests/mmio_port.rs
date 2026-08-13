@@ -15,7 +15,11 @@ use pdma_model_host::{
 #[tokio::test(flavor = "current_thread")]
 async fn message_delivery_uses_non_consuming_readiness_and_one_raw_claim() -> ModelResult<()> {
     // Given: the real worker and one Message-routed completion through an MMIO port.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let bus = MmioDeviceBus::new(device.handle());
     let cpu = SoftwareCpu::new();
@@ -61,7 +65,11 @@ async fn message_delivery_uses_non_consuming_readiness_and_one_raw_claim() -> Mo
 #[tokio::test(flavor = "current_thread")]
 async fn owner_cpu_and_reset_boundaries_hold_through_mmio_port() -> ModelResult<()> {
     // Given: one owner-bound MMIO port, a queue capability, and persistent DMA bytes.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let bus = MmioDeviceBus::new(handle.clone());
     let owner = SoftwareCpu::new();
@@ -116,7 +124,11 @@ async fn owner_cpu_and_reset_boundaries_hold_through_mmio_port() -> ModelResult<
 #[tokio::test(flavor = "current_thread")]
 async fn inactive_cpu_rejects_before_mmio_port_mutation() -> ModelResult<()> {
     // Given: a port returned from its sole active owner segment.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let owner = SoftwareCpu::new();
     let mut port = owner
         .run_main(async { BusDevicePort::new(MmioDeviceBus::new(device.handle())) })

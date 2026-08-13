@@ -1,5 +1,5 @@
 use super::resolve;
-use crate::dma_space::DmaSpace;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,
@@ -13,7 +13,7 @@ use pdma_model_contract::{
 use pdma_model_contract::{BufferId, CommandId, CompletionRingId, DmaRangeStart, QueueId};
 
 pub(super) fn resolve(
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     queue: QueueId,
     completion: CompletionRingId,
     command_id: CommandId,
@@ -33,7 +33,7 @@ pub(super) fn resolve(
 }
 
 fn copy(
-    dma: &DmaSpace,
+    dma: &PdmaMemoryMappings,
     queue: QueueId,
     completion: CompletionRingId,
     command_id: CommandId,
@@ -67,7 +67,7 @@ fn copy(
 }
 
 fn strided(
-    dma: &DmaSpace,
+    dma: &PdmaMemoryMappings,
     queue: QueueId,
     completion: CompletionRingId,
     command_id: CommandId,
@@ -124,7 +124,7 @@ fn strided(
 }
 
 fn broadcast(
-    dma: &DmaSpace,
+    dma: &PdmaMemoryMappings,
     queue: QueueId,
     completion: CompletionRingId,
     command_id: CommandId,
@@ -151,7 +151,7 @@ fn broadcast(
         Err(fault) => return Ok(Err(fault)),
     };
     let bytes = dma
-        .read_iova(command.destination_list(), extent)
+        .read_memory(command.destination_list(), extent)
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let mut destinations = Vec::new();
     destinations
@@ -191,7 +191,7 @@ fn broadcast(
 }
 
 fn vector(
-    dma: &DmaSpace,
+    dma: &PdmaMemoryMappings,
     queue: QueueId,
     completion: CompletionRingId,
     command_id: CommandId,
@@ -240,7 +240,7 @@ fn vector(
 }
 
 fn operand(
-    dma: &DmaSpace,
+    dma: &PdmaMemoryMappings,
     address: pdma_model_contract::abi::DmaAddress,
     length: u32,
     visit: AbiOperandVisit,

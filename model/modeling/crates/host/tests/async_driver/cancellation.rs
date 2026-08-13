@@ -16,7 +16,11 @@ async fn setup_copy(port: &mut BlockingPort) -> ModelResult<(AsyncDriver, CopyRe
 #[tokio::test(flavor = "current_thread")]
 async fn submit_failure_restores_slot_but_consumes_command_id() {
     // Given: a depth-one driver whose first device submission fails before acceptance.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut port = BlockingPort::new(device.handle());
     port.fail_next_submit();
 
@@ -39,7 +43,11 @@ async fn submit_failure_restores_slot_but_consumes_command_id() {
 #[tokio::test(flavor = "current_thread")]
 async fn inner_select_cancellation_restores_slot_but_consumes_command_id() {
     // Given: a submit future blocked before device acceptance inside one complete main.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();
     let observer = control.clone();
@@ -81,7 +89,11 @@ async fn inner_select_cancellation_restores_slot_but_consumes_command_id() {
 #[tokio::test(flavor = "current_thread")]
 async fn aborted_run_main_restores_slot_for_retained_clone() {
     // Given: main publishes a clone before blocking a submission ahead of acceptance.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut main_port = BlockingPort::new(device.handle());
     main_port.block_submit();
     let observer = main_port.clone();
@@ -120,7 +132,11 @@ async fn aborted_run_main_restores_slot_for_retained_clone() {
 #[tokio::test(flavor = "current_thread")]
 async fn doorbell_failure_keeps_accepted_command_slot_consumed() {
     // Given: a depth-one queue whose first doorbell fails after command acceptance.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut port = BlockingPort::new(device.handle());
     port.fail_next_doorbell();
 
@@ -143,7 +159,11 @@ async fn doorbell_failure_keeps_accepted_command_slot_consumed() {
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_doorbell_keeps_accepted_command_slot_consumed() {
     // Given: a submit blocked at the doorbell after device acceptance.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let mut port = BlockingPort::new(device.handle());
     let observer = port.clone();
     observer.block_doorbell();

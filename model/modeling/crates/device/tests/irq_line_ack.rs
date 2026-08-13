@@ -12,7 +12,11 @@ use pdma_model_device::SyncDevice;
 #[test]
 fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelResult<()> {
     // Given: software has drained one Line-routed completion and observed the ring empty.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device
         .create_queue(QueueConfig::new(
             4,
@@ -69,7 +73,11 @@ fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelRes
 #[test]
 fn line_ack_cannot_create_a_cause_for_a_disabled_source() -> ModelResult<()> {
     // Given: a disabled source has a completion record but never latched an IRQ cause.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device.create_queue(QueueConfig::new(
         2,
         2,

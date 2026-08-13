@@ -46,7 +46,11 @@ async fn semantic_nonzero_start_unknown_object_and_range_overflow_publish_no_suc
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retires_copy_after_handle_submission() {
     // Given: a queue-port async runner, an async handle, one queue, source/destination buffers, and a source write.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle
@@ -96,9 +100,11 @@ async fn async_runner_retires_copy_after_handle_submission() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progress() {
     // Given: a one-slot completion publication path with three direct copy commands on one queue.
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_completion_publication_slots(1),
-    );
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     let queue = handle
@@ -191,7 +197,11 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_side_effects() {
     // Given: a direct copy command whose completion ring is not present in the async device.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let handle: AsyncDeviceHandle = runner.handle();
     let queue = handle

@@ -38,7 +38,11 @@ async fn run() -> TestResult {
 
 async fn assert_current_epoch_is_reported() -> TestResult {
     // Given: a device advanced through the existing typed whole-device reset.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let epoch = handle
         .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
@@ -61,7 +65,11 @@ async fn assert_unstarted_state(
     expected: u64,
 ) -> TestResult {
     // Given: an unstarted worker with either no work, runnable work, or constrained work.
-    let (device, _worker) = AsyncDevice::queue_port_with_resource_config(config);
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        config,
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let work = if let Some(build) = command {
         let (queue, source, destination) = fixture(&handle).await?;
@@ -102,9 +110,13 @@ async fn assert_unstarted_state(
 
 async fn assert_reads_preserve_device_observables() -> TestResult {
     // Given: committed DMA, one active queue, and a stable IRQ snapshot.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [submission, completion, event] = stage.regions() else {
         return Err(std::io::Error::other("three ring regions required").into());
     };
@@ -121,7 +133,7 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
     )?;
     handle.activate_queue(stage, activation).await?;
     let before_snapshot = handle.snapshot().await;
-    let before_generation = handle.dma_generation().await;
+    let before_generation = handle.memory_generation().await;
     let before_queue = handle
         .control_queue(QueueControl::ReadStatus(queue))
         .await?;
@@ -134,7 +146,7 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
 
     // Then: lifecycle, DMA, queue, and IRQ observables are unchanged.
     assert_eq!(handle.snapshot().await, before_snapshot);
-    assert_eq!(handle.dma_generation().await, before_generation);
+    assert_eq!(handle.memory_generation().await, before_generation);
     assert_eq!(
         handle
             .control_queue(QueueControl::ReadStatus(queue))
@@ -150,7 +162,11 @@ async fn assert_worker_pressure(
     build: fn(BufferId, BufferId, pdma_model_contract::QueueConfigHandle) -> ExternalCommand,
 ) -> TestResult {
     // Given: a worker that reaches a real publication-pressure stall.
-    let (device, worker) = AsyncDevice::queue_port_with_resource_config(config);
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        config,
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let (queue, source, destination) = fixture(&handle).await?;
     handle

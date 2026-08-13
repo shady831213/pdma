@@ -4,13 +4,18 @@ use pdma_model_device::AsyncDeviceHandle;
 
 /// Creates a fresh asynchronous queue-port handle.
 pub fn new_handle() -> AsyncDeviceHandle {
-    let (device, _worker) = pdma_model_device::AsyncDevice::queue_port();
+    let (device, _worker) =
+        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        ));
     device.handle()
 }
 
 /// Builds the canonical depth-two activation for a staged ring batch.
 pub fn activation(
-    stage: &pdma_model_device::DmaStage,
+    stage: &pdma_model_device::PdmaMemoryStage,
     queue_id: QueueId,
 ) -> Result<QueueActivation, pdma_model_contract::abi::AbiControlError> {
     let [submission_region, completion_region, event_region] = stage.regions() else {

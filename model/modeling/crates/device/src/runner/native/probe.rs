@@ -1,12 +1,11 @@
 use super::QueuePortDeviceModel;
-use super::io::QueueFetch;
+use super::io::NormalizedFetch;
 use super::resources::ResourceDemand;
 use super::retirement::PendingRetirement;
-use crate::dma_space::DmaSpace;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::AsyncStallReason;
 use crate::runner::bus::control::BusControlState;
 use pdma_model_contract::QueueId;
-use pdma_model_contract::semantic::EpochQueue;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) enum RunStateProbe {
@@ -20,7 +19,7 @@ pub(in crate::runner) enum RunStateProbe {
 
 pub(in crate::runner) fn probe_run_state(
     device: &QueuePortDeviceModel,
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     bus_control: &BusControlState,
 ) -> RunStateProbe {
     if let Some(pending) = device.pending_retirement {
@@ -36,14 +35,11 @@ pub(in crate::runner) fn probe_run_state(
     let Ok(context) = device.queue(queue) else {
         return RunStateProbe::Running;
     };
-    let fetched = context.io.fetch(
-        dma_space,
-        bus_control,
-        queue,
-        context.entry.completion_ring_id(),
-    );
+    let fetched = context
+        .frontend
+        .probe(dma_space, bus_control, context.entry);
     match fetched {
-        Ok(Some(QueueFetch::Command(command)))
+        Ok(Some(NormalizedFetch::Command(command)))
             if !ResourceDemand::for_command(&command).fits(device.resource_config) =>
         {
             RunStateProbe::Blocked {
@@ -51,7 +47,7 @@ pub(in crate::runner) fn probe_run_state(
                 reason: AsyncStallReason::ExecutionResourcePressure,
             }
         }
-        Ok(Some(QueueFetch::Command(_) | QueueFetch::Fault(_)) | None) | Err(_) => {
+        Ok(Some(NormalizedFetch::Command(_) | NormalizedFetch::Fault(_)) | None) | Err(_) => {
             RunStateProbe::Running
         }
     }
@@ -66,17 +62,18 @@ fn pending_probe(
         PendingRetirement::Completion(success) => (
             success.queue,
             AsyncStallReason::CompletionPublicationPressure,
-            completion_is_blocked(device, bus_control, success.queue, success.completion_ring),
+            completion_is_blocked(device, bus_control, success.queue),
         ),
-        PendingRetirement::Event { queue_id, .. } => (
-            queue_id,
+        PendingRetirement::Fault { queue, .. } => (
+            queue,
             AsyncStallReason::FaultRetirementPendingRetry,
-            device.events.len() >= device.resource_config.event_publication_slots(),
-        ),
-        PendingRetirement::DmaEvent(event) => (
-            event.queue_id(),
-            AsyncStallReason::FaultRetirementPendingRetry,
-            dma_ring_is_full(bus_control, event.queue_id(), false),
+            device.queue(queue).map_or(true, |context| {
+                context.frontend.fault_blocked(
+                    bus_control,
+                    queue,
+                    device.resource_config.event_publication_slots(),
+                )
+            }),
         ),
     };
     if blocked {
@@ -90,27 +87,12 @@ fn completion_is_blocked(
     device: &QueuePortDeviceModel,
     bus_control: &BusControlState,
     queue: QueueId,
-    completion: pdma_model_contract::CompletionRingId,
 ) -> bool {
     device.queue(queue).is_ok_and(|context| {
-        if context.io.is_dma_bus() {
-            dma_ring_is_full(bus_control, queue, true)
-        } else {
-            device.completion(completion).map_or(true, |ring| {
-                ring.is_full()
-                    || ring.len() >= device.resource_config.completion_publication_slots()
-            })
-        }
-    })
-}
-
-fn dma_ring_is_full(control: &BusControlState, queue: QueueId, completion: bool) -> bool {
-    let queue = EpochQueue::new(control.epoch(), queue);
-    control.queue(queue).map_or(true, |active| {
-        if completion {
-            active.completion.is_full()
-        } else {
-            active.event.is_full()
-        }
+        context.frontend.completion_blocked(
+            bus_control,
+            queue,
+            device.resource_config.completion_publication_slots(),
+        )
     })
 }

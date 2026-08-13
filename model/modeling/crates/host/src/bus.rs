@@ -11,7 +11,7 @@ pub use stage::{AsyncDeviceBusStage, BusDmaStage, BusDmaWrite};
 
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::{
-    DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate,
+    DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate,
     RingCursor, RingCursors,
 };
 use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
@@ -196,25 +196,25 @@ pub trait AsyncPdmaBus: Send + Sync {
     type ControlError: Error + Send + Sync + 'static;
 
     /// Allocates and returns one committed raw DMA region.
-    fn allocate_dma_region(
+    fn allocate_memory_region(
         &self,
         len: usize,
-    ) -> impl Future<Output = ModelResult<DmaRegion>> + Send;
+    ) -> impl Future<Output = ModelResult<PdmaMemoryRegion>> + Send;
 
     /// Proposes DMA regions without committing allocator or mapping state.
-    fn stage_dma_regions(
+    fn stage_memory_regions(
         &self,
         lengths: &[u64],
     ) -> impl Future<Output = Result<Self::Stage, Self::DmaError>> + Send;
 
-    /// Reads one checked IOVA extent.
+    /// Reads one checked mapped-memory extent.
     fn read_dma(
         &self,
         address: DmaAddress,
         length: u64,
     ) -> impl Future<Output = Result<Vec<u8>, Self::DmaError>> + Send;
 
-    /// Writes one checked IOVA extent.
+    /// Writes one checked mapped-memory extent.
     fn write_dma(
         &self,
         address: DmaAddress,

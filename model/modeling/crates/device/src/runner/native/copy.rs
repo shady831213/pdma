@@ -27,7 +27,7 @@ pub(super) fn retire_copy(
         bus_control,
     } = execution;
     let request = command.request();
-    let memory = device.memory_resolver(queue_id, command.command_id())?;
+    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
     let bytes = match memory.read(dma_space, request.src_start(), request.len()) {
         Ok(bytes) => bytes,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
@@ -68,7 +68,7 @@ pub(super) fn retire_strided_copy(
         dma_space,
         bus_control,
     } = execution;
-    let memory = device.memory_resolver(queue_id, command.command_id())?;
+    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
     let chunks = match strided_chunks(dma_space, memory, command) {
         Ok(chunks) => chunks,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
@@ -111,7 +111,7 @@ pub(super) fn retire_strided_copy(
 }
 
 fn strided_chunks(
-    dma_space: &crate::dma_space::DmaSpace,
+    dma_space: &crate::dma_space::PdmaMemoryMappings,
     memory: QueueMemoryResolver,
     command: StridedCopyCommand,
 ) -> Result<Vec<NativeCopyChunk>, FaultRetirement> {

@@ -10,7 +10,11 @@ enum MalformedRead {
 #[tokio::test]
 async fn malformed_reads_preserve_all_observable_state() {
     // Given: distinct bank, runner, and DMA state snapshots.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let buffer = handle
         .allocate_buffer(4)
@@ -25,7 +29,7 @@ async fn malformed_reads_preserve_all_observable_state() {
         .await
         .expect("bank seed should succeed");
     let before_runner = handle.snapshot().await;
-    let before_dma_generation = handle.dma_generation().await;
+    let before_dma_generation = handle.memory_generation().await;
     let before_dma = handle
         .read_buffer(buffer, 0, 4)
         .await
@@ -91,7 +95,7 @@ async fn malformed_reads_preserve_all_observable_state() {
         // Then: error identity is contract-owned and every observable remains unchanged.
         assert_eq!(actual, decode_read(offset, width).map(|_| Vec::new()));
         assert_eq!(handle.snapshot().await, before_runner);
-        assert_eq!(handle.dma_generation().await, before_dma_generation);
+        assert_eq!(handle.memory_generation().await, before_dma_generation);
         assert_eq!(
             handle.read_buffer(buffer, 0, 4).await,
             Ok(before_dma.clone())
@@ -107,7 +111,11 @@ async fn malformed_reads_preserve_all_observable_state() {
 #[tokio::test]
 async fn malformed_writes_preserve_all_observable_state() {
     // Given: a seeded register bank and its device snapshot.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let seed = 0x0123_4567_89ab_cdef_u64.to_le_bytes();
     handle
@@ -115,7 +123,7 @@ async fn malformed_writes_preserve_all_observable_state() {
         .await
         .expect("bank seed should succeed");
     let before_runner = handle.snapshot().await;
-    let before_dma_generation = handle.dma_generation().await;
+    let before_dma_generation = handle.memory_generation().await;
     let before_bank = handle
         .read_mmio(0x108, 8)
         .await
@@ -142,7 +150,7 @@ async fn malformed_writes_preserve_all_observable_state() {
         // Then: the exact contract error is returned before any mutation.
         assert_eq!(actual, decode_write(offset, bytes).map(|_| ()));
         assert_eq!(handle.snapshot().await, before_runner);
-        assert_eq!(handle.dma_generation().await, before_dma_generation);
+        assert_eq!(handle.memory_generation().await, before_dma_generation);
         assert_eq!(handle.read_mmio(0x108, 8).await, Ok(before_bank.clone()));
         assert_eq!(
             support::result_latches(&handle).await,

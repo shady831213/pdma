@@ -1,7 +1,8 @@
 #![allow(missing_docs, clippy::redundant_pub_crate)]
 
 #[path = "bus_retirement/cases.rs"]
-mod cases;
+/// Exact retirement behavior cases.
+pub mod cases;
 #[path = "bus_retirement/support.rs"]
 mod support;
 

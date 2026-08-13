@@ -6,14 +6,15 @@ use pdma_model_contract::{
     BufferId, CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 use pdma_model_contract::{
-    DeviceEpoch, DmaAddress, DmaRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
+    DeviceEpoch, DmaAddress, PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
+    RingRecord,
 };
 
 #[derive(Debug, Clone)]
 pub(super) struct PortState {
     pub(super) epoch: DeviceEpoch,
     pub(super) queue: Option<QueueState>,
-    pub(super) regions: Vec<DmaRegion>,
+    pub(super) regions: Vec<PdmaMemoryRegion>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -49,7 +50,7 @@ impl PortState {
         Ok(queue)
     }
 
-    pub(super) fn region(&self, id: BufferId) -> ModelResult<DmaRegion> {
+    pub(super) fn region(&self, id: BufferId) -> ModelResult<PdmaMemoryRegion> {
         self.regions
             .iter()
             .copied()
@@ -76,7 +77,7 @@ where
     })??;
     let lengths = ring_lengths(config)?;
     let stage = port
-        .poll_dma(port.bus.stage_dma_regions(&lengths), None)
+        .poll_dma(port.bus.stage_memory_regions(&lengths), None)
         .await?;
     let [submission, completion, event] = stage.proposed_regions() else {
         return Err(ModelError::DmaSubmissionState);
@@ -137,7 +138,9 @@ pub(super) async fn allocate_buffer<B>(port: &BusDevicePort<B>, len: usize) -> M
 where
     B: AsyncPdmaBus,
 {
-    let region = port.poll_model(port.bus.allocate_dma_region(len)).await?;
+    let region = port
+        .poll_model(port.bus.allocate_memory_region(len))
+        .await?;
     port.state.with(|state| {
         state.regions.push(region);
         region.object()
@@ -194,7 +197,7 @@ fn checked_range<B>(
         }
         let offset = u64::try_from(offset).map_err(|_| ModelError::RangeOverflow)?;
         region
-            .base()
+            .abi_base()
             .checked_add(offset)
             .map_err(|_| ModelError::RangeOverflow)
     })?

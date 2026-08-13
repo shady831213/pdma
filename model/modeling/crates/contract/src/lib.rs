@@ -24,7 +24,7 @@ pub mod trace;
 
 pub use abi::*;
 pub use bridge::{
-    AbiDiscovery, AbiEvent, AbiLimits, ControlRequest, DiscoveryRequest, DmaRegion,
+    AbiDiscovery, AbiEvent, AbiLimits, ControlRequest, DiscoveryRequest, PdmaMemoryRegion,
     QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingCursors, RingLayout,
     decode_completion, decode_event, decode_memory_address, encode_completion, encode_event,
     encode_id_value, encode_memory_address, encode_memory_address_value, encode_semantic_event,

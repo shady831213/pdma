@@ -1,6 +1,6 @@
 use pdma_model_contract::{
     AbiBroadcastCopy, AbiCommand, AbiId, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape,
-    DmaAddress, DmaRegion, EpochQueue, RingRecord,
+    DmaAddress, EpochQueue, PdmaMemoryRegion, RingRecord,
 };
 use pdma_model_contract::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, BufferId, CommandId,
@@ -18,7 +18,7 @@ mod driver_credit;
 
 struct SubmissionState {
     status: BusQueueStatus,
-    indirect: DmaRegion,
+    indirect: PdmaMemoryRegion,
     list_bytes: Vec<u8>,
     descriptor_bytes: Vec<u8>,
 }
@@ -26,7 +26,7 @@ struct SubmissionState {
 async fn region(
     handle: &pdma_model_device::AsyncDeviceHandle,
     object: BufferId,
-) -> ModelResult<DmaRegion> {
+) -> ModelResult<PdmaMemoryRegion> {
     handle
         .region_for_object(object)
         .await
@@ -39,7 +39,7 @@ async fn dma_bytes(
     length: u64,
 ) -> ModelResult<Vec<u8>> {
     handle
-        .read_iova(address, length)
+        .read_memory(address, length)
         .await
         .map_err(|_| ModelError::DmaSubmissionState)
 }
@@ -47,7 +47,7 @@ async fn dma_bytes(
 async fn submission_state(
     handle: &pdma_model_device::AsyncDeviceHandle,
     queue: EpochQueue,
-    submission: DmaRegion,
+    submission: PdmaMemoryRegion,
 ) -> ModelResult<SubmissionState> {
     let status = AsyncPdmaBus::read_queue_status(handle, queue)
         .await
@@ -67,9 +67,9 @@ async fn submission_state(
 }
 
 fn encode_broadcast(
-    source: DmaRegion,
-    destinations: [DmaRegion; 2],
-    indirect: DmaRegion,
+    source: PdmaMemoryRegion,
+    destinations: [PdmaMemoryRegion; 2],
+    indirect: PdmaMemoryRegion,
 ) -> ModelResult<(Vec<u8>, Vec<u8>)> {
     let descriptor = AbiCommand::BroadcastCopy(
         AbiBroadcastCopy::try_new(
@@ -99,7 +99,11 @@ fn encode_broadcast(
 
 pub(super) async fn verify_cancellation_commit_points() -> ModelResult<()> {
     // Given: a depth-one real ABI bus, an indirect command, and its raw ring mappings.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let cpu = SoftwareCpu::new();
     let (mut port, driver, source, destination_a, destination_b) = cpu

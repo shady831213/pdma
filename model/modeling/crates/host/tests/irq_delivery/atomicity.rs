@@ -49,7 +49,11 @@ impl IrqHandler for SequencedHandler {
 #[tokio::test(flavor = "current_thread")]
 async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
     // Given: two queued IRQ messages, one CPU token, and a handler blocked on its first call.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let mut device_port = device.handle();
     let cpu = SoftwareCpu::new();

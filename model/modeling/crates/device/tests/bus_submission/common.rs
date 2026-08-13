@@ -1,5 +1,5 @@
 use pdma_model_contract::{
-    AbiCommand, AbiEvent, DeviceEpoch, DmaAddress, DmaRegion, EpochQueue, QueueActivation,
+    AbiCommand, AbiEvent, DeviceEpoch, DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation,
     QueueControl, QueueCursorUpdate, QueueRingRegions, RingCursor, RingLayout, RingRecord,
 };
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, ResourceConfig, SoftwareOwnerId};
@@ -22,10 +22,16 @@ pub(super) struct RunResult {
     pub(super) destinations: Vec<Vec<u8>>,
     pub(super) steps: usize,
     pub(super) irq_pending: bool,
+    pub(super) traces: Vec<pdma_model_contract::TraceEvent>,
+    pub(super) native_steps: usize,
 }
 
 pub(super) async fn fixture(resources: ResourceConfig) -> TestResult<Fixture> {
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(resources);
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        resources,
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = runner.handle();
     let (queue, submission) = activate(&handle, QueueId::new(0)).await?;
     Ok(Fixture {
@@ -48,7 +54,7 @@ pub(super) async fn activate_on(
     epoch: DeviceEpoch,
     queue_id: QueueId,
 ) -> TestResult<(EpochQueue, DmaAddress)> {
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [submission, completion, event] = stage.regions() else {
         return Err("ring stage shape".into());
     };
@@ -68,7 +74,10 @@ pub(super) async fn activate_on(
     Ok((activation.queue(), submission.base()))
 }
 
-pub(super) async fn allocate(handle: &AsyncDeviceHandle, length: usize) -> TestResult<DmaRegion> {
+pub(super) async fn allocate(
+    handle: &AsyncDeviceHandle,
+    length: usize,
+) -> TestResult<PdmaMemoryRegion> {
     let object = handle.allocate_buffer(length).await?;
     handle
         .region_for_object(object)
@@ -79,8 +88,9 @@ pub(super) async fn allocate(handle: &AsyncDeviceHandle, length: usize) -> TestR
 pub(super) async fn run_descriptor(
     fixture: Fixture,
     bytes: [u8; 64],
-    destinations: &[DmaRegion],
+    destinations: &[PdmaMemoryRegion],
 ) -> TestResult<RunResult> {
+    fixture.handle.enable_tracing().await;
     fixture
         .handle
         .control_queue(QueueControl::PublishCompletionProducer(
@@ -110,7 +120,7 @@ pub(super) async fn run_descriptor(
         ))
         .await?;
     fixture.handle.wait_for_stall_after(0).await;
-    fixture.handle.write_iova(fixture.submission, &[]).await?;
+    fixture.handle.write_memory(fixture.submission, &[]).await?;
     fixture.handle.wait_for_stall_after(1).await;
     let status = fixture
         .handle
@@ -119,12 +129,14 @@ pub(super) async fn run_descriptor(
     let pending = fixture.handle.pending_dma_result().await;
     let snapshot = fixture.handle.snapshot().await;
     let irq_pending = fixture.handle.irq_snapshot().await.is_some();
+    let traces = fixture.handle.trace_events().await;
+    let native_steps = fixture.handle.native_steps().await;
     let mut bytes = Vec::new();
     for region in destinations {
         bytes.push(
             fixture
                 .handle
-                .read_iova(region.base(), region.length())
+                .read_memory(region.base(), region.length())
                 .await?,
         );
     }
@@ -136,6 +148,8 @@ pub(super) async fn run_descriptor(
         destinations: bytes,
         steps: snapshot.steps,
         irq_pending,
+        traces,
+        native_steps,
     })
 }
 

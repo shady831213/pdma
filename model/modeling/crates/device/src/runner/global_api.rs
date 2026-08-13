@@ -1,14 +1,14 @@
 use super::AsyncDeviceHandle;
 use super::backend::DeviceModel;
 use super::native::probe::{RunStateProbe, probe_run_state};
-use super::state::RunnerState;
+use super::state::DeviceCore;
 use pdma_model_contract::{AbiDiscovery, DeviceRunState, DeviceStatus, DiscoveryRequest};
 
 pub(in crate::runner) const fn discover(_request: DiscoveryRequest) -> AbiDiscovery {
     AbiDiscovery::v1()
 }
 
-pub(in crate::runner) fn status(state: &RunnerState) -> DeviceStatus {
+pub(in crate::runner) fn status(state: &DeviceCore) -> DeviceStatus {
     let run_state = match &state.backend {
         DeviceModel::QueuePort(device) => {
             probe_run_state(device, &state.dma_space, &state.bus_control)

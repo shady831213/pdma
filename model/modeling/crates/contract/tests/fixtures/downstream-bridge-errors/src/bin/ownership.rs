@@ -1,7 +1,7 @@
 use std::error::Error;
 
 fn main() {
-    let device = pdma_model_device::DmaSpaceError::AddressExhausted;
+    let device = pdma_model_device::PdmaMemoryError::AddressExhausted;
     let host = pdma_model_host::ModelError::SoftwareCpuInactive;
     let runtime = hardware_interface_runtime::CpuContextError::Inactive;
     println!(

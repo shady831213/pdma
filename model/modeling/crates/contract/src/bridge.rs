@@ -47,6 +47,12 @@ pub const fn decode_memory_address(address: DmaAddress) -> MemoryAddress {
     MemoryAddress::new(address.raw())
 }
 
+impl From<DmaAddress> for MemoryAddress {
+    fn from(address: DmaAddress) -> Self {
+        decode_memory_address(address)
+    }
+}
+
 /// Checks an untrusted wide address before constructing a runtime address.
 pub fn encode_memory_address_value(value: u128) -> Result<MemoryAddress, BridgeError> {
     DmaAddress::try_from(value)
@@ -61,14 +67,14 @@ pub fn encode_id_value(value: u128) -> Result<AbiId, BridgeError> {
 
 /// Model correlation between a semantic buffer and its exact IOVA extent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DmaRegion {
+pub struct PdmaMemoryRegion {
     object: BufferId,
     base: DmaAddress,
     length: u64,
     exclusive_end: DmaAddress,
 }
 
-impl DmaRegion {
+impl PdmaMemoryRegion {
     /// Creates a region whose exclusive end is representable.
     pub const fn try_new(
         object: BufferId,
@@ -96,6 +102,16 @@ impl DmaRegion {
         self.base
     }
 
+    /// Returns the frozen ABI-v1 base address.
+    pub const fn abi_base(self) -> DmaAddress {
+        self.base
+    }
+
+    /// Returns the neutral runtime base address.
+    pub const fn memory_base(self) -> MemoryAddress {
+        decode_memory_address(self.base)
+    }
+
     /// Returns the fixed-width byte length.
     pub const fn length(self) -> u64 {
         self.length
@@ -104,6 +120,16 @@ impl DmaRegion {
     /// Returns the checked exclusive end.
     pub const fn exclusive_end(self) -> DmaAddress {
         self.exclusive_end
+    }
+
+    /// Returns the frozen ABI-v1 exclusive end address.
+    pub const fn abi_exclusive_end(self) -> DmaAddress {
+        self.exclusive_end
+    }
+
+    /// Returns the neutral runtime exclusive end address.
+    pub const fn memory_exclusive_end(self) -> MemoryAddress {
+        decode_memory_address(self.exclusive_end)
     }
 
     /// Returns whether the region contains no bytes.

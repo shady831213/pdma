@@ -1,18 +1,15 @@
-use super::ring::NativeRing;
-use super::{QueueContext, QueuePortDeviceModel, io, retirement};
+use super::{QueueContext, QueuePortDeviceModel, io};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::{
     CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 
-pub(in crate::runner) struct PreparedDmaBusQueue {
+pub(in crate::runner) struct PreparedExactQueue {
     context: QueueContext,
-    completion: NativeRing<CompletionRecord>,
 }
 
-impl PreparedDmaBusQueue {
+impl PreparedExactQueue {
     pub(in crate::runner) const fn queue_id(&self) -> QueueId {
         self.context.entry.queue_id()
     }
@@ -30,32 +27,26 @@ impl QueuePortDeviceModel {
     pub(in crate::runner) fn prepare_dma_bus_queue(
         &mut self,
         config: QueueConfig,
-    ) -> ModelResult<PreparedDmaBusQueue> {
+    ) -> ModelResult<PreparedExactQueue> {
         self.queues
             .try_reserve_exact(1)
             .map_err(|_| ModelError::DmaAllocationExhausted)?;
-        self.completions
-            .try_reserve_exact(1)
-            .map_err(|_| ModelError::DmaAllocationExhausted)?;
-        let completion = NativeRing::with_capacity(config.completion_depth())?;
         let queue_id = QueueId::new(self.queues.len());
-        let completion_id = CompletionRingId::new(self.completions.len());
-        Ok(PreparedDmaBusQueue {
+        let completion_id = CompletionRingId::new(self.queues.len());
+        Ok(PreparedExactQueue {
             context: QueueContext {
                 entry: QueueDirectoryEntry::new(queue_id, completion_id, config),
-                io: io::QueueIo::dma_bus(),
+                frontend: io::exact(),
             },
-            completion,
         })
     }
 
     pub(in crate::runner) fn install_dma_bus_queue(
         &mut self,
-        prepared: PreparedDmaBusQueue,
+        prepared: PreparedExactQueue,
     ) -> QueueConfigHandle {
         let entry = prepared.context.entry;
         self.queues.push(prepared.context);
-        self.completions.push(prepared.completion);
         QueueConfigHandle::new(self.epoch, entry)
     }
 
@@ -66,7 +57,7 @@ impl QueuePortDeviceModel {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
         let context = self.queue(queue_id)?;
-        if !matches!(context.io, io::QueueIo::DmaBus(_)) {
+        if !context.frontend.accepts_exact_control() {
             return Err(ModelError::UnknownQueue(queue_id));
         }
         if !self.runnable.contains(&queue_id) {
@@ -79,7 +70,7 @@ impl QueuePortDeviceModel {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
         let context = self.queue(queue_id)?;
-        if matches!(context.io, io::QueueIo::DmaBus(_)) {
+        if context.frontend.accepts_exact_control() {
             Ok(())
         } else {
             Err(ModelError::UnknownQueue(queue_id))
@@ -87,7 +78,23 @@ impl QueuePortDeviceModel {
     }
 
     pub(in crate::runner) fn pending_dma_result(&self) -> Option<super::super::PendingDmaResult> {
-        self.pending_retirement
-            .and_then(retirement::PendingRetirement::dma_result)
+        match self.pending_retirement {
+            Some(super::retirement::PendingRetirement::Completion(success)) => {
+                Some(super::super::PendingDmaResult::Completion(
+                    pdma_model_contract::CompletionRecord::new(
+                        success.queue,
+                        success.command,
+                        pdma_model_contract::CompletionStatus::Success,
+                    ),
+                ))
+            }
+            Some(super::retirement::PendingRetirement::Fault { queue, .. }) => self
+                .queue(queue)
+                .ok()
+                .and_then(|context| context.frontend.pending_fault_bytes())
+                .and_then(|bytes| io::exact::decode_event(&bytes))
+                .map(super::super::PendingDmaResult::Event),
+            None => None,
+        }
     }
 }

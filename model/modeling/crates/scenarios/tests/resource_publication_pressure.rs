@@ -8,9 +8,11 @@ use pdma_model_host::{AsyncDriver, SoftwareCpu};
 async fn async_runner_completion_publication_capacity_one_preserves_completion_order_after_polling()
 {
     // Given: two async copies queued behind a one-slot completion publication path.
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_completion_publication_slots(1),
-    );
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (
         first_command,
@@ -102,9 +104,11 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_event_publication_capacity_one_preserves_event_order_after_polling() {
     // Given: two faulting async copies behind a one-slot event publication path.
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_event_publication_slots(1),
-    );
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (
         first_command,

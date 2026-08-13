@@ -18,7 +18,7 @@ pub(super) fn retire_vector_add(
         bus_control,
     } = execution;
     let request = command.request();
-    let memory = device.memory_resolver(queue_id, command.command_id())?;
+    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
     let left_source =
         pdma_model_contract::DmaRangeStart::new(request.src_a(), request.src_a_offset());
     let src_a = match memory.read(dma_space, left_source, request.len()) {

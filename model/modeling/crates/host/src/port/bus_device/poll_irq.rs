@@ -180,7 +180,7 @@ fn slot_address(
         .ok_or(ModelError::DmaSubmissionState)?;
     layout
         .region()
-        .base()
+        .abi_base()
         .checked_add(offset)
         .map_err(|_| ModelError::DmaSubmissionState)
 }
@@ -195,7 +195,7 @@ fn semantic_event<B>(
         state
             .regions
             .iter()
-            .find(|region| region.base() <= locator && locator < region.exclusive_end())
+            .find(|region| region.abi_base() <= locator && locator < region.abi_exclusive_end())
             .map_or(BufferId::new(usize::MAX), |region| region.object())
     })?;
     let error_kind = match kind {

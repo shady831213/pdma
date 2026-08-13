@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Async PDMA scenarios skeleton"
 
 [dependencies]
+hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 pdma-model-contract = { path = "../contract" }
 pdma-model-device = { path = "../device" }
 pdma-model-host = { path = "../host" }

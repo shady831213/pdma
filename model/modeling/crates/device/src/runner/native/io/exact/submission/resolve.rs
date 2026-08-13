@@ -1,14 +1,14 @@
 use super::fault::canonical;
-use crate::dma_space::DmaSpace;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::DmaRangeStart;
 use pdma_model_contract::{
     AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultOrder, AbiFaultSite,
-    AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DmaAddress, DmaRegion,
+    AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DmaAddress, PdmaMemoryRegion,
 };
 
 pub(super) fn direct(
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     address: DmaAddress,
     length: u64,
     visit: AbiOperandVisit,
@@ -27,7 +27,7 @@ pub(super) fn direct(
 }
 
 pub(super) fn strided(
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     base: DmaAddress,
     row: u64,
     stride: u64,
@@ -57,7 +57,7 @@ pub(super) fn strided(
 }
 
 pub(super) fn indirect_container(
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     base: DmaAddress,
     count: u64,
 ) -> ModelResult<Result<(DmaRangeStart, u64), AbiFault>> {
@@ -85,7 +85,7 @@ pub(super) fn indirect_container(
 }
 
 fn resolve_representable(
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     start: DmaAddress,
     end: DmaAddress,
     length: u64,
@@ -100,10 +100,10 @@ fn resolve_representable(
             },
         )));
     };
-    if end > region.exclusive_end() {
+    if end > region.abi_exclusive_end() {
         return Ok(Err(canonical(
             AbiFault::out_of_bounds(
-                region.exclusive_end(),
+                region.abi_exclusive_end(),
                 AbiBounds::new(region.length(), end.raw()),
                 site(visit),
             ),
@@ -116,7 +116,7 @@ fn resolve_representable(
     range_start(region, start).map(Ok)
 }
 
-fn range_start(region: DmaRegion, start: DmaAddress) -> ModelResult<DmaRangeStart> {
+fn range_start(region: PdmaMemoryRegion, start: DmaAddress) -> ModelResult<DmaRangeStart> {
     let offset = start
         .raw()
         .checked_sub(region.base().raw())

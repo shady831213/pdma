@@ -6,36 +6,47 @@ mod prepared;
 mod stage;
 mod validation;
 
-pub use error::DmaSpaceError;
-pub use stage::DmaStage;
+pub use error::PdmaMemoryError;
+pub use stage::PdmaMemoryStage;
 
+use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory};
+use pdma_model_contract::bridge::PdmaMemoryRegion;
 use pdma_model_contract::ids::BufferId;
-use pdma_model_contract::{DmaAddress, DmaRegion};
+use std::sync::Arc;
 
-const FIRST_IOVA: u64 = 0x1_0000;
-const IOVA_ALIGNMENT: u64 = 64;
+const FIRST_MEMORY_ADDRESS: u64 = 0x1_0000;
+const MAPPING_ALIGNMENT: u64 = 64;
 
 #[derive(Debug)]
 struct RegionBacking {
-    region: DmaRegion,
-    bytes: Vec<u8>,
+    region: PdmaMemoryRegion,
+    storage: Option<MemoryRegion>,
 }
 
-/// Monotonic checked IOVA allocator with committed host backing storage.
-#[derive(Debug)]
-pub struct DmaSpace {
+pub(crate) struct PreparedPdmaMapping {
     regions: Vec<RegionBacking>,
-    next_iova: u64,
-    generation: u64,
+    next_address: u64,
+    next_generation: u64,
+    runtime_regions: Vec<MemoryRegion>,
 }
 
-impl DmaSpace {
-    /// Creates an empty DMA space at the deterministic first IOVA.
-    pub const fn new() -> Self {
+/// Monotonic checked memory-mapping allocator over injected runtime storage.
+#[derive(Debug)]
+pub struct PdmaMemoryMappings {
+    regions: Vec<RegionBacking>,
+    next_address: u64,
+    generation: u64,
+    memory: Arc<SharedMemory>,
+}
+
+impl PdmaMemoryMappings {
+    /// Creates an empty mapping table at the deterministic first address.
+    pub const fn new(memory: Arc<SharedMemory>) -> Self {
         Self {
             regions: Vec::new(),
-            next_iova: FIRST_IOVA,
+            next_address: FIRST_MEMORY_ADDRESS,
             generation: 0,
+            memory,
         }
     }
 
@@ -45,68 +56,89 @@ impl DmaSpace {
     }
 
     /// Proposes an aligned allocation batch without changing allocator or backing state.
-    pub fn stage(&self, lengths: &[u64]) -> Result<DmaStage, DmaSpaceError> {
+    pub fn stage(&self, lengths: &[u64]) -> Result<PdmaMemoryStage, PdmaMemoryError> {
         let mut regions = Vec::new();
         regions
             .try_reserve_exact(lengths.len())
-            .map_err(|_| DmaSpaceError::StorageExhausted)?;
-        let mut next_iova = self.next_iova;
+            .map_err(|_| PdmaMemoryError::StorageExhausted)?;
+        let mut next_address = self.next_address;
         let first_object = self.regions.len();
         first_object
             .checked_add(lengths.len())
-            .ok_or(DmaSpaceError::AddressExhausted)?;
+            .ok_or(PdmaMemoryError::AddressExhausted)?;
         for (index, length) in lengths.iter().copied().enumerate() {
             let object_raw = first_object
                 .checked_add(index)
-                .ok_or(DmaSpaceError::AddressExhausted)?;
-            let base = align_iova(next_iova)?;
-            let region =
-                DmaRegion::try_new(BufferId::new(object_raw), DmaAddress::new(base), length)
-                    .map_err(|_| DmaSpaceError::AddressExhausted)?;
-            next_iova = reserved_end(region)?;
+                .ok_or(PdmaMemoryError::AddressExhausted)?;
+            let base = align_address(next_address)?;
+            let region = PdmaMemoryRegion::try_new(
+                BufferId::new(object_raw),
+                pdma_model_contract::abi::DmaAddress::new(base),
+                length,
+            )
+            .map_err(|_| PdmaMemoryError::AddressExhausted)?;
+            next_address = reserved_end(region)?;
             regions.push(region);
         }
-        Ok(DmaStage {
+        Ok(PdmaMemoryStage {
             generation: self.generation,
-            next_iova,
+            next_address,
             regions,
         })
     }
 
     /// Installs an entire staged batch or leaves mappings and bytes unchanged.
-    pub fn commit(&mut self, stage: DmaStage) -> Result<Vec<DmaRegion>, DmaSpaceError> {
+    pub fn commit(
+        &mut self,
+        stage: PdmaMemoryStage,
+    ) -> Result<Vec<PdmaMemoryRegion>, PdmaMemoryError> {
         self.validate_stage(&stage)?;
         let next_generation = self
             .generation
             .checked_add(1)
-            .ok_or(DmaSpaceError::AddressExhausted)?;
+            .ok_or(PdmaMemoryError::AddressExhausted)?;
+        let alignment = MemoryAlignment::try_new(MAPPING_ALIGNMENT)
+            .map_err(|_| PdmaMemoryError::InvalidRegion)?;
+        let runtime_regions = stage
+            .regions
+            .iter()
+            .filter(|region| !region.is_empty())
+            .map(|region| MemoryRegion::try_new(region.memory_base(), region.length(), alignment))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| PdmaMemoryError::InvalidRegion)?;
+        let prepared = self
+            .memory
+            .prepare_regions(&runtime_regions)
+            .map_err(|error| PdmaMemoryError::from_runtime_memory(&error))?;
         let mut additions = Vec::new();
         additions
             .try_reserve_exact(stage.regions.len())
-            .map_err(|_| DmaSpaceError::StorageExhausted)?;
+            .map_err(|_| PdmaMemoryError::StorageExhausted)?;
+        let mut runtime = runtime_regions.iter().copied();
         for region in stage.regions.iter().copied() {
-            let length =
-                usize::try_from(region.length()).map_err(|_| DmaSpaceError::StorageExhausted)?;
-            let mut bytes = Vec::new();
-            bytes
-                .try_reserve_exact(length)
-                .map_err(|_| DmaSpaceError::StorageExhausted)?;
-            bytes.resize(length, 0);
-            additions.push(RegionBacking { region, bytes });
+            let storage = if region.is_empty() {
+                None
+            } else {
+                runtime.next()
+            };
+            additions.push(RegionBacking { region, storage });
         }
         self.regions
             .try_reserve_exact(additions.len())
-            .map_err(|_| DmaSpaceError::StorageExhausted)?;
+            .map_err(|_| PdmaMemoryError::StorageExhausted)?;
+        prepared
+            .try_install(&self.memory)
+            .map_err(|error| PdmaMemoryError::from_runtime_memory(&error))?;
         let committed = stage.regions;
         self.regions.extend(additions);
-        self.next_iova = stage.next_iova;
+        self.next_address = stage.next_address;
         self.generation = next_generation;
         Ok(committed)
     }
 
-    pub(crate) fn validate_stage(&self, stage: &DmaStage) -> Result<(), DmaSpaceError> {
+    pub(crate) fn validate_stage(&self, stage: &PdmaMemoryStage) -> Result<(), PdmaMemoryError> {
         if stage.generation != self.generation {
-            return Err(DmaSpaceError::StaleStage {
+            return Err(PdmaMemoryError::StaleStage {
                 expected_generation: stage.generation,
                 actual_generation: self.generation,
             });
@@ -115,25 +147,25 @@ impl DmaSpace {
     }
 
     /// Allocates and commits one region.
-    pub fn allocate(&mut self, length: u64) -> Result<DmaRegion, DmaSpaceError> {
+    pub fn allocate(&mut self, length: u64) -> Result<PdmaMemoryRegion, PdmaMemoryError> {
         let stage = self.stage(&[length])?;
         let committed = self.commit(stage)?;
         committed
             .first()
             .copied()
-            .ok_or(DmaSpaceError::AddressExhausted)
+            .ok_or(PdmaMemoryError::AddressExhausted)
     }
 
-    fn validate_proposal(&self, stage: &DmaStage) -> Result<(), DmaSpaceError> {
+    fn validate_proposal(&self, stage: &PdmaMemoryStage) -> Result<(), PdmaMemoryError> {
         let mut previous_end = self
             .regions
             .last()
             .map(|backing| reserved_end(backing.region))
             .transpose()?
-            .unwrap_or(FIRST_IOVA);
+            .unwrap_or(FIRST_MEMORY_ADDRESS);
         for region in &stage.regions {
             if region.base().raw() < previous_end {
-                return Err(DmaSpaceError::OverlappingRegion);
+                return Err(PdmaMemoryError::OverlappingRegion);
             }
             previous_end = reserved_end(*region)?;
         }
@@ -141,23 +173,17 @@ impl DmaSpace {
     }
 }
 
-impl Default for DmaSpace {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-fn align_iova(address: u64) -> Result<u64, DmaSpaceError> {
+fn align_address(address: u64) -> Result<u64, PdmaMemoryError> {
     address
-        .checked_add(IOVA_ALIGNMENT - 1)
-        .map(|value| value & !(IOVA_ALIGNMENT - 1))
-        .ok_or(DmaSpaceError::AddressExhausted)
+        .checked_add(MAPPING_ALIGNMENT - 1)
+        .map(|value| value & !(MAPPING_ALIGNMENT - 1))
+        .ok_or(PdmaMemoryError::AddressExhausted)
 }
 
-fn reserved_end(region: DmaRegion) -> Result<u64, DmaSpaceError> {
+fn reserved_end(region: PdmaMemoryRegion) -> Result<u64, PdmaMemoryError> {
     region
         .base()
         .raw()
         .checked_add(region.length().max(1))
-        .ok_or(DmaSpaceError::AddressExhausted)
+        .ok_or(PdmaMemoryError::AddressExhausted)
 }

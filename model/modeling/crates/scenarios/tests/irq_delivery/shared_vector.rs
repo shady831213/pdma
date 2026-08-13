@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 #[tokio::test(flavor = "current_thread")]
 async fn completion_and_event_sources_share_one_persistent_vector_handler() -> ModelResult<()> {
     // Given: both driver sources route to one vector and one persistent handler instance.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
     let cpu = SoftwareCpu::new();
@@ -121,7 +121,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
 #[tokio::test(flavor = "current_thread")]
 async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelResult<()> {
     // Given: two masked fault messages accumulate for one source and one registered vector.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
     port.enable_tracing().await;
@@ -223,4 +223,12 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
     assert_eq!(summary.deliveries(), 2);
     assert_eq!(device_summary.errors, 2);
     Ok(())
+}
+
+fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
+    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ))
 }

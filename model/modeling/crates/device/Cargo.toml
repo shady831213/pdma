@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Async PDMA device model skeleton"
 
 [dependencies]
+hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 pdma-model-contract = { path = "../contract" }
 tokio = { version = "1.49", features = ["rt", "sync"] }
 

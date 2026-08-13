@@ -1,15 +1,15 @@
 use super::{ActiveQueue, BusControlError, QueueStatus};
-use crate::dma_space::DmaStage;
-use crate::runner::native::dma_bus_api::PreparedDmaBusQueue;
-use crate::runner::state::RunnerState;
+use crate::dma_space::PdmaMemoryStage;
+use crate::runner::native::exact_api::PreparedExactQueue;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::QueueId;
-use pdma_model_contract::{DmaRegion, QueueActivation, RingLayout, RingRecord};
+use pdma_model_contract::{PdmaMemoryRegion, QueueActivation, RingLayout, RingRecord};
 
 struct ValidatedMappedActivation(QueueActivation);
 
 pub(in crate::runner) struct PreparedQueueActivation {
     shadow: ActiveQueue,
-    native: PreparedDmaBusQueue,
+    native: PreparedExactQueue,
 }
 
 impl PreparedQueueActivation {
@@ -19,8 +19,8 @@ impl PreparedQueueActivation {
 }
 
 pub(in crate::runner) fn activate_staged(
-    runner: &mut RunnerState,
-    stage: DmaStage,
+    runner: &mut DeviceCore,
+    stage: PdmaMemoryStage,
     activation: QueueActivation,
 ) -> Result<QueueStatus, BusControlError> {
     let prepared = prepare_staged(runner, &stage, activation)?;
@@ -29,7 +29,7 @@ pub(in crate::runner) fn activate_staged(
 }
 
 pub(in crate::runner) fn activate_mapped(
-    runner: &mut RunnerState,
+    runner: &mut DeviceCore,
     activation: QueueActivation,
 ) -> Result<QueueStatus, BusControlError> {
     let prepared = prepare_mapped(runner, activation)?;
@@ -37,8 +37,8 @@ pub(in crate::runner) fn activate_mapped(
 }
 
 pub(in crate::runner) fn prepare_staged(
-    runner: &mut RunnerState,
-    stage: &DmaStage,
+    runner: &mut DeviceCore,
+    stage: &PdmaMemoryStage,
     activation: QueueActivation,
 ) -> Result<PreparedQueueActivation, BusControlError> {
     let validated = validate_staged(runner, stage, activation)?;
@@ -46,7 +46,7 @@ pub(in crate::runner) fn prepare_staged(
 }
 
 pub(in crate::runner) fn prepare_mapped(
-    runner: &mut RunnerState,
+    runner: &mut DeviceCore,
     activation: QueueActivation,
 ) -> Result<PreparedQueueActivation, BusControlError> {
     let validated = validate_mapped(runner, activation)?;
@@ -54,8 +54,8 @@ pub(in crate::runner) fn prepare_mapped(
 }
 
 fn validate_staged(
-    runner: &RunnerState,
-    stage: &DmaStage,
+    runner: &DeviceCore,
+    stage: &PdmaMemoryStage,
     activation: QueueActivation,
 ) -> Result<ValidatedMappedActivation, BusControlError> {
     validate_identity(runner, activation)?;
@@ -71,7 +71,7 @@ fn validate_staged(
 }
 
 fn validate_mapped(
-    runner: &RunnerState,
+    runner: &DeviceCore,
     activation: QueueActivation,
 ) -> Result<ValidatedMappedActivation, BusControlError> {
     validate_identity(runner, activation)?;
@@ -83,7 +83,7 @@ fn validate_mapped(
 }
 
 fn validate_identity(
-    runner: &RunnerState,
+    runner: &DeviceCore,
     activation: QueueActivation,
 ) -> Result<(), BusControlError> {
     if activation.queue().epoch() != runner.bus_control.epoch {
@@ -122,7 +122,7 @@ fn validate_layouts(activation: QueueActivation) -> Result<(), BusControlError> 
 }
 
 fn prepare(
-    runner: &mut RunnerState,
+    runner: &mut DeviceCore,
     validated: &ValidatedMappedActivation,
 ) -> Result<PreparedQueueActivation, BusControlError> {
     let activation = validated.0;
@@ -143,7 +143,7 @@ fn prepare(
 }
 
 pub(in crate::runner) fn install(
-    runner: &mut RunnerState,
+    runner: &mut DeviceCore,
     prepared: PreparedQueueActivation,
 ) -> QueueStatus {
     runner.backend.install_dma_bus_queue(prepared.native);
@@ -162,7 +162,7 @@ fn validate_layout(layout: RingLayout, record: RingRecord) -> Result<(), BusCont
     }
 }
 
-const fn activation_regions(activation: QueueActivation) -> [DmaRegion; 3] {
+const fn activation_regions(activation: QueueActivation) -> [PdmaMemoryRegion; 3] {
     let rings = activation.rings();
     [
         rings.submission().region(),
@@ -171,7 +171,7 @@ const fn activation_regions(activation: QueueActivation) -> [DmaRegion; 3] {
     ]
 }
 
-const fn regions_overlap(left: DmaRegion, right: DmaRegion) -> bool {
+const fn regions_overlap(left: PdmaMemoryRegion, right: PdmaMemoryRegion) -> bool {
     let left_end = left.base().raw().saturating_add(left.length());
     let right_end = right.base().raw().saturating_add(right.length());
     left.base().raw() < right_end && right.base().raw() < left_end

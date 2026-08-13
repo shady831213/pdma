@@ -13,7 +13,11 @@ use support::{
 #[tokio::test(flavor = "current_thread")]
 async fn source_commands_return_complete_post_command_state() -> TestResult {
     // Given: one valid completion source with an untouched response bank.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let queue = create_queue(&handle, 1).await?;
     select_completion(&handle, queue).await?;
@@ -44,7 +48,11 @@ async fn source_commands_return_complete_post_command_state() -> TestResult {
 #[tokio::test(flavor = "current_thread")]
 async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> TestResult {
     // Given: one published completion on an enabled unmasked Line source.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let queue = create_queue(&handle, 1).await?;
@@ -84,7 +92,11 @@ async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> 
 #[tokio::test(flavor = "current_thread")]
 async fn message_readiness_is_non_consuming_and_claim_consumes_exactly_one() -> TestResult {
     // Given: two completions on a Message source that was masked during publication.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let queue = create_queue(&handle, 2).await?;
@@ -126,7 +138,11 @@ async fn message_readiness_is_non_consuming_and_claim_consumes_exactly_one() -> 
 #[tokio::test(flavor = "current_thread")]
 async fn malformed_stale_and_invalid_source_commands_preserve_response_and_state() -> TestResult {
     // Given: one successful observation retained as the response baseline.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let queue = create_queue(&handle, 1).await?;
     select_completion(&handle, queue).await?;

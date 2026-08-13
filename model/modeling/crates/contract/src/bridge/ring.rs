@@ -1,10 +1,10 @@
-use super::DmaRegion;
+use super::PdmaMemoryRegion;
 use crate::abi::{AbiControlError, MAX_RING_DEPTH, RingCursor, RingRecord};
 
 /// One validated ABI-v1 ring region and its retained full-capacity depth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RingLayout {
-    region: DmaRegion,
+    region: PdmaMemoryRegion,
     depth: u32,
     extent: u64,
     record: RingRecord,
@@ -13,7 +13,7 @@ pub struct RingLayout {
 impl RingLayout {
     /// Validates depth, extent, alignment, and exact region length.
     pub fn try_new(
-        region: DmaRegion,
+        region: PdmaMemoryRegion,
         depth: u64,
         record: RingRecord,
     ) -> Result<Self, AbiControlError> {
@@ -53,7 +53,7 @@ impl RingLayout {
     }
 
     /// Backing DMA region.
-    pub const fn region(self) -> DmaRegion {
+    pub const fn region(self) -> PdmaMemoryRegion {
         self.region
     }
 

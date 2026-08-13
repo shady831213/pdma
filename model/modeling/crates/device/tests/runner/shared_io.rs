@@ -28,11 +28,13 @@ pub fn assert_semantic_stall_commit_points() -> TestResult {
 }
 
 fn fixture() -> TestResult<Fixture> {
-    let mut device = SyncDevice::with_resource_config(
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default()
             .with_read_slots(1)
             .with_completion_publication_slots(1),
-    );
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     device.enable_tracing();
     let copy_queue = device.create_queue(config())?;
     let vector_queue = device.create_queue(config())?;

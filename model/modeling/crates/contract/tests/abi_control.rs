@@ -2,16 +2,16 @@
 
 use pdma_model_contract::{
     AbiAddressError, AbiControlError, AbiDiscovery, AbiLimits, ControlRequest, DeviceEpoch,
-    DeviceRunState, DeviceStatus, DiscoveryRequest, DmaAddress, DmaRegion, EpochIrqRoute,
-    EpochIrqSource, IrqControl, QueueActivation, QueueControl, QueueRingRegions, RingCursor,
+    DeviceRunState, DeviceStatus, DiscoveryRequest, DmaAddress, EpochIrqRoute, EpochIrqSource,
+    IrqControl, PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions, RingCursor,
     RingCursors, RingLayout, RingRecord, WholeDeviceReset,
 };
 use pdma_model_contract::{
     BufferId, EventRouting, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueId, SoftwareOwnerId,
 };
 
-const fn region(id: usize, base: u64, length: u64) -> Result<DmaRegion, AbiAddressError> {
-    DmaRegion::try_new(BufferId::new(id), DmaAddress::new(base), length)
+const fn region(id: usize, base: u64, length: u64) -> Result<PdmaMemoryRegion, AbiAddressError> {
+    PdmaMemoryRegion::try_new(BufferId::new(id), DmaAddress::new(base), length)
 }
 
 fn assert_layout_errors(actual: [Option<AbiControlError>; 5]) {

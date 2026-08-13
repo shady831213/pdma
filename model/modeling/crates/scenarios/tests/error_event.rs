@@ -12,7 +12,11 @@ mod recovery;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_past_source() {
     // Given: async runner handle, AsyncDriver, and a linear copy whose source read is too long.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, queue_id, command_id, src, no_completion, no_event) = SoftwareCpu::new()
         .run_main(async {
@@ -74,7 +78,11 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() {
     // Given: async runner handle, AsyncDriver, and a one-slot queue with one invalid command.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (second_before, snapshot, event, queue_id, submit_after_ok) = SoftwareCpu::new()
         .run_main(async {
@@ -127,7 +135,11 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     // Given: one async driver's queue has a pending memory fault event.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, wrong_event, owner_event, owner_queue_id, first_submit_ok, second_submit) =
         SoftwareCpu::new()

@@ -11,7 +11,7 @@ use pdma_model_contract::{
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_contract::{DeviceEpoch, EpochQueue};
-use pdma_model_device::{BusControlError, DmaSpaceError};
+use pdma_model_device::{BusControlError, PdmaMemoryError};
 use state::PortState;
 use std::future::{Future, poll_fn};
 
@@ -27,7 +27,7 @@ pub trait BusControlErrorAdapter {
     fn into_model_error(self, queue: EpochQueue) -> ModelError;
 }
 
-impl BusDmaErrorAdapter for DmaSpaceError {
+impl BusDmaErrorAdapter for PdmaMemoryError {
     fn into_model_error(self, buffer: Option<BufferId>) -> ModelError {
         match self {
             Self::AddressExhausted | Self::StorageExhausted => ModelError::DmaAllocationExhausted,

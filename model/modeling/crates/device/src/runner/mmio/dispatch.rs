@@ -2,10 +2,10 @@ use super::bank::MmioScalar;
 use super::global::{self, GlobalRegister as G};
 use super::irq::{self, IrqRegister as I};
 use super::queue::{self, QueueRegister as Q};
-use crate::runner::state::RunnerState;
+use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::RegisterId;
 
-pub(super) const fn read(state: &RunnerState, register: RegisterId) -> MmioScalar {
+pub(in crate::runner) const fn read(state: &DeviceCore, register: RegisterId) -> MmioScalar {
     match register {
         RegisterId::GMagic => global::read(state, G::Magic),
         RegisterId::GMmioAbiVersion => global::read(state, G::MmioAbiVersion),
@@ -76,7 +76,7 @@ pub(super) const fn read(state: &RunnerState, register: RegisterId) -> MmioScala
     }
 }
 
-pub(super) fn write(state: &mut RunnerState, register: RegisterId, value: u64) {
+pub(in crate::runner) fn write(state: &mut DeviceCore, register: RegisterId, value: u64) {
     match register {
         RegisterId::GMagic => global::write(state, G::Magic, value),
         RegisterId::GMmioAbiVersion => global::write(state, G::MmioAbiVersion, value),

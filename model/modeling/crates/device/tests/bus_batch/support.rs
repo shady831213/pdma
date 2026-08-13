@@ -1,22 +1,77 @@
 use pdma_model_contract::abi::mmio::{MmioByteCount, QueueResponseBank};
 use pdma_model_contract::{
-    DeviceEpoch, DmaRegion, EpochQueue, QueueActivation, QueueControl, QueueRingRegions,
+    DeviceEpoch, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions,
     RingCursor, RingLayout, RingRecord,
 };
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::{
-    AsyncDeviceHandle, DmaStage, DmaWrite, QueueBootstrapBatch, SubmissionBatch,
+    AsyncDeviceHandle, DmaWrite, PdmaMemoryStage, QueueBootstrapBatch, SubmissionBatch,
 };
+use std::sync::{Arc, Mutex};
+
+#[derive(Debug, Default)]
+pub struct RecordingObserver(Mutex<Vec<hardware_interface_runtime::RegisterObservation>>);
+
+impl RecordingObserver {
+    pub fn snapshot(&self) -> Vec<hardware_interface_runtime::RegisterObservation> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl hardware_interface_runtime::RegisterObserver for RecordingObserver {
+    fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(observation);
+    }
+}
 
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 pub fn new_handle() -> AsyncDeviceHandle {
-    let (device, _worker) = pdma_model_device::AsyncDevice::queue_port();
+    let (device, _worker) =
+        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        ));
     device.handle()
 }
 
+pub fn observed_handle() -> (AsyncDeviceHandle, Arc<RecordingObserver>) {
+    let (handle, observer, _) = observed_handle_with_memory();
+    (handle, observer)
+}
+
+pub fn observed_handle_with_memory() -> (
+    AsyncDeviceHandle,
+    Arc<RecordingObserver>,
+    Arc<hardware_interface_runtime::SharedMemory>,
+) {
+    let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let (handle, observer) = observed_handle_for_memory(&memory);
+    (handle, observer, memory)
+}
+
+pub fn observed_handle_for_memory(
+    memory: &Arc<hardware_interface_runtime::SharedMemory>,
+) -> (AsyncDeviceHandle, Arc<RecordingObserver>) {
+    let observer = Arc::new(RecordingObserver::default());
+    let (device, _worker) =
+        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            Arc::clone(memory),
+            pdma_model_contract::ResourceConfig::default(),
+            observer.clone(),
+        ));
+    (device.handle(), observer)
+}
+
 pub fn activation(
-    stage: &DmaStage,
+    stage: &PdmaMemoryStage,
     epoch: DeviceEpoch,
 ) -> Result<QueueActivation, pdma_model_contract::abi::AbiControlError> {
     let [submission, completion, event] = stage.regions() else {
@@ -42,8 +97,8 @@ pub fn activation(
 
 pub async fn bootstrap(
     handle: &AsyncDeviceHandle,
-) -> TestResult<(EpochQueue, DmaRegion, [u8; 72])> {
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+) -> TestResult<(EpochQueue, PdmaMemoryRegion, [u8; 72])> {
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [submission, _, _] = stage.regions() else {
         return Err("three staged regions required".into());
     };

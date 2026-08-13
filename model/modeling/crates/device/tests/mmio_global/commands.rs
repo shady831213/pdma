@@ -9,7 +9,11 @@ pub async fn assert_global_commands() -> TestResult {
 
 async fn run() -> TestResult {
     // Given: a fresh device and independently typed ABI-v1 discovery and limits.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
     let discovery = AbiDiscovery::v1();
     let limits = AbiLimits::v1();

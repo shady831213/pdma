@@ -19,10 +19,14 @@ include!("mmio_queue/activation_rejections.rs");
 #[tokio::test]
 async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors() -> TestResult {
     // Given: exact committed depth-two SQ/CQ/EQ mappings and programmed raw registers.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
-    let committed = handle.commit_dma_stage(stage).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
+    let committed = handle.commit_memory_stage(stage).await?;
 
     // When: ACTIVATE is issued solely through the raw queue register window.
     activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &committed).await?;
@@ -40,10 +44,14 @@ async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors()
 #[tokio::test]
 async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutation() -> TestResult {
     // Given: exact mappings paired with misaligned, wrong-ID, and stale activation registers.
-    let (wrong_device, _worker) = AsyncDevice::queue_port();
+    let (wrong_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let wrong = wrong_device.handle();
-    let wrong_stage = wrong.stage_dma_regions(&[128, 64, 128]).await?;
-    let wrong_regions = wrong.commit_dma_stage(wrong_stage).await?;
+    let wrong_stage = wrong.stage_memory_regions(&[128, 64, 128]).await?;
+    let wrong_regions = wrong.commit_memory_stage(wrong_stage).await?;
     let [wrong_submission, wrong_completion, wrong_event] = wrong_regions.as_slice() else {
         return Err("three committed queue regions required".into());
     };
@@ -119,10 +127,14 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
 #[tokio::test]
 async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() -> TestResult {
     // Given: one mapped active depth-two queue with every cursor at zero.
-    let (device, _worker) = AsyncDevice::queue_port();
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
-    let regions = handle.commit_dma_stage(stage).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
+    let regions = handle.commit_memory_stage(stage).await?;
     activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &regions).await?;
     support::write_u64(&handle, 0x118, 1).await?;
 
@@ -182,15 +194,19 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
 async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_event() -> TestResult
 {
     // Given: an active queue whose first committed descriptor slot contains malformed bytes.
-    let (device, worker) = AsyncDevice::queue_port();
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = device.handle();
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
-    let regions = handle.commit_dma_stage(stage).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
+    let regions = handle.commit_memory_stage(stage).await?;
     let [submission, _, event] = regions.as_slice() else {
         return Err("three committed queue regions required".into());
     };
     activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &regions).await?;
-    handle.write_iova(submission.base(), &[0; 64]).await?;
+    handle.write_memory(submission.base(), &[0; 64]).await?;
 
     // When: doorbell-before-publication rejects, publication succeeds, then capture succeeds.
     support::write_u64(&handle, 0x118, 1).await?;
@@ -215,7 +231,7 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     assert_eq!(retired[2..5], [1, 1, 1]);
     assert_eq!(retired[7], 1);
     println!("{{\"malformed_retirement\":{retired:?}}}");
-    let bytes = handle.read_iova(event.base(), 64).await?;
+    let bytes = handle.read_memory(event.base(), 64).await?;
     assert!(decode_event(&bytes).is_ok());
     handle.request_shutdown().await;
     worker.await?;

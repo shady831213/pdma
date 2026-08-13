@@ -6,7 +6,7 @@ pub mod support;
 
 use pdma_model_contract::{BufferId, DeviceEpoch, QueueId};
 use pdma_model_contract::{
-    DmaAddress, DmaRegion, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate,
+    DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate,
     QueueRingRegions, RingCursor, RingLayout, RingRecord,
 };
 use pdma_model_device::{BusControlError, DmaWrite, SubmissionAcceptance};

@@ -1,17 +1,17 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct FakeStage(Vec<DmaRegion>);
+struct FakeStage(Vec<PdmaMemoryRegion>);
 
 impl BusDmaStage for FakeStage {
-    fn proposed_regions(&self) -> &[DmaRegion] {
+    fn proposed_regions(&self) -> &[PdmaMemoryRegion] {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Sequence {
-    Allocate(usize, DmaRegion),
-    Stage(Vec<u64>, Vec<DmaRegion>),
-    Bootstrap(Vec<DmaRegion>, QueueActivation),
+    Allocate(usize, PdmaMemoryRegion),
+    Stage(Vec<u64>, Vec<PdmaMemoryRegion>),
+    Bootstrap(Vec<PdmaMemoryRegion>, QueueActivation),
     Write(DmaAddress, Vec<u8>),
     Read(DmaAddress, u64),
     WriteControl(QueueControlWrite),
@@ -19,7 +19,7 @@ enum Sequence {
     Accept(
         EpochQueue,
         RingCursor,
-        Vec<DmaRegion>,
+        Vec<PdmaMemoryRegion>,
         BusDmaWrite,
         Option<BusDmaWrite>,
     ),
@@ -86,16 +86,16 @@ impl AsyncPdmaBus for FakeBus {
     type DmaError = FakeError;
     type ControlError = FakeError;
 
-    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
+    async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
         let length = u64::try_from(len).map_err(|_| ModelError::DmaAllocationExhausted)?;
-        let region = DmaRegion::try_new(BufferId::new(0), DmaAddress::new(0x1_0000), length)
+        let region = PdmaMemoryRegion::try_new(BufferId::new(0), DmaAddress::new(0x1_0000), length)
             .map_err(|_| ModelError::DmaAllocationExhausted)?;
         self.record(Sequence::Allocate(len, region))
             .map_err(|_| ModelError::DmaAllocationExhausted)?;
         Ok(region)
     }
 
-    async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, Self::DmaError> {
+    async fn stage_memory_regions(&self, lengths: &[u64]) -> Result<Self::Stage, Self::DmaError> {
         let mut state = self.state.lock().map_err(|_| FakeError)?;
         let ordinal = state.stage_count;
         state.stage_count += 1;
@@ -106,7 +106,7 @@ impl AsyncPdmaBus for FakeBus {
             .copied()
             .enumerate()
             .map(|(index, length)| {
-                let region = DmaRegion::try_new(
+                let region = PdmaMemoryRegion::try_new(
                     BufferId::new(index + 1 + ordinal * 3),
                     DmaAddress::new(cursor),
                     length,
@@ -189,7 +189,7 @@ impl AsyncPdmaBus for FakeBus {
 }
 
 fn activation(
-    regions: &[DmaRegion],
+    regions: &[PdmaMemoryRegion],
     queue_id: QueueId,
 ) -> Result<QueueActivation, pdma_model_contract::abi::AbiControlError> {
     let [submission_region, completion_region, event_region] = regions else {
@@ -224,7 +224,7 @@ fn zero_status(queue: EpochQueue, rings: QueueRingRegions) -> Result<BusQueueSta
 }
 
 fn empty_status(queue: EpochQueue) -> Result<BusQueueStatus, FakeError> {
-    let region = DmaRegion::try_new(BufferId::new(99), DmaAddress::new(0x8_0000), 64)
+    let region = PdmaMemoryRegion::try_new(BufferId::new(99), DmaAddress::new(0x8_0000), 64)
         .map_err(|_| FakeError)?;
     let layout = RingLayout::try_new(region, 1, RingRecord::Submission).map_err(|_| FakeError)?;
     let cursors = RingCursors::try_new(layout, RingCursor::new(0), RingCursor::new(0))
@@ -239,14 +239,14 @@ fn empty_status(queue: EpochQueue) -> Result<BusQueueStatus, FakeError> {
 }
 
 fn expected_sequence(
-    allocated: DmaRegion,
-    proposed: &[DmaRegion],
+    allocated: PdmaMemoryRegion,
+    proposed: &[PdmaMemoryRegion],
     activation: QueueActivation,
 ) -> Result<Vec<Sequence>, pdma_model_contract::abi::AbiAddressError> {
     let [submission, _, _] = proposed else {
         return Ok(Vec::new());
     };
-    let indirect = DmaRegion::try_new(BufferId::new(4), DmaAddress::new(0x3_0000), 8)?;
+    let indirect = PdmaMemoryRegion::try_new(BufferId::new(4), DmaAddress::new(0x3_0000), 8)?;
     let queue = activation.queue();
     Ok(vec![
         Sequence::Allocate(32, allocated),

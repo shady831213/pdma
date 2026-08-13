@@ -1,19 +1,19 @@
 async fn assert_mapped_activation_rejected(
     handle: &pdma_model_device::AsyncDeviceHandle,
     request: QueueActivation,
-    committed: &[DmaRegion],
+    committed: &[PdmaMemoryRegion],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let generation = handle.dma_generation().await;
+    let generation = handle.memory_generation().await;
     let run = handle.snapshot().await;
     let trace = handle.trace_events().await;
     let mut region_bytes = Vec::new();
     region_bytes.try_reserve_exact(committed.len())?;
     for region in committed {
-        region_bytes.push(handle.read_iova(region.base(), region.length()).await?);
+        region_bytes.push(handle.read_memory(region.base(), region.length()).await?);
     }
 
     assert!(handle.activate_mapped_queue(request).await.is_err());
-    assert_eq!(handle.dma_generation().await, generation);
+    assert_eq!(handle.memory_generation().await, generation);
     assert_eq!(handle.snapshot().await, run);
     assert_eq!(handle.trace_events().await, trace);
     for (region, before) in committed.iter().zip(&region_bytes) {
@@ -23,7 +23,7 @@ async fn assert_mapped_activation_rejected(
         );
         assert_eq!(
             handle
-                .read_iova(region.base(), region.length())
+                .read_memory(region.base(), region.length())
                 .await?
                 .as_slice(),
             before.as_slice()
@@ -43,23 +43,23 @@ async fn committed_mapped_queue_activation_preserves_dma_and_installs_zeroed_que
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: three exact, committed SQ/CQ/EQ mappings and their next-queue activation.
     let handle = new_handle();
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let request = activation(&stage, QueueId::new(0))?;
-    let committed = handle.commit_dma_stage(stage).await?;
-    let generation = handle.dma_generation().await;
+    let committed = handle.commit_memory_stage(stage).await?;
+    let generation = handle.memory_generation().await;
 
     // When: mapped activation consumes the already committed mappings.
     let status = handle.activate_mapped_queue(request).await?;
 
     // Then: DMA is untouched and one zero-cursor queue with the exact identity is installed.
-    assert_eq!(handle.dma_generation().await, generation);
+    assert_eq!(handle.memory_generation().await, generation);
     for region in &committed {
         assert_eq!(
             handle.region_for_object(region.object()).await,
             Some(*region)
         );
         assert_eq!(
-            handle.read_iova(region.base(), region.length()).await?,
+            handle.read_memory(region.base(), region.length()).await?,
             vec![0; usize::try_from(region.length())?]
         );
     }
@@ -82,13 +82,12 @@ async fn mapped_activation_rejects_uncommitted_and_partial_mappings_without_muta
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: one wholly uncommitted activation and one with only its SQ mapping committed.
     let uncommitted_handle = new_handle();
-    let uncommitted = uncommitted_handle
-        .stage_dma_regions(&[128, 64, 128])
+    let uncommitted = uncommitted_handle.stage_memory_regions(&[128, 64, 128])
         .await?;
     let uncommitted_request = activation(&uncommitted, QueueId::new(0))?;
     let partial_handle = new_handle();
-    let submission = partial_handle.allocate_dma_region(128).await?;
-    let partial = partial_handle.stage_dma_regions(&[64, 128]).await?;
+    let submission = partial_handle.allocate_memory_region(128).await?;
+    let partial = partial_handle.stage_memory_regions(&[64, 128]).await?;
     let [completion, event] = partial.regions() else {
         return Err("two proposed result rings required".into());
     };
@@ -120,9 +119,9 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
     // Given: exact committed rings plus validly constructed but stale/wrong mapping requests.
     let handle = new_handle();
     handle.enable_tracing().await;
-    let ring_stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let ring_stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let valid = activation(&ring_stage, QueueId::new(0))?;
-    let committed = handle.commit_dma_stage(ring_stage).await?;
+    let committed = handle.commit_memory_stage(ring_stage).await?;
     let [submission_region, _, _] = committed.as_slice() else {
         return Err("three committed ring regions required".into());
     };
@@ -139,7 +138,7 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
         valid.config(),
         valid.rings(),
     )?;
-    let fake_submission = DmaRegion::try_new(
+    let fake_submission = PdmaMemoryRegion::try_new(
         BufferId::new(99),
         valid.rings().submission().region().base(),
         valid.rings().submission().region().length(),
@@ -190,13 +189,13 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
         )
         .is_err()
     );
-    let misaligned = DmaRegion::try_new(
+    let misaligned = PdmaMemoryRegion::try_new(
         submission_region.object(),
         DmaAddress::new(submission_region.base().raw().saturating_add(1)),
         submission_region.length(),
     )?;
     assert!(RingLayout::try_new(misaligned, 2, RingRecord::Submission).is_err());
-    let wrong_extent = DmaRegion::try_new(
+    let wrong_extent = PdmaMemoryRegion::try_new(
         submission_region.object(),
         submission_region.base(),
         submission_region.length().saturating_sub(1),
@@ -216,7 +215,7 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
         )
         .is_err()
     );
-    assert_eq!(handle.dma_generation().await, 1);
+    assert_eq!(handle.memory_generation().await, 1);
     assert!(handle.trace_events().await.is_empty());
     Ok(())
 }
@@ -226,9 +225,9 @@ async fn dropped_mapped_activation_future_changes_nothing_before_commit()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: exact committed rings and an unpolled mapped-activation future.
     let handle = new_handle();
-    let stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let request = activation(&stage, QueueId::new(0))?;
-    let committed = handle.commit_dma_stage(stage).await?;
+    let committed = handle.commit_memory_stage(stage).await?;
     let before = handle.snapshot().await;
     let pending = handle.activate_mapped_queue(request);
 
@@ -237,7 +236,7 @@ async fn dropped_mapped_activation_future_changes_nothing_before_commit()
 
     // Then: no queue, mapping, generation, trace, or wake state changed.
     assert_eq!(handle.snapshot().await, before);
-    assert_eq!(handle.dma_generation().await, 1);
+    assert_eq!(handle.memory_generation().await, 1);
     assert!(handle.trace_events().await.is_empty());
     for region in &committed {
         assert_eq!(

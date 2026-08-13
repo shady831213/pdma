@@ -7,19 +7,30 @@ use pdma_model_contract::{
 };
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
-#[derive(Clone, Copy)]
-pub(super) enum OperationCase {
+/// Operation variants covered by the exact descriptor inventory.
+#[derive(Clone, Copy, Debug)]
+pub enum OperationCase {
+    /// Linear copy.
     Copy,
+    /// Strided copy.
     Strided,
+    /// Broadcast copy.
     Broadcast,
+    /// Vector addition.
     Vector,
 }
 
 impl OperationCase {
-    pub(super) const ALL: [Self; 4] = [Self::Copy, Self::Strided, Self::Broadcast, Self::Vector];
+    /// Complete operation inventory.
+    pub const ALL: [Self; 4] = [Self::Copy, Self::Strided, Self::Broadcast, Self::Vector];
 }
 
-pub(super) async fn execute_operation(case: OperationCase) -> TestResult {
+/// Drives one operation through the exact descriptor frontend.
+///
+/// # Panics
+///
+/// Panics when the observed exact result violates the pinned operation contract.
+pub async fn execute_operation(case: OperationCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
     let source_a = allocate(&fixture.handle, 8).await?;
     let source_b = allocate(&fixture.handle, 8).await?;
@@ -27,11 +38,11 @@ pub(super) async fn execute_operation(case: OperationCase) -> TestResult {
     let destination_b = allocate(&fixture.handle, 8).await?;
     fixture
         .handle
-        .write_iova(source_a.base(), &[1, 2, 3, 4, 5, 6, 7, 8])
+        .write_memory(source_a.base(), &[1, 2, 3, 4, 5, 6, 7, 8])
         .await?;
     fixture
         .handle
-        .write_iova(source_b.base(), &[8, 7, 6, 5, 4, 3, 2, 1])
+        .write_memory(source_b.base(), &[8, 7, 6, 5, 4, 3, 2, 1])
         .await?;
     let (command, expected_a, expected_b) = command(
         case,
@@ -53,15 +64,22 @@ pub(super) async fn execute_operation(case: OperationCase) -> TestResult {
         pdma_model_contract::abi::RingCursor::new(1)
     );
     assert_eq!(result.destinations, [expected_a, expected_b]);
+    assert!(!result.traces.is_empty());
     assert_eq!(result.steps, 0);
+    assert_eq!(result.native_steps, 1);
     assert!(!result.irq_pending);
     Ok(())
 }
 
-pub(super) async fn multi_queue_arbitration() -> TestResult {
+pub(super) async fn multi_queue_arbitration() -> TestResult<Vec<pdma_model_contract::QueueId>> {
     let resources = ResourceConfig::default().with_compute_slots(0);
-    let (runner, worker) = AsyncDevice::queue_port_with_resource_config(resources);
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        resources,
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = runner.handle();
+    handle.enable_tracing().await;
     let (vector_queue, vector_slot) =
         activate(&handle, pdma_model_contract::QueueId::new(0)).await?;
     let (copy_queue, copy_slot) = activate(&handle, pdma_model_contract::QueueId::new(1)).await?;
@@ -69,8 +87,8 @@ pub(super) async fn multi_queue_arbitration() -> TestResult {
     let source_b = allocate(&handle, 4).await?;
     let vector_destination = allocate(&handle, 4).await?;
     let copy_destination = allocate(&handle, 4).await?;
-    handle.write_iova(source_a.base(), &[1, 2, 3, 4]).await?;
-    handle.write_iova(source_b.base(), &[4, 3, 2, 1]).await?;
+    handle.write_memory(source_a.base(), &[1, 2, 3, 4]).await?;
+    handle.write_memory(source_b.base(), &[4, 3, 2, 1]).await?;
     let vector = encode(AbiCommand::VectorAdd(AbiVectorAdd::new(
         AbiId::new(40),
         VectorIovas::new(source_a.base(), source_b.base(), vector_destination.base()),
@@ -101,7 +119,7 @@ pub(super) async fn multi_queue_arbitration() -> TestResult {
     }
     let worker = tokio::spawn(worker.run());
     let _first_stall = handle.wait_for_stall_after(0).await;
-    handle.write_iova(source_a.base(), &[1, 2, 3, 4]).await?;
+    handle.write_memory(source_a.base(), &[1, 2, 3, 4]).await?;
     let _second_stall = handle.wait_for_stall_after(1).await;
     let vector_status = handle
         .control_queue(QueueControl::ReadStatus(vector_queue))
@@ -113,28 +131,35 @@ pub(super) async fn multi_queue_arbitration() -> TestResult {
     assert_eq!(copy_status.submission().consumer(), RingCursor::new(1));
     assert_eq!(
         handle
-            .read_iova(copy_destination.base(), copy_destination.length())
+            .read_memory(copy_destination.base(), copy_destination.length())
             .await?,
         [1, 2, 3, 4]
     );
     assert_eq!(
         handle
-            .read_iova(vector_destination.base(), vector_destination.length())
+            .read_memory(vector_destination.base(), vector_destination.length())
             .await?,
         [0; 4]
     );
+    let order = handle
+        .trace_events()
+        .await
+        .into_iter()
+        .filter(|event| event.kind() == pdma_model_contract::TraceEventKind::Scheduled)
+        .filter_map(|event| event.queue_id())
+        .collect();
     handle.request_shutdown().await;
     worker.await?;
-    Ok(())
+    Ok(order)
 }
 
-async fn command(
+pub(super) async fn command(
     case: OperationCase,
     handle: &pdma_model_device::AsyncDeviceHandle,
-    source_a: pdma_model_contract::bridge::DmaRegion,
-    source_b: pdma_model_contract::bridge::DmaRegion,
-    destination_a: pdma_model_contract::bridge::DmaRegion,
-    destination_b: pdma_model_contract::bridge::DmaRegion,
+    source_a: pdma_model_contract::bridge::PdmaMemoryRegion,
+    source_b: pdma_model_contract::bridge::PdmaMemoryRegion,
+    destination_a: pdma_model_contract::bridge::PdmaMemoryRegion,
+    destination_b: pdma_model_contract::bridge::PdmaMemoryRegion,
 ) -> TestResult<(AbiCommand, Vec<u8>, Vec<u8>)> {
     match case {
         OperationCase::Copy => Ok((
@@ -163,7 +188,7 @@ async fn command(
             let mut entries = [0_u8; 16];
             entries[0..8].copy_from_slice(&destination_a.base().raw().to_le_bytes());
             entries[8..16].copy_from_slice(&destination_b.base().raw().to_le_bytes());
-            handle.write_iova(list.base(), &entries).await?;
+            handle.write_memory(list.base(), &entries).await?;
             Ok((
                 AbiCommand::BroadcastCopy(AbiBroadcastCopy::try_new(
                     AbiId::new(12),

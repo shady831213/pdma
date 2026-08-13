@@ -1,4 +1,4 @@
-use pdma_model_contract::{DeviceEpoch, DmaRegion};
+use pdma_model_contract::{DeviceEpoch, PdmaMemoryRegion};
 use pdma_model_contract::{
     EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqSource, IrqVector,
 };
@@ -18,7 +18,7 @@ pub(super) enum Access {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct RecordingStage(pub(super) Vec<DmaRegion>);
+pub(super) struct RecordingStage(pub(super) Vec<PdmaMemoryRegion>);
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct RecordingTransport {

@@ -1,8 +1,8 @@
 use super::super::{AsyncDeviceBusStage, BusDmaStage, BusSubmission};
 use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::{DmaAddress, DmaRegion, QueueActivation};
-use pdma_model_device::{DmaSpaceError, MmioBatchError, QueueResponseBytes};
+use pdma_model_contract::{DmaAddress, PdmaMemoryRegion, QueueActivation};
+use pdma_model_device::{MmioBatchError, PdmaMemoryError, QueueResponseBytes};
 
 /// Device-facing operations used by the MMIO bus and literal recording transports.
 pub trait MmioDeviceTransport: Clone + Send + Sync {
@@ -10,27 +10,27 @@ pub trait MmioDeviceTransport: Clone + Send + Sync {
     type Stage: BusDmaStage;
 
     /// Allocates one checked committed DMA region.
-    fn allocate_dma_region(
+    fn allocate_memory_region(
         &self,
         len: usize,
-    ) -> impl Future<Output = ModelResult<DmaRegion>> + Send;
+    ) -> impl Future<Output = ModelResult<PdmaMemoryRegion>> + Send;
     /// Proposes checked DMA mappings.
-    fn stage_dma_regions(
+    fn stage_memory_regions(
         &self,
         lengths: &[u64],
-    ) -> impl Future<Output = Result<Self::Stage, DmaSpaceError>> + Send;
+    ) -> impl Future<Output = Result<Self::Stage, PdmaMemoryError>> + Send;
     /// Reads checked DMA bytes.
     fn read_dma(
         &self,
         address: DmaAddress,
         length: u64,
-    ) -> impl Future<Output = Result<Vec<u8>, DmaSpaceError>> + Send;
+    ) -> impl Future<Output = Result<Vec<u8>, PdmaMemoryError>> + Send;
     /// Writes checked DMA bytes.
     fn write_dma(
         &self,
         address: DmaAddress,
         bytes: &[u8],
-    ) -> impl Future<Output = Result<(), DmaSpaceError>> + Send;
+    ) -> impl Future<Output = Result<(), PdmaMemoryError>> + Send;
     /// Executes the exact closed bootstrap batch.
     fn bootstrap_batch(
         &self,
@@ -61,19 +61,19 @@ pub trait MmioDeviceTransport: Clone + Send + Sync {
 impl MmioDeviceTransport for pdma_model_device::AsyncDeviceHandle {
     type Stage = AsyncDeviceBusStage;
 
-    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
-        self.allocate_dma_region(len).await.map_err(Into::into)
+    async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
+        self.allocate_memory_region(len).await.map_err(Into::into)
     }
-    async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, DmaSpaceError> {
-        self.stage_dma_regions(lengths)
+    async fn stage_memory_regions(&self, lengths: &[u64]) -> Result<Self::Stage, PdmaMemoryError> {
+        self.stage_memory_regions(lengths)
             .await
             .map(AsyncDeviceBusStage)
     }
-    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, DmaSpaceError> {
-        self.read_iova(address, length).await
+    async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, PdmaMemoryError> {
+        self.read_memory(address, length).await
     }
-    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), DmaSpaceError> {
-        self.write_iova(address, bytes).await
+    async fn write_dma(&self, address: DmaAddress, bytes: &[u8]) -> Result<(), PdmaMemoryError> {
+        self.write_memory(address, bytes).await
     }
     async fn bootstrap_batch(
         &self,

@@ -1,8 +1,11 @@
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use super::bulk::write_store;
 use super::{PreparedRegions, Store};
-use crate::{MemoryError, MemoryRegion, MemoryRevision};
+use crate::{
+    MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryError, MemoryRegion, MemoryRevision,
+};
 
 /// An exclusive synchronous memory view confined to a transaction closure.
 #[derive(Debug)]
@@ -39,6 +42,21 @@ impl<'store> MemoryTransaction<'store> {
         self.store.install(prepared.prepared);
         revision
     }
+
+    /// Clones the exclusive view into a fallible transaction-local draft.
+    pub fn try_draft(&self) -> Result<MemoryTransactionDraft<'store>, MemoryError> {
+        Ok(MemoryTransactionDraft {
+            store: self.store.try_clone()?,
+            brand: PhantomData,
+        })
+    }
+
+    /// Replaces the exclusive view with a completely validated draft.
+    pub fn install_draft(&mut self, draft: MemoryTransactionDraft<'store>) -> MemoryRevision {
+        let revision = draft.store.revision;
+        *self.store = draft.store;
+        revision
+    }
 }
 
 /// A non-cloneable proposal branded to one exclusive transaction view.
@@ -46,4 +64,30 @@ impl<'store> MemoryTransaction<'store> {
 pub struct TransactionPreparedRegions<'store> {
     prepared: PreparedRegions,
     brand: PhantomData<&'store mut &'store ()>,
+}
+
+/// A prospective store confined to one exclusive transaction.
+#[derive(Debug)]
+pub struct MemoryTransactionDraft<'store> {
+    store: Store,
+    brand: PhantomData<&'store mut &'store ()>,
+}
+
+impl MemoryTransactionDraft<'_> {
+    /// Prepares and applies regions only to this prospective view.
+    pub fn prepare_regions(&mut self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
+        let prepared = PreparedRegions::prepare(&self.store, regions)?;
+        self.store.install(prepared);
+        Ok(())
+    }
+
+    /// Applies one checked byte write only to this prospective view.
+    pub fn write(
+        &mut self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        source: &[u8],
+    ) -> Result<(), MemoryAccessError> {
+        write_store(&mut self.store, address, alignment, source)
+    }
 }

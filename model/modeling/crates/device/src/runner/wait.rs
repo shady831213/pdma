@@ -1,6 +1,6 @@
 //! Tokio-backed asynchronous wait helpers for runner snapshots.
 
-use super::state::{RunnerState, snapshot, snapshot_with_status};
+use super::state::{DeviceCore, snapshot, snapshot_with_status};
 use super::{AsyncDevice, AsyncDeviceHandle, AsyncRunSnapshot, AsyncStepStatus};
 
 impl AsyncDevice {
@@ -71,7 +71,7 @@ impl AsyncDeviceHandle {
 
     async fn wait_until(
         &self,
-        predicate: impl Fn(&RunnerState) -> bool + Send + Sync,
+        predicate: impl Fn(&DeviceCore) -> bool + Send + Sync,
     ) -> AsyncRunSnapshot {
         self.wait_until_snapshot(|state| predicate(state).then(|| snapshot(state)))
             .await
@@ -79,7 +79,7 @@ impl AsyncDeviceHandle {
 
     async fn wait_until_snapshot(
         &self,
-        project: impl Fn(&RunnerState) -> Option<AsyncRunSnapshot> + Send + Sync,
+        project: impl Fn(&DeviceCore) -> Option<AsyncRunSnapshot> + Send + Sync,
     ) -> AsyncRunSnapshot {
         let mut changes = self.shared.changed.subscribe();
         loop {

@@ -64,6 +64,7 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
         )
     );
     assert_eq!(result.steps, 1);
+    assert_eq!(result.native_steps, 1);
     assert!(!result.irq_pending);
     Ok(())
 }
@@ -152,6 +153,7 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
     assert_eq!(result.consumer, RingCursor::new(1));
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 1);
+    assert_eq!(result.native_steps, 1);
     assert!(!result.irq_pending);
     Ok(())
 }

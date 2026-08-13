@@ -3,14 +3,14 @@ async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Given: dropped and conflicting stages plus an activation naming the wrong queue.
     let handle = new_handle();
-    let dropped = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let dropped = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let dropped_activation = activation(&dropped, QueueId::new(0))?;
     let pending = handle.activate_queue(dropped, dropped_activation);
     drop(pending);
-    let stale = handle.stage_dma_regions(&[128, 64, 128]).await?;
-    let winner = handle.stage_dma_regions(&[8]).await?;
-    handle.commit_dma_stage(winner).await?;
-    let invalid = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let stale = handle.stage_memory_regions(&[128, 64, 128]).await?;
+    let winner = handle.stage_memory_regions(&[8]).await?;
+    handle.commit_memory_stage(winner).await?;
+    let invalid = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let invalid_activation = activation(&invalid, QueueId::new(1))?;
 
     // When: stale and wrong-ID bootstrap transactions are rejected.
@@ -26,9 +26,9 @@ async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged
     );
 
     // Then: only the independent winner exists and the original ID/base remains reusable.
-    assert_eq!(handle.dma_generation().await, 1);
+    assert_eq!(handle.memory_generation().await, 1);
     assert_eq!(handle.region_for_object(BufferId::new(1)).await, None);
-    let valid = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let valid = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [valid_submission, _, _] = valid.regions() else {
         return Err("three valid ring regions required".into());
     };
@@ -48,7 +48,7 @@ async fn cancelled_or_invalid_submission_accept_changes_no_dma_bytes_mapping_or_
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Given: one active queue, a dropped acceptance value, and an invalid descriptor extent.
     let handle = new_handle();
-    let rings = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
     let [submission, _, _] = rings.regions() else {
         return Err("three ring regions required".into());
@@ -57,7 +57,7 @@ async fn cancelled_or_invalid_submission_accept_changes_no_dma_bytes_mapping_or_
     handle
         .activate_queue(rings.clone(), activation(&rings, QueueId::new(0))?)
         .await?;
-    let indirect = handle.stage_dma_regions(&[8]).await?;
+    let indirect = handle.stage_memory_regions(&[8]).await?;
     let [indirect_region] = indirect.regions() else {
         return Err("one indirect region required".into());
     };
@@ -86,10 +86,10 @@ async fn cancelled_or_invalid_submission_accept_changes_no_dma_bytes_mapping_or_
     assert!(handle.accept_submission(invalid).await.is_err());
 
     // Then: no stage, byte, mapping, or producer mutation occurred.
-    assert_eq!(handle.dma_generation().await, 1);
+    assert_eq!(handle.memory_generation().await, 1);
     assert_eq!(handle.region_for_object(indirect_region.object()).await, None);
     assert_eq!(
-        handle.read_iova(submission.base(), 64).await?,
+        handle.read_memory(submission.base(), 64).await?,
         vec![0; 64]
     );
     let status = handle.control_queue(QueueControl::ReadStatus(queue)).await?;
@@ -102,7 +102,7 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Given: staged rings plus epoch, ID, layout, overlap, and depth-invalid activations.
     let handle = new_handle();
-    let rings = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
     let valid = activation(&rings, QueueId::new(0))?;
     let stale = QueueActivation::try_new(
@@ -126,7 +126,7 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
             )?,
         ),
     )?;
-    let fake = DmaRegion::try_new(BufferId::new(99), DmaAddress::new(0x2_0000), 128)
+    let fake = PdmaMemoryRegion::try_new(BufferId::new(99), DmaAddress::new(0x2_0000), 128)
         .map_err(|_| "valid fake DMA region required")?;
     let mismatched = QueueActivation::try_new(
         DeviceEpoch::initial(),
@@ -154,12 +154,12 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
     );
     for invalid in [stale, wrong_id, overlapping, mismatched] {
         assert!(handle.activate_queue(rings.clone(), invalid).await.is_err());
-        assert_eq!(handle.dma_generation().await, 0);
+        assert_eq!(handle.memory_generation().await, 0);
     }
     handle
         .activate_queue(rings.clone(), valid)
         .await?;
-    let generation = handle.dma_generation().await;
+    let generation = handle.memory_generation().await;
 
     // When: stale/unknown controls and full, regressing, or beyond-capacity cursors are rejected.
     for control in [
@@ -178,7 +178,7 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
     }
 
     // Then: allocator, epoch, identity, mappings, and every cursor remain unchanged.
-    assert_eq!(handle.dma_generation().await, generation);
+    assert_eq!(handle.memory_generation().await, generation);
     let status = handle.control_queue(QueueControl::ReadStatus(queue)).await?;
     assert_eq!(status.queue(), queue);
     assert_eq!(status.submission().producer(), RingCursor::new(0));

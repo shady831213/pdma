@@ -50,7 +50,7 @@ where
         .rings
         .submission()
         .region()
-        .base()
+        .abi_base()
         .checked_add(slot_offset)
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let status = port
@@ -193,7 +193,7 @@ where
         .checked_mul(8)
         .ok_or(ModelError::DmaAllocationExhausted)?;
     let stage = port
-        .poll_dma(port.bus.stage_dma_regions(&[extent]), None)
+        .poll_dma(port.bus.stage_memory_regions(&[extent]), None)
         .await?;
     let [region] = stage.proposed_regions() else {
         return Err(ModelError::DmaSubmissionState);
@@ -210,14 +210,14 @@ where
         abi_id(command.command_id().raw())?,
         BroadcastIovas::new(
             operand(port, request.src(), request.src_offset())?,
-            region.base(),
+            region.abi_base(),
         ),
         BroadcastShape::new(scalar(request.len())?, count),
     )
     .map_err(|_| ModelError::DmaSubmissionState)?;
     Ok((
         AbiCommand::BroadcastCopy(abi),
-        Some((stage, BusDmaWrite::new(region.base(), bytes))),
+        Some((stage, BusDmaWrite::new(region.abi_base(), bytes))),
     ))
 }
 
@@ -233,7 +233,7 @@ fn operand<B>(port: &BusDevicePort<B>, id: BufferId, offset: usize) -> ModelResu
             });
         }
         region
-            .base()
+            .abi_base()
             .checked_add(offset)
             .map_err(|_| ModelError::RangeOverflow)
     })?

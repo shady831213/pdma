@@ -1,8 +1,8 @@
 use super::AsyncStallReason;
 use super::bus::control::BusControlState;
 use super::native::QueuePortDeviceModel;
-use super::native::dma_bus_api::PreparedDmaBusQueue;
-use crate::dma_space::DmaSpace;
+use super::native::exact_api::PreparedExactQueue;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::completion::CompletionRecord;
 use pdma_model_contract::desc::ExternalCommand;
@@ -25,10 +25,6 @@ pub(super) enum DeviceModel {
 }
 
 impl DeviceModel {
-    pub(super) fn queue_port() -> Self {
-        Self::queue_port_with_resource_config(ResourceConfig::default())
-    }
-
     pub(super) fn queue_port_with_resource_config(config: ResourceConfig) -> Self {
         if config == ResourceConfig::default() {
             Self::QueuePort(QueuePortDeviceModel::new())
@@ -39,7 +35,7 @@ impl DeviceModel {
 
     pub(super) fn step(
         &mut self,
-        dma_space: &mut DmaSpace,
+        dma_space: &mut PdmaMemoryMappings,
         bus_control: &mut BusControlState,
     ) -> ModelResult<ModelStepStatus> {
         match self {
@@ -47,7 +43,11 @@ impl DeviceModel {
         }
     }
 
-    pub(super) fn has_work(&self, dma_space: &DmaSpace, bus_control: &BusControlState) -> bool {
+    pub(super) fn has_work(
+        &self,
+        dma_space: &PdmaMemoryMappings,
+        bus_control: &BusControlState,
+    ) -> bool {
         match self {
             Self::QueuePort(device) => device.has_work(dma_space, bus_control),
         }
@@ -192,7 +192,7 @@ impl DeviceModel {
     pub(in crate::runner) fn prepare_dma_bus_queue(
         &mut self,
         config: QueueConfig,
-    ) -> ModelResult<PreparedDmaBusQueue> {
+    ) -> ModelResult<PreparedExactQueue> {
         match self {
             Self::QueuePort(device) => device.prepare_dma_bus_queue(config),
         }
@@ -200,7 +200,7 @@ impl DeviceModel {
 
     pub(in crate::runner) fn install_dma_bus_queue(
         &mut self,
-        prepared: PreparedDmaBusQueue,
+        prepared: PreparedExactQueue,
     ) -> QueueConfigHandle {
         match self {
             Self::QueuePort(device) => device.install_dma_bus_queue(prepared),
@@ -249,6 +249,12 @@ impl DeviceModel {
     pub(super) fn trace_events(&self) -> Vec<TraceEvent> {
         match self {
             Self::QueuePort(device) => device.trace_events(),
+        }
+    }
+
+    pub(super) const fn native_steps(&self) -> usize {
+        match self {
+            Self::QueuePort(device) => device.native_steps(),
         }
     }
 

@@ -7,13 +7,13 @@ use pdma_model_device::{DmaWrite, MmioBatchError, QueueBootstrapBatch, Submissio
 async fn malformed_cardinality_and_exact_write_shapes_commit_nothing() -> TestResult {
     // Given: a canonical activation plus separate wrong-cardinality stages.
     let handle = support::new_handle();
-    let canonical = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let canonical = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let activation = support::activation(&canonical, DeviceEpoch::initial())?;
     let [submission_region, _, _] = canonical.regions() else {
         return Err("canonical stage must contain three regions".into());
     };
     let submission_region = *submission_region;
-    let short = handle.stage_dma_regions(&[128, 64]).await?;
+    let short = handle.stage_memory_regions(&[128, 64]).await?;
     let before = handle.snapshot().await;
 
     // When: bootstrap cardinality/order and submission byte cardinalities are malformed.
@@ -27,7 +27,7 @@ async fn malformed_cardinality_and_exact_write_shapes_commit_nothing() -> TestRe
         None,
     );
     let submission = handle.submit_queue_batch(descriptor).await;
-    let indirect_stage = handle.stage_dma_regions(&[8, 8]).await?;
+    let indirect_stage = handle.stage_memory_regions(&[8, 8]).await?;
     let extra_indirect = SubmissionBatch::new(
         activation.queue(),
         RingCursor::new(0),
@@ -43,7 +43,7 @@ async fn malformed_cardinality_and_exact_write_shapes_commit_nothing() -> TestRe
     assert_eq!(bootstrap, Err(MmioBatchError::InvalidShape));
     assert_eq!(submission, Err(MmioBatchError::InvalidShape));
     assert_eq!(indirect, Err(MmioBatchError::InvalidShape));
-    assert_eq!(handle.dma_generation().await, 0);
+    assert_eq!(handle.memory_generation().await, 0);
     assert_eq!(handle.snapshot().await, before);
     assert_eq!(
         handle.region_for_object(submission_region.object()).await,
@@ -59,7 +59,7 @@ async fn terminal_command_failure_preserves_dma_cursor_and_standalone_latch() ->
     let (queue, submission, _) = support::bootstrap(&handle).await?;
     handle.write_mmio(0x168, &99_u32.to_le_bytes()).await?;
     let latch_before = support::queue_latches(&handle).await?;
-    let bytes_before = handle.read_iova(submission.base(), 64).await?;
+    let bytes_before = handle.read_memory(submission.base(), 64).await?;
     let status_before = support::queue_status(&handle, queue).await?;
     let snapshot_before = handle.snapshot().await;
 
@@ -77,7 +77,10 @@ async fn terminal_command_failure_preserves_dma_cursor_and_standalone_latch() ->
     assert!(
         matches!(result, Err(MmioBatchError::Command(details)) if details.result == MmioResult::InvalidTransaction)
     );
-    assert_eq!(handle.read_iova(submission.base(), 64).await?, bytes_before);
+    assert_eq!(
+        handle.read_memory(submission.base(), 64).await?,
+        bytes_before
+    );
     assert_eq!(support::queue_status(&handle, queue).await?, status_before);
     assert_eq!(support::queue_latches(&handle).await?, latch_before);
     assert_eq!(handle.snapshot().await, snapshot_before);
@@ -90,8 +93,8 @@ async fn final_dma_operation_failure_discards_prepared_indirect_state() -> TestR
     // Given: a valid indirect stage/write followed by an unmapped descriptor address.
     let handle = support::new_handle();
     let (queue, submission, _) = support::bootstrap(&handle).await?;
-    handle.write_iova(submission.base(), &[0x5a; 64]).await?;
-    let indirect = handle.stage_dma_regions(&[8]).await?;
+    handle.write_memory(submission.base(), &[0x5a; 64]).await?;
+    let indirect = handle.stage_memory_regions(&[8]).await?;
     let [indirect_region] = indirect.regions() else {
         return Err("one indirect region required".into());
     };
@@ -116,13 +119,13 @@ async fn final_dma_operation_failure_discards_prepared_indirect_state() -> TestR
     assert!(
         matches!(result, Err(MmioBatchError::Dma(details)) if details.result == MmioResult::DmaUnmapped && details.details == [0xdead_0000, 64, 0])
     );
-    assert_eq!(handle.dma_generation().await, 1);
+    assert_eq!(handle.memory_generation().await, 1);
     assert_eq!(
         handle.region_for_object(indirect_region.object()).await,
         None
     );
     assert_eq!(
-        handle.read_iova(submission.base(), 64).await?,
+        handle.read_memory(submission.base(), 64).await?,
         vec![0x5a; 64]
     );
     assert_eq!(
@@ -141,13 +144,13 @@ async fn final_dma_operation_failure_discards_prepared_indirect_state() -> TestR
 async fn stale_epoch_terminal_failure_and_unpolled_drop_preserve_state() -> TestResult {
     // Given: an old-epoch bootstrap request and a second request never polled.
     let handle = support::new_handle();
-    let stale_stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let stale_stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let stale_activation = support::activation(&stale_stage, DeviceEpoch::initial())?;
     handle
         .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
         .await?;
     let before = handle.snapshot().await;
-    let dropped_stage = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let dropped_stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let dropped_activation = support::activation(&dropped_stage, DeviceEpoch::new(1))?;
 
     // When: the stale terminal command is awaited and the fresh future drops before polling.
@@ -162,7 +165,7 @@ async fn stale_epoch_terminal_failure_and_unpolled_drop_preserve_state() -> Test
     assert!(
         matches!(stale, Err(MmioBatchError::Command(details)) if details.result == MmioResult::StaleEpoch)
     );
-    assert_eq!(handle.dma_generation().await, 0);
+    assert_eq!(handle.memory_generation().await, 0);
     assert_eq!(handle.snapshot().await, before);
     assert_eq!(
         handle.read_mmio(0x16c, MmioByteCount::from(4_u8)).await?,

@@ -7,7 +7,11 @@ use pdma_model_contract::{
 use pdma_model_device::SyncDevice;
 
 pub(super) fn exercise() -> TestResult {
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device.create_queue(QueueConfig::new(
         2,
         2,

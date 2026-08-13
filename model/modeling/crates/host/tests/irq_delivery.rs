@@ -139,7 +139,11 @@ const fn message(id: usize, vector: IrqVector, source: IrqSource) -> IrqNotifica
 #[tokio::test(flavor = "current_thread")]
 async fn stale_notification_fails_before_drain_or_ack() {
     // Given: one pending real completion and a same-source notification from a later epoch.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let cpu = SoftwareCpu::new();
     let mut driver = cpu
         .run_main(AsyncDriver::setup_on(&mut device, 1, 1))

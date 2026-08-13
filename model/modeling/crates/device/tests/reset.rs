@@ -22,7 +22,11 @@ const fn config() -> QueueConfig {
 #[tokio::test]
 async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> TestResult {
     // Given: one completed copy, retained trace history, and both queue frontends at epoch zero.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     device.enable_tracing();
     let old_queue = device.create_queue(config())?;
     let old_bus_queue = device.create_dma_bus_queue(config())?;
@@ -40,7 +44,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
     )?;
     device.ring_doorbell(old_queue)?;
     device.run_until_idle(1)?;
-    let dma_generation = device.dma_generation();
+    let memory_generation = device.memory_generation();
     let trace_before = device.trace_events();
 
     // When: a whole-device reset advances the expected epoch.
@@ -48,7 +52,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
 
     // Then: DMA and instrumentation persist, old capabilities stale, and queue zero is reusable.
     assert_eq!(epoch, DeviceEpoch::new(1));
-    assert_eq!(device.dma_generation(), dma_generation);
+    assert_eq!(device.memory_generation(), memory_generation);
     assert_eq!(device.read_buffer(destination, 0, 4)?, [1, 3, 5, 7]);
     assert_eq!(device.trace_events(), trace_before);
     assert!(matches!(
@@ -63,14 +67,19 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
     assert_eq!(new_queue.epoch(), epoch);
     assert_eq!(new_queue.queue_id(), QueueId::new(0));
 
-    let (async_device, _worker) = pdma_model_device::AsyncDevice::queue_port();
+    let (async_device, _worker) =
+        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::ResourceConfig::default(),
+            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+        ));
     let handle = async_device.handle();
-    let old_rings = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let old_rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let old_activation = activation(&old_rings, DeviceEpoch::initial())?;
     let old_status = handle
         .activate_queue(old_rings.clone(), old_activation)
         .await?;
-    let old_dma_generation = handle.dma_generation().await;
+    let old_dma_generation = handle.memory_generation().await;
     let snapshot = handle.snapshot().await;
     assert_eq!(
         handle
@@ -79,7 +88,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
         DeviceEpoch::new(1)
     );
     assert!(handle.snapshot().await.generation() > snapshot.generation());
-    assert_eq!(handle.dma_generation().await, old_dma_generation);
+    assert_eq!(handle.memory_generation().await, old_dma_generation);
     assert_eq!(
         handle
             .control_queue(QueueControl::ReadStatus(old_status.queue()))
@@ -89,7 +98,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
             actual: DeviceEpoch::initial(),
         })
     );
-    let new_rings = handle.stage_dma_regions(&[128, 64, 128]).await?;
+    let new_rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let new_status = handle
         .activate_queue(
             new_rings.clone(),
@@ -106,8 +115,11 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
 #[test]
 fn reset_discards_stalled_and_pending_retirement_without_late_publication() -> TestResult {
     // Given: one resource-stalled command and one completion pending retirement.
-    let mut stalled =
-        SyncDevice::with_resource_config(ResourceConfig::default().with_read_slots(0));
+    let mut stalled = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        ResourceConfig::default().with_read_slots(0),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let stalled_queue = stalled.create_queue(config())?;
     let source = stalled.allocate_buffer(1)?;
     let destination = stalled.allocate_buffer(1)?;
@@ -119,7 +131,11 @@ fn reset_discards_stalled_and_pending_retirement_without_late_publication() -> T
         AsyncStepStatus::Stalled(AsyncStallReason::ExecutionResourcePressure)
     );
 
-    let mut retiring = SyncDevice::new();
+    let mut retiring = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let retiring_queue = retiring.create_queue(config())?;
     let retiring_source = retiring.allocate_buffer(1)?;
     let first_destination = retiring.allocate_buffer(1)?;
@@ -159,7 +175,11 @@ fn reset_discards_stalled_and_pending_retirement_without_late_publication() -> T
 #[test]
 fn old_notification_and_epoch_overflow_mutate_nothing() -> TestResult {
     // Given: one host-owned message notification and a fully exhausted epoch value.
-    let mut device = SyncDevice::new();
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let queue = device.create_queue(config())?;
     let source = queue.completion_irq_source();
     device.configure_irq_route(source, IrqRoute::Message(IrqVector::new(7)))?;
@@ -223,7 +243,7 @@ fn submit_copy(
 }
 
 fn activation(
-    stage: &pdma_model_device::DmaStage,
+    stage: &pdma_model_device::PdmaMemoryStage,
     epoch: DeviceEpoch,
 ) -> Result<QueueActivation, pdma_model_contract::abi::AbiControlError> {
     let [submission, completion, event] = stage.regions() else {

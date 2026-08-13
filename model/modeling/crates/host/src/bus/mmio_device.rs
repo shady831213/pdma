@@ -18,7 +18,7 @@ pub use recording::MmioDeviceTransport;
 
 use super::AsyncPdmaBus;
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::{DmaAddress, DmaRegion, EpochQueue, QueueActivation};
+use pdma_model_contract::{DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation};
 use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -63,15 +63,15 @@ where
     T: MmioDeviceTransport,
 {
     type Stage = T::Stage;
-    type DmaError = pdma_model_device::DmaSpaceError;
+    type DmaError = pdma_model_device::PdmaMemoryError;
     type ControlError = MmioBusControlError;
 
-    async fn allocate_dma_region(&self, len: usize) -> ModelResult<DmaRegion> {
-        self.transport.allocate_dma_region(len).await
+    async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
+        self.transport.allocate_memory_region(len).await
     }
 
-    async fn stage_dma_regions(&self, lengths: &[u64]) -> Result<Self::Stage, Self::DmaError> {
-        self.transport.stage_dma_regions(lengths).await
+    async fn stage_memory_regions(&self, lengths: &[u64]) -> Result<Self::Stage, Self::DmaError> {
+        self.transport.stage_memory_regions(lengths).await
     }
 
     async fn read_dma(&self, address: DmaAddress, length: u64) -> Result<Vec<u8>, Self::DmaError> {

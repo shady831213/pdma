@@ -15,7 +15,8 @@ impl MemoryAddress {
         self.0
     }
 
-    pub(crate) const fn checked_add(self, length: u64) -> Option<Self> {
+    /// Returns the checked address after adding a byte length.
+    pub const fn checked_add(self, length: u64) -> Option<Self> {
         match self.0.checked_add(length) {
             Some(raw) => Some(Self(raw)),
             None => None,
@@ -34,6 +35,9 @@ impl From<u64> for MemoryAddress {
 pub struct MemoryAlignment(u64);
 
 impl MemoryAlignment {
+    /// Byte alignment accepted by every address.
+    pub const ONE: Self = Self(1);
+
     /// Parses a numeric alignment.
     pub const fn try_new(alignment: u64) -> Result<Self, MemoryAlignmentError> {
         if alignment.is_power_of_two() {

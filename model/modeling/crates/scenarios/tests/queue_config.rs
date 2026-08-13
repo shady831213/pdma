@@ -12,7 +12,11 @@ use pdma_model_host::{AsyncDriver, SoftwareCpu};
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
     // Given: two explicit async queue configurations with different software owners.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let config_a = QueueConfig::new(2, 3, EventRouting::QueueLocal, SoftwareOwnerId::new(10));
     let config_b = QueueConfig::new(4, 5, EventRouting::QueueLocal, SoftwareOwnerId::new(20));
@@ -51,7 +55,11 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
     // Given: an async driver created from an explicit one-slot queue config.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (command_id, second_submit, queue_handle) = SoftwareCpu::new()
         .run_main(async {
@@ -97,7 +105,11 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
     // Given: two async drivers with explicit queue-local event routing.
-    let (runner, worker) = AsyncDevice::queue_port();
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let worker = tokio::spawn(worker.run());
     let (
         snapshot,

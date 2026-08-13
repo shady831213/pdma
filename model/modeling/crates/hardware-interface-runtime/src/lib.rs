@@ -28,5 +28,8 @@ pub use register::{
     ObservationGateError, ObservationReservation, RegisterAccess, RegisterObservation,
     RegisterObserver, SharedRegisterObserver,
 };
-pub use store::{MemoryTransaction, PreparedRegions, SharedMemory, TransactionPreparedRegions};
+pub use store::{
+    MemoryTransaction, MemoryTransactionDraft, PreparedRegions, SharedMemory,
+    TransactionPreparedRegions,
+};
 pub use trace::TraceBuffer;

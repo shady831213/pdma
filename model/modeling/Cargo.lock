@@ -79,6 +79,7 @@ dependencies = [
 name = "pdma-model-device"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-runtime",
  "pdma-model-contract",
  "tokio",
 ]
@@ -97,6 +98,7 @@ dependencies = [
 name = "pdma-model-scenarios"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-runtime",
  "pdma-model-contract",
  "pdma-model-device",
  "pdma-model-host",

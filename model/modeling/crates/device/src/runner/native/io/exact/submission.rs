@@ -2,8 +2,7 @@ mod command;
 mod fault;
 mod resolve;
 
-use super::super::QueueFetch;
-use crate::dma_space::DmaSpace;
+use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::BusControlError;
 use crate::runner::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
@@ -11,12 +10,18 @@ use pdma_model_contract::abi::DescriptorSchemaView;
 use pdma_model_contract::{AbiCommand, AbiEvent, DeviceEpoch, EpochQueue, RingRecord};
 use pdma_model_contract::{CommandId, CompletionRingId, QueueId};
 
+#[derive(Debug, Clone)]
+pub(super) enum ExactFetch {
+    Command(pdma_model_contract::desc::ExternalCommand),
+    Fault(AbiEvent),
+}
+
 pub(super) fn fetch(
-    dma_space: &DmaSpace,
+    dma_space: &PdmaMemoryMappings,
     control: &BusControlState,
     queue_id: QueueId,
     completion_ring: CompletionRingId,
-) -> ModelResult<Option<QueueFetch>> {
+) -> ModelResult<Option<ExactFetch>> {
     let queue = EpochQueue::new(DeviceEpoch::new(control.epoch().raw()), queue_id);
     let active = control
         .queue(queue)
@@ -31,18 +36,18 @@ pub(super) fn fetch(
         .ok_or(ModelError::DmaSubmissionState)?;
     let slot = layout
         .region()
-        .base()
+        .abi_base()
         .checked_add(offset)
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let bytes = dma_space
-        .read_iova(slot, u64::from(RingRecord::Submission.record_size()))
+        .read_memory(slot, u64::from(RingRecord::Submission.record_size()))
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let command_id = command_id(&bytes)?;
     match AbiCommand::decode(&bytes) {
         Ok(command) => command::resolve(dma_space, queue_id, completion_ring, command_id, command)
-            .map(|result| Some(result.map_or_else(QueueFetch::Fault, QueueFetch::Command))),
+            .map(|result| Some(result.map_or_else(ExactFetch::Fault, ExactFetch::Command))),
         Err(error) => fault::descriptor(slot, &bytes, error).map(|fault| {
-            Some(QueueFetch::Fault(AbiEvent::new(
+            Some(ExactFetch::Fault(AbiEvent::new(
                 queue_id, command_id, fault,
             )))
         }),

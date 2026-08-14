@@ -7,6 +7,12 @@ mod error;
 mod irq_delivery;
 mod port;
 
+pub mod adapters;
+pub mod compat;
+pub mod core;
+pub mod interrupt;
+pub mod register;
+
 pub use bus::{
     AsyncDeviceBusStage, AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusQueueStatus, BusSubmission,
     MmioBusControlError, MmioDeviceBus, MmioDeviceTransport, QueueControlWrite,
@@ -19,4 +25,6 @@ pub use irq_delivery::{
     IrqDeliverySummary, IrqHandler, IrqHandlerFuture, IrqHandlerRegistry, NoHandler,
     StatefulIrqHandler, irq_handler, stateful_irq_handler,
 };
-pub use port::{AsyncDevicePort, BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};
+pub use port::{
+    AsyncDevicePort, BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter, DriverPort,
+};

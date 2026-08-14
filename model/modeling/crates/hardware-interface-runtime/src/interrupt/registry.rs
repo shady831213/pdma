@@ -35,6 +35,19 @@ impl<V, N, H> HandlerRegistry<V, N, H> {
         }
     }
 
+    /// Creates a non-empty registry from one initial handler.
+    pub fn with_handler(vector: V, handler: H) -> Self
+    where
+        V: Ord,
+    {
+        let mut handlers = BTreeMap::new();
+        handlers.insert(vector, handler);
+        Self {
+            handlers,
+            notification: PhantomData,
+        }
+    }
+
     /// Reports whether no handler has been registered.
     pub fn is_empty(&self) -> bool {
         self.handlers.is_empty()

@@ -76,6 +76,28 @@ impl MmioRegisterEndpoint {
         }
         Ok(notification)
     }
+
+    /// Claims one IRQ notification and returns the exact emitted direct transcript.
+    pub async fn claim_notification_exact_observed(
+        &self,
+    ) -> Result<
+        (
+            Option<pdma_model_contract::IrqNotification>,
+            Vec<RegisterObservation>,
+        ),
+        MmioRegisterError,
+    > {
+        let committed = {
+            let mut state = self.shared.state.lock().await;
+            claim::prepare_claim(&mut state)?
+        };
+        let generation = committed.generation();
+        let result = committed.emit_observed()?;
+        if let Some(generation) = generation {
+            publish(&self.shared, generation);
+        }
+        Ok(result)
+    }
 }
 
 impl RegisterAccess for MmioRegisterEndpoint {

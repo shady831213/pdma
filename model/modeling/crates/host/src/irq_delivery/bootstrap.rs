@@ -57,7 +57,7 @@ impl<P> IrqDeliveryBootstrap<P> {
     {
         let mut registry = IrqHandlerRegistry::new();
         configure(&mut registry)?;
-        let handler = registry.into_handler_state()?;
+        let handler = registry.freeze()?;
         let (delivery, handle) = self.delivery.with_handlers(handler);
         self.start
             .send(delivery)
@@ -68,7 +68,7 @@ impl<P> IrqDeliveryBootstrap<P> {
 
 impl<P> IrqDeliveryRunner<P>
 where
-    P: AsyncDevicePort,
+    P: AsyncDevicePort + 'static,
 {
     /// Waits for software registration, then runs the host delivery actor.
     pub async fn run(self) -> ModelResult<IrqDeliverySummary> {

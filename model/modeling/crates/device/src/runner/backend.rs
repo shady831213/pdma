@@ -12,6 +12,9 @@ use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::trace::TraceEvent;
 use pdma_model_contract::{DeviceEpoch, EpochIrqSource, ResourceConfig};
 
+#[path = "backend/reset_snapshot.rs"]
+mod reset_snapshot;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ModelStepStatus {
     Progressed,
@@ -171,6 +174,12 @@ impl DeviceModel {
     pub(super) const fn epoch(&self) -> DeviceEpoch {
         match self {
             Self::QueuePort(device) => device.epoch(),
+        }
+    }
+
+    pub(super) const fn resource_config(&self) -> ResourceConfig {
+        match self {
+            Self::QueuePort(device) => device.resource_config(),
         }
     }
 

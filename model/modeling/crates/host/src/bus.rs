@@ -65,7 +65,7 @@ impl<S> BusSubmission<S> {
         }
     }
 
-    fn into_parts(
+    pub(crate) fn into_parts(
         self,
     ) -> (
         EpochQueue,

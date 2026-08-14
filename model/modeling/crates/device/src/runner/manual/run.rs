@@ -4,6 +4,24 @@ use crate::runner::{AsyncRunSummary, AsyncStepStatus, DeviceCore};
 use crate::{ModelError, ModelResult};
 
 impl SyncDevice {
+    /// Runs until idle and preserves the execution-layer source chain.
+    pub fn run_until_idle_typed(
+        &mut self,
+        max_steps: usize,
+    ) -> Result<AsyncRunSummary, crate::PdmaRunError> {
+        self.run_until_idle(max_steps)
+            .map_err(crate::PdmaRunError::from)
+    }
+
+    /// Runs until blocked and preserves the execution-layer source chain.
+    pub fn run_until_blocked_typed(
+        &mut self,
+        max_steps: usize,
+    ) -> Result<AsyncRunSummary, crate::PdmaRunError> {
+        self.run_until_blocked(max_steps)
+            .map_err(crate::PdmaRunError::from)
+    }
+
     /// Runs deterministic synchronous steps until idle or until the step budget expires.
     pub fn run_until_idle(&mut self, max_steps: usize) -> ModelResult<AsyncRunSummary> {
         let start_steps = self.steps;

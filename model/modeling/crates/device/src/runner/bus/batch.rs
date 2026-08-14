@@ -7,7 +7,7 @@ use pdma_model_contract::bridge::QueueActivation;
 
 #[path = "batch/error.rs"]
 mod error;
-pub use error::{DmaBatchContext, MmioBatchError};
+pub use error::{DmaBatchContext, MmioBatchError, PdmaBatchError};
 #[path = "batch/commit.rs"]
 mod commit;
 use commit::{commit_bootstrap, commit_submission};

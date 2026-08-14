@@ -15,8 +15,8 @@ use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::semantic::EpochIrqSource;
 
-/// Async device-facing operations required by the host driver actor.
-pub trait AsyncDevicePort: Send + Sync {
+/// Async device-facing operations required by a host driver turn.
+pub trait DriverPort: Send + Sync {
     /// Provisions one command queue and one bound completion ring.
     ///
     /// # Cancel safety
@@ -140,3 +140,6 @@ pub trait AsyncDevicePort: Send + Sync {
     /// Waits for and consumes one line or message IRQ notification.
     fn wait_irq_notification(&mut self) -> impl Future<Output = Option<IrqNotification>> + Send;
 }
+
+/// Transitional name for [`DriverPort`], retained through Task 26.
+pub use DriverPort as AsyncDevicePort;

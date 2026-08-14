@@ -58,6 +58,10 @@ impl QueuePortDeviceModel {
         }
     }
 
+    pub(super) const fn resource_config(&self) -> ResourceConfig {
+        self.resource_config
+    }
+
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         let frontend = io::semantic(config.command_depth(), config.completion_depth())?;
         let queue_id = QueueId::new(self.queues.len());

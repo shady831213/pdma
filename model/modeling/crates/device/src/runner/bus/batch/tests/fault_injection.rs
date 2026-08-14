@@ -3,6 +3,7 @@ use crate::runner::bus::DmaWrite;
 use pdma_model_contract::DmaAddress;
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult};
+use std::error::Error;
 
 #[tokio::test]
 async fn bootstrap_injectors_reject_before_any_prepared_install() -> TestResult {
@@ -153,25 +154,53 @@ fn assert_injected_error(
 ) {
     use super::super::BatchPreparationFault as F;
     match (fault, result) {
-        (F::Capacity, Err(super::super::MmioBatchError::Dma(details))) => {
+        (F::Capacity, Err(error @ super::super::MmioBatchError::Dma(details))) => {
             assert_eq!(details.result, MmioResult::DmaStorageExhausted);
+            assert!(error.source().is_none());
         }
-        (F::Overlap, Err(super::super::MmioBatchError::Dma(details))) => {
+        (F::Overlap, Err(error @ super::super::MmioBatchError::Dma(details))) => {
             assert_eq!(details.result, MmioResult::DmaOverlap);
+            assert!(error.source().is_none());
         }
         (
             F::Decode,
-            Err(super::super::MmioBatchError::Access(MmioAccessError::ReservedOffset { .. })),
-        )
-        | (
+            Err(
+                error @ super::super::MmioBatchError::Access(MmioAccessError::ReservedOffset {
+                    ..
+                }),
+            ),
+        ) => assert_eq!(
+            error.source().and_then(|source| source.downcast_ref()),
+            Some(&MmioAccessError::ReservedOffset { offset: 0x168 })
+        ),
+        (
             F::Access,
-            Err(super::super::MmioBatchError::Access(MmioAccessError::WriteToReadOnly { .. })),
-        )
-        | (
+            Err(
+                error @ super::super::MmioBatchError::Access(MmioAccessError::WriteToReadOnly {
+                    ..
+                }),
+            ),
+        ) => assert_eq!(
+            error.source().and_then(|source| source.downcast_ref()),
+            Some(&MmioAccessError::WriteToReadOnly { offset: 0x168 })
+        ),
+        (
             F::Mask,
-            Err(super::super::MmioBatchError::Access(MmioAccessError::ReservedBits { .. })),
-        )
-        | (F::Response, Err(super::super::MmioBatchError::InvalidShape)) => {}
+            Err(
+                error @ super::super::MmioBatchError::Access(MmioAccessError::ReservedBits {
+                    ..
+                }),
+            ),
+        ) => assert_eq!(
+            error.source().and_then(|source| source.downcast_ref()),
+            Some(&MmioAccessError::ReservedBits {
+                offset: 0x168,
+                bits: 4,
+            })
+        ),
+        (F::Response, Err(error @ super::super::MmioBatchError::InvalidShape)) => {
+            assert!(error.source().is_none());
+        }
         unexpected => panic!("unexpected injected preparation result: {unexpected:?}"),
     }
 }

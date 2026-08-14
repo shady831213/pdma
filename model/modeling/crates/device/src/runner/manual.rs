@@ -27,6 +27,28 @@ impl SyncDevice {
         Self { core }
     }
 
+    pub(crate) fn reset_core(
+        &mut self,
+        request: pdma_model_contract::WholeDeviceReset,
+    ) -> Result<pdma_model_contract::DeviceEpoch, super::bus::PdmaControlError> {
+        self.core.reset_runner(request)
+    }
+
+    /// Returns committed invocations of the sole reset runner.
+    pub const fn reset_runner_calls(&self) -> usize {
+        self.core.reset_runner_calls()
+    }
+
+    /// Returns the persistent resource configuration owned by the core.
+    pub const fn resource_config(&self) -> pdma_model_contract::ResourceConfig {
+        self.core.backend.resource_config()
+    }
+
+    /// Returns persistent lifecycle step accounting owned by the core.
+    pub const fn lifecycle_steps(&self) -> usize {
+        self.core.steps
+    }
+
     /// Provisions one command queue and one bound completion ring.
     pub fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         self.backend.create_queue(config)

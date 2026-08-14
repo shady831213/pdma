@@ -1,6 +1,6 @@
-use crate::CpuLocal;
 use crate::ModelError;
 use crate::ModelResult;
+use hardware_interface_runtime::CpuLocal;
 use pdma_model_contract::CommandId;
 use std::{
     future::{Future, poll_fn},
@@ -42,9 +42,10 @@ pub(super) struct SharedAccounting {
 impl SharedAccounting {
     pub(super) fn capture_active(command_depth: usize) -> ModelResult<Self> {
         Ok(Self {
-            state: AccountingState::Cpu(CpuLocal::capture_active(DriverAccounting::new(
-                command_depth,
-            ))?),
+            state: AccountingState::Cpu(
+                CpuLocal::capture_active(DriverAccounting::new(command_depth))
+                    .map_err(ModelError::from)?,
+            ),
             pending_rollbacks: Arc::new(AtomicUsize::new(0)),
         })
     }
@@ -105,10 +106,12 @@ impl SharedAccounting {
 
     fn with<R>(&self, operation: impl FnOnce(&mut DriverAccounting) -> R) -> ModelResult<R> {
         match &self.state {
-            AccountingState::Cpu(state) => state.with(|accounting| {
-                self.drain_rollbacks(accounting);
-                operation(accounting)
-            }),
+            AccountingState::Cpu(state) => state
+                .with(|accounting| {
+                    self.drain_rollbacks(accounting);
+                    operation(accounting)
+                })
+                .map_err(ModelError::from),
             AccountingState::Manual(state) => {
                 let mut state = state.lock().map_err(|_| ModelError::SoftwareCpuStateBusy)?;
                 self.drain_rollbacks(&mut state);

@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "adverse/writer.rs"]
+mod writer;
+
 pub(super) async fn run() -> support::TestResult {
     // Given: independent stale and active-queue fixtures with full public pre-state snapshots.
     let (handle, observer) = support::observed_handle();
@@ -10,6 +13,8 @@ pub(super) async fn run() -> support::TestResult {
     let generation = handle.memory_generation().await;
     let registers = support::queue_latches(&handle).await?;
     let trace = handle.trace_events().await;
+    let mut stale_wake = Box::pin(handle.wait_for_change_after(snapshot));
+    assert!(poll_once_pending(&mut stale_wake).await);
     let (active, active_observer) = support::observed_handle();
     let (queue, submission, _) = support::bootstrap(&active).await?;
     let active_snapshot = active.snapshot().await;
@@ -17,6 +22,8 @@ pub(super) async fn run() -> support::TestResult {
     let active_registers = support::queue_latches(&active).await?;
     let active_observations = active_observer.snapshot().len();
     let active_trace = active.trace_events().await;
+    let mut active_wake = Box::pin(active.wait_for_change_after(active_snapshot));
+    assert!(poll_once_pending(&mut active_wake).await);
 
     // When: all publicly constructible adverse operations execute through real surfaces.
     let stale = handle
@@ -26,6 +33,14 @@ pub(super) async fn run() -> support::TestResult {
     let [capacity, overlap] = capacity_and_overlap().await?;
     let ([length, range, queue_failure, decode, access, mask], cancelled_region) =
         exercise_active(&active, queue, submission).await?;
+    let response = response_encoding_limit();
+    let wakes_zero =
+        poll_once_pending(&mut stale_wake).await && poll_once_pending(&mut active_wake).await;
+    assert!(wakes_zero);
+    drop(stale_wake);
+    drop(active_wake);
+    let writer_serialized = writer::run().await?;
+    assert!(writer_serialized);
 
     // Then: every failure and cancellation leaves all captured public surfaces unchanged.
     assert!(
@@ -38,7 +53,8 @@ pub(super) async fn run() -> support::TestResult {
             queue_failure,
             decode,
             access,
-            mask
+            mask,
+            response,
         ]
         .into_iter()
         .all(core::convert::identity)
@@ -58,9 +74,25 @@ pub(super) async fn run() -> support::TestResult {
         None
     );
     println!(
-        "failures=stale,capacity,overlap,range,length,decode,access,mask,queue,response;observations=0;wakes=0;bytes_unchanged=true;mappings_unchanged=true;generation_unchanged=true;registers_unchanged=true;control_unchanged=true;trace_unchanged=true;cancelled_unchanged=true;writer_serialized=true"
+        "failures=stale,capacity,overlap,range,length,decode,access,mask,queue,response;observations=0;wakes={};bytes_unchanged=true;mappings_unchanged=true;generation_unchanged=true;registers_unchanged=true;control_unchanged=true;trace_unchanged=true;cancelled_unchanged=true;writer_serialized={writer_serialized}",
+        usize::from(!wakes_zero),
     );
     Ok(())
+}
+
+fn response_encoding_limit() -> bool {
+    let mut short = [0_u8; 71];
+    let rejected =
+        pdma_model_contract::abi::mmio::QueueResponseRegistersViewMut::new(&mut short).is_err();
+    assert!(rejected);
+    rejected
+}
+
+async fn poll_once_pending<F: std::future::Future>(future: &mut std::pin::Pin<Box<F>>) -> bool {
+    std::future::poll_fn(|context| {
+        std::task::Poll::Ready(future.as_mut().poll(context).is_pending())
+    })
+    .await
 }
 
 async fn capacity_and_overlap() -> support::TestResult<[bool; 2]> {

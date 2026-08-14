@@ -35,6 +35,14 @@ impl CommittedClaim {
         self.reservation.emit(self.observations)?;
         Ok(self.notification)
     }
+
+    pub(super) fn emit_observed(
+        self,
+    ) -> Result<(Option<IrqNotification>, Vec<RegisterObservation>), MmioRegisterError> {
+        let observations = self.observations.clone();
+        self.reservation.emit(self.observations)?;
+        Ok((self.notification, observations))
+    }
 }
 
 impl DeviceCore {

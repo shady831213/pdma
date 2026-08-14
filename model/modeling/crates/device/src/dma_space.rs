@@ -50,6 +50,10 @@ impl PdmaMemoryMappings {
         }
     }
 
+    pub(crate) fn shared_memory(&self) -> Arc<SharedMemory> {
+        Arc::clone(&self.memory)
+    }
+
     /// Returns the generation advanced by each successful batch commit.
     pub const fn generation(&self) -> u64 {
         self.generation

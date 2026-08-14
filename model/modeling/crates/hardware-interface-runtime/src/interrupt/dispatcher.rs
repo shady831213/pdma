@@ -33,6 +33,12 @@ pub struct InterruptShutdown {
     shutdown: watch::Sender<bool>,
 }
 
+/// Sole-consumer shutdown signal paired with [`InterruptShutdown`].
+#[derive(Debug)]
+pub struct InterruptShutdownReceiver {
+    shutdown: watch::Receiver<bool>,
+}
+
 impl InterruptShutdown {
     /// Requests shutdown without joining or accessing actor-owned state.
     pub fn request_shutdown(&self) {
@@ -84,6 +90,41 @@ impl<V, S, H> Drop for InterruptDispatcherTask<V, S, H> {
 }
 
 impl InterruptDispatcher {
+    /// Creates one signal-only shutdown capability and its sole receiver.
+    pub fn shutdown_channel() -> (InterruptShutdown, InterruptShutdownReceiver) {
+        let (shutdown, receiver) = watch::channel(false);
+        (
+            InterruptShutdown { shutdown },
+            InterruptShutdownReceiver { shutdown: receiver },
+        )
+    }
+
+    /// Runs the canonical dispatcher in the caller-owned future.
+    pub async fn run<S, H>(
+        cpu: Arc<SoftwareCpu>,
+        registry: FrozenHandlerRegistry<
+            <<S as InterruptSource>::Notification as InterruptEnvelope>::Vector,
+            S::Notification,
+            H,
+        >,
+        source: S,
+        observer: SharedInterruptObserver<S::Notification>,
+        receiver: InterruptShutdownReceiver,
+    ) -> Result<
+        InterruptSummary,
+        InterruptDispatchError<
+            <<S as InterruptSource>::Notification as InterruptEnvelope>::Vector,
+            S::Error,
+            H::Error,
+        >,
+    >
+    where
+        S: InterruptSource,
+        H: InterruptHandler<S::Notification>,
+    {
+        run_dispatch(cpu, registry, source, observer, receiver.shutdown).await
+    }
+
     /// Freezes a non-empty registry and starts its sole-owner dispatcher task.
     pub fn start<S, H>(
         cpu: Arc<SoftwareCpu>,
@@ -101,12 +142,12 @@ impl InterruptDispatcher {
     >
     where
         S: InterruptSource,
-        H: InterruptHandler<S::Notification>,
+        H: InterruptHandler<S::Notification> + 'static,
     {
-        let (shutdown, receiver) = watch::channel(false);
-        let join = tokio::spawn(run_dispatch(cpu, registry, source, observer, receiver));
+        let (shutdown, receiver) = Self::shutdown_channel();
+        let join = tokio::spawn(Self::run(cpu, registry, source, observer, receiver));
         InterruptDispatcherTask {
-            shutdown: InterruptShutdown { shutdown },
+            shutdown,
             join: Some(join),
         }
     }

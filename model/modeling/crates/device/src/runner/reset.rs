@@ -1,6 +1,8 @@
+use super::AsyncDeviceHandle;
 use super::bus::BusControlError;
-use super::state::{DeviceCore, publish, wake};
-use super::{AsyncDeviceHandle, SyncDevice};
+#[cfg(test)]
+use super::state::DeviceCore;
+use super::state::{publish, wake};
 use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
 
 impl AsyncDeviceHandle {
@@ -20,52 +22,6 @@ impl AsyncDeviceHandle {
         }
         result
     }
-}
-
-impl SyncDevice {
-    /// Atomically resets device-owned state and advances recovery identity.
-    pub fn reset(&mut self, request: WholeDeviceReset) -> Result<DeviceEpoch, BusControlError> {
-        reset_backend(&mut self.backend, request)
-    }
-}
-
-pub(in crate::runner) fn reset_runner(
-    state: &mut DeviceCore,
-    request: WholeDeviceReset,
-) -> Result<DeviceEpoch, BusControlError> {
-    let backend_epoch = state.backend.epoch();
-    let control_epoch = state.bus_control.epoch();
-    if request.expected_epoch() != backend_epoch || control_epoch != backend_epoch {
-        return Err(BusControlError::StaleEpoch {
-            expected: backend_epoch,
-            actual: request.expected_epoch(),
-        });
-    }
-    let next_backend = backend_epoch.next()?;
-    let next_control = control_epoch.next()?;
-    if next_backend != next_control {
-        return Err(BusControlError::InvalidTransaction);
-    }
-    state.backend.reset(next_backend);
-    state.bus_control.reset(next_control);
-    super::mmio::reset::register_banks(state);
-    Ok(next_backend)
-}
-
-fn reset_backend(
-    backend: &mut super::backend::DeviceModel,
-    request: WholeDeviceReset,
-) -> Result<DeviceEpoch, BusControlError> {
-    let current = backend.epoch();
-    if request.expected_epoch() != current {
-        return Err(BusControlError::StaleEpoch {
-            expected: current,
-            actual: request.expected_epoch(),
-        });
-    }
-    let next = current.next()?;
-    backend.reset(next);
-    Ok(next)
 }
 
 #[cfg(test)]
@@ -139,7 +95,7 @@ mod tests {
         let generation = state.generation;
 
         // When: reset cannot checked-advance the current epoch.
-        let result = reset_runner(&mut state, WholeDeviceReset::new(exhausted));
+        let result = state.reset_runner(WholeDeviceReset::new(exhausted));
 
         // Then: the typed overflow leaves identity, DMA, counters, and lifecycle unchanged.
         assert_eq!(

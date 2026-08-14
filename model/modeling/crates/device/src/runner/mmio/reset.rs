@@ -1,6 +1,5 @@
 use super::RegisterBanks;
 use crate::runner::bus::BusControlError;
-use crate::runner::reset::reset_runner;
 use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
 use pdma_model_contract::{AbiControlError, DeviceEpoch, WholeDeviceReset};
@@ -21,10 +20,7 @@ impl ResetOutcome {
 }
 
 pub(in crate::runner) fn execute(state: &mut DeviceCore, expected_epoch: u64) -> ResetOutcome {
-    match reset_runner(
-        state,
-        WholeDeviceReset::new(DeviceEpoch::new(expected_epoch)),
-    ) {
+    match state.reset_runner(WholeDeviceReset::new(DeviceEpoch::new(expected_epoch))) {
         Ok(epoch) => ResetOutcome::Success(epoch),
         Err(error) => ResetOutcome::Rejected(error, map_error(error)),
     }

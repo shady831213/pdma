@@ -1,21 +1,22 @@
 //! Async PDMA device model runner.
 
+pub mod compat;
 pub mod dma_space;
 mod error;
 mod runner;
 pub mod trace;
 
 pub use dma_space::{PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
-pub use error::{ModelError, ModelResult};
+pub use error::{ModelError, ModelResult, PdmaResetError, PdmaRunError};
+pub use hardware_interface_runtime::{
+    NoopRegisterObserver, RegisterObservation, RegisterObserver, SharedMemory,
+    SharedRegisterObserver,
+};
 pub use runner::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
-    AsyncStallReason, AsyncStepStatus, BusControlError, DeviceCore, DmaBatchContext, DmaWrite,
-    MmioBatchError, MmioRegisterEndpoint, MmioRegisterError, PendingDmaResult, QueueBootstrapBatch,
-    QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch, SyncDevice,
+    AsyncStallReason, AsyncStepStatus, BusControlError, DeviceCore, DeviceStateSnapshot,
+    DmaBatchContext, DmaWrite, MmioBatchError, MmioRegisterEndpoint, MmioRegisterError,
+    PdmaBatchError, PdmaControlError, PendingDmaResult, QueueBootstrapBatch, QueueResponseBytes,
+    QueueStatus, ResetPartitionSnapshot, SubmissionAcceptance, SubmissionBatch, SyncDevice,
 };
 pub use trace::TraceSink;
-
-/// Compatibility facade retained while synchronous callers migrate independently.
-pub mod compat {
-    pub use crate::runner::SyncDevice;
-}

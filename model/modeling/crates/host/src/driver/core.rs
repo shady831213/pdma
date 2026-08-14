@@ -1,5 +1,5 @@
 use super::accounting::SharedAccounting;
-use crate::AsyncDevicePort;
+use crate::DriverPort;
 use crate::ModelResult;
 use pdma_model_contract::{
     BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, QueueConfig,
@@ -14,7 +14,7 @@ pub(super) struct DriverCore {
 
 impl DriverCore {
     pub(super) async fn setup_on(
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         config: QueueConfig,
         accounting: SharedAccounting,
     ) -> ModelResult<Self> {
@@ -27,7 +27,7 @@ impl DriverCore {
 
     pub(super) async fn allocate_buffer_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         len: usize,
     ) -> ModelResult<BufferId> {
         device.allocate_buffer(len).await
@@ -35,7 +35,7 @@ impl DriverCore {
 
     pub(super) async fn write_buffer_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         buffer: BufferId,
         data: &[u8],
     ) -> ModelResult<()> {
@@ -44,7 +44,7 @@ impl DriverCore {
 
     pub(super) async fn read_buffer_on(
         &self,
-        device: &impl AsyncDevicePort,
+        device: &impl DriverPort,
         buffer: BufferId,
         len: usize,
     ) -> ModelResult<Vec<u8>> {
@@ -53,7 +53,7 @@ impl DriverCore {
 
     pub(super) async fn poll_completion_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
     ) -> ModelResult<Option<CompletionRecord>> {
         let completion = self
             .accounting
@@ -67,7 +67,7 @@ impl DriverCore {
 
     pub(super) async fn poll_event_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
     ) -> ModelResult<Option<EventRecord>> {
         let event = match self.queue_config.event_routing() {
             EventRouting::QueueLocal => {

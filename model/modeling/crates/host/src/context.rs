@@ -30,6 +30,11 @@ impl SoftwareCpu {
         self.0.run_main(program).await
     }
 
+    pub(crate) fn runtime(&self) -> RuntimeSoftwareCpu {
+        self.0.clone()
+    }
+
+    #[cfg(test)]
     pub(crate) async fn run_irq<F, T>(&self, handler: F) -> T
     where
         F: Future<Output = T>,

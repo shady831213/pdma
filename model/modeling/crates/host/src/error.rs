@@ -1,6 +1,35 @@
 use core::fmt;
+use hardware_interface_runtime::CpuContextError;
 use pdma_model_contract::{BufferId, CompletionRingId, DeviceEpoch, IrqSource, IrqVector, QueueId};
 use pdma_model_device::ModelError as DeviceModelError;
+
+macro_rules! define_layer_error {
+    ($name:ident, $message:literal) => {
+        #[doc = concat!("Typed failure at the ", $message, " boundary.")]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub struct $name(crate::ModelError);
+
+        impl From<crate::ModelError> for $name {
+            fn from(source: crate::ModelError) -> Self {
+                Self(source)
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str($message)
+            }
+        }
+
+        impl std::error::Error for $name {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+    };
+}
+
+pub(crate) use define_layer_error;
 
 /// Result returned by legacy host-model operations.
 pub type ModelResult<T> = Result<T, ModelError>;
@@ -90,6 +119,16 @@ impl From<DeviceModelError> for ModelError {
             DeviceModelError::StepBudgetExhausted { max_steps } => {
                 Self::StepBudgetExhausted { max_steps }
             }
+        }
+    }
+}
+
+impl From<CpuContextError> for ModelError {
+    fn from(error: CpuContextError) -> Self {
+        match error {
+            CpuContextError::Inactive => Self::SoftwareCpuInactive,
+            CpuContextError::Mismatch => Self::SoftwareCpuMismatch,
+            CpuContextError::StateBusy => Self::SoftwareCpuStateBusy,
         }
     }
 }

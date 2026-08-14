@@ -7,6 +7,7 @@ use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::{
     AsyncDeviceHandle, DmaWrite, PdmaMemoryStage, QueueBootstrapBatch, SubmissionBatch,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default)]
@@ -27,6 +28,61 @@ impl hardware_interface_runtime::RegisterObserver for RecordingObserver {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(observation);
+    }
+}
+
+#[derive(Debug)]
+pub struct GatedObserver {
+    observations: Mutex<Vec<hardware_interface_runtime::RegisterObservation>>,
+    expected_regions: AtomicUsize,
+    memory: Arc<hardware_interface_runtime::SharedMemory>,
+    entered: std::sync::Barrier,
+    release: std::sync::Barrier,
+}
+
+impl GatedObserver {
+    pub const fn new(memory: Arc<hardware_interface_runtime::SharedMemory>) -> Self {
+        Self {
+            observations: Mutex::new(Vec::new()),
+            expected_regions: AtomicUsize::new(3),
+            memory,
+            entered: std::sync::Barrier::new(2),
+            release: std::sync::Barrier::new(2),
+        }
+    }
+
+    pub fn expect_regions(&self, count: usize) {
+        self.expected_regions.store(count, Ordering::SeqCst);
+    }
+
+    pub fn await_observation(&self) {
+        self.entered.wait();
+    }
+
+    pub fn release_observation(&self) {
+        self.release.wait();
+    }
+
+    pub fn snapshot(&self) -> Vec<hardware_interface_runtime::RegisterObservation> {
+        self.observations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl hardware_interface_runtime::RegisterObserver for GatedObserver {
+    fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
+        assert_eq!(
+            self.memory.regions().len(),
+            self.expected_regions.load(Ordering::SeqCst)
+        );
+        self.observations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(observation);
+        self.entered.wait();
+        self.release.wait();
     }
 }
 
@@ -68,6 +124,22 @@ pub fn observed_handle_for_memory(
             observer.clone(),
         ));
     (device.handle(), observer)
+}
+
+pub fn gated_handle() -> (
+    AsyncDeviceHandle,
+    Arc<GatedObserver>,
+    Arc<hardware_interface_runtime::SharedMemory>,
+) {
+    let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let observer = Arc::new(GatedObserver::new(Arc::clone(&memory)));
+    let (device, _worker) =
+        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            Arc::clone(&memory),
+            pdma_model_contract::ResourceConfig::default(),
+            observer.clone(),
+        ));
+    (device.handle(), observer, memory)
 }
 
 pub fn activation(

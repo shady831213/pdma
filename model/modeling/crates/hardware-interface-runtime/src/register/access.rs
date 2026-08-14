@@ -10,8 +10,12 @@ pub trait RegisterAccess {
         &self,
         offset: u32,
         response: &mut [u8],
-    ) -> impl Future<Output = Result<(), Self::Error>>;
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Writes exactly `request.len()` caller-owned bytes.
-    fn write(&self, offset: u32, request: &[u8]) -> impl Future<Output = Result<(), Self::Error>>;
+    fn write(
+        &self,
+        offset: u32,
+        request: &[u8],
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }

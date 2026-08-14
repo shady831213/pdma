@@ -1,5 +1,5 @@
 use super::{AsyncDriver, ManualDriver, core::DriverCore};
-use crate::AsyncDevicePort;
+use crate::DriverPort;
 use crate::ModelResult;
 use pdma_model_contract::{
     BroadcastCopyCommand, BroadcastCopyRequest, CommandId, CopyCommand, CopyRequest,
@@ -9,7 +9,7 @@ use pdma_model_contract::{
 impl DriverCore {
     async fn submit_copy_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         request: CopyRequest,
     ) -> ModelResult<CommandId> {
         let reservation = self.accounting.prepare()?;
@@ -25,7 +25,7 @@ impl DriverCore {
 
     async fn submit_strided_copy_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         request: StridedCopyRequest,
     ) -> ModelResult<CommandId> {
         let reservation = self.accounting.prepare()?;
@@ -41,7 +41,7 @@ impl DriverCore {
 
     async fn submit_broadcast_copy_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         request: BroadcastCopyRequest,
     ) -> ModelResult<CommandId> {
         let reservation = self.accounting.prepare()?;
@@ -61,7 +61,7 @@ impl DriverCore {
 
     async fn submit_vector_add_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         request: VectorAddRequest,
     ) -> ModelResult<CommandId> {
         let reservation = self.accounting.prepare()?;
@@ -77,7 +77,7 @@ impl DriverCore {
 
     async fn submit_external_command_on(
         &self,
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         reservation: super::accounting::CommandReservation,
         command: ExternalCommand,
     ) -> ModelResult<CommandId> {
@@ -100,7 +100,7 @@ macro_rules! impl_driver_submission {
             /// Emits a copy descriptor through an async device port and rings the doorbell.
             pub async fn submit_copy_on(
                 &mut self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
                 request: CopyRequest,
             ) -> ModelResult<CommandId> {
                 self.core.submit_copy_on(device, request).await
@@ -109,7 +109,7 @@ macro_rules! impl_driver_submission {
             /// Emits a strided copy descriptor through an async device port and rings the doorbell.
             pub async fn submit_strided_copy_on(
                 &mut self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
                 request: StridedCopyRequest,
             ) -> ModelResult<CommandId> {
                 self.core.submit_strided_copy_on(device, request).await
@@ -118,7 +118,7 @@ macro_rules! impl_driver_submission {
             /// Emits a broadcast copy descriptor through an async port and rings the doorbell.
             pub async fn submit_broadcast_copy_on(
                 &mut self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
                 request: BroadcastCopyRequest,
             ) -> ModelResult<CommandId> {
                 self.core.submit_broadcast_copy_on(device, request).await
@@ -127,7 +127,7 @@ macro_rules! impl_driver_submission {
             /// Emits a vector-add descriptor through an async device port and rings the doorbell.
             pub async fn submit_vector_add_on(
                 &mut self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
                 request: VectorAddRequest,
             ) -> ModelResult<CommandId> {
                 self.core.submit_vector_add_on(device, request).await

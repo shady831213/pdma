@@ -21,7 +21,7 @@ pub enum DmaBatchContext {
 
 /// Closed failure surface for the two ordered queue batches.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MmioBatchError {
+pub enum PdmaBatchError {
     /// The typed request does not satisfy its one closed grammar.
     InvalidShape,
     /// One fixed MMIO access is structurally invalid.
@@ -34,13 +34,13 @@ pub enum MmioBatchError {
     Observation(ObservationGateError),
 }
 
-impl From<ObservationGateError> for MmioBatchError {
+impl From<ObservationGateError> for PdmaBatchError {
     fn from(error: ObservationGateError) -> Self {
         Self::Observation(error)
     }
 }
 
-impl MmioBatchError {
+impl PdmaBatchError {
     /// Maps every checked DMA failure using the attempted operation context.
     pub const fn from_dma(error: PdmaMemoryError, context: DmaBatchContext) -> Self {
         let details = match (error, context) {
@@ -82,10 +82,21 @@ impl MmioBatchError {
     }
 }
 
-impl core::fmt::Display for MmioBatchError {
+impl core::fmt::Display for PdmaBatchError {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(formatter, "MMIO batch failed: {self:?}")
     }
 }
 
-impl std::error::Error for MmioBatchError {}
+impl std::error::Error for PdmaBatchError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Access(error) => Some(error),
+            Self::Observation(error) => Some(error),
+            Self::InvalidShape | Self::Dma(_) | Self::Command(_) => None,
+        }
+    }
+}
+
+/// Transitional exact-batch error name retained through Task 25.
+pub type MmioBatchError = PdmaBatchError;

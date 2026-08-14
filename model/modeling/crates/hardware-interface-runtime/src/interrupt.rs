@@ -5,7 +5,8 @@ mod registry;
 mod traits;
 
 pub use dispatcher::{
-    InterruptDispatcher, InterruptDispatcherTask, InterruptShutdown, InterruptSummary,
+    InterruptDispatcher, InterruptDispatcherTask, InterruptShutdown, InterruptShutdownReceiver,
+    InterruptSummary,
 };
 pub use error::{InterruptDispatchError, InterruptJoinError};
 pub use observer::{

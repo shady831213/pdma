@@ -25,6 +25,15 @@ impl HostIrqTrace {
         &self.events
     }
 
+    pub(super) fn successful_deliveries(&self) -> usize {
+        self.events
+            .iter()
+            .filter(|event| {
+                event.kind() == TraceEventKind::IrqHandlerCompleted && event.detail() == "Success"
+            })
+            .count()
+    }
+
     fn push(&mut self, kind: TraceEventKind, detail: &'static str) {
         self.events.push(TraceEvent::new(
             self.next_sequence,

@@ -12,86 +12,12 @@ use pdma_model_device::{DmaWrite, QueueBootstrapBatch, SubmissionBatch};
 
 #[path = "prepared_batch_surface/adverse.rs"]
 pub mod adverse;
+#[path = "prepared_batch_surface/happy.rs"]
+mod happy;
 
 #[tokio::test]
 async fn task19_prepared_batch_adverse_surface() -> support::TestResult {
     adverse::run().await
-}
-
-#[tokio::test]
-async fn task19_prepared_batch_surface() -> support::TestResult {
-    // Given: both real closed batches share one core observer and response bank.
-    let (handle, observer, memory) = support::observed_handle_with_memory();
-
-    // When: bootstrap and submission commit without an intervening direct access.
-    let (queue, submission, bootstrap_response) = support::bootstrap(&handle).await?;
-    let submission_response = handle
-        .submit_queue_batch(support::submission(
-            queue,
-            RingCursor::new(0),
-            submission.base(),
-            0x6b,
-        ))
-        .await?;
-
-    // Then: exact state and the two Batch command observations are synchronously visible.
-    let observations: [_; 2] = observer
-        .snapshot()
-        .try_into()
-        .map_err(|_| "exactly two observations required")?;
-    let status = support::queue_status(&handle, queue).await?;
-    let expected_submission = support::response(status)
-        .to_le_bytes()
-        .map_err(|_| "submission response encode failed")?;
-    let responses_exact = submission_response == expected_submission
-        && bootstrap_response.len() == expected_submission.len();
-    let commands: Vec<u32> = observations
-        .iter()
-        .map(|observation| {
-            observation
-                .request_bytes
-                .as_slice()
-                .try_into()
-                .map(u32::from_le_bytes)
-                .map_err(|_| "command observation was not four bytes")
-        })
-        .collect::<Result<_, _>>()?;
-    let commands: [_; 2] = commands
-        .try_into()
-        .map_err(|_| "exactly two commands required")?;
-    assert_eq!(commands, [1, 3]);
-    assert!(
-        observations
-            .iter()
-            .all(|observation| observation.origin == AccessOrigin::Batch)
-    );
-    assert!(
-        observations
-            .iter()
-            .all(|observation| observation.offset == 0x168 && observation.width == 4)
-    );
-    assert_eq!(
-        handle.read_memory(submission.base(), 64).await?,
-        vec![0x6b; 64]
-    );
-    assert!(responses_exact);
-    let installs_before_observe = memory.regions().len() == 3 && observations.len() == 2;
-    let observe_before_wake = handle.snapshot().await.generation() == 2
-        && observations.last().is_some_and(|item| item.sequence == 1);
-    assert!(installs_before_observe);
-    assert!(observe_before_wake);
-    println!(
-        "bootstrap_command={};submission_command={};bootstrap_observations=1;submission_observations=1;offsets={:#x}/{},{:#x}/{};origins=batch,batch;responses_exact={responses_exact};installs_before_observe={installs_before_observe};observe_before_wake={observe_before_wake};sequences={},{}",
-        commands[0],
-        commands[1],
-        observations[0].offset,
-        observations[0].width,
-        observations[1].offset,
-        observations[1].width,
-        observations[0].sequence,
-        observations[1].sequence,
-    );
-    Ok(())
 }
 
 #[tokio::test]

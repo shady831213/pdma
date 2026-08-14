@@ -15,7 +15,7 @@ use pdma_model_contract::{
     QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
 };
 
-use crate::AsyncDevicePort;
+use crate::DriverPort;
 
 /// Async software driver model owning queue setup and local ring-space accounting.
 ///
@@ -38,7 +38,7 @@ pub struct ManualDriver {
 impl AsyncDriver {
     /// Sets up one command queue through an async device port.
     pub async fn setup_on(
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         command_depth: usize,
         completion_depth: usize,
     ) -> ModelResult<Self> {
@@ -56,7 +56,7 @@ impl AsyncDriver {
 
     /// Sets up one command queue from an explicit queue configuration through an async port.
     pub async fn setup_with_config_on(
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         config: QueueConfig,
     ) -> ModelResult<Self> {
         let accounting = accounting::SharedAccounting::capture_active(config.command_depth())?;
@@ -68,7 +68,7 @@ impl AsyncDriver {
 impl ManualDriver {
     /// Sets up one command queue for an intentional manual-observability path.
     pub async fn setup_on(
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         command_depth: usize,
         completion_depth: usize,
     ) -> ModelResult<Self> {
@@ -86,7 +86,7 @@ impl ManualDriver {
 
     /// Sets up one manually driven queue from an explicit queue configuration.
     pub async fn setup_with_config_on(
-        device: &mut impl AsyncDevicePort,
+        device: &mut impl DriverPort,
         config: QueueConfig,
     ) -> ModelResult<Self> {
         let accounting = accounting::SharedAccounting::manual(config.command_depth());
@@ -101,7 +101,7 @@ macro_rules! impl_driver_data_plane {
             /// Allocates a device-visible buffer through an async device port.
             pub async fn allocate_buffer_on(
                 &self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
                 len: usize,
             ) -> ModelResult<BufferId> {
                 self.core.allocate_buffer_on(device, len).await
@@ -110,7 +110,7 @@ macro_rules! impl_driver_data_plane {
             /// Writes a complete buffer payload at offset zero through an async device port.
             pub async fn write_buffer_on(
                 &self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
                 buffer: BufferId,
                 data: &[u8],
             ) -> ModelResult<()> {
@@ -120,7 +120,7 @@ macro_rules! impl_driver_data_plane {
             /// Reads a checked buffer payload at offset zero through an async device port.
             pub async fn read_buffer_on(
                 &self,
-                device: &impl AsyncDevicePort,
+                device: &impl DriverPort,
                 buffer: BufferId,
                 len: usize,
             ) -> ModelResult<Vec<u8>> {
@@ -130,7 +130,7 @@ macro_rules! impl_driver_data_plane {
             /// Polls one completion and reclaims one local command slot.
             pub async fn poll_completion_on(
                 &mut self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
             ) -> ModelResult<Option<CompletionRecord>> {
                 self.core.poll_completion_on(device).await
             }
@@ -138,7 +138,7 @@ macro_rules! impl_driver_data_plane {
             /// Polls one event and reclaims one local command slot.
             pub async fn poll_event_on(
                 &mut self,
-                device: &mut impl AsyncDevicePort,
+                device: &mut impl DriverPort,
             ) -> ModelResult<Option<EventRecord>> {
                 self.core.poll_event_on(device).await
             }

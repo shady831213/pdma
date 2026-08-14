@@ -76,6 +76,10 @@ impl<B: Sync> BusDevicePort<B> {
         })
     }
 
+    pub(crate) fn validate_owner(&self) -> ModelResult<()> {
+        self.state.with(|_| ())
+    }
+
     async fn poll_model<F, T>(&self, future: F) -> ModelResult<T>
     where
         F: Future<Output = ModelResult<T>> + Send,

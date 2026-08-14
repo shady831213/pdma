@@ -29,7 +29,7 @@ pub trait InterruptSource: Send + 'static {
 }
 
 /// Persistent mutable handler state for one notification type.
-pub trait InterruptHandler<N>: Send + 'static {
+pub trait InterruptHandler<N>: Send {
     /// Typed handler failure.
     type Error: Error + Send + Sync + 'static;
 

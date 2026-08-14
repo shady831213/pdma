@@ -4,10 +4,15 @@ use pdma_model_contract::abi::mmio::MmioByteCount;
 use pdma_model_contract::{DeviceEpoch, QueueActivation, QueueRingRegions, RingLayout, RingRecord};
 use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use std::future::{Future, poll_fn};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
+#[path = "tests/cancellation.rs"]
+mod cancellation;
+#[path = "tests/ordering.rs"]
+mod ordering;
+use ordering::CommitOrderObserver;
 #[path = "tests/fault_injection.rs"]
 mod fault_injection;
 
@@ -68,81 +73,6 @@ async fn pending_real_lock_drop_repeats_without_mutation_then_recovers() -> Test
         handle.snapshot().await.generation(),
         before.generation() + 1
     );
-    Ok(())
-}
-
-#[derive(Default)]
-struct CommitOrderObserver {
-    memory: Option<Arc<hardware_interface_runtime::SharedMemory>>,
-    wake: Mutex<Option<tokio::sync::watch::Receiver<usize>>>,
-    observations: Mutex<Vec<hardware_interface_runtime::RegisterObservation>>,
-}
-
-impl hardware_interface_runtime::RegisterObserver for CommitOrderObserver {
-    fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
-        let memory = self.memory.as_ref().expect("observer memory configured");
-        assert_eq!(memory.regions().len(), 3);
-        let wake = self.wake.lock().expect("wake probe lock available");
-        assert!(matches!(
-            wake.as_ref().expect("wake probe configured").has_changed(),
-            Ok(false)
-        ));
-        drop(wake);
-        self.observations
-            .lock()
-            .expect("observation probe lock available")
-            .push(observation);
-    }
-}
-
-#[tokio::test]
-async fn prepared_installs_precede_observation_which_precedes_wake_publication() -> TestResult {
-    // Given: the real core observer inspects committed memory and the real wake receiver.
-    let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let observer = Arc::new(CommitOrderObserver {
-        memory: Some(Arc::clone(&memory)),
-        ..CommitOrderObserver::default()
-    });
-    let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
-        memory,
-        pdma_model_contract::ResourceConfig::default(),
-        observer.clone(),
-    ));
-    let handle = device.handle();
-    *observer.wake.lock().expect("wake probe lock available") =
-        Some(handle.shared.changed.subscribe());
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let activation = activation(&stage)?;
-
-    // When: the closed bootstrap batch commits once.
-    handle
-        .bootstrap_queue_batch(QueueBootstrapBatch::new(stage, activation))
-        .await?;
-
-    // Then: the callback saw installed memory before any wake publication, then return saw wake.
-    let observations = observer
-        .observations
-        .lock()
-        .expect("observation probe lock available");
-    assert_eq!(observations.len(), 1);
-    assert_eq!(
-        observations
-            .first()
-            .ok_or("one ordered observation required")?
-            .offset,
-        0x168
-    );
-    drop(observations);
-    assert!(matches!(
-        observer
-            .wake
-            .lock()
-            .expect("wake probe lock available")
-            .as_ref()
-            .expect("wake probe configured")
-            .has_changed(),
-        Ok(true)
-    ));
     Ok(())
 }
 

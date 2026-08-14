@@ -19,8 +19,8 @@ pub use interrupt::{
     DuplicateHandler, EmptyRegistry, FrozenHandlerRegistry, HandlerRegistry,
     InterruptDispatchError, InterruptDispatcher, InterruptDispatcherTask, InterruptEnvelope,
     InterruptHandler, InterruptJoinError, InterruptLifecycleEvent, InterruptLifecycleObserver,
-    InterruptShutdown, InterruptSource, InterruptSummary, NoopInterruptObserver,
-    SharedInterruptObserver,
+    InterruptShutdown, InterruptShutdownReceiver, InterruptSource, InterruptSummary,
+    NoopInterruptObserver, SharedInterruptObserver,
 };
 pub use region::MemoryRegion;
 pub use register::{

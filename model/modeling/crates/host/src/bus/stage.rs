@@ -33,7 +33,7 @@ impl BusDmaWrite {
         &self.bytes
     }
 
-    pub(super) fn into_parts(self) -> (DmaAddress, Vec<u8>) {
+    pub(crate) fn into_parts(self) -> (DmaAddress, Vec<u8>) {
         (self.address, self.bytes)
     }
 }

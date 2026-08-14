@@ -62,7 +62,7 @@ impl SubmissionAcceptance {
 
 /// Typed queue-control transaction failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BusControlError {
+pub enum PdmaControlError {
     /// DMA staging or access validation failed.
     Dma(PdmaMemoryError),
     /// Typed ABI cursor or layout validation failed.
@@ -80,7 +80,7 @@ pub enum BusControlError {
     InvalidTransaction,
 }
 
-impl fmt::Display for BusControlError {
+impl fmt::Display for PdmaControlError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Dma(error) => write!(formatter, "{error}"),
@@ -97,22 +97,34 @@ impl fmt::Display for BusControlError {
     }
 }
 
-impl std::error::Error for BusControlError {}
+impl std::error::Error for PdmaControlError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Dma(error) => Some(error),
+            Self::Abi(error) => Some(error),
+            Self::StaleEpoch { .. } | Self::InvalidQueue | Self::InvalidTransaction => None,
+        }
+    }
+}
 
-impl From<PdmaMemoryError> for BusControlError {
+impl From<PdmaMemoryError> for PdmaControlError {
     fn from(error: PdmaMemoryError) -> Self {
         Self::Dma(error)
     }
 }
 
-impl From<AbiControlError> for BusControlError {
+impl From<AbiControlError> for PdmaControlError {
     fn from(error: AbiControlError) -> Self {
         Self::Abi(error)
     }
 }
 
+/// Transitional queue-control error name retained through Task 25.
+pub type BusControlError = PdmaControlError;
+
 pub use batch::{
-    DmaBatchContext, MmioBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
+    DmaBatchContext, MmioBatchError, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes,
+    SubmissionBatch,
 };
 pub use control::QueueStatus;
 

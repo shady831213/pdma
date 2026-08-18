@@ -6,7 +6,7 @@ mod adverse;
 use super::lock;
 use hardware_interface_runtime::{AccessOrigin, RegisterObservation};
 use pdma_model_contract::abi::mmio::MmioAccessError;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqVector, QueueConfigHandle,
 };
 use pdma_model_host::register::{PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim};

@@ -1,24 +1,26 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     CompletionStatus, ResourceConfig, TraceEvent, TraceEventKind, TraceOperation, desc::CopyRequest,
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_complete_copy_lifecycle() {
     // Given: an async runner, a driver handle, source/destination buffers, and tracing enabled.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one complete software main submits a copy, waits, and polls the completion.
     let (command_id, completion, copied) = cpu
@@ -52,8 +54,8 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
             (command_id, completion, copied)
         })
         .await;
-    let trace_events = handle.trace_events().await;
-    let trace_json = handle.trace_json().await;
+    let trace_events = raw_handle.trace_events().await;
+    let trace_json = raw_handle.trace_json().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -106,14 +108,15 @@ async fn async_trace_log_records_error_event_without_success_completion() {
     // Given: a traced async runner and a copy that reads past the source buffer.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one complete software main submits the fault and polls its event path.
     let (command_id, event, completion) = cpu
@@ -146,8 +149,8 @@ async fn async_trace_log_records_error_event_without_success_completion() {
             (command_id, event, completion)
         })
         .await;
-    let trace_events = handle.trace_events().await;
-    let trace_json = handle.trace_json().await;
+    let trace_events = raw_handle.trace_events().await;
+    let trace_json = raw_handle.trace_json().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -184,10 +187,11 @@ async fn async_trace_log_records_stall_annotations_for_status_waits() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one complete software main submits the copy and waits for its first stall.
     cpu.run_main(async {
@@ -209,8 +213,8 @@ async fn async_trace_log_records_stall_annotations_for_status_waits() {
         let _snapshot = runner.wait_for_stall_after(0).await;
     })
     .await;
-    let trace_events = handle.trace_events().await;
-    let trace_json = handle.trace_json().await;
+    let trace_events = raw_handle.trace_events().await;
+    let trace_json = raw_handle.trace_json().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 

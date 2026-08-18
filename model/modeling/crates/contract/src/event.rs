@@ -1,6 +1,6 @@
 //! Event records returned from the PDMA device to the driver.
 
-use crate::ids::{BufferId, CommandId, QueueId};
+use crate::semantic::ids::{BufferId, CommandId, QueueId};
 
 /// Software-visible recoverable command error kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

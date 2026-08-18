@@ -1,7 +1,8 @@
 use super::{Access, RecordingStage, RecordingTransport};
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::{BufferId, IrqNotification};
-use pdma_model_contract::{DmaAddress, PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::semantic::{BufferId, IrqNotification};
 use pdma_model_device::{MmioBatchError, PdmaMemoryError, QueueResponseBytes};
 use pdma_model_host::ModelResult;
 use pdma_model_host::{BusDmaStage, BusSubmission, MmioDeviceTransport};
@@ -163,3 +164,4 @@ impl MmioDeviceTransport for RecordingTransport {
         self.notification.lock().is_ok_and(|value| value.is_some())
     }
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

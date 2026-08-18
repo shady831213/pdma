@@ -1,5 +1,5 @@
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification,
     IrqRoute, IrqSnapshot, IrqSource,
 };

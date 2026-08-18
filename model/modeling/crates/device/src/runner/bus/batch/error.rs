@@ -1,7 +1,8 @@
 use crate::dma_space::PdmaMemoryError;
 use hardware_interface_runtime::ObservationGateError;
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
-use pdma_model_contract::{DmaAddress, PdmaMemoryRegion};
+use pdma_model_contract::bridge::PdmaMemoryRegion;
 
 /// Attempted extent used to retain contextual DMA failure details.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

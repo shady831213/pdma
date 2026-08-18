@@ -3,13 +3,14 @@ use crate::dma_space::PdmaMemoryError;
 use crate::runner::bus::control::transactions;
 use crate::runner::state::DeviceCore;
 use crate::runner::{BusControlError, QueueStatus};
-use pdma_model_contract::QueueId;
+use pdma_model_contract::abi::AbiControlError;
+use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseBank, ResponseUpdate,
 };
-use pdma_model_contract::{
-    AbiControlError, DeviceEpoch, EpochQueue, QueueControl, QueueCursorUpdate, RingCursor,
-};
+use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::semantic::QueueId;
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 
 pub(super) type CommandResult = Result<(QueueResponseBank, bool), MmioResultDetails>;
 

@@ -7,9 +7,9 @@ use super::{
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::desc::ExternalCommand;
 use pdma_model_contract::semantic::EpochQueue;
-use pdma_model_contract::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
 
 #[derive(Debug)]
 pub(super) struct ExactFrontend {
@@ -114,7 +114,7 @@ impl QueueFrontend for ExactFrontend {
 
     fn pending_fault_bytes(&self) -> Option<[u8; 64]> {
         self.pending_fault
-            .and_then(|event| pdma_model_contract::encode_event(event).ok())
+            .and_then(|event| pdma_model_contract::bridge::encode_event(event).ok())
     }
 
     fn poll_compat_completion(&mut self) -> Option<CompletionRecord> {
@@ -176,7 +176,7 @@ fn normalize(fetched: submission::ExactFetch) -> NormalizedFetch {
 pub(in crate::runner::native) fn decode_event(
     bytes: &[u8],
 ) -> Option<pdma_model_contract::bridge::AbiEvent> {
-    pdma_model_contract::decode_event(bytes).ok()
+    pdma_model_contract::bridge::decode_event(bytes).ok()
 }
 
 pub(super) fn ring_is_full(control: &BusControlState, queue: QueueId, completion: bool) -> bool {

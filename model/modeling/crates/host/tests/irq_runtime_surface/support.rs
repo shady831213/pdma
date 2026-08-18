@@ -24,7 +24,7 @@ mod compiler_proof {
     }
 }
 
-use pdma_model_contract::IrqNotification;
+use pdma_model_contract::semantic::IrqNotification;
 use pdma_model_host::DriverIrqRecord;
 use pdma_model_host::interrupt::PdmaIrqHandler;
 use std::{

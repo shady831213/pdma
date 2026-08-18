@@ -1,11 +1,12 @@
 use super::super::{AsyncDeviceBusStage, BusDmaStage, BusSubmission};
 use crate::ModelResult;
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::{DmaAddress, PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation};
 use pdma_model_device::{MmioBatchError, PdmaMemoryError, QueueResponseBytes};
 
 /// Device-facing operations used by the MMIO bus and literal recording transports.
-pub trait MmioDeviceTransport: Clone + Send + Sync {
+pub(in crate::register) trait MmioDeviceTransport: Clone + Send + Sync {
     /// Transport-owned checked DMA staging capability.
     type Stage: BusDmaStage;
 

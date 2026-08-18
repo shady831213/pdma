@@ -3,13 +3,16 @@
 #[path = "abi_schema_parity/support.rs"]
 pub(crate) mod support;
 
-use pdma_model_contract::{
-    AbiCommand, AbiDecodeError, BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
-    DescriptorSchema, DescriptorSchemaView, EventSchema, EventSchemaView,
-    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView, decode_completion,
-    decode_event, encode_completion, encode_event,
+use pdma_model_contract::abi::{AbiCommand, AbiDecodeError};
+use pdma_model_contract::abi::{
+    BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView, DescriptorSchema,
+    DescriptorSchemaView, EventSchema, EventSchemaView, IndirectDestinationEntrySchema,
+    IndirectDestinationEntrySchemaView,
 };
-use pdma_model_contract::{CommandId, CompletionRecord, CompletionStatus, QueueId};
+use pdma_model_contract::bridge::{
+    decode_completion, decode_event, encode_completion, encode_event,
+};
+use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 use support::{
     COMPLETION_BYTES, COMPLETION_FIELDS, COPY, DESCRIPTOR_FIELDS, EVENT_BYTES, EVENT_FIELDS,
     INDIRECT_BYTES, INDIRECT_FIELDS, SchemaCodecError, assert_schema_parity,

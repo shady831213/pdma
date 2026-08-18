@@ -145,14 +145,10 @@ impl AsyncPdmaBus for FakeBus {
         &self,
         request: BusSubmission<Self::Stage>,
     ) -> Result<BusQueueStatus, Self::ControlError> {
-        let queue = request.queue();
-        let producer = request.expected_producer();
-        let descriptor = request.descriptor().clone();
-        let (regions, indirect) = request
-            .indirect()
-            .map_or((Vec::new(), None), |(stage, write)| {
-                (stage.proposed_regions().to_vec(), Some(write.clone()))
-            });
+        let (queue, producer, descriptor, staged) = request.into_parts();
+        let (regions, indirect) = staged.map_or((Vec::new(), None), |(stage, write)| {
+            (stage.proposed_regions().to_vec(), Some(write))
+        });
         self.record(Sequence::Accept(
             queue, producer, regions, descriptor, indirect,
         ))?;
@@ -180,9 +176,9 @@ impl AsyncPdmaBus for FakeBus {
         Some(IrqNotification::Message(IrqMessage::new(
             IrqMessageId::new(0),
             IrqVector::new(9),
-            pdma_model_contract::EpochIrqSource::new(
+            pdma_model_contract::semantic::EpochIrqSource::new(
                 DeviceEpoch::initial(),
-                pdma_model_contract::IrqSource::Event(QueueId::new(0)),
+                pdma_model_contract::semantic::IrqSource::Event(QueueId::new(0)),
             ),
         )))
     }

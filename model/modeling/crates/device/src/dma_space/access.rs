@@ -2,9 +2,9 @@ use super::{PdmaMemoryError, PdmaMemoryMappings};
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::bridge::PdmaMemoryRegion;
-use pdma_model_contract::dma::DmaRangeStart;
-use pdma_model_contract::event::{EventErrorKind, MemoryFault};
-use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::semantic::dma::DmaRangeStart;
+use pdma_model_contract::semantic::event::{EventErrorKind, MemoryFault};
+use pdma_model_contract::semantic::ids::BufferId;
 
 const BYTE_ALIGNMENT: MemoryAlignment = MemoryAlignment::ONE;
 
@@ -109,7 +109,7 @@ impl PdmaMemoryMappings {
                 MemoryFault::with_address(
                     start.object(),
                     EventErrorKind::RangeOverflow,
-                    pdma_model_contract::FaultAddress::new(address),
+                    pdma_model_contract::semantic::FaultAddress::new(address),
                 )
             },
         )
@@ -200,7 +200,7 @@ impl PdmaMemoryMappings {
                 MemoryFault::with_address(
                     object,
                     error_kind,
-                    pdma_model_contract::FaultAddress::new(
+                    pdma_model_contract::semantic::FaultAddress::new(
                         backing.region.memory_exclusive_end().raw(),
                     ),
                 )

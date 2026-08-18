@@ -1,7 +1,9 @@
 //! Checked DMA allocation, atomic staging, access, and backend-persistence tests.
 
-use pdma_model_contract::ids::BufferId;
-use pdma_model_contract::{DeviceEpoch, DmaAddress, PdmaMemoryRegion, WholeDeviceReset};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::ids::BufferId;
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::{PdmaMemoryError, PdmaMemoryMappings, SyncDevice};
 
 #[test]
@@ -101,7 +103,7 @@ fn allocations_and_checked_iova_access_survive_backend_reset() {
     // Given a staged region committed beside a synchronous backend.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let stage = device.stage_memory_regions(&[8]).expect("valid stage");

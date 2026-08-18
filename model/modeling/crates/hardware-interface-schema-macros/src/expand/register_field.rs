@@ -2,9 +2,9 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::parse2;
 
-use crate::{crate_path, syntax::RegisterFieldDefinitionDecl};
+use crate::internal::{crate_path, syntax::RegisterFieldDefinitionDecl};
 
-pub(crate) fn run(input: TokenStream) -> TokenStream {
+pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
     parse2::<RegisterFieldDefinitionDecl>(input)
         .and_then(|decl| expand(&decl))
         .unwrap_or_else(syn::Error::into_compile_error)

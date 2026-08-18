@@ -1,6 +1,11 @@
-use super::{ScenarioResult, SoftwarePhase, recording::assert_mmio_transport};
-use pdma_model_contract::{CompletionRecord, CompletionStatus, IrqNotification, TraceEventKind};
-use pdma_model_host::{BusQueueStatus, DriverIrqRecord};
+use super::{
+    ScenarioResult, SoftwarePhase,
+    recording::{assert_memory_accesses, assert_register_transcript},
+};
+use pdma_model_contract::semantic::{
+    CompletionRecord, CompletionStatus, IrqNotification, TraceEventKind,
+};
+use pdma_model_host::{DriverIrqRecord, register::BusQueueStatus};
 
 /// # Panics
 ///
@@ -35,7 +40,8 @@ pub fn assert_outcome(result: &ScenarioResult) {
     assert_eq!(result.deliveries, 1);
     assert_eq!(result.device_steps, 1);
     assert_queue_cursors(result.queue_status);
-    assert_mmio_transport(&result.mmio_accesses);
+    assert_register_transcript(&result.mmio_accesses);
+    assert_memory_accesses(&result.memory_accesses);
     let lifecycle = assert_lifecycle_order(result);
     emit_manual_qa(result, &lifecycle);
 }
@@ -113,7 +119,7 @@ fn assert_lifecycle_order(result: &ScenarioResult) -> Vec<TraceEventKind> {
     let observed_device_trace = result
         .device_trace
         .iter()
-        .map(pdma_model_contract::TraceEvent::kind)
+        .map(pdma_model_contract::semantic::TraceEvent::kind)
         .filter(|kind| expected_device_trace.contains(kind))
         .collect::<Vec<_>>();
     assert_eq!(observed_device_trace, expected_device_trace);

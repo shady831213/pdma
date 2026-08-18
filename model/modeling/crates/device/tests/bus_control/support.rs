@@ -1,5 +1,6 @@
-use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
-use pdma_model_contract::{QueueActivation, QueueRingRegions, RingLayout, RingRecord};
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::AsyncDeviceHandle;
 
 /// Creates a fresh asynchronous queue-port handle.
@@ -7,7 +8,7 @@ pub fn new_handle() -> AsyncDeviceHandle {
     let (device, _worker) =
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
     device.handle()
@@ -32,7 +33,7 @@ pub fn activation(
     let completion = RingLayout::try_new(*completion_region, 2, RingRecord::Completion)?;
     let event = RingLayout::try_new(*event_region, 2, RingRecord::Event)?;
     QueueActivation::try_new(
-        pdma_model_contract::DeviceEpoch::initial(),
+        pdma_model_contract::semantic::DeviceEpoch::initial(),
         queue_id,
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
         QueueRingRegions::new(submission, completion, event),

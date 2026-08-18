@@ -1,9 +1,10 @@
 use super::{TestResult, read_u64, write_u32, write_u64};
-use pdma_model_contract::{
-    DeviceEpoch, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
-    RingCursor, RingLayout, RingRecord,
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
 };
-use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
 #[tokio::test(flavor = "current_thread")]
@@ -11,12 +12,12 @@ async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestR
     // Given: independent typed and raw devices with identical committed ring mappings.
     let (typed_device, _typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let (raw_device, _raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let typed = typed_device.handle();

@@ -1,6 +1,6 @@
 //! Broadcast copy descriptor schema.
 
-use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use crate::semantic::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 
 /// One destination range for a broadcast copy request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

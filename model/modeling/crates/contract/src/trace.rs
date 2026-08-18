@@ -1,6 +1,6 @@
 //! Shared trace event schema types.
 
-use crate::ids::{CommandId, QueueId};
+use crate::semantic::ids::{CommandId, QueueId};
 
 /// Operation carried by a traced command or scheduled work item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

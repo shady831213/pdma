@@ -21,40 +21,43 @@ fn require_error<T, E>(result: Result<T, E>) -> TestResult<E> {
 }
 
 fn activation(
-    regions: &[pdma_model_contract::PdmaMemoryRegion],
-    epoch: pdma_model_contract::DeviceEpoch,
-) -> Result<pdma_model_contract::QueueActivation, pdma_model_contract::AbiControlError> {
+    regions: &[pdma_model_contract::bridge::PdmaMemoryRegion],
+    epoch: pdma_model_contract::semantic::DeviceEpoch,
+) -> Result<pdma_model_contract::bridge::QueueActivation, pdma_model_contract::abi::AbiControlError>
+{
     let [submission, completion, event] = regions else {
-        return Err(pdma_model_contract::AbiControlError::QueueDepthMismatch {
-            ring: "staged",
-            expected: 3,
-            actual: u32::MAX,
-        });
+        return Err(
+            pdma_model_contract::abi::AbiControlError::QueueDepthMismatch {
+                ring: "staged",
+                expected: 3,
+                actual: u32::MAX,
+            },
+        );
     };
-    pdma_model_contract::QueueActivation::try_new(
+    pdma_model_contract::bridge::QueueActivation::try_new(
         epoch,
-        pdma_model_contract::QueueId::new(0),
-        pdma_model_contract::QueueConfig::new(
+        pdma_model_contract::semantic::QueueId::new(0),
+        pdma_model_contract::semantic::QueueConfig::new(
             2,
             2,
-            pdma_model_contract::EventRouting::QueueLocal,
-            pdma_model_contract::SoftwareOwnerId::new(0),
+            pdma_model_contract::semantic::EventRouting::QueueLocal,
+            pdma_model_contract::semantic::SoftwareOwnerId::new(0),
         ),
-        pdma_model_contract::QueueRingRegions::new(
-            pdma_model_contract::RingLayout::try_new(
+        pdma_model_contract::bridge::QueueRingRegions::new(
+            pdma_model_contract::bridge::RingLayout::try_new(
                 *submission,
                 2,
-                pdma_model_contract::RingRecord::Submission,
+                pdma_model_contract::abi::RingRecord::Submission,
             )?,
-            pdma_model_contract::RingLayout::try_new(
+            pdma_model_contract::bridge::RingLayout::try_new(
                 *completion,
                 2,
-                pdma_model_contract::RingRecord::Completion,
+                pdma_model_contract::abi::RingRecord::Completion,
             )?,
-            pdma_model_contract::RingLayout::try_new(
+            pdma_model_contract::bridge::RingLayout::try_new(
                 *event,
                 2,
-                pdma_model_contract::RingRecord::Event,
+                pdma_model_contract::abi::RingRecord::Event,
             )?,
         ),
     )

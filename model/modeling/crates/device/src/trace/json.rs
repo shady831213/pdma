@@ -1,4 +1,4 @@
-use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::semantic::trace::TraceEvent;
 
 pub(super) fn export(events: &[TraceEvent]) -> String {
     let mut json = String::from("{\"traceEvents\":[");
@@ -79,7 +79,7 @@ fn push_hex_nibble(json: &mut String, value: u32) {
 
 #[cfg(test)]
 mod tests {
-    use pdma_model_contract::trace::{TraceEvent, TraceEventKind};
+    use pdma_model_contract::semantic::trace::{TraceEvent, TraceEventKind};
 
     #[test]
     fn export_escapes_all_json_control_characters() {

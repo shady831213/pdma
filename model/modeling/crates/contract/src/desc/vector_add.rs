@@ -1,6 +1,6 @@
 //! Vector-add descriptor schema.
 
-use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use crate::semantic::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 
 /// SDK/driver-facing vector-add request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

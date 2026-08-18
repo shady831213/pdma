@@ -1,6 +1,6 @@
 use crate::common::{TestResult, allocate, encode, fixture, run_descriptor};
 use crate::operations::{OperationCase, command};
-use pdma_model_contract::{ResourceConfig, TraceEventKind, TraceOperation};
+use pdma_model_contract::semantic::{ResourceConfig, TraceEventKind, TraceOperation};
 
 pub(super) struct ExactObservation {
     pub(super) destinations: Vec<Vec<u8>>,
@@ -33,7 +33,10 @@ pub(super) async fn observe(case: OperationCase) -> TestResult<ExactObservation>
     )
     .await?;
     let result = run_descriptor(fixture, encode(command)?, &[destination_a, destination_b]).await?;
-    assert_eq!(result.consumer, pdma_model_contract::RingCursor::new(1));
+    assert_eq!(
+        result.consumer,
+        pdma_model_contract::abi::RingCursor::new(1)
+    );
     let retirements = usize::from(matches!(
         result.pending,
         Some(pdma_model_device::PendingDmaResult::Completion(_))

@@ -5,30 +5,30 @@ use syn::{
 
 use super::{key, keyword, usize_lit};
 
-pub(crate) struct RecordDecl {
-    pub(crate) visibility: Visibility,
-    pub(crate) name: Ident,
-    pub(crate) size: (usize, proc_macro2::Span),
-    pub(crate) alignment: (usize, proc_macro2::Span),
-    pub(crate) fields: Vec<FieldDecl>,
-    pub(crate) records: Vec<RecordPlacementDecl>,
+pub(in crate::internal) struct RecordDecl {
+    pub(in crate::internal) visibility: Visibility,
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) size: (usize, proc_macro2::Span),
+    pub(in crate::internal) alignment: (usize, proc_macro2::Span),
+    pub(in crate::internal) fields: Vec<FieldDecl>,
+    pub(in crate::internal) records: Vec<RecordPlacementDecl>,
 }
 
-pub(crate) struct FieldDecl {
-    pub(crate) name: Ident,
-    pub(crate) shape: FieldShape,
-    pub(crate) offset: (usize, proc_macro2::Span),
-    pub(crate) endian: Ident,
+pub(in crate::internal) struct FieldDecl {
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) shape: FieldShape,
+    pub(in crate::internal) offset: (usize, proc_macro2::Span),
+    pub(in crate::internal) endian: Ident,
 }
 
-pub(crate) struct RecordPlacementDecl {
-    pub(crate) name: Ident,
-    pub(crate) definition: Path,
-    pub(crate) id: (u16, proc_macro2::Span),
-    pub(crate) offset: (usize, proc_macro2::Span),
+pub(in crate::internal) struct RecordPlacementDecl {
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) definition: Path,
+    pub(in crate::internal) id: (u16, proc_macro2::Span),
+    pub(in crate::internal) offset: (usize, proc_macro2::Span),
 }
 
-pub(crate) enum FieldShape {
+pub(in crate::internal) enum FieldShape {
     Scalar {
         scalar: ScalarType,
         id: (u16, proc_macro2::Span),
@@ -46,7 +46,7 @@ pub(crate) enum FieldShape {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum ScalarType {
+pub(in crate::internal) enum ScalarType {
     U8,
     U16,
     U32,
@@ -54,7 +54,7 @@ pub(crate) enum ScalarType {
 }
 
 impl ScalarType {
-    pub(crate) const fn width(self) -> usize {
+    pub(in crate::internal) const fn width(self) -> usize {
         match self {
             Self::U8 => 1,
             Self::U16 => 2,
@@ -63,7 +63,7 @@ impl ScalarType {
         }
     }
 
-    pub(crate) fn parse(input: ParseStream<'_>) -> Result<Self> {
+    pub(in crate::internal) fn parse(input: ParseStream<'_>) -> Result<Self> {
         let ident: Ident = input.parse()?;
         match ident.to_string().as_str() {
             "u8" => Ok(Self::U8),

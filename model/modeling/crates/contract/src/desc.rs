@@ -1,7 +1,10 @@
 //! Shared external command descriptor schema.
 
+#[path = "desc/broadcast.rs"]
 mod broadcast;
+#[path = "desc/copy.rs"]
 mod copy;
+#[path = "desc/vector_add.rs"]
 mod vector_add;
 
 pub use broadcast::{BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange};
@@ -24,7 +27,7 @@ pub enum ExternalCommand {
 #[cfg(test)]
 mod tests {
     use super::{CopyCommand, CopyRequest, ExternalCommand};
-    use crate::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+    use crate::semantic::ids::{BufferId, CommandId, CompletionRingId, QueueId};
 
     #[test]
     fn external_copy_schema_is_owned_by_contract() {

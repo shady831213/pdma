@@ -1,6 +1,6 @@
 use super::{PdmaIrqController, QueuePortDeviceModel};
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::{DeviceEpoch, IrqLine, IrqVector};
+use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector};
 
 impl QueuePortDeviceModel {
     pub(in crate::runner) fn reset_partition_counts(

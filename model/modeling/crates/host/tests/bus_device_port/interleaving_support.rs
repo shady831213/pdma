@@ -1,14 +1,17 @@
-use pdma_model_contract::{
+use crate::register::legacy_test_support::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{
     BufferId, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot,
     IrqSource, IrqVector,
 };
-use pdma_model_contract::{DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation};
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, PdmaMemoryError};
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 use pdma_model_host::{
-    AsyncDevicePort, AsyncPdmaBus, BusDevicePort, BusQueueStatus, BusSubmission, IrqDelivery,
-    SoftwareCpu, StatefulIrqHandler, stateful_irq_handler,
+    AsyncPdmaBus, BusDevicePort, BusQueueStatus, BusSubmission, DriverPort as AsyncDevicePort,
 };
 use std::{
     future::Future,
@@ -197,10 +200,10 @@ impl StatefulIrqHandler for RepollHandler {
 ///
 /// # Panics
 /// Panics when the handler or resumed owner produces an unexpected observation.
-pub async fn verify_handler_turn_rejects_pending_port_repoll() -> ModelResult<()> {
+pub(crate) async fn verify_handler_turn_rejects_pending_port_repoll() -> ModelResult<()> {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let (bus, notification_sender) = InterleavingBus::new(device.handle());
@@ -240,7 +243,7 @@ pub async fn verify_handler_turn_rejects_pending_port_repoll() -> ModelResult<()
             vector,
             EpochIrqSource::new(
                 pdma_model_contract::semantic::DeviceEpoch::initial(),
-                IrqSource::Completion(pdma_model_contract::CompletionRingId::new(0)),
+                IrqSource::Completion(pdma_model_contract::semantic::CompletionRingId::new(0)),
             ),
         )))
         .await
@@ -263,3 +266,4 @@ pub async fn verify_handler_turn_rejects_pending_port_repoll() -> ModelResult<()
         .map_err(|_| ModelError::DmaSubmissionState)??;
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

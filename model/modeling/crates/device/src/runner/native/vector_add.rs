@@ -3,9 +3,9 @@ use super::retirement::validate_success_completion_route;
 use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
 use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
-use pdma_model_contract::desc::VectorAddCommand;
-use pdma_model_contract::ids::QueueId;
-use pdma_model_contract::trace::TraceOperation;
+use pdma_model_contract::semantic::desc::VectorAddCommand;
+use pdma_model_contract::semantic::ids::QueueId;
+use pdma_model_contract::semantic::trace::TraceOperation;
 
 pub(super) fn retire_vector_add(
     execution: NativeExecution<'_>,
@@ -20,13 +20,13 @@ pub(super) fn retire_vector_add(
     let request = command.request();
     let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
     let left_source =
-        pdma_model_contract::DmaRangeStart::new(request.src_a(), request.src_a_offset());
+        pdma_model_contract::semantic::DmaRangeStart::new(request.src_a(), request.src_a_offset());
     let src_a = match memory.read(dma_space, left_source, request.len()) {
         Ok(bytes) => bytes,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
     };
     let right_source =
-        pdma_model_contract::DmaRangeStart::new(request.src_b(), request.src_b_offset());
+        pdma_model_contract::semantic::DmaRangeStart::new(request.src_b(), request.src_b_offset());
     let src_b = match memory.read(dma_space, right_source, request.len()) {
         Ok(bytes) => bytes,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
@@ -36,7 +36,8 @@ pub(super) fn retire_vector_add(
         .zip(src_b.iter())
         .map(|(left, right)| left.wrapping_add(*right))
         .collect::<Vec<_>>();
-    let destination = pdma_model_contract::DmaRangeStart::new(request.dst(), request.dst_offset());
+    let destination =
+        pdma_model_contract::semantic::DmaRangeStart::new(request.dst(), request.dst_offset());
     if let Err(fault) = memory.validate(dma_space, destination, request.len()) {
         return publish_fault(device, dma_space, bus_control, fault);
     }

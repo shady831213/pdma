@@ -1,16 +1,19 @@
 //! Public raw PDMA bus behavioral contract.
 
+use super::pdma_model_host;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 
-use pdma_model_contract::{
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueCursorUpdate, QueueRingRegions, RingCursors, RingLayout,
+};
+use pdma_model_contract::semantic::{
     BufferId, EventRouting, IrqMessage, IrqMessageId, IrqNotification, IrqVector, QueueConfig,
     QueueId, SoftwareOwnerId,
 };
-use pdma_model_contract::{
-    DeviceEpoch, DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueCursorUpdate,
-    QueueRingRegions, RingCursor, RingCursors, RingLayout, RingRecord, WholeDeviceReset,
-};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, BusControlError, PdmaMemoryError};
 use pdma_model_host::{
     AsyncPdmaBus, BusControlErrorAdapter, BusDmaErrorAdapter, BusDmaStage, BusDmaWrite,

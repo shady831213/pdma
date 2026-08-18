@@ -1,5 +1,5 @@
 use super::support::{HandlerIdentity, HandlerObservation, RecordKind};
-use pdma_model_contract::{IrqSource, IrqVector, TraceEvent, TraceEventKind};
+use pdma_model_contract::semantic::{IrqSource, IrqVector, TraceEvent, TraceEventKind};
 use tokio::sync::mpsc;
 
 pub async fn receive_observations(

@@ -1,12 +1,12 @@
-use crate::BusControlErrorAdapter;
 use crate::ModelError;
+use crate::register::port::BusControlErrorAdapter;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
-use pdma_model_contract::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 use pdma_model_device::MmioBatchError;
 
 /// Exact failure returned by an MMIO queue procedure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MmioBusControlError {
+pub(in crate::register) enum MmioBusControlError {
     /// A byte-bearing access failed structurally.
     Access(MmioAccessError),
     /// A closed ordered batch failed before commit.

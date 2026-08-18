@@ -1,6 +1,7 @@
 use super::*;
 use pdma_model_host::register::{PdmaPreparedProposal, PdmaRegisterPort};
-use pdma_model_host::{DriverPort, ModelError, SoftwareCpu};
+use pdma_model_host::{DriverPort, ModelError};
+use hardware_interface_runtime::{SoftwareCpu};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};

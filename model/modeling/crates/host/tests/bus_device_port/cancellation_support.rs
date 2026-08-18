@@ -1,8 +1,11 @@
-use pdma_model_contract::{
-    AbiBroadcastCopy, AbiCommand, AbiId, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape,
-    DmaAddress, EpochQueue, PdmaMemoryRegion, RingRecord,
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::abi::{AbiBroadcastCopy, AbiCommand, AbiId, DmaAddress};
+use pdma_model_contract::abi::{
+    BroadcastDestinationEntry, BroadcastIovas, BroadcastShape, RingRecord,
 };
-use pdma_model_contract::{
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, BufferId, CommandId,
     ExternalCommand,
 };
@@ -10,7 +13,7 @@ use pdma_model_device::AsyncDevice;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 use pdma_model_host::{
-    AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, BusQueueStatus, SoftwareCpu,
+    AsyncDriver, AsyncPdmaBus, BusDevicePort, BusQueueStatus, DriverPort as AsyncDevicePort,
 };
 
 #[path = "cancellation_support/driver_credit.rs"]
@@ -101,7 +104,7 @@ pub(super) async fn verify_cancellation_commit_points() -> ModelResult<()> {
     // Given: a depth-one real ABI bus, an indirect command, and its raw ring mappings.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -187,3 +190,4 @@ pub(super) async fn verify_cancellation_commit_points() -> ModelResult<()> {
     driver_credit::verify_after_acceptance_driver_credit().await?;
     driver_credit::verify_before_acceptance_driver_credit().await
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

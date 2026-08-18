@@ -4,13 +4,13 @@ include!("host_core_surface/compiler.rs");
 #[path = "host_core_surface/support.rs"]
 mod support;
 
-use hardware_interface_runtime::CpuContextError;
-use pdma_model_contract::{CommandId, CompletionRecord, CopyRequest};
+use hardware_interface_runtime::{CpuContextError, SoftwareCpu};
+use pdma_model_contract::semantic::{CommandId, CompletionRecord, CopyRequest};
 use pdma_model_host::{
     DriverPort, ModelError,
     adapters::AdapterError,
     compat::CompatError,
-    core::{AsyncDriver, DriverError, ManualDriver, PortError, SoftwareCpu},
+    core::{AsyncDriver, DriverError, ManualDriver, PortError},
     interrupt::InterruptError,
     register::RegisterError,
 };
@@ -36,7 +36,7 @@ fn public_host_layers_expose_cause_preserving_errors() {
     let driver = DriverError::from(ModelError::SoftwareCpuInactive);
     let register = RegisterError::Access(PortError::SubmissionState);
     let interrupt = InterruptError::from(ModelError::DuplicateIrqVector(
-        pdma_model_contract::IrqVector::new(7),
+        pdma_model_contract::semantic::IrqVector::new(7),
     ));
     let adapter = AdapterError::from(ModelError::DmaAllocationExhausted);
     let compat = CompatError::from(ModelError::RingFull);
@@ -51,7 +51,7 @@ fn public_host_layers_expose_cause_preserving_errors() {
     assert_eq!(driver, DriverError::InactiveCpu(CpuContextError::Inactive));
     assert_eq!(
         interrupt,
-        InterruptError::DuplicateVector(pdma_model_contract::IrqVector::new(7))
+        InterruptError::DuplicateVector(pdma_model_contract::semantic::IrqVector::new(7))
     );
     assert_eq!(source_count, 4);
     assert!(interrupt.source().is_none());
@@ -157,7 +157,7 @@ async fn generic_port_drives_both_non_generic_facades() {
 
 struct CancellationObservables {
     inactive: Result<AsyncDriver, ModelError>,
-    wrong: Result<Option<pdma_model_contract::CompletionRecord>, ModelError>,
+    wrong: Result<Option<pdma_model_contract::semantic::CompletionRecord>, ModelError>,
     retained: Result<CommandId, ModelError>,
     recovered: Result<CommandId, ModelError>,
     commits_before_accept: usize,
@@ -173,8 +173,8 @@ async fn cancellation_and_cpu_observables_are_live() -> Result<CancellationObser
         .run_main(AsyncDriver::setup_on(&mut pre_port, 1, 1))
         .await?;
     let request = CopyRequest::new(
-        pdma_model_contract::BufferId::new(0),
-        pdma_model_contract::BufferId::new(1),
+        pdma_model_contract::semantic::BufferId::new(0),
+        pdma_model_contract::semantic::BufferId::new(1),
         1,
     );
     pre_port.block_submit();

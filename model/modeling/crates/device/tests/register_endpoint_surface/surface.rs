@@ -1,7 +1,7 @@
 use super::support::{RecordingObserver, TestResult, create_message, submit_copy};
 use hardware_interface_runtime::{AccessOrigin, RegisterAccess};
 use pdma_model_contract::abi::mmio::{MmioAccess, PdmaMmioMap};
-use pdma_model_contract::{IrqNotification, ResourceConfig};
+use pdma_model_contract::semantic::{IrqNotification, ResourceConfig};
 use pdma_model_device::{AsyncDevice, DeviceCore};
 use std::future::Future;
 use std::pin::Pin;

@@ -3,7 +3,7 @@ use super::bus::BusControlError;
 #[cfg(test)]
 use super::state::DeviceCore;
 use super::state::{publish, wake};
-use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 impl AsyncDeviceHandle {
     /// Atomically resets device-owned state and advances recovery identity.
@@ -29,14 +29,14 @@ mod tests {
     use super::*;
     use pdma_model_contract::abi::AbiControlError;
     use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-    use pdma_model_contract::ids::BufferId;
+    use pdma_model_contract::semantic::ids::BufferId;
 
     #[test]
     fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
         // Given: a runner at its initial epoch.
         let mut state = DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         );
 
@@ -78,7 +78,7 @@ mod tests {
         let exhausted = DeviceEpoch::new(u64::MAX);
         let mut state = DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         );
         state.backend.reset(exhausted);

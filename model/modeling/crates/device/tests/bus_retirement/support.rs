@@ -1,12 +1,14 @@
 use super::TestResult;
-use pdma_model_contract::{
-    AbiCommand, AbiCopy, AbiId, CopyIovas, DeviceEpoch, DmaAddress, EpochQueue, QueueActivation,
-    QueueControl, QueueCursorUpdate, QueueRingRegions, RingCursor, RingLayout, RingRecord,
+use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId, DmaAddress};
+use pdma_model_contract::abi::{CopyIovas, RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
 };
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRingId, EpochIrqSource, EventRouting, IrqSource, QueueConfig, QueueId,
     SoftwareOwnerId,
 };
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 use pdma_model_device::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, DmaWrite, SubmissionAcceptance,
 };
@@ -24,7 +26,7 @@ impl Fixture {
     pub(super) async fn new(epoch: DeviceEpoch, result_depth: u64) -> TestResult<Self> {
         let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
         let handle = runner.handle();

@@ -2,15 +2,15 @@ use super::DeviceCore;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::PdmaMemoryRegion;
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::BufferId;
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
-use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::bridge::PdmaMemoryRegion;
 use pdma_model_contract::semantic::EpochIrqSource;
-use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::semantic::completion::CompletionRecord;
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::event::EventRecord;
+use pdma_model_contract::semantic::ids::BufferId;
+use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::semantic::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::trace::TraceEvent;
 use std::ops::{Deref, DerefMut};
 
 mod run;
@@ -29,8 +29,8 @@ impl SyncDevice {
 
     pub(crate) fn reset_core(
         &mut self,
-        request: pdma_model_contract::WholeDeviceReset,
-    ) -> Result<pdma_model_contract::DeviceEpoch, super::bus::PdmaControlError> {
+        request: pdma_model_contract::semantic::WholeDeviceReset,
+    ) -> Result<pdma_model_contract::semantic::DeviceEpoch, super::bus::PdmaControlError> {
         self.core.reset_runner(request)
     }
 
@@ -40,7 +40,7 @@ impl SyncDevice {
     }
 
     /// Returns the persistent resource configuration owned by the core.
-    pub const fn resource_config(&self) -> pdma_model_contract::ResourceConfig {
+    pub const fn resource_config(&self) -> pdma_model_contract::semantic::ResourceConfig {
         self.core.backend.resource_config()
     }
 

@@ -2,7 +2,7 @@
 
 use pdma_model_device::ModelResult;
 
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId,
     desc::{CopyCommand, ExternalCommand},
     ids::CommandId,
@@ -14,7 +14,7 @@ fn line_ack_preserves_a_cause_relatched_after_the_final_empty_poll() -> ModelRes
     // Given: software has drained one Line-routed completion and observed the ring empty.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device
@@ -75,7 +75,7 @@ fn line_ack_cannot_create_a_cause_for_a_disabled_source() -> ModelResult<()> {
     // Given: a disabled source has a completion record but never latched an IRQ cause.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device.create_queue(QueueConfig::new(
@@ -104,9 +104,9 @@ fn line_ack_cannot_create_a_cause_for_a_disabled_source() -> ModelResult<()> {
 
 fn submit_copy(
     device: &mut SyncDevice,
-    queue: pdma_model_contract::QueueConfigHandle,
-    src: pdma_model_contract::BufferId,
-    dst: pdma_model_contract::BufferId,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
+    src: pdma_model_contract::semantic::BufferId,
+    dst: pdma_model_contract::semantic::BufferId,
     command_id: usize,
 ) -> ModelResult<()> {
     device.submit_command(

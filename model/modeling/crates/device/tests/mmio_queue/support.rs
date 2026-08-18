@@ -1,5 +1,5 @@
 use pdma_model_contract::bridge::PdmaMemoryRegion;
-use pdma_model_contract::{DeviceEpoch, QueueId};
+use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
 use pdma_model_device::AsyncDeviceHandle;
 
 pub(crate) async fn write_u32(

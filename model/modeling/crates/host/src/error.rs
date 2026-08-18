@@ -1,6 +1,8 @@
 use core::fmt;
 use hardware_interface_runtime::CpuContextError;
-use pdma_model_contract::{BufferId, CompletionRingId, DeviceEpoch, IrqSource, IrqVector, QueueId};
+use pdma_model_contract::semantic::{
+    BufferId, CompletionRingId, DeviceEpoch, IrqSource, IrqVector, QueueId,
+};
 use pdma_model_device::ModelError as DeviceModelError;
 
 macro_rules! define_layer_error {

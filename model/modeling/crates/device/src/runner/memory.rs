@@ -2,7 +2,8 @@ use super::{AsyncDeviceHandle, publish, wake};
 use crate::ModelResult;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::{BufferId, PdmaMemoryRegion};
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::BufferId;
 use std::sync::Arc;
 
 impl AsyncDeviceHandle {

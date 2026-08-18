@@ -1,8 +1,12 @@
 use super::{Access, RecordingTransport, activation, expected_queue_transcript};
+use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::{CompletionRingId, EpochIrqSource, IrqSource, IrqVector, QueueId};
-use pdma_model_contract::{DeviceEpoch, EpochQueue, QueueCursorUpdate, RingCursor};
+use pdma_model_contract::bridge::QueueCursorUpdate;
+use pdma_model_contract::semantic::{
+    CompletionRingId, EpochIrqSource, IrqSource, IrqVector, QueueId,
+};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 use pdma_model_device::{AsyncDevice, MmioBatchError};
 use pdma_model_host::{
     AsyncPdmaBus, BusDmaStage, BusDmaWrite, BusSubmission, MmioDeviceBus, QueueControlWrite,
@@ -90,7 +94,7 @@ async fn concrete_adapters_return_identical_typed_irq_status() -> TestResult {
     // Given: one real device bootstrapped only through the MMIO bus batch.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -278,3 +282,4 @@ async fn notification_wait_retries_empty_race_and_shutdown_never_claims() -> Tes
     assert!(transport.accesses().is_empty());
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

@@ -4,8 +4,9 @@
 mod support;
 
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::{DeviceEpoch, QueueId};
-use pdma_model_contract::{WholeDeviceReset, decode_event};
+use pdma_model_contract::bridge::decode_event;
+use pdma_model_contract::semantic::WholeDeviceReset;
+use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
 use pdma_model_device::AsyncDevice;
 use support::{
     RawActivation, activate_raw, issue_queue_command, program_activation, read_response, read_u32,
@@ -21,7 +22,7 @@ async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors()
     // Given: exact committed depth-two SQ/CQ/EQ mappings and programmed raw registers.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -46,7 +47,7 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
     // Given: exact mappings paired with misaligned, wrong-ID, and stale activation registers.
     let (wrong_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let wrong = wrong_device.handle();
@@ -129,7 +130,7 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     // Given: one mapped active depth-two queue with every cursor at zero.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -196,7 +197,7 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     // Given: an active queue whose first committed descriptor slot contains malformed bytes.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();

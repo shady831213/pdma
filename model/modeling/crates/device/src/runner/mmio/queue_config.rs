@@ -2,11 +2,13 @@ use super::queue_control::{CommandResult, fail, map_abi};
 use super::{QueueStaging, status_response};
 use crate::runner::bus::control;
 use crate::runner::state::DeviceCore;
+use pdma_model_contract::abi::RingRecord;
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::{
-    AbiControlError, DmaAddress, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
+use pdma_model_contract::abi::{AbiControlError, DmaAddress};
+use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EventRouting, QueueConfig, QueueId, SoftwareOwnerId,
 };
-use pdma_model_contract::{DeviceEpoch, EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 
 pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> CommandResult {
     let queue_id = usize::try_from(staging.id)

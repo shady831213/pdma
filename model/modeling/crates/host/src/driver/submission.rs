@@ -1,7 +1,7 @@
 use super::{AsyncDriver, ManualDriver, core::DriverCore};
 use crate::DriverPort;
 use crate::ModelResult;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BroadcastCopyCommand, BroadcastCopyRequest, CommandId, CopyCommand, CopyRequest,
     ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
 };

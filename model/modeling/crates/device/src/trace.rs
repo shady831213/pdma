@@ -4,9 +4,9 @@ mod event;
 mod json;
 mod sink;
 
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::ids::CommandId;
-use pdma_model_contract::trace::TraceOperation;
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::ids::CommandId;
+use pdma_model_contract::semantic::trace::TraceOperation;
 
 pub use sink::TraceSink;
 

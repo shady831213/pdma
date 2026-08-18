@@ -1,31 +1,33 @@
 //! Behavioral contract for the ABI-backed asynchronous device port.
 
+use super::pdma_model_host;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 
 #[path = "bus_device_port/cancellation_support.rs"]
 /// Test-only ABI cancellation observations retained outside the integration-test root.
-pub mod cancellation_support;
+pub(super) mod cancellation_support;
 #[path = "bus_device_port/consumer_race_support.rs"]
 /// Deterministic clone-consumer race scenarios.
-pub mod consumer_race_support;
+pub(super) mod consumer_race_support;
 #[path = "bus_device_port/interleaving_support.rs"]
 /// Test-only CPU interleaving scenarios.
-pub mod interleaving_support;
+pub(super) mod interleaving_support;
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, IrqRoute, IrqVector,
     StridedCopyRequest, VectorAddRequest, VectorBufferRange,
 };
-use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDevicePort, AsyncDriver, BusDevicePort, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, BusDevicePort, DriverPort as AsyncDevicePort};
 
 struct HappyFixture {
     port: BusDevicePort<pdma_model_device::AsyncDeviceHandle>,
     driver: AsyncDriver,
-    destinations: [pdma_model_contract::BufferId; 5],
-    commands: [pdma_model_contract::CommandId; 4],
+    destinations: [pdma_model_contract::semantic::BufferId; 5],
+    commands: [pdma_model_contract::semantic::CommandId; 4],
 }
 
 async fn submit_all_operations(
@@ -103,7 +105,7 @@ async fn region_handoff_drives_all_operations_and_irq_service_through_one_clone_
     // Given: one real ABI bus and a CPU-bound driver/port pair.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let cpu = SoftwareCpu::new();
@@ -138,7 +140,7 @@ async fn region_handoff_drives_all_operations_and_irq_service_through_one_clone_
 
     // Then: descriptor execution, canonical decode, consumer commit, and clone state agree.
     assert_eq!(
-        commands.map(pdma_model_contract::CommandId::raw),
+        commands.map(pdma_model_contract::semantic::CommandId::raw),
         [0, 1, 2, 3]
     );
     assert_eq!(records.len(), 4);
@@ -181,7 +183,7 @@ async fn wrong_cpu_and_handler_repoll_commit_nothing() -> ModelResult<()> {
     // Given: one owner-bound port before its first raw allocation.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let owner = SoftwareCpu::new();
@@ -209,7 +211,7 @@ async fn reset_stales_all_clones_without_mutex_deadlock() -> ModelResult<()> {
     // Given: two old port clones, a live epoch-zero queue, and persistent mapped bytes.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();

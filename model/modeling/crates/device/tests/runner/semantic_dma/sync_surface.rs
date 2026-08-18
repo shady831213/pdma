@@ -1,5 +1,5 @@
 use super::TestResult;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CompletionStatus, DmaRangeStart, ExternalCommand, QueueConfig, SoftwareOwnerId,
     desc::{StridedCopyCommand, StridedCopyRequest},
     queue::EventRouting,
@@ -9,7 +9,7 @@ use pdma_model_device::SyncDevice;
 pub(super) fn exercise() -> TestResult {
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device.create_queue(QueueConfig::new(

@@ -1,6 +1,8 @@
 use super::ConsumerLane;
-use pdma_model_contract::{DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_device::{AsyncDeviceHandle, BusControlError, PdmaMemoryError};
 use pdma_model_host::ModelResult;
 use pdma_model_host::{AsyncPdmaBus, BusQueueStatus, BusSubmission, QueueControlWrite};
@@ -241,3 +243,4 @@ impl AsyncPdmaBus for GatedBus {
         self.notifications.lock().await.recv().await
     }
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

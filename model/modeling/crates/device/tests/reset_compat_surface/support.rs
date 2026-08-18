@@ -3,10 +3,13 @@
 use std::sync::{Arc, Mutex};
 
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver, SharedMemory};
-use pdma_model_contract::{
-    CommandId, CopyCommand, CopyRequest, DeviceEpoch, EventRouting, ExternalCommand,
-    PdmaMemoryRegion, QueueActivation, QueueConfig, QueueConfigHandle, QueueRingRegions,
-    ResourceConfig, RingLayout, RingRecord, SoftwareOwnerId,
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
+};
+use pdma_model_contract::semantic::{
+    CommandId, CopyCommand, CopyRequest, DeviceEpoch, EventRouting, ExternalCommand, QueueConfig,
+    QueueConfigHandle, ResourceConfig, SoftwareOwnerId,
 };
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{AsyncDeviceHandle, DeviceCore};
@@ -56,17 +59,19 @@ pub(super) const fn queue_config() -> QueueConfig {
 pub(super) fn activation(
     regions: &[PdmaMemoryRegion],
     epoch: DeviceEpoch,
-) -> Result<QueueActivation, pdma_model_contract::AbiControlError> {
+) -> Result<QueueActivation, pdma_model_contract::abi::AbiControlError> {
     let [submission, completion, event] = regions else {
-        return Err(pdma_model_contract::AbiControlError::QueueDepthMismatch {
-            ring: "staged",
-            expected: 3,
-            actual: u32::MAX,
-        });
+        return Err(
+            pdma_model_contract::abi::AbiControlError::QueueDepthMismatch {
+                ring: "staged",
+                expected: 3,
+                actual: u32::MAX,
+            },
+        );
     };
     QueueActivation::try_new(
         epoch,
-        pdma_model_contract::QueueId::new(0),
+        pdma_model_contract::semantic::QueueId::new(0),
         queue_config(),
         QueueRingRegions::new(
             RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
@@ -79,8 +84,8 @@ pub(super) fn activation(
 pub(super) fn submit_copy(
     device: &mut SyncDevice,
     queue: QueueConfigHandle,
-    source: pdma_model_contract::BufferId,
-    destination: pdma_model_contract::BufferId,
+    source: pdma_model_contract::semantic::BufferId,
+    destination: pdma_model_contract::semantic::BufferId,
     command: usize,
 ) -> TestResult {
     device.submit_command(

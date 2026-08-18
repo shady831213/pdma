@@ -1,8 +1,8 @@
-use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::event::{EventErrorKind, EventRecord};
-use pdma_model_contract::ids::CommandId;
-use pdma_model_contract::trace::TraceOperation;
+use pdma_model_contract::semantic::completion::{CompletionRecord, CompletionStatus};
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::event::{EventErrorKind, EventRecord};
+use pdma_model_contract::semantic::ids::CommandId;
+use pdma_model_contract::semantic::trace::TraceOperation;
 
 pub(super) const fn operation_from_external(command: &ExternalCommand) -> TraceOperation {
     match command {

@@ -36,7 +36,10 @@ pub(super) fn project_region(
 
 pub(super) fn device_write(write: PdmaDmaWrite) -> pdma_model_device::DmaWrite {
     let (address, bytes) = write.into_parts();
-    pdma_model_device::DmaWrite::new(pdma_model_contract::DmaAddress::new(address.raw()), bytes)
+    pdma_model_device::DmaWrite::new(
+        pdma_model_contract::abi::DmaAddress::new(address.raw()),
+        bytes,
+    )
 }
 
 pub(super) const fn map_model_allocation(

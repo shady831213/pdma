@@ -11,7 +11,7 @@ pub use stage::PdmaMemoryStage;
 
 use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::bridge::PdmaMemoryRegion;
-use pdma_model_contract::ids::BufferId;
+use pdma_model_contract::semantic::ids::BufferId;
 use std::sync::Arc;
 
 const FIRST_MEMORY_ADDRESS: u64 = 0x1_0000;

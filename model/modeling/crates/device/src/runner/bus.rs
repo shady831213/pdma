@@ -7,9 +7,10 @@ pub(super) mod control;
 
 use super::{AsyncDeviceHandle, publish, wake};
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
-use pdma_model_contract::{
-    AbiControlError, DeviceEpoch, DmaAddress, QueueActivation, QueueControl, RingCursor,
-};
+use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::abi::{AbiControlError, DmaAddress};
+use pdma_model_contract::bridge::{QueueActivation, QueueControl};
+use pdma_model_contract::semantic::DeviceEpoch;
 use std::fmt;
 
 /// One byte-opaque DMA write committed by a bus transaction.

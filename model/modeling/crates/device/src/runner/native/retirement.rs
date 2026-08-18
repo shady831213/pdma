@@ -5,11 +5,11 @@ use crate::runner::AsyncStallReason;
 use crate::runner::backend::ModelStepStatus;
 use crate::runner::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::completion::{CompletionRecord, CompletionStatus};
-use pdma_model_contract::event::MemoryFault;
-use pdma_model_contract::ids::{CommandId, CompletionRingId, QueueId};
-use pdma_model_contract::irq::IrqSource;
-use pdma_model_contract::trace::TraceOperation;
+use pdma_model_contract::semantic::completion::{CompletionRecord, CompletionStatus};
+use pdma_model_contract::semantic::event::MemoryFault;
+use pdma_model_contract::semantic::ids::{CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::semantic::irq::IrqSource;
+use pdma_model_contract::semantic::trace::TraceOperation;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FaultRetirement {
@@ -176,7 +176,7 @@ pub(super) fn publish_fault(
     bus_control: &mut BusControlState,
     fault: FaultRetirement,
 ) -> ModelResult<ModelStepStatus> {
-    let event = pdma_model_contract::EventRecord::from_memory_fault(
+    let event = pdma_model_contract::semantic::EventRecord::from_memory_fault(
         fault.queue_id,
         fault.command_id,
         fault.fault,

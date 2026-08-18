@@ -10,7 +10,7 @@ mod submission;
 pub use irq::DriverIrqRecord;
 
 use core::DriverCore;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, CompletionRingId, EpochIrqSource, EventRecord, EventRouting,
     QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
 };

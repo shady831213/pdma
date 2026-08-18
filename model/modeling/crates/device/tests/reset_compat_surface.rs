@@ -12,7 +12,9 @@ use std::error::Error;
 use std::sync::Arc;
 
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::{DeviceEpoch, IrqRoute, IrqVector, ResourceConfig, WholeDeviceReset};
+use pdma_model_contract::semantic::{
+    DeviceEpoch, IrqRoute, IrqVector, ResourceConfig, WholeDeviceReset,
+};
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{
     AsyncDevice, MmioBatchError, ModelError, NoopRegisterObserver, PdmaControlError,
@@ -145,12 +147,12 @@ fn observation_sequences(
 
 fn adverse_surface(
     device: &mut SyncDevice,
-    queue: pdma_model_contract::QueueConfigHandle,
-    irq: pdma_model_contract::EpochIrqSource,
-    notification: pdma_model_contract::EpochIrqSource,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
+    irq: pdma_model_contract::semantic::EpochIrqSource,
+    notification: pdma_model_contract::semantic::EpochIrqSource,
     observer: &Arc<RecordingObserver>,
 ) -> TestResult {
-    let bytes = device.read_buffer(pdma_model_contract::BufferId::new(1), 0, 1)?;
+    let bytes = device.read_buffer(pdma_model_contract::semantic::BufferId::new(1), 0, 1)?;
     let mappings = device.mapped_region_count();
     let generation = device.memory_generation();
     let resources = device.resource_config();
@@ -169,7 +171,8 @@ fn adverse_surface(
         Err(ModelError::StaleDeviceEpoch { .. })
     );
     let (epoch_overflow, mutations) = overflow::run()?;
-    let bytes_unchanged = device.read_buffer(pdma_model_contract::BufferId::new(1), 0, 1)? == bytes;
+    let bytes_unchanged =
+        device.read_buffer(pdma_model_contract::semantic::BufferId::new(1), 0, 1)? == bytes;
     let mappings_unchanged = device.mapped_region_count() == mappings;
     let generation_unchanged = device.memory_generation() == generation;
     let resources_unchanged = device.resource_config() == resources;

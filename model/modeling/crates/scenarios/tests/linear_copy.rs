@@ -2,23 +2,27 @@
 
 use pdma_model_device::ModelError;
 
-use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CompletionStatus, desc::CopyRequest};
 use pdma_model_device::{AsyncDevice, SyncDevice};
-use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
+use pdma_model_host::{
+    AsyncDriver, ManualDriver,
+    compat::{AsyncDevicePort, SemanticDevicePort},
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     // Given: async runner handle, AsyncDriver, source/destination buffers, source write.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let cpu = SoftwareCpu::new();
     let (completion, command_id, snapshot, dst_bytes) = cpu
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -66,24 +70,27 @@ async fn reports_step_budget_exhaustion_when_work_remains() {
     // Given: one pending copy command.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
-    let mut driver = ManualDriver::setup_on(&mut device, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src = driver
-        .allocate_buffer_on(&mut device, 1)
-        .await
-        .expect("allocation");
-    let dst = driver
-        .allocate_buffer_on(&mut device, 1)
-        .await
-        .expect("allocation");
-    driver
-        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 1))
-        .await
-        .expect("copy submission has ring space");
+    {
+        let mut port = SemanticDevicePort::new(&mut device);
+        let mut driver = ManualDriver::setup_on(&mut port, 4, 4)
+            .await
+            .expect("queue setup is valid");
+        let src = driver
+            .allocate_buffer_on(&mut port, 1)
+            .await
+            .expect("allocation");
+        let dst = driver
+            .allocate_buffer_on(&mut port, 1)
+            .await
+            .expect("allocation");
+        driver
+            .submit_copy_on(&mut port, CopyRequest::new(src, dst, 1))
+            .await
+            .expect("copy submission has ring space");
+    }
 
     // When: the device is given no steps.
     let result = device.run_until_idle(0);

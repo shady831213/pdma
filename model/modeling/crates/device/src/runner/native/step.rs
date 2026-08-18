@@ -9,7 +9,7 @@ use crate::ModelResult;
 use crate::runner::AsyncStallReason;
 use crate::runner::backend::ModelStepStatus;
 use crate::trace::{command_id, operation_from_external};
-use pdma_model_contract::desc::ExternalCommand;
+use pdma_model_contract::semantic::desc::ExternalCommand;
 
 pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatus> {
     let NativeExecution {

@@ -14,7 +14,7 @@ use pdma_model_contract::abi::{
     ABI_VERSION, AbiCommand, BroadcastDestinationEntry, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
     DescriptorDecodeError, DmaAddress, VECTOR_ADD_OPCODE,
 };
-use pdma_model_contract::{BufferId, CopyRequest, DmaRangeStart, StridedCopyRequest};
+use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, StridedCopyRequest};
 
 #[test]
 fn every_v1_descriptor_matches_golden_bytes() {

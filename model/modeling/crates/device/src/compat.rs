@@ -29,7 +29,7 @@ impl ModelErrorAdapter {
     /// Projects a control failure into the historical compatibility vocabulary.
     pub const fn from_control(
         error: PdmaControlError,
-        queue: pdma_model_contract::QueueId,
+        queue: pdma_model_contract::semantic::QueueId,
     ) -> ModelError {
         match error {
             PdmaControlError::StaleEpoch { expected, actual } => {

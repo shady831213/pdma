@@ -37,7 +37,7 @@ irq_control!(unmask, unmask_irq_source);
 irq_control!(ack, ack_irq_source);
 
 fn validate_source<B>(port: &BusDevicePort<B>, source: EpochIrqSource) -> ModelResult<()> {
-    port.state.with(|state| {
+    port.with_state(|state| {
         let queue = state
             .queue
             .ok_or_else(|| ModelError::UnknownIrqSource(source.source()))?;

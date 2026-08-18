@@ -1,8 +1,9 @@
-use pdma_model_contract::{BufferId, CommandId, CopyRequest, TraceEventKind};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest, TraceEventKind};
 use pdma_model_device::{AsyncStepStatus, SyncDevice};
+use pdma_model_host::AsyncDriver;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
 
 struct PollFixture {
     owner: SoftwareCpu,
@@ -29,7 +30,7 @@ impl PollFixture {
                     .driver
                     .poll_completion_on(&mut self.device)
                     .await?
-                    .map(pdma_model_contract::CompletionRecord::command_id);
+                    .map(pdma_model_contract::semantic::CompletionRecord::command_id);
                 let submitted = self
                     .driver
                     .submit_copy_on(&mut self.device, self.retry)
@@ -46,7 +47,7 @@ impl PollFixture {
                     .driver
                     .poll_event_on(&mut self.device)
                     .await?
-                    .map(pdma_model_contract::EventRecord::command_id);
+                    .map(pdma_model_contract::semantic::EventRecord::command_id);
                 let submitted = self
                     .driver
                     .submit_copy_on(&mut self.device, self.retry)
@@ -61,7 +62,7 @@ async fn completion_fixture() -> ModelResult<PollFixture> {
     let owner = SoftwareCpu::new();
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     device.enable_tracing();
@@ -90,7 +91,7 @@ async fn event_fixture() -> ModelResult<PollFixture> {
     let owner = SoftwareCpu::new();
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     device.enable_tracing();

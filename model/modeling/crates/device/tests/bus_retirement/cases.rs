@@ -1,11 +1,11 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
-use pdma_model_contract::{
+use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::bridge::{decode_completion, decode_event};
+use pdma_model_contract::semantic::{
     CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
-use pdma_model_contract::{
-    DeviceEpoch, RingCursor, WholeDeviceReset, decode_completion, decode_event,
-};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::PendingDmaResult;
 
 /// Exercises exact event visibility and retry ordering.
@@ -217,7 +217,7 @@ pub async fn corrupt_masked_and_stale() -> TestResult {
             .handle
             .irq_snapshot()
             .await
-            .is_some_and(pdma_model_contract::IrqSnapshot::asserted)
+            .is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted)
     );
     fixture.handle.request_shutdown().await;
     worker.await?;

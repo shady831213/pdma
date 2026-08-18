@@ -3,11 +3,12 @@ use super::{
     QueueControlWrite,
 };
 use crate::ModelResult;
+use pdma_model_contract::abi::DmaAddress;
+#[cfg(test)]
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::{
-    DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl,
-};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation, QueueControl};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use pdma_model_device::{
     AsyncDeviceHandle, BusControlError, PdmaMemoryError, QueueStatus, SubmissionAcceptance,
 };
@@ -140,6 +141,7 @@ impl AsyncPdmaBus for AsyncDeviceHandle {
         Self::ack_irq_source(self, source).await.map_err(Into::into)
     }
 
+    #[cfg(test)]
     async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
         Self::observe_irq_source(self, source)
             .await

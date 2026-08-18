@@ -1,8 +1,8 @@
 use super::{CommandOutcome, line_response, source_response};
 use crate::runner::irq::{map_mmio_error, observe_irq_source, usize_to_u64};
 use crate::runner::state::DeviceCore;
-use pdma_model_contract::IrqNotification;
 use pdma_model_contract::abi::mmio::{IrqCommand, MmioResultDetails};
+use pdma_model_contract::semantic::IrqNotification;
 
 pub(super) fn snapshot_line(state: &DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
     let Some(snapshot) = state.backend.irq_snapshot() else {

@@ -1,7 +1,7 @@
 use super::{QueueContext, QueuePortDeviceModel, io};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::EpochQueue;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 
@@ -81,10 +81,10 @@ impl QueuePortDeviceModel {
         match self.pending_retirement {
             Some(super::retirement::PendingRetirement::Completion(success)) => {
                 Some(super::super::PendingDmaResult::Completion(
-                    pdma_model_contract::CompletionRecord::new(
+                    pdma_model_contract::semantic::CompletionRecord::new(
                         success.queue,
                         success.command,
-                        pdma_model_contract::CompletionStatus::Success,
+                        pdma_model_contract::semantic::CompletionStatus::Success,
                     ),
                 ))
             }

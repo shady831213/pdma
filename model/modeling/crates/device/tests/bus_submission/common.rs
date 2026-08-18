@@ -1,8 +1,13 @@
-use pdma_model_contract::{
-    AbiCommand, AbiEvent, DeviceEpoch, DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation,
-    QueueControl, QueueCursorUpdate, QueueRingRegions, RingCursor, RingLayout, RingRecord,
+use pdma_model_contract::abi::{AbiCommand, DmaAddress};
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    AbiEvent, PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
+    RingLayout,
 };
-use pdma_model_contract::{EventRouting, QueueConfig, QueueId, ResourceConfig, SoftwareOwnerId};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{
+    EventRouting, QueueConfig, QueueId, ResourceConfig, SoftwareOwnerId,
+};
 use pdma_model_device::{
     AsyncDevice, AsyncDeviceHandle, DmaWrite, PendingDmaResult, SubmissionAcceptance,
 };
@@ -22,7 +27,7 @@ pub(super) struct RunResult {
     pub(super) destinations: Vec<Vec<u8>>,
     pub(super) steps: usize,
     pub(super) irq_pending: bool,
-    pub(super) traces: Vec<pdma_model_contract::TraceEvent>,
+    pub(super) traces: Vec<pdma_model_contract::semantic::TraceEvent>,
     pub(super) native_steps: usize,
 }
 

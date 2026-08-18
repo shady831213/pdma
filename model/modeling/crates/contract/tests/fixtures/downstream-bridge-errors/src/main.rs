@@ -3,9 +3,7 @@ use pdma_model_contract::abi::{AbiCommand, AbiEncodeError};
 use pdma_model_contract::bridge::{
     BridgeError, CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
 };
-use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId,
-};
+use pdma_model_contract::semantic::{BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

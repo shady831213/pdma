@@ -2,12 +2,12 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::parse2;
 
-use crate::{
+use crate::internal::{
     crate_path,
     syntax::{FieldDefinitionDecl, ScalarType},
 };
 
-pub(crate) fn run(input: TokenStream) -> TokenStream {
+pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
     parse2::<FieldDefinitionDecl>(input)
         .and_then(|decl| expand(&decl))
         .unwrap_or_else(syn::Error::into_compile_error)

@@ -2,26 +2,28 @@
 
 use pdma_model_host::ModelError;
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     CompletionStatus, TraceEvent, TraceEventKind,
     desc::CopyRequest,
     ids::{CommandId, QueueId},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_default_policy_retires_runnable_queues_in_submission_order() {
     // Given: two async queues with one runnable copy each, submitted in queue order.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
     let (queue_a, queue_b, command_a, command_b, completion_a, completion_b, copied_a, copied_b) =
         SoftwareCpu::new()
             .run_main(async {
@@ -90,7 +92,7 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
                 )
             })
             .await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
@@ -114,9 +116,10 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
     // Given: one peer queue and one repeated-work queue are both runnable.
     let (runner, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
     let (
         peer_queue,
         repeated_queue,
@@ -195,7 +198,7 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
         })
         .await
         .expect("software program succeeds");
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
@@ -222,7 +225,7 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
 fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
     AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ))
 }

@@ -4,11 +4,14 @@
 /// Shared typed queue-control fixtures.
 pub mod support;
 
-use pdma_model_contract::{BufferId, DeviceEpoch, QueueId};
-use pdma_model_contract::{
-    DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate,
-    QueueRingRegions, RingCursor, RingLayout, RingRecord,
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
+    RingLayout,
 };
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{BufferId, DeviceEpoch, QueueId};
 use pdma_model_device::{BusControlError, DmaWrite, SubmissionAcceptance};
 use support::{activation, new_handle};
 

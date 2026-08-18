@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use crate::syntax::{RegisterDecl, RegisterDefinitionDecl};
+use crate::internal::syntax::{RegisterDecl, RegisterDefinitionDecl};
 
-pub(crate) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()> {
+pub(in crate::internal) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()> {
     let mut ids = HashSet::new();
     for register in registers {
         if !ids.insert(register.id.0) {
@@ -48,7 +48,7 @@ pub(crate) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()
     Ok(())
 }
 
-pub(crate) fn check_definition(register: &RegisterDefinitionDecl) -> syn::Result<()> {
+pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -> syn::Result<()> {
     if !matches!(register.width.0, 1 | 2 | 4 | 8) {
         return Err(syn::Error::new(
             register.width.1,
@@ -107,7 +107,7 @@ fn generated_ident(name: &str) -> String {
         .collect()
 }
 
-pub(crate) fn validate_values(register: &RegisterDecl) -> syn::Result<()> {
+pub(in crate::internal) fn validate_values(register: &RegisterDecl) -> syn::Result<()> {
     if !matches!(register.width.0, 1 | 2 | 4 | 8) {
         return Err(syn::Error::new(
             register.width.1,

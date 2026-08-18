@@ -1,10 +1,9 @@
 //! Canonical host driver core surface.
 
+pub use crate::DriverPort;
 pub use crate::driver::{AsyncDriver, ManualDriver};
-pub use crate::port::DriverPort;
 use hardware_interface_runtime::CpuContextError;
-pub use hardware_interface_runtime::{CpuLocal, SoftwareCpu};
-use pdma_model_contract::{BufferId, CompletionRingId, DeviceEpoch, IrqSource, QueueId};
+use pdma_model_contract::semantic::{BufferId, CompletionRingId, DeviceEpoch, IrqSource, QueueId};
 use std::{error::Error, fmt};
 
 /// Device-port rejection projected entirely into host/runtime/contract types.

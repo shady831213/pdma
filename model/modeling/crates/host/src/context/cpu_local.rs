@@ -8,7 +8,7 @@ use std::fmt;
 /// Cloning shares the same value and access remains synchronous. A reference cannot escape:
 ///
 /// ```compile_fail
-/// use pdma_model_host::SoftwareCpu;
+/// use hardware_interface_runtime::SoftwareCpu;
 ///
 /// let cpu = SoftwareCpu::new();
 /// let local = cpu.local(String::from("state"));
@@ -19,7 +19,7 @@ use std::fmt;
 /// A future cannot retain a borrow across an await:
 ///
 /// ```compile_fail
-/// use pdma_model_host::SoftwareCpu;
+/// use hardware_interface_runtime::SoftwareCpu;
 ///
 /// let cpu = SoftwareCpu::new();
 /// let local = cpu.local(String::from("state"));
@@ -29,21 +29,16 @@ use std::fmt;
 /// });
 /// # let _ = future;
 /// ```
-pub struct CpuLocal<T>(RuntimeCpuLocal<T>);
+pub(super) struct CpuLocal<T>(RuntimeCpuLocal<T>);
 
 impl<T> CpuLocal<T> {
+    #[cfg(test)]
     pub(super) const fn from_runtime(local: RuntimeCpuLocal<T>) -> Self {
         Self(local)
     }
 
-    pub(crate) fn capture_active(value: T) -> ModelResult<Self> {
-        RuntimeCpuLocal::capture_active(value)
-            .map(Self)
-            .map_err(map_context_error)
-    }
-
     /// Applies one synchronous operation while the owning CPU is active.
-    pub fn with<R>(&self, operation: impl FnOnce(&mut T) -> R) -> ModelResult<R> {
+    pub(super) fn with<R>(&self, operation: impl FnOnce(&mut T) -> R) -> ModelResult<R> {
         self.0.with(operation).map_err(map_context_error)
     }
 }

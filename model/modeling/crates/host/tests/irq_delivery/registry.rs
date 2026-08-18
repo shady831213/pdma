@@ -1,10 +1,11 @@
-use crate::{NotificationPort, line, message};
-use pdma_model_contract::{
+use super::{NotificationPort, line, message};
+use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     CompletionRingId, IrqNotification, IrqSource, IrqVector, QueueId, TraceEventKind,
 };
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::{mpsc, oneshot};
 
@@ -243,3 +244,4 @@ async fn unregistered_vector_fails_before_cpu_and_trace() -> ModelResult<()> {
     assert_eq!(summary.deliveries(), 1);
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

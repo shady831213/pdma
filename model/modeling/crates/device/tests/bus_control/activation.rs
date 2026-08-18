@@ -94,11 +94,11 @@ async fn mapped_activation_rejects_uncommitted_and_partial_mappings_without_muta
     let partial_request = QueueActivation::try_new(
         DeviceEpoch::initial(),
         QueueId::new(0),
-        pdma_model_contract::QueueConfig::new(
+        pdma_model_contract::semantic::QueueConfig::new(
             2,
             2,
-            pdma_model_contract::EventRouting::QueueLocal,
-            pdma_model_contract::SoftwareOwnerId::new(7),
+            pdma_model_contract::semantic::EventRouting::QueueLocal,
+            pdma_model_contract::semantic::SoftwareOwnerId::new(7),
         ),
         QueueRingRegions::new(
             RingLayout::try_new(submission, 2, RingRecord::Submission)?,
@@ -205,11 +205,11 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
         QueueActivation::try_new(
             DeviceEpoch::initial(),
             QueueId::new(0),
-            pdma_model_contract::QueueConfig::new(
+            pdma_model_contract::semantic::QueueConfig::new(
                 1,
                 2,
-                pdma_model_contract::EventRouting::QueueLocal,
-                pdma_model_contract::SoftwareOwnerId::new(7),
+                pdma_model_contract::semantic::EventRouting::QueueLocal,
+                pdma_model_contract::semantic::SoftwareOwnerId::new(7),
             ),
             valid.rings(),
         )

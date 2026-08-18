@@ -1,6 +1,6 @@
 use super::PdmaInterruptNotification;
 use hardware_interface_runtime::{InterruptLifecycleEvent, InterruptLifecycleObserver};
-use pdma_model_contract::{TraceEvent, TraceEventKind};
+use pdma_model_contract::semantic::{TraceEvent, TraceEventKind};
 use std::sync::Mutex;
 
 /// Clone-shareable synchronous trace adapter for complete composite IRQ turns.
@@ -25,8 +25,8 @@ impl InterruptLifecycleObserver<PdmaInterruptNotification> for PdmaInterruptTrac
             InterruptLifecycleEvent::Started { notification, .. } => (
                 TraceEventKind::IrqHandlerStarted,
                 match notification.notification() {
-                    pdma_model_contract::IrqNotification::Line(_) => "line",
-                    pdma_model_contract::IrqNotification::Message(_) => "message",
+                    pdma_model_contract::semantic::IrqNotification::Line(_) => "line",
+                    pdma_model_contract::semantic::IrqNotification::Message(_) => "message",
                 },
             ),
             InterruptLifecycleEvent::Succeeded { .. } => {

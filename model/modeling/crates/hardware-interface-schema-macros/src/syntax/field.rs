@@ -5,11 +5,11 @@ use syn::{
 
 use super::{ScalarType, key, keyword};
 
-pub(crate) struct FieldDefinitionDecl {
-    pub(crate) visibility: Visibility,
-    pub(crate) name: Ident,
-    pub(crate) scalar: ScalarType,
-    pub(crate) endian: Ident,
+pub(in crate::internal) struct FieldDefinitionDecl {
+    pub(in crate::internal) visibility: Visibility,
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) scalar: ScalarType,
+    pub(in crate::internal) endian: Ident,
 }
 
 impl Parse for FieldDefinitionDecl {

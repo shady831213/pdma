@@ -1,10 +1,10 @@
 mod irq;
 
 use crate::trace::event;
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::{CommandId, QueueId};
-use pdma_model_contract::trace::{TraceEvent, TraceEventKind, TraceOperation};
+use pdma_model_contract::semantic::completion::CompletionRecord;
+use pdma_model_contract::semantic::event::EventRecord;
+use pdma_model_contract::semantic::ids::{CommandId, QueueId};
+use pdma_model_contract::semantic::trace::{TraceEvent, TraceEventKind, TraceOperation};
 
 /// In-memory deterministic trace sink for async PDMA lifecycle events.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

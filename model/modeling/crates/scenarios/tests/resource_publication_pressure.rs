@@ -1,8 +1,9 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{CompletionStatus, ResourceConfig, desc::CopyRequest};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CompletionStatus, ResourceConfig, desc::CopyRequest};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_completion_publication_capacity_one_preserves_completion_order_after_polling()
@@ -24,7 +25,7 @@ async fn async_runner_completion_publication_capacity_one_preserves_completion_o
         final_completion,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -120,7 +121,7 @@ async fn async_runner_event_publication_capacity_one_preserves_event_order_after
         final_event,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

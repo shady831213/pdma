@@ -1,28 +1,32 @@
 use crate::ModelError;
 use crate::ModelResult;
+#[path = "bus_device/poll_irq.rs"]
 mod poll_irq;
+#[path = "bus_device/state.rs"]
 mod state;
+#[path = "bus_device/submission.rs"]
 mod submission;
 
-use super::AsyncDevicePort;
-use crate::{AsyncPdmaBus, CpuLocal};
-use pdma_model_contract::{
+use super::DriverPort;
+use crate::register::bus::{AsyncPdmaBus, BusQueueStatus};
+use hardware_interface_runtime::CpuLocal;
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
-use pdma_model_contract::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 use pdma_model_device::{BusControlError, PdmaMemoryError};
 use state::PortState;
 use std::future::{Future, poll_fn};
 
 /// Adapts a transport DMA error into the closed host model error vocabulary.
-pub trait BusDmaErrorAdapter {
+pub(in crate::register) trait BusDmaErrorAdapter {
     /// Preserves the typed meaning of a failed DMA operation.
     fn into_model_error(self, buffer: Option<BufferId>) -> ModelError;
 }
 
 /// Adapts a transport control error into the closed host model error vocabulary.
-pub trait BusControlErrorAdapter {
+pub(in crate::register) trait BusControlErrorAdapter {
     /// Preserves stale-epoch and queue identity meaning for the failed operation.
     fn into_model_error(self, queue: EpochQueue) -> ModelError;
 }
@@ -57,27 +61,35 @@ impl BusControlErrorAdapter for BusControlError {
 
 /// CPU-bound clone-shared host port that drives PDMA through the fixed-width ABI bus.
 #[derive(Debug, Clone)]
-pub struct BusDevicePort<B> {
+pub(in crate::register) struct BusDevicePort<B> {
     bus: B,
     state: CpuLocal<PortState>,
 }
 
+impl<B> BusDevicePort<B> {
+    fn with_state<R>(&self, operation: impl FnOnce(&mut PortState) -> R) -> ModelResult<R> {
+        self.state.with(operation).map_err(ModelError::from)
+    }
+}
+
 impl<B: Sync> BusDevicePort<B> {
     /// Captures the active software CPU as this port's owner.
-    pub fn new(bus: B) -> ModelResult<Self> {
+    #[cfg(test)]
+    pub(in crate::register) fn new(bus: B) -> ModelResult<Self> {
         Self::new_at(bus, DeviceEpoch::initial())
     }
 
     /// Captures the active software CPU for an explicitly known current device epoch.
-    pub fn new_at(bus: B, epoch: DeviceEpoch) -> ModelResult<Self> {
+    pub(in crate::register) fn new_at(bus: B, epoch: DeviceEpoch) -> ModelResult<Self> {
         Ok(Self {
             bus,
-            state: CpuLocal::capture_active(PortState::new(epoch))?,
+            state: CpuLocal::capture_active(PortState::new(epoch)).map_err(ModelError::from)?,
         })
     }
 
-    pub(crate) fn validate_owner(&self) -> ModelResult<()> {
-        self.state.with(|_| ())
+    /// Verifies that the current poll is on the owning software CPU.
+    pub(in crate::register) fn validate_owner(&self) -> ModelResult<()> {
+        self.with_state(|_| ())
     }
 
     async fn poll_model<F, T>(&self, future: F) -> ModelResult<T>
@@ -87,7 +99,7 @@ impl<B: Sync> BusDevicePort<B> {
     {
         let mut future = Box::pin(future);
         poll_fn(|context| {
-            if let Err(error) = self.state.with(|_| ()) {
+            if let Err(error) = self.with_state(|_| ()) {
                 return std::task::Poll::Ready(Err(error));
             }
             future.as_mut().poll(context)
@@ -103,7 +115,7 @@ impl<B: Sync> BusDevicePort<B> {
     {
         let mut future = Box::pin(future);
         poll_fn(|context| {
-            if let Err(error) = self.state.with(|_| ()) {
+            if let Err(error) = self.with_state(|_| ()) {
                 return std::task::Poll::Ready(Err(error));
             }
             match future.as_mut().poll(context) {
@@ -124,7 +136,7 @@ impl<B: Sync> BusDevicePort<B> {
     {
         let mut future = Box::pin(future);
         poll_fn(|context| {
-            if let Err(error) = self.state.with(|_| ()) {
+            if let Err(error) = self.with_state(|_| ()) {
                 return std::task::Poll::Ready(Err(error));
             }
             match future.as_mut().poll(context) {
@@ -138,7 +150,22 @@ impl<B: Sync> BusDevicePort<B> {
     }
 }
 
-impl<B> AsyncDevicePort for BusDevicePort<B>
+impl<B> BusDevicePort<B>
+where
+    B: AsyncPdmaBus,
+    B::ControlError: BusControlErrorAdapter,
+{
+    /// Reads the current cursor status for one queue.
+    pub(in crate::register) async fn queue_status(
+        &self,
+        queue: EpochQueue,
+    ) -> ModelResult<BusQueueStatus> {
+        self.poll_control(self.bus.read_queue_status(queue), queue)
+            .await
+    }
+}
+
+impl<B> DriverPort for BusDevicePort<B>
 where
     B: AsyncPdmaBus + Clone,
     B::DmaError: BusDmaErrorAdapter,

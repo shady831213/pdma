@@ -7,11 +7,11 @@ use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqSourceStatus, IrqStateBit, MmioResult, MmioResultDetails,
 };
-use pdma_model_contract::irq::{
+use pdma_model_contract::semantic::EpochIrqSource;
+use pdma_model_contract::semantic::irq::{
     IrqLine, IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector,
 };
-use pdma_model_contract::semantic::EpochIrqSource;
-use pdma_model_contract::{CompletionRingId, DeviceEpoch, QueueId};
+use pdma_model_contract::semantic::{CompletionRingId, DeviceEpoch, QueueId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) struct IrqSourceView {

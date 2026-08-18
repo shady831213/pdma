@@ -1,8 +1,12 @@
-use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqVector, TraceEventKind};
+use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
+    CopyRequest, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
+};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::AsyncDriver;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use tokio::sync::oneshot;
 
 struct FailingHandler {
@@ -25,7 +29,7 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
     // Given: one pending IRQ and a handler that reports a typed failure.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -88,3 +92,4 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
     worker.await.expect("device worker joins cleanly");
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

@@ -1,4 +1,4 @@
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CompletionStatus, ExternalCommand, QueueConfigHandle, ResourceConfig,
     TraceEventKind,
     desc::{CopyCommand, CopyRequest, VectorAddCommand, VectorAddRequest, VectorBufferRange},
@@ -121,7 +121,7 @@ fn verify_stall_commit_points(mut fixture: Fixture) -> TestResult {
         Err(ModelError::StepBudgetExhausted { max_steps: 1 })
     );
     assert_eq!(
-        first_completion.map(pdma_model_contract::CompletionRecord::command_id),
+        first_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
         Some(CommandId::new(0))
     );
     assert_eq!(
@@ -188,6 +188,6 @@ fn trace_sequences(device: &SyncDevice, kind: TraceEventKind, command: CommandId
         .trace_events()
         .iter()
         .filter(|event| event.kind() == kind && event.command_id() == Some(command))
-        .map(pdma_model_contract::TraceEvent::sequence)
+        .map(pdma_model_contract::semantic::TraceEvent::sequence)
         .collect()
 }

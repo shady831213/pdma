@@ -1,5 +1,5 @@
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, IrqRoute, IrqVector,
     QueueConfig, SoftwareOwnerId,
 };
@@ -105,7 +105,7 @@ async fn wait_until_core_contended(handle: &AsyncDeviceHandle) -> TestResult {
 /// Creates and enables one message-routed completion source.
 pub async fn create_message(
     handle: &AsyncDeviceHandle,
-) -> TestResult<pdma_model_contract::QueueConfigHandle> {
+) -> TestResult<pdma_model_contract::semantic::QueueConfigHandle> {
     let queue = handle
         .create_queue(QueueConfig::new(
             2,
@@ -126,7 +126,7 @@ pub async fn create_message(
 /// Submits one copy that produces a completion message.
 pub async fn submit_copy(
     handle: &AsyncDeviceHandle,
-    queue: pdma_model_contract::QueueConfigHandle,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
 ) -> TestResult {
     let source = handle.allocate_buffer(1).await?;
     let destination = handle.allocate_buffer(1).await?;

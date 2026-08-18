@@ -1,7 +1,9 @@
 use super::{MmioBusControlError, MmioDeviceBus, MmioDeviceTransport};
-use crate::{BusQueueStatus, BusSubmission, QueueControlWrite};
+use crate::register::bus::{BusQueueStatus, BusSubmission, QueueControlWrite};
+use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{MmioByteCount, MmioResult, MmioResultDetails};
-use pdma_model_contract::{EpochQueue, QueueActivation, QueueRingRegions, RingCursor, RingCursors};
+use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingCursors};
+use pdma_model_contract::semantic::EpochQueue;
 
 pub(super) async fn bootstrap<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
@@ -125,7 +127,7 @@ fn decode_status(
     };
     let queue = EpochQueue::new(
         pdma_model_contract::semantic::DeviceEpoch::new(*epoch),
-        pdma_model_contract::QueueId::new(
+        pdma_model_contract::semantic::QueueId::new(
             usize::try_from(*id).map_err(|_| MmioBusControlError::MalformedResponse)?,
         ),
     );
@@ -166,15 +168,18 @@ const fn command_cursors(
         QueueControlWrite::CaptureSubmissionProducer(update) => {
             (4, status.captured_submission_producer(), update.cursor())
         }
+        #[cfg(test)]
         QueueControlWrite::PublishSubmissionConsumer(update) => {
             (5, status.submission().consumer(), update.cursor())
         }
+        #[cfg(test)]
         QueueControlWrite::PublishCompletionProducer(update) => {
             (6, status.completion().producer(), update.cursor())
         }
         QueueControlWrite::PublishCompletionConsumer(update) => {
             (7, status.completion().consumer(), update.cursor())
         }
+        #[cfg(test)]
         QueueControlWrite::PublishEventProducer(update) => {
             (8, status.event().producer(), update.cursor())
         }

@@ -1,19 +1,23 @@
 //! ABI-v1 numeric registry and checked boundary conformance.
 
 use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::BufferId;
-use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
-use pdma_model_contract::{
+use pdma_model_contract::abi::{
     ABI_VERSION, AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError, AbiId,
-    AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK,
-    COMPLETION_SIZE, COPY_OPCODE, DESCRIPTOR, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_FLAGS_MASK,
-    DESCRIPTOR_SIZE, DESCRIPTOR_V1_FEATURE, DmaAddress, EVENT, EVENT_ACCESSES, EVENT_ALIGNMENT,
-    EVENT_FLAGS_MASK, EVENT_KINDS, EVENT_SIZE, EVENT_STAGES, EVENT_V1_FEATURE, FEATURES, FieldSpec,
-    INDIRECT_BROADCAST_FEATURE, INDIRECT_ENTRY_ALIGNMENT, IOVA64_FEATURE, KNOWN_FEATURE_MASK,
-    MAX_INDIRECT_DESTINATIONS, MAX_RING_DEPTH, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
-    OPCODES, OpcodeSpec, PdmaMemoryRegion, STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE,
-    SUCCESS_STATUS, VECTOR_ADD_FEATURE, VECTOR_ADD_OPCODE, copy_u64_le, validate_abi_version,
+    AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK,
+    COMPLETION_SIZE, COPY_OPCODE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
+    DESCRIPTOR_V1_FEATURE, DmaAddress, EVENT_ACCESSES, EVENT_ALIGNMENT, EVENT_FLAGS_MASK,
+    EVENT_KINDS, EVENT_SIZE, EVENT_STAGES, EVENT_V1_FEATURE, INDIRECT_BROADCAST_FEATURE,
+    INDIRECT_ENTRY_ALIGNMENT, IOVA64_FEATURE, KNOWN_FEATURE_MASK, MAX_INDIRECT_DESTINATIONS,
+    MAX_RING_DEPTH, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES, STRIDED_COPY_FEATURE,
+    STRIDED_COPY_OPCODE, SUCCESS_STATUS, VECTOR_ADD_FEATURE, VECTOR_ADD_OPCODE, copy_u64_le,
+    validate_abi_version,
 };
+use pdma_model_contract::abi::{
+    COMPLETION, DESCRIPTOR, EVENT, FEATURES, FieldSpec, OPCODES, OpcodeSpec,
+};
+use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::BufferId;
 
 fn assert_fields_cover_record(fields: &[FieldSpec], record_size: usize) {
     for (index, field) in fields.iter().enumerate() {

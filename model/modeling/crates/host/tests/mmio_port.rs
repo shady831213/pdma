@@ -1,15 +1,17 @@
 //! MMIO-backed host-port CPU, reset, and DMA-persistence boundaries.
 
+use super::pdma_model_host;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::abi::mmio::{MmioByteCount, MmioResult};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CopyRequest, EventRouting, IrqNotification, IrqRoute, IrqVector, QueueConfig, SoftwareOwnerId,
 };
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDevicePort, AsyncDriver, AsyncPdmaBus, BusDevicePort, MmioDeviceBus, SoftwareCpu,
+    AsyncDriver, AsyncPdmaBus, BusDevicePort, DriverPort as AsyncDevicePort, MmioDeviceBus,
 };
 
 #[tokio::test(flavor = "current_thread")]
@@ -17,7 +19,7 @@ async fn message_delivery_uses_non_consuming_readiness_and_one_raw_claim() -> Mo
     // Given: the real worker and one Message-routed completion through an MMIO port.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -67,7 +69,7 @@ async fn owner_cpu_and_reset_boundaries_hold_through_mmio_port() -> ModelResult<
     // Given: one owner-bound MMIO port, a queue capability, and persistent DMA bytes.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -126,7 +128,7 @@ async fn inactive_cpu_rejects_before_mmio_port_mutation() -> ModelResult<()> {
     // Given: a port returned from its sole active owner segment.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let owner = SoftwareCpu::new();

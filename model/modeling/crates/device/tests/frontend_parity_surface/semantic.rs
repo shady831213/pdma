@@ -1,10 +1,10 @@
 use crate::operations::OperationCase;
-use pdma_model_contract::desc::{
+use pdma_model_contract::semantic::desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,
     CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand,
     VectorAddRequest, VectorBufferRange,
 };
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, DmaRangeStart, EventRouting, QueueConfig, ResourceConfig, SoftwareOwnerId,
     TraceEventKind, TraceOperation,
 };
@@ -81,7 +81,7 @@ pub(super) fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
     })
 }
 
-pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::QueueId>> {
+pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_compute_slots(0),
@@ -140,9 +140,9 @@ pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::QueueId>> {
 
 fn command(
     case: OperationCase,
-    queue: pdma_model_contract::QueueConfigHandle,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
     command_id: CommandId,
-    buffers: [pdma_model_contract::BufferId; 4],
+    buffers: [pdma_model_contract::semantic::BufferId; 4],
 ) -> ExternalCommand {
     let [source_a, source_b, destination_a, destination_b] = buffers;
     match case {

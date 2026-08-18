@@ -1,4 +1,4 @@
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig,
     QueueConfigHandle, SoftwareOwnerId,
 };

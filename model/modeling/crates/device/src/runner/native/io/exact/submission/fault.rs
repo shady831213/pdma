@@ -1,10 +1,10 @@
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::{
+use pdma_model_contract::abi::{
     AbiFault, AbiFaultCandidate, AbiFaultOrder, AbiHeaderField, AbiReservedField, AbiScalarField,
-    BROADCAST_COPY_OPCODE, COPY_OPCODE, DescriptorDecodeError, DescriptorSchema,
-    DescriptorSchemaView, DmaAddress, STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE,
+    BROADCAST_COPY_OPCODE, COPY_OPCODE, DmaAddress, STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE,
     select_canonical_fault,
 };
+use pdma_model_contract::abi::{DescriptorDecodeError, DescriptorSchema, DescriptorSchemaView};
 
 pub(super) fn descriptor(
     slot: DmaAddress,

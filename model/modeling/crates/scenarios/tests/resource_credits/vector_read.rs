@@ -11,7 +11,7 @@ pub(super) async fn run_vector_add_one_read_slot_scenario() {
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

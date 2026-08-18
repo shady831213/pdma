@@ -153,3 +153,4 @@ impl AsyncDevicePort for PendingDoorbellPort {
         self.port.wait_irq_notification()
     }
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

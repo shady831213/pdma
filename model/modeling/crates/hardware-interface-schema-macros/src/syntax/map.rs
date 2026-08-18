@@ -5,36 +5,36 @@ use syn::{
 
 use super::{RegisterDecl, key, keyword, usize_lit};
 
-pub(crate) struct MapDecl {
-    pub(crate) visibility: Visibility,
-    pub(crate) name: Ident,
-    pub(crate) size: (usize, proc_macro2::Span),
-    pub(crate) fixed: Vec<RegisterDecl>,
-    pub(crate) referenced_fixed: Vec<RegisterPlacementDecl>,
-    pub(crate) fixed_groups: Vec<FixedRegisterGroup>,
-    pub(crate) banks: Vec<RegisterGroup>,
+pub(in crate::internal) struct MapDecl {
+    pub(in crate::internal) visibility: Visibility,
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) size: (usize, proc_macro2::Span),
+    pub(in crate::internal) fixed: Vec<RegisterDecl>,
+    pub(in crate::internal) referenced_fixed: Vec<RegisterPlacementDecl>,
+    pub(in crate::internal) fixed_groups: Vec<FixedRegisterGroup>,
+    pub(in crate::internal) banks: Vec<RegisterGroup>,
 }
 
-pub(crate) struct FixedRegisterGroup {
-    pub(crate) schema: Path,
-    pub(crate) variants: Vec<Ident>,
+pub(in crate::internal) struct FixedRegisterGroup {
+    pub(in crate::internal) schema: Path,
+    pub(in crate::internal) variants: Vec<Ident>,
 }
 
-pub(crate) struct RegisterGroup {
-    pub(crate) name: Ident,
-    pub(crate) count: (usize, proc_macro2::Span),
-    pub(crate) base: (usize, proc_macro2::Span),
-    pub(crate) stride: (usize, proc_macro2::Span),
-    pub(crate) registers: Vec<RegisterDecl>,
-    pub(crate) referenced: Vec<RegisterPlacementDecl>,
+pub(in crate::internal) struct RegisterGroup {
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) count: (usize, proc_macro2::Span),
+    pub(in crate::internal) base: (usize, proc_macro2::Span),
+    pub(in crate::internal) stride: (usize, proc_macro2::Span),
+    pub(in crate::internal) registers: Vec<RegisterDecl>,
+    pub(in crate::internal) referenced: Vec<RegisterPlacementDecl>,
 }
 
-pub(crate) struct RegisterPlacementDecl {
-    pub(crate) symbol: Ident,
-    pub(crate) definition: Path,
-    pub(crate) id: (u16, proc_macro2::Span),
-    pub(crate) name: LitStr,
-    pub(crate) offset: (usize, proc_macro2::Span),
+pub(in crate::internal) struct RegisterPlacementDecl {
+    pub(in crate::internal) symbol: Ident,
+    pub(in crate::internal) definition: Path,
+    pub(in crate::internal) id: (u16, proc_macro2::Span),
+    pub(in crate::internal) name: LitStr,
+    pub(in crate::internal) offset: (usize, proc_macro2::Span),
 }
 
 enum MapMemberDecl {

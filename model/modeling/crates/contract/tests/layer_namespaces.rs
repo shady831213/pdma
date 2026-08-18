@@ -1,11 +1,10 @@
 //! Compile and value proofs for the additive contract namespaces.
 
-use pdma_model_contract::{
-    BufferId,
-    abi::{AbiCommand, AbiCopy, AbiId, CopyIovas, DmaAddress, RingCursor, RingLayout, RingRecord},
-    bridge::{decode_buffer_id, encode_buffer_id},
-    semantic,
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCopy, AbiId, CopyIovas, DmaAddress, RingCursor, RingLayout, RingRecord,
 };
+use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
+use pdma_model_contract::semantic::{self, BufferId};
 
 #[test]
 fn semantic_and_abi_are_independent_and_bridge_is_explicit() {
@@ -33,7 +32,7 @@ fn semantic_and_abi_are_independent_and_bridge_is_explicit() {
 #[test]
 fn legacy_root_and_semantic_paths_are_equal() {
     // Given: values constructed through the legacy root and semantic namespace.
-    let legacy = pdma_model_contract::QueueId::new(17);
+    let legacy = pdma_model_contract::semantic::QueueId::new(17);
     let namespaced = semantic::QueueId::new(17);
 
     // When/Then: additive names preserve literal type identity and equality.
@@ -50,5 +49,8 @@ fn semantic_capabilities_and_exact_abi_rings_have_direct_owners() {
     // When/Then: both owner namespaces construct usable values without a bridge.
     assert_eq!(queue.queue_id(), semantic::QueueId::new(7));
     assert_eq!(ring.map(|layout| layout.slot(RingCursor::new(3))), Ok(0));
-    assert_eq!(pdma_model_contract::DeviceEpoch::initial(), queue.epoch());
+    assert_eq!(
+        pdma_model_contract::semantic::DeviceEpoch::initial(),
+        queue.epoch()
+    );
 }

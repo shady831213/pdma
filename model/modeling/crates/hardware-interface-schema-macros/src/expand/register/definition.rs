@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 
-use crate::{
+use crate::internal::{
     crate_path,
     syntax::{AccessValue, RegisterDefinitionDecl},
     validate,

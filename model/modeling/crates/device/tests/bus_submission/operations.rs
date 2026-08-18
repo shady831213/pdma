@@ -1,10 +1,13 @@
 use super::common::{TestResult, activate, allocate, encode, fixture, run_descriptor};
-use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd, BroadcastIovas,
-    BroadcastShape, CopyIovas, CopyStrides, QueueControl, QueueCursorUpdate, RingCursor,
-    StridedCopyShape, VectorIovas,
+use pdma_model_contract::abi::{
+    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
 };
+use pdma_model_contract::abi::{
+    BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, RingCursor, StridedCopyShape,
+    VectorIovas,
+};
+use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
 /// Operation variants covered by the exact descriptor inventory.
@@ -71,7 +74,8 @@ pub async fn execute_operation(case: OperationCase) -> TestResult {
     Ok(())
 }
 
-pub(super) async fn multi_queue_arbitration() -> TestResult<Vec<pdma_model_contract::QueueId>> {
+pub(super) async fn multi_queue_arbitration()
+-> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
     let resources = ResourceConfig::default().with_compute_slots(0);
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -81,8 +85,9 @@ pub(super) async fn multi_queue_arbitration() -> TestResult<Vec<pdma_model_contr
     let handle = runner.handle();
     handle.enable_tracing().await;
     let (vector_queue, vector_slot) =
-        activate(&handle, pdma_model_contract::QueueId::new(0)).await?;
-    let (copy_queue, copy_slot) = activate(&handle, pdma_model_contract::QueueId::new(1)).await?;
+        activate(&handle, pdma_model_contract::semantic::QueueId::new(0)).await?;
+    let (copy_queue, copy_slot) =
+        activate(&handle, pdma_model_contract::semantic::QueueId::new(1)).await?;
     let source_a = allocate(&handle, 4).await?;
     let source_b = allocate(&handle, 4).await?;
     let vector_destination = allocate(&handle, 4).await?;
@@ -145,7 +150,7 @@ pub(super) async fn multi_queue_arbitration() -> TestResult<Vec<pdma_model_contr
         .trace_events()
         .await
         .into_iter()
-        .filter(|event| event.kind() == pdma_model_contract::TraceEventKind::Scheduled)
+        .filter(|event| event.kind() == pdma_model_contract::semantic::TraceEventKind::Scheduled)
         .filter_map(|event| event.queue_id())
         .collect();
     handle.request_shutdown().await;

@@ -5,7 +5,7 @@ struct ActiveProbe {
 }
 
 async fn real_bus_happy_probe() -> Result<(), Box<dyn std::error::Error>> {
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let bus = device.handle();
     let before_allocation = bus.snapshot().await;
     let region = AsyncPdmaBus::allocate_memory_region(&bus, 8).await?;
@@ -56,7 +56,7 @@ async fn real_bus_failure_probe() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn probe_dropped_and_conflicting_bootstrap() -> Result<ActiveProbe, Box<dyn std::error::Error>>
 {
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let bus = device.handle();
     let initial = bus.snapshot().await;
 

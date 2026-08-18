@@ -1,16 +1,17 @@
 use super::{AsyncPdmaBus, BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};
 use crate::ModelError;
 use crate::ModelResult;
-use crate::QueueControlWrite;
-use pdma_model_contract::{
-    AbiEventKind, DmaAddress, QueueCursorUpdate, RingCursor, decode_completion, decode_event,
-};
-use pdma_model_contract::{
+use crate::register::bus::QueueControlWrite;
+use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::abi::{AbiEventKind, DmaAddress};
+use pdma_model_contract::bridge::{QueueCursorUpdate, decode_completion, decode_event};
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EpochIrqSource, EventErrorKind, EventRecord, IrqRoute,
     QueueConfigHandle,
 };
 use std::{future::poll_fn, task::Poll};
 
+#[path = "poll_irq/irq_control.rs"]
 mod irq_control;
 
 pub(super) async fn completion<B>(
@@ -105,14 +106,14 @@ where
     B: AsyncPdmaBus,
     B::ControlError: super::BusControlErrorAdapter,
 {
-    let queue = port.state.with(|state| state.queue(handle))??;
+    let queue = port.with_state(|state| state.queue(handle))??;
     let status = port
         .poll_control(
             port.bus.read_queue_status(queue.status.queue()),
             queue.status.queue(),
         )
         .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         let current = state.queue(handle)?;
         let refreshed = super::state::QueueState { status, ..current };
         state.queue = Some(refreshed);
@@ -133,18 +134,21 @@ where
 {
     let mut raw = Box::pin(port.bus.write_queue_control(request));
     let status = poll_fn(|context| {
-        if let Err(error) = port.state.with(|_| ()) {
+        if let Err(error) = port.with_state(|_| ()) {
             return Poll::Ready(Err(error));
         }
-        let observed = match port.state.with(|state| {
+        let observed = match port.with_state(|state| {
             let status = state.queue(handle)?.status;
             match request {
                 QueueControlWrite::PublishCompletionConsumer(_) => {
                     Ok(status.completion().consumer())
                 }
                 QueueControlWrite::PublishEventConsumer(_) => Ok(status.event().consumer()),
-                QueueControlWrite::CaptureSubmissionProducer(_)
-                | QueueControlWrite::PublishSubmissionConsumer(_)
+                QueueControlWrite::CaptureSubmissionProducer(_) => {
+                    Err(ModelError::DmaSubmissionState)
+                }
+                #[cfg(test)]
+                QueueControlWrite::PublishSubmissionConsumer(_)
                 | QueueControlWrite::PublishCompletionProducer(_)
                 | QueueControlWrite::PublishEventProducer(_) => Err(ModelError::DmaSubmissionState),
             }
@@ -163,7 +167,7 @@ where
         }
     })
     .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         let current = state.queue(handle)?;
         state.queue = Some(super::state::QueueState { status, ..current });
         Ok(())
@@ -191,7 +195,7 @@ fn semantic_event<B>(
 ) -> ModelResult<EventRecord> {
     let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
     let locator = DmaAddress::new(locator);
-    let buffer = port.state.with(|state| {
+    let buffer = port.with_state(|state| {
         state
             .regions
             .iter()

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, NoopRegisterObserver, SharedMemory,
 };
-use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{AsyncDevice, DeviceCore, PdmaMemoryError};
 

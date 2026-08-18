@@ -1,18 +1,20 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{CompletionStatus, ResourceConfig, desc::CopyRequest, ids::CommandId};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
+    CompletionStatus, ResourceConfig, desc::CopyRequest, ids::CommandId,
+};
 use pdma_model_device::{AsyncDevice, AsyncStallReason, AsyncStepStatus};
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
 
-#[path = "stall_annotations/manual.rs"]
-mod manual;
+include!("stall_annotations/manual.rs");
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
     // Given: a queue-port async runner with no queued work.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -32,13 +34,13 @@ async fn async_runner_successful_copy_reports_progressed_status() {
     // Given: an async copy on a queue-port async runner with default resources.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let snapshot = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -82,7 +84,7 @@ async fn async_runner_resource_stall_reports_execution_reason() {
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -132,7 +134,7 @@ async fn async_runner_completion_publication_stall_reports_reason() {
     let worker = tokio::spawn(worker.run());
     let (snapshot, first_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -204,7 +206,7 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     let worker = tokio::spawn(worker.run());
     let (first_snapshot, second_snapshot, event) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

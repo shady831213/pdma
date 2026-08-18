@@ -3,8 +3,8 @@ use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::BusControlState;
 use crate::runner::native::ring::NativeRing;
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
 use std::collections::VecDeque;
 
 #[derive(Debug)]

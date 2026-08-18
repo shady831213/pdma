@@ -2,7 +2,9 @@ use std::error::Error;
 use std::sync::Arc;
 
 use hardware_interface_runtime::{MemoryRegion, SharedMemory};
-use pdma_model_contract::{BufferId, DmaAddress, PdmaMemoryRegion};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::BufferId;
 use pdma_model_device::{PdmaMemoryError, PdmaMemoryMappings};
 
 use super::{TestResult, require_error};

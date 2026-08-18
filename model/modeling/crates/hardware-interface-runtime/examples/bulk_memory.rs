@@ -1,11 +1,7 @@
 //! Manual public-surface probe for checked bulk memory.
 
-#![allow(
-    clippy::print_stdout,
-    reason = "manual QA example prints literal public observables"
-)]
-
 use std::cell::Cell;
+use std::io::{self, Write};
 
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
@@ -59,6 +55,7 @@ impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut surface = io::stdout().lock();
     let happy_memory = SharedMemory::new();
     let alignment = MemoryAlignment::try_new(64)?;
     let before = happy_memory.revision().raw();
@@ -80,7 +77,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     happy_access.read(MemoryAddress::new(0x4000), alignment, &mut output)?;
     let first = output.first().copied().unwrap_or_default();
     let last = output.last().copied().unwrap_or_default();
-    println!(
+    writeln!(
+        surface,
         "happy installed_regions={} region_base={:#x} region_length={} region_alignment={} write_calls={} read_calls={} first={first:#04x} last={last:#04x} revision={before}->{} equal={}",
         happy_memory.regions().len(),
         region.base().raw(),
@@ -90,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         happy_access.read_calls(),
         happy_memory.revision().raw(),
         output == descriptor
-    );
+    )?;
 
     let adverse_memory = SharedMemory::new();
     adverse_memory
@@ -122,7 +120,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     verification_access.read(MemoryAddress::new(0x4000), alignment, &mut observed_store)?;
     let expected_hash: u64 = expected_store.iter().copied().map(u64::from).sum();
     let observed_hash: u64 = observed_store.iter().copied().map(u64::from).sum();
-    println!(
+    writeln!(
+        surface,
         "adverse setup_write_calls={} adverse_write_calls={} adverse_read_calls={} verification_read_calls={} crossing={crossing:?} misaligned={misaligned:?} overflow={overflow:?} destination_before={before_destination:?} destination_after={destination:?} expected_store_hash={expected_hash} observed_store_hash={observed_hash} destination_unchanged={} store_unchanged={}",
         setup_access.write_calls(),
         adverse_access.write_calls(),
@@ -130,6 +129,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         verification_access.read_calls(),
         destination == before_destination,
         observed_store == expected_store
-    );
+    )?;
     Ok(())
 }

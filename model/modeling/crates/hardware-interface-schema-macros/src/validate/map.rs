@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use crate::{
+use crate::internal::{
     syntax::{MapDecl, RegisterDecl},
     validate::register::validate_values,
 };
 
-pub(crate) fn check(decl: &MapDecl) -> syn::Result<()> {
+pub(in crate::internal) fn check(decl: &MapDecl) -> syn::Result<()> {
     let declarations: Vec<&RegisterDecl> = decl
         .fixed
         .iter()

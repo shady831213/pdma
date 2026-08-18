@@ -2,30 +2,30 @@ use super::{
     HasHandlers, IrqDelivery, IrqDeliveryHandle, IrqDeliverySummary, IrqHandler,
     IrqHandlerRegistry, NoHandler,
 };
-use crate::AsyncDevicePort;
+use crate::DriverPort;
 use crate::ModelError;
 use crate::ModelResult;
-use pdma_model_contract::IrqVector;
+use pdma_model_contract::semantic::IrqVector;
 use tokio::sync::oneshot;
 
 type RunnableDelivery<P> = IrqDelivery<P, HasHandlers<'static>>;
 
 /// Software-side type-state builder for a deferred host IRQ delivery actor.
 #[derive(Debug)]
-pub struct IrqDeliveryBootstrap<P> {
+pub(crate) struct IrqDeliveryBootstrap<P> {
     delivery: IrqDelivery<P, NoHandler>,
     start: oneshot::Sender<RunnableDelivery<P>>,
 }
 
 /// Harness-side runner that waits for software to finish handler registration.
 #[derive(Debug)]
-pub struct IrqDeliveryRunner<P> {
+pub(crate) struct IrqDeliveryRunner<P> {
     start: oneshot::Receiver<RunnableDelivery<P>>,
 }
 
 impl<P> IrqDelivery<P, NoHandler> {
     /// Splits software registration from harness-owned actor execution.
-    pub fn defer(self) -> (IrqDeliveryBootstrap<P>, IrqDeliveryRunner<P>) {
+    pub(crate) fn defer(self) -> (IrqDeliveryBootstrap<P>, IrqDeliveryRunner<P>) {
         let (start, registered) = oneshot::channel();
         (
             IrqDeliveryBootstrap {
@@ -39,7 +39,7 @@ impl<P> IrqDelivery<P, NoHandler> {
 
 impl<P> IrqDeliveryBootstrap<P> {
     /// Registers one vector handler and publishes the fixed registry to the runner.
-    pub fn register_handler<H>(
+    pub(crate) fn register_handler<H>(
         self,
         vector: IrqVector,
         handler: H,
@@ -51,7 +51,7 @@ impl<P> IrqDeliveryBootstrap<P> {
     }
 
     /// Registers all vector handlers atomically, then publishes the actor to the runner.
-    pub fn register_handlers<F>(self, configure: F) -> ModelResult<IrqDeliveryHandle>
+    pub(crate) fn register_handlers<F>(self, configure: F) -> ModelResult<IrqDeliveryHandle>
     where
         F: FnOnce(&mut IrqHandlerRegistry<'static>) -> ModelResult<()>,
     {
@@ -68,10 +68,10 @@ impl<P> IrqDeliveryBootstrap<P> {
 
 impl<P> IrqDeliveryRunner<P>
 where
-    P: AsyncDevicePort + 'static,
+    P: DriverPort + 'static,
 {
     /// Waits for software registration, then runs the host delivery actor.
-    pub async fn run(self) -> ModelResult<IrqDeliverySummary> {
+    pub(crate) async fn run(self) -> ModelResult<IrqDeliverySummary> {
         let delivery = self
             .start
             .await

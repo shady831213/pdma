@@ -14,7 +14,8 @@ mod semantics;
 #[path = "async_driver/support.rs"]
 pub mod support;
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     DeviceEpoch, ExternalCommand, QueueConfigHandle,
     desc::{CopyCommand, CopyRequest},
     ids::{CommandId, CompletionRingId},
@@ -22,14 +23,14 @@ use pdma_model_contract::{
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::{AsyncDevice, SyncDevice};
-use pdma_model_host::{AsyncDevicePort, AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
     // Given: a fresh manual device and no active modeled software CPU.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut port = support::BlockingPort::new(device.handle());
@@ -44,7 +45,10 @@ async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
         .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
         .await
         .expect("active software setup is valid");
-    assert_eq!(driver.queue_id(), pdma_model_contract::QueueId::new(0));
+    assert_eq!(
+        driver.queue_id(),
+        pdma_model_contract::semantic::QueueId::new(0)
+    );
     assert_eq!(port.create_calls(), 1);
 }
 
@@ -54,7 +58,7 @@ async fn cloned_drivers_share_depth_one_command_credit() {
     let cpu = SoftwareCpu::new();
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
 
@@ -92,7 +96,7 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
     // Given: a queue-port AsyncDevice, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -133,7 +137,7 @@ async fn irq_controls_are_available_through_async_device_port() {
     // Given: a manual device used through the host port trait.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device
@@ -147,7 +151,7 @@ async fn irq_controls_are_available_through_async_device_port() {
     let valid_source = queue.completion_irq_source();
     let unknown_source = IrqSource::Completion(CompletionRingId::new(99));
     let unknown_capability =
-        pdma_model_contract::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
+        pdma_model_contract::semantic::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
 
     // When: host code controls IRQ state through the AsyncDevicePort abstraction.
     let enable_result = AsyncDevicePort::enable_irq_source(&mut device, valid_source).await;
@@ -170,7 +174,7 @@ async fn stale_queue_and_result_capabilities_commit_nothing() {
     // Given: one real queue and a same-ID capability from a later device epoch.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device

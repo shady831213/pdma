@@ -1,13 +1,17 @@
 //! ABI-v1 ring arithmetic and typed control vocabulary.
 
-use pdma_model_contract::{
-    AbiAddressError, AbiControlError, AbiDiscovery, AbiLimits, ControlRequest, DeviceEpoch,
-    DeviceRunState, DeviceStatus, DiscoveryRequest, DmaAddress, EpochIrqRoute, EpochIrqSource,
-    IrqControl, PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions, RingCursor,
-    RingCursors, RingLayout, RingRecord, WholeDeviceReset,
+use pdma_model_contract::abi::{AbiAddressError, AbiControlError, DmaAddress};
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    AbiDiscovery, AbiLimits, ControlRequest, DiscoveryRequest, PdmaMemoryRegion, QueueActivation,
+    QueueControl, QueueRingRegions, RingCursors, RingLayout,
 };
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, EventRouting, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueId, SoftwareOwnerId,
+};
+use pdma_model_contract::semantic::{
+    DeviceEpoch, DeviceRunState, DeviceStatus, EpochIrqRoute, EpochIrqSource, IrqControl,
+    WholeDeviceReset,
 };
 
 const fn region(id: usize, base: u64, length: u64) -> Result<PdmaMemoryRegion, AbiAddressError> {

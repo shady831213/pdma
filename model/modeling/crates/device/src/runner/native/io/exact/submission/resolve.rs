@@ -1,11 +1,12 @@
 use super::fault::canonical;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::DmaRangeStart;
-use pdma_model_contract::{
+use pdma_model_contract::abi::{
     AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultOrder, AbiFaultSite,
-    AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DmaAddress, PdmaMemoryRegion,
+    AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DmaAddress,
 };
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::DmaRangeStart;
 
 pub(super) fn direct(
     dma_space: &PdmaMemoryMappings,

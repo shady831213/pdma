@@ -1,4 +1,4 @@
-use pdma_model_contract::{IrqNotification, TraceEvent, TraceEventKind};
+use pdma_model_contract::semantic::{IrqNotification, TraceEvent, TraceEventKind};
 
 #[derive(Debug, Default)]
 pub(super) struct HostIrqTrace {

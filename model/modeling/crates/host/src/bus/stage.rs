@@ -1,11 +1,12 @@
-use pdma_model_contract::{DmaAddress, PdmaMemoryRegion};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::bridge::PdmaMemoryRegion;
 
 /// Opaque staging capability produced by an asynchronous device handle.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AsyncDeviceBusStage(pub(super) pdma_model_device::PdmaMemoryStage);
+pub(in crate::register) struct AsyncDeviceBusStage(pub(super) pdma_model_device::PdmaMemoryStage);
 
 /// Read-only capability for an uncommitted DMA allocation batch.
-pub trait BusDmaStage: Send {
+pub(in crate::register) trait BusDmaStage: Send {
     /// Returns the proposed regions without exposing allocator state.
     fn proposed_regions(&self) -> &[PdmaMemoryRegion];
 }
@@ -33,7 +34,8 @@ impl BusDmaWrite {
         &self.bytes
     }
 
-    pub(crate) fn into_parts(self) -> (DmaAddress, Vec<u8>) {
+    /// Decomposes one staged DMA write.
+    pub fn into_parts(self) -> (DmaAddress, Vec<u8>) {
         (self.address, self.bytes)
     }
 }

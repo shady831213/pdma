@@ -1,13 +1,16 @@
+#[path = "port/transport.rs"]
 mod transport;
 
 use self::transport::CanonicalTransport;
+use super::bus::{BusQueueStatus, MmioDeviceBus};
+use super::port::BusDevicePort;
 use super::{
     PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
     PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegisterAccessError,
 };
-use crate::{BusDevicePort, DriverPort, MmioDeviceBus, ModelResult};
+use crate::{DriverPort, ModelResult};
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
@@ -39,6 +42,14 @@ where
     /// Returns the clone-shared split capability.
     pub const fn access(&self) -> &A {
         &self.access
+    }
+
+    /// Reads one queue status through this port's clone-shared selector state.
+    pub async fn queue_status(
+        &self,
+        queue: pdma_model_contract::semantic::EpochQueue,
+    ) -> ModelResult<BusQueueStatus> {
+        self.inner.queue_status(queue).await
     }
 
     async fn claim_notification(&self) -> Option<IrqNotification> {
@@ -98,12 +109,15 @@ where
     async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         self.inner.create_queue(config).await
     }
-    async fn allocate_buffer(&mut self, len: usize) -> ModelResult<pdma_model_contract::BufferId> {
+    async fn allocate_buffer(
+        &mut self,
+        len: usize,
+    ) -> ModelResult<pdma_model_contract::semantic::BufferId> {
         self.inner.allocate_buffer(len).await
     }
     async fn write_buffer(
         &mut self,
-        id: pdma_model_contract::BufferId,
+        id: pdma_model_contract::semantic::BufferId,
         offset: usize,
         data: &[u8],
     ) -> ModelResult<()> {
@@ -111,7 +125,7 @@ where
     }
     async fn read_buffer(
         &self,
-        id: pdma_model_contract::BufferId,
+        id: pdma_model_contract::semantic::BufferId,
         offset: usize,
         len: usize,
     ) -> ModelResult<Vec<u8>> {

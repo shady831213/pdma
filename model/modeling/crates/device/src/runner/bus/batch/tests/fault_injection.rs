@@ -1,6 +1,6 @@
 use super::*;
 use crate::runner::bus::DmaWrite;
-use pdma_model_contract::DmaAddress;
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult};
 use std::error::Error;
@@ -13,7 +13,7 @@ async fn bootstrap_injectors_reject_before_any_prepared_install() -> TestResult 
         let observer = Arc::new(CommitOrderObserver::default());
         let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
             Arc::clone(&memory),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             observer.clone(),
         ));
         let handle = device.handle();
@@ -66,7 +66,7 @@ async fn submission_injectors_reject_before_any_prepared_install() -> TestResult
         });
         let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
             Arc::clone(&memory),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             observer.clone(),
         ));
         let handle = device.handle();

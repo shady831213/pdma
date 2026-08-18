@@ -4,13 +4,13 @@ use super::native::QueuePortDeviceModel;
 use super::native::exact_api::PreparedExactQueue;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
-use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
-use pdma_model_contract::trace::TraceEvent;
-use pdma_model_contract::{DeviceEpoch, EpochIrqSource, ResourceConfig};
+use pdma_model_contract::semantic::completion::CompletionRecord;
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::event::EventRecord;
+use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::semantic::queue::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::trace::TraceEvent;
+use pdma_model_contract::semantic::{DeviceEpoch, EpochIrqSource, ResourceConfig};
 
 #[path = "backend/reset_snapshot.rs"]
 mod reset_snapshot;
@@ -225,7 +225,7 @@ impl DeviceModel {
         }
     }
 
-    pub(in crate::runner) fn next_queue_id(&self) -> pdma_model_contract::QueueId {
+    pub(in crate::runner) fn next_queue_id(&self) -> pdma_model_contract::semantic::QueueId {
         match self {
             Self::QueuePort(device) => device.next_queue_id(),
         }

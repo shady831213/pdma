@@ -1,6 +1,6 @@
 use crate::PdmaResetError;
 use crate::runner::{PdmaControlError, SyncDevice};
-use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 impl SyncDevice {
     /// Atomically resets compatibility state through `DeviceCore::reset_runner`.

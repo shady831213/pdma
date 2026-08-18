@@ -6,9 +6,7 @@ use pdma_model_contract::abi::{
 use pdma_model_contract::bridge::{
     CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
 };
-use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId,
-};
+use pdma_model_contract::semantic::{BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId};
 
 const DESCRIPTOR: [u8; 64] = [
     1, 0, 1, 0, 0, 0, 64, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 32,

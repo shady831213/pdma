@@ -1,6 +1,7 @@
 use crate::TestResult;
 use crate::support::{Fixture, allocate_pair};
-use pdma_model_contract::{CommandId, DeviceEpoch, RingCursor, TraceEventKind};
+use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::{CommandId, DeviceEpoch, TraceEventKind};
 
 /// State-derived publication-pressure observation fields.
 pub type Observation = (usize, usize, usize, bool, bool, bool, bool, bool);
@@ -96,7 +97,7 @@ async fn fault_reexecuted() -> TestResult<bool> {
             0,
             82,
             fault_source.base(),
-            pdma_model_contract::DmaAddress::new(u64::MAX),
+            pdma_model_contract::abi::DmaAddress::new(u64::MAX),
         )
         .await?;
     fault_fixture.capture(1).await?;

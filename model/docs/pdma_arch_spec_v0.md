@@ -37,14 +37,15 @@ The v0 model validates the following end-to-end behaviors:
   command acceptance.
 - ABI-v1 fixed-width little-endian descriptor, completion, event, IOVA, ring, and typed
   control vocabulary, with a checked-in C11 data header generated from Rust metadata.
-- Checked host-owned `DmaSpace`, atomic ABI queue activation/submission controls, and a
-  transport-neutral host bus. This ABI path is canonical for new end-to-end scenarios.
+- One system-owned `SharedMemory` per device instance, with PDMA mapping policy retained
+  by the device and checked bulk access supplied by `hardware-interface-runtime`.
 - Whole-device reset with checked epoch advancement, stale-capability rejection before
   mutation, and fresh bootstrap under the new epoch.
 - One exact 4 KiB little-endian MMIO region with 66 canonical registers, shared decoding,
   generated C constants, command banks, and stable response semantics.
-- One MMIO-backed host bus whose selector locks, mapped activation, two closed ordered
-  batches, and non-consuming IRQ readiness reuse existing typed boundaries.
+- One canonical `PdmaRegisterPort<AsyncDeviceAccess>` whose split memory/register,
+  provisioning, closed-batch, and compound-claim capabilities reuse existing typed
+  boundaries.
 
 The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
 
@@ -56,18 +57,29 @@ the closed transport error before mutation. The 66-entry registry is the only
 offset/access/reset/mask authority and drives Rust decoding and C11 constants. Global,
 queue, and IRQ families have 4, 9, and 9 commands and share 32 result codes.
 
-Standalone activation validates three exact mappings already committed in `DmaSpace`
+Standalone activation validates three exact mappings already committed in device-owned mapping state
 and uses the prepared mapped-activation seam; it commits no DMA. The closed bootstrap
 batch combines three staged rings with activation, while the closed submission batch
 combines optional indirect DMA and descriptor bytes with producer publication. Both
-validate the projected transaction before one synchronous commit. Doorbell capture is a
+validate every fallible stage before one synchronous model-state commit. This is a
+cancel-safe modeling mechanism, not a hardware transaction or cycle-accurate claim. Doorbell capture is a
 later command, preserving bytes-before-producer-before-runnable ordering.
 
-`MmioDeviceBus` owns clone-shared selector locks. Notification readiness is
-non-consuming; the adapter issues exactly one claim after wake and retries an EMPTY
-race. The canonical scenario uses `BusDevicePort<ScenarioBus>` backed by
-`MmioDeviceBus<RecordingMmioTransport>` and proves raw MMIO from setup through
-completion drain, ACK, and final status, including both batch-carried queue commands.
+`PdmaRegisterPort` owns clone-shared selector state. Notification readiness is
+non-consuming; `PdmaInterruptSource` performs one compound exact claim after wake.
+The canonical scenario injects one system-owned register observer through `DeviceCore`.
+It proves 156 committed observations: 154 Direct entries and the two real Batch-origin
+queue-command writes, while a scenario-local memory decorator records bulk access
+separately. Worker and dispatcher shutdown/join finish before the collector snapshot.
+
+Schema definitions and resolved layouts belong to `hardware-interface-schema`; shared
+memory, raw registers, CPU-local state, generic interrupt dispatch, and trace storage
+belong to `hardware-interface-runtime`. Contract `semantic`, `abi`, and `bridge` modules
+own conceptual vocabulary, exact bytes/registers, and cross-layer conversion
+respectively. Device owns mappings and execution/retirement. Host owns the canonical
+register port, PDMA interrupt adapter, driver accounting, and explicit semantic/sync
+compatibility adapters. Compatibility does not create a second executor or canonical
+E2E.
 
 ## Software/Driver Responsibility Boundary
 

@@ -1,13 +1,13 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, reason = "integration test crate")]
 
 #[path = "bus_batch/support.rs"]
 pub mod support;
 
 use hardware_interface_runtime::{AccessOrigin, RegisterAccess};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
-use pdma_model_contract::DeviceEpoch;
-use pdma_model_contract::DmaAddress;
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::DeviceEpoch;
 use pdma_model_device::{DmaWrite, QueueBootstrapBatch, SubmissionBatch};
 
 #[path = "prepared_batch_surface/adverse.rs"]

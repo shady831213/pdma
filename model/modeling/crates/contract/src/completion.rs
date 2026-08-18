@@ -1,6 +1,6 @@
 //! Completion records returned from the PDMA device to the driver.
 
-use crate::ids::{CommandId, QueueId};
+use crate::semantic::ids::{CommandId, QueueId};
 
 /// Completion status for the first linear-copy slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

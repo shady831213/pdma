@@ -83,22 +83,6 @@ impl SharedMemory {
         drop(store);
         result
     }
-
-    /// Creates an independent fallible snapshot of regions and bytes.
-    pub fn try_snapshot(&self) -> Result<Self, MemoryError> {
-        let source = lock_store(&self.inner);
-        Ok(Self {
-            inner: Arc::new(Mutex::new(source.try_clone()?)),
-        })
-    }
-
-    /// Replaces this store from an independently prepared snapshot.
-    pub fn install_snapshot(&self, snapshot: &Self) {
-        let mut source = lock_store(&snapshot.inner);
-        let prepared = std::mem::replace(&mut *source, Store::new());
-        drop(source);
-        *lock_store(&self.inner) = prepared;
-    }
 }
 
 impl Default for SharedMemory {

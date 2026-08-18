@@ -1,17 +1,21 @@
 #![allow(missing_docs)]
 
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+#[path = "message_irq_dual_handler/assertions.rs"]
+pub mod assertions;
+#[path = "message_irq_dual_handler/delivery.rs"]
+pub mod delivery;
 
-use pdma_model_contract::{
-    CommandId, CompletionStatus, CopyRequest, EventErrorKind, IrqNotification, IrqRoute, IrqSource,
-    IrqVector,
+use hardware_interface_runtime::SoftwareCpu;
+
+use pdma_model_contract::semantic::{
+    CommandId, CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector,
 };
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDriver, DriverIrqRecord, IrqDelivery, SoftwareCpu, StatefulIrqHandler,
-    stateful_irq_handler,
+    AsyncDriver, DriverIrqRecord, DriverPort, ModelError, ModelResult, adapters::AsyncDeviceAccess,
+    compat::AsyncDevicePort, interrupt::PdmaIrqHandler,
 };
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,7 +25,7 @@ enum HandlerIdentity {
 }
 
 #[derive(Debug)]
-struct HandlerObservation {
+pub struct HandlerObservation {
     identity: HandlerIdentity,
     call: usize,
     notification: IrqNotification,
@@ -31,24 +35,24 @@ struct HandlerObservation {
 struct DriverHandler {
     identity: HandlerIdentity,
     calls: usize,
-    driver: AsyncDriver,
-    port: AsyncDeviceHandle,
     source: IrqSource,
     report: mpsc::Sender<HandlerObservation>,
 }
 
-impl StatefulIrqHandler for DriverHandler {
-    async fn handle(&mut self, notification: IrqNotification) -> ModelResult<()> {
+impl PdmaIrqHandler for DriverHandler {
+    type Error = ModelError;
+
+    async fn handle(
+        &mut self,
+        notification: IrqNotification,
+        records: &[DriverIrqRecord],
+    ) -> ModelResult<()> {
         if notification_source(notification) != self.source {
             return Err(ModelError::UnknownIrqSource(notification_source(
                 notification,
             )));
         }
         self.calls = self.calls.saturating_add(1);
-        let records = self
-            .driver
-            .service_irq_on(&mut self.port, notification)
-            .await?;
         // This report channel only makes the handler order and drained records test-visible.
         let _ = self
             .report
@@ -56,14 +60,22 @@ impl StatefulIrqHandler for DriverHandler {
                 identity: self.identity,
                 call: self.calls,
                 notification,
-                records,
+                records: records.to_vec(),
             })
             .await;
         Ok(())
     }
 }
 
-struct MainOutcome {
+#[derive(Debug)]
+pub struct DeliveryBootstrap {
+    driver: AsyncDriver,
+    completion_source: IrqSource,
+    event_source: IrqSource,
+}
+
+#[derive(Debug)]
+pub struct MainOutcome {
     commands: [CommandId; 3],
     sources: [IrqSource; 2],
     observations: Vec<HandlerObservation>,
@@ -72,23 +84,29 @@ struct MainOutcome {
 
 #[tokio::test(flavor = "current_thread")]
 async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
-    // Given: two vectors dispatch to independent persistent handlers on one modeled CPU.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
-    ));
+    let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
-    let port = device.handle();
-    let cpu = SoftwareCpu::new();
+    let raw_port = device.handle();
+    let access = AsyncDeviceAccess::new(raw_port.clone());
+    let port = AsyncDevicePort::new(raw_port);
+    let cpu = Arc::new(SoftwareCpu::new());
     let completion_vector = IrqVector::new(65);
     let event_vector = IrqVector::new(66);
-    // Test-only rendezvous: main waits for each handler turn before its next submission.
     let (report_tx, mut report_rx) = mpsc::channel(3);
-    let (delivery, delivery_runner) = IrqDelivery::new(port.clone(), cpu.clone()).defer();
-    let delivery_task = tokio::spawn(delivery_runner.run());
+    let delivery::DeliveryActor {
+        bootstrap,
+        ready,
+        shutdown,
+        join,
+        task: delivery_task,
+    } = delivery::spawn(delivery::DeliveryConfig {
+        cpu: Arc::clone(&cpu),
+        access,
+        port: port.clone(),
+        vectors: [completion_vector, event_vector],
+        report: report_tx,
+    });
 
-    // When: main retains one driver clone while both handlers retain their own clones.
     let mut main_port = port.clone();
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
@@ -97,26 +115,14 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
             let event_capability = driver.event_irq_source();
             let completion_source = completion_capability.source();
             let event_source = event_capability.source();
-            let completion_handler = stateful_irq_handler(DriverHandler {
-                identity: HandlerIdentity::Completion,
-                calls: 0,
-                driver: driver.clone(),
-                port: main_port.clone(),
-                source: completion_source,
-                report: report_tx.clone(),
-            });
-            let event_handler = stateful_irq_handler(DriverHandler {
-                identity: HandlerIdentity::Event,
-                calls: 0,
-                driver: driver.clone(),
-                port: main_port.clone(),
-                source: event_source,
-                report: report_tx,
-            });
-            delivery.register_handlers(|registry| {
-                registry.register(completion_vector, completion_handler)?;
-                registry.register(event_vector, event_handler)
-            })?;
+            bootstrap
+                .send(DeliveryBootstrap {
+                    driver: driver.clone(),
+                    completion_source,
+                    event_source,
+                })
+                .expect("delivery receives its persistent services");
+            ready.await.expect("both handlers are registered");
             for (source, vector) in [
                 (completion_capability, completion_vector),
                 (event_capability, event_vector),
@@ -166,12 +172,16 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
     });
 
     let outcome = main.await.expect("software main joins cleanly")?;
+    shutdown
+        .await
+        .expect("delivery publishes shutdown")
+        .request_shutdown();
+    let _ = join.send(());
     device.request_shutdown().await;
-    let delivery_summary = delivery_task.await.expect("host delivery joins cleanly")?;
+    let delivery_summary = delivery_task.await.expect("host delivery joins cleanly");
     let device_summary = worker.await.expect("device worker joins cleanly");
 
-    // Then: either handler can reclaim the shared depth-one credit used by main.
-    assert_observations(&outcome, completion_vector, event_vector);
+    assertions::assert_observations(&outcome, completion_vector, event_vector);
     assert_eq!(outcome.copied, vec![2, 4, 6, 8]);
     assert_eq!(delivery_summary.deliveries(), 3);
     assert_eq!(device_summary.steps, 2);
@@ -179,63 +189,17 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
     Ok(())
 }
 
+fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
+    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+        Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ))
+}
+
 const fn notification_source(notification: IrqNotification) -> IrqSource {
     match notification {
         IrqNotification::Line(snapshot) => snapshot.cause().source(),
         IrqNotification::Message(message) => message.source(),
     }
-}
-
-fn assert_observations(
-    outcome: &MainOutcome,
-    completion_vector: IrqVector,
-    event_vector: IrqVector,
-) {
-    let [first, fault, final_report] = outcome.observations.as_slice() else {
-        assert_eq!(outcome.observations.len(), 3);
-        return;
-    };
-    assert_eq!(
-        (first.identity, first.call, first.notification.vector()),
-        (HandlerIdentity::Completion, 1, completion_vector)
-    );
-    assert_eq!(
-        (fault.identity, fault.call, fault.notification.vector()),
-        (HandlerIdentity::Event, 1, event_vector)
-    );
-    assert_eq!(
-        (
-            final_report.identity,
-            final_report.call,
-            final_report.notification.vector()
-        ),
-        (HandlerIdentity::Completion, 2, completion_vector)
-    );
-    assert_eq!(notification_source(first.notification), outcome.sources[0]);
-    assert_eq!(notification_source(fault.notification), outcome.sources[1]);
-    assert_eq!(
-        notification_source(final_report.notification),
-        outcome.sources[0]
-    );
-    assert_completion(first, outcome.commands[0]);
-    assert_event(fault, outcome.commands[1]);
-    assert_completion(final_report, outcome.commands[2]);
-}
-
-fn assert_completion(observation: &HandlerObservation, command: CommandId) {
-    assert!(matches!(
-        observation.records.as_slice(),
-        [DriverIrqRecord::Completion(completion)]
-            if completion.command_id() == command
-                && completion.status() == CompletionStatus::Success
-    ));
-}
-
-fn assert_event(observation: &HandlerObservation, command: CommandId) {
-    assert!(matches!(
-        observation.records.as_slice(),
-        [DriverIrqRecord::Event(event)]
-            if event.command_id() == command
-                && event.error_kind() == EventErrorKind::OutOfBounds { len: 4, end: 8 }
-    ));
 }

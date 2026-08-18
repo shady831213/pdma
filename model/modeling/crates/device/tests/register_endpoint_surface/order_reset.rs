@@ -1,6 +1,6 @@
 use super::support::{RecordingObserver, TestResult, contend_core};
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, DeviceCore, MmioRegisterEndpoint};
 use std::sync::Arc;
 

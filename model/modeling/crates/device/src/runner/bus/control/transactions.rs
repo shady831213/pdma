@@ -1,7 +1,8 @@
 use super::{ActiveQueue, BusControlError, QueueStatus};
 use crate::runner::bus::{DmaWrite, SubmissionAcceptance};
 use crate::runner::state::DeviceCore;
-use pdma_model_contract::{QueueControl, QueueCursorUpdate, RingCursor, RingRecord};
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
 
 #[derive(Clone, Copy)]
 pub(in crate::runner) struct PreparedSubmissionPublication {
@@ -204,7 +205,7 @@ pub(in crate::runner) fn control(
 
 pub(in crate::runner) fn advance_submission_consumer_raw(
     control: &mut super::BusControlState,
-    queue_id: pdma_model_contract::QueueId,
+    queue_id: pdma_model_contract::semantic::QueueId,
 ) -> Result<(), BusControlError> {
     let queue = pdma_model_contract::semantic::EpochQueue::new(control.epoch(), queue_id);
     let active = control.queue_mut(queue)?;

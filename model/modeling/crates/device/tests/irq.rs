@@ -2,7 +2,7 @@
 
 use pdma_model_device::ModelError;
 
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     DeviceEpoch, EpochIrqSource, ResourceConfig,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::{CommandId, CompletionRingId, QueueId},
@@ -94,7 +94,7 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
     assert!(stalled_snapshot.stalls >= 1);
     assert!(first_irq.asserted());
     assert_eq!(first_irq.cause().source(), source.source());
-    assert!(retained_irq.is_some_and(pdma_model_contract::IrqSnapshot::asserted));
+    assert!(retained_irq.is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted));
     assert_eq!(first_completion.command_id(), CommandId::new(0));
     assert_eq!(retry_snapshot.steps, 2);
     assert!(retry_irq.asserted());
@@ -107,7 +107,7 @@ async fn invalid_irq_source_control_returns_error_without_creating_state() {
     // Given: a device with one queue and invalid IRQ source identities.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -213,7 +213,7 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
     assert!(stalled_snapshot.stalls >= 1);
     assert!(first_irq.asserted());
     assert_eq!(first_irq.cause().source(), source.source());
-    assert!(retained_irq.is_some_and(pdma_model_contract::IrqSnapshot::asserted));
+    assert!(retained_irq.is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted));
     assert_eq!(first_event.command_id(), CommandId::new(0));
     assert_eq!(retry_error.errors, 2);
     assert!(retry_irq.asserted());

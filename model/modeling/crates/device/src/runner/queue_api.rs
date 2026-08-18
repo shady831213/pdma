@@ -2,7 +2,7 @@
 
 use super::AsyncDeviceHandle;
 use crate::ModelResult;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRecord, EventRecord, ExternalCommand, QueueConfig, QueueConfigHandle,
 };
 

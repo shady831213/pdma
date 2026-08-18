@@ -1,6 +1,6 @@
 use super::support::{TestResult, read_u32, response, result, write_u32, write_u64};
 use pdma_model_contract::abi::mmio::MmioAccessError;
-use pdma_model_contract::{AbiDiscovery, AbiLimits};
+use pdma_model_contract::bridge::{AbiDiscovery, AbiLimits};
 use pdma_model_device::AsyncDevice;
 
 pub async fn assert_global_commands() -> TestResult {
@@ -11,7 +11,7 @@ async fn run() -> TestResult {
     // Given: a fresh device and independently typed ABI-v1 discovery and limits.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();

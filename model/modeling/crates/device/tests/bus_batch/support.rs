@@ -1,9 +1,10 @@
 use pdma_model_contract::abi::mmio::{MmioByteCount, QueueResponseBank};
-use pdma_model_contract::{
-    DeviceEpoch, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions,
-    RingCursor, RingLayout, RingRecord,
+use pdma_model_contract::abi::{RingCursor, RingRecord};
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions, RingLayout,
 };
-use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::{
     AsyncDeviceHandle, DmaWrite, PdmaMemoryStage, QueueBootstrapBatch, SubmissionBatch,
 };
@@ -92,7 +93,7 @@ pub fn new_handle() -> AsyncDeviceHandle {
     let (device, _worker) =
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
     device.handle()
@@ -120,7 +121,7 @@ pub fn observed_handle_for_memory(
     let (device, _worker) =
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             Arc::clone(memory),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             observer.clone(),
         ));
     (device.handle(), observer)
@@ -136,7 +137,7 @@ pub fn gated_handle() -> (
     let (device, _worker) =
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             Arc::clone(&memory),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             observer.clone(),
         ));
     (device.handle(), observer, memory)

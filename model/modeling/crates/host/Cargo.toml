@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 description = "Async PDMA host model skeleton"
+autotests = false
 
 [dependencies]
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
@@ -19,3 +20,15 @@ tokio = { version = "1.49", features = ["macros", "rt", "sync"] }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "async_driver"
+path = "tests/async_driver.rs"
+
+[[test]]
+name = "host_core_surface"
+path = "tests/host_core_surface.rs"
+
+[[test]]
+name = "irq_runtime_surface"
+path = "tests/irq_runtime_surface.rs"

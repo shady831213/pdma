@@ -1,6 +1,6 @@
 //! DMA-visible range vocabulary without address translation semantics.
 
-use crate::ids::DmaObjectId;
+use crate::semantic::ids::DmaObjectId;
 
 /// DMA-visible object and byte offset where a range begins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -67,7 +67,7 @@ impl DmaRange {
 
 #[cfg(test)]
 mod tests {
-    use crate::ids::{BufferId, DmaObjectId};
+    use crate::semantic::ids::{BufferId, DmaObjectId};
 
     use super::{DmaRange, DmaRangeStart};
 

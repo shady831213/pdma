@@ -1,11 +1,13 @@
-use pdma_model_contract::{CommandId, CopyRequest, IrqNotification, IrqVector};
-use pdma_model_contract::{EpochQueue, RingCursor};
+use crate::register::legacy_test_support::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{CommandId, CopyRequest, IrqNotification, IrqVector};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 use pdma_model_host::{
-    AsyncDriver, AsyncPdmaBus, BusDevicePort, DriverIrqRecord, IrqDelivery, QueueControlWrite,
-    SoftwareCpu, StatefulIrqHandler, stateful_irq_handler,
+    AsyncDriver, AsyncPdmaBus, BusDevicePort, DriverIrqRecord, QueueControlWrite,
 };
 use tokio::sync::oneshot;
 
@@ -19,7 +21,7 @@ use setup::{PortClones, setup_ports};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Host-consumed publication lane selected for one fresh race fixture.
-pub enum ConsumerLane {
+pub(crate) enum ConsumerLane {
     /// Completion-ring consumer publication.
     Completion,
     /// Event-ring consumer publication.
@@ -34,7 +36,7 @@ impl ConsumerLane {
         }
     }
 
-    const fn source(self, driver: &AsyncDriver) -> pdma_model_contract::EpochIrqSource {
+    const fn source(self, driver: &AsyncDriver) -> pdma_model_contract::semantic::EpochIrqSource {
         match self {
             Self::Completion => driver.completion_irq_source(),
             Self::Event => driver.event_irq_source(),
@@ -129,10 +131,10 @@ fn print_observation(lane: ConsumerLane) {
 ///
 /// # Panics
 /// Panics when an intermediate or final test observation violates the race contract.
-pub async fn run_consumer_race(lane: ConsumerLane) -> ModelResult<()> {
+pub(crate) async fn run_consumer_race(lane: ConsumerLane) -> ModelResult<()> {
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -232,3 +234,4 @@ pub async fn run_consumer_race(lane: ConsumerLane) -> ModelResult<()> {
     print_observation(lane);
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

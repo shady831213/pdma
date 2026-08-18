@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use pdma_model_contract::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{NoopRegisterObserver, SharedMemory};
 

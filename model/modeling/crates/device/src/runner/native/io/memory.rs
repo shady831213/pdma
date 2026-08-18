@@ -1,6 +1,6 @@
 use super::super::retirement::FaultRetirement;
 use crate::dma_space::PdmaMemoryMappings;
-use pdma_model_contract::{CommandId, DmaRangeStart, MemoryFault, QueueId};
+use pdma_model_contract::semantic::{CommandId, DmaRangeStart, MemoryFault, QueueId};
 
 #[derive(Debug, Clone, Copy)]
 pub(in crate::runner::native) struct QueueMemoryResolver {

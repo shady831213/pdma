@@ -1,4 +1,4 @@
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
     ExternalCommand, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
@@ -92,14 +92,14 @@ impl DriverPort for ProbePort {
     async fn poll_queue_event(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<pdma_model_contract::EventRecord>, ModelError> {
+    ) -> Result<Option<pdma_model_contract::semantic::EventRecord>, ModelError> {
         Ok(None)
     }
 
     async fn configure_irq_route(
         &mut self,
-        _source: pdma_model_contract::EpochIrqSource,
-        _route: pdma_model_contract::IrqRoute,
+        _source: pdma_model_contract::semantic::EpochIrqSource,
+        _route: pdma_model_contract::semantic::IrqRoute,
     ) -> Result<(), ModelError> {
         self.irq_calls += 1;
         Ok(())
@@ -107,7 +107,7 @@ impl DriverPort for ProbePort {
 
     async fn enable_irq_source(
         &mut self,
-        _source: pdma_model_contract::EpochIrqSource,
+        _source: pdma_model_contract::semantic::EpochIrqSource,
     ) -> Result<(), ModelError> {
         self.irq_calls += 1;
         Ok(())
@@ -115,7 +115,7 @@ impl DriverPort for ProbePort {
 
     async fn disable_irq_source(
         &mut self,
-        _source: pdma_model_contract::EpochIrqSource,
+        _source: pdma_model_contract::semantic::EpochIrqSource,
     ) -> Result<(), ModelError> {
         self.irq_calls += 1;
         Ok(())
@@ -123,7 +123,7 @@ impl DriverPort for ProbePort {
 
     async fn mask_irq_source(
         &mut self,
-        _source: pdma_model_contract::EpochIrqSource,
+        _source: pdma_model_contract::semantic::EpochIrqSource,
     ) -> Result<(), ModelError> {
         self.irq_calls += 1;
         Ok(())
@@ -131,7 +131,7 @@ impl DriverPort for ProbePort {
 
     async fn unmask_irq_source(
         &mut self,
-        _source: pdma_model_contract::EpochIrqSource,
+        _source: pdma_model_contract::semantic::EpochIrqSource,
     ) -> Result<(), ModelError> {
         self.irq_calls += 1;
         Ok(())
@@ -139,21 +139,23 @@ impl DriverPort for ProbePort {
 
     async fn ack_irq_source(
         &mut self,
-        _source: pdma_model_contract::EpochIrqSource,
+        _source: pdma_model_contract::semantic::EpochIrqSource,
     ) -> Result<(), ModelError> {
         self.irq_calls += 1;
         Ok(())
     }
 
-    async fn irq_snapshot(&self) -> Option<pdma_model_contract::IrqSnapshot> {
+    async fn irq_snapshot(&self) -> Option<pdma_model_contract::semantic::IrqSnapshot> {
         None
     }
 
-    async fn wait_irq(&self) -> Option<pdma_model_contract::IrqSnapshot> {
+    async fn wait_irq(&self) -> Option<pdma_model_contract::semantic::IrqSnapshot> {
         None
     }
 
-    async fn wait_irq_notification(&mut self) -> Option<pdma_model_contract::IrqNotification> {
+    async fn wait_irq_notification(
+        &mut self,
+    ) -> Option<pdma_model_contract::semantic::IrqNotification> {
         None
     }
 }

@@ -1,9 +1,9 @@
 use super::common::{TestResult, activate_on, allocate, encode, fixture};
-use pdma_model_contract::{
-    AbiCommand, AbiCopy, AbiId, CopyIovas, QueueControl, QueueCursorUpdate, RingCursor,
-    WholeDeviceReset,
-};
-use pdma_model_contract::{
+use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId};
+use pdma_model_contract::abi::{CopyIovas, RingCursor};
+use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::semantic::WholeDeviceReset;
+use pdma_model_contract::semantic::{
     CommandId, CompletionStatus, EventRouting, ExternalCommand, QueueConfig, ResourceConfig,
     SoftwareOwnerId,
     desc::{CopyCommand, CopyRequest},
@@ -63,8 +63,12 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
         fixture.handle.read_memory(descriptor_address, 64).await?,
         descriptor
     );
-    let (new_queue, _) =
-        activate_on(&fixture.handle, epoch, pdma_model_contract::QueueId::new(0)).await?;
+    let (new_queue, _) = activate_on(
+        &fixture.handle,
+        epoch,
+        pdma_model_contract::semantic::QueueId::new(0),
+    )
+    .await?;
     assert_eq!(new_queue.epoch(), epoch);
     let status = fixture
         .handle
@@ -174,11 +178,11 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
 
 async fn assert_semantic_completion(
     handle: &pdma_model_device::AsyncDeviceHandle,
-    queue: pdma_model_contract::QueueConfigHandle,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
 ) -> TestResult {
     assert_eq!(
         handle.poll_completion(queue).await?,
-        Some(pdma_model_contract::CompletionRecord::new(
+        Some(pdma_model_contract::semantic::CompletionRecord::new(
             queue.queue_id(),
             CommandId::new(71),
             CompletionStatus::Success,

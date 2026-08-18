@@ -1,9 +1,9 @@
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::AsyncDeviceHandle;
-use pdma_model_host::AsyncDevicePort;
+use pdma_model_host::DriverPort as AsyncDevicePort;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 use std::sync::{

@@ -1,7 +1,4 @@
-use pdma_model_contract::{
-    BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
-};
+use pdma_model_contract::semantic::{BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle};
 use pdma_model_host::{DriverPort, ModelError};
 
 struct DownstreamPort;

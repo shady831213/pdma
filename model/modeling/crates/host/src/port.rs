@@ -1,19 +1,24 @@
 //! Async host/device port used by actor-style driver turns.
 
+#[path = "port/async_device.rs"]
 mod async_device;
+#[path = "port/bus_device.rs"]
 mod bus_device;
+#[path = "port/sync_device.rs"]
 mod sync_device;
 
-pub use bus_device::{BusControlErrorAdapter, BusDevicePort, BusDmaErrorAdapter};
+#[cfg(test)]
+pub(in crate::register) use bus_device::BusDmaErrorAdapter;
+pub(in crate::register) use bus_device::{BusControlErrorAdapter, BusDevicePort};
 
 use crate::ModelResult;
-use pdma_model_contract::completion::CompletionRecord;
-use pdma_model_contract::desc::ExternalCommand;
-use pdma_model_contract::event::EventRecord;
-use pdma_model_contract::ids::BufferId;
-use pdma_model_contract::irq::{IrqNotification, IrqRoute, IrqSnapshot};
-use pdma_model_contract::queue::{QueueConfig, QueueConfigHandle};
 use pdma_model_contract::semantic::EpochIrqSource;
+use pdma_model_contract::semantic::completion::CompletionRecord;
+use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::event::EventRecord;
+use pdma_model_contract::semantic::ids::BufferId;
+use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::semantic::queue::{QueueConfig, QueueConfigHandle};
 
 /// Async device-facing operations required by a host driver turn.
 pub trait DriverPort: Send + Sync {
@@ -140,6 +145,3 @@ pub trait DriverPort: Send + Sync {
     /// Waits for and consumes one line or message IRQ notification.
     fn wait_irq_notification(&mut self) -> impl Future<Output = Option<IrqNotification>> + Send;
 }
-
-/// Transitional name for [`DriverPort`], retained through Task 26.
-pub use DriverPort as AsyncDevicePort;

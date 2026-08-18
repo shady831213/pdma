@@ -1,10 +1,10 @@
 use super::{HostIrqTrace, IrqDeliverySummary, IrqHandler};
-use crate::{AsyncDevicePort, ModelError, ModelResult};
+use crate::{DriverPort, ModelError, ModelResult};
 use hardware_interface_runtime::{
     InterruptDispatchError, InterruptEnvelope, InterruptHandler, InterruptLifecycleEvent,
     InterruptLifecycleObserver, InterruptSource, InterruptSummary,
 };
-use pdma_model_contract::{IrqNotification, IrqVector};
+use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use std::{
     error::Error,
     fmt,
@@ -61,7 +61,7 @@ impl fmt::Display for CompatSourceClosed {
 
 impl Error for CompatSourceClosed {}
 
-impl<P: AsyncDevicePort + 'static> InterruptSource for CompatSource<P> {
+impl<P: DriverPort + 'static> InterruptSource for CompatSource<P> {
     type Notification = CompatNotification;
     type Ready = CompatNotification;
     type Error = CompatSourceClosed;

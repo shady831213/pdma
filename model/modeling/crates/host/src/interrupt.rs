@@ -11,12 +11,7 @@ pub use trace::PdmaInterruptTrace;
 
 use crate::core::PortError;
 pub use crate::driver::DriverIrqRecord;
-pub use crate::irq_delivery::{
-    HasHandlers, IrqDelivery, IrqDeliveryBootstrap, IrqDeliveryHandle, IrqDeliveryRunner,
-    IrqDeliverySummary, IrqHandler, IrqHandlerFuture, IrqHandlerRegistry, NoHandler,
-    StatefulIrqHandler, irq_handler, stateful_irq_handler,
-};
-use pdma_model_contract::IrqVector;
+use pdma_model_contract::semantic::IrqVector;
 use std::{error::Error, fmt};
 
 /// Failure from host interrupt registration or delivery.

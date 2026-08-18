@@ -1,13 +1,15 @@
 use super::{AsyncPdmaBus, BusDevicePort, BusDmaErrorAdapter};
-use crate::BusDmaStage;
 use crate::ModelError;
 use crate::ModelResult;
-use pdma_model_contract::{
-    BufferId, CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
+use crate::register::bus::{BusDmaStage, BusQueueStatus};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
 };
-use pdma_model_contract::{
-    DeviceEpoch, DmaAddress, PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
-    RingRecord,
+use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::{
+    BufferId, CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 
 #[derive(Debug, Clone)]
@@ -21,7 +23,7 @@ pub(super) struct PortState {
 pub(super) struct QueueState {
     pub(super) handle: QueueConfigHandle,
     pub(super) rings: QueueRingRegions,
-    pub(super) status: crate::BusQueueStatus,
+    pub(super) status: BusQueueStatus,
 }
 
 impl PortState {
@@ -68,7 +70,7 @@ where
     B::DmaError: BusDmaErrorAdapter,
     B::ControlError: super::BusControlErrorAdapter,
 {
-    let epoch = port.state.with(|state| {
+    let epoch = port.with_state(|state| {
         if state.queue.is_some() {
             Err(ModelError::DmaSubmissionState)
         } else {
@@ -120,7 +122,7 @@ where
             config,
         ),
     );
-    port.state.with(|state| {
+    port.with_state(|state| {
         if state.queue.is_some() {
             return Err(ModelError::DmaSubmissionState);
         }
@@ -141,7 +143,7 @@ where
     let region = port
         .poll_model(port.bus.allocate_memory_region(len))
         .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         state.regions.push(region);
         region.object()
     })
@@ -184,7 +186,7 @@ fn checked_range<B>(
     offset: usize,
     len: usize,
 ) -> ModelResult<DmaAddress> {
-    port.state.with(|state| {
+    port.with_state(|state| {
         let region = state.region(id)?;
         let end = offset.checked_add(len).ok_or(ModelError::RangeOverflow)?;
         let region_len = usize::try_from(region.length()).map_err(|_| ModelError::RangeOverflow)?;

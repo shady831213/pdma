@@ -1,8 +1,10 @@
 use super::super::PublicationOutcome;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::{ActiveQueue, BusControlState};
-use pdma_model_contract::{AbiEvent, DmaAddress, EpochQueue, encode_completion, encode_event};
-use pdma_model_contract::{CompletionRecord, QueueId};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::bridge::{AbiEvent, encode_completion, encode_event};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{CompletionRecord, QueueId};
 
 pub(super) fn completion(
     dma_space: &PdmaMemoryMappings,

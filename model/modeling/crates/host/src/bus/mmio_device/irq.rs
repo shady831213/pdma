@@ -2,26 +2,26 @@ use super::{MmioDeviceBus, MmioDeviceTransport};
 use crate::ModelError;
 use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{IrqSourceStatus, MmioByteCount, MmioResult};
-use pdma_model_contract::{DeviceEpoch, EpochIrqSource, IrqRoute, IrqSource};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochIrqSource, IrqRoute, IrqSource};
 
 #[path = "irq/notification.rs"]
 mod notification;
 
 pub(super) async fn snapshot<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
-) -> Option<pdma_model_contract::IrqSnapshot> {
+) -> Option<pdma_model_contract::semantic::IrqSnapshot> {
     notification::snapshot(bus).await
 }
 
 pub(super) async fn wait_line<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
-) -> Option<pdma_model_contract::IrqSnapshot> {
+) -> Option<pdma_model_contract::semantic::IrqSnapshot> {
     notification::wait_line(bus).await
 }
 
 pub(super) async fn wait_notification<T: MmioDeviceTransport>(
     bus: &MmioDeviceBus<T>,
-) -> Option<pdma_model_contract::IrqNotification> {
+) -> Option<pdma_model_contract::semantic::IrqNotification> {
     notification::wait_notification(bus).await
 }
 

@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
-use pdma_model_contract::{DeviceEpoch, DmaAddress, RingCursor};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::DeviceEpoch;
 use pdma_model_device::{
     AsyncDeviceHandle, DeviceStateSnapshot, DmaWrite, MmioBatchError, QueueBootstrapBatch,
     SubmissionBatch,
@@ -158,7 +160,7 @@ fn new_handle(observer: Arc<dyn RegisterObserver>) -> pdma_model_device::AsyncDe
     let (device, _worker) =
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             observer,
         ));
     device.handle()

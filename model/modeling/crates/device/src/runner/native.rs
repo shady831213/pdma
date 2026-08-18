@@ -19,7 +19,7 @@ use crate::dma_space::PdmaMemoryMappings;
 use crate::trace::{TraceSink, command_id, operation_from_external};
 use crate::{ModelError, ModelResult};
 use irq::PdmaIrqController;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, ExternalCommand, IrqLine,
     IrqVector, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId, ResourceConfig,
     TraceEvent,
@@ -266,7 +266,7 @@ impl QueuePortDeviceModel {
 
     const fn memory_resolver(
         queue_id: QueueId,
-        command_id: pdma_model_contract::CommandId,
+        command_id: pdma_model_contract::semantic::CommandId,
     ) -> io::QueueMemoryResolver {
         io::QueueMemoryResolver::new(queue_id, command_id)
     }

@@ -1,15 +1,15 @@
+use super::super::bus::{BusDmaStage, BusDmaWrite, BusSubmission, MmioDeviceTransport};
 use super::super::{
     PdmaBatchError, PdmaDmaWrite, PdmaPreparedProposal, PdmaProvisioningCause,
     PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError, PdmaSubmissionBatch,
 };
-use crate::{
-    BusDmaStage, BusDmaWrite, BusSubmission, MmioDeviceTransport, ModelError, ModelResult,
-};
+use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess,
 };
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount};
-use pdma_model_contract::{DmaAddress, PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation};
 use pdma_model_device::{MmioBatchError, PdmaMemoryError};
 
 #[derive(Debug, Clone)]

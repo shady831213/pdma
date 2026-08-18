@@ -1,5 +1,5 @@
 use super::TestResult;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionStatus, DmaRangeStart, EventErrorKind, ExternalCommand,
     QueueConfig, QueueConfigHandle, SoftwareOwnerId,
     desc::{CopyCommand, CopyRequest},
@@ -33,7 +33,7 @@ impl Fixture {
     async fn new() -> TestResult<Self> {
         let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
         let worker = tokio::spawn(worker.run());
@@ -107,7 +107,7 @@ impl Fixture {
         assert_eq!(event.buffer(), self.source);
         assert_eq!(
             event.fault_address(),
-            Some(pdma_model_contract::FaultAddress::new(
+            Some(pdma_model_contract::semantic::FaultAddress::new(
                 self.source_end.raw()
             ))
         );
@@ -162,7 +162,7 @@ impl Fixture {
         Ok(())
     }
 
-    async fn next_event(&self) -> TestResult<pdma_model_contract::EventRecord> {
+    async fn next_event(&self) -> TestResult<pdma_model_contract::semantic::EventRecord> {
         self.handle
             .poll_queue_event(self.queue)
             .await?

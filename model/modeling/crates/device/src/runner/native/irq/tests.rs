@@ -1,5 +1,5 @@
 use super::PdmaIrqController;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqLine, IrqMessage, IrqMessageId,
     IrqNotification, IrqRoute, IrqSource, IrqVector,
 };

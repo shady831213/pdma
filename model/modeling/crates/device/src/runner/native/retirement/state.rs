@@ -2,7 +2,7 @@ use super::{QueuePortDeviceModel, SuccessRetirement};
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::QueueId;
+use pdma_model_contract::semantic::QueueId;
 
 pub(super) fn completion_publication_is_full(
     device: &QueuePortDeviceModel,

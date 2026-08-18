@@ -1,8 +1,10 @@
 use super::{QueueBootstrapBatch, QueueResponseBytes};
 use crate::runner::AsyncDevice;
+use pdma_model_contract::abi::RingRecord;
 use pdma_model_contract::abi::mmio::MmioByteCount;
-use pdma_model_contract::{DeviceEpoch, QueueActivation, QueueRingRegions, RingLayout, RingRecord};
-use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use std::future::{Future, poll_fn};
 use std::sync::Arc;
 
@@ -21,7 +23,7 @@ async fn pending_real_lock_drop_repeats_without_mutation_then_recovers() -> Test
     // Given: committed sentinel bytes and every standalone queue latch are pinned.
     let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();

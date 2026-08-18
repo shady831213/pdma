@@ -2,7 +2,7 @@
 async fn raw_activation_rejects_uncommitted_partial_and_wrong_extent_mappings_without_mutation(
 ) -> TestResult {
     // Given: uncommitted, partially committed, and wrong-extent mapping sets.
-    let (uncommitted_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
+    let (uncommitted_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let uncommitted = uncommitted_device.handle();
     let proposed = uncommitted.stage_memory_regions(&[128, 64, 128]).await?;
     let [sq, cq, eq] = proposed.regions() else {
@@ -35,7 +35,7 @@ async fn raw_activation_rejects_uncommitted_partial_and_wrong_extent_mappings_wi
     .await?;
     assert_eq!(read_u32(&uncommitted, 0x16c).await?, MmioResult::Ok.code());
 
-    let (partial_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
+    let (partial_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let partial = partial_device.handle();
     let submission_mapping = partial.allocate_memory_region(128).await?;
     let pending = partial.stage_memory_regions(&[64, 128]).await?;
@@ -54,7 +54,7 @@ async fn raw_activation_rejects_uncommitted_partial_and_wrong_extent_mappings_wi
     issue_queue_command(&partial, 1).await?;
     assert_eq!(read_u32(&partial, 0x16c).await?, MmioResult::DmaUnmapped.code());
 
-    let (extent_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
+    let (extent_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
     let extent = extent_device.handle();
     let wrong_extent = extent.stage_memory_regions(&[127, 64, 128]).await?;
     let wrong_extent = extent.commit_memory_stage(wrong_extent).await?;

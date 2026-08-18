@@ -5,7 +5,7 @@ use crate::ModelResult;
 
 use super::AsyncDriver;
 use crate::DriverPort;
-use pdma_model_contract::{CompletionRecord, EventRecord, IrqNotification, IrqSource};
+use pdma_model_contract::semantic::{CompletionRecord, EventRecord, IrqNotification, IrqSource};
 
 /// One record drained by the PDMA software handler.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +32,7 @@ impl AsyncDriver {
     pub(crate) fn validate_irq_notification(
         &self,
         notification: IrqNotification,
-    ) -> ModelResult<pdma_model_contract::EpochIrqSource> {
+    ) -> ModelResult<pdma_model_contract::semantic::EpochIrqSource> {
         self.core.accounting.validate()?;
         let source = notification.source_capability();
         let expected_epoch = self.core.queue_config.epoch();
@@ -56,7 +56,7 @@ impl AsyncDriver {
     pub(crate) async fn drain_irq_source_on(
         &mut self,
         device: &mut impl DriverPort,
-        source: pdma_model_contract::EpochIrqSource,
+        source: pdma_model_contract::semantic::EpochIrqSource,
     ) -> ModelResult<Vec<DriverIrqRecord>> {
         match source.source() {
             IrqSource::Completion(_) => self.drain_completions(device).await,

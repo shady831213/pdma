@@ -64,7 +64,7 @@ impl MmioRegisterEndpoint {
     /// Claims one exact IRQ notification and emits its complete direct transcript atomically.
     pub async fn claim_notification_exact(
         &self,
-    ) -> Result<Option<pdma_model_contract::IrqNotification>, MmioRegisterError> {
+    ) -> Result<Option<pdma_model_contract::semantic::IrqNotification>, MmioRegisterError> {
         let committed = {
             let mut state = self.shared.state.lock().await;
             claim::prepare_claim(&mut state)?
@@ -82,7 +82,7 @@ impl MmioRegisterEndpoint {
         &self,
     ) -> Result<
         (
-            Option<pdma_model_contract::IrqNotification>,
+            Option<pdma_model_contract::semantic::IrqNotification>,
             Vec<RegisterObservation>,
         ),
         MmioRegisterError,

@@ -6,11 +6,11 @@ use pdma_model_device::ModelError;
 pub mod support;
 
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig, QueueId,
     SoftwareOwnerId,
 };
-use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, BusControlError};
 use support::{TestResult, raw_reset, read_u32, read_u64, write_u64};
 
@@ -23,7 +23,7 @@ async fn typed_reset_clears_resettable_state_and_preserves_persistent_partition(
     // Given: completed work, pending record/IRQ state, persistent DMA, trace, and staged banks.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -92,7 +92,7 @@ async fn stale_typed_reset_rejects_before_any_mutation() -> TestResult {
     // Given: epoch one with committed DMA and new nonzero queue/IRQ staging.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -129,7 +129,7 @@ async fn global_reset_dispatch_returns_post_reset_receipt_and_preserves_dma() ->
     // Given: a published global response, staged queue/IRQ banks, and committed DMA.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();

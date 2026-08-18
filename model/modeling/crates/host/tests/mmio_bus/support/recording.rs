@@ -1,5 +1,6 @@
-use pdma_model_contract::{DeviceEpoch, PdmaMemoryRegion};
-use pdma_model_contract::{
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::{
     EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqSource, IrqVector,
 };
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -104,7 +105,7 @@ impl RecordingTransport {
                 IrqVector::new(vector),
                 EpochIrqSource::new(
                     DeviceEpoch::initial(),
-                    IrqSource::Completion(pdma_model_contract::CompletionRingId::new(0)),
+                    IrqSource::Completion(pdma_model_contract::semantic::CompletionRingId::new(0)),
                 ),
             )));
         }

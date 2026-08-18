@@ -1,5 +1,5 @@
 use super::*;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRecord, CopyRequest, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
     IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
@@ -16,7 +16,7 @@ use pending_doorbell::PendingDoorbellPort;
 pub(super) async fn verify_after_acceptance_driver_credit() -> ModelResult<()> {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -82,7 +82,7 @@ pub(super) async fn verify_after_acceptance_driver_credit() -> ModelResult<()> {
 pub(super) async fn verify_before_acceptance_driver_credit() -> ModelResult<()> {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -152,3 +152,4 @@ pub(super) async fn verify_before_acceptance_driver_credit() -> ModelResult<()> 
     );
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

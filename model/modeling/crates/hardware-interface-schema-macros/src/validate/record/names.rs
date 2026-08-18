@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use proc_macro2::Span;
 
-use crate::syntax::{FieldShape, RecordDecl};
+use crate::internal::syntax::{FieldShape, RecordDecl};
 
 pub(super) fn check(decl: &RecordDecl) -> syn::Result<()> {
     let composable = !decl.records.is_empty()

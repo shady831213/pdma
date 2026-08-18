@@ -14,7 +14,7 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
     });
     let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
         Arc::clone(&memory),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         observer.clone(),
     ));
     let handle = device.handle();

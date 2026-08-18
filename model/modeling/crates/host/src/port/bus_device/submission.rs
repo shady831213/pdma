@@ -1,13 +1,16 @@
 use super::{AsyncPdmaBus, BusDevicePort, BusDmaErrorAdapter};
 use crate::ModelError;
 use crate::ModelResult;
-use crate::{BusDmaStage, BusDmaWrite, BusSubmission, QueueControlWrite};
-use pdma_model_contract::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
-    BroadcastDestinationEntry, BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DmaAddress,
-    QueueCursorUpdate, RingRecord, StridedCopyShape, VectorIovas,
+use crate::register::bus::{BusDmaStage, BusDmaWrite, BusSubmission, QueueControlWrite};
+use pdma_model_contract::abi::{
+    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd, DmaAddress,
 };
-use pdma_model_contract::{BufferId, ExternalCommand, QueueConfigHandle};
+use pdma_model_contract::abi::{
+    BroadcastDestinationEntry, BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, RingRecord,
+    StridedCopyShape, VectorIovas,
+};
+use pdma_model_contract::bridge::QueueCursorUpdate;
+use pdma_model_contract::semantic::{BufferId, ExternalCommand, QueueConfigHandle};
 
 pub(super) async fn submit<B>(
     port: &BusDevicePort<B>,
@@ -19,14 +22,14 @@ where
     B::DmaError: BusDmaErrorAdapter,
     B::ControlError: super::BusControlErrorAdapter,
 {
-    let queue = port.state.with(|state| state.queue(handle))??;
+    let queue = port.with_state(|state| state.queue(handle))??;
     let observed = port
         .poll_control(
             port.bus.read_queue_status(queue.status.queue()),
             queue.status.queue(),
         )
         .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         let current = state.queue(handle)?;
         state.queue = Some(super::state::QueueState {
             status: observed,
@@ -34,7 +37,7 @@ where
         });
         Ok::<(), ModelError>(())
     })??;
-    let queue = port.state.with(|state| state.queue(handle))??;
+    let queue = port.with_state(|state| state.queue(handle))??;
     let (abi, indirect) = encode_command(port, command).await?;
     let mut descriptor = vec![0_u8; usize::from(RingRecord::Submission.record_size())];
     abi.encode(&mut descriptor)
@@ -64,7 +67,7 @@ where
             queue.status.queue(),
         )
         .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         let active = state.queue(handle)?;
         if active.status.submission().producer() != producer {
             return Err(ModelError::DmaSubmissionState);
@@ -82,14 +85,14 @@ where
     B: AsyncPdmaBus,
     B::ControlError: super::BusControlErrorAdapter,
 {
-    let queue = port.state.with(|state| state.queue(handle))??;
+    let queue = port.with_state(|state| state.queue(handle))??;
     let observed = port
         .poll_control(
             port.bus.read_queue_status(queue.status.queue()),
             queue.status.queue(),
         )
         .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         let current = state.queue(handle)?;
         state.queue = Some(super::state::QueueState {
             status: observed,
@@ -97,7 +100,7 @@ where
         });
         Ok::<(), ModelError>(())
     })??;
-    let queue = port.state.with(|state| state.queue(handle))??;
+    let queue = port.with_state(|state| state.queue(handle))??;
     let status = port
         .poll_control(
             port.bus
@@ -110,7 +113,7 @@ where
             queue.status.queue(),
         )
         .await?;
-    port.state.with(|state| {
+    port.with_state(|state| {
         let active = state.queue(handle)?;
         state.queue = Some(super::state::QueueState { status, ..active });
         Ok(())
@@ -181,7 +184,7 @@ where
 
 async fn broadcast<B>(
     port: &BusDevicePort<B>,
-    command: pdma_model_contract::BroadcastCopyCommand,
+    command: pdma_model_contract::semantic::BroadcastCopyCommand,
 ) -> ModelResult<(AbiCommand, Option<(B::Stage, BusDmaWrite)>)>
 where
     B: AsyncPdmaBus,
@@ -222,7 +225,7 @@ where
 }
 
 fn operand<B>(port: &BusDevicePort<B>, id: BufferId, offset: usize) -> ModelResult<DmaAddress> {
-    port.state.with(|state| {
+    port.with_state(|state| {
         let region = state.region(id)?;
         let offset = u64::try_from(offset).map_err(|_| ModelError::RangeOverflow)?;
         if offset > region.length() {

@@ -4,8 +4,9 @@ use hardware_interface_runtime::{
     ObservationGate, RegisterObserver, SharedMemory, SharedRegisterObserver,
 };
 use pdma_model_contract::abi::mmio::PdmaMmioMap;
-use pdma_model_contract::trace::TraceEvent;
-use pdma_model_contract::{DeviceEpoch, PdmaMemoryRegion, ResourceConfig, WholeDeviceReset};
+use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::semantic::trace::TraceEvent;
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 
 use super::backend::DeviceModel;
 use super::bus::control::BusControlState;
@@ -55,7 +56,7 @@ pub struct DeviceStateSnapshot {
     /// Resettable backend/control/MMIO partitions.
     pub partitions: ResetPartitionSnapshot,
     /// Current PDMA-local IRQ state.
-    pub irq: Option<pdma_model_contract::IrqSnapshot>,
+    pub irq: Option<pdma_model_contract::semantic::IrqSnapshot>,
     /// Committed calls to the sole reset runner.
     pub reset_runner_calls: usize,
 }
@@ -67,7 +68,7 @@ pub struct DeviceStateSnapshot {
 /// ```compile_fail
 /// use std::sync::Arc;
 /// use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
-/// use pdma_model_contract::ResourceConfig;
+/// use pdma_model_contract::semantic::ResourceConfig;
 /// use pdma_model_device::{AsyncDevice, DeviceCore};
 ///
 /// let core = DeviceCore::new(
@@ -185,7 +186,7 @@ impl DeviceCore {
         let mappings = (0..self.dma_space.mapped_region_count())
             .map(|raw| {
                 self.dma_space
-                    .region_for_object(pdma_model_contract::BufferId::new(raw))
+                    .region_for_object(pdma_model_contract::semantic::BufferId::new(raw))
                     .ok_or(PdmaMemoryError::InvalidRegion)
             })
             .collect::<Result<Vec<_>, _>>()?;

@@ -5,14 +5,13 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use pdma_model_contract::{
+use crate::register::legacy_test_support::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
     IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
-use pdma_model_host::{
-    AsyncDevicePort, AsyncDriver, IrqDelivery, SoftwareCpu, StatefulIrqHandler,
-    stateful_irq_handler,
-};
+use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort};
 use tokio::sync::{Mutex, mpsc};
 
 use super::message;
@@ -141,11 +140,11 @@ impl StatefulIrqHandler for ResetHandler {
 ///
 /// # Panics
 /// Panics when stale service reaches acknowledgement or returns the wrong typed error.
-pub async fn run() -> ModelResult<()> {
+pub(crate) async fn run() -> ModelResult<()> {
     // Given: an old driver and host-owned notification facing a reset epoch service port.
     let mut device = pdma_model_device::SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let cpu = SoftwareCpu::new();
@@ -153,7 +152,11 @@ pub async fn run() -> ModelResult<()> {
         .run_main(AsyncDriver::setup_on(&mut device, 1, 1))
         .await?;
     let source = driver.completion_irq_source();
-    let notification = message(0, pdma_model_contract::IrqVector::new(4), source.source());
+    let notification = message(
+        0,
+        pdma_model_contract::semantic::IrqVector::new(4),
+        source.source(),
+    );
     let (sender, notifications) = mpsc::channel(1);
     sender
         .send(notification)
@@ -168,7 +171,7 @@ pub async fn run() -> ModelResult<()> {
         acknowledgements: Arc::clone(&acknowledgements),
     };
     let (delivery, _) = IrqDelivery::new(port.clone(), cpu).register_handler(
-        pdma_model_contract::IrqVector::new(4),
+        pdma_model_contract::semantic::IrqVector::new(4),
         stateful_irq_handler(ResetHandler { driver, port }),
     );
 
@@ -187,3 +190,4 @@ pub async fn run() -> ModelResult<()> {
     assert_eq!(acknowledgements.load(Ordering::SeqCst), 0);
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

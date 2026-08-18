@@ -3,9 +3,10 @@
 #[path = "strided_copy/retry.rs"]
 mod retry;
 
-use pdma_model_contract::{CompletionStatus, desc::StridedCopyRequest};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CompletionStatus, desc::StridedCopyRequest};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
@@ -17,13 +18,13 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     // Given: async runner handle, AsyncDriver, padded source rows, and sentinel destination bytes.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, queue_id, dst_bytes, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -96,13 +97,13 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
     // Given: async runner handle, AsyncDriver, and a strided copy whose second row is too long.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -140,14 +141,14 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
     // Given: a bad strided copy followed by a valid strided copy in the same async queue.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (error_snapshot, progress_snapshot, completion, good_command, good_dst_bytes) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = runner.handle();
+                let mut handle = AsyncDevicePort::new(runner.handle());
                 let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                     .await
                     .expect("queue setup is valid");

@@ -6,13 +6,16 @@ use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::BusControlError;
 use crate::runner::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
+use pdma_model_contract::abi::AbiCommand;
 use pdma_model_contract::abi::DescriptorSchemaView;
-use pdma_model_contract::{AbiCommand, AbiEvent, DeviceEpoch, EpochQueue, RingRecord};
-use pdma_model_contract::{CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::AbiEvent;
+use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
-    Command(pdma_model_contract::desc::ExternalCommand),
+    Command(pdma_model_contract::semantic::desc::ExternalCommand),
     Fault(AbiEvent),
 }
 

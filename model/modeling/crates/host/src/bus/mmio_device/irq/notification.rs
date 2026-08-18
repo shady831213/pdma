@@ -1,6 +1,6 @@
 use super::{MmioDeviceBus, MmioDeviceTransport, read_u32, read_u64, write_u32};
 use pdma_model_contract::abi::mmio::{IrqSourceStatus, MmioResult};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId,
     IrqNotification, IrqSnapshot, IrqSource, IrqVector, QueueId,
 };

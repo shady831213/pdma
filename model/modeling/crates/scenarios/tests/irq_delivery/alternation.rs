@@ -3,10 +3,12 @@ use super::{
     assertions::{assert_distinct_observations, receive_observations, trace_count},
     support::{DistinctDelivery, HandlerChannels, spawn_distinct_delivery},
 };
-use pdma_model_contract::{IrqVector, TraceEventKind};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{IrqVector, TraceEventKind};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::ModelResult;
-use pdma_model_host::SoftwareCpu;
+use pdma_model_host::{adapters::AsyncDeviceAccess, compat::AsyncDevicePort};
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 #[tokio::test(flavor = "current_thread")]
@@ -15,14 +17,16 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
     // Given: one retained main capability and handlers registered for distinct MSI-style vectors.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
+    let access = AsyncDeviceAccess::new(port.clone());
+    let compat_port = AsyncDevicePort::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
-    let cpu = SoftwareCpu::new();
+    let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
     let vector_a = IrqVector::new(41);
     let vector_b = IrqVector::new(42);
@@ -34,7 +38,8 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
     let (b_done_tx, b_done_rx) = mpsc::channel(4);
     let (a_release_tx, a_release_rx) = mpsc::channel(4);
     let delivery = spawn_distinct_delivery(DistinctDelivery {
-        port: port.clone(),
+        access,
+        port: compat_port.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -57,7 +62,7 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
 
     // When: main submits completion and event work in two consecutive A/B rounds.
     let main = spawn_main(MainProgram {
-        port: port.clone(),
+        port: compat_port,
         cpu: cpu.clone(),
         depth: depth.clone(),
         bootstrap: bootstrap_tx,
@@ -85,7 +90,7 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
         5
     );
     assert_eq!(trace_count(&device_trace, TraceEventKind::IrqDeviceAck), 5);
-    let host_trace = delivery_handle.trace_events().await;
+    let host_trace = delivery_handle.trace_events();
     assert_eq!(
         trace_count(&host_trace, TraceEventKind::IrqHandlerStarted),
         5
@@ -96,11 +101,7 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
     );
     delivery_handle.request_shutdown();
     device.request_shutdown().await;
-    let summary = delivery
-        .task
-        .await
-        .expect("delivery joins cleanly")
-        .expect("bootstrap sender stays alive")?;
+    let summary = delivery.task.await.expect("delivery joins cleanly");
     let device_summary = worker.await.expect("device worker joins cleanly");
     assert_eq!(summary.deliveries(), 5);
     assert_eq!(device_summary.steps, 3);

@@ -2,10 +2,14 @@ use super::{
     assertions::{assert_line_lifecycle, assert_line_observation, receive_observations},
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
-use pdma_model_contract::{CopyRequest, IrqLine, IrqRoute, IrqVector};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CopyRequest, IrqLine, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{
+    AsyncDriver, DriverPort, adapters::AsyncDeviceAccess, compat::AsyncDevicePort,
+};
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 #[tokio::test(flavor = "current_thread")]
@@ -13,14 +17,16 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     // Given: a line-routed completion and independently running device, main, and delivery actors.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
+    let access = AsyncDeviceAccess::new(port.clone());
+    let compat_port = AsyncDevicePort::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
-    let cpu = SoftwareCpu::new();
+    let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
     let vector = IrqVector::new(61);
     let (bootstrap_tx, bootstrap_rx) = oneshot::channel();
@@ -29,7 +35,8 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     let (milestones_tx, _milestones_rx) = mpsc::channel(4);
     let (done_tx, mut done_rx) = mpsc::channel(2);
     let delivery = spawn_shared_delivery(SharedDelivery {
-        port: port.clone(),
+        access,
+        port: compat_port.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -44,7 +51,7 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     });
 
     // When: complete software setup publishes a clone, waits for registration, then submits once.
-    let mut main_port = port.clone();
+    let mut main_port = compat_port;
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
@@ -98,15 +105,11 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     assert_eq!(copied, vec![4, 3, 2, 1]);
     assert_eq!(irq_snapshot, None);
     let device_trace = port.trace_events().await;
-    let host_trace = delivery_handle.trace_events().await;
+    let host_trace = delivery_handle.trace_events();
     assert_line_lifecycle(&device_trace, &host_trace);
     delivery_handle.request_shutdown();
     device.request_shutdown().await;
-    let summary = delivery
-        .task
-        .await
-        .expect("delivery joins cleanly")
-        .expect("bootstrap sender stays alive")?;
+    let summary = delivery.task.await.expect("delivery joins cleanly");
     let device_summary = worker.await.expect("device worker joins cleanly");
     assert_eq!(summary.deliveries(), 1);
     assert_eq!(device_summary.steps, 1);

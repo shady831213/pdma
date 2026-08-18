@@ -1,5 +1,4 @@
 //! MMIO-backed transport adapter for the existing asynchronous PDMA bus.
-
 use crate::ModelResult;
 
 #[path = "mmio_device/dma.rs"]
@@ -13,20 +12,23 @@ mod queue;
 #[path = "mmio_device/recording.rs"]
 mod recording;
 
-pub use error::MmioBusControlError;
-pub use recording::MmioDeviceTransport;
+pub(in crate::register) use error::MmioBusControlError;
+pub(in crate::register) use recording::MmioDeviceTransport;
 
 use super::AsyncPdmaBus;
+use pdma_model_contract::abi::DmaAddress;
+#[cfg(test)]
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::{DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Clone-shared MMIO bus with one lock for each selector window.
 #[derive(Debug)]
-pub struct MmioDeviceBus<T = pdma_model_device::AsyncDeviceHandle> {
+pub(in crate::register) struct MmioDeviceBus<T = pdma_model_device::AsyncDeviceHandle> {
     transport: T,
     queue_window: Arc<Mutex<QueueWindow>>,
     irq_window: Arc<Mutex<()>>,
@@ -49,7 +51,7 @@ impl<T: Clone> Clone for MmioDeviceBus<T> {
 
 impl<T> MmioDeviceBus<T> {
     /// Wraps one raw device transport with clone-shared selector ownership.
-    pub fn new(transport: T) -> Self {
+    pub(in crate::register) fn new(transport: T) -> Self {
         Self {
             transport,
             queue_window: Arc::new(Mutex::new(QueueWindow::default())),
@@ -141,6 +143,7 @@ where
         irq::source_command(self, source, None, 6).await.map(|_| ())
     }
 
+    #[cfg(test)]
     async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
         irq::source_command(self, source, None, 7).await
     }

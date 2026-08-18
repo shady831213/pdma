@@ -1,7 +1,9 @@
 use super::{QueuePortDeviceModel, irq::IrqSourceObservation};
 use crate::runner::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource};
+use pdma_model_contract::semantic::{
+    EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
+};
 
 impl QueuePortDeviceModel {
     pub(in crate::runner) fn enable_irq_source(

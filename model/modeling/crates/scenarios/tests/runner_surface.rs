@@ -1,21 +1,22 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{CompletionStatus, desc::CopyRequest};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CompletionStatus, desc::CopyRequest};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_surface_interleaves_software_and_hardware_turns() {
     // Given: an async runner, a runner handle, and source/destination buffers.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, completion, snapshot, copied) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -63,13 +64,13 @@ async fn async_runner_surface_poll_before_progress_observes_no_completion() {
     // Given: an async runner, a runner handle, and source/destination buffers.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, early_completion, completion, snapshot, copied) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -122,14 +123,14 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
     // Given: an async runner, a driver handle, one faulting command, and one later valid command.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (bad_command, good_command, error_snapshot, fault, progress_snapshot, completion, copied) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = runner.handle();
+                let mut handle = AsyncDevicePort::new(runner.handle());
                 let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                     .await
                     .expect("queue setup is valid");
@@ -206,13 +207,13 @@ async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
     // Given: an async runner and one completed command.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, completion, snapshot, copied) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = runner.handle();
+            let mut handle = AsyncDevicePort::new(runner.handle());
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

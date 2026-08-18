@@ -5,10 +5,10 @@ use syn::{
 
 use super::{key, keyword, usize_lit};
 
-pub(crate) struct RegisterFieldDefinitionDecl {
-    pub(crate) visibility: Visibility,
-    pub(crate) name: Ident,
-    pub(crate) bit_width: (usize, proc_macro2::Span),
+pub(in crate::internal) struct RegisterFieldDefinitionDecl {
+    pub(in crate::internal) visibility: Visibility,
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) bit_width: (usize, proc_macro2::Span),
 }
 
 impl Parse for RegisterFieldDefinitionDecl {

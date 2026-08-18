@@ -2,24 +2,32 @@
 
 use crate::ModelResult;
 
+#[path = "bus/async_device.rs"]
 mod async_device;
+#[path = "bus/mmio_device.rs"]
 mod mmio_device;
+#[path = "bus/stage.rs"]
 mod stage;
 
-pub use mmio_device::{MmioBusControlError, MmioDeviceBus, MmioDeviceTransport};
-pub use stage::{AsyncDeviceBusStage, BusDmaStage, BusDmaWrite};
+#[cfg(test)]
+pub(in crate::register) use mmio_device::MmioBusControlError;
+pub(in crate::register) use mmio_device::{MmioDeviceBus, MmioDeviceTransport};
+pub(in crate::register) use stage::{AsyncDeviceBusStage, BusDmaStage, BusDmaWrite};
 
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::abi::RingCursor;
+#[cfg(test)]
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::{
-    DmaAddress, EpochQueue, PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate,
-    RingCursor, RingCursors,
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, RingCursors,
 };
-use pdma_model_contract::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot};
 use std::error::Error;
 
 /// One all-or-none raw submission acceptance request.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BusSubmission<S> {
+pub(in crate::register) struct BusSubmission<S> {
     queue: EpochQueue,
     expected_producer: RingCursor,
     descriptor: BusDmaWrite,
@@ -28,7 +36,7 @@ pub struct BusSubmission<S> {
 
 impl<S> BusSubmission<S> {
     /// Groups an optional staged list, opaque writes, and producer commit.
-    pub const fn new(
+    pub(in crate::register) const fn new(
         queue: EpochQueue,
         expected_producer: RingCursor,
         descriptor: BusDmaWrite,
@@ -43,29 +51,12 @@ impl<S> BusSubmission<S> {
     }
 
     /// Epoch-qualified target queue.
-    pub const fn queue(&self) -> EpochQueue {
+    pub(in crate::register) const fn queue(&self) -> EpochQueue {
         self.queue
     }
 
-    /// Producer value that must still be current.
-    pub const fn expected_producer(&self) -> RingCursor {
-        self.expected_producer
-    }
-
-    /// Opaque submission descriptor write.
-    pub const fn descriptor(&self) -> &BusDmaWrite {
-        &self.descriptor
-    }
-
-    /// Optional staged region and opaque indirect-list write.
-    pub const fn indirect(&self) -> Option<(&S, &BusDmaWrite)> {
-        match &self.indirect {
-            Some((stage, write)) => Some((stage, write)),
-            None => None,
-        }
-    }
-
-    pub(crate) fn into_parts(
+    /// Decomposes the accepted submission request.
+    pub(in crate::register) fn into_parts(
         self,
     ) -> (
         EpochQueue,
@@ -84,16 +75,19 @@ impl<S> BusSubmission<S> {
 
 /// Typed queue-control write without the read-status variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum QueueControlWrite {
+pub(in crate::register) enum QueueControlWrite {
     /// Capture the accepted submission producer at a doorbell.
     CaptureSubmissionProducer(QueueCursorUpdate),
     /// Publish device submission consumption.
+    #[cfg(test)]
     PublishSubmissionConsumer(QueueCursorUpdate),
     /// Publish device completion production.
+    #[cfg(test)]
     PublishCompletionProducer(QueueCursorUpdate),
     /// Publish host completion consumption.
     PublishCompletionConsumer(QueueCursorUpdate),
     /// Publish device event production.
+    #[cfg(test)]
     PublishEventProducer(QueueCursorUpdate),
     /// Publish host event consumption.
     PublishEventConsumer(QueueCursorUpdate),
@@ -101,14 +95,15 @@ pub enum QueueControlWrite {
 
 impl QueueControlWrite {
     /// Epoch-qualified target queue.
-    pub const fn queue(self) -> EpochQueue {
+    pub(in crate::register) const fn queue(self) -> EpochQueue {
         match self {
             Self::CaptureSubmissionProducer(update)
-            | Self::PublishSubmissionConsumer(update)
-            | Self::PublishCompletionProducer(update)
             | Self::PublishCompletionConsumer(update)
-            | Self::PublishEventProducer(update)
             | Self::PublishEventConsumer(update) => update.queue(),
+            #[cfg(test)]
+            Self::PublishSubmissionConsumer(update)
+            | Self::PublishCompletionProducer(update)
+            | Self::PublishEventProducer(update) => update.queue(),
         }
     }
 
@@ -117,15 +112,18 @@ impl QueueControlWrite {
             Self::CaptureSubmissionProducer(update) => {
                 QueueControl::CaptureSubmissionProducer(update)
             }
+            #[cfg(test)]
             Self::PublishSubmissionConsumer(update) => {
                 QueueControl::PublishSubmissionConsumer(update)
             }
+            #[cfg(test)]
             Self::PublishCompletionProducer(update) => {
                 QueueControl::PublishCompletionProducer(update)
             }
             Self::PublishCompletionConsumer(update) => {
                 QueueControl::PublishCompletionConsumer(update)
             }
+            #[cfg(test)]
             Self::PublishEventProducer(update) => QueueControl::PublishEventProducer(update),
             Self::PublishEventConsumer(update) => QueueControl::PublishEventConsumer(update),
         }
@@ -187,7 +185,7 @@ impl BusQueueStatus {
 }
 
 /// Raw asynchronous transport contract used to drive one PDMA device.
-pub trait AsyncPdmaBus: Send + Sync {
+pub(in crate::register) trait AsyncPdmaBus: Send + Sync {
     /// Transport-owned read-only DMA stage capability.
     type Stage: BusDmaStage;
     /// Typed DMA staging or access error.
@@ -296,6 +294,7 @@ pub trait AsyncPdmaBus: Send + Sync {
     }
 
     /// Observes one PDMA-local IRQ source without consuming it.
+    #[cfg(test)]
     fn observe_irq_source(
         &self,
         _source: EpochIrqSource,

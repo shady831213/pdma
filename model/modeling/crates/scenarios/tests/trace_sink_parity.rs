@@ -1,29 +1,30 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     ResourceConfig, TraceEvent, TraceEventKind,
     desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
 };
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
     // Given: an idle async runner with tracing enabled after startup noise is cleared.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let handle = runner.handle();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
-    let baseline = handle.snapshot().await;
+    let raw_handle = runner.handle();
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
+    let baseline = raw_handle.snapshot().await;
 
     // When: the worker observes another idle turn after the trace wake.
     let snapshot = runner.wait_for_change_after(baseline).await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -46,10 +47,11 @@ async fn async_trace_log_schedules_before_resource_stall() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one software main submits the copy and waits for its first stall.
     let command = cpu
@@ -73,7 +75,7 @@ async fn async_trace_log_schedules_before_resource_stall() {
             command
         })
         .await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -98,10 +100,11 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one software main fills completion capacity and waits for the second stall.
     let second_command = cpu
@@ -146,7 +149,7 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
             second_command
         })
         .await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -172,14 +175,15 @@ async fn async_trace_log_records_queue_only_doorbells() {
     // Given: two drivers whose first commands reuse the same command id on distinct queues.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one software main submits command id zero on both queues.
     let (copy_command, vector_command, vector_queue_id) = cpu
@@ -229,7 +233,7 @@ async fn async_trace_log_records_queue_only_doorbells() {
             (copy_command, vector_command, vector_driver.queue_id())
         })
         .await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -246,7 +250,7 @@ async fn async_trace_log_records_queue_only_doorbells() {
 fn event_position(
     events: &[TraceEvent],
     kind: TraceEventKind,
-    command: pdma_model_contract::ids::CommandId,
+    command: pdma_model_contract::semantic::ids::CommandId,
 ) -> Option<usize> {
     events
         .iter()

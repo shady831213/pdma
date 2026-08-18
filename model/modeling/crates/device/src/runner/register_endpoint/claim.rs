@@ -3,7 +3,7 @@ use crate::runner::irq::{decode_source, irq_notification_ready};
 use crate::runner::state::DeviceCore;
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation, RegisterObservation};
 use pdma_model_contract::abi::mmio::{IrqCommand, MmioResult, PdmaMmioMap, RegisterId};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqSnapshot, IrqVector,
 };
 

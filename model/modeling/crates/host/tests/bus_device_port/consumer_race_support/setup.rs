@@ -1,6 +1,7 @@
 use super::{ConsumerLane, GatedBus};
-use pdma_model_contract::{BufferId, CommandId, CopyRequest, IrqRoute, IrqVector};
-use pdma_model_host::{AsyncDevicePort, AsyncDriver, BusDevicePort, ModelResult, SoftwareCpu};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest, IrqRoute, IrqVector};
+use pdma_model_host::{AsyncDriver, BusDevicePort, DriverPort as AsyncDevicePort, ModelResult};
 
 pub(super) struct PortClones {
     pub(super) main_port: BusDevicePort<GatedBus>,
@@ -53,3 +54,4 @@ pub(super) async fn setup_ports(
     })
     .await
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

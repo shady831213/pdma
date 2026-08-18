@@ -4,11 +4,11 @@ use proc_macro2::Span;
 
 use syn::spanned::Spanned;
 
-use crate::syntax::{FieldShape, RecordDecl};
+use crate::internal::syntax::{FieldShape, RecordDecl};
 
 mod names;
 
-pub(crate) fn check(decl: &RecordDecl) -> syn::Result<()> {
+pub(in crate::internal) fn check(decl: &RecordDecl) -> syn::Result<()> {
     if decl.alignment.0 == 0 || !decl.alignment.0.is_power_of_two() {
         return Err(syn::Error::new(
             decl.alignment.1,

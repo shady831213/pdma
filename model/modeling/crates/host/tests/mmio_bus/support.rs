@@ -1,10 +1,12 @@
 #[path = "support/recording.rs"]
 mod recording;
 
-use pdma_model_contract::{
-    DeviceEpoch, PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout, RingRecord,
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{
+    PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
 };
-use pdma_model_contract::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use recording::{Access, RecordingTransport};
 
 fn activation(

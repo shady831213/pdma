@@ -141,9 +141,9 @@ async fn capacity_and_overlap() -> support::TestResult<[bool; 2]> {
 
 async fn exercise_active(
     active: &pdma_model_device::AsyncDeviceHandle,
-    queue: pdma_model_contract::EpochQueue,
-    submission: pdma_model_contract::PdmaMemoryRegion,
-) -> support::TestResult<([bool; 6], pdma_model_contract::PdmaMemoryRegion)> {
+    queue: pdma_model_contract::semantic::EpochQueue,
+    submission: pdma_model_contract::bridge::PdmaMemoryRegion,
+) -> support::TestResult<([bool; 6], pdma_model_contract::bridge::PdmaMemoryRegion)> {
     let length = active
         .submit_queue_batch(SubmissionBatch::new(
             queue,

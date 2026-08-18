@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionStatus, ResourceConfig,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::{CommandId, CompletionRingId},
@@ -48,7 +48,7 @@ async fn async_runner_retires_copy_after_handle_submission() {
     // Given: a queue-port async runner, an async handle, one queue, source/destination buffers, and a source write.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -199,7 +199,7 @@ async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_si
     // Given: a direct copy command whose completion ring is not present in the async device.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());

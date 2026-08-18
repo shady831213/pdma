@@ -52,7 +52,7 @@ async fn bootstrap_installs_precede_observation_and_wake() -> TestResult {
     });
     let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
         memory,
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         observer.clone(),
     ));
     let handle = device.handle();
@@ -82,7 +82,7 @@ async fn submission_installs_precede_observation_and_wake() -> TestResult {
     });
     let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
         memory,
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         observer.clone(),
     ));
     let handle = device.handle();

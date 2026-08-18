@@ -1,6 +1,6 @@
 use super::{TestResult, read_u32, read_u64, write_u32, write_u64};
 use pdma_model_contract::abi::mmio::{IrqSourceStatus, MmioResult};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig,
     QueueConfigHandle, SoftwareOwnerId,
     irq::{IrqNotification, IrqRoute, IrqVector},
@@ -12,7 +12,7 @@ async fn readiness_preserves_one_message_until_one_raw_claim() -> TestResult {
     // Given: one masked Message-routed completion source with one pending notification.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -74,12 +74,12 @@ async fn typed_irq_observation_and_notification_match_raw_mmio() -> TestResult {
     // Given: equivalent typed and raw devices with enabled Message-routed completion sources.
     let (typed_device, typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let (raw_device, raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let typed_worker = tokio::spawn(typed_worker.run());
@@ -210,7 +210,7 @@ async fn readiness_wait_returns_shutdown_without_notification() -> TestResult {
     // Given: a pending readiness wait on a device with no notification.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();

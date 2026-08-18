@@ -1,15 +1,17 @@
 #![allow(missing_docs)]
 
+use super::pdma_model_host;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
     IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
     IrqVector, QueueConfig, QueueConfigHandle, desc::CopyRequest,
 };
 use pdma_model_device::SyncDevice;
-use pdma_model_host::{AsyncDevicePort, AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -141,7 +143,7 @@ async fn stale_notification_fails_before_drain_or_ack() {
     // Given: one pending real completion and a same-source notification from a later epoch.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let cpu = SoftwareCpu::new();
@@ -250,7 +252,7 @@ mod registry;
 #[path = "irq_delivery/shutdown.rs"]
 mod shutdown;
 #[path = "irq_delivery/stale_reset.rs"]
-pub mod stale_reset;
+pub(super) mod stale_reset;
 
 #[tokio::test(flavor = "current_thread")]
 async fn stale_notification_terminates_old_delivery_without_ack() -> ModelResult<()> {

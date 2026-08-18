@@ -1,9 +1,10 @@
 use super::support::BlockingPort;
-use pdma_model_contract::{BufferId, CommandId, CopyRequest, QueueId};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest, QueueId};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
+use pdma_model_host::AsyncDriver;
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
 use std::{
     future::{Future, poll_fn},
     pin::Pin,
@@ -56,7 +57,7 @@ async fn setup_copy(
 fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
     AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ))
 }
@@ -169,7 +170,7 @@ async fn completion_repoll(context: InvalidContext) -> ModelResult<()> {
             let completion = driver.poll_completion_on(&mut port).await?;
             let next = driver.submit_copy_on(&mut port, request).await;
             Ok::<_, ModelError>((
-                completion.map(pdma_model_contract::CompletionRecord::command_id),
+                completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
                 next,
             ))
         })
@@ -214,7 +215,7 @@ async fn event_repoll(context: InvalidContext) -> ModelResult<()> {
             let event = driver.poll_event_on(&mut port).await?;
             let next = driver.submit_copy_on(&mut port, request).await;
             Ok::<_, ModelError>((
-                event.map(pdma_model_contract::EventRecord::command_id),
+                event.map(pdma_model_contract::semantic::EventRecord::command_id),
                 next,
             ))
         })

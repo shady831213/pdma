@@ -1,5 +1,5 @@
-use pdma_model_contract::queue::{EventRouting, QueueConfig, SoftwareOwnerId};
-use pdma_model_contract::{DeviceEpoch, EpochIrqSource};
+use pdma_model_contract::semantic::queue::{EventRouting, QueueConfig, SoftwareOwnerId};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochIrqSource};
 use pdma_model_device::{AsyncDevice, ModelError};
 
 #[tokio::test(flavor = "current_thread")]
@@ -7,7 +7,7 @@ async fn stale_irq_capability_commits_nothing() {
     // Given: one real IRQ source and a same-source capability from a later device epoch.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -38,7 +38,9 @@ async fn stale_irq_capability_commits_nothing() {
     let configure = handle
         .configure_irq_route(
             stale,
-            pdma_model_contract::IrqRoute::Message(pdma_model_contract::IrqVector::new(7)),
+            pdma_model_contract::semantic::IrqRoute::Message(
+                pdma_model_contract::semantic::IrqVector::new(7),
+            ),
         )
         .await;
     let enable = handle.enable_irq_source(stale).await;

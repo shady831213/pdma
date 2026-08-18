@@ -3,7 +3,7 @@ use crate::support::{PersistentHandler, ProbeAccess, ProbePort};
 use hardware_interface_runtime::{
     HandlerRegistry, InterruptDispatcher, NoopInterruptObserver, SoftwareCpu,
 };
-use pdma_model_contract::{IrqNotification, IrqVector};
+use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use pdma_model_host::DriverIrqRecord;
 use pdma_model_host::interrupt::{
     PdmaInterruptSource, PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
@@ -166,9 +166,9 @@ pub(super) async fn observer_error() -> bool {
         && matches!(
             events.as_slice(),
             [started, completed]
-                if started.kind() == pdma_model_contract::TraceEventKind::IrqHandlerStarted
+                if started.kind() == pdma_model_contract::semantic::TraceEventKind::IrqHandlerStarted
                     && completed.kind()
-                        == pdma_model_contract::TraceEventKind::IrqHandlerCompleted
+                        == pdma_model_contract::semantic::TraceEventKind::IrqHandlerCompleted
                     && completed.detail() == "Error"
         )
 }

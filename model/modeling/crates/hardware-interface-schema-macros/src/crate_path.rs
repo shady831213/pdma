@@ -2,7 +2,7 @@ use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-pub(crate) fn facade() -> syn::Result<TokenStream> {
+pub(in crate::internal) fn facade() -> syn::Result<TokenStream> {
     match crate_name("hardware-interface-schema") {
         Ok(FoundCrate::Itself) => Ok(quote!(crate)),
         Ok(FoundCrate::Name(name)) => {

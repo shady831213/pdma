@@ -142,11 +142,11 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
         QueueActivation::try_new(
             DeviceEpoch::initial(),
             QueueId::new(0),
-            pdma_model_contract::QueueConfig::new(
+            pdma_model_contract::semantic::QueueConfig::new(
                 1,
                 2,
-                pdma_model_contract::EventRouting::QueueLocal,
-                pdma_model_contract::SoftwareOwnerId::new(7),
+                pdma_model_contract::semantic::EventRouting::QueueLocal,
+                pdma_model_contract::semantic::SoftwareOwnerId::new(7),
             ),
             valid.rings(),
         )

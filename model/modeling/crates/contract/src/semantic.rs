@@ -1,10 +1,26 @@
 //! Model-semantic PDMA vocabulary, independent of wire layout.
 //!
-//! The legacy crate-root modules and exports remain available during the
-//! additive namespace transition.
 
 mod capability;
+#[path = "completion.rs"]
+pub mod completion;
+#[path = "desc.rs"]
+pub mod desc;
+#[path = "dma.rs"]
+pub mod dma;
 mod error;
+#[path = "event.rs"]
+pub mod event;
+#[path = "ids.rs"]
+pub mod ids;
+#[path = "irq.rs"]
+pub mod irq;
+#[path = "queue.rs"]
+pub mod queue;
+#[path = "resources.rs"]
+pub mod resources;
+#[path = "trace.rs"]
+pub mod trace;
 
 pub use capability::{
     DeviceEpoch, DeviceRunState, DeviceStatus, EpochIrqRoute, EpochIrqSource, EpochQueue,
@@ -12,23 +28,21 @@ pub use capability::{
 };
 pub use error::{SemanticError, SemanticResult};
 
-pub use crate::{completion, desc, dma, event, ids, irq, queue, resources, trace};
-
-pub use crate::completion::{CompletionRecord, CompletionStatus};
-pub use crate::desc::{
+pub use completion::{CompletionRecord, CompletionStatus};
+pub use desc::{
     BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,
     CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand,
     VectorAddRequest, VectorBufferRange,
 };
-pub use crate::dma::{DmaRange, DmaRangeStart};
-pub use crate::event::{EventErrorKind, EventRecord, FaultAddress, MemoryFault};
-pub use crate::ids::{BufferId, CommandId, CompletionRingId, DmaObjectId, QueueId};
-pub use crate::irq::{
+pub use dma::{DmaRange, DmaRangeStart};
+pub use event::{EventErrorKind, EventRecord, FaultAddress, MemoryFault};
+pub use ids::{BufferId, CommandId, CompletionRingId, DmaObjectId, QueueId};
+pub use irq::{
     IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
     IrqVector,
 };
-pub use crate::queue::{
+pub use queue::{
     EventRouting, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, SoftwareOwnerId,
 };
-pub use crate::resources::ResourceConfig;
-pub use crate::trace::{TraceEvent, TraceEventKind, TraceOperation};
+pub use resources::ResourceConfig;
+pub use trace::{TraceEvent, TraceEventKind, TraceOperation};

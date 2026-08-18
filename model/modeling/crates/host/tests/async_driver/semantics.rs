@@ -1,14 +1,15 @@
-use pdma_model_contract::{BufferId, CommandId, CopyRequest};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus, SyncDevice};
 use pdma_model_host::ModelError;
-use pdma_model_host::{AsyncDriver, ManualDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, ManualDriver};
 
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a completed command on a depth-one CPU-bound driver.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
 
@@ -40,7 +41,7 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
 
     // Then: the reclaimed credit is visible in the same CPU poll.
     assert_eq!(
-        completion.map(pdma_model_contract::CompletionRecord::command_id),
+        completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
         Some(CommandId::new(0))
     );
     assert_eq!(next, Ok(CommandId::new(1)));
@@ -51,7 +52,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a fault event for a depth-one CPU-bound driver.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -82,7 +83,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
 
     // Then: event handling restores the shared command credit synchronously.
     assert_eq!(
-        event.map(pdma_model_contract::EventRecord::command_id),
+        event.map(pdma_model_contract::semantic::EventRecord::command_id),
         Some(CommandId::new(0))
     );
     assert_eq!(next, Ok(CommandId::new(1)));
@@ -93,7 +94,7 @@ async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
     // Given: two manual driver capabilities for one depth-one queue.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut first = ManualDriver::setup_on(&mut device, 1, 1)

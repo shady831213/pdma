@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     desc::{CopyCommand, CopyRequest, ExternalCommand},
     ids::CommandId,
     irq::{IrqMessageId, IrqNotification, IrqRoute, IrqVector},
@@ -13,7 +13,7 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
     // Given: two successful copies routed to one enabled message-signaled IRQ source.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());

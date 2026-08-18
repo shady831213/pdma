@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::{Path, spanned::Spanned};
 
-use crate::{
+use crate::internal::{
     crate_path,
     expand::register::variant,
     syntax::{MapDecl, RegisterPlacementDecl},

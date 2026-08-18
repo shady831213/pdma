@@ -1,8 +1,9 @@
 use super::support::{DriverBootstrap, HandlerIdentity, Milestone};
-use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector};
-use pdma_model_device::AsyncDeviceHandle;
+use hardware_interface_runtime::{CpuLocal, SoftwareCpu};
+use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, CpuLocal, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
+use std::sync::Arc;
 use tokio::{
     sync::{mpsc, oneshot},
     task::JoinHandle,
@@ -18,8 +19,8 @@ pub struct MainOutcome {
 
 #[derive(Debug)]
 pub struct MainProgram {
-    pub port: AsyncDeviceHandle,
-    pub cpu: SoftwareCpu,
+    pub port: AsyncDevicePort,
+    pub cpu: Arc<SoftwareCpu>,
     pub depth: CpuLocal<usize>,
     pub bootstrap: oneshot::Sender<DriverBootstrap>,
     pub ready: oneshot::Receiver<()>,

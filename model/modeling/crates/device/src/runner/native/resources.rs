@@ -1,5 +1,5 @@
-use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::desc::ExternalCommand;
+use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_contract::semantic::desc::ExternalCommand;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ResourceDemand {

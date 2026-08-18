@@ -1,3 +1,3 @@
-pub(crate) mod map;
-pub(crate) mod record;
-pub(crate) mod register;
+pub(in crate::internal) mod map;
+pub(in crate::internal) mod record;
+pub(in crate::internal) mod register;

@@ -5,10 +5,14 @@ use super::{
     },
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
-use pdma_model_contract::{CopyRequest, IrqRoute, IrqVector};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{
+    AsyncDriver, DriverPort, adapters::AsyncDeviceAccess, compat::AsyncDevicePort,
+};
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 #[tokio::test(flavor = "current_thread")]
@@ -17,7 +21,9 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let cpu = SoftwareCpu::new();
+    let access = AsyncDeviceAccess::new(port.clone());
+    let compat_port = AsyncDevicePort::new(port.clone());
+    let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
     let vector = IrqVector::new(51);
     let (bootstrap_tx, bootstrap_rx) = oneshot::channel();
@@ -26,7 +32,8 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
     let (milestones_tx, _milestones_rx) = mpsc::channel(8);
     let (done_tx, mut done_rx) = mpsc::channel(4);
     let delivery = spawn_shared_delivery(SharedDelivery {
-        port: port.clone(),
+        access,
+        port: compat_port.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -41,7 +48,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
     });
 
     // When: retained main submits one success and one fault through depth-one accounting.
-    let mut main_port = port.clone();
+    let mut main_port = compat_port;
     let main_depth = depth.clone();
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
@@ -106,11 +113,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
     assert_eq!(copied, vec![1, 3, 5, 7]);
     delivery_handle.request_shutdown();
     device.request_shutdown().await;
-    let summary = delivery
-        .task
-        .await
-        .expect("delivery joins cleanly")
-        .expect("bootstrap sender stays alive")?;
+    let summary = delivery.task.await.expect("delivery joins cleanly");
     let device_summary = worker.await.expect("device worker joins cleanly");
     assert_eq!(summary.deliveries(), 2);
     assert_eq!(device_summary.steps, 1);
@@ -124,9 +127,11 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
+    let access = AsyncDeviceAccess::new(port.clone());
+    let compat_port = AsyncDevicePort::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
-    let cpu = SoftwareCpu::new();
+    let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
     let vector = IrqVector::new(52);
     let (bootstrap_tx, bootstrap_rx) = oneshot::channel();
@@ -137,7 +142,8 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
     let (milestones_tx, _milestones_rx) = mpsc::channel(8);
     let (done_tx, mut done_rx) = mpsc::channel(4);
     let delivery = spawn_shared_delivery(SharedDelivery {
-        port: port.clone(),
+        access,
+        port: compat_port.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -152,7 +158,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
     });
 
     // When: main publishes both faults while masked, then exposes both pending messages.
-    let mut main_port = port.clone();
+    let mut main_port = compat_port;
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
             let mut driver = AsyncDriver::setup_on(&mut main_port, 2, 4).await?;
@@ -214,11 +220,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
     assert_redundant_message_lifecycle(&device_trace);
     delivery_handle.request_shutdown();
     device.request_shutdown().await;
-    let summary = delivery
-        .task
-        .await
-        .expect("delivery joins cleanly")
-        .expect("bootstrap sender stays alive")?;
+    let summary = delivery.task.await.expect("delivery joins cleanly");
     let device_summary = worker.await.expect("device worker joins cleanly");
     assert_eq!(summary.deliveries(), 2);
     assert_eq!(device_summary.errors, 2);
@@ -228,7 +230,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
 fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
     AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ))
 }

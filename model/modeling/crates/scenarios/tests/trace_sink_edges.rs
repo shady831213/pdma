@@ -1,11 +1,12 @@
 #![allow(missing_docs)]
 
-use pdma_model_contract::{
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{
     CommandId, ResourceConfig, TraceEvent, TraceEventKind,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, SoftwareCpu};
+use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
@@ -16,10 +17,11 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one software main drains the first completion so retry can publish the second.
     let second_command = cpu
@@ -69,7 +71,7 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
             second_command
         })
         .await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -89,11 +91,12 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     // Given: a command submitted while trace capture is disabled.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
 
     // When: instrumentation stays inside main to preserve submit-disabled doorbell ordering.
@@ -120,8 +123,8 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
                 .submit_command(driver.queue_config_handle(), ExternalCommand::Copy(command))
                 .await
                 .expect("direct submission has ring space");
-            handle.enable_tracing().await;
-            handle.clear_trace().await;
+            raw_handle.enable_tracing().await;
+            raw_handle.clear_trace().await;
             handle
                 .ring_doorbell(driver.queue_config_handle())
                 .await
@@ -129,7 +132,7 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
             driver.queue_id()
         })
         .await;
-    let trace_events = handle.trace_events().await;
+    let trace_events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
@@ -152,14 +155,15 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     // Given: two traced async drivers where one queue faults and the other remains unrelated.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let raw_handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
-    handle.enable_tracing().await;
-    handle.clear_trace().await;
+    raw_handle.enable_tracing().await;
+    raw_handle.clear_trace().await;
 
     // When: one software main polls the unrelated queue before the faulting queue.
     let (wrong_driver_event, owner_event, owner_queue_id, unrelated_queue_id) = cpu
@@ -200,8 +204,8 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
             )
         })
         .await;
-    let trace_events = handle.trace_events().await;
-    let trace_json = handle.trace_json().await;
+    let trace_events = raw_handle.trace_events().await;
+    let trace_json = raw_handle.trace_json().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 

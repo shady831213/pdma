@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use pdma_model_contract::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::{PdmaControlError, PdmaResetError};
 
 use super::support::TestResult;
@@ -22,7 +22,7 @@ pub fn run() -> TestResult<(bool, usize)> {
         .reset(WholeDeviceReset::new(DeviceEpoch::new(u64::MAX)));
     let overflow = fixture::require_error(overflow)?;
     let expected = PdmaResetError::Control(PdmaControlError::Abi(
-        pdma_model_contract::AbiControlError::DeviceEpochOverflow { current: u64::MAX },
+        pdma_model_contract::abi::AbiControlError::DeviceEpochOverflow { current: u64::MAX },
     ));
     let epoch_overflow = overflow == expected;
     assert!(epoch_overflow);
@@ -32,12 +32,12 @@ pub fn run() -> TestResult<(bool, usize)> {
     assert_eq!(
         control,
         Some(&PdmaControlError::Abi(
-            pdma_model_contract::AbiControlError::DeviceEpochOverflow { current: u64::MAX }
+            pdma_model_contract::abi::AbiControlError::DeviceEpochOverflow { current: u64::MAX }
         ))
     );
     assert_eq!(
         control.and_then(|error| error.source().and_then(|source| source.downcast_ref())),
-        Some(&pdma_model_contract::AbiControlError::DeviceEpochOverflow { current: u64::MAX })
+        Some(&pdma_model_contract::abi::AbiControlError::DeviceEpochOverflow { current: u64::MAX })
     );
     let after = fixture.device.state_snapshot_for_test()?;
     let mutations = fixture.assert_unchanged(&before, &after);

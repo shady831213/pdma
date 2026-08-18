@@ -1,4 +1,4 @@
-use pdma_model_contract::IrqNotification;
+use pdma_model_contract::semantic::IrqNotification;
 use pdma_model_host::{DriverPort, ManualDriver};
 
 async fn manual_driver_has_no_irq_service<P: DriverPort>(

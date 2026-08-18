@@ -1,5 +1,5 @@
 use core::fmt;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CompletionRingId, DeviceEpoch, EventErrorKind, IrqSource, QueueId, SemanticError,
 };
 

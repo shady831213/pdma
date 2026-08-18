@@ -2,7 +2,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CommandId, CompletionRingId, CopyCommand, CopyRequest, DeviceEpoch, EpochIrqSource,
     EventRouting, ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueConfigHandle,
     QueueDirectoryEntry, QueueId, ResourceConfig, SoftwareOwnerId, WholeDeviceReset,
@@ -40,8 +40,8 @@ fn model_fate_rows_have_literal_leaf_sources() -> TestResult {
     )?;
     assert_leaf(
         &mut device,
-        |core| core.read_buffer(pdma_model_contract::BufferId::new(99), 0, 1),
-        ModelError::UnknownBuffer(pdma_model_contract::BufferId::new(99)),
+        |core| core.read_buffer(pdma_model_contract::semantic::BufferId::new(99), 0, 1),
+        ModelError::UnknownBuffer(pdma_model_contract::semantic::BufferId::new(99)),
     )?;
     assert_leaf(
         &mut device,

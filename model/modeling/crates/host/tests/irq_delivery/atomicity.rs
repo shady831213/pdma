@@ -1,8 +1,10 @@
-use crate::{NotificationPort, message};
-use pdma_model_contract::{CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector};
+use super::{NotificationPort, message};
+use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::AsyncDriver;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, IrqDelivery, IrqHandler, IrqHandlerFuture, SoftwareCpu};
 use tokio::sync::{mpsc, oneshot};
 
 struct BlockingHandler {
@@ -51,7 +53,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
     // Given: two queued IRQ messages, one CPU token, and a handler blocked on its first call.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
@@ -144,7 +146,7 @@ async fn pending_handler_blocks_main_and_another_vector() -> ModelResult<()> {
     let cpu = SoftwareCpu::new();
     let vector_a = IrqVector::new(31);
     let vector_b = IrqVector::new(32);
-    let source = IrqSource::Completion(pdma_model_contract::CompletionRingId::new(0));
+    let source = IrqSource::Completion(pdma_model_contract::semantic::CompletionRingId::new(0));
     let (port, notifications) = NotificationPort::channel(2);
     notifications
         .send(message(0, vector_a, source))
@@ -201,3 +203,4 @@ async fn pending_handler_blocks_main_and_another_vector() -> ModelResult<()> {
     assert_eq!(summary.deliveries(), 2);
     Ok(())
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

@@ -2,15 +2,14 @@
 
 use pdma_model_device::ModelError;
 
-use pdma_model_contract::{
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
+use pdma_model_contract::semantic::{
     CommandId, CopyCommand, CopyRequest, DeviceEpoch, EpochIrqSource, EventRouting,
     ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueId, ResourceConfig,
     SoftwareOwnerId,
 };
-use pdma_model_contract::{
-    EpochQueue, QueueActivation, QueueControl, QueueRingRegions, RingLayout, RingRecord,
-    WholeDeviceReset,
-};
+use pdma_model_contract::semantic::{EpochQueue, WholeDeviceReset};
 use pdma_model_device::{AsyncStallReason, AsyncStepStatus, SyncDevice};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -24,7 +23,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
     // Given: one completed copy, retained trace history, and both queue frontends at epoch zero.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     device.enable_tracing();
@@ -70,7 +69,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
     let (async_device, _worker) =
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::ResourceConfig::default(),
+            pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
     let handle = async_device.handle();
@@ -133,7 +132,7 @@ fn reset_discards_stalled_and_pending_retirement_without_late_publication() -> T
 
     let mut retiring = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let retiring_queue = retiring.create_queue(config())?;
@@ -177,7 +176,7 @@ fn old_notification_and_epoch_overflow_mutate_nothing() -> TestResult {
     // Given: one host-owned message notification and a fully exhausted epoch value.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device.create_queue(config())?;
@@ -224,9 +223,9 @@ fn old_notification_and_epoch_overflow_mutate_nothing() -> TestResult {
 
 fn submit_copy(
     device: &mut SyncDevice,
-    queue: pdma_model_contract::QueueConfigHandle,
-    source: pdma_model_contract::BufferId,
-    destination: pdma_model_contract::BufferId,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
+    source: pdma_model_contract::semantic::BufferId,
+    destination: pdma_model_contract::semantic::BufferId,
     command: usize,
 ) -> TestResult {
     device.submit_command(

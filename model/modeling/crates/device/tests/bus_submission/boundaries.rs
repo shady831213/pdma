@@ -1,8 +1,8 @@
 use super::common::{TestResult, activate, allocate, encode};
-use pdma_model_contract::ResourceConfig;
-use pdma_model_contract::{
-    AbiCommand, AbiCopy, AbiId, CopyIovas, QueueControl, QueueCursorUpdate, RingCursor,
-};
+use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId};
+use pdma_model_contract::abi::{CopyIovas, RingCursor};
+use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {
@@ -12,7 +12,8 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = runner.handle();
-    let (queue, submission) = activate(&handle, pdma_model_contract::QueueId::new(0)).await?;
+    let (queue, submission) =
+        activate(&handle, pdma_model_contract::semantic::QueueId::new(0)).await?;
     let source = allocate(&handle, 4).await?;
     let destination = allocate(&handle, 4).await?;
     handle.write_memory(source.base(), &[4, 3, 2, 1]).await?;
@@ -72,10 +73,10 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
     assert_eq!(
         handle.pending_dma_result().await,
         Some(PendingDmaResult::Completion(
-            pdma_model_contract::CompletionRecord::new(
+            pdma_model_contract::semantic::CompletionRecord::new(
                 queue.queue_id(),
-                pdma_model_contract::CommandId::new(50),
-                pdma_model_contract::CompletionStatus::Success,
+                pdma_model_contract::semantic::CommandId::new(50),
+                pdma_model_contract::semantic::CompletionStatus::Success,
             )
         ))
     );

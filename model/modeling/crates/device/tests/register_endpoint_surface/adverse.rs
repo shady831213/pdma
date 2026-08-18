@@ -1,6 +1,6 @@
 use super::support::{RecordingObserver, TestResult, contend_core, create_message, submit_copy};
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, DeviceCore};
 use std::future::Future;
 use std::sync::Arc;

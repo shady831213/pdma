@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     FrozenHandlerRegistry, InterruptDispatcher, InterruptDispatcherTask, InterruptEnvelope,
     InterruptHandler, InterruptSource, RegisterObservation, SharedInterruptObserver, SoftwareCpu,
 };
-use pdma_model_contract::{IrqNotification, IrqVector};
+use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use std::{error::Error, fmt, future::Future, sync::Arc};
 
 /// Affine proof that a PDMA interrupt source reported readiness.

@@ -4,11 +4,10 @@ use hardware_interface_runtime::{
     RegisterObservation,
 };
 use pdma_model_contract::abi::mmio::{QueueResponseBank, decode_read, decode_write};
-use pdma_model_contract::{
-    CompletionRingId, DeviceEpoch, DmaAddress, EpochIrqSource, IrqMessage, IrqMessageId,
-    IrqNotification, IrqSource, IrqVector, QueueActivation, QueueConfig, QueueId, QueueRingRegions,
-    RingLayout, RingRecord, SoftwareOwnerId,
-};
+use pdma_model_contract::semantic::{CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqSource, IrqVector, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::abi::{RingRecord};
+use pdma_model_contract::abi::{DmaAddress};
+use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
 use pdma_model_host::register::{
     PdmaBatchError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
     PdmaRegisterAccessError,
@@ -30,7 +29,7 @@ pub fn activation(regions: &[PdmaMappedRegion]) -> TestResult<QueueActivation> {
         QueueConfig::new(
             2,
             2,
-            pdma_model_contract::EventRouting::QueueLocal,
+            pdma_model_contract::semantic::EventRouting::QueueLocal,
             SoftwareOwnerId::new(0),
         ),
         rings,
@@ -93,8 +92,8 @@ pub(super) fn response(
     .map_err(|_| PdmaBatchError::InvalidShape)
 }
 
-fn project(region: PdmaMappedRegion) -> TestResult<pdma_model_contract::PdmaMemoryRegion> {
-    Ok(pdma_model_contract::PdmaMemoryRegion::try_new(
+fn project(region: PdmaMappedRegion) -> TestResult<pdma_model_contract::bridge::PdmaMemoryRegion> {
+    Ok(pdma_model_contract::bridge::PdmaMemoryRegion::try_new(
         region.object(),
         DmaAddress::new(region.base().raw()),
         region.length(),

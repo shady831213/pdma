@@ -1,7 +1,8 @@
 use super::support::{TestResult, response, result, write_u32};
-use pdma_model_contract::{
-    CommandId, DeviceEpoch, EpochQueue, ExternalCommand, QueueActivation, QueueControl, QueueId,
-    QueueRingRegions, ResourceConfig, RingLayout, RingRecord, WholeDeviceReset,
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
+use pdma_model_contract::semantic::{
+    CommandId, DeviceEpoch, EpochQueue, ExternalCommand, QueueId, ResourceConfig, WholeDeviceReset,
     desc::{CopyCommand, CopyRequest},
     ids::BufferId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
@@ -40,7 +41,7 @@ async fn assert_current_epoch_is_reported() -> TestResult {
     // Given: a device advanced through the existing typed whole-device reset.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -60,7 +61,7 @@ async fn assert_current_epoch_is_reported() -> TestResult {
 async fn assert_unstarted_state(
     config: ResourceConfig,
     command: Option<
-        fn(BufferId, BufferId, pdma_model_contract::QueueConfigHandle) -> ExternalCommand,
+        fn(BufferId, BufferId, pdma_model_contract::semantic::QueueConfigHandle) -> ExternalCommand,
     >,
     expected: u64,
 ) -> TestResult {
@@ -112,7 +113,7 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
     // Given: committed DMA, one active queue, and a stable IRQ snapshot.
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::ResourceConfig::default(),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
@@ -159,7 +160,11 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
 
 async fn assert_worker_pressure(
     config: ResourceConfig,
-    build: fn(BufferId, BufferId, pdma_model_contract::QueueConfigHandle) -> ExternalCommand,
+    build: fn(
+        BufferId,
+        BufferId,
+        pdma_model_contract::semantic::QueueConfigHandle,
+    ) -> ExternalCommand,
 ) -> TestResult {
     // Given: a worker that reaches a real publication-pressure stall.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
@@ -189,7 +194,11 @@ async fn assert_worker_pressure(
 
 async fn fixture(
     handle: &AsyncDeviceHandle,
-) -> TestResult<(pdma_model_contract::QueueConfigHandle, BufferId, BufferId)> {
+) -> TestResult<(
+    pdma_model_contract::semantic::QueueConfigHandle,
+    BufferId,
+    BufferId,
+)> {
     let queue = handle
         .create_queue(QueueConfig::new(
             2,
@@ -207,7 +216,7 @@ async fn fixture(
 const fn valid_command(
     source: BufferId,
     destination: BufferId,
-    queue: pdma_model_contract::QueueConfigHandle,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
 ) -> ExternalCommand {
     ExternalCommand::Copy(CopyCommand::new(
         CommandId::new(7),
@@ -220,7 +229,7 @@ const fn valid_command(
 const fn faulting_command(
     _source: BufferId,
     destination: BufferId,
-    queue: pdma_model_contract::QueueConfigHandle,
+    queue: pdma_model_contract::semantic::QueueConfigHandle,
 ) -> ExternalCommand {
     ExternalCommand::Copy(CopyCommand::new(
         CommandId::new(9),

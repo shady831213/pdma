@@ -4,10 +4,10 @@ use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
-use pdma_model_contract::desc::{CopyCommand, StridedCopyCommand};
-use pdma_model_contract::dma::DmaRangeStart;
-use pdma_model_contract::ids::QueueId;
-use pdma_model_contract::trace::TraceOperation;
+use pdma_model_contract::semantic::desc::{CopyCommand, StridedCopyCommand};
+use pdma_model_contract::semantic::dma::DmaRangeStart;
+use pdma_model_contract::semantic::ids::QueueId;
+use pdma_model_contract::semantic::trace::TraceOperation;
 
 #[derive(Debug, Clone, Copy)]
 struct NativeCopyChunk {

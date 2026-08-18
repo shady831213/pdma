@@ -28,7 +28,7 @@ pub use bus::{
 };
 pub use core::{DeviceCore, DeviceStateSnapshot, ResetPartitionSnapshot};
 pub use manual::SyncDevice;
-use pdma_model_contract::trace::TraceEvent;
+use pdma_model_contract::semantic::trace::TraceEvent;
 pub use register_endpoint::{MmioRegisterEndpoint, MmioRegisterError};
 use state::{RunnerShared, publish, summary, wake};
 use std::sync::Arc;

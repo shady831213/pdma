@@ -1,5 +1,5 @@
-pub(crate) mod field;
-pub(crate) mod map;
-pub(crate) mod record;
-pub(crate) mod register;
-pub(crate) mod register_field;
+pub(in crate::internal) mod field;
+pub(in crate::internal) mod map;
+pub(in crate::internal) mod record;
+pub(in crate::internal) mod register;
+pub(in crate::internal) mod register_field;

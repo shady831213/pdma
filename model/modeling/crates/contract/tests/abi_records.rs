@@ -1,14 +1,17 @@
 //! ABI-v1 completion and event record boundary scenarios.
 
-use pdma_model_contract::bridge::BridgeError;
-use pdma_model_contract::{
-    AbiBounds, AbiDecodeError, AbiEncodeError, AbiEvent, AbiEventAccess, AbiEventKind,
-    AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
-    AbiFaultSelectionError, AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit,
-    AbiReservedField, AbiScalarField, AbiStrideOffset, DmaAddress, decode_completion, decode_event,
-    encode_completion, encode_event, encode_semantic_event, select_canonical_fault,
+use pdma_model_contract::abi::{
+    AbiBounds, AbiDecodeError, AbiEncodeError, AbiEventAccess, AbiEventKind, AbiEventStage,
+    AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder, AbiFaultSelectionError,
+    AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit, AbiReservedField,
+    AbiScalarField, AbiStrideOffset, DmaAddress, select_canonical_fault,
 };
-use pdma_model_contract::{
+use pdma_model_contract::bridge::BridgeError;
+use pdma_model_contract::bridge::{
+    AbiEvent, decode_completion, decode_event, encode_completion, encode_event,
+    encode_semantic_event,
+};
+use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord, QueueId,
 };
 

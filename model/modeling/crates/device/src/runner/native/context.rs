@@ -1,7 +1,7 @@
 use super::{QueuePortDeviceModel, io};
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::QueueDirectoryEntry;
+use pdma_model_contract::semantic::QueueDirectoryEntry;
 
 #[derive(Debug)]
 pub(super) struct QueueContext {

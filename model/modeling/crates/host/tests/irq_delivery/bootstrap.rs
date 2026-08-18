@@ -1,8 +1,9 @@
-use crate::{NotificationPort, message};
-use pdma_model_contract::{CompletionRingId, IrqSource, IrqVector, QueueId};
+use super::{NotificationPort, message};
+use crate::register::legacy_test_support::{IrqDelivery, irq_handler};
+use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::semantic::{CompletionRingId, IrqSource, IrqVector, QueueId};
 use pdma_model_host::ModelError;
 use pdma_model_host::ModelResult;
-use pdma_model_host::{IrqDelivery, SoftwareCpu, irq_handler};
 use tokio::sync::mpsc;
 
 #[tokio::test(flavor = "current_thread")]
@@ -70,3 +71,4 @@ async fn empty_batch_registration_does_not_publish_delivery() {
     ));
     assert_eq!(runner.run().await, Err(ModelError::IrqDeliveryUnavailable));
 }
+use crate::register::legacy_integration_tests::pdma_model_host;

@@ -1,10 +1,17 @@
 //! Transitional host IRQ API forwarded to the canonical runtime dispatcher.
+#![allow(
+    clippy::redundant_pub_crate,
+    dead_code,
+    unreachable_pub,
+    unused_imports,
+    reason = "retired IRQ behavior is compiled only by the crate-private legacy regression harness"
+)]
 
-use crate::{AsyncDevicePort, ModelError, ModelResult, SoftwareCpu};
+use crate::{DriverPort, ModelError, ModelResult};
 use hardware_interface_runtime::{
-    HandlerRegistry, InterruptDispatcher, InterruptShutdown, InterruptShutdownReceiver,
+    HandlerRegistry, InterruptDispatcher, InterruptShutdown, InterruptShutdownReceiver, SoftwareCpu,
 };
-use pdma_model_contract::{IrqNotification, IrqVector, TraceEvent};
+use pdma_model_contract::semantic::{IrqNotification, IrqVector, TraceEvent};
 use std::{
     fmt,
     future::Future,
@@ -17,21 +24,21 @@ mod bootstrap;
 mod compat;
 mod trace;
 
-pub use bootstrap::{IrqDeliveryBootstrap, IrqDeliveryRunner};
+pub(crate) use bootstrap::{IrqDeliveryBootstrap, IrqDeliveryRunner};
 use compat::{CompatHandler, CompatNotification, CompatObserver, CompatSource};
 use trace::HostIrqTrace;
 
 /// Boxed asynchronous PDMA handler turn.
-pub type IrqHandlerFuture<'a> = Pin<Box<dyn Future<Output = ModelResult<()>> + Send + 'a>>;
+pub(crate) type IrqHandlerFuture<'a> = Pin<Box<dyn Future<Output = ModelResult<()>> + Send + 'a>>;
 
 /// Transitional handler signature retained through Task 26.
-pub trait IrqHandler: Send {
+pub(crate) trait IrqHandler: Send {
     /// Handles one notification in the runtime-owned CPU turn.
     fn handle(&mut self, notification: IrqNotification) -> IrqHandlerFuture<'_>;
 }
 
 /// Transitional stateful handler signature retained through Task 26.
-pub trait StatefulIrqHandler: Send {
+pub(crate) trait StatefulIrqHandler: Send {
     /// Handles one notification while borrowing persistent state.
     fn handle(
         &mut self,
@@ -43,7 +50,7 @@ struct FunctionIrqHandler<F>(F);
 struct StatefulIrqHandlerAdapter<H>(H);
 
 /// Adapts an async function into the transitional handler signature.
-pub const fn irq_handler<F, Fut>(handler: F) -> impl IrqHandler
+pub(crate) const fn irq_handler<F, Fut>(handler: F) -> impl IrqHandler
 where
     F: FnMut(IrqNotification) -> Fut + Send,
     Fut: Future<Output = ModelResult<()>> + Send + 'static,
@@ -52,7 +59,7 @@ where
 }
 
 /// Adapts persistent async state into the transitional handler signature.
-pub const fn stateful_irq_handler<H>(handler: H) -> impl IrqHandler
+pub(crate) const fn stateful_irq_handler<H>(handler: H) -> impl IrqHandler
 where
     H: StatefulIrqHandler,
 {
@@ -80,10 +87,10 @@ type RuntimeRegistry<'handler> =
 
 /// Type-state marker for a delivery adapter without a registered handler.
 #[derive(Debug)]
-pub struct NoHandler(PhantomData<()>);
+pub(crate) struct NoHandler(PhantomData<()>);
 
 /// Transitional registry forwarding duplicate and freeze semantics to the runtime.
-pub struct IrqHandlerRegistry<'handler> {
+pub(crate) struct IrqHandlerRegistry<'handler> {
     inner: RuntimeRegistry<'handler>,
 }
 
@@ -101,7 +108,7 @@ impl<'handler> IrqHandlerRegistry<'handler> {
     }
 
     /// Adds one vector handler without replacing the runtime registration.
-    pub fn register<H>(&mut self, vector: IrqVector, handler: H) -> ModelResult<()>
+    pub(crate) fn register<H>(&mut self, vector: IrqVector, handler: H) -> ModelResult<()>
     where
         H: IrqHandler + 'handler,
     {
@@ -122,7 +129,7 @@ impl<'handler> IrqHandlerRegistry<'handler> {
 }
 
 /// Type-state marker carrying the runtime's frozen registry.
-pub struct HasHandlers<'handler> {
+pub(crate) struct HasHandlers<'handler> {
     registry: RuntimeRegistry<'handler>,
 }
 
@@ -134,7 +141,7 @@ impl fmt::Debug for HasHandlers<'_> {
 
 /// Transitional builder whose execution is the canonical runtime dispatcher.
 #[derive(Debug)]
-pub struct IrqDelivery<P, H> {
+pub(crate) struct IrqDelivery<P, H> {
     port: P,
     cpu: SoftwareCpu,
     handler: H,
@@ -145,20 +152,20 @@ pub struct IrqDelivery<P, H> {
 
 /// Signal-only compatibility handle for the canonical runtime dispatcher.
 #[derive(Debug, Clone)]
-pub struct IrqDeliveryHandle {
+pub(crate) struct IrqDeliveryHandle {
     shutdown: InterruptShutdown,
     trace: Arc<Mutex<HostIrqTrace>>,
 }
 
 /// Final successful-delivery count projected from the runtime summary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IrqDeliverySummary {
+pub(crate) struct IrqDeliverySummary {
     deliveries: usize,
 }
 
 impl<P> IrqDelivery<P, NoHandler> {
     /// Creates an unregistered compatibility builder.
-    pub fn new(port: P, cpu: SoftwareCpu) -> Self {
+    pub(crate) fn new(port: P, cpu: SoftwareCpu) -> Self {
         let (shutdown, receiver) = InterruptDispatcher::shutdown_channel();
         Self {
             port,
@@ -171,7 +178,7 @@ impl<P> IrqDelivery<P, NoHandler> {
     }
 
     /// Registers the first handler in the runtime registry.
-    pub fn register_handler<'handler, H>(
+    pub(crate) fn register_handler<'handler, H>(
         self,
         vector: IrqVector,
         handler: H,
@@ -207,9 +214,9 @@ impl<P> IrqDelivery<P, NoHandler> {
     }
 }
 
-impl<'handler, P: AsyncDevicePort + 'static> IrqDelivery<P, HasHandlers<'handler>> {
+impl<'handler, P: DriverPort + 'static> IrqDelivery<P, HasHandlers<'handler>> {
     /// Adds a handler before runtime execution.
-    pub fn register_handler<H>(&mut self, vector: IrqVector, handler: H) -> ModelResult<()>
+    pub(crate) fn register_handler<H>(&mut self, vector: IrqVector, handler: H) -> ModelResult<()>
     where
         H: IrqHandler + 'handler,
     {
@@ -220,7 +227,7 @@ impl<'handler, P: AsyncDevicePort + 'static> IrqDelivery<P, HasHandlers<'handler
     }
 
     /// Runs the single canonical runtime dispatcher in this caller-owned future.
-    pub async fn run(self) -> ModelResult<IrqDeliverySummary> {
+    pub(crate) async fn run(self) -> ModelResult<IrqDeliverySummary> {
         let observer = Arc::new(CompatObserver::new(Arc::clone(&self.trace)));
         let registry = self
             .handler
@@ -229,7 +236,7 @@ impl<'handler, P: AsyncDevicePort + 'static> IrqDelivery<P, HasHandlers<'handler
             .map_err(|_| ModelError::EmptyIrqHandlerRegistry)?;
         let _shutdown = self.shutdown;
         let result = InterruptDispatcher::run(
-            Arc::new(self.cpu.runtime()),
+            Arc::new(self.cpu.clone()),
             registry,
             CompatSource::new(self.port),
             observer,
@@ -242,12 +249,12 @@ impl<'handler, P: AsyncDevicePort + 'static> IrqDelivery<P, HasHandlers<'handler
 
 impl IrqDeliveryHandle {
     /// Requests cooperative runtime shutdown.
-    pub fn request_shutdown(&self) {
+    pub(crate) fn request_shutdown(&self) {
         self.shutdown.request_shutdown();
     }
 
     /// Returns runtime-observed lifecycle events.
-    pub async fn trace_events(&self) -> Vec<TraceEvent> {
+    pub(crate) async fn trace_events(&self) -> Vec<TraceEvent> {
         let events = self
             .trace
             .lock()
@@ -260,7 +267,7 @@ impl IrqDeliveryHandle {
 
 impl IrqDeliverySummary {
     /// Number of successful runtime handler turns.
-    pub const fn deliveries(self) -> usize {
+    pub(crate) const fn deliveries(self) -> usize {
         self.deliveries
     }
 }

@@ -1,12 +1,10 @@
 //! Standalone downstream layer-boundary behavior.
 
-use pdma_model_contract::{
-    abi::{
+use pdma_model_contract::abi::{{
         AbiCommand, AbiCopy, AbiId, CopyIovas, DmaAddress, RingCursor, RingLayout, RingRecord,
-    },
-    bridge::{decode_buffer_id, encode_buffer_id},
-    semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId},
-};
+    }};
+use pdma_model_contract::bridge::{{decode_buffer_id, encode_buffer_id}};
+use pdma_model_contract::semantic::{{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId}};
 
 #[test]
 fn independent_values_compose_only_through_bridge() {

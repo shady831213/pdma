@@ -1,7 +1,7 @@
 use super::TraceSink;
-use pdma_model_contract::ids::QueueId;
-use pdma_model_contract::irq::IrqSource;
-use pdma_model_contract::trace::TraceEventKind;
+use pdma_model_contract::semantic::ids::QueueId;
+use pdma_model_contract::semantic::irq::IrqSource;
+use pdma_model_contract::semantic::trace::TraceEventKind;
 
 impl TraceSink {
     pub(crate) fn irq_source_latched(&mut self, source: IrqSource) {

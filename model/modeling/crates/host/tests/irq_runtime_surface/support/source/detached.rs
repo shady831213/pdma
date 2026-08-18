@@ -1,7 +1,7 @@
 use super::{HandlerError, setup};
 use crate::support::{ProbeAccess, ProbePort};
 use hardware_interface_runtime::{HandlerRegistry, NoopInterruptObserver, SoftwareCpu};
-use pdma_model_contract::{IrqNotification, IrqVector};
+use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use pdma_model_host::DriverIrqRecord;
 use pdma_model_host::interrupt::{
     PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,

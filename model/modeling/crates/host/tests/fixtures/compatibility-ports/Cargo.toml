@@ -1,0 +1,17 @@
+[package]
+name = "compatibility-ports"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+hardware-interface-runtime = { path = "../../../../hardware-interface-runtime" }
+pdma-model-contract = { path = "../../../../contract" }
+pdma-model-device = { path = "../../../../device" }
+pdma-model-host = { path = "../../.." }
+tokio = { version = "1.49", features = ["macros", "rt"] }
+
+[workspace]
+
+[lints.rust]
+unsafe_code = "forbid"

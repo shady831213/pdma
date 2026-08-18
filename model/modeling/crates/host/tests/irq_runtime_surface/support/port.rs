@@ -1,6 +1,6 @@
 //! Driver-port probe for composite drain and ACK state.
 
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
     EpochIrqSource, EventErrorKind, EventRecord, ExternalCommand, IrqRoute, IrqSnapshot,
     QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
@@ -183,7 +183,9 @@ impl DriverPort for ProbePort {
     async fn wait_irq(&self) -> Option<IrqSnapshot> {
         None
     }
-    async fn wait_irq_notification(&mut self) -> Option<pdma_model_contract::IrqNotification> {
+    async fn wait_irq_notification(
+        &mut self,
+    ) -> Option<pdma_model_contract::semantic::IrqNotification> {
         None
     }
 }

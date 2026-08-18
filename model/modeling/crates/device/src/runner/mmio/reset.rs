@@ -1,8 +1,9 @@
 use super::RegisterBanks;
 use crate::runner::bus::BusControlError;
 use crate::runner::state::DeviceCore;
+use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::{AbiControlError, DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) enum ResetOutcome {

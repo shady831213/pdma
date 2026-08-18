@@ -5,59 +5,59 @@ use syn::{
 
 use super::{key, keyword, u64_lit, usize_lit};
 
-pub(crate) struct RegistersDecl {
-    pub(crate) visibility: Visibility,
-    pub(crate) name: Ident,
-    pub(crate) external_id: Option<Path>,
-    pub(crate) registers: Vec<RegisterDecl>,
+pub(in crate::internal) struct RegistersDecl {
+    pub(in crate::internal) visibility: Visibility,
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) external_id: Option<Path>,
+    pub(in crate::internal) registers: Vec<RegisterDecl>,
 }
 
-pub(crate) enum RegisterInput {
+pub(in crate::internal) enum RegisterInput {
     Legacy(RegistersDecl),
     Definition(RegisterDefinitionDecl),
 }
 
-pub(crate) struct RegisterDefinitionDecl {
-    pub(crate) visibility: Visibility,
-    pub(crate) name: Ident,
-    pub(crate) width: (usize, proc_macro2::Span),
-    pub(crate) endian: Ident,
-    pub(crate) access: AccessValue,
-    pub(crate) reset: ResetValue,
-    pub(crate) mask: (u64, proc_macro2::Span),
-    pub(crate) fields: Vec<RegisterFieldDecl>,
+pub(in crate::internal) struct RegisterDefinitionDecl {
+    pub(in crate::internal) visibility: Visibility,
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) width: (usize, proc_macro2::Span),
+    pub(in crate::internal) endian: Ident,
+    pub(in crate::internal) access: AccessValue,
+    pub(in crate::internal) reset: ResetValue,
+    pub(in crate::internal) mask: (u64, proc_macro2::Span),
+    pub(in crate::internal) fields: Vec<RegisterFieldDecl>,
 }
 
-pub(crate) struct RegisterFieldDecl {
-    pub(crate) name: Ident,
-    pub(crate) definition: Path,
-    pub(crate) id: (u16, proc_macro2::Span),
-    pub(crate) lsb: (usize, proc_macro2::Span),
+pub(in crate::internal) struct RegisterFieldDecl {
+    pub(in crate::internal) name: Ident,
+    pub(in crate::internal) definition: Path,
+    pub(in crate::internal) id: (u16, proc_macro2::Span),
+    pub(in crate::internal) lsb: (usize, proc_macro2::Span),
 }
 
 #[derive(Clone)]
-pub(crate) struct RegisterDecl {
-    pub(crate) symbol: Ident,
-    pub(crate) id: (u16, proc_macro2::Span),
-    pub(crate) name: LitStr,
-    pub(crate) offset: (usize, proc_macro2::Span),
-    pub(crate) width: (usize, proc_macro2::Span),
-    pub(crate) access: AccessValue,
-    pub(crate) reset: ResetValue,
-    pub(crate) mask: (u64, proc_macro2::Span),
+pub(in crate::internal) struct RegisterDecl {
+    pub(in crate::internal) symbol: Ident,
+    pub(in crate::internal) id: (u16, proc_macro2::Span),
+    pub(in crate::internal) name: LitStr,
+    pub(in crate::internal) offset: (usize, proc_macro2::Span),
+    pub(in crate::internal) width: (usize, proc_macro2::Span),
+    pub(in crate::internal) access: AccessValue,
+    pub(in crate::internal) reset: ResetValue,
+    pub(in crate::internal) mask: (u64, proc_macro2::Span),
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum AccessValue {
+pub(in crate::internal) enum AccessValue {
     ReadOnly,
     ReadWrite,
     WriteOnly,
 }
 
 #[derive(Clone)]
-pub(crate) struct ResetValue {
-    pub(crate) kind: Ident,
-    pub(crate) value: (u64, proc_macro2::Span),
+pub(in crate::internal) struct ResetValue {
+    pub(in crate::internal) kind: Ident,
+    pub(in crate::internal) value: (u64, proc_macro2::Span),
 }
 
 impl Parse for RegistersDecl {

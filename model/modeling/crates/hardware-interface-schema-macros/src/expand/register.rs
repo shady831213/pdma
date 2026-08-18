@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::parse2;
 
-use crate::{
+use crate::internal::{
     crate_path,
     syntax::{AccessValue, RegisterDecl, RegisterInput, RegistersDecl},
     validate,
@@ -10,7 +10,7 @@ use crate::{
 
 mod definition;
 
-pub(crate) fn run(input: TokenStream) -> TokenStream {
+pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
     parse2::<RegisterInput>(input)
         .and_then(|decl| match decl {
             RegisterInput::Legacy(decl) => expand(&decl),
@@ -79,7 +79,7 @@ fn expand(decl: &RegistersDecl) -> syn::Result<TokenStream> {
     })
 }
 
-pub(crate) fn spec(
+pub(in crate::internal) fn spec(
     register: &RegisterDecl,
     id: &TokenStream,
     id_name: &TokenStream,
@@ -100,7 +100,7 @@ pub(crate) fn spec(
     quote!(#facade::register::RegisterSpec::<#id_name>::new(#id, #name, #offset, #width).with_numeric_id(#numeric_id).with_access(#facade::register::Access::#access).with_reset(#facade::register::ResetKind::#reset_kind, #reset_value).with_writable_mask(#mask))
 }
 
-pub(crate) fn variant(name: &str) -> syn::Ident {
+pub(in crate::internal) fn variant(name: &str) -> syn::Ident {
     format_ident!(
         "{}",
         name.split('_')

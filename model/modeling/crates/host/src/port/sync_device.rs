@@ -1,12 +1,12 @@
-use super::AsyncDevicePort;
+use super::DriverPort;
 use crate::ModelResult;
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::SyncDevice;
 
-impl AsyncDevicePort for SyncDevice {
+impl DriverPort for SyncDevice {
     async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
         Self::create_queue(self, config).map_err(Into::into)
     }

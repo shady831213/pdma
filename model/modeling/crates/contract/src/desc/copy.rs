@@ -1,6 +1,6 @@
 //! Linear and strided copy descriptor schema.
 
-use crate::{
+use crate::semantic::{
     dma::DmaRangeStart,
     ids::{BufferId, CommandId, CompletionRingId, QueueId},
 };

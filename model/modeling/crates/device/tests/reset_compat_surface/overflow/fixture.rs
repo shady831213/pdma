@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use hardware_interface_runtime::SharedMemory;
-use pdma_model_contract::{DeviceEpoch, ResourceConfig};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{DeviceCore, DeviceStateSnapshot};
 

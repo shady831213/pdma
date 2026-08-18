@@ -5,7 +5,7 @@ use super::retirement::PendingRetirement;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::AsyncStallReason;
 use crate::runner::bus::control::BusControlState;
-use pdma_model_contract::QueueId;
+use pdma_model_contract::semantic::QueueId;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) enum RunStateProbe {

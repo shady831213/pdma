@@ -1,6 +1,6 @@
 //! IRQ contract vocabulary tests.
 
-use pdma_model_contract::{
+use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId,
     IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector, QueueId,
 };

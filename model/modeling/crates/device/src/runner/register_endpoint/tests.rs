@@ -1,6 +1,6 @@
 use super::*;
 use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
-use pdma_model_contract::ResourceConfig;
+use pdma_model_contract::semantic::ResourceConfig;
 use std::future::Future;
 use std::pin::pin;
 use std::sync::Arc;

@@ -3,13 +3,13 @@ use super::retirement::validate_success_completion_route;
 use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
 use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
-use pdma_model_contract::DmaRangeStart;
-use pdma_model_contract::desc::BroadcastCopyCommand;
-use pdma_model_contract::trace::TraceOperation;
+use pdma_model_contract::semantic::DmaRangeStart;
+use pdma_model_contract::semantic::desc::BroadcastCopyCommand;
+use pdma_model_contract::semantic::trace::TraceOperation;
 
 pub(super) fn retire_broadcast_copy(
     execution: NativeExecution<'_>,
-    queue_id: pdma_model_contract::QueueId,
+    queue_id: pdma_model_contract::semantic::QueueId,
     command: &BroadcastCopyCommand,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution {

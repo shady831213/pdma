@@ -2,8 +2,9 @@ use super::{ActiveQueue, BusControlError, QueueStatus};
 use crate::dma_space::PdmaMemoryStage;
 use crate::runner::native::exact_api::PreparedExactQueue;
 use crate::runner::state::DeviceCore;
-use pdma_model_contract::QueueId;
-use pdma_model_contract::{PdmaMemoryRegion, QueueActivation, RingLayout, RingRecord};
+use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::bridge::{PdmaMemoryRegion, QueueActivation, RingLayout};
+use pdma_model_contract::semantic::QueueId;
 
 struct ValidatedMappedActivation(QueueActivation);
 

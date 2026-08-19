@@ -1,22 +1,19 @@
-use super::{AsyncPdmaBus, BusDevicePort, BusDmaErrorAdapter};
-use crate::ModelError;
-use crate::ModelResult;
-use crate::register::bus::{BusDmaStage, BusQueueStatus};
-use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::bridge::{
-    PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
-};
-use pdma_model_contract::semantic::DeviceEpoch;
+use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
+use crate::register::{BusQueueStatus, PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest};
+use crate::{ModelError, ModelResult};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::abi::{DmaAddress, RingRecord};
+use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
+    BufferId, CompletionRingId, DeviceEpoch, QueueConfig, QueueConfigHandle, QueueDirectoryEntry,
+    QueueId,
 };
 
 #[derive(Debug, Clone)]
 pub(super) struct PortState {
     pub(super) epoch: DeviceEpoch,
     pub(super) queue: Option<QueueState>,
-    pub(super) regions: Vec<PdmaMemoryRegion>,
+    pub(super) regions: Vec<PdmaMappedRegion>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -52,7 +49,7 @@ impl PortState {
         Ok(queue)
     }
 
-    pub(super) fn region(&self, id: BufferId) -> ModelResult<PdmaMemoryRegion> {
+    pub(super) fn region(&self, id: BufferId) -> ModelResult<PdmaMappedRegion> {
         self.regions
             .iter()
             .copied()
@@ -61,15 +58,10 @@ impl PortState {
     }
 }
 
-pub(super) async fn create_queue<B>(
-    port: &BusDevicePort<B>,
+pub(super) async fn create_queue<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     config: QueueConfig,
-) -> ModelResult<QueueConfigHandle>
-where
-    B: AsyncPdmaBus,
-    B::DmaError: BusDmaErrorAdapter,
-    B::ControlError: super::BusControlErrorAdapter,
-{
+) -> PdmaPortResult<QueueConfigHandle> {
     let epoch = port.with_state(|state| {
         if state.queue.is_some() {
             Err(ModelError::DmaSubmissionState)
@@ -78,42 +70,26 @@ where
         }
     })??;
     let lengths = ring_lengths(config)?;
-    let stage = port
-        .poll_dma(port.bus.stage_memory_regions(&lengths), None)
+    let alignment = alignment()?;
+    let requests = lengths.map(|length| PdmaRegionRequest::new(length, alignment));
+    let proposal = port
+        .poll_provision(port.access.prepare_regions(&requests))
         .await?;
-    let [submission, completion, event] = stage.proposed_regions() else {
-        return Err(ModelError::DmaSubmissionState);
+    let [submission, completion, event] = proposal.regions() else {
+        return Err(ModelError::DmaSubmissionState.into());
     };
     let proposed = [*submission, *completion, *event];
-    let [submission, completion, event] = proposed;
     let rings = QueueRingRegions::new(
-        RingLayout::try_new(
-            submission,
-            lengths[0] / u64::from(RingRecord::Submission.record_size()),
-            RingRecord::Submission,
-        )
-        .map_err(|_| ModelError::DmaSubmissionState)?,
-        RingLayout::try_new(
-            completion,
-            lengths[1] / u64::from(RingRecord::Completion.record_size()),
-            RingRecord::Completion,
-        )
-        .map_err(|_| ModelError::DmaSubmissionState)?,
-        RingLayout::try_new(
-            event,
-            lengths[2] / u64::from(RingRecord::Event.record_size()),
-            RingRecord::Event,
-        )
-        .map_err(|_| ModelError::DmaSubmissionState)?,
+        layout(*submission, lengths[0], RingRecord::Submission)?,
+        layout(*completion, lengths[1], RingRecord::Completion)?,
+        layout(*event, lengths[2], RingRecord::Event)?,
     );
     let activation = QueueActivation::try_new(epoch, QueueId::new(0), config, rings)
         .map_err(|_| ModelError::DmaSubmissionState)?;
-    let status = port
-        .poll_control(
-            port.bus.bootstrap_queue(stage, activation),
-            activation.queue(),
-        )
+    let bytes = port
+        .poll_batch(port.access.bootstrap_queue(proposal, activation))
         .await?;
+    let status = super::control::decode_status(&bytes, rings)?;
     let handle = QueueConfigHandle::new(
         activation.queue().epoch(),
         QueueDirectoryEntry::new(
@@ -122,7 +98,7 @@ where
             config,
         ),
     );
-    port.with_state(|state| {
+    Ok(port.with_state(|state| {
         if state.queue.is_some() {
             return Err(ModelError::DmaSubmissionState);
         }
@@ -133,15 +109,17 @@ where
             status,
         });
         Ok(handle)
-    })?
+    })??)
 }
 
-pub(super) async fn allocate_buffer<B>(port: &BusDevicePort<B>, len: usize) -> ModelResult<BufferId>
-where
-    B: AsyncPdmaBus,
-{
+pub(super) async fn allocate_buffer<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
+    len: usize,
+) -> PdmaPortResult<BufferId> {
+    let length = u64::try_from(len).map_err(|_| ModelError::DmaAllocationExhausted)?;
+    let request = PdmaRegionRequest::new(length, alignment()?);
     let region = port
-        .poll_model(port.bus.allocate_memory_region(len))
+        .poll_provision(port.access.allocate_region(request))
         .await?;
     port.with_state(|state| {
         state.regions.push(region);
@@ -149,44 +127,39 @@ where
     })
 }
 
-pub(super) async fn write_buffer<B>(
-    port: &BusDevicePort<B>,
+pub(super) fn write_buffer<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     id: BufferId,
     offset: usize,
     data: &[u8],
-) -> ModelResult<()>
-where
-    B: AsyncPdmaBus,
-    B::DmaError: BusDmaErrorAdapter,
-{
+) -> PdmaPortResult<()> {
     let address = checked_range(port, id, offset, data.len())?;
-    port.poll_dma(port.bus.write_dma(address, data), Some(id))
-        .await
+    port.validate_owner()?;
+    MemoryAccess::write(&port.access, address, MemoryAlignment::ONE, data)
+        .map_err(crate::register::PdmaRegisterPortError::from)
 }
 
-pub(super) async fn read_buffer<B>(
-    port: &BusDevicePort<B>,
+pub(super) fn read_buffer<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     id: BufferId,
     offset: usize,
     len: usize,
-) -> ModelResult<Vec<u8>>
-where
-    B: AsyncPdmaBus,
-    B::DmaError: BusDmaErrorAdapter,
-{
+) -> PdmaPortResult<Vec<u8>> {
     let address = checked_range(port, id, offset, len)?;
-    let length = u64::try_from(len).map_err(|_| ModelError::RangeOverflow)?;
-    port.poll_dma(port.bus.read_dma(address, length), Some(id))
-        .await
+    port.validate_owner()?;
+    let mut bytes = vec![0; len];
+    MemoryAccess::read(&port.access, address, MemoryAlignment::ONE, &mut bytes)
+        .map_err(crate::register::PdmaRegisterPortError::from)?;
+    Ok(bytes)
 }
 
-fn checked_range<B>(
-    port: &BusDevicePort<B>,
+pub(super) fn checked_range<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     id: BufferId,
     offset: usize,
     len: usize,
-) -> ModelResult<DmaAddress> {
-    port.with_state(|state| {
+) -> PdmaPortResult<MemoryAddress> {
+    Ok(port.with_state(|state| {
         let region = state.region(id)?;
         let end = offset.checked_add(len).ok_or(ModelError::RangeOverflow)?;
         let region_len = usize::try_from(region.length()).map_err(|_| ModelError::RangeOverflow)?;
@@ -199,10 +172,18 @@ fn checked_range<B>(
         }
         let offset = u64::try_from(offset).map_err(|_| ModelError::RangeOverflow)?;
         region
-            .abi_base()
+            .base()
             .checked_add(offset)
-            .map_err(|_| ModelError::RangeOverflow)
-    })?
+            .ok_or(ModelError::RangeOverflow)
+    })??)
+}
+
+pub(super) const fn dma_address(address: MemoryAddress) -> DmaAddress {
+    DmaAddress::new(address.raw())
+}
+
+fn alignment() -> ModelResult<MemoryAlignment> {
+    MemoryAlignment::try_new(64).map_err(|_| ModelError::DmaAllocationExhausted)
 }
 
 fn ring_lengths(config: QueueConfig) -> ModelResult<[u64; 3]> {
@@ -217,4 +198,15 @@ fn ring_length(depth: usize, record: RingRecord) -> ModelResult<u64> {
     let depth = u64::try_from(depth).map_err(|_| ModelError::DmaAllocationExhausted)?;
     RingLayout::checked_extent(depth, record.record_size())
         .map_err(|_| ModelError::DmaAllocationExhausted)
+}
+
+fn layout(region: PdmaMappedRegion, length: u64, record: RingRecord) -> ModelResult<RingLayout> {
+    let projected = pdma_model_contract::bridge::PdmaMemoryRegion::try_new(
+        region.object(),
+        dma_address(region.base()),
+        region.length(),
+    )
+    .map_err(|_| ModelError::DmaSubmissionState)?;
+    RingLayout::try_new(projected, length / u64::from(record.record_size()), record)
+        .map_err(|_| ModelError::DmaSubmissionState)
 }

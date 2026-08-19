@@ -4,6 +4,7 @@ use pdma_model_contract::semantic::{BufferId, IrqNotification};
 use pdma_model_host::register::{
     PdmaBatchError, PdmaClaimError, PdmaMappedRegion, PdmaPreparedProposal,
     PdmaProvisioningCause, PdmaProvisioningError, PdmaRegionRequest,
+    PdmaRegisterAccessError,
 };
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +18,7 @@ pub struct FakeAccess {
     pub(super) pending_register: Arc<AtomicBool>,
     pub(super) next_batch_error: Arc<Mutex<Option<PdmaBatchError>>>,
     pub(super) next_claim_error: Arc<Mutex<Option<PdmaClaimError>>>,
+    pub(super) next_register_error: Arc<Mutex<Option<PdmaRegisterAccessError>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,6 +71,7 @@ impl FakeAccess {
             pending_register: Arc::new(AtomicBool::new(false)),
             next_batch_error: Arc::new(Mutex::new(None)),
             next_claim_error: Arc::new(Mutex::new(None)),
+            next_register_error: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -89,6 +92,9 @@ impl FakeAccess {
     }
     pub(super) fn fail_next_claim(&self, error: PdmaClaimError) {
         *lock(&self.next_claim_error) = Some(error);
+    }
+    pub(super) fn fail_next_register(&self, error: PdmaRegisterAccessError) {
+        *lock(&self.next_register_error) = Some(error);
     }
 
     pub(super) fn prepare(

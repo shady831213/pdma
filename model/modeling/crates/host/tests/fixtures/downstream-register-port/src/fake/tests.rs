@@ -1,5 +1,5 @@
 use super::*;
-use pdma_model_host::register::{PdmaPreparedProposal, PdmaRegisterPort};
+use pdma_model_host::register::{PdmaPreparedProposal, PdmaRegisterPort, PdmaRegisterPortError};
 use pdma_model_host::{DriverPort, ModelError};
 use hardware_interface_runtime::{SoftwareCpu};
 use std::future::Future;
@@ -147,4 +147,102 @@ fn poll_pending<F: Future>(future: &mut Pin<Box<F>>) -> bool {
     let waker = Waker::noop();
     let mut context = Context::from_waker(waker);
     matches!(future.as_mut().poll(&mut context), Poll::Pending)
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn canonical_port_preserves_provisioning_source_before_legacy_projection() -> TestResult<()> {
+    let fake = FakeAccess::new(message());
+    let owner = SoftwareCpu::new();
+    owner
+        .run_main(async {
+            let mut port = PdmaRegisterPort::new(fake.clone())?;
+            fake.fail_next_allocation();
+            let error = port
+                .try_allocate_buffer(1)
+                .await
+                .expect_err("typed allocation must preserve its cause");
+            assert!(matches!(
+                error,
+                PdmaRegisterPortError::Provisioning(PdmaProvisioningError::Provisioning(
+                    PdmaProvisioningCause::StorageExhausted
+                ))
+            ));
+            assert!(
+                Error::source(&error)
+                    .and_then(|source| source.downcast_ref::<PdmaProvisioningError>())
+                    .is_some()
+            );
+            Ok::<_, Box<dyn Error + Send + Sync>>(())
+        })
+        .await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn canonical_port_preserves_batch_register_and_claim_sources() -> TestResult<()> {
+    let owner = SoftwareCpu::new();
+    owner
+        .run_main(async {
+            let batch_fake = FakeAccess::new(message());
+            let mut batch_port = PdmaRegisterPort::new(batch_fake.clone())?;
+            let provisioning = PdmaProvisioningError::Provisioning(
+                PdmaProvisioningCause::StorageExhausted,
+            );
+            batch_fake.fail_next_batch(PdmaBatchError::Provisioning(provisioning));
+            let batch = batch_port
+                .try_create_queue(queue_config())
+                .await
+                .expect_err("typed queue creation must preserve batch failure");
+            assert!(matches!(batch, PdmaRegisterPortError::Batch(_)));
+            assert_eq!(
+                Error::source(&batch).and_then(|source| source.downcast_ref()),
+                Some(&PdmaBatchError::Provisioning(provisioning))
+            );
+
+            let fake = FakeAccess::new(message());
+            let mut port = PdmaRegisterPort::new(fake.clone())?;
+            let handle = port.try_create_queue(queue_config()).await?;
+            let access = PdmaRegisterAccessError::Access(
+                pdma_model_contract::abi::mmio::MmioAccessError::ReservedOffset { offset: 0 },
+            );
+            fake.fail_next_register(access);
+            let register = port
+                .try_queue_status(pdma_model_contract::semantic::EpochQueue::new(
+                    handle.epoch(),
+                    handle.queue_id(),
+                ))
+                .await
+                .expect_err("typed status must preserve register failure");
+            assert!(matches!(register, PdmaRegisterPortError::Register(_)));
+            assert_eq!(
+                Error::source(&register).and_then(|source| source.downcast_ref()),
+                Some(&access)
+            );
+
+            let claim = PdmaClaimError::Access(
+                pdma_model_contract::abi::mmio::MmioAccessError::ReservedOffset { offset: 0 },
+            );
+            fake.fail_next_claim(claim);
+            let claimed = port
+                .try_wait_irq_notification()
+                .await
+                .expect_err("typed wait must preserve claim failure");
+            assert!(matches!(claimed, PdmaRegisterPortError::Claim(_)));
+            assert_eq!(
+                Error::source(&claimed).and_then(|source| source.downcast_ref()),
+                Some(&claim)
+            );
+            Ok::<_, Box<dyn Error + Send + Sync>>(())
+        })
+        .await?;
+    Ok(())
+}
+
+fn queue_config() -> pdma_model_contract::semantic::QueueConfig {
+    pdma_model_contract::semantic::QueueConfig::new(
+        2,
+        2,
+        pdma_model_contract::semantic::EventRouting::QueueLocal,
+        pdma_model_contract::semantic::SoftwareOwnerId::new(0),
+    )
 }

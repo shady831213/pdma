@@ -80,12 +80,17 @@ fn find_rlib(deps: &Path, prefix: &str) -> Result<PathBuf, String> {
         .map_err(|error| error.to_string())?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .find(|path| {
+        .filter(|path| {
             path.extension()
                 .is_some_and(|extension| extension == "rlib")
                 && path
                     .file_name()
                     .is_some_and(|name| name.to_string_lossy().starts_with(prefix))
+        })
+        .max_by_key(|path| {
+            path.metadata()
+                .and_then(|metadata| metadata.modified())
+                .ok()
         })
         .ok_or_else(|| format!("missing {prefix}*.rlib in {}", deps.display()))
 }

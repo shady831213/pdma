@@ -76,6 +76,9 @@ impl MemoryAccess for FakeAccess {
 impl RegisterAccess for FakeAccess {
     type Error = PdmaRegisterAccessError;
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
+        if let Some(error) = lock(&self.next_register_error).take() {
+            return Err(error);
+        }
         validate_read(offset, response.len())?;
         let state = lock(&self.state);
         if let Some(bytes) = state.registers.get(&offset) {
@@ -86,6 +89,9 @@ impl RegisterAccess for FakeAccess {
         Ok(())
     }
     async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
+        if let Some(error) = lock(&self.next_register_error).take() {
+            return Err(error);
+        }
         if self.pending_register.swap(false, Ordering::SeqCst) {
             tokio::task::yield_now().await;
         }

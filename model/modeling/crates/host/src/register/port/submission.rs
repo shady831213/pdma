@@ -1,43 +1,20 @@
-use super::{AsyncPdmaBus, BusDevicePort, BusDmaErrorAdapter};
-use crate::ModelError;
-use crate::ModelResult;
-use crate::register::bus::{BusDmaStage, BusDmaWrite, BusSubmission, QueueControlWrite};
+use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
+use crate::register::{PdmaDmaWrite, PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch};
+use crate::{ModelError, ModelResult};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd, DmaAddress,
-};
-use pdma_model_contract::abi::{
+    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
     BroadcastDestinationEntry, BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, RingRecord,
     StridedCopyShape, VectorIovas,
 };
-use pdma_model_contract::bridge::QueueCursorUpdate;
 use pdma_model_contract::semantic::{BufferId, ExternalCommand, QueueConfigHandle};
 
-pub(super) async fn submit<B>(
-    port: &BusDevicePort<B>,
+pub(super) async fn submit<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     handle: QueueConfigHandle,
     command: ExternalCommand,
-) -> ModelResult<()>
-where
-    B: AsyncPdmaBus,
-    B::DmaError: BusDmaErrorAdapter,
-    B::ControlError: super::BusControlErrorAdapter,
-{
-    let queue = port.with_state(|state| state.queue(handle))??;
-    let observed = port
-        .poll_control(
-            port.bus.read_queue_status(queue.status.queue()),
-            queue.status.queue(),
-        )
-        .await?;
-    port.with_state(|state| {
-        let current = state.queue(handle)?;
-        state.queue = Some(super::state::QueueState {
-            status: observed,
-            ..current
-        });
-        Ok::<(), ModelError>(())
-    })??;
-    let queue = port.with_state(|state| state.queue(handle))??;
+) -> PdmaPortResult<()> {
+    let queue = refresh(port, handle).await?;
     let (abi, indirect) = encode_command(port, command).await?;
     let mut descriptor = vec![0_u8; usize::from(RingRecord::Submission.record_size())];
     abi.encode(&mut descriptor)
@@ -56,89 +33,71 @@ where
         .abi_base()
         .checked_add(slot_offset)
         .map_err(|_| ModelError::DmaSubmissionState)?;
-    let status = port
-        .poll_control(
-            port.bus.accept_submission(BusSubmission::new(
-                queue.status.queue(),
-                producer,
-                BusDmaWrite::new(address, descriptor),
-                indirect,
-            )),
-            queue.status.queue(),
-        )
-        .await?;
-    port.with_state(|state| {
+    let descriptor = PdmaDmaWrite::new(MemoryAddress::new(address.raw()), descriptor);
+    let request = PdmaSubmissionBatch::new(queue.status.queue(), producer, descriptor, indirect);
+    let bytes = port.poll_batch(port.access.submit_queue(request)).await?;
+    let status = super::control::decode_status(&bytes, queue.rings)?;
+    Ok(port.with_state(|state| -> ModelResult<()> {
         let active = state.queue(handle)?;
         if active.status.submission().producer() != producer {
             return Err(ModelError::DmaSubmissionState);
         }
         state.queue = Some(super::state::QueueState { status, ..active });
-        Ok::<(), ModelError>(())
-    })?
+        Ok(())
+    })??)
 }
 
-pub(super) async fn doorbell<B>(
-    port: &BusDevicePort<B>,
+pub(super) async fn doorbell<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     handle: QueueConfigHandle,
-) -> ModelResult<()>
-where
-    B: AsyncPdmaBus,
-    B::ControlError: super::BusControlErrorAdapter,
-{
-    let queue = port.with_state(|state| state.queue(handle))??;
-    let observed = port
-        .poll_control(
-            port.bus.read_queue_status(queue.status.queue()),
-            queue.status.queue(),
-        )
-        .await?;
-    port.with_state(|state| {
-        let current = state.queue(handle)?;
-        state.queue = Some(super::state::QueueState {
-            status: observed,
-            ..current
-        });
-        Ok::<(), ModelError>(())
-    })??;
-    let queue = port.with_state(|state| state.queue(handle))??;
-    let status = port
-        .poll_control(
-            port.bus
-                .write_queue_control(QueueControlWrite::CaptureSubmissionProducer(
-                    QueueCursorUpdate::new(
-                        queue.status.queue(),
-                        queue.status.submission().producer(),
-                    ),
-                )),
-            queue.status.queue(),
-        )
-        .await?;
-    port.with_state(|state| {
+) -> PdmaPortResult<()> {
+    let queue = refresh(port, handle).await?;
+    let current = queue.status.captured_submission_producer();
+    let proposed = queue.status.submission().producer();
+    let status = super::control::update_cursor(
+        port,
+        queue.status.queue(),
+        queue.rings,
+        pdma_model_contract::abi::mmio::QueueCommand::CaptureSqProducer,
+        current,
+        proposed,
+    )
+    .await?;
+    Ok(port.with_state(|state| -> ModelResult<()> {
         let active = state.queue(handle)?;
         state.queue = Some(super::state::QueueState { status, ..active });
         Ok(())
+    })??)
+}
+
+pub(super) async fn refresh<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
+    handle: QueueConfigHandle,
+) -> PdmaPortResult<super::state::QueueState> {
+    let queue = port.with_state(|state| state.queue(handle))??;
+    let status = super::control::read_status(port, queue.status.queue(), queue.rings).await?;
+    port.with_state(|state| {
+        let current = state.queue(handle)?;
+        let refreshed = super::state::QueueState { status, ..current };
+        state.queue = Some(refreshed);
+        Ok(refreshed)
     })?
 }
 
-async fn encode_command<B>(
-    port: &BusDevicePort<B>,
+async fn encode_command<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     command: ExternalCommand,
-) -> ModelResult<(AbiCommand, Option<(B::Stage, BusDmaWrite)>)>
-where
-    B: AsyncPdmaBus,
-    B::DmaError: BusDmaErrorAdapter,
-{
+) -> PdmaPortResult<(AbiCommand, Option<(A::Proposal, PdmaDmaWrite)>)> {
     match command {
         ExternalCommand::Copy(command) => {
             let request = command.request();
-            let iovas = CopyIovas::new(
-                operand(port, request.src(), request.src_start().offset())?,
-                operand(port, request.dst(), request.dst_start().offset())?,
-            );
             Ok((
                 AbiCommand::Copy(AbiCopy::new(
                     abi_id(command.command_id().raw())?,
-                    iovas,
+                    CopyIovas::new(
+                        operand(port, request.src(), request.src_start().offset())?,
+                        operand(port, request.dst(), request.dst_start().offset())?,
+                    ),
                     scalar(request.len())?,
                 )),
                 None,
@@ -182,24 +141,24 @@ where
     }
 }
 
-async fn broadcast<B>(
-    port: &BusDevicePort<B>,
+async fn broadcast<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
     command: pdma_model_contract::semantic::BroadcastCopyCommand,
-) -> ModelResult<(AbiCommand, Option<(B::Stage, BusDmaWrite)>)>
-where
-    B: AsyncPdmaBus,
-    B::DmaError: BusDmaErrorAdapter,
-{
+) -> PdmaPortResult<(AbiCommand, Option<(A::Proposal, PdmaDmaWrite)>)> {
     let request = command.request();
     let count = scalar(request.destinations().len())?;
     let extent = u64::from(count)
         .checked_mul(8)
         .ok_or(ModelError::DmaAllocationExhausted)?;
-    let stage = port
-        .poll_dma(port.bus.stage_memory_regions(&[extent]), None)
+    let alignment = MemoryAlignment::try_new(64).map_err(|_| ModelError::DmaAllocationExhausted)?;
+    let proposal = port
+        .poll_provision(
+            port.access
+                .prepare_regions(&[PdmaRegionRequest::new(extent, alignment)]),
+        )
         .await?;
-    let [region] = stage.proposed_regions() else {
-        return Err(ModelError::DmaSubmissionState);
+    let [region] = proposal.regions() else {
+        return Err(ModelError::DmaSubmissionState.into());
     };
     let region = *region;
     let mut bytes =
@@ -213,33 +172,22 @@ where
         abi_id(command.command_id().raw())?,
         BroadcastIovas::new(
             operand(port, request.src(), request.src_offset())?,
-            region.abi_base(),
+            super::state::dma_address(region.base()),
         ),
         BroadcastShape::new(scalar(request.len())?, count),
     )
     .map_err(|_| ModelError::DmaSubmissionState)?;
-    Ok((
-        AbiCommand::BroadcastCopy(abi),
-        Some((stage, BusDmaWrite::new(region.abi_base(), bytes))),
-    ))
+    let write = PdmaDmaWrite::new(region.base(), bytes);
+    Ok((AbiCommand::BroadcastCopy(abi), Some((proposal, write))))
 }
 
-fn operand<B>(port: &BusDevicePort<B>, id: BufferId, offset: usize) -> ModelResult<DmaAddress> {
-    port.with_state(|state| {
-        let region = state.region(id)?;
-        let offset = u64::try_from(offset).map_err(|_| ModelError::RangeOverflow)?;
-        if offset > region.length() {
-            return Err(ModelError::OutOfBounds {
-                buffer: id,
-                len: usize::try_from(region.length()).map_err(|_| ModelError::RangeOverflow)?,
-                end: usize::try_from(offset).map_err(|_| ModelError::RangeOverflow)?,
-            });
-        }
-        region
-            .abi_base()
-            .checked_add(offset)
-            .map_err(|_| ModelError::RangeOverflow)
-    })?
+fn operand<A: CanonicalAccess>(
+    port: &PdmaRegisterPort<A>,
+    id: BufferId,
+    offset: usize,
+) -> PdmaPortResult<pdma_model_contract::abi::DmaAddress> {
+    let address = super::state::checked_range(port, id, offset, 0)?;
+    Ok(super::state::dma_address(address))
 }
 
 fn scalar(value: usize) -> ModelResult<u32> {

@@ -10,11 +10,17 @@ mod tests;
 const HEADER: &str = "owner\tpath\tline\tsymbol\treplacement\tretention\ttask26_removal";
 
 pub fn render() -> Option<String> {
-    Some(format!("{HEADER}\n"))
+    let rows = source::live_rows()?;
+    let mut manifest = format!("{HEADER}\n");
+    for row in rows {
+        manifest.push_str(&row);
+        manifest.push('\n');
+    }
+    Some(manifest)
 }
 
 pub fn is_complete(manifest: &str) -> bool {
-    manifest == format!("{HEADER}\n")
+    render().is_some_and(|rendered| manifest == rendered)
 }
 
 pub fn new_alias_count() -> usize {

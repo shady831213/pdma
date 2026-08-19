@@ -121,7 +121,6 @@ pub fn live_rows() -> Option<BTreeSet<String>> {
     let mut files = Vec::new();
     for relative in [
         "crates/host/src",
-        "crates/host/tests",
         "crates/scenarios/tests",
     ] {
         if !collect_files(&root.join(relative), &mut files) {

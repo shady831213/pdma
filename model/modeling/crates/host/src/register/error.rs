@@ -1,5 +1,6 @@
+use hardware_interface_runtime::CpuContextError;
 use hardware_interface_runtime::{MemoryAccessError, ObservationGateError};
-use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResultDetails};
+use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResultDetails, ResponseCodecError};
 use std::{error::Error, fmt};
 
 /// Underlying host-owned provisioning cause.
@@ -132,6 +133,89 @@ impl Error for PdmaClaimError {
             Self::Access(source) => Some(source),
             Self::Observation(source) => Some(source),
         }
+    }
+}
+
+/// Typed failure returned by the canonical split-capability register port.
+#[derive(Debug)]
+pub enum PdmaRegisterPortError {
+    /// The port was polled outside its owning software CPU.
+    Cpu(CpuContextError),
+    /// Host semantic validation rejected the request.
+    Semantic(crate::core::PortError),
+    /// Host-owned memory provisioning failed.
+    Provisioning(PdmaProvisioningError),
+    /// One generated register access failed.
+    Register(PdmaRegisterAccessError),
+    /// A closed queue batch failed.
+    Batch(PdmaBatchError),
+    /// Interrupt readiness or claim failed.
+    Claim(PdmaClaimError),
+    /// Checked DMA memory access failed.
+    Memory(MemoryAccessError),
+    /// A generated response view rejected bytes or a value.
+    Response(ResponseCodecError),
+}
+
+impl fmt::Display for PdmaRegisterPortError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "canonical PDMA register port failed: {self:?}")
+    }
+}
+
+impl Error for PdmaRegisterPortError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Cpu(source) => Some(source),
+            Self::Semantic(source) => Some(source),
+            Self::Provisioning(source) => Some(source),
+            Self::Register(source) => Some(source),
+            Self::Batch(source) => Some(source),
+            Self::Claim(source) => Some(source),
+            Self::Memory(source) => Some(source),
+            Self::Response(source) => Some(source),
+        }
+    }
+}
+
+impl From<CpuContextError> for PdmaRegisterPortError {
+    fn from(source: CpuContextError) -> Self {
+        Self::Cpu(source)
+    }
+}
+impl From<crate::ModelError> for PdmaRegisterPortError {
+    fn from(source: crate::ModelError) -> Self {
+        Self::Semantic(source.into())
+    }
+}
+impl From<PdmaProvisioningError> for PdmaRegisterPortError {
+    fn from(source: PdmaProvisioningError) -> Self {
+        Self::Provisioning(source)
+    }
+}
+impl From<PdmaRegisterAccessError> for PdmaRegisterPortError {
+    fn from(source: PdmaRegisterAccessError) -> Self {
+        Self::Register(source)
+    }
+}
+impl From<PdmaBatchError> for PdmaRegisterPortError {
+    fn from(source: PdmaBatchError) -> Self {
+        Self::Batch(source)
+    }
+}
+impl From<PdmaClaimError> for PdmaRegisterPortError {
+    fn from(source: PdmaClaimError) -> Self {
+        Self::Claim(source)
+    }
+}
+impl From<MemoryAccessError> for PdmaRegisterPortError {
+    fn from(source: MemoryAccessError) -> Self {
+        Self::Memory(source)
+    }
+}
+impl From<ResponseCodecError> for PdmaRegisterPortError {
+    fn from(source: ResponseCodecError) -> Self {
+        Self::Response(source)
     }
 }
 

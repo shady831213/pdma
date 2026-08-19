@@ -1,6 +1,19 @@
 use super::{HEADER, is_complete, render};
 
 #[test]
+fn rendered_manifest_is_derived_from_live_source_rows() {
+    let rows = super::source::live_rows().expect("workspace source must be readable");
+    let mut expected = String::from(HEADER);
+    expected.push('\n');
+    for row in &rows {
+        expected.push_str(row);
+        expected.push('\n');
+    }
+
+    assert_eq!(render().as_deref(), Some(expected.as_str()));
+}
+
+#[test]
 fn manifest_rejects_missing_row() {
     let manifest = render().expect("workspace source must be readable");
     assert!(is_complete(&manifest));

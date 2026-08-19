@@ -20,7 +20,14 @@ impl core::fmt::Display for ResponseCodecError {
     }
 }
 
-impl std::error::Error for ResponseCodecError {}
+impl std::error::Error for ResponseCodecError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Map(source) => Some(source),
+            Self::Register(source) => Some(source),
+        }
+    }
+}
 
 impl From<hardware_interface_schema::SchemaCodecError> for ResponseCodecError {
     fn from(error: hardware_interface_schema::SchemaCodecError) -> Self {

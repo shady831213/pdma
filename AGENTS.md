@@ -20,7 +20,7 @@ pdma/
 ├── model/docs/v0_7_model_plan.md  # historical v0.7 single-handler IRQ snapshot
 ├── model/docs/v0_8_model_plan.md  # historical vector-dispatch/CPU-local IRQ plan
 ├── model/docs/v0_9_model_plan.md  # completed v0.9 data ABI and exact 4 KiB MMIO model
-└── model/modeling/                # Rust 2024 model workspace
+└── model/modeling/                # Rust 2024 schema/runtime/PDMA model workspace
 ```
 
 Ignore generated `model/modeling/target/` content.
@@ -32,8 +32,9 @@ Ignore generated `model/modeling/target/` content.
 | Review completed v0.9 | `model/docs/v0_9_model_plan.md` | Historical ABI plus exact MMIO registry/endpoint/adapter/batches, reset epochs, and header policy. |
 | Shared host/device contract | `model/modeling/crates/contract/` | IDs, ABI-v1 metadata/codecs, DMA vocabulary, descriptors, records, controls, and IRQ vocabulary. |
 | Reusable schema facility | `model/modeling/crates/hardware-interface-schema/` | Runtime-neutral record/register schema metadata, codecs, exact-start lookup, format-neutral exporters, and default-off generic C11 fragments. |
-| Device behavior | `model/modeling/crates/device/` | Queue-port actor, checked `DmaSpace`, typed bus control/reset, shared execution/retirement, trace, and PDMA-local IRQ. |
-| Host-side model | `model/modeling/crates/host/` | Driver, `AsyncPdmaBus`, `BusDevicePort`, host IRQ delivery, and SW execution contexts. |
+| Reusable runtime | `model/modeling/crates/hardware-interface-runtime/` | Shared memory, raw register access/observation, software CPU-local state, generic interrupt dispatch, and trace storage. |
+| Device behavior | `model/modeling/crates/device/` | Queue-port actor, device-owned PDMA mappings over runtime memory, typed reset/control, shared execution/retirement, trace, and PDMA-local IRQ. |
+| Host-side model | `model/modeling/crates/host/` | `PdmaRegisterPort<AsyncDeviceAccess>`, driver accounting, PDMA interrupt adapters, and explicit async/sync compatibility ports. |
 | System scenarios | `model/modeling/crates/scenarios/` | Host/device/IRQ stories; `message_irq_linear_copy` is the canonical ABI E2E. |
 | Validate workspace | `model/modeling/Cargo.toml` | Workspace lint/profile config. |
 
@@ -72,6 +73,13 @@ PDMA hardware/runtime boundary: PDMA still owns rings, register storage and MMIO
 DMA, reset epochs, IRQ state machines, callbacks, actors, and executor behavior. Its
 generic `export-c-header` backend is default-off and explicitly enabled only by the PDMA
 contract for the existing generated data header; the crate remains `publish = false`.
+
+The workspace-private `hardware-interface-runtime` crate owns generic shared memory,
+raw register access and observation, `SoftwareCpu`/`CpuLocal`, interrupt registry and
+dispatcher mechanics, and generic trace storage. PDMA device/host crates retain PDMA
+mapping policy, register effects, driver accounting, exact interrupt adaptation, and
+the explicit compatibility ports; the canonical E2E uses `PdmaRegisterPort` over
+`AsyncDeviceAccess`.
 
 ## CONVENTIONS
 
@@ -126,4 +134,8 @@ Use `GIT_MASTER=1` before every git command.
 
 ## NOTES
 
-For follow-on work, keep crate boundaries aligned with `model/docs/v0_8_model_plan.md`: contract has vocabulary only, device has no host dependency and never invokes handlers, host owns vector dispatch and software execution state, and scenarios wire the actors together.
+For follow-on work, keep the active successor boundaries aligned with
+`model/docs/pdma_arch_spec_v0.md`: contract has vocabulary only; runtime owns generic
+CPU-local and interrupt-dispatch mechanics; device has no host dependency and never
+invokes handlers; host owns PDMA driver/register/interrupt adaptation; and scenarios
+wire the actors together.

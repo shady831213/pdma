@@ -85,7 +85,10 @@ E2E.
 
 The driver model, implemented in `model/modeling/crates/host/src/driver.rs`, owns the following responsibilities:
 
-- Allocate device-visible buffers through `AsyncDevicePort` and fill source data through `write_buffer_on`.
+- Allocate device-visible buffers through the active `DriverPort` implementation and
+  fill source data through `write_buffer_on`. The canonical path is
+  `PdmaRegisterPort<AsyncDeviceAccess>`; `compat::AsyncDevicePort` and
+  `compat::SemanticDevicePort` are explicit compatibility boundaries only.
 - Configure a CPU-bound queue with `AsyncDriver::setup_on` or
   `AsyncDriver::setup_with_config_on`, receiving a `QueueConfigHandle`. The active
   software CPU is captured before device queue creation and revalidated before every
@@ -193,7 +196,7 @@ An invalid-context attempt cannot consume the record or credit. No accounting bo
 spans a device-port poll or await. A `TraceEventKind::CommandSubmitted` event is emitted
 when the device accepts the command.
 
-`AsyncDevicePort` defines these cancel-safe commit points: `create_queue` creates the
+`DriverPort` defines these cancel-safe commit points: `create_queue` creates the
 queue and consumes its ID only on `Ok(_)`; `submit_command` accepts the command only on
 `Ok(())`; `ring_doorbell` mutates runnable state and trace only on `Ok(())`; and
 completion/event polling removes a record only on `Ok(Some(_))`. Dropping any of those
@@ -238,9 +241,10 @@ separately; the model performs no intentional coalescing or moderation. Exact PC
 MSI/MSI-X address/data, table/PBA, and transport behavior remain deferred.
 
 Both Line and Message notifications resolve one `IrqVector` at the shared contract
-boundary. The host-owned `IrqDelivery` actor registers a non-empty vector-to-handler
-map through type state and never places a handler in the device. The first registration
-transitions `NoHandler` to `HasHandlers`; further registrations occur before `run`.
+boundary. Runtime `HandlerRegistry` freezes a non-empty vector-to-handler map before
+`InterruptDispatcher` starts and never places a handler in the device. Host
+`PdmaIrqDelivery` supplies the PDMA source, service, trace, and error adapters around
+that generic dispatcher.
 Different sources may share one vector and persistent handler. Duplicate registration
 returns `DuplicateIrqVector` without replacement. An unregistered vector returns
 `UnregisteredIrqVector` before CPU acquisition, lifecycle tracing, or delivery-summary
@@ -277,7 +281,7 @@ Shutdown has deterministic priority over a simultaneously ready notification. De
 progress is synchronized by handler-owned channels when a scenario needs it, while the
 actor's final `IrqDeliverySummary` reports only successfully completed handler turns; no
 separate delivery-progress watch API exists. Evidence:
-`crates/device/tests/irq_line_ack.rs`, `crates/host/tests/irq_delivery.rs`, and
+`crates/device/tests/irq_line_ack.rs`, `crates/host/tests/irq_runtime_surface.rs`, and
 `crates/scenarios/tests/irq_delivery.rs`.
 
 IRQ scenarios bootstrap without transferring driver ownership away from main. Main
@@ -296,16 +300,17 @@ historical baseline alongside the completed exact MMIO contract.
 
 ## ABI-v1 and Command Boundary
 
-ABI-v1 is the canonical interface for new end-to-end system scenarios. `AsyncPdmaBus`
-exposes raw DMA allocation/read/write, typed control transactions, and epoch-bearing IRQ
-notification waiting; CPU-bound `BusDevicePort` maps the existing driver operations onto
-that ABI, validates its captured `SoftwareCpu` before every nested poll, and never
-retains a host-state guard across an await. Atomic queue bootstrap commits its three
-rings and activation together; atomic submission commits any indirect mapping, record
-bytes, and producer together, while doorbell capture is a separate commit.
-`DmaRegion` is the only host object-to-IOVA handoff and committed regions are never
-unmapped in v0.9. Existing semantic tests continue to exercise the same core and are not
-duplicated as a second E2E path.
+The historical v0.9 ABI established raw DMA allocation/read/write, typed control
+transactions, epoch-bearing IRQ notification waiting, atomic queue bootstrap, and
+atomic submission before the separate doorbell commit. Its retired transport adapters
+are preserved by name only in `v0_9_model_plan.md`. The active successor expresses the
+same behavior through `PdmaRegisterPort<AsyncDeviceAccess>` over runtime
+`MemoryAccess`/`RegisterAccess`, device-backed `PdmaMemoryProvisioning`, closed
+`PdmaBatchAccess`, and `PdmaExactInterruptClaim`. The port validates its captured
+`SoftwareCpu` before every nested CPU-bound poll and never retains a host-state guard
+across an await. `PdmaMappedRegion` carries the host object-to-`MemoryAddress` handoff;
+committed regions remain mapped for the device lifetime. Explicit compatibility ports
+exercise the same core and do not create a second E2E path.
 
 The ABI is fixed-width little-endian data, never Rust layout: v1 descriptors are 64
 bytes, completions 32 bytes, and events 64 bytes. `include/pdma_model_abi.h` is a
@@ -397,12 +402,13 @@ binary contains four tests and four `run_main` calls. The standalone
 `message_irq_linear_copy` test adds one complete nominal Message-IRQ path in one file:
 software handler registration, configuration and submission, device completion/IRQ
 emission, host delivery, handler drain/acknowledgment, and resumed-main observation.
-It uses `BusDevicePort<ScenarioBus>` backed by
-`MmioDeviceBus<RecordingMmioTransport>` as the canonical ABI E2E. Ordered batches carry
-ACTIVATE and producer publication; direct MMIO carries queue/IRQ commands and the final
-raw status read. The scenario asserts the nine-stage lifecycle through acknowledgement,
-vector 64, one delivery and device step, cursor values, `MainAfterHandler`, and
-destination `[1, 2, 3, 4]`.
+It uses `PdmaRegisterPort<RecordingMemoryAccess>` over
+`AsyncDeviceAccess` as the canonical ABI E2E. Runtime `SoftwareCpu` owns the main/handler
+gate, while `PdmaIrqDelivery` starts the generic dispatcher with PDMA source/service
+adapters. Ordered batches carry ACTIVATE and producer publication; Direct observations
+carry queue/IRQ commands and the final raw status read. The scenario asserts the
+nine-stage lifecycle through acknowledgement, vector 64, one delivery and device step,
+cursor values, `MainAfterHandler`, and destination `[1, 2, 3, 4]`.
 The persistent stateful-handler adapter keeps await-spanning handler-owned capabilities
 in one registry entry and handler-future boxing at the host type-erasure boundary.
 Cross-context test phase remains `CpuLocal`; the handler does not take and restore its
@@ -411,11 +417,11 @@ The standalone `message_irq_dual_handler` test registers separate completion and
 handlers. Main and both persistent handlers hold clones of one CPU-bound driver;
 depth-one success/fault/success submissions prove shared credit reclamation across
 repeated main/handler transitions while preserving independent handler call state.
-`IrqDelivery::defer` splits a software-side registration bootstrap from a harness-side
-runner. Software registers one handler directly or configures multiple handlers in one
-closure; successful registration automatically publishes the fixed registry, and the
-runner owns the resulting actor loop. The one-time ownership handoff remains private to
-the host API.
+Scenario bootstrap sends the driver and register-port clones to the delivery actor,
+which constructs PDMA services, freezes the runtime handler registry, starts
+`PdmaIrqDelivery`, and signals readiness before main enables the source. The runtime
+dispatcher task owns the resulting actor loop; the one-time ownership handoff remains
+private to the scenario harness and host adapter.
 
 Actor construction, spawn, shutdown, join, trace instrumentation/collection, and final
 assertions are scenario-harness responsibilities. The single intentional instrumentation

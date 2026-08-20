@@ -18,7 +18,8 @@ crates/
 ├── device/           # active hardware runner plus PDMA-local IRQ controller
 ├── hardware-interface-schema/ # reusable runtime-neutral record/register schema facade
 ├── hardware-interface-schema-macros/ # proc-macro implementation for the schema facade
-├── host/             # driver, device port, and host-owned IRQ delivery actor
+├── hardware-interface-runtime/ # shared memory/register/CPU/interrupt/trace runtime
+├── host/             # driver, canonical register port, PDMA IRQ adapter, and compat ports
 └── scenarios/        # active host/device/IRQ-delivery validation stories
 ```
 
@@ -30,14 +31,17 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 | --- | --- | --- |
 | Shared contract | `crates/contract/src/` | ABI-v1 metadata/codecs and vocabulary; no backing memory, runtime, handler traits, or device execution. |
 | Reusable schemas | `crates/hardware-interface-schema/` | Runtime-neutral record/register metadata, scalar codecs, exact-start lookup, format-neutral exports, and default-off generic C11 fragments. |
-| Device behavior | `crates/device/src/` | Queue-port model, checked `DmaSpace`, typed bus controls/reset, shared execution/retirement, async worker, trace, and PDMA-local IRQ. |
-| Host-side model | `crates/host/src/` | CPU-bound `AsyncDriver`, manual facade, `AsyncPdmaBus`, `BusDevicePort`, IRQ delivery, and SW context helpers. |
+| Reusable runtime | `crates/hardware-interface-runtime/` | Shared memory, raw register access/observation, `SoftwareCpu`/`CpuLocal`, generic interrupt dispatch, and generic trace storage. |
+| Device behavior | `crates/device/src/` | Queue-port model, device-owned PDMA mappings over runtime memory, typed reset/control, shared execution/retirement, async worker, trace, and PDMA-local IRQ. |
+| Host-side model | `crates/host/src/` | CPU-bound `AsyncDriver`, `PdmaRegisterPort<AsyncDeviceAccess>`, PDMA interrupt adapters, and explicit semantic/async compatibility ports. |
 | System scenarios | `crates/scenarios/tests/` | Concurrent actors; `message_irq_linear_copy` is the canonical ABI Message-IRQ E2E. |
 
 ## CONVENTIONS
 
 - Tests use Given/When/Then comments and assert observable completions, events, and memory contents.
-- `AsyncDevice::queue_port*()` returns `(AsyncDevice, AsyncDeviceWorker)`; callers choose whether to `tokio::spawn(worker.run())`, directly await it, or use another executor strategy.
+- `AsyncDevice::from_core(DeviceCore)` returns `(AsyncDevice, AsyncDeviceWorker)`; callers
+  choose whether to `tokio::spawn(worker.run())`, directly await it, or use another
+  executor strategy.
 - `SyncDevice::run_until_idle(max_steps)` and `SyncDevice::run_until_blocked(max_steps)` calls belong only in explicit manual-drive helper/status/trace and step-budget tests.
 - `AsyncDriver` is CPU-bound: setup requires an active matching `SoftwareCpu`, clones share
   one command-ID/slot accounting state, and it alone services IRQs. `ManualDriver` is the
@@ -45,11 +49,13 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   `ManualDriver::setup_with_config_on`; it has no IRQ service. Both public facades forward
   to one private core with clone-shared accounting. Among system scenarios, only the five
   named zero-entry observability tests use manual setup; focused host tests may exercise it.
-- Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; handler registration and delivery adaptation belongs to `pdma-model-host`.
+- Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; generic handler
+  registration, CPU execution and dispatch belong to `hardware-interface-runtime`;
+  PDMA source/service/trace adaptation belongs to `pdma-model-host`.
 - Software handlers register by `IrqVector` with host IRQ delivery before `run`, never
   with the device. Multiple sources may share one vector; each vector has one persistent
   handler entry, and delivery remains serial and non-reentrant.
-- `CpuLocal<T>` is the modeled single-copy mutable software-state capability. Access is
+- Runtime `CpuLocal<T>` is the modeled single-copy mutable software-state capability. Access is
   synchronous and valid only during a poll of the owning CPU's main or handler future;
   do not expose a lock, guard, raw CPU identity, or await-spanning borrow.
 - Await-spanning state private to one vector handler belongs in its persistent
@@ -58,11 +64,12 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - The private `SoftwareCpuToken` is installed in the single `CURRENT_SOFTWARE_CPU` option
   only around an actual inner main or handler poll. RAII restores any prior token after the
   poll, so a nested CPU context does not erase its enclosing context.
-- Before every nested poll of a CPU-bound create, submit, doorbell, completion, or event
-  port future, validate the owning active CPU. A pending future resumed inactive or on
-  another CPU returns the typed error before its commit point. `AsyncDevicePort` commits
-  create only on `Ok(_)`, submit/doorbell only on `Ok(())`, record removal only on
-  `Ok(Some(_))`, and preserves the corresponding device state when dropped pending.
+- Before every nested poll of a CPU-bound `DriverPort` create, submit, doorbell,
+  completion, or event future, validate the owning active CPU. A pending future resumed
+  inactive or on another CPU returns the typed error before its commit point. The
+  canonical `PdmaRegisterPort` and explicit compatibility ports commit create only on
+  `Ok(_)`, submit/doorbell only on `Ok(())`, record removal only on `Ok(Some(_))`, and
+  preserve the corresponding device state when dropped pending.
 - Each software-bearing scenario calls `SoftwareCpu::run_main` once with its complete
   program. One poll is one atomic main segment; only `Poll::Pending` releases the CPU
   before the next poll, while the complete IRQ handler future remains atomic.
@@ -74,11 +81,12 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - The scenario invariant is 56 tests: 51 software-bearing tests with one `run_main` and
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
-- ABI-v1 is the canonical frontend for new E2E scenarios. `AsyncPdmaBus` and
-  `BusDevicePort` add checked DMA/control transactions without a second executor; the
-  semantic and ABI frontends share execution and retirement behavior.
+- `PdmaRegisterPort<AsyncDeviceAccess>` is the canonical frontend for new E2E scenarios.
+  Its split runtime memory/register access plus PDMA provisioning, batch and exact-claim
+  capabilities add no second executor; explicit semantic/async compatibility ports
+  share the same device core, execution and retirement behavior.
 - A successful whole-device reset checked-advances `DeviceEpoch`, preserves committed
-  `DmaSpace` mappings/bytes/generation, trace history, resource configuration, and
+  device-owned PDMA mappings plus runtime memory bytes/revision, trace history, resource configuration, and
   lifecycle accounting, and clears queue/control/runnable/result/pending-retirement/
   PDMA-IRQ state. Prior-epoch queue, IRQ, and notification capabilities reject before
   mutation and require explicit new-epoch bootstrap; epoch overflow does not mutate.
@@ -116,6 +124,12 @@ storage/MMIO effects, DMA, reset, IRQ, actor, and executor behavior. The crate i
 `publish = false`; its `export-c-header` backend is default-off and enabled explicitly
 by the PDMA contract for the existing exact generated data header.
 
+`hardware-interface-runtime` is the active workspace-private generic runtime. It owns
+the one shared byte store, raw register access/observation, software CPU-local state,
+generic interrupt registry/dispatcher contracts, and generic trace storage. PDMA owns
+mapping policy, register effects, the canonical register port, driver accounting, IRQ
+adaptation, actors and execution/retirement behavior.
+
 ## DO NOT
 
 - Do not add callable C APIs, Terminus, PCIe/MSI-X physical maps/table/PBA behavior,
@@ -128,3 +142,6 @@ by the PDMA contract for the existing exact generated data header.
 - Do not make device depend on host or scenarios.
 - Do not make the device store handler tables or invoke software callbacks.
 - Do not add IRQ service to `ManualDriver` or bypass `AsyncDriver` CPU validation.
+- Do not resurrect the retired transport/bus/port stack in production, tests, or active
+  guidance; historical v0.9 prose and the explicit negative compile fixture are the only
+  retained references.

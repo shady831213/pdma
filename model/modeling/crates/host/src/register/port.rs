@@ -136,17 +136,7 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
         F: Future<Output = Result<T, PdmaClaimError>> + Send,
         T: Send,
     {
-        let mut future = Box::pin(future);
-        poll_fn(|context| {
-            if let Err(error) = self.validate_owner() {
-                return Poll::Ready(Err(error));
-            }
-            match future.as_mut().poll(context) {
-                Poll::Ready(result) => Poll::Ready(result.map_err(PdmaRegisterPortError::from)),
-                Poll::Pending => Poll::Pending,
-            }
-        })
-        .await
+        self.poll_typed(future).await
     }
     async fn claim_notification(&self) -> PdmaPortResult<Option<IrqNotification>> {
         loop {

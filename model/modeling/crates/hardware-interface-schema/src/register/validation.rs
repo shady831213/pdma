@@ -58,6 +58,15 @@ fn validate_shape<I: Copy>(
             width: definition.width(),
         });
     }
+    if definition.alignment() == 0 || !definition.alignment().is_power_of_two() {
+        return Err(RegisterDefinitionError::InvalidAlignment {
+            root,
+            path: path.into(),
+            declaration_index,
+            name: definition.name(),
+            alignment: definition.alignment(),
+        });
+    }
     if !fits_width(definition.writable_mask(), definition.width()) {
         return Err(RegisterDefinitionError::WritableMaskOverflow {
             root,

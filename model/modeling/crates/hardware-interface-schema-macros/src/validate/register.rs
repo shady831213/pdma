@@ -55,6 +55,14 @@ pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -
             "register width must be 1, 2, 4, or 8",
         ));
     }
+    if let Some((alignment, span)) = register.alignment
+        && (alignment == 0 || !alignment.is_power_of_two())
+    {
+        return Err(syn::Error::new(
+            span,
+            "register alignment must be a nonzero power of two",
+        ));
+    }
     if !matches!(register.endian.to_string().as_str(), "Little" | "Big") {
         return Err(syn::Error::new(
             register.endian.span(),

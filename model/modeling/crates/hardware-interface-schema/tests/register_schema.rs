@@ -1,7 +1,11 @@
 //! Black-box register declaration tests.
 
-use hardware_interface_schema::register::{
-    Access, RegisterSpec, RegisterValidationError, ResetKind,
+use hardware_interface_schema::{
+    Endian,
+    register::{
+        Access, RegisterDefinition, RegisterDefinitionError, RegisterSpec, RegisterValidationError,
+        ResetKind,
+    },
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,6 +71,17 @@ fn register_validation_rejects_invalid_width() {
             width: 3,
         })
     );
+}
+
+#[test]
+fn register_definition_validation_rejects_invalid_alignment() {
+    let definition =
+        RegisterDefinition::<u16>::new("misaligned", 4, Endian::Little).with_alignment(3);
+
+    assert!(matches!(
+        definition.validate(),
+        Err(RegisterDefinitionError::InvalidAlignment { alignment: 3, .. })
+    ));
 }
 
 #[test]

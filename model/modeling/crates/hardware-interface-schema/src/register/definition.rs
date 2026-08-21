@@ -10,6 +10,7 @@ use super::{
 pub struct RegisterDefinition<I: 'static = u16> {
     name: &'static str,
     width: usize,
+    alignment: usize,
     endian: Endian,
     access: Access,
     reset_kind: ResetKind,
@@ -24,6 +25,7 @@ impl<I: Copy> RegisterDefinition<I> {
         Self {
             name,
             width,
+            alignment: width,
             endian,
             access: Access::ReadOnly,
             reset_kind: ResetKind::Zero,
@@ -31,6 +33,13 @@ impl<I: Copy> RegisterDefinition<I> {
             writable_mask: 0,
             fields: &[],
         }
+    }
+
+    /// Replaces the required byte alignment for placements of this definition.
+    #[must_use]
+    pub const fn with_alignment(mut self, alignment: usize) -> Self {
+        self.alignment = alignment;
+        self
     }
 
     /// Replaces the declared access permission.
@@ -70,6 +79,11 @@ impl<I: Copy> RegisterDefinition<I> {
     /// Returns the byte width.
     pub const fn width(self) -> usize {
         self.width
+    }
+
+    /// Returns the required byte alignment for placements of this definition.
+    pub const fn alignment(self) -> usize {
+        self.alignment
     }
 
     /// Returns the byte order.

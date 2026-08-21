@@ -5,16 +5,22 @@ use syn::parse2;
 use crate::internal::{
     crate_path,
     expand::register::{spec, variant},
-    syntax::MapDecl,
+    syntax::{MapDecl, MapSyntaxProbe, OrderedMapDecl},
     validate,
 };
 
 mod composable;
+mod ordered;
 
 pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
-    parse2::<MapDecl>(input)
-        .and_then(|decl| expand(&decl))
-        .unwrap_or_else(syn::Error::into_compile_error)
+    let expanded = parse2::<MapSyntaxProbe>(input.clone()).and_then(|probe| {
+        if probe.ordered {
+            parse2::<OrderedMapDecl>(input).and_then(|decl| ordered::expand(&decl))
+        } else {
+            parse2::<MapDecl>(input).and_then(|decl| expand(&decl))
+        }
+    });
+    expanded.unwrap_or_else(syn::Error::into_compile_error)
 }
 
 fn expand(decl: &MapDecl) -> syn::Result<TokenStream> {

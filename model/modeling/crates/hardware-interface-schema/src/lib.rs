@@ -6,6 +6,8 @@ pub mod codec;
 pub mod endian;
 /// Format-neutral artifact and exporter extension boundary.
 pub mod export;
+/// Shared composition contract for generated register layouts.
+pub mod layout;
 /// Fixed-record field and validation vocabulary.
 pub mod record;
 /// Register metadata vocabulary.
@@ -20,6 +22,7 @@ pub use endian::Endian;
 pub use hardware_interface_schema_macros::{
     field_schema, record_schema, register_field_schema, register_map, register_schema,
 };
+pub use layout::{RegisterLayout, checked_align_up, checked_placement_end};
 pub use record::{
     FieldDefinition, FieldSpec, RecordGraphError, RecordPlacement, RecordSpec,
     RecordValidationError, ResolvedMember, ResolvedMemberKind, ResolvedRecord,
@@ -30,8 +33,9 @@ pub use register::{
     RegisterValueView, RegisterValueViewMut, ResetKind,
 };
 pub use register_map::{
-    RegisterLocation, RegisterMapError, RegisterMapSpec, RegisterMapValidationError,
-    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
+    OrderedRegisterMapSpec, RegisterLayoutGeometry, RegisterLocation, RegisterMapError,
+    RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError, RepeatedRegisterBank,
+    ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
 };
 pub use scalar::{Scalar, ScalarKind};
 

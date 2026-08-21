@@ -11,8 +11,8 @@ procedural-macro implementation crate.
 
 Schemas are descriptive. A record uses only `u8`, `u16`, `u32`, or `u64` fields with an
 explicit `Little` or `Big` byte order. Fields may leave gaps. Register declarations
-carry typed IDs, offset, width, access, reset, and writable-mask metadata. Maps combine
-fixed registers with repeated banks and return typed locations.
+carry typed IDs, width, alignment, access, reset, and writable-mask metadata. Maps place
+registers or nested maps in one declaration-ordered layout.
 
 This crate does **not** own ring structure, entry publication, cursors, register
 storage, MMIO or bus transactions/effects, DMA, reset epochs, IRQ state machines,
@@ -46,21 +46,23 @@ publication endpoint.
 `record_schema!` declares a fixed record. Scalar fields use
 `name: scalar { id, offset, endian }`; arrays use
 `name: [scalar; count] { ids: [...], offset, stride, endian }`. `register_schema!`
-declares a reusable named set of registers (optionally with an external typed ID as
-`Registers<ExternalId>`). `register_map!` declares `size`, inline `fixed` registers,
-optional `fixed_groups: { Registers: [Variant, ...] }`, and repeated `banks` with
-`count`, `base`, `stride`, and `members`. Register entries always declare `id`, `name`,
-`offset`, `width`, `access`, `reset`, and `writable_mask`.
+declares an offset-free register with explicit width and alignment. `register_map!`
+declares map `alignment`, an optional exact `extent`, and one ordered
+`placements: [...]` list. A placement may omit its offset; the macro then aligns the
+current high-water mark to the child layout. `count` defaults to one and a repeated
+placement's omitted stride is the aligned child extent. Registers and maps implement
+the same `RegisterLayout` contract, so maps compose recursively.
 
-The following executable example declares all three forms, writes bytes through a
-generated mutable view, and performs both fixed and repeated exact-start lookup.
+The following executable example declares a record, two registers, and one ordered
+map, then encodes generated owned map values.
 
 ```rust
-use hardware_interface_schema::{
-    record_schema, register_map::RegisterLocation, register_schema,
-};
+use hardware_interface_schema::{record_schema, register_schema};
 # use hardware_interface_schema::{
-#     Endian, FieldSpec, RecordSpec, ScalarKind, SchemaCodecError, read_scalar, write_scalar,
+#     Access, Endian, FieldSpec, OrderedRegisterMapSpec, RecordSpec, RegisterCodecError,
+#     RegisterDefinition, RegisterLayout, RegisterLayoutGeometry, RegisterMapPlacement,
+#     ResetKind, ScalarKind, SchemaCodecError, checked_align_up, checked_placement_end,
+#     read_scalar, write_scalar,
 # };
 # mod register { pub use hardware_interface_schema::register::*; }
 # mod register_map { pub use hardware_interface_schema::register_map::*; }
@@ -77,25 +79,37 @@ record_schema! {
 }
 
 register_schema! {
-    pub registers Controls {
-        command: { id: 1, name: "command", offset: 0, width: 4, access: ReadWrite,
-            reset: Zero(0), writable_mask: 0xffff_ffff },
+    pub register Status {
+        width: 4,
+        alignment: 4,
+        endian: Little,
+        access: ReadOnly,
+        reset: Zero(0),
+        writable_mask: 0,
+        fields: {},
+    }
+}
+
+register_schema! {
+    pub register Producer {
+        width: 4,
+        alignment: 4,
+        endian: Little,
+        access: ReadWrite,
+        reset: Zero(0),
+        writable_mask: 0xffff_ffff,
+        fields: {},
     }
 }
 
 hardware_interface_schema::register_map! {
     pub map DeviceMap {
-        size: 64,
-        fixed: {
-            status: { id: 1, name: "status", offset: 0, width: 4, access: ReadOnly,
-                reset: Zero(0), writable_mask: 0 },
-        },
-        banks: {
-            queue: { count: 2, base: 16, stride: 16, members: {
-                producer: { id: 2, name: "producer", offset: 0, width: 4, access: ReadWrite,
-                    reset: Zero(0), writable_mask: 0xffff_ffff },
-            } },
-        }
+        alignment: 4,
+        extent: 16,
+        placements: [
+            pub status: Status,
+            pub producer: Producer { count: 2 },
+        ],
     }
 }
 
@@ -106,19 +120,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     view.set_code(0x5566)?;
     assert_eq!(bytes, [0x44, 0x33, 0x22, 0x11, 0x55, 0x66, 0, 0]);
     assert_eq!(Packet::SPEC.validate(), Ok(()));
-    assert!(Controls::SPEC.iter().all(|register| register.validate().is_ok()));
-    assert_eq!(DeviceMap::SPEC.validate(), Ok(()));
-    assert!(matches!(DeviceMap::locate(0), Some(RegisterLocation::Fixed { .. })));
-    assert!(matches!(DeviceMap::locate(32), Some(RegisterLocation::Repeated { instance: 1, .. })));
-    assert_eq!(DeviceMap::locate(33), None);
-    assert_eq!(DeviceMap::locate(63), None);
+    let values = DeviceMapValues { status: 7, producer: [11, 13] };
+    let encoded = values.to_bytes()?;
+    assert_eq!(&encoded[..12], &[7, 0, 0, 0, 11, 0, 0, 0, 13, 0, 0, 0]);
+    assert_eq!(DeviceMap::STATUS.offset(), 0);
+    assert_eq!(DeviceMap::PRODUCER.offset(), 4);
+    assert_eq!(DeviceMap::PRODUCER.stride(), 4);
+    assert_eq!(DeviceMapValues::from_bytes(&encoded)?, values);
     Ok(())
 }
 ```
 
 Generated record marker types expose `SPEC`, field-ID types, offset constants, and
-immutable/mutable checked views with typed accessors. Generated register and map marker
-types expose `SPEC`, typed `*RegisterId` values, constants, and `register(id)`.
+immutable/mutable checked views with typed accessors. Ordered maps expose typed
+placement metadata, checked nested views, and a generated `*Values` owned codec.
 
 Validation is deterministic. `RecordSpec::validate` checks duplicate IDs, duplicate
 names, scalar widths, alignment, extents, and overlaps, in that order and declaration

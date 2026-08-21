@@ -1,11 +1,13 @@
 mod field;
 mod map;
+mod map_ordered;
 mod record;
 mod register;
 mod register_field;
 
 pub(in crate::internal) use field::FieldDefinitionDecl;
 pub(in crate::internal) use map::{MapDecl, RegisterPlacementDecl};
+pub(in crate::internal) use map_ordered::{MapSyntaxProbe, OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{FieldShape, RecordDecl, RecordPlacementDecl, ScalarType};
 pub(in crate::internal) use register::{
     AccessValue, RegisterDecl, RegisterDefinitionDecl, RegisterInput, RegistersDecl,

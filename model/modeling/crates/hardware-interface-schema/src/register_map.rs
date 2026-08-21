@@ -1,11 +1,13 @@
 mod error;
 mod layout;
+mod ordered;
 mod resolve;
 mod resolved;
 mod validation;
 
 pub use crate::register::RegisterSpec;
 pub use error::{RegisterMapError, RegisterMapValidationError};
+pub use ordered::{OrderedRegisterMapSpec, RegisterLayoutGeometry, RegisterMapPlacement};
 pub use resolved::{ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap};
 
 /// One immutable repeated register-bank declaration.

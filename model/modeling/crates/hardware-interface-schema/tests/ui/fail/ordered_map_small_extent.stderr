@@ -1,0 +1,10 @@
+error[E0080]: evaluation panicked: register map placement extends beyond its explicit extent
+  --> tests/ui/fail/ordered_map_small_extent.rs:15:1
+   |
+15 | / register_map! {
+16 | |     pub map SmallExtent {
+17 | |         alignment: 4,
+18 | |         extent: 3,
+...  |
+21 | | }
+   | |_^ evaluation of `_` failed here

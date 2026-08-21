@@ -21,6 +21,7 @@ pub(in crate::internal) struct RegisterDefinitionDecl {
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) width: (usize, proc_macro2::Span),
+    pub(in crate::internal) alignment: Option<(usize, proc_macro2::Span)>,
     pub(in crate::internal) endian: Ident,
     pub(in crate::internal) access: AccessValue,
     pub(in crate::internal) reset: ResetValue,
@@ -114,6 +115,14 @@ impl Parse for RegisterDefinitionDecl {
         key(&body, "width")?;
         let width = usize_lit(&body)?;
         body.parse::<Token![,]>()?;
+        let alignment = if body.peek(Ident) && body.fork().parse::<Ident>()? == "alignment" {
+            key(&body, "alignment")?;
+            let alignment = usize_lit(&body)?;
+            body.parse::<Token![,]>()?;
+            Some(alignment)
+        } else {
+            None
+        };
         key(&body, "endian")?;
         let endian = body.parse()?;
         body.parse::<Token![,]>()?;
@@ -139,6 +148,7 @@ impl Parse for RegisterDefinitionDecl {
             visibility,
             name,
             width,
+            alignment,
             endian,
             access,
             reset,

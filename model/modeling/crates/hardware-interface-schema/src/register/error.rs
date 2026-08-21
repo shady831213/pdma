@@ -56,6 +56,19 @@ pub enum RegisterDefinitionError<I = u16> {
         /// Supplied width.
         width: usize,
     },
+    /// The required byte alignment is zero or not a power of two.
+    InvalidAlignment {
+        /// Root map or definition name.
+        root: &'static str,
+        /// Root-qualified placement path.
+        path: String,
+        /// Placement declaration index.
+        declaration_index: usize,
+        /// Definition name.
+        name: &'static str,
+        /// Supplied alignment.
+        alignment: usize,
+    },
     /// The writable mask exceeds the byte width.
     WritableMaskOverflow {
         /// Root name.

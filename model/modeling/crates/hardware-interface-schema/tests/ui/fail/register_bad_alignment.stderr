@@ -1,0 +1,5 @@
+error: register alignment must be a nonzero power of two
+ --> tests/ui/fail/register_bad_alignment.rs:6:20
+  |
+6 |         alignment: 3,
+  |                    ^

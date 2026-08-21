@@ -57,7 +57,7 @@ pub(super) fn commit_bootstrap(
         #[cfg(test)]
         super::reject_injected(state, super::BatchPreparationFault::Response, context)?;
         let response_bytes = response
-            .to_le_bytes()
+            .to_bytes()
             .map_err(|_| MmioBatchError::InvalidShape)?;
         #[cfg(test)]
         super::reject_injected(state, super::BatchPreparationFault::Decode, context)?;
@@ -137,7 +137,7 @@ pub(super) fn commit_submission(
             DmaBatchContext::None,
         )?;
         let response_bytes = response
-            .to_le_bytes()
+            .to_bytes()
             .map_err(|_| MmioBatchError::InvalidShape)?;
         #[cfg(test)]
         super::reject_injected(

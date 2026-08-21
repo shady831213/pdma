@@ -48,7 +48,7 @@ fn irq_response_bank_has_source_and_distinct_empty_shapes() {
         assert_eq!(
             response
                 .bank()
-                .to_le_bytes()
+                .to_bytes()
                 .expect("generated response view must encode"),
             expected
         );
@@ -98,7 +98,7 @@ fn irq_response_bank_has_literal_notification_bytes_for_both_claim_kinds() {
     // Then: each command-specific response uses its literal notification shape and zero fill.
     assert_eq!(
         line.bank()
-            .to_le_bytes()
+            .to_bytes()
             .expect("generated response view must encode"),
         [
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13,
@@ -110,7 +110,7 @@ fn irq_response_bank_has_literal_notification_bytes_for_both_claim_kinds() {
     assert_eq!(
         message
             .bank()
-            .to_le_bytes()
+            .to_bytes()
             .expect("generated response view must encode"),
         [
             0x68, 0x67, 0x66, 0x65, 0x64, 0x63, 0x62, 0x61, 0x78, 0x77, 0x76, 0x75, 0x74, 0x73,

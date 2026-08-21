@@ -87,8 +87,7 @@ pub(super) fn response(
         queue_id: u64::try_from(queue).map_err(|_| PdmaBatchError::InvalidShape)?,
         sq_producer: producer,
         ..QueueResponseBank::default()
-    }
-    .to_le_bytes()
+    }.to_bytes()
     .map_err(|_| PdmaBatchError::InvalidShape)
 }
 

@@ -2,7 +2,7 @@ use super::bank::{CommandBank, MmioScalar, narrow_u32};
 use crate::runner::native::probe::{RunStateProbe, probe_run_state};
 use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::{
-    GlobalCommand, MmioResult, MmioResultDetails, ResponseUpdate,
+    GlobalCommand, GlobalResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
 };
 use pdma_model_contract::bridge::{AbiLimits, DiscoveryRequest};
 use pdma_model_contract::semantic::DeviceRunState;
@@ -33,25 +33,12 @@ pub(super) enum GlobalRegister {
     MaxStride,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct GlobalResponseRegisters {
-    abi_version: u32,
-    run_state: u32,
-    features: u64,
-    epoch: u64,
-    max_ring_depth: u32,
-    max_indirect_destinations: u32,
-    max_transfer_bytes: u32,
-    max_strided_rows: u32,
-    max_stride: u32,
-}
-
 #[derive(Debug)]
 pub(super) struct GlobalBank {
     req_abi_version: u32,
     req_features: u64,
     reset_expected_epoch: u64,
-    command: CommandBank<GlobalResponseRegisters>,
+    command: CommandBank<GlobalResponseBank>,
 }
 
 impl GlobalBank {
@@ -144,9 +131,9 @@ fn reset(state: &mut DeviceCore) {
         super::reset::ResetOutcome::Success(epoch) => {
             complete_success(
                 state,
-                GlobalResponseRegisters {
+                GlobalResponseBank {
                     epoch: epoch.raw(),
-                    ..GlobalResponseRegisters::default()
+                    ..GlobalResponseBank::default()
                 },
             );
             crate::runner::state::wake(state);
@@ -165,10 +152,10 @@ fn discover(state: &mut DeviceCore) {
             let discovery = crate::runner::global_api::discover(request);
             complete_success(
                 state,
-                GlobalResponseRegisters {
+                GlobalResponseBank {
                     abi_version: u32::from(discovery.version()),
                     features: discovery.features().bits(),
-                    ..GlobalResponseRegisters::default()
+                    ..GlobalResponseBank::default()
                 },
             );
         }
@@ -180,13 +167,13 @@ fn read_limits(state: &mut DeviceCore) {
     let limits = AbiLimits::v1();
     complete_success(
         state,
-        GlobalResponseRegisters {
+        GlobalResponseBank {
             max_ring_depth: limits.max_ring_depth(),
             max_indirect_destinations: limits.max_indirect_destinations(),
             max_transfer_bytes: limits.max_transfer_bytes(),
             max_strided_rows: limits.max_strided_rows(),
             max_stride: limits.max_stride(),
-            ..GlobalResponseRegisters::default()
+            ..GlobalResponseBank::default()
         },
     );
 }
@@ -209,15 +196,15 @@ fn read_status(state: &mut DeviceCore) {
     };
     complete_success(
         state,
-        GlobalResponseRegisters {
+        GlobalResponseBank {
             run_state: encoded,
             epoch: state.backend.epoch().raw(),
-            ..GlobalResponseRegisters::default()
+            ..GlobalResponseBank::default()
         },
     );
 }
 
-fn complete_success(state: &mut DeviceCore, response: GlobalResponseRegisters) {
+fn complete_success(state: &mut DeviceCore, response: GlobalResponseBank) {
     state.mmio.global.command.complete(
         details(MmioResult::Ok, [0; 3]),
         ResponseUpdate::Replace(response),

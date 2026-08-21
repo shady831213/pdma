@@ -7,7 +7,9 @@ use crate::runner::irq::{
     observe_irq_source, usize_to_u64,
 };
 use crate::runner::state::DeviceCore;
-use pdma_model_contract::abi::mmio::{IrqCommand, MmioResult, MmioResultDetails, ResponseUpdate};
+use pdma_model_contract::abi::mmio::{
+    IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
+};
 
 #[path = "irq/notification.rs"]
 mod notification;
@@ -35,19 +37,6 @@ pub(super) enum IrqRegister {
     RspPendingMessages,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct IrqResponseRegisters {
-    epoch: u64,
-    source_id: u64,
-    source_kind: u32,
-    state: u32,
-    route_kind: u32,
-    notification_kind: u32,
-    vector: u64,
-    message_id: u64,
-    pending_messages: u64,
-}
-
 #[derive(Debug)]
 pub(super) struct IrqBank {
     expected_epoch: u64,
@@ -55,7 +44,7 @@ pub(super) struct IrqBank {
     source_kind: u32,
     route_kind: u32,
     route_vector: u64,
-    command: CommandBank<IrqResponseRegisters>,
+    command: CommandBank<IrqResponseBank>,
 }
 
 impl IrqBank {
@@ -164,7 +153,7 @@ fn execute(state: &mut DeviceCore, raw_command: u32) {
 }
 
 struct CommandOutcome {
-    response: Option<IrqResponseRegisters>,
+    response: Option<IrqResponseBank>,
     changed: bool,
 }
 
@@ -211,10 +200,10 @@ fn execute_command(
     })
 }
 
-fn source_response(view: IrqSourceView) -> IrqResponseRegisters {
+fn source_response(view: IrqSourceView) -> IrqResponseBank {
     let (source_kind, source_id) = encode_source(view.source.source());
     let (route_kind, vector) = encode_route(view.route);
-    IrqResponseRegisters {
+    IrqResponseBank {
         epoch: view.source.epoch().raw(),
         source_id,
         source_kind,
@@ -227,8 +216,8 @@ fn source_response(view: IrqSourceView) -> IrqResponseRegisters {
     }
 }
 
-fn line_response(view: IrqSourceView, vector: usize) -> IrqResponseRegisters {
-    IrqResponseRegisters {
+fn line_response(view: IrqSourceView, vector: usize) -> IrqResponseBank {
+    IrqResponseBank {
         notification_kind: 1,
         vector: usize_to_u64(vector),
         pending_messages: 0,

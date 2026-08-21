@@ -57,7 +57,7 @@ fn global_response_bank_has_literal_le_bytes_for_all_commands() {
         assert_eq!(
             response
                 .bank()
-                .to_le_bytes()
+                .to_bytes()
                 .expect("generated response view must encode"),
             expected
         );

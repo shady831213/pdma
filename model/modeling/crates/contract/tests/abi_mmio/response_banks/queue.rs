@@ -65,7 +65,7 @@ fn queue_response_bank_publishes_all_nine_words_for_every_command() {
         assert_eq!(
             response
                 .bank()
-                .to_le_bytes()
+                .to_bytes()
                 .expect("generated response view must encode"),
             expected
         );

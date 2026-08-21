@@ -25,7 +25,7 @@ fn reset_response_is_epoch_only_with_literal_zero_fill() {
     assert_eq!(
         response
             .bank()
-            .to_le_bytes()
+            .to_bytes()
             .expect("generated response view must encode"),
         [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03,
@@ -55,7 +55,7 @@ fn queue_response_bank_has_named_fields_and_literal_architecture_order() {
     assert_eq!(bank.epoch, 0x0102_0304_0506_0708);
     assert_eq!(bank.queue_id, 0x1112_1314_1516_1718);
     assert_eq!(
-        bank.to_le_bytes()
+        bank.to_bytes()
             .expect("generated response view must encode"),
         [
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13,
@@ -90,7 +90,7 @@ fn message_claim_encodes_post_claim_source_status_and_message_route() {
     assert_eq!(
         response
             .bank()
-            .to_le_bytes()
+            .to_bytes()
             .expect("generated response view must encode"),
         [
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13,

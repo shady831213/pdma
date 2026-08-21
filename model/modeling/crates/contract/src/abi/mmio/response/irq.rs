@@ -1,66 +1,12 @@
-use hardware_interface_schema::{RegisterCodecError, register_map};
-
-use super::ResponseCodecError;
-use crate::abi::mmio::{IrqCommand, IrqSourceStatus, irq};
-
-register_map! { pub map IrqResponseRegisters {
-    size: 56,
-    fixed: {
-        epoch: irq::IRspEpoch { id: 0, name: "I_RSP_EPOCH", offset: 0 },
-        source_id: irq::IRspSourceId { id: 1, name: "I_RSP_SOURCE_ID", offset: 8 },
-        source_kind: irq::IRspSourceKind { id: 2, name: "I_RSP_SOURCE_KIND", offset: 16 },
-        state: irq::IRspState { id: 3, name: "I_RSP_STATE", offset: 20 },
-        route_kind: irq::IRspRouteKind { id: 4, name: "I_RSP_ROUTE_KIND", offset: 24 },
-        notification_kind: irq::IRspNotificationKind { id: 5, name: "I_RSP_NOTIFICATION_KIND", offset: 28 },
-        vector: irq::IRspVector { id: 6, name: "I_RSP_VECTOR", offset: 32 },
-        message_id: irq::IRspMessageId { id: 7, name: "I_RSP_MESSAGE_ID", offset: 40 },
-        pending_messages: irq::IRspPendingMessages { id: 8, name: "I_RSP_PENDING_MESSAGES", offset: 48 },
-    },
-    banks: {}
-} }
+use crate::abi::mmio::register::irq::IrqResponseRegistersValues;
+pub use crate::abi::mmio::register::irq::{
+    IrqResponseRegisters, IrqResponseRegistersRegisterId, IrqResponseRegistersView,
+    IrqResponseRegistersViewMut,
+};
+use crate::abi::mmio::{IrqCommand, IrqSourceStatus};
 
 /// Exact bytes published through the IRQ response registers.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct IrqResponseBank {
-    epoch: u64,
-    source_id: u64,
-    source_kind: u32,
-    state: u32,
-    route_kind: u32,
-    notification_kind: u32,
-    vector: u64,
-    message_id: u64,
-    pending_messages: u64,
-}
-
-impl IrqResponseBank {
-    /// Exact contiguous little-endian response-register bytes.
-    pub fn to_le_bytes(self) -> Result<[u8; 56], ResponseCodecError> {
-        let mut bytes = [0; 56];
-        let mut view = IrqResponseRegistersViewMut::new(&mut bytes)?;
-        self.write_to(&mut view)?;
-        Ok(bytes)
-    }
-
-    fn write_to(
-        self,
-        view: &mut IrqResponseRegistersViewMut<'_>,
-    ) -> Result<(), RegisterCodecError> {
-        view.epoch_mut()?.set_value(self.epoch)?;
-        view.source_id_mut()?.set_value(self.source_id)?;
-        view.source_kind_mut()?
-            .set_value(u64::from(self.source_kind))?;
-        view.state_mut()?.set_value(u64::from(self.state))?;
-        view.route_kind_mut()?
-            .set_value(u64::from(self.route_kind))?;
-        view.notification_kind_mut()?
-            .set_value(u64::from(self.notification_kind))?;
-        view.vector_mut()?.set_value(self.vector)?;
-        view.message_id_mut()?.set_value(self.message_id)?;
-        view.pending_messages_mut()?
-            .set_value(self.pending_messages)
-    }
-}
+pub type IrqResponseBank = IrqResponseRegistersValues;
 
 /// Source state returned by the source-scoped IRQ commands.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -197,17 +143,7 @@ impl IrqResponse {
 
 impl IrqResponseBank {
     const fn zero() -> Self {
-        Self {
-            epoch: 0,
-            source_id: 0,
-            source_kind: 0,
-            state: 0,
-            route_kind: 0,
-            notification_kind: 0,
-            vector: 0,
-            message_id: 0,
-            pending_messages: 0,
-        }
+        Self::ZERO
     }
 
     const fn source(response: IrqSourceResponse) -> Self {

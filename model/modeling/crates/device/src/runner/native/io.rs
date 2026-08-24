@@ -4,17 +4,20 @@ mod semantic;
 
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::control::BusControlState;
+use crate::runner::native::execution::ExecutionCommand;
 use crate::runner::native::retirement::FaultRetirement;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::desc::ExternalCommand;
-use pdma_model_contract::semantic::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
+use pdma_model_contract::semantic::{
+    CommandId, CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId, TraceOperation,
+};
 
 pub(in crate::runner::native) use memory::QueueMemoryResolver;
 
 #[derive(Debug, Clone)]
 pub(super) enum NormalizedFetch {
-    Command(ExternalCommand),
+    Command(ExecutionCommand),
     Fault(NormalizedFault),
 }
 
@@ -30,7 +33,11 @@ pub(super) enum PublicationOutcome {
 }
 
 pub(super) trait QueueFrontend: std::fmt::Debug + Send + Sync {
-    fn submit_compat(&mut self, queue: QueueId, command: ExternalCommand) -> ModelResult<()>;
+    fn submit_compat(
+        &mut self,
+        queue: QueueId,
+        command: ExternalCommand,
+    ) -> ModelResult<(CommandId, TraceOperation)>;
 
     fn probe(
         &self,

@@ -3,7 +3,7 @@
 use pdma_model_contract::semantic::{
     CompletionStatus, ResourceConfig,
     desc::{CopyCommand, CopyRequest, ExternalCommand},
-    ids::{CommandId, CompletionRingId},
+    ids::{CommandId, CompletionRingId, QueueId},
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
@@ -72,7 +72,7 @@ async fn async_runner_retires_copy_after_handle_submission() {
     // When: the handle submits one ExternalCommand::Copy or equivalent command path directly to the async device handle, rings the doorbell if needed, waits for one progress step, polls completion, requests shutdown, and joins.
     let command = ExternalCommand::Copy(CopyCommand::new(
         CommandId::new(0),
-        queue.queue_id(),
+        QueueId::new(99),
         queue.completion_ring_id(),
         CopyRequest::new(src, dst, 4),
     ));

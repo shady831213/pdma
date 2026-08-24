@@ -2,6 +2,7 @@ mod broadcast;
 mod context;
 mod copy;
 pub(in crate::runner) mod exact_api;
+mod execution;
 mod io;
 mod irq;
 mod irq_api;
@@ -16,7 +17,7 @@ mod vector_add;
 use super::backend::ModelStepStatus;
 use super::bus::control::BusControlState;
 use crate::dma_space::PdmaMemoryMappings;
-use crate::trace::{TraceSink, command_id, operation_from_external};
+use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use irq::PdmaIrqController;
 use pdma_model_contract::semantic::{
@@ -78,12 +79,10 @@ impl QueuePortDeviceModel {
     ) -> ModelResult<()> {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
-        let operation = operation_from_external(&command);
-        let submitted_command = command_id(&command);
         self.queue_mut(queue_id)?
             .frontend
             .submit_compat(queue_id, command)
-            .map(|()| {
+            .map(|(submitted_command, operation)| {
                 self.trace
                     .command_submitted(queue_id, operation, submitted_command);
             })

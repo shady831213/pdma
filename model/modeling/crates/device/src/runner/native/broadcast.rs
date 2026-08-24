@@ -1,31 +1,27 @@
 use super::NativeExecution;
+use super::execution::{BroadcastCopyOperation, ExecutionRoute};
 use super::retirement::validate_success_completion_route;
 use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
 use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
-use pdma_model_contract::semantic::DmaRangeStart;
-use pdma_model_contract::semantic::desc::BroadcastCopyCommand;
 use pdma_model_contract::semantic::trace::TraceOperation;
 
 pub(super) fn retire_broadcast_copy(
     execution: NativeExecution<'_>,
-    queue_id: pdma_model_contract::semantic::QueueId,
-    command: &BroadcastCopyCommand,
+    route: ExecutionRoute,
+    operation: BroadcastCopyOperation,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution {
         device,
         dma_space,
         bus_control,
     } = execution;
-    let request = command.request();
-    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
-    let source = DmaRangeStart::new(request.src(), request.src_offset());
-    for destination in request.destinations() {
-        if let Err(fault) = memory.validate(dma_space, source, request.len()) {
+    let memory = super::QueuePortDeviceModel::memory_resolver(route.queue, route.command);
+    for destination in &operation.destinations {
+        if let Err(fault) = memory.validate(dma_space, operation.source, operation.length) {
             return publish_fault(device, dma_space, bus_control, fault);
         }
-        let destination = DmaRangeStart::new(destination.dst(), destination.dst_offset());
-        if let Err(fault) = memory.validate(dma_space, destination, request.len()) {
+        if let Err(fault) = memory.validate(dma_space, *destination, operation.length) {
             return publish_fault(device, dma_space, bus_control, fault);
         }
     }
@@ -33,15 +29,14 @@ pub(super) fn retire_broadcast_copy(
         device,
         dma_space,
         bus_control,
-        queue_id,
-        command.completion_ring_id(),
+        route.queue,
+        route.completion_ring,
     )?;
-    for destination in request.destinations() {
-        let bytes = match memory.read(dma_space, source, request.len()) {
+    for destination in operation.destinations {
+        let bytes = match memory.read(dma_space, operation.source, operation.length) {
             Ok(bytes) => bytes,
             Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
         };
-        let destination = DmaRangeStart::new(destination.dst(), destination.dst_offset());
         if let Err(fault) = memory.write(dma_space, destination, &bytes) {
             return publish_fault(device, dma_space, bus_control, fault);
         }
@@ -51,9 +46,9 @@ pub(super) fn retire_broadcast_copy(
         dma_space,
         bus_control,
         SuccessRetirement {
-            queue: queue_id,
-            command: command.command_id(),
-            completion_ring: command.completion_ring_id(),
+            queue: route.queue,
+            command: route.command,
+            completion_ring: route.completion_ring,
             operation: TraceOperation::BroadcastCopy,
         },
     )

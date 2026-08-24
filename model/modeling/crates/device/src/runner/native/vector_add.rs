@@ -1,33 +1,27 @@
 use super::NativeExecution;
+use super::execution::{ExecutionRoute, VectorAddOperation};
 use super::retirement::validate_success_completion_route;
 use super::retirement::{SuccessRetirement, publish_completion, publish_fault};
 use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
-use pdma_model_contract::semantic::desc::VectorAddCommand;
-use pdma_model_contract::semantic::ids::QueueId;
 use pdma_model_contract::semantic::trace::TraceOperation;
 
 pub(super) fn retire_vector_add(
     execution: NativeExecution<'_>,
-    queue_id: QueueId,
-    command: VectorAddCommand,
+    route: ExecutionRoute,
+    operation: VectorAddOperation,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution {
         device,
         dma_space,
         bus_control,
     } = execution;
-    let request = command.request();
-    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
-    let left_source =
-        pdma_model_contract::semantic::DmaRangeStart::new(request.src_a(), request.src_a_offset());
-    let src_a = match memory.read(dma_space, left_source, request.len()) {
+    let memory = super::QueuePortDeviceModel::memory_resolver(route.queue, route.command);
+    let src_a = match memory.read(dma_space, operation.source_a, operation.length) {
         Ok(bytes) => bytes,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
     };
-    let right_source =
-        pdma_model_contract::semantic::DmaRangeStart::new(request.src_b(), request.src_b_offset());
-    let src_b = match memory.read(dma_space, right_source, request.len()) {
+    let src_b = match memory.read(dma_space, operation.source_b, operation.length) {
         Ok(bytes) => bytes,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
     };
@@ -36,19 +30,17 @@ pub(super) fn retire_vector_add(
         .zip(src_b.iter())
         .map(|(left, right)| left.wrapping_add(*right))
         .collect::<Vec<_>>();
-    let destination =
-        pdma_model_contract::semantic::DmaRangeStart::new(request.dst(), request.dst_offset());
-    if let Err(fault) = memory.validate(dma_space, destination, request.len()) {
+    if let Err(fault) = memory.validate(dma_space, operation.destination, operation.length) {
         return publish_fault(device, dma_space, bus_control, fault);
     }
     validate_success_completion_route(
         device,
         dma_space,
         bus_control,
-        queue_id,
-        command.completion_ring_id(),
+        route.queue,
+        route.completion_ring,
     )?;
-    if let Err(fault) = memory.write(dma_space, destination, &sum) {
+    if let Err(fault) = memory.write(dma_space, operation.destination, &sum) {
         return publish_fault(device, dma_space, bus_control, fault);
     }
     publish_completion(
@@ -56,9 +48,9 @@ pub(super) fn retire_vector_add(
         dma_space,
         bus_control,
         SuccessRetirement {
-            queue: queue_id,
-            command: command.command_id(),
-            completion_ring: command.completion_ring_id(),
+            queue: route.queue,
+            command: route.command,
+            completion_ring: route.completion_ring,
             operation: TraceOperation::VectorAdd,
         },
     )

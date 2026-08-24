@@ -1,12 +1,11 @@
 use super::NativeExecution;
+use super::execution::{CopyOperation, ExecutionRoute, ResolvedStridedRows, StridedCopyOperation};
 use super::io::QueueMemoryResolver;
 use super::retirement::validate_success_completion_route;
 use super::retirement::{FaultRetirement, SuccessRetirement, publish_completion, publish_fault};
 use crate::ModelResult;
 use crate::runner::backend::ModelStepStatus;
-use pdma_model_contract::semantic::desc::{CopyCommand, StridedCopyCommand};
 use pdma_model_contract::semantic::dma::DmaRangeStart;
-use pdma_model_contract::semantic::ids::QueueId;
 use pdma_model_contract::semantic::trace::TraceOperation;
 
 #[derive(Debug, Clone, Copy)]
@@ -18,31 +17,30 @@ struct NativeCopyChunk {
 
 pub(super) fn retire_copy(
     execution: NativeExecution<'_>,
-    queue_id: QueueId,
-    command: CopyCommand,
+    route: ExecutionRoute,
+    operation: CopyOperation,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution {
         device,
         dma_space,
         bus_control,
     } = execution;
-    let request = command.request();
-    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
-    let bytes = match memory.read(dma_space, request.src_start(), request.len()) {
+    let memory = super::QueuePortDeviceModel::memory_resolver(route.queue, route.command);
+    let bytes = match memory.read(dma_space, operation.source, operation.length) {
         Ok(bytes) => bytes,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
     };
-    if let Err(fault) = memory.validate(dma_space, request.dst_start(), request.len()) {
+    if let Err(fault) = memory.validate(dma_space, operation.destination, operation.length) {
         return publish_fault(device, dma_space, bus_control, fault);
     }
     validate_success_completion_route(
         device,
         dma_space,
         bus_control,
-        queue_id,
-        command.completion_ring_id(),
+        route.queue,
+        route.completion_ring,
     )?;
-    if let Err(fault) = memory.write(dma_space, request.dst_start(), &bytes) {
+    if let Err(fault) = memory.write(dma_space, operation.destination, &bytes) {
         return publish_fault(device, dma_space, bus_control, fault);
     }
     publish_completion(
@@ -50,9 +48,9 @@ pub(super) fn retire_copy(
         dma_space,
         bus_control,
         SuccessRetirement {
-            queue: queue_id,
-            command: command.command_id(),
-            completion_ring: command.completion_ring_id(),
+            queue: route.queue,
+            command: route.command,
+            completion_ring: route.completion_ring,
             operation: TraceOperation::Copy,
         },
     )
@@ -60,16 +58,16 @@ pub(super) fn retire_copy(
 
 pub(super) fn retire_strided_copy(
     execution: NativeExecution<'_>,
-    queue_id: QueueId,
-    command: StridedCopyCommand,
+    route: ExecutionRoute,
+    operation: StridedCopyOperation,
 ) -> ModelResult<ModelStepStatus> {
     let NativeExecution {
         device,
         dma_space,
         bus_control,
     } = execution;
-    let memory = super::QueuePortDeviceModel::memory_resolver(queue_id, command.command_id());
-    let chunks = match strided_chunks(dma_space, memory, command) {
+    let memory = super::QueuePortDeviceModel::memory_resolver(route.queue, route.command);
+    let chunks = match strided_chunks(dma_space, memory, operation) {
         Ok(chunks) => chunks,
         Err(fault) => return publish_fault(device, dma_space, bus_control, fault),
     };
@@ -85,8 +83,8 @@ pub(super) fn retire_strided_copy(
         device,
         dma_space,
         bus_control,
-        queue_id,
-        command.completion_ring_id(),
+        route.queue,
+        route.completion_ring,
     )?;
     for chunk in chunks {
         let bytes = match memory.read(dma_space, chunk.src, chunk.len) {
@@ -102,9 +100,9 @@ pub(super) fn retire_strided_copy(
         dma_space,
         bus_control,
         SuccessRetirement {
-            queue: queue_id,
-            command: command.command_id(),
-            completion_ring: command.completion_ring_id(),
+            queue: route.queue,
+            command: route.command,
+            completion_ring: route.completion_ring,
             operation: TraceOperation::StridedCopy,
         },
     )
@@ -113,19 +111,25 @@ pub(super) fn retire_strided_copy(
 fn strided_chunks(
     dma_space: &crate::dma_space::PdmaMemoryMappings,
     memory: QueueMemoryResolver,
-    command: StridedCopyCommand,
+    operation: StridedCopyOperation,
 ) -> Result<Vec<NativeCopyChunk>, FaultRetirement> {
-    let request = command.request();
+    let (source, destination, count) = match operation.rows {
+        ResolvedStridedRows::Empty => return Ok(Vec::new()),
+        ResolvedStridedRows::NonEmpty {
+            source,
+            destination,
+            count,
+        } => (source, destination, count.get()),
+    };
     let mut chunks = Vec::new();
-    for row in 0..request.rows() {
-        let src =
-            memory.strided_start(dma_space, request.src_start(), row, request.src_stride())?;
+    for row in 0..count {
+        let src = memory.strided_start(dma_space, source, row, operation.source_stride)?;
         let dst =
-            memory.strided_start(dma_space, request.dst_start(), row, request.dst_stride())?;
+            memory.strided_start(dma_space, destination, row, operation.destination_stride)?;
         chunks.push(NativeCopyChunk {
             src,
             dst,
-            len: request.row_bytes(),
+            len: operation.row_bytes,
         });
     }
     Ok(chunks)

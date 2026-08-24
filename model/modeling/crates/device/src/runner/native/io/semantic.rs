@@ -1,3 +1,6 @@
+pub(super) mod command;
+
+use super::super::execution::ExecutionCommand;
 use super::{NormalizedFetch, PublicationOutcome, QueueFrontend};
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
@@ -9,7 +12,7 @@ use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub(super) struct SemanticFrontend {
-    commands: NativeRing<ExternalCommand>,
+    commands: NativeRing<ExecutionCommand>,
     completions: NativeRing<CompletionRecord>,
     events: VecDeque<EventRecord>,
     pending_fault: Option<(EventRecord, crate::ModelError)>,
@@ -27,8 +30,17 @@ impl SemanticFrontend {
 }
 
 impl QueueFrontend for SemanticFrontend {
-    fn submit_compat(&mut self, _queue: QueueId, command: ExternalCommand) -> ModelResult<()> {
-        self.commands.push(command)
+    fn submit_compat(
+        &mut self,
+        _queue: QueueId,
+        command: ExternalCommand,
+    ) -> ModelResult<(
+        pdma_model_contract::semantic::CommandId,
+        pdma_model_contract::semantic::TraceOperation,
+    )> {
+        let command = command::normalize(command);
+        let identity = command::identity(&command);
+        self.commands.push(command).map(|()| identity)
     }
 
     fn fetch(

@@ -1,5 +1,5 @@
+use super::execution::{ExecutionCommand, ExecutionOperation};
 use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_contract::semantic::desc::ExternalCommand;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ResourceDemand {
@@ -10,27 +10,27 @@ pub(super) struct ResourceDemand {
 }
 
 impl ResourceDemand {
-    pub(super) fn for_command(command: &ExternalCommand) -> Self {
-        match command {
-            ExternalCommand::Copy(_) => Self {
+    pub(super) fn for_command(command: &ExecutionCommand) -> Self {
+        match command.operation() {
+            ExecutionOperation::Copy(_) => Self {
                 internal_descriptors: 1,
                 read_slots: 1,
                 write_slots: 1,
                 compute_slots: 0,
             },
-            ExternalCommand::StridedCopy(command) => Self {
-                internal_descriptors: command.request().rows(),
-                read_slots: command.request().rows(),
-                write_slots: command.request().rows(),
+            ExecutionOperation::StridedCopy(operation) => Self {
+                internal_descriptors: operation.rows.count(),
+                read_slots: operation.rows.count(),
+                write_slots: operation.rows.count(),
                 compute_slots: 0,
             },
-            ExternalCommand::BroadcastCopy(command) => Self {
-                internal_descriptors: command.request().destinations().len(),
-                read_slots: command.request().destinations().len(),
-                write_slots: command.request().destinations().len(),
+            ExecutionOperation::BroadcastCopy(operation) => Self {
+                internal_descriptors: operation.destinations.len(),
+                read_slots: operation.destinations.len(),
+                write_slots: operation.destinations.len(),
                 compute_slots: 0,
             },
-            ExternalCommand::VectorAdd(_) => Self {
+            ExecutionOperation::VectorAdd(_) => Self {
                 internal_descriptors: 1,
                 read_slots: 2,
                 write_slots: 1,

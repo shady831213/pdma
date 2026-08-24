@@ -66,6 +66,15 @@ pub(super) fn decode(
                 #ty::from_raw(raw, #marker::#offset)?
             };))
         }
+        ModernTypeDecl::BitsReference(path) => Ok(quote!(let #name = {
+            let end = #marker::#offset.saturating_add(#path::EXTENT);
+            let field = bytes.get(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
+            <#path as #facade::BitsLayout>::decode_record(
+                field,
+                #facade::Endian::#endian,
+                #marker::#offset,
+            )?
+        };)),
         ModernTypeDecl::Record(path) => Ok(quote!(let #name = {
             let end = #marker::#offset.saturating_add(#path::RECORD_SIZE);
             let field = bytes.get(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
@@ -124,6 +133,17 @@ pub(super) fn encode(
                 #facade::write_scalar(field, #facade::Endian::#endian, raw)?;
             })
         }
+        ModernTypeDecl::BitsReference(path) => quote!({
+            let end = #marker::#offset.saturating_add(#path::EXTENT);
+            let actual = encoded.len();
+            let field = encoded.get_mut(#marker::#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
+            <#path as #facade::BitsLayout>::encode_record(
+                field,
+                #facade::Endian::#endian,
+                &normalized.#name,
+                #marker::#offset,
+            )?;
+        }),
         ModernTypeDecl::Record(path) => quote!({
             let end = #marker::#offset.saturating_add(#path::RECORD_SIZE);
             let actual = encoded.len();

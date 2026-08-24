@@ -10,7 +10,7 @@ mod bits;
 mod enumeration;
 mod union;
 
-pub(in crate::internal) use bits::BitsDecl;
+pub(in crate::internal) use bits::{BitsDecl, BitsTypeDecl};
 pub(in crate::internal) use enumeration::EnumDecl;
 pub(in crate::internal) use union::{ScopedPath, UnionDecl, UnionFieldDecl};
 
@@ -34,6 +34,7 @@ pub(in crate::internal) enum ModernTypeDecl {
     },
     Enum(EnumDecl),
     Bits(BitsDecl),
+    BitsReference(Path),
     Record(Path),
     Union(UnionDecl),
 }
@@ -90,7 +91,10 @@ impl ModernTypeDecl {
         }
         let probe = input.fork();
         if probe.parse::<Ident>().is_ok_and(|ident| ident == "bits") {
-            return input.parse().map(Self::Bits);
+            return match input.parse::<BitsTypeDecl>()? {
+                BitsTypeDecl::Inline(decl) => Ok(Self::Bits(decl)),
+                BitsTypeDecl::Reference(path) => Ok(Self::BitsReference(path)),
+            };
         }
         let path: Path = input.parse()?;
         if let Some(scalar) = scalar_path(&path) {

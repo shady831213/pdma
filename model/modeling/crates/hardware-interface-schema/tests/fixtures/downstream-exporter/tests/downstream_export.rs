@@ -50,6 +50,6 @@ fn downstream_export_when_schema_is_declared_through_renamed_facade() {
         b"record_size=16;record=DownPair.left@0+8,DownPair.left.sequence@0+4,DownPair.left.flags@4+2,DownPair.right@8+8,DownPair.right.sequence@8+4,DownPair.right.flags@12+2;map_size=128;registers=controller@4,status@12,lane[0].publish@32,lane[1].publish@64,lane[0].fault@40,lane[1].fault@72"
     );
     let composable = composable_output_line();
-    assert_eq!(composable.as_deref(), Some("nested=[44, 33, 22, 11, 00, 00, 00, 00, 00, 00, 00, 00, 66, 55, 00, 00];le=[01, 00, 00, 00];be=[12, 34];left=0x11223344;enable=1;status=0x1234"));
+    assert_eq!(composable.as_deref(), Some("nested=[44, 33, 22, 11, 00, 00, 00, 00, 00, 00, 00, 00, 66, 55, 00, 00];le=[05, 00, 00, 00];be=[12, 34];bits=[05];left=0x11223344;enable=true;mode=2;status=0x1234"));
     println!("{}", composable.as_deref().unwrap_or("missing composable output"));
 }

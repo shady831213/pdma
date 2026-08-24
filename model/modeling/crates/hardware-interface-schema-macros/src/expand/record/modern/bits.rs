@@ -17,42 +17,33 @@ pub(super) fn expand(
     let raw_maximum = decl.storage.maximum();
     let declarations = decl.fields.iter().map(|field| {
         let field_name = &field.name;
-        let width = field.end.0 - field.start.0;
+        let width = crate::internal::expand::bits::width(field);
         if width == 1 {
             quote!(#[doc = "Generated one-bit boolean field."] #visibility #field_name: bool)
         } else {
-            let ty = scalar::ty(scalar::for_bits(width));
+            let ty = crate::internal::expand::bits::semantic_type(field);
             quote!(#[doc = "Generated packed integer field."] #visibility #field_name: #ty)
         }
     });
     let zero_fields = decl.fields.iter().map(|field| {
         let name = &field.name;
-        if field.end.0 - field.start.0 == 1 {
-            quote!(#name: false)
-        } else {
-            quote!(#name: 0)
-        }
+        let value = crate::internal::expand::bits::zero(field);
+        quote!(#name: #value)
     });
     let decoded_fields = decl.fields.iter().map(|field| {
         let name = &field.name;
-        let start = field.start.0;
-        let width = field.end.0 - start;
-        let mask = mask(width);
-        if width == 1 {
-            quote!(#name: ((observed >> #start) & 1) != 0)
-        } else {
-            let scalar = scalar::for_bits(width);
-            let narrowed = scalar::from_u64(scalar, quote!((observed >> #start) & #mask));
-            quote!(#name: #narrowed)
-        }
+        let observed = quote!(observed);
+        let value = crate::internal::expand::bits::decode(field, &observed);
+        quote!(#name: #value)
     });
     let encoded_fields = decl.fields.iter().map(|field| {
         let name = &field.name;
-        let start = field.start.0;
-        let width = field.end.0 - start;
-        let maximum = mask(width);
+        let width = crate::internal::expand::bits::width(field);
+        let maximum = crate::internal::validate::bits::bit_mask(width);
+        let value = quote!(self.#name);
+        let encoded = crate::internal::expand::bits::encode(field, &value);
         if width == 1 {
-            quote!(if self.#name { observed |= 1_u64 << #start; })
+            quote!(observed |= #encoded;)
         } else {
             quote!({
                 let value = u64::from(self.#name);
@@ -63,13 +54,11 @@ pub(super) fn expand(
                         maximum: #maximum,
                     });
                 }
-                observed |= value << #start;
+                observed |= #encoded;
             })
         }
     });
-    let used_mask = decl.fields.iter().fold(0_u64, |mask, field| {
-        mask | (self::mask(field.end.0 - field.start.0) << field.start.0)
-    });
+    let used_mask = crate::internal::validate::bits::declared_mask(&decl.fields);
     let reserved_mask = raw_maximum & !used_mask;
     let narrowed_raw = scalar::from_u64(decl.storage, quote!(observed));
     quote! {
@@ -98,13 +87,5 @@ pub(super) fn expand(
         impl ::core::default::Default for #name {
             fn default() -> Self { Self::ZERO }
         }
-    }
-}
-
-const fn mask(width: usize) -> u64 {
-    if width >= 64 {
-        u64::MAX
-    } else {
-        (1_u64 << width) - 1
     }
 }

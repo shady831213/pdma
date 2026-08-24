@@ -5,12 +5,9 @@ pub mod irq;
 /// Queue-register definitions without map placement.
 pub mod queue;
 
-use hardware_interface_schema::{register_field_schema, register_map};
+use hardware_interface_schema::register_map;
 
 pub use hardware_interface_schema::register::{Access as MmioAccess, ResetKind as MmioReset};
-
-register_field_schema! { pub register_field U32Value { bit_width: 32 } }
-register_field_schema! { pub register_field U64Value { bit_width: 64 } }
 
 register_map! {
     pub map PdmaMmioMap {

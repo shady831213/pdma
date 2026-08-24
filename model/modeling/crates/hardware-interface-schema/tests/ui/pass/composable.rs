@@ -1,6 +1,4 @@
-use hardware_interface_schema::{
-    field_schema, record_schema, register_field_schema, register_map, register_schema,
-};
+use hardware_interface_schema::{field_schema, record_schema, register_map, register_schema};
 
 field_schema! { pub field LeU32 { scalar: u32, endian: Little } }
 record_schema! { pub record Header {
@@ -18,11 +16,10 @@ record_schema! { pub record Pair {
         right: Header { id: 2, offset: 8 },
     },
 } }
-register_field_schema! { pub register_field Enable { bit_width: 1 } }
 register_schema! { pub register Control {
     width: 4, endian: Little, access: ReadWrite,
     reset: Constant(0), writable_mask: 0x1,
-    fields: { enable: Enable { id: 1, lsb: 0 }, },
+    fields: { enable: 0..1, },
 } }
 register_schema! { pub register Status {
     width: 2, endian: Big, access: ReadWrite,
@@ -49,8 +46,8 @@ fn main() {
         .unwrap()
         .control_mut()
         .unwrap()
-        .set_enable(1)
+        .set_enable(true)
         .unwrap();
-    assert_eq!(DeviceMapView::new(&registers).unwrap().control().unwrap().enable(), Ok(1));
-    assert_eq!(DeviceMapView::new(&registers).unwrap().channel_control(0).unwrap().enable(), Ok(0));
+    assert_eq!(DeviceMapView::new(&registers).unwrap().control().unwrap().enable(), Ok(true));
+    assert_eq!(DeviceMapView::new(&registers).unwrap().channel_control(0).unwrap().enable(), Ok(false));
 }

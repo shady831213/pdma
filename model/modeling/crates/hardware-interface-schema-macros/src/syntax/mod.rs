@@ -1,9 +1,9 @@
+mod bits;
 mod field;
 mod map;
 mod map_ordered;
 mod record;
 mod register;
-mod register_field;
 
 pub(in crate::internal) use field::FieldDefinitionDecl;
 pub(in crate::internal) use map::{MapDecl, RegisterPlacementDecl};
@@ -14,9 +14,9 @@ pub(in crate::internal) use record::{
     UnionFieldDecl,
 };
 pub(in crate::internal) use register::{
-    AccessValue, RegisterDecl, RegisterDefinitionDecl, RegisterInput, RegistersDecl,
+    AccessValue, RegisterDecl, RegisterDefinitionDecl, RegisterFieldsDecl, RegisterInput,
+    RegistersDecl,
 };
-pub(in crate::internal) use register_field::RegisterFieldDefinitionDecl;
 
 use syn::{Ident, LitInt, Result, Token, parse::ParseStream};
 
@@ -49,3 +49,4 @@ pub(in crate::internal) fn u64_lit(input: ParseStream<'_>) -> Result<(u64, proc_
     let value = literal.base10_parse::<u64>()?;
     Ok((value, literal.span()))
 }
+pub(in crate::internal) use bits::{BitFieldDecl, BitsSchemaDecl};

@@ -86,6 +86,7 @@ fn type_alignment(ty: &ModernTypeDecl) -> TokenStream {
         ModernTypeDecl::Scalar { scalar, .. } => width(*scalar),
         ModernTypeDecl::Enum(decl) => width(decl.storage),
         ModernTypeDecl::Bits(decl) => width(decl.storage),
+        ModernTypeDecl::BitsReference(path) => quote!(#path::EXTENT),
         ModernTypeDecl::Record(path) => quote!(#path::RECORD_ALIGNMENT),
         ModernTypeDecl::Union(union) => {
             let width = union_geometry(union).map_or(1, |geometry| geometry.storage.width());
@@ -99,6 +100,7 @@ fn type_extent(ty: &ModernTypeDecl) -> TokenStream {
         ModernTypeDecl::Scalar { scalar, .. } => width(*scalar),
         ModernTypeDecl::Enum(decl) => width(decl.storage),
         ModernTypeDecl::Bits(decl) => width(decl.storage),
+        ModernTypeDecl::BitsReference(path) => quote!(#path::EXTENT),
         ModernTypeDecl::Record(path) => quote!(#path::RECORD_SIZE),
         ModernTypeDecl::Union(union) => {
             let extent = union_geometry(union).map_or(0, |geometry| geometry.extent);

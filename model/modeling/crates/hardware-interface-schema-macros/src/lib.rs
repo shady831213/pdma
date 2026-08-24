@@ -7,11 +7,17 @@ mod internal;
 use proc_macro::TokenStream;
 
 trait Expansion {
+    fn bits(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn field(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn record(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn register(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
-    fn register_field(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
     fn map(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+}
+
+/// Declares one reusable typed bit-field schema.
+#[proc_macro]
+pub fn bits_schema(input: TokenStream) -> TokenStream {
+    <() as Expansion>::bits(input.into()).into()
 }
 
 /// Declares one reusable typed scalar field definition.
@@ -30,12 +36,6 @@ pub fn record_schema(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn register_schema(input: TokenStream) -> TokenStream {
     <() as Expansion>::register(input.into()).into()
-}
-
-/// Declares one reusable register bit-field definition.
-#[proc_macro]
-pub fn register_field_schema(input: TokenStream) -> TokenStream {
-    <() as Expansion>::register_field(input.into()).into()
 }
 
 /// Declares a fixed and repeated-bank register map with exact-start lookup.

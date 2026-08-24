@@ -41,6 +41,7 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
             &decl.endian,
         ),
         crate::internal::syntax::ModernTypeDecl::Scalar { .. }
+        | crate::internal::syntax::ModernTypeDecl::BitsReference(_)
         | crate::internal::syntax::ModernTypeDecl::Record(_) => Ok(TokenStream::new()),
     });
     let type_items = type_items.collect::<syn::Result<Vec<_>>>()?;

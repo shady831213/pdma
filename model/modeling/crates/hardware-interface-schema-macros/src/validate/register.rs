@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::internal::syntax::{RegisterDecl, RegisterDefinitionDecl};
+use crate::internal::syntax::{RegisterDecl, RegisterDefinitionDecl, RegisterFieldsDecl};
 
 pub(in crate::internal) fn check(registers: &[RegisterDecl], overlap: bool) -> syn::Result<()> {
     let mut ids = HashSet::new();
@@ -81,25 +81,31 @@ pub(in crate::internal) fn check_definition(register: &RegisterDefinitionDecl) -
             "reset value does not fit register width",
         ));
     }
-    let mut ids = HashSet::new();
-    let mut names = HashSet::new();
+    let RegisterFieldsDecl::Inline(fields) = &register.fields else {
+        return Ok(());
+    };
+    crate::internal::validate::bits::check(fields, register.width.0 * 8)?;
     let mut generated = HashSet::new();
-    for field in &register.fields {
-        if !ids.insert(field.id.0) {
-            return Err(syn::Error::new(field.id.1, "duplicate register field ID"));
-        }
-        if !names.insert(field.name.to_string()) {
-            return Err(syn::Error::new(
-                field.name.span(),
-                "duplicate register field name",
-            ));
-        }
+    for field in fields {
         if !generated.insert(generated_ident(&field.name.to_string())) {
             return Err(syn::Error::new(
                 field.name.span(),
                 "generated register field identifier collision",
             ));
         }
+    }
+    if fields.len() > usize::from(u16::MAX) {
+        return Err(syn::Error::new(
+            register.name.span(),
+            "register has too many bit fields",
+        ));
+    }
+    let declared_mask = crate::internal::validate::bits::declared_mask(fields);
+    if !fields.is_empty() && register.mask.0 & !declared_mask != 0 {
+        return Err(syn::Error::new(
+            register.mask.1,
+            "writable mask contains undeclared bits",
+        ));
     }
     Ok(())
 }

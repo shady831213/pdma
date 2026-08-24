@@ -3,8 +3,8 @@
 use std::collections::{BTreeSet, HashSet};
 
 use hardware_interface_schema::{
-    RegisterValueError, SchemaCodecError, field_schema, record_schema, register_field_schema,
-    register_map, register_map::RegisterLocation, register_schema,
+    RegisterValueError, SchemaCodecError, field_schema, record_schema, register_map,
+    register_map::RegisterLocation, register_schema,
 };
 
 field_schema! { pub field LeU32 { scalar: u32, endian: Little } }
@@ -22,11 +22,10 @@ record_schema! { pub record Pair {
         right: Header { id: 2, offset: 8 },
     },
 } }
-register_field_schema! { pub register_field Enable { bit_width: 1 } }
 register_schema! { pub register Control {
     width: 4, endian: Little, access: ReadWrite,
     reset: Constant(0), writable_mask: 1,
-    fields: { enable: Enable { id: 1, lsb: 0 }, },
+    fields: { enable: 0..1, },
 } }
 register_schema! { pub register BeStatus {
     width: 2, endian: Big, access: ReadWrite,
@@ -182,14 +181,14 @@ fn register_map_views_when_le_and_be_definitions_are_placed_use_exact_bytes()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut bytes = [0_u8; 64];
     let mut map = ComposableMapViewMut::new(&mut bytes)?;
-    map.control_mut()?.set_enable(1)?;
+    map.control_mut()?.set_enable(true)?;
     map.channel_status_mut(0)?.set_value(0x1234)?;
     map.channel_status_mut(1)?.set_value(0xabcd)?;
     assert_eq!(&bytes[..4], &[1, 0, 0, 0]);
     assert_eq!(&bytes[16..18], &[0x12, 0x34]);
     assert_eq!(&bytes[32..34], &[0xab, 0xcd]);
     let map = ComposableMapView::new(&bytes)?;
-    assert_eq!(map.control()?.enable()?, 1);
+    assert!(map.control()?.enable()?);
     assert_eq!(map.channel_status(1)?.value()?, 0xabcd);
     Ok(())
 }
@@ -197,14 +196,6 @@ fn register_map_views_when_le_and_be_definitions_are_placed_use_exact_bytes()
 #[test]
 fn generated_checked_views_when_buffers_or_values_are_invalid_do_not_mutate()
 -> Result<(), RegisterValueError> {
-    let mut raw = 0_u64;
-    Enable::insert(&mut raw, 1)?;
-    assert_eq!(Enable::extract(raw), 1);
-    assert!(matches!(
-        Enable::insert(&mut raw, 2),
-        Err(RegisterValueError::FieldValueOverflow { .. })
-    ));
-    assert_eq!(raw, 1);
     let mut short = [0x5a_u8; 3];
     assert!(matches!(
         ControlViewMut::new(&mut short),
@@ -215,9 +206,10 @@ fn generated_checked_views_when_buffers_or_values_are_invalid_do_not_mutate()
     ));
     assert_eq!(short, [0x5a; 3]);
     let mut value = [0_u8; 4];
-    let mut control = ControlViewMut::new(&mut value)?;
     assert!(matches!(
-        control.set_enable(2),
+        Control::SPEC
+            .view_mut(&mut value)?
+            .set_field_by_name("enable", 2),
         Err(RegisterValueError::FieldValueOverflow { .. })
     ));
     assert_eq!(value, [0; 4]);

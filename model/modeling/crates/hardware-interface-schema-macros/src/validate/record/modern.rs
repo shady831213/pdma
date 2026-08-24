@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 
-use crate::internal::syntax::{
-    BitsDecl, EnumDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, UnionDecl,
-};
+use crate::internal::syntax::{EnumDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, UnionDecl};
 
 pub(in crate::internal) fn check(decl: &ModernRecordDecl) -> syn::Result<()> {
     super::validate_endian(decl.endian.to_string().as_str(), decl.endian.span())?;
@@ -79,7 +77,10 @@ fn check_type(decl: &ModernRecordDecl, ty: &ModernTypeDecl) -> syn::Result<()> {
             Ok(())
         }
         ModernTypeDecl::Enum(enum_decl) => enum_variants(enum_decl).map(|_| ()),
-        ModernTypeDecl::Bits(bits) => check_bits(bits),
+        ModernTypeDecl::Bits(bits) => {
+            crate::internal::validate::bits::check(&bits.fields, bits.storage.width() * 8)
+        }
+        ModernTypeDecl::BitsReference(_) => Ok(()),
         ModernTypeDecl::Record(path) => {
             if path
                 .segments
@@ -96,34 +97,6 @@ fn check_type(decl: &ModernRecordDecl, ty: &ModernTypeDecl) -> syn::Result<()> {
         }
         ModernTypeDecl::Union(union) => check_union(decl, union),
     }
-}
-
-fn check_bits(bits: &BitsDecl) -> syn::Result<()> {
-    let storage_bits = bits.storage.width() * 8;
-    let mut ranges = Vec::new();
-    let mut names = HashSet::new();
-    for field in &bits.fields {
-        if !names.insert(field.name.to_string()) {
-            return Err(syn::Error::new(
-                field.name.span(),
-                "duplicate bits field name",
-            ));
-        }
-        if field.start.0 >= field.end.0 || field.end.0 > storage_bits {
-            return Err(syn::Error::new(
-                field.start.1,
-                "bits field range is empty or exceeds storage",
-            ));
-        }
-        if ranges
-            .iter()
-            .any(|&(start, end)| start < field.end.0 && field.start.0 < end)
-        {
-            return Err(syn::Error::new(field.start.1, "bits fields overlap"));
-        }
-        ranges.push((field.start.0, field.end.0));
-    }
-    Ok(())
 }
 
 fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {

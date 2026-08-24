@@ -1,11 +1,11 @@
 //! Facade macro re-export smoke test.
 
 use hardware_interface_schema::{
-    field_schema, record_schema, register_field_schema, register_map, register_schema,
+    bits_schema, field_schema, record_schema, register_map, register_schema,
 };
 
 field_schema! { pub field SurfaceByte { scalar: u8, endian: Little } }
-register_field_schema! { pub register_field SurfaceBit { bit_width: 1 } }
+bits_schema! { pub bits SurfaceBits { enable: 0..1, } }
 
 record_schema! {
     pub record SurfaceRecord {
@@ -21,7 +21,7 @@ record_schema! {
 register_schema! { pub register SurfaceControl {
     width: 4, endian: Little, access: ReadWrite,
     reset: Constant(0), writable_mask: 1,
-    fields: { enable: SurfaceBit { id: 1, lsb: 0 }, },
+    fields: SurfaceBits,
 } }
 
 register_map! { pub map SurfaceComposableMap {
@@ -56,7 +56,6 @@ fn facade_reexports_macros_when_surface_is_declared() -> Result<(), Box<dyn std:
     assert_eq!(SurfaceRegisters::SPEC.len(), 1);
     assert_eq!(SurfaceMap::SPEC.size(), 8);
     assert_eq!(SurfaceByte::DEFINITION.width(), 1);
-    assert_eq!(SurfaceBit::DEFINITION.bit_width(), 1);
     let resolved = SurfaceComposableMap::resolve()?;
     let paths = resolved
         .registers()
@@ -74,7 +73,7 @@ fn facade_reexports_macros_when_surface_is_declared() -> Result<(), Box<dyn std:
     let mut bytes = [0_u8; 32];
     SurfaceComposableMapViewMut::new(&mut bytes)?
         .channel_control_mut(1)?
-        .set_enable(1)?;
+        .set_fields(SurfaceBitsValues { enable: true })?;
     assert_eq!(bytes[24], 1);
     Ok(())
 }

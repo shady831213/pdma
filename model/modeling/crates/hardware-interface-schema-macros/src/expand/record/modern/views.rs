@@ -1,9 +1,12 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl, ScalarType};
+use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl};
 
-use super::{layout::RecordPlan, layout::union_geometry, scalar};
+use super::{layout::RecordPlan, layout::union_geometry};
+
+mod bits;
+mod raw_scalar;
 
 pub(super) fn expand(
     decl: &ModernRecordDecl,
@@ -76,33 +79,32 @@ fn getters(
 ) -> Vec<TokenStream> {
     let name = &field.decl.name;
     let offset = &field.offset_name;
+    let scalar_context = raw_scalar::ViewContext {
+        marker,
+        offset,
+        facade,
+        endian,
+    };
     match &field.decl.ty {
         ModernTypeDecl::Scalar { scalar, .. } => {
-            vec![scalar_getter_at(
+            vec![raw_scalar::getter(scalar_context, name, (0, *scalar))]
+        }
+        ModernTypeDecl::Enum(decl) => {
+            vec![raw_scalar::getter(scalar_context, name, (0, decl.storage))]
+        }
+        ModernTypeDecl::Bits(decl) => {
+            vec![raw_scalar::getter(scalar_context, name, (0, decl.storage))]
+        }
+        ModernTypeDecl::BitsReference(path) => {
+            vec![bits::getter(bits::ViewContext {
                 marker,
                 name,
                 offset,
-                (0, *scalar),
+                path,
                 facade,
                 endian,
-            )]
+            })]
         }
-        ModernTypeDecl::Enum(decl) => vec![scalar_getter_at(
-            marker,
-            name,
-            offset,
-            (0, decl.storage),
-            facade,
-            endian,
-        )],
-        ModernTypeDecl::Bits(decl) => vec![scalar_getter_at(
-            marker,
-            name,
-            offset,
-            (0, decl.storage),
-            facade,
-            endian,
-        )],
         ModernTypeDecl::Record(path) => vec![quote! {
             #[doc = "Creates a checked immutable view of the nested record."]
             pub fn #name(&self) -> ::core::result::Result<<#path as #facade::RecordLayout>::View<'_>, #facade::SchemaCodecError> {
@@ -116,14 +118,7 @@ fn getters(
                 .map(|index| {
                     let method = format_ident!("word{index}");
                     let relative = index * geometry.storage.width();
-                    scalar_getter_at(
-                        marker,
-                        &method,
-                        offset,
-                        (relative, geometry.storage),
-                        facade,
-                        endian,
-                    )
+                    raw_scalar::getter(scalar_context, &method, (relative, geometry.storage))
                 })
                 .collect()
         }),
@@ -138,33 +133,32 @@ fn setters(
 ) -> Vec<TokenStream> {
     let name = &field.decl.name;
     let offset = &field.offset_name;
+    let scalar_context = raw_scalar::ViewContext {
+        marker,
+        offset,
+        facade,
+        endian,
+    };
     match &field.decl.ty {
         ModernTypeDecl::Scalar { scalar, .. } => {
-            vec![scalar_setter_at(
+            vec![raw_scalar::setter(scalar_context, name, (0, *scalar))]
+        }
+        ModernTypeDecl::Enum(decl) => {
+            vec![raw_scalar::setter(scalar_context, name, (0, decl.storage))]
+        }
+        ModernTypeDecl::Bits(decl) => {
+            vec![raw_scalar::setter(scalar_context, name, (0, decl.storage))]
+        }
+        ModernTypeDecl::BitsReference(path) => {
+            vec![bits::setter(bits::ViewContext {
                 marker,
                 name,
                 offset,
-                (0, *scalar),
+                path,
                 facade,
                 endian,
-            )]
+            })]
         }
-        ModernTypeDecl::Enum(decl) => vec![scalar_setter_at(
-            marker,
-            name,
-            offset,
-            (0, decl.storage),
-            facade,
-            endian,
-        )],
-        ModernTypeDecl::Bits(decl) => vec![scalar_setter_at(
-            marker,
-            name,
-            offset,
-            (0, decl.storage),
-            facade,
-            endian,
-        )],
         ModernTypeDecl::Record(path) => {
             let method = format_ident!("{name}_mut");
             vec![quote! {
@@ -182,62 +176,9 @@ fn setters(
                 .map(|index| {
                     let method = format_ident!("word{index}");
                     let relative = index * geometry.storage.width();
-                    scalar_setter_at(
-                        marker,
-                        &method,
-                        offset,
-                        (relative, geometry.storage),
-                        facade,
-                        endian,
-                    )
+                    raw_scalar::setter(scalar_context, &method, (relative, geometry.storage))
                 })
                 .collect()
         }),
-    }
-}
-
-fn scalar_getter_at(
-    marker: &syn::Ident,
-    method: &syn::Ident,
-    offset: &syn::Ident,
-    storage: (usize, ScalarType),
-    facade: &TokenStream,
-    endian: &syn::Ident,
-) -> TokenStream {
-    let (relative, scalar_type) = storage;
-    let ty = scalar::ty(scalar_type);
-    let width = scalar_type.width();
-    quote! {
-        #[doc = "Reads one raw scalar storage field."]
-        pub fn #method(&self) -> ::core::result::Result<#ty, #facade::SchemaCodecError> {
-            let start = #marker::#offset.saturating_add(#relative);
-            let end = start.saturating_add(#width);
-            let bytes = self.bytes.get(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: self.bytes.len() })?;
-            #facade::read_scalar(bytes, #facade::Endian::#endian)
-        }
-    }
-}
-
-fn scalar_setter_at(
-    marker: &syn::Ident,
-    method: &syn::Ident,
-    offset: &syn::Ident,
-    storage: (usize, ScalarType),
-    facade: &TokenStream,
-    endian: &syn::Ident,
-) -> TokenStream {
-    let (relative, scalar_type) = storage;
-    let setter = format_ident!("set_{method}");
-    let ty = scalar::ty(scalar_type);
-    let width = scalar_type.width();
-    quote! {
-        #[doc = "Writes one raw scalar storage field."]
-        pub fn #setter(&mut self, value: #ty) -> ::core::result::Result<(), #facade::SchemaCodecError> {
-            let start = #marker::#offset.saturating_add(#relative);
-            let end = start.saturating_add(#width);
-            let actual = self.bytes.len();
-            let bytes = self.bytes.get_mut(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-            #facade::write_scalar(bytes, #facade::Endian::#endian, value)
-        }
     }
 }

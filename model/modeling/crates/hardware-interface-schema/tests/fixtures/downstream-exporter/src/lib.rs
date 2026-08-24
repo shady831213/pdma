@@ -3,13 +3,18 @@
 use core::convert::Infallible;
 
 use his::{
+    bits_schema,
     export::{Artifact, ArtifactSink, Exporter},
-    field_schema, record_schema, register_field_schema, register_map,
+    field_schema, record_schema, register_map,
     register_map::RegisterLocation,
     register_schema,
 };
 
 field_schema! { pub field DownLeU32 { scalar: u32, endian: Little } }
+bits_schema! { pub bits DownControlBits { enable: 0..1, mode: 1..3, } }
+record_schema! { pub record DownControlRecord { endian: Little, fields: {
+    flags: bits(DownControlBits),
+} } }
 record_schema! { pub record DownHeader {
     size: 8, alignment: 4,
     fields: {
@@ -24,11 +29,10 @@ record_schema! { pub record DownPair {
         right: DownHeader { id: 2, offset: 8 },
     },
 } }
-register_field_schema! { pub register_field DownEnable { bit_width: 1 } }
 register_schema! { pub register DownControl {
     width: 4, endian: Little, access: ReadWrite,
-    reset: Constant(0), writable_mask: 1,
-    fields: { enable: DownEnable { id: 1, lsb: 0 }, },
+    reset: Constant(0), writable_mask: 7,
+    fields: DownControlBits,
 } }
 register_schema! { pub register DownStatus {
     width: 2, endian: Big, access: ReadWrite,
@@ -202,15 +206,19 @@ pub fn composable_output_line() -> Option<String> {
 
     let mut registers = [0_u8; 32];
     let mut map = DownMapViewMut::new(&mut registers).ok()?;
-    map.control_mut().ok()?.set_enable(1).ok()?;
+    let flags = DownControlBitsValues { enable: true, mode: 2 };
+    map.control_mut().ok()?.set_fields(flags).ok()?;
     map.lane_status_mut(0).ok()?.set_value(0x1234).ok()?;
     let map = DownMapView::new(&registers).ok()?;
-    let enable = map.control().ok()?.enable().ok()?;
+    let control = map.control().ok()?.fields().ok()?;
+    let bits = DownControlRecordValues { flags }.to_bytes().ok()?;
     let status = map.lane_status(0).ok()?.value().ok()?;
     Some(format!(
-        "nested={nested:02x?};le={:02x?};be={:02x?};left={left:#010x};enable={enable};status={status:#06x}",
+        "nested={nested:02x?};le={:02x?};be={:02x?};bits={bits:02x?};left={left:#010x};enable={};mode={};status={status:#06x}",
         &registers[..4],
         &registers[16..18],
+        control.enable,
+        control.mode,
     ))
 }
 

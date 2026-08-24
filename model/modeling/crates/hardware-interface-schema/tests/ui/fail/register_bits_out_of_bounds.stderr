@@ -1,0 +1,5 @@
+error: bits field range is empty or exceeds storage
+  --> tests/ui/fail/register_bits_out_of_bounds.rs:11:20
+   |
+11 |             value: 1..9,
+   |                    ^

@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+/// Reusable typed bit-field layout contract.
+pub mod bits;
 /// Scalar encoding and decoding functions plus their typed errors.
 pub mod codec;
 /// Byte-order vocabulary for scalar codecs and record fields.
@@ -17,10 +19,11 @@ pub mod register_map;
 /// Supported scalar kinds and their sealed codec trait.
 pub mod scalar;
 
+pub use bits::{BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError};
 pub use codec::{SchemaCodecError, read_scalar, write_scalar};
 pub use endian::Endian;
 pub use hardware_interface_schema_macros::{
-    field_schema, record_schema, register_field_schema, register_map, register_schema,
+    bits_schema, field_schema, record_schema, register_map, register_schema,
 };
 pub use layout::{
     RecordLayout, RegisterLayout, checked_align_up, checked_placement_end, inferred_align_up,

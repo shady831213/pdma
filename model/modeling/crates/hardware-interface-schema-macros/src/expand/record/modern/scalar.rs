@@ -24,18 +24,6 @@ pub(super) fn kind(scalar: ScalarType) -> syn::Ident {
     )
 }
 
-pub(super) const fn for_bits(width: usize) -> ScalarType {
-    if width <= 8 {
-        ScalarType::U8
-    } else if width <= 16 {
-        ScalarType::U16
-    } else if width <= 32 {
-        ScalarType::U32
-    } else {
-        ScalarType::U64
-    }
-}
-
 pub(super) fn from_u64(scalar: ScalarType, value: TokenStream) -> TokenStream {
     match scalar {
         ScalarType::U8 => {

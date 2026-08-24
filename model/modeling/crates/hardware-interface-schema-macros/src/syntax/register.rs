@@ -3,7 +3,7 @@ use syn::{
     parse::{Parse, ParseStream},
 };
 
-use super::{key, keyword, u64_lit, usize_lit};
+use super::{BitFieldDecl, key, keyword, u64_lit, usize_lit};
 
 pub(in crate::internal) struct RegistersDecl {
     pub(in crate::internal) visibility: Visibility,
@@ -26,14 +26,12 @@ pub(in crate::internal) struct RegisterDefinitionDecl {
     pub(in crate::internal) access: AccessValue,
     pub(in crate::internal) reset: ResetValue,
     pub(in crate::internal) mask: (u64, proc_macro2::Span),
-    pub(in crate::internal) fields: Vec<RegisterFieldDecl>,
+    pub(in crate::internal) fields: RegisterFieldsDecl,
 }
 
-pub(in crate::internal) struct RegisterFieldDecl {
-    pub(in crate::internal) name: Ident,
-    pub(in crate::internal) definition: Path,
-    pub(in crate::internal) id: (u16, proc_macro2::Span),
-    pub(in crate::internal) lsb: (usize, proc_macro2::Span),
+pub(in crate::internal) enum RegisterFieldsDecl {
+    Inline(Vec<BitFieldDecl>),
+    Reference(Path),
 }
 
 #[derive(Clone)]
@@ -137,12 +135,18 @@ impl Parse for RegisterDefinitionDecl {
         let mask = u64_lit(&body)?;
         body.parse::<Token![,]>()?;
         key(&body, "fields")?;
-        let fields_body;
-        braced!(fields_body in body);
-        let fields = fields_body
-            .parse_terminated(RegisterFieldDecl::parse, Token![,])?
-            .into_iter()
-            .collect();
+        let fields = if body.peek(syn::token::Brace) {
+            let fields_body;
+            braced!(fields_body in body);
+            RegisterFieldsDecl::Inline(
+                fields_body
+                    .parse_terminated(BitFieldDecl::parse, Token![,])?
+                    .into_iter()
+                    .collect(),
+            )
+        } else {
+            RegisterFieldsDecl::Reference(body.parse()?)
+        };
         let _ = body.parse::<Token![,]>();
         Ok(Self {
             visibility,
@@ -154,29 +158,6 @@ impl Parse for RegisterDefinitionDecl {
             reset,
             mask,
             fields,
-        })
-    }
-}
-
-impl Parse for RegisterFieldDecl {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let name = input.parse()?;
-        input.parse::<Token![:]>()?;
-        let definition = input.parse()?;
-        let body;
-        braced!(body in input);
-        key(&body, "id")?;
-        let (raw_id, span) = usize_lit(&body)?;
-        let id = u16::try_from(raw_id)
-            .map_err(|_| syn::Error::new(span, "register field ID must fit u16"))?;
-        body.parse::<Token![,]>()?;
-        key(&body, "lsb")?;
-        let lsb = usize_lit(&body)?;
-        Ok(Self {
-            name,
-            definition,
-            id: (id, span),
-            lsb,
         })
     }
 }

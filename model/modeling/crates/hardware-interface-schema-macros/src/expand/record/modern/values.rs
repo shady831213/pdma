@@ -129,6 +129,7 @@ fn value_declaration(
             let ty = scalar::type_name(marker, name, "Values");
             quote!(#ty)
         }
+        ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::Value),
         ModernTypeDecl::Record(path) => quote!(<#path as #facade::RecordLayout>::Value),
     };
     Some(quote!(#[doc = "Generated semantic record field."] #visibility #name: #ty))
@@ -153,6 +154,7 @@ fn zero_field(
             let ty = scalar::type_name(marker, name, "Values");
             quote!(#ty::ZERO)
         }
+        ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::ZERO),
         ModernTypeDecl::Record(path) => {
             quote!(<#path as #facade::RecordLayout>::ZERO)
         }

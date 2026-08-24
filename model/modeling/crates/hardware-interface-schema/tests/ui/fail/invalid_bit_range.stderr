@@ -1,5 +1,5 @@
-error[E0080]: evaluation panicked: register field extends beyond register width
- --> tests/ui/fail/invalid_bit_range.rs:7:21
+error: bits field range is empty or exceeds storage
+ --> tests/ui/fail/invalid_bit_range.rs:5:21
   |
-7 |     fields: { wide: Wide { id: 1, lsb: 1 }, },
-  |                     ^^^^ evaluation of `_` failed here
+5 |     fields: { wide: 1..9, },
+  |                     ^

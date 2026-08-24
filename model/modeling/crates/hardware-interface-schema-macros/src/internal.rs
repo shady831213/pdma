@@ -8,6 +8,10 @@ mod syntax;
 mod validate;
 
 impl crate::Expansion for () {
+    fn bits(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        expand::bits::run(input)
+    }
+
     fn field(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         expand::field::run(input)
     }
@@ -18,10 +22,6 @@ impl crate::Expansion for () {
 
     fn register(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         expand::register::run(input)
-    }
-
-    fn register_field(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-        expand::register_field::run(input)
     }
 
     fn map(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {

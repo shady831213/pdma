@@ -25,7 +25,10 @@ pub(super) fn expand(
             let slots = union_geometry(union).map_or(0, |geometry| geometry.slots);
             quote!(#slots)
         }
-        ModernTypeDecl::Scalar { .. } | ModernTypeDecl::Enum(_) | ModernTypeDecl::Bits(_) => {
+        ModernTypeDecl::Scalar { .. }
+        | ModernTypeDecl::Enum(_)
+        | ModernTypeDecl::Bits(_)
+        | ModernTypeDecl::BitsReference(_) => {
             quote!(1_usize)
         }
     });
@@ -95,6 +98,18 @@ fn fill_field(
         ModernTypeDecl::Bits(decl) => {
             fill_scalar(marker, &name, offset, decl.storage, facade, endian)
         }
+        ModernTypeDecl::BitsReference(path) => quote!({
+            let id = match #facade::inferred_field_id(output_index) { Some(id) => id, None => 0 };
+            fields[output_index] = #facade::FieldSpec::new(
+                id,
+                #name,
+                #marker::#offset,
+                <#path as #facade::BitsLayout>::SCALAR_KIND,
+            )
+                .with_endian(#facade::Endian::#endian)
+                .with_declaration_index(output_index);
+            output_index += 1;
+        }),
         ModernTypeDecl::Record(path) => quote!({
             let child = #path::SPEC.fields();
             let mut child_index = 0_usize;

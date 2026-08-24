@@ -54,8 +54,16 @@ use wider wire `storage`, while unused union slots and undeclared bits are reser
 zero. A scalar `{ const: OtherRecord::record_size }` is derived during encoding and
 validated during decoding. Generated `*Values` types therefore expose the semantic
 record directly rather than requiring a second handwritten overlay.
-`register_schema!`
-declares an offset-free register with explicit width and alignment. `register_map!`
+`bits_schema!` gives one LSB0 half-open bit layout a stable name, typed value, field
+identities, inferred minimum scalar extent, and checked codecs. Inferred records refer
+to it with `bits(Name)`, while registers use `fields: Name`; both embeddings therefore
+share the exact field names, ranges, semantic types, and metadata. Byte order belongs
+to the containing record or register rather than to the bits schema.
+`register_schema!` declares an offset-free register with explicit width and alignment.
+Its inline `fields` use the same bit language: one-bit fields have typed `bool`
+accessors and wider ranges use the smallest matching unsigned integer. Field IDs are
+inferred in declaration order. Undeclared bits are preserved by field writes, and the
+writable mask may not select an undeclared bit. `register_map!`
 declares map `alignment`, an optional exact `extent`, and one ordered
 `placements: [...]` list. A placement may omit its offset; the macro then aligns the
 current high-water mark to the child layout. `count` defaults to one and a repeated
@@ -64,6 +72,50 @@ the same `RegisterLayout` contract, so maps compose recursively.
 
 The following executable example declares a record, two registers, and one ordered
 map, then encodes both generated owned-value types.
+
+```rust
+use hardware_interface_schema::{bits_schema, record_schema, register_schema};
+# use hardware_interface_schema::{
+#     Access, BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError, Endian,
+#     FieldSpec, RecordLayout, RecordSpec, RegisterCodecError, RegisterDefinition,
+#     RegisterLayout, RegisterValueError, ResetKind, ScalarKind, SchemaCodecError,
+#     inferred_align_up, inferred_field_id, read_scalar, write_scalar,
+# };
+
+bits_schema! {
+    pub bits CommonFlags {
+        ready: 0..1,
+        mode: 8..12,
+    }
+}
+
+record_schema! {
+    pub record FlagRecord {
+        endian: Big,
+        fields: { flags: bits(CommonFlags), },
+    }
+}
+
+register_schema! {
+    pub register FlagRegister {
+        width: 4,
+        endian: Little,
+        access: ReadWrite,
+        reset: Zero(0),
+        writable_mask: 0xf01,
+        fields: CommonFlags,
+    }
+}
+
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+let flags = CommonFlagsValues { ready: true, mode: 5 };
+assert_eq!(FlagRecordValues { flags }.to_bytes()?, [0x05, 0x01]);
+let mut register = [0xf0, 0xa0, 0x5a, 0xc3];
+FlagRegisterViewMut::new(&mut register)?.set_fields(flags)?;
+assert_eq!(register, [0xf1, 0xa5, 0x5a, 0xc3]);
+# Ok(())
+# }
+```
 
 ```rust
 use hardware_interface_schema::{record_schema, register_schema};

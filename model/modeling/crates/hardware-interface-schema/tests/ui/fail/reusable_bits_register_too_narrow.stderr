@@ -1,0 +1,10 @@
+error[E0080]: evaluation panicked: bits schema exceeds register width
+  --> tests/ui/fail/reusable_bits_register_too_narrow.rs:9:1
+   |
+ 9 | / register_schema! {
+10 | |     pub register NarrowRegister {
+11 | |         width: 1,
+12 | |         endian: Little,
+...  |
+18 | | }
+   | |_^ evaluation of `_` failed here

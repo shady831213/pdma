@@ -43,10 +43,17 @@ publication endpoint.
 
 ## Declare and inspect a schema
 
-`record_schema!` declares a fixed record. Scalar fields use
-`name: scalar { id, offset, endian }`; arrays use
-`name: [scalar; count] { ids: [...], offset, stride, endian }`. Records expose the
-same owned `*Values` codec and composable `RecordLayout` contract as nested records.
+`record_schema!` supports both explicit fixed layouts and inferred typed records. The
+explicit form keeps `name: scalar { id, offset, endian }` and array declarations for
+existing schemas. The inferred form declares record-level `endian`, optional
+`alignment`, and ordered fields whose aligned offsets and final size are generated.
+Its field types are scalars, nested records, `enum(storage)`, `bits(storage)` with
+LSB0 half-open ranges such as `0..5`, and `union` cases selected by a local or nested
+`self` tag. Enum values may omit assignments after an explicit value. Union fields may
+use wider wire `storage`, while unused union slots and undeclared bits are reserved
+zero. A scalar `{ const: OtherRecord::record_size }` is derived during encoding and
+validated during decoding. Generated `*Values` types therefore expose the semantic
+record directly rather than requiring a second handwritten overlay.
 `register_schema!`
 declares an offset-free register with explicit width and alignment. `register_map!`
 declares map `alignment`, an optional exact `extent`, and one ordered
@@ -132,10 +139,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Generated record marker types expose `SPEC`, field-ID types, offset constants,
-immutable/mutable checked views, a composable `RecordLayout`, and a generated `*Values`
-owned codec. Ordered maps expose typed placement metadata, checked nested views, and the
-same owned-codec surface.
+Generated record marker types expose `SPEC`, offset constants, immutable/mutable
+checked views, a composable `RecordLayout`, and a generated `*Values` owned codec.
+Explicit fixed records additionally expose stable field-ID types. Ordered maps expose
+typed placement metadata, checked nested views, and the same owned-codec surface.
 
 Validation is deterministic. `RecordSpec::validate` checks duplicate IDs, duplicate
 names, scalar widths, alignment, extents, and overlaps, in that order and declaration

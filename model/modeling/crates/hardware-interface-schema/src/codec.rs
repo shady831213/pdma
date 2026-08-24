@@ -13,6 +13,36 @@ pub enum SchemaCodecError {
         /// Supplied byte length.
         actual: usize,
     },
+    /// A record union contains an unassigned discriminant.
+    UnknownTag {
+        /// Observed discriminant value.
+        observed: u64,
+    },
+    /// A record contains nonzero reserved storage.
+    NonZeroReserved {
+        /// Reserved scalar byte offset.
+        offset: usize,
+        /// Observed reserved scalar value.
+        observed: u64,
+    },
+    /// A stored record scalar does not fit its semantic scalar type.
+    NarrowingOverflow {
+        /// Stored scalar byte offset.
+        offset: usize,
+        /// Observed stored value.
+        observed: u64,
+        /// Largest representable semantic value.
+        maximum: u64,
+    },
+    /// A derived record field does not contain its required constant.
+    ConstantMismatch {
+        /// Derived scalar byte offset.
+        offset: usize,
+        /// Observed stored value.
+        observed: u64,
+        /// Required generated value.
+        expected: u64,
+    },
 }
 
 impl fmt::Display for SchemaCodecError {
@@ -21,6 +51,27 @@ impl fmt::Display for SchemaCodecError {
             Self::BufferTooShort { required, actual } => write!(
                 formatter,
                 "scalar buffer is too short: required {required} bytes, received {actual}"
+            ),
+            Self::UnknownTag { observed } => write!(formatter, "unknown record tag {observed}"),
+            Self::NonZeroReserved { offset, observed } => write!(
+                formatter,
+                "reserved record storage at byte {offset} is {observed:#x}"
+            ),
+            Self::NarrowingOverflow {
+                offset,
+                observed,
+                maximum,
+            } => write!(
+                formatter,
+                "record value {observed} at byte {offset} exceeds {maximum}"
+            ),
+            Self::ConstantMismatch {
+                offset,
+                observed,
+                expected,
+            } => write!(
+                formatter,
+                "record constant at byte {offset} is {observed}, expected {expected}"
             ),
         }
     }

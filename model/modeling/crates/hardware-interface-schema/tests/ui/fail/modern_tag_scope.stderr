@@ -1,0 +1,5 @@
+error: tag root must be a record
+ --> tests/ui/fail/modern_tag_scope.rs:9:27
+  |
+9 |                 tag: self.opcode.extra,
+  |                           ^^^^^^

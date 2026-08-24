@@ -3,6 +3,9 @@
 /// Malformed descriptor and boundary-error assertions.
 #[path = "abi_descriptor/errors.rs"]
 pub mod errors;
+/// Generated semantic descriptor-value assertions.
+#[path = "abi_descriptor/schema_values.rs"]
+pub mod schema_values;
 /// Typed descriptor fixtures and byte mutation helpers.
 #[path = "abi_descriptor/support.rs"]
 pub mod support;

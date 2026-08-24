@@ -12,8 +12,10 @@ use super::{AbiDecodeError, AbiEncodeError};
 pub use broadcast::{AbiBroadcastCopy, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape};
 pub use copy::{AbiCopy, AbiStridedCopy, CopyIovas, CopyStrides, StridedCopyShape};
 pub use schema::{
-    DescriptorSchema, DescriptorSchemaValues, DescriptorSchemaView, DescriptorSchemaViewMut,
-    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
+    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
+    DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
+    DescriptorSchema, DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView,
+    DescriptorSchemaViewMut, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
     IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
 };
 pub use vector::{AbiVectorAdd, VectorIovas};

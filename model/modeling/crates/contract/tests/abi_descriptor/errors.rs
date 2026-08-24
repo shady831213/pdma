@@ -68,6 +68,25 @@ pub fn assert_reserved_and_scalar_errors() {
             },
         );
     }
+
+    let mut reserved_and_scalar = vectors::COPY;
+    assert!(support::replace_u64(
+        &mut reserved_and_scalar,
+        32,
+        u64::from(u32::MAX) + 1
+    ));
+    assert!(support::replace_u64(
+        &mut reserved_and_scalar,
+        40,
+        0x0102_0304_0506_0708
+    ));
+    assert_decode_error(
+        &reserved_and_scalar,
+        DescriptorDecodeError::InvalidReserved {
+            offset: 40,
+            observed: 0x0102_0304_0506_0708,
+        },
+    );
 }
 
 /// Checks count, alignment, short slices, and host construction failures.

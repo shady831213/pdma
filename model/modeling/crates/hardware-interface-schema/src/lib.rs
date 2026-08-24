@@ -22,7 +22,10 @@ pub use endian::Endian;
 pub use hardware_interface_schema_macros::{
     field_schema, record_schema, register_field_schema, register_map, register_schema,
 };
-pub use layout::{RecordLayout, RegisterLayout, checked_align_up, checked_placement_end};
+pub use layout::{
+    RecordLayout, RegisterLayout, checked_align_up, checked_placement_end, inferred_align_up,
+    inferred_field_id,
+};
 pub use record::{
     FieldDefinition, FieldSpec, RecordGraphError, RecordPlacement, RecordSpec,
     RecordValidationError, ResolvedMember, ResolvedMemberKind, ResolvedRecord,

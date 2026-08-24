@@ -119,11 +119,15 @@ fn abi_v1_registry_is_exact() {
 
     // When: callers consume canonical metadata and the checked LE helpers.
     let mut view = DescriptorSchemaViewMut::new(&mut bytes).expect("descriptor is exact");
-    view.set_version(0x2301).expect("descriptor is exact");
-    view.set_command_id(sentinel).expect("descriptor is exact");
+    let mut header = view.header_mut().expect("descriptor is exact");
+    header.set_version(0x2301).expect("descriptor is exact");
+    header
+        .set_command_id(sentinel)
+        .expect("descriptor is exact");
     let view = DescriptorSchemaView::new(&bytes).expect("descriptor is exact");
-    let decoded_version = view.version().expect("descriptor is exact");
-    let decoded_sentinel = view.command_id().expect("descriptor is exact");
+    let header = view.header().expect("descriptor is exact");
+    let decoded_version = header.version().expect("descriptor is exact");
+    let decoded_sentinel = header.command_id().expect("descriptor is exact");
 
     // Then: numeric assignments, bounds, and byte order exactly match the contract.
     assert_eq!(ABI_VERSION, 1);

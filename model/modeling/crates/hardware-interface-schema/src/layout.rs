@@ -76,6 +76,26 @@ pub const fn checked_align_up(value: usize, alignment: usize) -> Option<usize> {
     }
 }
 
+/// Computes an inferred aligned offset, returning `usize::MAX` on invalid geometry.
+pub const fn inferred_align_up(value: usize, alignment: usize) -> usize {
+    match checked_align_up(value, alignment) {
+        Some(aligned) => aligned,
+        None => usize::MAX,
+    }
+}
+
+/// Converts a zero-based declaration index into its one-based generated field ID.
+pub const fn inferred_field_id(index: usize) -> Option<u16> {
+    let Some(value) = index.checked_add(1) else {
+        return None;
+    };
+    if value > 65_535 {
+        return None;
+    }
+    let bytes = value.to_le_bytes();
+    Some(u16::from_le_bytes([bytes[0], bytes[1]]))
+}
+
 /// Computes the last byte after a repeated placement without wrapping.
 pub const fn checked_placement_end(
     offset: usize,

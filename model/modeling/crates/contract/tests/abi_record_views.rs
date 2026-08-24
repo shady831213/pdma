@@ -1,5 +1,6 @@
 //! Public generated record-view behavior.
 
+use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::abi::{
     CompletionSchemaView, CompletionSchemaViewMut, DescriptorSchemaView, DescriptorSchemaViewMut,
     EventSchemaView, EventSchemaViewMut, IndirectDestinationEntrySchemaView,
@@ -7,24 +8,14 @@ use pdma_model_contract::abi::{
 };
 
 #[test]
-fn generated_views_when_every_field_is_written_preserve_exact_values() {
+fn generated_views_when_every_field_is_written_preserve_exact_values()
+-> Result<(), SchemaCodecError> {
     let mut descriptor = [0_u8; 64];
     let mut completion = [0_u8; 32];
     let mut event = [0_u8; 64];
     let mut indirect = [0_u8; 8];
 
-    let mut descriptor_mut = DescriptorSchemaViewMut::new(&mut descriptor).unwrap();
-    descriptor_mut.set_version(1).unwrap();
-    descriptor_mut.set_opcode(2).unwrap();
-    descriptor_mut.set_flags(3).unwrap();
-    descriptor_mut.set_size(64).unwrap();
-    descriptor_mut.set_command_id(5).unwrap();
-    descriptor_mut.set_word0(6).unwrap();
-    descriptor_mut.set_word1(7).unwrap();
-    descriptor_mut.set_word2(8).unwrap();
-    descriptor_mut.set_word3(9).unwrap();
-    descriptor_mut.set_word4(10).unwrap();
-    descriptor_mut.set_word5(11).unwrap();
+    write_descriptor(&mut descriptor)?;
     let mut completion_mut = CompletionSchemaViewMut::new(&mut completion).unwrap();
     completion_mut.set_version(1).unwrap();
     completion_mut.set_size(32).unwrap();
@@ -52,23 +43,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values() {
         .set_destination_iova(14)
         .unwrap();
 
-    let descriptor = DescriptorSchemaView::new(&descriptor).unwrap();
-    assert_eq!(
-        (
-            descriptor.version().unwrap(),
-            descriptor.opcode().unwrap(),
-            descriptor.flags().unwrap(),
-            descriptor.size().unwrap(),
-            descriptor.command_id().unwrap(),
-            descriptor.word0().unwrap(),
-            descriptor.word1().unwrap(),
-            descriptor.word2().unwrap(),
-            descriptor.word3().unwrap(),
-            descriptor.word4().unwrap(),
-            descriptor.word5().unwrap(),
-        ),
-        (1, 2, 3, 64, 5, 6, 7, 8, 9, 10, 11)
-    );
+    assert_descriptor(&descriptor)?;
     let completion = CompletionSchemaView::new(&completion).unwrap();
     assert_eq!(
         (
@@ -107,6 +82,48 @@ fn generated_views_when_every_field_is_written_preserve_exact_values() {
             .destination_iova(),
         Ok(14)
     );
+    Ok(())
+}
+
+fn write_descriptor(bytes: &mut [u8; 64]) -> Result<(), SchemaCodecError> {
+    let mut descriptor = DescriptorSchemaViewMut::new(bytes)?;
+    {
+        let mut header = descriptor.header_mut()?;
+        header.set_version(1)?;
+        header.set_opcode(2)?;
+        header.set_flags(3)?;
+        header.set_size(64)?;
+        header.set_command_id(5)?;
+    }
+    descriptor.set_word0(6)?;
+    descriptor.set_word1(7)?;
+    descriptor.set_word2(8)?;
+    descriptor.set_word3(9)?;
+    descriptor.set_word4(10)?;
+    descriptor.set_word5(11)?;
+    Ok(())
+}
+
+fn assert_descriptor(bytes: &[u8; 64]) -> Result<(), SchemaCodecError> {
+    let descriptor = DescriptorSchemaView::new(bytes)?;
+    let header = descriptor.header()?;
+    assert_eq!(
+        (
+            header.version()?,
+            header.opcode()?,
+            header.flags()?,
+            header.size()?,
+            header.command_id()?,
+            descriptor.word0()?,
+            descriptor.word1()?,
+            descriptor.word2()?,
+            descriptor.word3()?,
+            descriptor.word4()?,
+            descriptor.word5()?,
+        ),
+        (1, 2, 3, 64, 5, 6, 7, 8, 9, 10, 11)
+    );
+    Ok(())
 }
 
 #[test]

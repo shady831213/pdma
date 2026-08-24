@@ -1,0 +1,5 @@
+error: union cases must exactly match tag enum variants
+ --> tests/ui/fail/modern_union_case_mismatch.rs:9:22
+  |
+9 |                 tag: self.opcode,
+  |                      ^^^^

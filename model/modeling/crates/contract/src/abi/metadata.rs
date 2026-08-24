@@ -1,6 +1,8 @@
 //! Canonical numeric registry for PDMA ABI version 1.
 
-use super::descriptor::{DescriptorSchema, IndirectDestinationEntrySchema};
+use super::descriptor::{
+    DescriptorHeaderSchemaOpcode, DescriptorSchema, IndirectDestinationEntrySchema,
+};
 use super::record::{CompletionSchema, EventSchema};
 use super::{AbiControlError, AbiDecodeError};
 
@@ -77,13 +79,13 @@ pub const fn validate_abi_version(version: u16) -> Result<(), AbiControlError> {
 }
 
 /// Copy descriptor opcode.
-pub const COPY_OPCODE: u16 = 1;
+pub const COPY_OPCODE: u16 = DescriptorHeaderSchemaOpcode::Copy.raw();
 /// Strided-copy descriptor opcode.
-pub const STRIDED_COPY_OPCODE: u16 = 2;
+pub const STRIDED_COPY_OPCODE: u16 = DescriptorHeaderSchemaOpcode::StridedCopy.raw();
 /// Broadcast-copy descriptor opcode.
-pub const BROADCAST_COPY_OPCODE: u16 = 3;
+pub const BROADCAST_COPY_OPCODE: u16 = DescriptorHeaderSchemaOpcode::BroadcastCopy.raw();
 /// Vector-add descriptor opcode.
-pub const VECTOR_ADD_OPCODE: u16 = 4;
+pub const VECTOR_ADD_OPCODE: u16 = DescriptorHeaderSchemaOpcode::VectorAdd.raw();
 
 /// Descriptor flags accepted by ABI v1.
 pub const DESCRIPTOR_FLAGS_MASK: u16 = 0;

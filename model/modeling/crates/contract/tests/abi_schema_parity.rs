@@ -5,7 +5,8 @@ pub(crate) mod support;
 
 use pdma_model_contract::abi::{AbiCommand, AbiDecodeError};
 use pdma_model_contract::abi::{
-    BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView, DescriptorSchema,
+    BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
+    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadValues,
     DescriptorSchemaValues, DescriptorSchemaView, EventSchema, EventSchemaView,
     IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
 };
@@ -36,7 +37,11 @@ fn canonical_schemas_match_every_frozen_record_layout() {
 
     // Then: all generated views expose the same little-endian scalar boundaries.
     assert_eq!(
-        DescriptorSchemaView::new(&COPY).unwrap().command_id(),
+        DescriptorSchemaView::new(&COPY)
+            .unwrap()
+            .header()
+            .unwrap()
+            .command_id(),
         Ok(0x0123_4567_89ab_cdef)
     );
     assert_eq!(
@@ -68,13 +73,17 @@ fn descriptor_owned_values_expose_the_complete_frozen_wire_record() {
     let Ok(values) = values else {
         return;
     };
-    assert_eq!(values.version, 1);
-    assert_eq!(values.opcode, 1);
-    assert_eq!(values.size, 64);
-    assert_eq!(values.command_id, 0x0123_4567_89ab_cdef);
-    assert_eq!(values.word0, 0x1020_3040_5060_7080);
-    assert_eq!(values.word1, 0x90a0_b0c0_d0e0_f000);
-    assert_eq!(values.word2, 0x1122_3344);
+    assert_eq!(values.header.version, 1);
+    assert_eq!(values.header.opcode, DescriptorHeaderSchemaOpcode::Copy);
+    assert_eq!(values.header.command_id, 0x0123_4567_89ab_cdef);
+    assert_eq!(
+        values.payload,
+        DescriptorSchemaPayloadValues::Copy {
+            source_iova: 0x1020_3040_5060_7080,
+            destination_iova: 0x90a0_b0c0_d0e0_f000,
+            length: 0x1122_3344,
+        }
+    );
     assert_eq!(values.to_bytes(), Ok(COPY));
 }
 

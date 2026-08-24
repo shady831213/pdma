@@ -4,16 +4,20 @@ use syn::parse2;
 
 use crate::internal::{
     crate_path,
-    syntax::{FieldShape, RecordDecl, ScalarType},
+    syntax::{FieldShape, RecordDecl, RecordInput, ScalarType},
     validate,
 };
 
 mod composable;
+mod modern;
 mod values;
 
 pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
-    parse2::<RecordDecl>(input)
-        .and_then(|decl| expand(&decl))
+    parse2::<RecordInput>(input)
+        .and_then(|decl| match decl {
+            RecordInput::Legacy(decl) => expand(&decl),
+            RecordInput::Modern(decl) => modern::expand(&decl),
+        })
         .unwrap_or_else(syn::Error::into_compile_error)
 }
 

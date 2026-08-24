@@ -74,7 +74,8 @@ pub(super) fn has_pending(control: &BusControlState, queue_id: QueueId) -> bool 
 fn command_id(bytes: &[u8]) -> ModelResult<CommandId> {
     let view = DescriptorSchemaView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
     let raw = view
-        .command_id()
+        .header()
+        .and_then(|header| header.command_id())
         .map_err(|_| ModelError::DmaSubmissionState)?;
     usize::try_from(raw)
         .map(CommandId::new)

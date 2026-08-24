@@ -91,6 +91,20 @@ impl<I: Copy> FieldSpec<I> {
         self
     }
 
+    /// Replaces the generated sibling identifier during record composition.
+    #[must_use]
+    pub const fn with_id(mut self, id: I) -> Self {
+        self.id = id;
+        self
+    }
+
+    /// Replaces the sibling-local byte offset during record composition.
+    #[must_use]
+    pub const fn with_offset(mut self, offset: usize) -> Self {
+        self.offset = offset;
+        self
+    }
+
     /// Selects the field byte order.
     #[must_use]
     pub const fn with_endian(mut self, endian: Endian) -> Self {

@@ -15,10 +15,12 @@ pub use codec::copy_u64_le;
 pub use descriptor::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
     BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
-    DescriptorSchema, DescriptorSchemaValues, DescriptorSchemaView, DescriptorSchemaViewMut,
-    DescriptorValueError, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
-    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut, StridedCopyShape,
-    VectorIovas,
+    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
+    DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
+    DescriptorSchema, DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView,
+    DescriptorSchemaViewMut, DescriptorValueError, IndirectDestinationEntrySchema,
+    IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
+    IndirectDestinationEntrySchemaViewMut, StridedCopyShape, VectorIovas,
 };
 pub use error::{AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError};
 pub use metadata::{

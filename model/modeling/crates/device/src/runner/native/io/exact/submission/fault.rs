@@ -13,7 +13,10 @@ pub(super) fn descriptor(
 ) -> ModelResult<AbiFault> {
     let view = DescriptorSchemaView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
     let list = view.word1().map_err(|_| ModelError::DmaSubmissionState)?;
-    let opcode = view.opcode().map_err(|_| ModelError::DmaSubmissionState)?;
+    let opcode = view
+        .header()
+        .and_then(|header| header.opcode())
+        .map_err(|_| ModelError::DmaSubmissionState)?;
     let (fault, order) = match error {
         DescriptorDecodeError::InvalidVersion { observed, .. } => (
             AbiFault::invalid_version(slot, observed),

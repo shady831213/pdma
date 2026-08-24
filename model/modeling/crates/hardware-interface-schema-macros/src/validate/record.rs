@@ -6,6 +6,7 @@ use syn::spanned::Spanned;
 
 use crate::internal::syntax::{FieldShape, RecordDecl};
 
+pub(in crate::internal) mod modern;
 mod names;
 
 pub(in crate::internal) fn check(decl: &RecordDecl) -> syn::Result<()> {
@@ -141,7 +142,7 @@ fn validate_records(decl: &RecordDecl, ranges: &[(usize, usize)]) -> syn::Result
     Ok(())
 }
 
-fn validate_endian(value: &str, span: Span) -> syn::Result<()> {
+pub(super) fn validate_endian(value: &str, span: Span) -> syn::Result<()> {
     if matches!(value, "Little" | "Big") {
         Ok(())
     } else {

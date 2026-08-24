@@ -207,5 +207,9 @@ const fn codec_error(error: crate::SchemaCodecError) -> RegisterValueError {
         crate::SchemaCodecError::BufferTooShort { required, actual } => {
             RegisterValueError::BufferTooShort { required, actual }
         }
+        crate::SchemaCodecError::UnknownTag { .. }
+        | crate::SchemaCodecError::NonZeroReserved { .. }
+        | crate::SchemaCodecError::NarrowingOverflow { .. }
+        | crate::SchemaCodecError::ConstantMismatch { .. } => RegisterValueError::InvalidDefinition,
     }
 }

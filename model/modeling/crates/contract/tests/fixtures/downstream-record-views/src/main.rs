@@ -1,7 +1,7 @@
 use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::abi::{
-    AbiCommand, CompletionSchemaView, DescriptorSchemaView, EventSchemaView,
-    IndirectDestinationEntrySchemaView,
+    AbiCommand, CompletionSchemaView, DescriptorSchemaPayloadValues, DescriptorSchemaValues,
+    DescriptorSchemaView, EventSchemaView, IndirectDestinationEntrySchemaView,
 };
 use pdma_model_contract::bridge::{
     CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
@@ -26,23 +26,33 @@ const INDIRECT: [u8; 8] = [0, 32, 0, 0, 0, 0, 0, 0];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let descriptor = DescriptorSchemaView::new(&DESCRIPTOR)?;
+    let header = descriptor.header()?;
+    let values = DescriptorSchemaValues::from_bytes(&DESCRIPTOR)?;
     let completion = CompletionSchemaView::new(&COMPLETION)?;
     let event = EventSchemaView::new(&EVENT)?;
     let indirect = IndirectDestinationEntrySchemaView::new(&INDIRECT)?;
+    let DescriptorSchemaPayloadValues::Copy {
+        source_iova,
+        destination_iova,
+        length,
+    } = values.payload
+    else {
+        return Err(std::io::Error::other("copy fixture decoded as another variant").into());
+    };
     let semantic = CopyCommand::new(
-        CommandId::new(usize::try_from(descriptor.command_id()?)?),
+        CommandId::new(usize::try_from(values.header.command_id)?),
         QueueId::new(usize::try_from(completion.origin_queue_id()?)?),
         CompletionRingId::new(5),
         CopyRequest::new(
             BufferId::new(11),
             BufferId::new(12),
-            usize::try_from(descriptor.word2()?)?,
+            usize::try_from(length)?,
         ),
     );
     let context = CopyBufferContext::from_command(semantic);
     let addresses = CopyRuntimeAddresses::new(
-        MemoryAddress::new(descriptor.word0()?),
-        MemoryAddress::new(descriptor.word1()?),
+        MemoryAddress::new(source_iova),
+        MemoryAddress::new(destination_iova),
     );
     let exact = encode_copy_command(semantic, addresses)?;
     let mut encoded = [0_u8; 64];
@@ -52,8 +62,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let roundtrip = roundtrip == semantic
         && decoded_addresses == addresses
         && encoded == DESCRIPTOR
-        && event.version()? == descriptor.version()?
-        && indirect.destination_iova()? == descriptor.word1()?;
+        && event.version()? == header.version()?
+        && values.header.version == header.version()?
+        && indirect.destination_iova()? == destination_iova;
     println!(
         "descriptor={};completion={};event={};indirect={};roundtrip={roundtrip}",
         DESCRIPTOR.len(),

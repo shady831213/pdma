@@ -13,7 +13,7 @@ use super::{
     AbiStrideOffset,
 };
 use crate::abi::{
-    ABI_VERSION, DESCRIPTOR_SIZE, DescriptorSchema, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
+    ABI_VERSION, DESCRIPTOR_SIZE, DescriptorHeaderSchema, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
     MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
 };
 
@@ -47,7 +47,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(ABI_VERSION),
-                descriptor_site(DescriptorSchema::VERSION_OFFSET as u64),
+                descriptor_site(DescriptorHeaderSchema::VERSION_OFFSET as u64),
             ),
         )
     }
@@ -60,7 +60,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(DESCRIPTOR_SIZE),
-                descriptor_site(DescriptorSchema::SIZE_OFFSET as u64),
+                descriptor_site(DescriptorHeaderSchema::SIZE_OFFSET as u64),
             ),
         )
     }
@@ -73,7 +73,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(VECTOR_ADD_OPCODE),
-                descriptor_site(DescriptorSchema::OPCODE_OFFSET as u64),
+                descriptor_site(DescriptorHeaderSchema::OPCODE_OFFSET as u64),
             ),
         )
     }
@@ -86,7 +86,7 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 0,
-                descriptor_site(DescriptorSchema::FLAGS_OFFSET as u64),
+                descriptor_site(DescriptorHeaderSchema::FLAGS_OFFSET as u64),
             ),
         )
     }

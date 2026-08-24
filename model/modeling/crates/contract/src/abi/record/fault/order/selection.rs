@@ -6,8 +6,8 @@ use super::types::{
     AbiScalarField, OrderKey,
 };
 use super::{operand_context, operation_for, order_key, reserved_offset};
-use crate::abi::DescriptorSchema;
 use crate::abi::record::{AbiEventKind, AbiFault};
+use crate::abi::{DescriptorHeaderSchema, DescriptorSchema};
 
 /// One canonical fault paired with its typed first-match location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,19 +95,19 @@ fn header_matches(tuple: FaultTuple, field: AbiHeaderField) -> bool {
     let (kind, index) = match field {
         AbiHeaderField::Version => (
             AbiEventKind::InvalidVersion,
-            DescriptorSchema::VERSION_OFFSET as u64,
+            DescriptorHeaderSchema::VERSION_OFFSET as u64,
         ),
         AbiHeaderField::Size => (
             AbiEventKind::InvalidSize,
-            DescriptorSchema::SIZE_OFFSET as u64,
+            DescriptorHeaderSchema::SIZE_OFFSET as u64,
         ),
         AbiHeaderField::Opcode => (
             AbiEventKind::InvalidOpcode,
-            DescriptorSchema::OPCODE_OFFSET as u64,
+            DescriptorHeaderSchema::OPCODE_OFFSET as u64,
         ),
         AbiHeaderField::Flags => (
             AbiEventKind::InvalidFlags,
-            DescriptorSchema::FLAGS_OFFSET as u64,
+            DescriptorHeaderSchema::FLAGS_OFFSET as u64,
         ),
     };
     tuple.0 == kind && tuple.6 == index

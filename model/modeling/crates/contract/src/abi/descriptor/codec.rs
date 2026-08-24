@@ -1,7 +1,7 @@
 use crate::abi::{
-    ABI_VERSION, AbiEncodeError, AbiId, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK,
-    DESCRIPTOR_SIZE, DescriptorSchemaValues, INDIRECT_DESTINATION_ENTRY_SIZE,
-    IndirectDestinationEntrySchemaValues, STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE,
+    ABI_VERSION, AbiEncodeError, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
+    DescriptorHeaderSchemaValues, DescriptorSchema, DescriptorSchemaPayloadValues,
+    DescriptorSchemaValues, INDIRECT_DESTINATION_ENTRY_SIZE, IndirectDestinationEntrySchemaValues,
     codec::encode_schema_error,
 };
 
@@ -11,24 +11,62 @@ pub(super) fn encode_descriptor(
     command: AbiCommand,
     output: &mut [u8],
 ) -> Result<(), AbiEncodeError> {
-    let required = usize::from(DESCRIPTOR_SIZE);
+    let required = DescriptorSchema::RECORD_SIZE;
     let actual = output.len();
     let destination = output
         .get_mut(..required)
         .ok_or(AbiEncodeError::BufferTooShort { required, actual })?;
-    let (command_id, opcode, words) = command_words(command);
+    let (command_id, opcode, payload) = match command {
+        AbiCommand::Copy(copy) => (
+            copy.command_id().raw(),
+            DescriptorHeaderSchemaOpcode::Copy,
+            DescriptorSchemaPayloadValues::Copy {
+                source_iova: copy.source().raw(),
+                destination_iova: copy.destination().raw(),
+                length: copy.length(),
+            },
+        ),
+        AbiCommand::StridedCopy(copy) => (
+            copy.command_id().raw(),
+            DescriptorHeaderSchemaOpcode::StridedCopy,
+            DescriptorSchemaPayloadValues::StridedCopy {
+                source_iova: copy.source().raw(),
+                destination_iova: copy.destination().raw(),
+                rows: copy.rows(),
+                row_bytes: copy.row_bytes(),
+                source_stride: copy.source_stride(),
+                destination_stride: copy.destination_stride(),
+            },
+        ),
+        AbiCommand::BroadcastCopy(copy) => (
+            copy.command_id().raw(),
+            DescriptorHeaderSchemaOpcode::BroadcastCopy,
+            DescriptorSchemaPayloadValues::BroadcastCopy {
+                source_iova: copy.source().raw(),
+                destination_list_iova: copy.destination_list().raw(),
+                length: copy.length(),
+                destination_count: copy.destination_count(),
+            },
+        ),
+        AbiCommand::VectorAdd(add) => (
+            add.command_id().raw(),
+            DescriptorHeaderSchemaOpcode::VectorAdd,
+            DescriptorSchemaPayloadValues::VectorAdd {
+                source_a_iova: add.source_a().raw(),
+                source_b_iova: add.source_b().raw(),
+                destination_iova: add.destination().raw(),
+                length: add.length(),
+            },
+        ),
+    };
     let encoded = DescriptorSchemaValues {
-        version: ABI_VERSION,
-        opcode,
-        flags: DESCRIPTOR_FLAGS_MASK,
-        size: DESCRIPTOR_SIZE,
-        command_id: command_id.raw(),
-        word0: words[0],
-        word1: words[1],
-        word2: words[2],
-        word3: words[3],
-        word4: words[4],
-        word5: words[5],
+        header: DescriptorHeaderSchemaValues {
+            version: ABI_VERSION,
+            opcode,
+            flags: DescriptorHeaderSchemaFlagsValues::ZERO,
+            command_id,
+        },
+        payload,
     }
     .to_bytes()
     .map_err(encode_schema_error)?;
@@ -52,57 +90,4 @@ pub(super) fn encode_destination(
         .ok_or(AbiEncodeError::BufferTooShort { required, actual })?;
     destination.copy_from_slice(&encoded);
     Ok(())
-}
-
-fn command_words(command: AbiCommand) -> (AbiId, u16, [u64; 6]) {
-    match command {
-        AbiCommand::Copy(copy) => (
-            copy.command_id(),
-            COPY_OPCODE,
-            [
-                copy.source().raw(),
-                copy.destination().raw(),
-                u64::from(copy.length()),
-                0,
-                0,
-                0,
-            ],
-        ),
-        AbiCommand::StridedCopy(copy) => (
-            copy.command_id(),
-            STRIDED_COPY_OPCODE,
-            [
-                copy.source().raw(),
-                copy.destination().raw(),
-                u64::from(copy.rows()),
-                u64::from(copy.row_bytes()),
-                u64::from(copy.source_stride()),
-                u64::from(copy.destination_stride()),
-            ],
-        ),
-        AbiCommand::BroadcastCopy(copy) => (
-            copy.command_id(),
-            BROADCAST_COPY_OPCODE,
-            [
-                copy.source().raw(),
-                copy.destination_list().raw(),
-                u64::from(copy.length()),
-                u64::from(copy.destination_count()),
-                0,
-                0,
-            ],
-        ),
-        AbiCommand::VectorAdd(add) => (
-            add.command_id(),
-            VECTOR_ADD_OPCODE,
-            [
-                add.source_a().raw(),
-                add.source_b().raw(),
-                add.destination().raw(),
-                u64::from(add.length()),
-                0,
-                0,
-            ],
-        ),
-    }
 }

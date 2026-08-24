@@ -1,8 +1,8 @@
 use super::AbiFault;
 use crate::abi::record::{AbiEventAccess, AbiEventKind, AbiEventStage};
 use crate::abi::{
-    DESCRIPTOR_SIZE, DescriptorSchema, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS,
-    MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
+    DESCRIPTOR_SIZE, DescriptorHeaderSchema, DescriptorSchema, INDIRECT_ENTRY_ALIGNMENT,
+    MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
 };
 
 pub(super) fn is_canonical(fault: AbiFault) -> bool {
@@ -13,22 +13,24 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
         AbiEventKind::RangeOverflow => operand && range_overflow(tuple),
         AbiEventKind::OutOfBounds => operand && tuple.3 > tuple.1,
         AbiEventKind::InvalidVersion => {
-            descriptor(tuple, 1, DescriptorSchema::VERSION_OFFSET as u64)
+            descriptor(tuple, 1, DescriptorHeaderSchema::VERSION_OFFSET as u64)
         }
         AbiEventKind::InvalidSize => descriptor(
             tuple,
             u64::from(DESCRIPTOR_SIZE),
-            DescriptorSchema::SIZE_OFFSET as u64,
+            DescriptorHeaderSchema::SIZE_OFFSET as u64,
         ),
         AbiEventKind::InvalidOpcode => {
             (tuple.2 == 0 || tuple.2 > u64::from(VECTOR_ADD_OPCODE))
                 && descriptor(
                     tuple,
                     u64::from(VECTOR_ADD_OPCODE),
-                    DescriptorSchema::OPCODE_OFFSET as u64,
+                    DescriptorHeaderSchema::OPCODE_OFFSET as u64,
                 )
         }
-        AbiEventKind::InvalidFlags => descriptor(tuple, 0, DescriptorSchema::FLAGS_OFFSET as u64),
+        AbiEventKind::InvalidFlags => {
+            descriptor(tuple, 0, DescriptorHeaderSchema::FLAGS_OFFSET as u64)
+        }
         AbiEventKind::InvalidReserved => {
             tuple.2 != 0
                 && tuple.3 == 0

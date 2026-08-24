@@ -1,0 +1,5 @@
+error: enum variant exceeds storage width
+ --> tests/ui/fail/modern_enum_overflow.rs:8:29
+  |
+8 |                 variants: { First = 256 },
+  |                             ^^^^^

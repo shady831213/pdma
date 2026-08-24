@@ -1,0 +1,5 @@
+error: bits fields overlap
+  --> tests/ui/fail/modern_bits_overlap.rs:10:29
+   |
+10 |                     second: 4..8,
+   |                             ^

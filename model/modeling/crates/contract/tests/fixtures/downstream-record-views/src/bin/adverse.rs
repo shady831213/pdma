@@ -44,8 +44,10 @@ fn main() {
     assert!(observed.into_iter().all(|value| value));
     let mut destination = [0x5a_u8; 63];
     let before = destination;
-    let write = DescriptorSchemaViewMut::new(&mut destination)
-        .and_then(|mut view| view.set_version(ABI_VERSION));
+    let write = DescriptorSchemaViewMut::new(&mut destination).and_then(|mut view| {
+        let mut header = view.header_mut()?;
+        header.set_version(ABI_VERSION)
+    });
     assert!(write.is_err());
     println!("short,version,opcode,flags,reserved,scalar;unchanged={}", destination == before);
 }

@@ -1,22 +1,64 @@
 use hardware_interface_schema::record_schema;
 
 record_schema! {
-    pub record DescriptorSchema {
-        size: 64,
-        alignment: 64,
+    pub record DescriptorHeaderSchema {
+        endian: Little,
         fields: {
-            version: u16 { id: 1, offset: 0, endian: Little },
-            opcode: u16 { id: 2, offset: 2, endian: Little },
-            flags: u16 { id: 3, offset: 4, endian: Little },
-            size: u16 { id: 4, offset: 6, endian: Little },
-            command_id: u64 { id: 5, offset: 8, endian: Little },
-            word0: u64 { id: 6, offset: 16, endian: Little },
-            word1: u64 { id: 7, offset: 24, endian: Little },
-            word2: u64 { id: 8, offset: 32, endian: Little },
-            word3: u64 { id: 9, offset: 40, endian: Little },
-            word4: u64 { id: 10, offset: 48, endian: Little },
-            word5: u64 { id: 11, offset: 56, endian: Little },
-        }
+            version: u16,
+            opcode: enum(u16) {
+                variants: {
+                    Copy = 1,
+                    StridedCopy,
+                    BroadcastCopy,
+                    VectorAdd,
+                },
+            },
+            flags: bits(u16) {
+                fields: {},
+            },
+            size: u16 { const: DescriptorSchema::record_size },
+            command_id: u64,
+        },
+    }
+}
+
+record_schema! {
+    pub record DescriptorSchema {
+        alignment: 64,
+        endian: Little,
+        fields: {
+            header: DescriptorHeaderSchema,
+            payload: union {
+                tag: self.header.opcode,
+                cases: {
+                    Copy {
+                        source_iova: u64,
+                        destination_iova: u64,
+                        length: u32 { storage: u64 },
+                    },
+                    StridedCopy {
+                        source_iova: u64,
+                        destination_iova: u64,
+                        rows: u32 { storage: u64 },
+                        row_bytes: u32 { storage: u64 },
+                        source_stride: u32 { storage: u64 },
+                        destination_stride: u32 { storage: u64 },
+                    },
+                    BroadcastCopy {
+                        source_iova: u64,
+                        destination_list_iova: u64,
+                        length: u32 { storage: u64 },
+                        destination_count: u32 { storage: u64 },
+                    },
+                    VectorAdd {
+                        source_a_iova: u64,
+                        source_b_iova: u64,
+                        destination_iova: u64,
+                        length: u32 { storage: u64 },
+                    },
+                },
+            },
+        },
     }
 }
 

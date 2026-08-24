@@ -5,8 +5,8 @@ use crate::abi::{AbiDecodeError, EVENT_ACCESSES, EVENT_KINDS, EVENT_STAGES};
 /// ABI-v1 event kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbiEventKind {
-    /// The attempted start IOVA has no containing mapping.
-    UnmappedIova,
+    /// The attempted start DMA address has no containing mapping.
+    UnmappedDmaAddress,
     /// Checked address or extent arithmetic overflowed.
     RangeOverflow,
     /// A representable requested end exceeds one containing mapping.
@@ -33,7 +33,7 @@ impl AbiEventKind {
     /// Returns the assigned ABI-v1 numeric value.
     pub const fn value(self) -> u16 {
         match self {
-            Self::UnmappedIova => EVENT_KINDS[0].value,
+            Self::UnmappedDmaAddress => EVENT_KINDS[0].value,
             Self::RangeOverflow => EVENT_KINDS[1].value,
             Self::OutOfBounds => EVENT_KINDS[2].value,
             Self::InvalidVersion => EVENT_KINDS[3].value,
@@ -49,7 +49,7 @@ impl AbiEventKind {
 
     pub(super) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
         match value {
-            value if value == EVENT_KINDS[0].value => Ok(Self::UnmappedIova),
+            value if value == EVENT_KINDS[0].value => Ok(Self::UnmappedDmaAddress),
             value if value == EVENT_KINDS[1].value => Ok(Self::RangeOverflow),
             value if value == EVENT_KINDS[2].value => Ok(Self::OutOfBounds),
             value if value == EVENT_KINDS[3].value => Ok(Self::InvalidVersion),

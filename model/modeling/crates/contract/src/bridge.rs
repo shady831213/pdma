@@ -27,13 +27,13 @@ use crate::abi::{AbiAddressError, AbiDecodeError, AbiEncodeError, AbiId, DmaAddr
 use crate::semantic::{BufferId, FaultAddress};
 use hardware_interface_runtime::MemoryAddress;
 
-/// Converts an exact IOVA to semantic fault-address context.
+/// Converts an exact DMA address to semantic fault-address context.
 pub const fn fault_address(address: DmaAddress) -> FaultAddress {
     FaultAddress::new(address.raw())
 }
 
-/// Converts semantic fault-address context to an exact IOVA.
-pub const fn fault_iova(address: FaultAddress) -> DmaAddress {
+/// Converts semantic fault-address context to an exact DMA address.
+pub const fn fault_dma_address(address: FaultAddress) -> DmaAddress {
     DmaAddress::new(address.raw())
 }
 
@@ -65,7 +65,7 @@ pub fn encode_id_value(value: u128) -> Result<AbiId, BridgeError> {
     AbiId::try_from(value).map_err(Into::into)
 }
 
-/// Model correlation between a semantic buffer and its exact IOVA extent.
+/// Model correlation between a semantic buffer and its exact DMA address extent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PdmaMemoryRegion {
     object: BufferId,
@@ -97,7 +97,7 @@ impl PdmaMemoryRegion {
         self.object
     }
 
-    /// Returns the exact base IOVA.
+    /// Returns the exact base DMA address.
     pub const fn base(self) -> DmaAddress {
         self.base
     }

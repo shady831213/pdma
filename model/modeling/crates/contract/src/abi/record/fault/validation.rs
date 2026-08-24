@@ -9,7 +9,7 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
     let tuple = fault.tuple();
     let operand = canonical_operand(tuple.4, tuple.5);
     match fault.kind() {
-        AbiEventKind::UnmappedIova => operand && tuple.3 == 0,
+        AbiEventKind::UnmappedDmaAddress => operand && tuple.3 == 0,
         AbiEventKind::RangeOverflow => operand && range_overflow(tuple),
         AbiEventKind::OutOfBounds => operand && tuple.3 > tuple.1,
         AbiEventKind::InvalidVersion => {

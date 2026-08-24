@@ -1,5 +1,5 @@
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCopy, AbiId, CopyIovas, DmaAddress, RingCursor, RingLayout, RingRecord,
+    AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress, RingCursor, RingLayout, RingRecord,
 };
 use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let exact = AbiCommand::Copy(AbiCopy::new(
         AbiId::new(41),
-        CopyIovas::new(DmaAddress::new(0x1000), DmaAddress::new(0x2000)),
+        CopyDmaAddresses::new(DmaAddress::new(0x1000), DmaAddress::new(0x2000)),
         16,
     ));
     let mut record = [0_u8; 64];

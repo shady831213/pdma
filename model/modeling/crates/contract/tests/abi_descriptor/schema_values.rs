@@ -21,8 +21,8 @@ fn generated_descriptor_uses_semantic_header_and_payload_fields() {
                 command_id: 0x0123_4567_89ab_cdef,
             },
             payload: DescriptorSchemaPayloadValues::Copy {
-                source_iova: 0x1020_3040_5060_7080,
-                destination_iova: 0x90a0_b0c0_d0e0_f000,
+                source_dma_address: 0x1020_3040_5060_7080,
+                destination_dma_address: 0x90a0_b0c0_d0e0_f000,
                 length: 0x1122_3344,
             },
         }

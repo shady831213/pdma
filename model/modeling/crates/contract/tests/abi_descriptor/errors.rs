@@ -1,7 +1,7 @@
 use super::{support, vectors};
 use pdma_model_contract::abi::{
     AbiBroadcastCopy, AbiCommand, AbiDecodeError, AbiEncodeError, AbiId, BroadcastDestinationEntry,
-    BroadcastIovas, BroadcastShape, DescriptorDecodeError, DescriptorValueError, DmaAddress,
+    BroadcastDmaAddresses, BroadcastShape, DescriptorDecodeError, DescriptorValueError, DmaAddress,
     INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS,
     MAX_TRANSFER_BYTES,
 };
@@ -159,7 +159,7 @@ pub fn assert_count_alignment_and_slice_errors() {
     assert_eq!(
         AbiBroadcastCopy::try_new(
             AbiId::new(1),
-            BroadcastIovas::new(DmaAddress::new(2), DmaAddress::new(8)),
+            BroadcastDmaAddresses::new(DmaAddress::new(2), DmaAddress::new(8)),
             BroadcastShape::new(0, 0),
         ),
         Err(DescriptorValueError::InvalidIndirectCount {
@@ -170,7 +170,7 @@ pub fn assert_count_alignment_and_slice_errors() {
     assert_eq!(
         AbiBroadcastCopy::try_new(
             AbiId::new(1),
-            BroadcastIovas::new(DmaAddress::new(2), DmaAddress::new(11)),
+            BroadcastDmaAddresses::new(DmaAddress::new(2), DmaAddress::new(11)),
             BroadcastShape::new(0, 1),
         ),
         Err(DescriptorValueError::InvalidIndirectAlignment {

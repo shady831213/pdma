@@ -182,7 +182,7 @@ impl AbiFault {
     /// Reports an absent mapping at an attempted operand start.
     pub const fn unmapped(locator: DmaAddress, length: u64, site: AbiFaultSite) -> Self {
         Self::from_parts(
-            AbiEventKind::UnmappedIova,
+            AbiEventKind::UnmappedDmaAddress,
             locator,
             AbiFaultDetails::new(length, 0, site),
         )

@@ -1,6 +1,6 @@
 use super::TestResult;
 use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId, DmaAddress};
-use pdma_model_contract::abi::{CopyIovas, RingCursor, RingRecord};
+use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor, RingRecord};
 use pdma_model_contract::bridge::{
     QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
 };
@@ -92,7 +92,7 @@ impl Fixture {
     ) -> TestResult {
         let descriptor = AbiCommand::Copy(AbiCopy::new(
             AbiId::new(command),
-            CopyIovas::new(source, destination),
+            CopyDmaAddresses::new(source, destination),
             4,
         ));
         let mut bytes = [0_u8; 64];

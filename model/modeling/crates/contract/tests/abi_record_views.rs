@@ -40,7 +40,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
     event_mut.set_index(13).unwrap();
     IndirectDestinationEntrySchemaViewMut::new(&mut indirect)
         .unwrap()
-        .set_destination_iova(14)
+        .set_destination_dma_address(14)
         .unwrap();
 
     assert_descriptor(&descriptor)?;
@@ -79,7 +79,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
     assert_eq!(
         IndirectDestinationEntrySchemaView::new(&indirect)
             .unwrap()
-            .destination_iova(),
+            .destination_dma_address(),
         Ok(14)
     );
     Ok(())

@@ -3,7 +3,7 @@
 use pdma_model_contract::abi::header::render_c_header;
 
 const LEGACY_HEADER: &[u8] = include_bytes!("../../../include/pdma_model_abi.h");
-const LEGACY_HEADER_BYTES: usize = 46_782;
+const LEGACY_HEADER_BYTES: usize = 46_867;
 const LEGACY_HEADER_LINES: usize = 708;
 
 #[test]

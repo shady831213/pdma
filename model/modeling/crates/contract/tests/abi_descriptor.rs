@@ -21,7 +21,7 @@ use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, Stride
 
 #[test]
 fn every_v1_descriptor_matches_golden_bytes() {
-    // Given: four commands with non-palindromic IDs, nonzero absolute IOVAs, and literal vectors.
+    // Given: four commands with non-palindromic IDs, nonzero absolute DMA addresses, and literal vectors.
     let commands = support::commands();
     assert!(commands.is_ok());
     let Ok(commands) = commands else {

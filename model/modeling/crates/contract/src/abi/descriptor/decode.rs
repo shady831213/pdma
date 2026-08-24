@@ -9,8 +9,8 @@ use crate::abi::{
 
 use super::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
-    BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
-    DescriptorValueError, StridedCopyShape, VectorIovas,
+    BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses, CopyStrides, DescriptorDecodeError,
+    DescriptorValueError, StridedCopyShape, VectorDmaAddresses,
 };
 
 pub(super) fn decode_descriptor(bytes: &[u8]) -> Result<AbiCommand, DescriptorDecodeError> {
@@ -32,7 +32,7 @@ pub(super) fn decode_destination(
     let values =
         IndirectDestinationEntrySchemaValues::from_bytes(bytes).map_err(decode_schema_error)?;
     Ok(BroadcastDestinationEntry::new(DmaAddress::new(
-        values.destination_iova,
+        values.destination_dma_address,
     )))
 }
 
@@ -75,29 +75,29 @@ fn decode_variant(
 ) -> Result<AbiCommand, DescriptorDecodeError> {
     match variant {
         DescriptorSchemaPayloadValues::Copy {
-            source_iova,
-            destination_iova,
+            source_dma_address,
+            destination_dma_address,
             length,
         } => Ok(AbiCommand::Copy(AbiCopy::new(
             command_id,
-            CopyIovas::new(
-                DmaAddress::new(source_iova),
-                DmaAddress::new(destination_iova),
+            CopyDmaAddresses::new(
+                DmaAddress::new(source_dma_address),
+                DmaAddress::new(destination_dma_address),
             ),
             length,
         ))),
         DescriptorSchemaPayloadValues::StridedCopy {
-            source_iova,
-            destination_iova,
+            source_dma_address,
+            destination_dma_address,
             rows,
             row_bytes,
             source_stride,
             destination_stride,
         } => Ok(AbiCommand::StridedCopy(AbiStridedCopy::new(
             command_id,
-            CopyIovas::new(
-                DmaAddress::new(source_iova),
-                DmaAddress::new(destination_iova),
+            CopyDmaAddresses::new(
+                DmaAddress::new(source_dma_address),
+                DmaAddress::new(destination_dma_address),
             ),
             StridedCopyShape::new(
                 rows,
@@ -106,31 +106,31 @@ fn decode_variant(
             ),
         ))),
         DescriptorSchemaPayloadValues::BroadcastCopy {
-            source_iova,
-            destination_list_iova,
+            source_dma_address,
+            destination_list_dma_address,
             length,
             destination_count,
         } => AbiBroadcastCopy::try_new(
             command_id,
-            BroadcastIovas::new(
-                DmaAddress::new(source_iova),
-                DmaAddress::new(destination_list_iova),
+            BroadcastDmaAddresses::new(
+                DmaAddress::new(source_dma_address),
+                DmaAddress::new(destination_list_dma_address),
             ),
             BroadcastShape::new(length, destination_count),
         )
         .map(AbiCommand::BroadcastCopy)
         .map_err(map_broadcast_error),
         DescriptorSchemaPayloadValues::VectorAdd {
-            source_a_iova,
-            source_b_iova,
-            destination_iova,
+            source_a_dma_address,
+            source_b_dma_address,
+            destination_dma_address,
             length,
         } => Ok(AbiCommand::VectorAdd(AbiVectorAdd::new(
             command_id,
-            VectorIovas::new(
-                DmaAddress::new(source_a_iova),
-                DmaAddress::new(source_b_iova),
-                DmaAddress::new(destination_iova),
+            VectorDmaAddresses::new(
+                DmaAddress::new(source_a_dma_address),
+                DmaAddress::new(source_b_dma_address),
+                DmaAddress::new(destination_dma_address),
             ),
             length,
         ))),

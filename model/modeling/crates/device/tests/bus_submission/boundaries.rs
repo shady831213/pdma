@@ -1,6 +1,6 @@
 use super::common::{TestResult, activate, allocate, encode};
 use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId};
-use pdma_model_contract::abi::{CopyIovas, RingCursor};
+use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor};
 use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
@@ -39,7 +39,7 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
     let second_slot = submission.checked_add(64)?;
     let command = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(50),
-        CopyIovas::new(source.base(), destination.base()),
+        CopyDmaAddresses::new(source.base(), destination.base()),
         4,
     )))?;
     handle

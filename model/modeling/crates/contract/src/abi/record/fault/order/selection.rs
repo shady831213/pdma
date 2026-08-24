@@ -155,7 +155,7 @@ fn step_matches(kind: AbiEventKind, visit: AbiOperandVisit, step: AbiOperandFaul
                 )
         }
         AbiOperandFaultStep::CheckedEnd => kind == AbiEventKind::RangeOverflow,
-        AbiOperandFaultStep::Unmapped => kind == AbiEventKind::UnmappedIova,
+        AbiOperandFaultStep::Unmapped => kind == AbiEventKind::UnmappedDmaAddress,
         AbiOperandFaultStep::OutOfBounds => kind == AbiEventKind::OutOfBounds,
     }
 }

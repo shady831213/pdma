@@ -3,7 +3,7 @@ use pdma_model_contract::abi::{
     AbiCommand, AbiCopy, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId, DmaAddress,
     MAX_TRANSFER_BYTES,
 };
-use pdma_model_contract::abi::{CopyIovas, RingCursor};
+use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor};
 use pdma_model_contract::semantic::ResourceConfig;
 
 #[derive(Clone, Copy)]
@@ -44,7 +44,7 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
     let destination = allocate(&fixture.handle, 4).await?;
     let mut bytes = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(31),
-        CopyIovas::new(source.base(), destination.base()),
+        CopyDmaAddresses::new(source.base(), destination.base()),
         4,
     )))?;
     let (kind, index, observed, expected) = mutate_header(case, &mut bytes);
@@ -123,7 +123,7 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
         fixture,
         encode(AbiCommand::Copy(AbiCopy::new(
             AbiId::new(32),
-            CopyIovas::new(source, DmaAddress::new(u64::MAX)),
+            CopyDmaAddresses::new(source, DmaAddress::new(u64::MAX)),
             4,
         )))?,
         &[destination],
@@ -131,7 +131,7 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
     .await?;
     let expected = match case {
         DirectFaultCase::Overflow => (AbiEventKind::RangeOverflow, source.raw(), 4, 0),
-        DirectFaultCase::Unmapped => (AbiEventKind::UnmappedIova, source.raw(), 4, 0),
+        DirectFaultCase::Unmapped => (AbiEventKind::UnmappedDmaAddress, source.raw(), 4, 0),
         DirectFaultCase::Bounds => (
             AbiEventKind::OutOfBounds,
             mapped.base().raw() + mapped.length(),

@@ -24,7 +24,7 @@
 #define PDMA_MODEL_ABI_EVENT_ALIGNMENT UINT64_C(64)
 #define PDMA_MODEL_ABI_INDIRECT_ENTRY_ALIGNMENT UINT64_C(8)
 #define PDMA_MODEL_ABI_KNOWN_FEATURE_MASK UINT64_C(255)
-#define PDMA_MODEL_ABI_FEATURE_IOVA64 UINT64_C(1)
+#define PDMA_MODEL_ABI_FEATURE_DMA_ADDRESS_64 UINT64_C(1)
 #define PDMA_MODEL_ABI_FEATURE_DESCRIPTOR_V1 UINT64_C(2)
 #define PDMA_MODEL_ABI_FEATURE_COMPLETION_V1 UINT64_C(4)
 #define PDMA_MODEL_ABI_FEATURE_EVENT_V1 UINT64_C(8)
@@ -36,7 +36,7 @@
 #define PDMA_MODEL_ABI_OPCODE_STRIDED_COPY UINT16_C(2)
 #define PDMA_MODEL_ABI_OPCODE_BROADCAST_COPY UINT16_C(3)
 #define PDMA_MODEL_ABI_OPCODE_VECTOR_ADD UINT16_C(4)
-#define PDMA_MODEL_ABI_EVENT_KIND_UNMAPPED_IOVA UINT16_C(1)
+#define PDMA_MODEL_ABI_EVENT_KIND_UNMAPPED_DMA_ADDRESS UINT16_C(1)
 #define PDMA_MODEL_ABI_EVENT_KIND_RANGE_OVERFLOW UINT16_C(2)
 #define PDMA_MODEL_ABI_EVENT_KIND_OUT_OF_BOUNDS UINT16_C(3)
 #define PDMA_MODEL_ABI_EVENT_KIND_INVALID_VERSION UINT16_C(4)
@@ -228,16 +228,16 @@ _Static_assert(sizeof(((pdma_model_abi_event_v1 *)0)->reserved) == PDMA_MODEL_AB
 _Static_assert(offsetof(pdma_model_abi_event_v1, index) == PDMA_MODEL_ABI_EVENT_V1_INDEX_OFFSET, "index offset");
 _Static_assert(sizeof(((pdma_model_abi_event_v1 *)0)->index) == PDMA_MODEL_ABI_EVENT_V1_INDEX_SIZE, "index width");
 
-#define PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_IOVA_OFFSET UINT16_C(0)
-#define PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_IOVA_SIZE UINT16_C(8)
+#define PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_DMA_ADDRESS_OFFSET UINT16_C(0)
+#define PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_DMA_ADDRESS_SIZE UINT16_C(8)
 
 typedef struct pdma_model_abi_indirect_destination_entry_v1 {
-    uint8_t destination_iova[PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_IOVA_SIZE];
+    uint8_t destination_dma_address[PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_DMA_ADDRESS_SIZE];
 } pdma_model_abi_indirect_destination_entry_v1;
 _Static_assert(_Alignof(pdma_model_abi_indirect_destination_entry_v1) == 1, "pdma_model_abi_indirect_destination_entry_v1 byte alignment");
 _Static_assert(sizeof(pdma_model_abi_indirect_destination_entry_v1) == PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_SIZE, "pdma_model_abi_indirect_destination_entry_v1 size");
-_Static_assert(offsetof(pdma_model_abi_indirect_destination_entry_v1, destination_iova) == PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_IOVA_OFFSET, "destination_iova offset");
-_Static_assert(sizeof(((pdma_model_abi_indirect_destination_entry_v1 *)0)->destination_iova) == PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_IOVA_SIZE, "destination_iova width");
+_Static_assert(offsetof(pdma_model_abi_indirect_destination_entry_v1, destination_dma_address) == PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_DMA_ADDRESS_OFFSET, "destination_dma_address offset");
+_Static_assert(sizeof(((pdma_model_abi_indirect_destination_entry_v1 *)0)->destination_dma_address) == PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_V1_DESTINATION_DMA_ADDRESS_SIZE, "destination_dma_address width");
 
 #define PDMA_MODEL_MMIO_ACCESS_RO UINT32_C(0)
 #define PDMA_MODEL_MMIO_ACCESS_RW UINT32_C(1)

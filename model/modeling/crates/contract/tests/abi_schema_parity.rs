@@ -57,7 +57,7 @@ fn canonical_schemas_match_every_frozen_record_layout() {
     assert_eq!(
         IndirectDestinationEntrySchemaView::new(&INDIRECT_BYTES)
             .unwrap()
-            .destination_iova(),
+            .destination_dma_address(),
         Ok(0x0123_4567_89ab_cdef)
     );
 }
@@ -79,8 +79,8 @@ fn descriptor_owned_values_expose_the_complete_frozen_wire_record() {
     assert_eq!(
         values.payload,
         DescriptorSchemaPayloadValues::Copy {
-            source_iova: 0x1020_3040_5060_7080,
-            destination_iova: 0x90a0_b0c0_d0e0_f000,
+            source_dma_address: 0x1020_3040_5060_7080,
+            destination_dma_address: 0x90a0_b0c0_d0e0_f000,
             length: 0x1122_3344,
         }
     );

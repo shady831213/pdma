@@ -1,6 +1,7 @@
 use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd, BroadcastIovas,
-    BroadcastShape, CopyIovas, CopyStrides, DmaAddress, StridedCopyShape, VectorIovas,
+    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
+    BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses, CopyStrides, DmaAddress,
+    StridedCopyShape, VectorDmaAddresses,
 };
 
 /// Encodes a command into a test-owned descriptor array.
@@ -35,7 +36,7 @@ pub fn replace_u64(bytes: &mut [u8; 64], offset: usize, value: u64) -> bool {
 pub fn commands() -> Result<[AbiCommand; 4], pdma_model_contract::abi::DescriptorValueError> {
     let broadcast = AbiBroadcastCopy::try_new(
         AbiId::new(0x0f1e_2d3c_4b5a_6978),
-        BroadcastIovas::new(
+        BroadcastDmaAddresses::new(
             DmaAddress::new(0xfedc_ba98_7654_3210),
             DmaAddress::new(0x1020_3040_5060_7008),
         ),
@@ -44,7 +45,7 @@ pub fn commands() -> Result<[AbiCommand; 4], pdma_model_contract::abi::Descripto
     Ok([
         AbiCommand::Copy(AbiCopy::new(
             AbiId::new(0x0123_4567_89ab_cdef),
-            CopyIovas::new(
+            CopyDmaAddresses::new(
                 DmaAddress::new(0x1020_3040_5060_7080),
                 DmaAddress::new(0x90a0_b0c0_d0e0_f000),
             ),
@@ -52,7 +53,7 @@ pub fn commands() -> Result<[AbiCommand; 4], pdma_model_contract::abi::Descripto
         )),
         AbiCommand::StridedCopy(AbiStridedCopy::new(
             AbiId::new(0x1021_3243_5465_7687),
-            CopyIovas::new(
+            CopyDmaAddresses::new(
                 DmaAddress::new(0x8877_6655_4433_2211),
                 DmaAddress::new(0xf0e0_d0c0_b0a0_9080),
             ),
@@ -65,7 +66,7 @@ pub fn commands() -> Result<[AbiCommand; 4], pdma_model_contract::abi::Descripto
         AbiCommand::BroadcastCopy(broadcast),
         AbiCommand::VectorAdd(AbiVectorAdd::new(
             AbiId::new(0x8897_a6b5_c4d3_e2f1),
-            VectorIovas::new(
+            VectorDmaAddresses::new(
                 DmaAddress::new(0x1112_1314_1516_1718),
                 DmaAddress::new(0x2122_2324_2526_2728),
                 DmaAddress::new(0x3132_3334_3536_3738),

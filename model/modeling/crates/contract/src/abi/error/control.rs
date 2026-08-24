@@ -31,7 +31,7 @@ pub enum AbiControlError {
     },
     /// A ring base does not meet its record alignment.
     MisalignedRing {
-        /// Supplied base IOVA.
+        /// Supplied base DMA address.
         base: u64,
         /// Required alignment.
         alignment: u64,

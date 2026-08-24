@@ -9,8 +9,10 @@ use core::fmt;
 
 use super::{AbiDecodeError, AbiEncodeError};
 
-pub use broadcast::{AbiBroadcastCopy, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape};
-pub use copy::{AbiCopy, AbiStridedCopy, CopyIovas, CopyStrides, StridedCopyShape};
+pub use broadcast::{
+    AbiBroadcastCopy, BroadcastDestinationEntry, BroadcastDmaAddresses, BroadcastShape,
+};
+pub use copy::{AbiCopy, AbiStridedCopy, CopyDmaAddresses, CopyStrides, StridedCopyShape};
 pub use schema::{
     DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
     DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
@@ -18,7 +20,7 @@ pub use schema::{
     DescriptorSchemaViewMut, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
     IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
 };
-pub use vector::{AbiVectorAdd, VectorIovas};
+pub use vector::{AbiVectorAdd, VectorDmaAddresses};
 
 /// One validated ABI-v1 command descriptor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,7 +54,7 @@ impl AbiCommand {
 }
 
 impl BroadcastDestinationEntry {
-    /// Encodes one destination IOVA into an eight-byte list entry.
+    /// Encodes one destination DMA address into an eight-byte list entry.
     ///
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one entry.
@@ -60,7 +62,7 @@ impl BroadcastDestinationEntry {
         codec::encode_destination(self, bytes)
     }
 
-    /// Decodes one eight-byte destination IOVA.
+    /// Decodes one eight-byte destination DMA address.
     ///
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one entry.
@@ -79,9 +81,9 @@ pub enum DescriptorValueError {
         /// Advertised maximum.
         maximum: u32,
     },
-    /// The indirect-list IOVA does not meet the entry alignment.
+    /// The indirect-list DMA address does not meet the entry alignment.
     InvalidIndirectAlignment {
-        /// Supplied list IOVA.
+        /// Supplied list DMA address.
         address: u64,
         /// Required alignment.
         alignment: u64,
@@ -146,9 +148,9 @@ pub enum DescriptorDecodeError {
         /// Advertised maximum.
         maximum: u32,
     },
-    /// The decoded indirect-list IOVA is unaligned.
+    /// The decoded indirect-list DMA address is unaligned.
     InvalidIndirectAlignment {
-        /// Supplied list IOVA.
+        /// Supplied list DMA address.
         address: u64,
         /// Required alignment.
         alignment: u64,

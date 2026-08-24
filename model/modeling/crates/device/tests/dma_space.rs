@@ -18,7 +18,7 @@ fn staged_batch_returns_regions_and_commits_all_or_none() {
     let proposed = stage.regions().to_vec();
     let committed = space.commit(stage).expect("atomic commit");
 
-    // Then deterministic IDs and aligned IOVAs become visible together.
+    // Then deterministic IDs and aligned DMA addresses become visible together.
     assert_eq!(committed, proposed);
     assert_eq!(space.validate_region_set(&committed), Ok(()));
     assert_eq!(space.generation(), 1);
@@ -99,7 +99,7 @@ fn allocation_exhaustion_preserves_allocator_state() {
 }
 
 #[test]
-fn allocations_and_checked_iova_access_survive_backend_reset() {
+fn allocations_and_checked_dma_address_access_survive_backend_reset() {
     // Given a staged region committed beside a synchronous backend.
     let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -250,7 +250,7 @@ fn rejects_exhausted_overlapping_unmapped_and_cross_region_access() {
 }
 
 #[test]
-fn zero_length_region_accepts_only_empty_iova_access_at_base() {
+fn zero_length_region_accepts_only_empty_dma_address_access_at_base() {
     // Given a committed zero-length region followed by a non-empty mapping.
     let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),

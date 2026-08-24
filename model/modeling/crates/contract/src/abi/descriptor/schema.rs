@@ -32,28 +32,28 @@ record_schema! {
                 tag: self.header.opcode,
                 cases: {
                     Copy {
-                        source_iova: u64,
-                        destination_iova: u64,
+                        source_dma_address: u64,
+                        destination_dma_address: u64,
                         length: u32 { storage: u64 },
                     },
                     StridedCopy {
-                        source_iova: u64,
-                        destination_iova: u64,
+                        source_dma_address: u64,
+                        destination_dma_address: u64,
                         rows: u32 { storage: u64 },
                         row_bytes: u32 { storage: u64 },
                         source_stride: u32 { storage: u64 },
                         destination_stride: u32 { storage: u64 },
                     },
                     BroadcastCopy {
-                        source_iova: u64,
-                        destination_list_iova: u64,
+                        source_dma_address: u64,
+                        destination_list_dma_address: u64,
                         length: u32 { storage: u64 },
                         destination_count: u32 { storage: u64 },
                     },
                     VectorAdd {
-                        source_a_iova: u64,
-                        source_b_iova: u64,
-                        destination_iova: u64,
+                        source_a_dma_address: u64,
+                        source_b_dma_address: u64,
+                        destination_dma_address: u64,
                         length: u32 { storage: u64 },
                     },
                 },
@@ -67,7 +67,7 @@ record_schema! {
         size: 8,
         alignment: 8,
         fields: {
-            destination_iova: u64 { id: 1, offset: 0, endian: Little },
+            destination_dma_address: u64 { id: 1, offset: 0, endian: Little },
         }
     }
 }

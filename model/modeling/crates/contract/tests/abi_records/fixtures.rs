@@ -76,7 +76,7 @@ fn event_golden(tuple: (u16, u64, u64, u64, u16, u16, u64)) -> [u8; 64] {
 const fn noncanonical_memory_events() -> [AbiEvent; 3] {
     [
         invalid_event(
-            AbiEventKind::UnmappedIova,
+            AbiEventKind::UnmappedDmaAddress,
             AbiFaultDetails::new(8, 1, site(AbiEventStage::Source, AbiEventAccess::Read, 0)),
         ),
         invalid_event(

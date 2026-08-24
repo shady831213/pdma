@@ -90,7 +90,7 @@ impl RingLayout {
             .ok_or(AbiControlError::RingExtentOverflow { depth, record_size })
     }
 
-    /// Exact base IOVA.
+    /// Exact base DMA address.
     pub const fn base(self) -> DmaAddress {
         self.base
     }

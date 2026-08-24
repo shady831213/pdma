@@ -21,8 +21,8 @@ pub(super) fn encode_descriptor(
             copy.command_id().raw(),
             DescriptorHeaderSchemaOpcode::Copy,
             DescriptorSchemaPayloadValues::Copy {
-                source_iova: copy.source().raw(),
-                destination_iova: copy.destination().raw(),
+                source_dma_address: copy.source().raw(),
+                destination_dma_address: copy.destination().raw(),
                 length: copy.length(),
             },
         ),
@@ -30,8 +30,8 @@ pub(super) fn encode_descriptor(
             copy.command_id().raw(),
             DescriptorHeaderSchemaOpcode::StridedCopy,
             DescriptorSchemaPayloadValues::StridedCopy {
-                source_iova: copy.source().raw(),
-                destination_iova: copy.destination().raw(),
+                source_dma_address: copy.source().raw(),
+                destination_dma_address: copy.destination().raw(),
                 rows: copy.rows(),
                 row_bytes: copy.row_bytes(),
                 source_stride: copy.source_stride(),
@@ -42,8 +42,8 @@ pub(super) fn encode_descriptor(
             copy.command_id().raw(),
             DescriptorHeaderSchemaOpcode::BroadcastCopy,
             DescriptorSchemaPayloadValues::BroadcastCopy {
-                source_iova: copy.source().raw(),
-                destination_list_iova: copy.destination_list().raw(),
+                source_dma_address: copy.source().raw(),
+                destination_list_dma_address: copy.destination_list().raw(),
                 length: copy.length(),
                 destination_count: copy.destination_count(),
             },
@@ -52,9 +52,9 @@ pub(super) fn encode_descriptor(
             add.command_id().raw(),
             DescriptorHeaderSchemaOpcode::VectorAdd,
             DescriptorSchemaPayloadValues::VectorAdd {
-                source_a_iova: add.source_a().raw(),
-                source_b_iova: add.source_b().raw(),
-                destination_iova: add.destination().raw(),
+                source_a_dma_address: add.source_a().raw(),
+                source_b_dma_address: add.source_b().raw(),
+                destination_dma_address: add.destination().raw(),
                 length: add.length(),
             },
         ),
@@ -81,7 +81,7 @@ pub(super) fn encode_destination(
     let required = usize::from(INDIRECT_DESTINATION_ENTRY_SIZE);
     let actual = bytes.len();
     let encoded = IndirectDestinationEntrySchemaValues {
-        destination_iova: entry.address().raw(),
+        destination_dma_address: entry.address().raw(),
     }
     .to_bytes()
     .map_err(encode_schema_error)?;

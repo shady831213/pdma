@@ -57,7 +57,7 @@ pub(crate) const EVENT_FIELDS: [Field; 13] = [
     ("reserved", 52, 4, ScalarKind::U32),
     ("index", 56, 8, ScalarKind::U64),
 ];
-pub(crate) const INDIRECT_FIELDS: [Field; 1] = [("destination_iova", 0, 8, ScalarKind::U64)];
+pub(crate) const INDIRECT_FIELDS: [Field; 1] = [("destination_dma_address", 0, 8, ScalarKind::U64)];
 
 pub(crate) fn assert_schema_parity(schema: RecordSpec, expected: &[Field]) {
     assert_eq!(schema.fields().len(), expected.len());

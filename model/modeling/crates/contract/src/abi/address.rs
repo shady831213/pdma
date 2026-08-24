@@ -1,4 +1,4 @@
-//! Opaque fixed-width IOVA values.
+//! Opaque fixed-width DMA address values.
 
 use super::{AbiAddressError, AbiDecodeError, AbiEncodeError};
 
@@ -53,7 +53,7 @@ impl DmaAddress {
         Self(raw)
     }
 
-    /// Returns the fixed-width IOVA value.
+    /// Returns the fixed-width DMA address value.
     pub const fn raw(self) -> u64 {
         self.0
     }

@@ -2,7 +2,7 @@ fn copy_case() -> ConflictCase {
     case(
         "copy source before destination",
         vec![copy_destination_unmapped(), copy_source_unmapped()],
-        (AbiEventKind::UnmappedIova, 0x2100, 8, 0, 3, 1, 0),
+        (AbiEventKind::UnmappedDmaAddress, 0x2100, 8, 0, 3, 1, 0),
     )
 }
 
@@ -26,7 +26,7 @@ fn strided_case() -> ConflictCase {
                 site(AbiEventStage::Source, AbiEventAccess::Read, 1),
             ),
         ],
-        (AbiEventKind::UnmappedIova, 0x3100, 8, 0, 3, 1, 1),
+        (AbiEventKind::UnmappedDmaAddress, 0x3100, 8, 0, 3, 1, 1),
     )
 }
 
@@ -39,7 +39,7 @@ fn broadcast_source_case() -> ConflictCase {
             broadcast_list(),
             broadcast_source(),
         ],
-        (AbiEventKind::UnmappedIova, 0x4100, 8, 0, 3, 1, 0),
+        (AbiEventKind::UnmappedDmaAddress, 0x4100, 8, 0, 3, 1, 0),
     )
 }
 
@@ -51,7 +51,7 @@ fn broadcast_list_case() -> ConflictCase {
             broadcast_destination(0),
             broadcast_list(),
         ],
-        (AbiEventKind::UnmappedIova, 0x4200, 8, 0, 2, 1, 0),
+        (AbiEventKind::UnmappedDmaAddress, 0x4200, 8, 0, 2, 1, 0),
     )
 }
 
@@ -59,7 +59,7 @@ fn broadcast_destination_case() -> ConflictCase {
     case(
         "broadcast destinations ascending",
         vec![broadcast_destination(2), broadcast_destination(0)],
-        (AbiEventKind::UnmappedIova, 0x4300, 8, 0, 4, 2, 0),
+        (AbiEventKind::UnmappedDmaAddress, 0x4300, 8, 0, 4, 2, 0),
     )
 }
 
@@ -71,7 +71,7 @@ fn vector_source_a_case() -> ConflictCase {
             vector_source_b(),
             vector_source_a(),
         ],
-        (AbiEventKind::UnmappedIova, 0x5100, 8, 0, 3, 1, 0),
+        (AbiEventKind::UnmappedDmaAddress, 0x5100, 8, 0, 3, 1, 0),
     )
 }
 
@@ -79,7 +79,7 @@ fn vector_source_b_case() -> ConflictCase {
     case(
         "vector source b before destination",
         vec![vector_destination(), vector_source_b()],
-        (AbiEventKind::UnmappedIova, 0x5101, 8, 0, 3, 1, 1),
+        (AbiEventKind::UnmappedDmaAddress, 0x5101, 8, 0, 3, 1, 1),
     )
 }
 
@@ -128,7 +128,7 @@ fn access_fault_case() -> ConflictCase {
     case(
         "unmapped before out of bounds",
         vec![arithmetic_out_of_bounds(), arithmetic_unmapped()],
-        (AbiEventKind::UnmappedIova, 0x6000, 8, 0, 4, 2, 2),
+        (AbiEventKind::UnmappedDmaAddress, 0x6000, 8, 0, 4, 2, 2),
     )
 }
 

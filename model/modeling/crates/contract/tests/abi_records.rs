@@ -107,14 +107,14 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
     event_access[50..52].copy_from_slice(&99_u16.to_le_bytes());
 
     // When: values that are not canonical ABI-v1 records cross the boundary.
-    let missing_iova = encode_semantic_event(model_only);
+    let missing_dma_address = encode_semantic_event(model_only);
     let unknown_status = decode_completion(&completion);
     let unknown_kind = decode_event(&event);
     let noncanonical = encode_event(AbiEvent::new(
         QueueId::new(1),
         CommandId::new(2),
         AbiFault::from_parts(
-            AbiEventKind::UnmappedIova,
+            AbiEventKind::UnmappedDmaAddress,
             DmaAddress::new(0x4000),
             AbiFaultDetails::new(8, 9, site(AbiEventStage::Source, AbiEventAccess::Read, 0)),
         ),
@@ -126,7 +126,7 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
     let mixed_operations = select_canonical_fault([copy_source_unmapped(), vector_source_a()]);
 
     // Then: each malformed class is rejected and no object identifier is serialized.
-    assert_eq!(missing_iova, Err(BridgeError::MissingEventLocator));
+    assert_eq!(missing_dma_address, Err(BridgeError::MissingEventLocator));
     assert_eq!(
         unknown_status,
         Err(AbiDecodeError::UnknownCompletionStatus { value: 9 })
@@ -174,7 +174,9 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
             Err(AbiEncodeError::NonCanonicalEventDetails)
         );
     }
-    println!("errors: {missing_iova:?}; {unknown_status:?}; {unknown_kind:?}; {noncanonical:?}");
+    println!(
+        "errors: {missing_dma_address:?}; {unknown_status:?}; {unknown_kind:?}; {noncanonical:?}"
+    );
     println!("ordering errors: {mismatched_order:?}; {mixed_operations:?}");
     println!(
         "malformed: {completion_flags_error:?}; {completion_reserved_error:?}; \

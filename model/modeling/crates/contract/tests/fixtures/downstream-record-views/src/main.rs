@@ -32,8 +32,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event = EventSchemaView::new(&EVENT)?;
     let indirect = IndirectDestinationEntrySchemaView::new(&INDIRECT)?;
     let DescriptorSchemaPayloadValues::Copy {
-        source_iova,
-        destination_iova,
+        source_dma_address,
+        destination_dma_address,
         length,
     } = values.payload
     else {
@@ -51,8 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let context = CopyBufferContext::from_command(semantic);
     let addresses = CopyRuntimeAddresses::new(
-        MemoryAddress::new(source_iova),
-        MemoryAddress::new(destination_iova),
+        MemoryAddress::new(source_dma_address),
+        MemoryAddress::new(destination_dma_address),
     );
     let exact = encode_copy_command(semantic, addresses)?;
     let mut encoded = [0_u8; 64];
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && encoded == DESCRIPTOR
         && event.version()? == header.version()?
         && values.header.version == header.version()?
-        && indirect.destination_iova()? == destination_iova;
+        && indirect.destination_dma_address()? == destination_dma_address;
     println!(
         "descriptor={};completion={};event={};indirect={};roundtrip={roundtrip}",
         DESCRIPTOR.len(),

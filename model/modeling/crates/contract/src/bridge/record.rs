@@ -75,7 +75,7 @@ pub fn decode_event(bytes: &[u8]) -> Result<AbiEvent, AbiDecodeError> {
     ))
 }
 
-/// Rejects events until a caller supplies exact IOVA fault context.
+/// Rejects events until a caller supplies exact DMA address fault context.
 pub const fn encode_semantic_event(_event: EventRecord) -> Result<[u8; 64], BridgeError> {
     Err(BridgeError::MissingEventLocator)
 }

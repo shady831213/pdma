@@ -9,14 +9,14 @@ pub use control::AbiControlError;
 /// Failure while constructing a model DMA address capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbiAddressError {
-    /// A fixed-width IOVA cannot represent the supplied value.
+    /// A fixed-width DMA address cannot represent the supplied value.
     UnrepresentableAddress {
         /// Supplied address value.
         value: u128,
     },
-    /// The region's exclusive end overflowed the IOVA width.
+    /// The region's exclusive end overflowed the DMA address width.
     RangeOverflow {
-        /// Starting IOVA.
+        /// Starting DMA address.
         base: u64,
         /// Requested byte length.
         length: u64,
@@ -52,8 +52,8 @@ pub enum AbiEncodeError {
         /// Supplied model identifier.
         value: usize,
     },
-    /// A semantic-only event has no IOVA fault locator.
-    MissingEventIova,
+    /// A semantic-only event has no DMA address fault locator.
+    MissingEventDmaAddress,
     /// An event tuple does not follow the ABI-v1 auxiliary-field rules.
     NonCanonicalEventDetails,
     /// Canonical metadata does not describe the required record fields.
@@ -126,12 +126,15 @@ impl fmt::Display for AbiAddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnrepresentableAddress { value } => {
-                write!(f, "address {value} is not representable as an ABI IOVA")
+                write!(
+                    f,
+                    "address {value} is not representable as an ABI DMA address"
+                )
             }
             Self::RangeOverflow { base, length } => {
                 write!(
                     f,
-                    "DMA region {base} + {length} overflows the ABI IOVA width"
+                    "DMA region {base} + {length} overflows the ABI DMA address width"
                 )
             }
         }
@@ -159,7 +162,7 @@ impl fmt::Display for AbiEncodeError {
                     "model identifier {value} is not representable as an ABI u64"
                 )
             }
-            Self::MissingEventIova => write!(f, "event has no ABI IOVA fault locator"),
+            Self::MissingEventDmaAddress => write!(f, "event has no ABI DMA address fault locator"),
             Self::NonCanonicalEventDetails => {
                 write!(f, "event auxiliary fields are not canonical for ABI v1")
             }

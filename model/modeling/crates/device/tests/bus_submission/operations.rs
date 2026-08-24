@@ -3,8 +3,8 @@ use pdma_model_contract::abi::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
 };
 use pdma_model_contract::abi::{
-    BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, RingCursor, StridedCopyShape,
-    VectorIovas,
+    BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses, CopyStrides, RingCursor,
+    StridedCopyShape, VectorDmaAddresses,
 };
 use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::ResourceConfig;
@@ -96,12 +96,12 @@ pub(super) async fn multi_queue_arbitration()
     handle.write_memory(source_b.base(), &[4, 3, 2, 1]).await?;
     let vector = encode(AbiCommand::VectorAdd(AbiVectorAdd::new(
         AbiId::new(40),
-        VectorIovas::new(source_a.base(), source_b.base(), vector_destination.base()),
+        VectorDmaAddresses::new(source_a.base(), source_b.base(), vector_destination.base()),
         4,
     )))?;
     let copy = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(41),
-        CopyIovas::new(source_a.base(), copy_destination.base()),
+        CopyDmaAddresses::new(source_a.base(), copy_destination.base()),
         4,
     )))?;
     for (queue, slot, descriptor) in [
@@ -170,7 +170,7 @@ pub(super) async fn command(
         OperationCase::Copy => Ok((
             AbiCommand::Copy(AbiCopy::new(
                 AbiId::new(10),
-                CopyIovas::new(
+                CopyDmaAddresses::new(
                     source_a.base().checked_add(2)?,
                     destination_a.base().checked_add(1)?,
                 ),
@@ -182,7 +182,7 @@ pub(super) async fn command(
         OperationCase::Strided => Ok((
             AbiCommand::StridedCopy(AbiStridedCopy::new(
                 AbiId::new(11),
-                CopyIovas::new(source_a.base().checked_add(1)?, destination_a.base()),
+                CopyDmaAddresses::new(source_a.base().checked_add(1)?, destination_a.base()),
                 StridedCopyShape::new(2, 2, CopyStrides::new(3, 3)),
             )),
             vec![2, 3, 0, 5, 6, 0, 0, 0],
@@ -197,7 +197,7 @@ pub(super) async fn command(
             Ok((
                 AbiCommand::BroadcastCopy(AbiBroadcastCopy::try_new(
                     AbiId::new(12),
-                    BroadcastIovas::new(source_a.base().checked_add(2)?, list.base()),
+                    BroadcastDmaAddresses::new(source_a.base().checked_add(2)?, list.base()),
                     BroadcastShape::new(3, 2),
                 )?),
                 vec![3, 4, 5, 0, 0, 0, 0, 0],
@@ -207,7 +207,7 @@ pub(super) async fn command(
         OperationCase::Vector => Ok((
             AbiCommand::VectorAdd(AbiVectorAdd::new(
                 AbiId::new(13),
-                VectorIovas::new(
+                VectorDmaAddresses::new(
                     source_a.base().checked_add(1)?,
                     source_b.base().checked_add(1)?,
                     destination_a.base().checked_add(2)?,

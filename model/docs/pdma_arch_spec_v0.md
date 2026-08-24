@@ -35,7 +35,7 @@ The v0 model validates the following end-to-end behaviors:
   main/handler switches.
 - Shared driver accounting with explicit cancellation semantics before and after device
   command acceptance.
-- ABI-v1 fixed-width little-endian descriptor, completion, event, IOVA, ring, and typed
+- ABI-v1 fixed-width little-endian descriptor, completion, event, DMA address, ring, and typed
   control vocabulary, with a checked-in C11 data header generated from Rust metadata.
 - One system-owned `SharedMemory` per device instance, with PDMA mapping policy retained
   by the device and checked bulk access supplied by `hardware-interface-runtime`.

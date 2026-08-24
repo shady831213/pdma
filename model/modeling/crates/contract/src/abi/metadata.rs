@@ -50,8 +50,8 @@ pub const MAX_STRIDED_ROWS: u32 = u32::MAX;
 /// Maximum representable stride.
 pub const MAX_STRIDE: u32 = u32::MAX;
 
-/// IOVA64 discovery feature.
-pub const IOVA64_FEATURE: u64 = 1 << 0;
+/// 64-bit DMA-address discovery feature.
+pub const DMA_ADDRESS_64_FEATURE: u64 = 1 << 0;
 /// Descriptor-v1 discovery feature.
 pub const DESCRIPTOR_V1_FEATURE: u64 = 1 << 1;
 /// Completion-v1 discovery feature.
@@ -161,7 +161,7 @@ impl TryFrom<u64> for AbiV1Features {
 
 /// ABI-v1 discovery feature assignments.
 pub const FEATURES: [(&str, u64); 8] = [
-    ("IOVA64", IOVA64_FEATURE),
+    ("DMA_ADDRESS_64", DMA_ADDRESS_64_FEATURE),
     ("DESCRIPTOR_V1", DESCRIPTOR_V1_FEATURE),
     ("COMPLETION_V1", COMPLETION_V1_FEATURE),
     ("EVENT_V1", EVENT_V1_FEATURE),
@@ -193,7 +193,7 @@ pub const OPCODES: [OpcodeSpec; 4] = [
 
 /// ABI-v1 event-kind assignments.
 pub const EVENT_KINDS: [NamedValue; 11] = [
-    NamedValue::new("UNMAPPED_IOVA", 1),
+    NamedValue::new("UNMAPPED_DMA_ADDRESS", 1),
     NamedValue::new("RANGE_OVERFLOW", 2),
     NamedValue::new("OUT_OF_BOUNDS", 3),
     NamedValue::new("INVALID_VERSION", 4),

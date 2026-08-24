@@ -1,6 +1,6 @@
 use super::common::{TestResult, activate_on, allocate, encode, fixture};
 use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId};
-use pdma_model_contract::abi::{CopyIovas, RingCursor};
+use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor};
 use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{
@@ -21,7 +21,7 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
         .await?;
     let descriptor = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(60),
-        CopyIovas::new(source.base(), destination.base()),
+        CopyDmaAddresses::new(source.base(), destination.base()),
         4,
     )))?;
     fixture
@@ -105,7 +105,7 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
         .await?;
     let vector = pdma_model_contract::abi::AbiVectorAdd::new(
         AbiId::new(70),
-        pdma_model_contract::abi::VectorIovas::new(
+        pdma_model_contract::abi::VectorDmaAddresses::new(
             source_a.base(),
             source_b.base(),
             dma_destination.base(),

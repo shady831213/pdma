@@ -1,15 +1,15 @@
 use super::DescriptorValueError;
 use crate::abi::{AbiId, DmaAddress, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS};
 
-/// Source and destination-list IOVAs for an indirect broadcast.
+/// Source and destination-list DMA addresses for an indirect broadcast.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BroadcastIovas {
+pub struct BroadcastDmaAddresses {
     source: DmaAddress,
     destination_list: DmaAddress,
 }
 
-impl BroadcastIovas {
-    /// Creates the absolute source and destination-list IOVAs.
+impl BroadcastDmaAddresses {
+    /// Creates the absolute source and destination-list DMA addresses.
     pub const fn new(source: DmaAddress, destination_list: DmaAddress) -> Self {
         Self {
             source,
@@ -22,7 +22,7 @@ impl BroadcastIovas {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AbiBroadcastCopy {
     command_id: AbiId,
-    iovas: BroadcastIovas,
+    dma_addresses: BroadcastDmaAddresses,
     length: u32,
     destination_count: u32,
 }
@@ -51,7 +51,7 @@ impl AbiBroadcastCopy {
     /// Returns a typed error when the destination count is zero or the list is unaligned.
     pub const fn try_new(
         command_id: AbiId,
-        iovas: BroadcastIovas,
+        dma_addresses: BroadcastDmaAddresses,
         shape: BroadcastShape,
     ) -> Result<Self, DescriptorValueError> {
         if shape.destination_count == 0 {
@@ -60,15 +60,15 @@ impl AbiBroadcastCopy {
                 maximum: MAX_INDIRECT_DESTINATIONS,
             });
         }
-        if iovas.destination_list.raw() % INDIRECT_ENTRY_ALIGNMENT != 0 {
+        if dma_addresses.destination_list.raw() % INDIRECT_ENTRY_ALIGNMENT != 0 {
             return Err(DescriptorValueError::InvalidIndirectAlignment {
-                address: iovas.destination_list.raw(),
+                address: dma_addresses.destination_list.raw(),
                 alignment: INDIRECT_ENTRY_ALIGNMENT,
             });
         }
         Ok(Self {
             command_id,
-            iovas,
+            dma_addresses,
             length: shape.length,
             destination_count: shape.destination_count,
         })
@@ -79,14 +79,14 @@ impl AbiBroadcastCopy {
         self.command_id
     }
 
-    /// Absolute source IOVA.
+    /// Absolute source DMA address.
     pub const fn source(self) -> DmaAddress {
-        self.iovas.source
+        self.dma_addresses.source
     }
 
-    /// Absolute destination-list IOVA.
+    /// Absolute destination-list DMA address.
     pub const fn destination_list(self) -> DmaAddress {
-        self.iovas.destination_list
+        self.dma_addresses.destination_list
     }
 
     /// Bytes copied to every destination.
@@ -112,12 +112,12 @@ pub struct BroadcastDestinationEntry {
 }
 
 impl BroadcastDestinationEntry {
-    /// Creates an entry containing one absolute destination IOVA.
+    /// Creates an entry containing one absolute destination DMA address.
     pub const fn new(address: DmaAddress) -> Self {
         Self { address }
     }
 
-    /// Absolute destination IOVA.
+    /// Absolute destination DMA address.
     pub const fn address(self) -> DmaAddress {
         self.address
     }

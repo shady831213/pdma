@@ -1,14 +1,14 @@
 use crate::abi::{AbiId, DmaAddress};
 
-/// Source and destination IOVAs shared by copy operations.
+/// Source and destination DMA addresses shared by copy operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CopyIovas {
+pub struct CopyDmaAddresses {
     source: DmaAddress,
     destination: DmaAddress,
 }
 
-impl CopyIovas {
-    /// Creates a pair of absolute IOVAs.
+impl CopyDmaAddresses {
+    /// Creates a pair of absolute DMA addresses.
     pub const fn new(source: DmaAddress, destination: DmaAddress) -> Self {
         Self {
             source,
@@ -21,16 +21,16 @@ impl CopyIovas {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AbiCopy {
     command_id: AbiId,
-    iovas: CopyIovas,
+    dma_addresses: CopyDmaAddresses,
     length: u32,
 }
 
 impl AbiCopy {
     /// Creates a fixed-width linear-copy command.
-    pub const fn new(command_id: AbiId, iovas: CopyIovas, length: u32) -> Self {
+    pub const fn new(command_id: AbiId, dma_addresses: CopyDmaAddresses, length: u32) -> Self {
         Self {
             command_id,
-            iovas,
+            dma_addresses,
             length,
         }
     }
@@ -40,14 +40,14 @@ impl AbiCopy {
         self.command_id
     }
 
-    /// Absolute source IOVA.
+    /// Absolute source DMA address.
     pub const fn source(self) -> DmaAddress {
-        self.iovas.source
+        self.dma_addresses.source
     }
 
-    /// Absolute destination IOVA.
+    /// Absolute destination DMA address.
     pub const fn destination(self) -> DmaAddress {
-        self.iovas.destination
+        self.dma_addresses.destination
     }
 
     /// Transfer length in bytes.
@@ -96,16 +96,20 @@ impl StridedCopyShape {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AbiStridedCopy {
     command_id: AbiId,
-    iovas: CopyIovas,
+    dma_addresses: CopyDmaAddresses,
     shape: StridedCopyShape,
 }
 
 impl AbiStridedCopy {
     /// Creates a fixed-width strided-copy command.
-    pub const fn new(command_id: AbiId, iovas: CopyIovas, shape: StridedCopyShape) -> Self {
+    pub const fn new(
+        command_id: AbiId,
+        dma_addresses: CopyDmaAddresses,
+        shape: StridedCopyShape,
+    ) -> Self {
         Self {
             command_id,
-            iovas,
+            dma_addresses,
             shape,
         }
     }
@@ -115,14 +119,14 @@ impl AbiStridedCopy {
         self.command_id
     }
 
-    /// Absolute source-start IOVA.
+    /// Absolute source-start DMA address.
     pub const fn source(self) -> DmaAddress {
-        self.iovas.source
+        self.dma_addresses.source
     }
 
-    /// Absolute destination-start IOVA.
+    /// Absolute destination-start DMA address.
     pub const fn destination(self) -> DmaAddress {
-        self.iovas.destination
+        self.dma_addresses.destination
     }
 
     /// Number of rows.

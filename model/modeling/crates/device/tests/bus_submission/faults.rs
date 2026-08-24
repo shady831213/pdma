@@ -3,7 +3,7 @@ use pdma_model_contract::abi::{
     AbiCommand, AbiCopy, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId, DmaAddress,
     MAX_INDIRECT_DESTINATIONS,
 };
-use pdma_model_contract::abi::{CopyIovas, RingCursor};
+use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor};
 use pdma_model_contract::semantic::ResourceConfig;
 
 #[derive(Clone, Copy)]
@@ -35,7 +35,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
         .await?;
     let mut bytes = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(20),
-        CopyIovas::new(source.base(), destination.base()),
+        CopyDmaAddresses::new(source.base(), destination.base()),
         4,
     )))?;
     bytes[40] = 1;
@@ -70,7 +70,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
         starved,
         encode(AbiCommand::Copy(AbiCopy::new(
             AbiId::new(21),
-            CopyIovas::new(source.base(), destination.base()),
+            CopyDmaAddresses::new(source.base(), destination.base()),
             4,
         )))?,
         &[destination],
@@ -96,7 +96,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
     let (list_base, count) = list_fields(case, list);
     let mut bytes = encode(AbiCommand::Copy(AbiCopy::new(
         AbiId::new(30),
-        CopyIovas::new(source.base(), source.base()),
+        CopyDmaAddresses::new(source.base(), source.base()),
         4,
     )))?;
     bytes[2..4].copy_from_slice(&3_u16.to_le_bytes());
@@ -151,7 +151,7 @@ fn expected_tuple(
             AbiEventAccess::Read,
         ),
         BroadcastFaultCase::Unmapped => (
-            AbiEventKind::UnmappedIova,
+            AbiEventKind::UnmappedDmaAddress,
             base.raw(),
             8,
             0,

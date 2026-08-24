@@ -1,15 +1,15 @@
 use crate::abi::{AbiId, DmaAddress};
 
-/// Source and destination IOVAs for vector addition.
+/// Source and destination DMA addresses for vector addition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VectorIovas {
+pub struct VectorDmaAddresses {
     source_a: DmaAddress,
     source_b: DmaAddress,
     destination: DmaAddress,
 }
 
-impl VectorIovas {
-    /// Creates three absolute vector IOVAs.
+impl VectorDmaAddresses {
+    /// Creates three absolute vector DMA addresses.
     pub const fn new(source_a: DmaAddress, source_b: DmaAddress, destination: DmaAddress) -> Self {
         Self {
             source_a,
@@ -23,16 +23,16 @@ impl VectorIovas {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AbiVectorAdd {
     command_id: AbiId,
-    iovas: VectorIovas,
+    dma_addresses: VectorDmaAddresses,
     length: u32,
 }
 
 impl AbiVectorAdd {
     /// Creates a fixed-width vector-add command.
-    pub const fn new(command_id: AbiId, iovas: VectorIovas, length: u32) -> Self {
+    pub const fn new(command_id: AbiId, dma_addresses: VectorDmaAddresses, length: u32) -> Self {
         Self {
             command_id,
-            iovas,
+            dma_addresses,
             length,
         }
     }
@@ -42,19 +42,19 @@ impl AbiVectorAdd {
         self.command_id
     }
 
-    /// Absolute first-source IOVA.
+    /// Absolute first-source DMA address.
     pub const fn source_a(self) -> DmaAddress {
-        self.iovas.source_a
+        self.dma_addresses.source_a
     }
 
-    /// Absolute second-source IOVA.
+    /// Absolute second-source DMA address.
     pub const fn source_b(self) -> DmaAddress {
-        self.iovas.source_b
+        self.dma_addresses.source_b
     }
 
-    /// Absolute destination IOVA.
+    /// Absolute destination DMA address.
     pub const fn destination(self) -> DmaAddress {
-        self.iovas.destination
+        self.dma_addresses.destination
     }
 
     /// Vector length in bytes.

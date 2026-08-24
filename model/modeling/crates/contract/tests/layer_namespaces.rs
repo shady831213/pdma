@@ -1,7 +1,7 @@
 //! Compile and value proofs for the additive contract namespaces.
 
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCopy, AbiId, CopyIovas, DmaAddress, RingCursor, RingLayout, RingRecord,
+    AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress, RingCursor, RingLayout, RingRecord,
 };
 use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
 use pdma_model_contract::semantic::{self, BufferId};
@@ -12,7 +12,7 @@ fn semantic_and_abi_are_independent_and_bridge_is_explicit() {
     let semantic = semantic::CopyRequest::new(BufferId::new(3), BufferId::new(5), 8);
     let abi = AbiCommand::Copy(AbiCopy::new(
         AbiId::new(11),
-        CopyIovas::new(DmaAddress::new(0x100), DmaAddress::new(0x200)),
+        CopyDmaAddresses::new(DmaAddress::new(0x100), DmaAddress::new(0x200)),
         8,
     ));
 

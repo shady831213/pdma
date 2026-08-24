@@ -1,5 +1,5 @@
 use super::BridgeError;
-use crate::abi::{AbiCommand, AbiCopy, AbiId, CopyIovas, DmaAddress};
+use crate::abi::{AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress};
 use crate::semantic::{BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId};
 use hardware_interface_runtime::MemoryAddress;
 
@@ -63,7 +63,7 @@ pub fn encode_copy_command(
         u32::try_from(request.len()).map_err(|_| BridgeError::SemanticRange { value: u64::MAX })?;
     Ok(AbiCommand::Copy(AbiCopy::new(
         AbiId::try_from(command.command_id().raw())?,
-        CopyIovas::new(source, destination),
+        CopyDmaAddresses::new(source, destination),
         length,
     )))
 }

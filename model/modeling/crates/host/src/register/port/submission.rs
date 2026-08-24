@@ -4,8 +4,8 @@ use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
-    BroadcastDestinationEntry, BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, RingRecord,
-    StridedCopyShape, VectorIovas,
+    BroadcastDestinationEntry, BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses,
+    CopyStrides, RingRecord, StridedCopyShape, VectorDmaAddresses,
 };
 use pdma_model_contract::semantic::{BufferId, ExternalCommand, QueueConfigHandle};
 
@@ -94,7 +94,7 @@ async fn encode_command<A: CanonicalAccess>(
             Ok((
                 AbiCommand::Copy(AbiCopy::new(
                     abi_id(command.command_id().raw())?,
-                    CopyIovas::new(
+                    CopyDmaAddresses::new(
                         operand(port, request.src(), request.src_start().offset())?,
                         operand(port, request.dst(), request.dst_start().offset())?,
                     ),
@@ -113,7 +113,7 @@ async fn encode_command<A: CanonicalAccess>(
             Ok((
                 AbiCommand::StridedCopy(AbiStridedCopy::new(
                     abi_id(command.command_id().raw())?,
-                    CopyIovas::new(
+                    CopyDmaAddresses::new(
                         operand(port, request.src(), request.src_start().offset())?,
                         operand(port, request.dst(), request.dst_start().offset())?,
                     ),
@@ -128,7 +128,7 @@ async fn encode_command<A: CanonicalAccess>(
             Ok((
                 AbiCommand::VectorAdd(AbiVectorAdd::new(
                     abi_id(command.command_id().raw())?,
-                    VectorIovas::new(
+                    VectorDmaAddresses::new(
                         operand(port, request.src_a(), request.src_a_offset())?,
                         operand(port, request.src_b(), request.src_b_offset())?,
                         operand(port, request.dst(), request.dst_offset())?,
@@ -170,7 +170,7 @@ async fn broadcast<A: CanonicalAccess>(
     }
     let abi = AbiBroadcastCopy::try_new(
         abi_id(command.command_id().raw())?,
-        BroadcastIovas::new(
+        BroadcastDmaAddresses::new(
             operand(port, request.src(), request.src_offset())?,
             super::state::dma_address(region.base()),
         ),

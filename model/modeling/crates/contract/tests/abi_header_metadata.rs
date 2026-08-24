@@ -24,7 +24,7 @@ fn indirect_destination_entry_metadata_drives_generated_header() {
         u64::try_from(record.alignment()),
         Ok(INDIRECT_ENTRY_ALIGNMENT)
     );
-    assert_eq!(field.name(), "destination_iova");
+    assert_eq!(field.name(), "destination_dma_address");
     assert_eq!(field.range(), Some(0..8));
     assert!(header.contains(&format!(
         "#define PDMA_MODEL_ABI_INDIRECT_DESTINATION_ENTRY_SIZE UINT16_C({})",

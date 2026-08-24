@@ -142,7 +142,7 @@ fn semantic_event<A: CanonicalAccess>(
             .map_or(BufferId::new(usize::MAX), |region| region.object())
     })?;
     let error_kind = match kind {
-        AbiEventKind::UnmappedIova => EventErrorKind::UnknownBuffer,
+        AbiEventKind::UnmappedDmaAddress => EventErrorKind::UnknownBuffer,
         AbiEventKind::OutOfBounds => EventErrorKind::OutOfBounds {
             len: usize::try_from(detail0).map_err(|_| ModelError::RangeOverflow)?,
             end: usize::try_from(detail1).map_err(|_| ModelError::RangeOverflow)?,

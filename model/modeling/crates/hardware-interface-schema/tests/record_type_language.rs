@@ -61,10 +61,10 @@ fn composed_types_when_encoded_derive_layout_tag_and_constant() -> Result<(), Sc
             },
             command_id: 0x3344,
         },
-        payload: ModernPacketPayloadValues::Compact {
+        payload: ModernPacketPayloadValues::Compact(ModernPacketPayloadCompactValues {
             value: 0x1122,
             count: 7,
-        },
+        }),
     };
 
     // When: the generated owned codec encodes and decodes the composed record.
@@ -76,6 +76,7 @@ fn composed_types_when_encoded_derive_layout_tag_and_constant() -> Result<(), Sc
     assert_eq!(ModernPacket::RECORD_SIZE, 12);
     assert_eq!(ModernPacket::SPEC.size(), 12);
     assert_eq!(ModernPacket::SPEC.alignment(), 4);
+    assert_eq!(values.payload.tag(), ModernHeaderOpcode::Compact);
     assert_eq!(bytes, [7, 0, 1, 5, 12, 0, 0x44, 0x33, 0x22, 0x11, 7, 0]);
     assert_eq!(decoded.header.opcode, ModernHeaderOpcode::Compact);
     assert_eq!(

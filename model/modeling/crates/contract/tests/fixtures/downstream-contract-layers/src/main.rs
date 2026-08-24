@@ -1,5 +1,6 @@
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress, RingCursor, RingLayout, RingRecord,
+    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingLayout,
+    RingRecord,
 };
 use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
@@ -10,11 +11,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let semantic = CopyRequest::new(source, destination, 16);
     let semantic_queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(3));
 
-    let exact = AbiCommand::Copy(AbiCopy::new(
+    let exact = AbiCommand::copy(
         AbiId::new(41),
-        CopyDmaAddresses::new(DmaAddress::new(0x1000), DmaAddress::new(0x2000)),
-        16,
-    ));
+        DescriptorSchemaPayloadCopyValues {
+            source_dma_address: 0x1000,
+            destination_dma_address: 0x2000,
+            length: 16,
+        },
+    );
     let mut record = [0_u8; 64];
     exact.encode(&mut record)?;
     let ring = RingLayout::try_new(

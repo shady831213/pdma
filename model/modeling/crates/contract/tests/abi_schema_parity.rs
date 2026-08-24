@@ -6,9 +6,9 @@ pub(crate) mod support;
 use pdma_model_contract::abi::{AbiCommand, AbiDecodeError};
 use pdma_model_contract::abi::{
     BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadValues,
-    DescriptorSchemaValues, DescriptorSchemaView, EventSchema, EventSchemaView,
-    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
+    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadCopyValues,
+    DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView, EventSchema,
+    EventSchemaView, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
 };
 use pdma_model_contract::bridge::{
     decode_completion, decode_event, encode_completion, encode_event,
@@ -78,11 +78,11 @@ fn descriptor_owned_values_expose_the_complete_frozen_wire_record() {
     assert_eq!(values.header.command_id, 0x0123_4567_89ab_cdef);
     assert_eq!(
         values.payload,
-        DescriptorSchemaPayloadValues::Copy {
+        DescriptorSchemaPayloadValues::Copy(DescriptorSchemaPayloadCopyValues {
             source_dma_address: 0x1020_3040_5060_7080,
             destination_dma_address: 0x90a0_b0c0_d0e0_f000,
             length: 0x1122_3344,
-        }
+        })
     );
     assert_eq!(values.to_bytes(), Ok(COPY));
 }

@@ -1,6 +1,8 @@
 use super::common::{TestResult, activate_on, allocate, encode, fixture};
-use pdma_model_contract::abi::{AbiCommand, AbiCopy, AbiId};
-use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadVectorAddValues,
+    RingCursor,
+};
 use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{
@@ -19,11 +21,14 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
         .handle
         .write_memory(source.base(), &[7, 6, 5, 4])
         .await?;
-    let descriptor = encode(AbiCommand::Copy(AbiCopy::new(
+    let descriptor = encode(AbiCommand::copy(
         AbiId::new(60),
-        CopyDmaAddresses::new(source.base(), destination.base()),
-        4,
-    )))?;
+        DescriptorSchemaPayloadCopyValues {
+            source_dma_address: source.base().raw(),
+            destination_dma_address: destination.base().raw(),
+            length: 4,
+        },
+    ))?;
     fixture
         .handle
         .accept_submission(SubmissionAcceptance::new(
@@ -103,24 +108,21 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
         .handle
         .write_memory(source_b.base(), &[4, 3, 2, 1])
         .await?;
-    let vector = pdma_model_contract::abi::AbiVectorAdd::new(
+    let vector = AbiCommand::vector_add(
         AbiId::new(70),
-        pdma_model_contract::abi::VectorDmaAddresses::new(
-            source_a.base(),
-            source_b.base(),
-            dma_destination.base(),
-        ),
-        4,
+        DescriptorSchemaPayloadVectorAddValues {
+            source_a_dma_address: source_a.base().raw(),
+            source_b_dma_address: source_b.base().raw(),
+            destination_dma_address: dma_destination.base().raw(),
+            length: 4,
+        },
     );
     fixture
         .handle
         .accept_submission(SubmissionAcceptance::new(
             fixture.queue,
             RingCursor::new(0),
-            DmaWrite::new(
-                fixture.submission,
-                encode(AbiCommand::VectorAdd(vector))?.to_vec(),
-            ),
+            DmaWrite::new(fixture.submission, encode(vector)?.to_vec()),
             None,
         ))
         .await?;

@@ -1,5 +1,7 @@
 use super::BridgeError;
-use crate::abi::{AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress};
+use crate::abi::{
+    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadValues, DmaAddress,
+};
 use crate::semantic::{BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId};
 use hardware_interface_runtime::MemoryAddress;
 
@@ -61,11 +63,14 @@ pub fn encode_copy_command(
     let destination = add_offset(addresses.destination, request.dst_start().offset())?;
     let length =
         u32::try_from(request.len()).map_err(|_| BridgeError::SemanticRange { value: u64::MAX })?;
-    Ok(AbiCommand::Copy(AbiCopy::new(
+    Ok(AbiCommand::copy(
         AbiId::try_from(command.command_id().raw())?,
-        CopyDmaAddresses::new(source, destination),
-        length,
-    )))
+        DescriptorSchemaPayloadCopyValues {
+            source_dma_address: source.raw(),
+            destination_dma_address: destination.raw(),
+            length,
+        },
+    ))
 }
 
 /// Rebuilds a semantic copy using caller-supplied identity context.
@@ -73,12 +78,12 @@ pub fn decode_copy_command(
     command: AbiCommand,
     context: CopyBufferContext,
 ) -> Result<(CopyCommand, CopyRuntimeAddresses), BridgeError> {
-    let AbiCommand::Copy(copy) = command else {
+    let DescriptorSchemaPayloadValues::Copy(copy) = command.payload() else {
         return Err(BridgeError::UnexpectedOpcode);
     };
-    let command_id = CommandId::new(copy.command_id().try_into_model()?);
-    let length = usize::try_from(copy.length()).map_err(|_| BridgeError::SemanticRange {
-        value: u64::from(copy.length()),
+    let command_id = CommandId::new(command.command_id().try_into_model()?);
+    let length = usize::try_from(copy.length).map_err(|_| BridgeError::SemanticRange {
+        value: u64::from(copy.length),
     })?;
     let semantic = CopyCommand::new(
         command_id,
@@ -87,8 +92,8 @@ pub fn decode_copy_command(
         CopyRequest::new(context.source, context.destination, length),
     );
     let addresses = CopyRuntimeAddresses::new(
-        MemoryAddress::new(copy.source().raw()),
-        MemoryAddress::new(copy.destination().raw()),
+        MemoryAddress::new(copy.source_dma_address),
+        MemoryAddress::new(copy.destination_dma_address),
     );
     Ok((semantic, addresses))
 }

@@ -31,11 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let completion = CompletionSchemaView::new(&COMPLETION)?;
     let event = EventSchemaView::new(&EVENT)?;
     let indirect = IndirectDestinationEntrySchemaView::new(&INDIRECT)?;
-    let DescriptorSchemaPayloadValues::Copy {
-        source_dma_address,
-        destination_dma_address,
-        length,
-    } = values.payload
+    let DescriptorSchemaPayloadValues::Copy(copy) = values.payload
     else {
         return Err(std::io::Error::other("copy fixture decoded as another variant").into());
     };
@@ -46,13 +42,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         CopyRequest::new(
             BufferId::new(11),
             BufferId::new(12),
-            usize::try_from(length)?,
+            usize::try_from(copy.length)?,
         ),
     );
     let context = CopyBufferContext::from_command(semantic);
     let addresses = CopyRuntimeAddresses::new(
-        MemoryAddress::new(source_dma_address),
-        MemoryAddress::new(destination_dma_address),
+        MemoryAddress::new(copy.source_dma_address),
+        MemoryAddress::new(copy.destination_dma_address),
     );
     let exact = encode_copy_command(semantic, addresses)?;
     let mut encoded = [0_u8; 64];
@@ -64,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && encoded == DESCRIPTOR
         && event.version()? == header.version()?
         && values.header.version == header.version()?
-        && indirect.destination_dma_address()? == destination_dma_address;
+        && indirect.destination_dma_address()? == copy.destination_dma_address;
     println!(
         "descriptor={};completion={};event={};indirect={};roundtrip={roundtrip}",
         DESCRIPTOR.len(),

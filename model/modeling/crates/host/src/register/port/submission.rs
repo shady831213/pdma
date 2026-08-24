@@ -3,9 +3,9 @@ use crate::register::{PdmaDmaWrite, PdmaPreparedProposal, PdmaRegionRequest, Pdm
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
-    BroadcastDestinationEntry, BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses,
-    CopyStrides, RingRecord, StridedCopyShape, VectorDmaAddresses,
+    AbiCommand, AbiId, BroadcastDestinationEntry, DescriptorSchemaPayloadBroadcastCopyValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
+    DescriptorSchemaPayloadVectorAddValues, RingRecord,
 };
 use pdma_model_contract::semantic::{BufferId, ExternalCommand, QueueConfigHandle};
 
@@ -92,33 +92,51 @@ async fn encode_command<A: CanonicalAccess>(
         ExternalCommand::Copy(command) => {
             let request = command.request();
             Ok((
-                AbiCommand::Copy(AbiCopy::new(
+                AbiCommand::copy(
                     abi_id(command.command_id().raw())?,
-                    CopyDmaAddresses::new(
-                        operand(port, request.src(), request.src_start().offset())?,
-                        operand(port, request.dst(), request.dst_start().offset())?,
-                    ),
-                    scalar(request.len())?,
-                )),
+                    DescriptorSchemaPayloadCopyValues {
+                        source_dma_address: operand(
+                            port,
+                            request.src(),
+                            request.src_start().offset(),
+                        )?
+                        .raw(),
+                        destination_dma_address: operand(
+                            port,
+                            request.dst(),
+                            request.dst_start().offset(),
+                        )?
+                        .raw(),
+                        length: scalar(request.len())?,
+                    },
+                ),
                 None,
             ))
         }
         ExternalCommand::StridedCopy(command) => {
             let request = command.request();
-            let shape = StridedCopyShape::new(
-                scalar(request.rows())?,
-                scalar(request.row_bytes())?,
-                CopyStrides::new(scalar(request.src_stride())?, scalar(request.dst_stride())?),
-            );
             Ok((
-                AbiCommand::StridedCopy(AbiStridedCopy::new(
+                AbiCommand::strided_copy(
                     abi_id(command.command_id().raw())?,
-                    CopyDmaAddresses::new(
-                        operand(port, request.src(), request.src_start().offset())?,
-                        operand(port, request.dst(), request.dst_start().offset())?,
-                    ),
-                    shape,
-                )),
+                    DescriptorSchemaPayloadStridedCopyValues {
+                        source_dma_address: operand(
+                            port,
+                            request.src(),
+                            request.src_start().offset(),
+                        )?
+                        .raw(),
+                        destination_dma_address: operand(
+                            port,
+                            request.dst(),
+                            request.dst_start().offset(),
+                        )?
+                        .raw(),
+                        rows: scalar(request.rows())?,
+                        row_bytes: scalar(request.row_bytes())?,
+                        source_stride: scalar(request.src_stride())?,
+                        destination_stride: scalar(request.dst_stride())?,
+                    },
+                ),
                 None,
             ))
         }
@@ -126,15 +144,30 @@ async fn encode_command<A: CanonicalAccess>(
         ExternalCommand::VectorAdd(command) => {
             let request = command.request();
             Ok((
-                AbiCommand::VectorAdd(AbiVectorAdd::new(
+                AbiCommand::vector_add(
                     abi_id(command.command_id().raw())?,
-                    VectorDmaAddresses::new(
-                        operand(port, request.src_a(), request.src_a_offset())?,
-                        operand(port, request.src_b(), request.src_b_offset())?,
-                        operand(port, request.dst(), request.dst_offset())?,
-                    ),
-                    scalar(request.len())?,
-                )),
+                    DescriptorSchemaPayloadVectorAddValues {
+                        source_a_dma_address: operand(
+                            port,
+                            request.src_a(),
+                            request.src_a_offset(),
+                        )?
+                        .raw(),
+                        source_b_dma_address: operand(
+                            port,
+                            request.src_b(),
+                            request.src_b_offset(),
+                        )?
+                        .raw(),
+                        destination_dma_address: operand(
+                            port,
+                            request.dst(),
+                            request.dst_offset(),
+                        )?
+                        .raw(),
+                        length: scalar(request.len())?,
+                    },
+                ),
                 None,
             ))
         }
@@ -168,17 +201,18 @@ async fn broadcast<A: CanonicalAccess>(
             .encode(slot)
             .map_err(|_| ModelError::DmaSubmissionState)?;
     }
-    let abi = AbiBroadcastCopy::try_new(
+    let abi = AbiCommand::try_broadcast_copy(
         abi_id(command.command_id().raw())?,
-        BroadcastDmaAddresses::new(
-            operand(port, request.src(), request.src_offset())?,
-            super::state::dma_address(region.base()),
-        ),
-        BroadcastShape::new(scalar(request.len())?, count),
+        DescriptorSchemaPayloadBroadcastCopyValues {
+            source_dma_address: operand(port, request.src(), request.src_offset())?.raw(),
+            destination_list_dma_address: super::state::dma_address(region.base()).raw(),
+            length: scalar(request.len())?,
+            destination_count: count,
+        },
     )
     .map_err(|_| ModelError::DmaSubmissionState)?;
     let write = PdmaDmaWrite::new(region.base(), bytes);
-    Ok((AbiCommand::BroadcastCopy(abi), Some((proposal, write))))
+    Ok((abi, Some((proposal, write))))
 }
 
 fn operand<A: CanonicalAccess>(

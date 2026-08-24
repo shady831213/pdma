@@ -1,7 +1,7 @@
 use super::{support, vectors};
 use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiCommand, AbiDecodeError, AbiEncodeError, AbiId, BroadcastDestinationEntry,
-    BroadcastDmaAddresses, BroadcastShape, DescriptorDecodeError, DescriptorValueError, DmaAddress,
+    AbiCommand, AbiDecodeError, AbiEncodeError, AbiId, BroadcastDestinationEntry,
+    DescriptorDecodeError, DescriptorSchemaPayloadBroadcastCopyValues, DescriptorValueError,
     INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS,
     MAX_TRANSFER_BYTES,
 };
@@ -157,10 +157,14 @@ pub fn assert_count_alignment_and_slice_errors() {
         })
     );
     assert_eq!(
-        AbiBroadcastCopy::try_new(
+        AbiCommand::try_broadcast_copy(
             AbiId::new(1),
-            BroadcastDmaAddresses::new(DmaAddress::new(2), DmaAddress::new(8)),
-            BroadcastShape::new(0, 0),
+            DescriptorSchemaPayloadBroadcastCopyValues {
+                source_dma_address: 2,
+                destination_list_dma_address: 8,
+                length: 0,
+                destination_count: 0,
+            },
         ),
         Err(DescriptorValueError::InvalidIndirectCount {
             observed: 0,
@@ -168,10 +172,14 @@ pub fn assert_count_alignment_and_slice_errors() {
         })
     );
     assert_eq!(
-        AbiBroadcastCopy::try_new(
+        AbiCommand::try_broadcast_copy(
             AbiId::new(1),
-            BroadcastDmaAddresses::new(DmaAddress::new(2), DmaAddress::new(11)),
-            BroadcastShape::new(0, 1),
+            DescriptorSchemaPayloadBroadcastCopyValues {
+                source_dma_address: 2,
+                destination_list_dma_address: 11,
+                length: 0,
+                destination_count: 1,
+            },
         ),
         Err(DescriptorValueError::InvalidIndirectAlignment {
             address: 11,

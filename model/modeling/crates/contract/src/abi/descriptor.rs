@@ -1,41 +1,87 @@
-mod broadcast;
 mod codec;
-mod copy;
 mod decode;
+mod error;
 mod schema;
-mod vector;
 
-use core::fmt;
-
-use super::{AbiDecodeError, AbiEncodeError};
-
-pub use broadcast::{
-    AbiBroadcastCopy, BroadcastDestinationEntry, BroadcastDmaAddresses, BroadcastShape,
+use super::{
+    ABI_VERSION, AbiEncodeError, AbiId, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
+    MAX_INDIRECT_DESTINATIONS,
 };
-pub use copy::{AbiCopy, AbiStridedCopy, CopyDmaAddresses, CopyStrides, StridedCopyShape};
+
+pub use error::{DescriptorDecodeError, DescriptorValueError};
+
 pub use schema::{
     DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
     DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
-    DescriptorSchema, DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView,
-    DescriptorSchemaViewMut, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
-    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
+    DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
+    DescriptorSchemaPayloadValues, DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaValues,
+    DescriptorSchemaView, DescriptorSchemaViewMut, IndirectDestinationEntrySchema,
+    IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
+    IndirectDestinationEntrySchemaViewMut,
 };
-pub use vector::{AbiVectorAdd, VectorDmaAddresses};
 
-/// One validated ABI-v1 command descriptor.
+/// One validated ABI-v1 command backed by the generated descriptor value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AbiCommand {
-    /// Linear-copy descriptor.
-    Copy(AbiCopy),
-    /// Strided-copy descriptor.
-    StridedCopy(AbiStridedCopy),
-    /// Indirect-broadcast descriptor.
-    BroadcastCopy(AbiBroadcastCopy),
-    /// Vector-add descriptor.
-    VectorAdd(AbiVectorAdd),
-}
+pub struct AbiCommand(DescriptorSchemaValues);
+
+/// Canonical generated value representation of one indirect destination entry.
+pub type BroadcastDestinationEntry = IndirectDestinationEntrySchemaValues;
 
 impl AbiCommand {
+    /// Creates a canonical linear-copy descriptor.
+    pub const fn copy(command_id: AbiId, values: DescriptorSchemaPayloadCopyValues) -> Self {
+        Self::from_payload(command_id, DescriptorSchemaPayloadValues::Copy(values))
+    }
+
+    /// Creates a canonical strided-copy descriptor.
+    pub const fn strided_copy(
+        command_id: AbiId,
+        values: DescriptorSchemaPayloadStridedCopyValues,
+    ) -> Self {
+        Self::from_payload(
+            command_id,
+            DescriptorSchemaPayloadValues::StridedCopy(values),
+        )
+    }
+
+    /// Creates a canonical indirect-broadcast descriptor.
+    ///
+    /// # Errors
+    /// Returns a typed error when the destination list is empty or unaligned.
+    pub fn try_broadcast_copy(
+        command_id: AbiId,
+        values: DescriptorSchemaPayloadBroadcastCopyValues,
+    ) -> Result<Self, DescriptorValueError> {
+        let payload = DescriptorSchemaPayloadValues::BroadcastCopy(values);
+        validate_payload(payload)?;
+        Ok(Self::from_payload(command_id, payload))
+    }
+
+    /// Creates a canonical vector-add descriptor.
+    pub const fn vector_add(
+        command_id: AbiId,
+        values: DescriptorSchemaPayloadVectorAddValues,
+    ) -> Self {
+        Self::from_payload(command_id, DescriptorSchemaPayloadValues::VectorAdd(values))
+    }
+
+    const fn from_payload(command_id: AbiId, payload: DescriptorSchemaPayloadValues) -> Self {
+        Self(DescriptorSchemaValues {
+            header: DescriptorHeaderSchemaValues {
+                version: ABI_VERSION,
+                opcode: payload.tag(),
+                flags: DescriptorHeaderSchemaFlagsValues::ZERO,
+                command_id: command_id.raw(),
+            },
+            payload,
+        })
+    }
+
+    const fn from_validated_values(values: DescriptorSchemaValues) -> Self {
+        Self(values)
+    }
+
     /// Encodes one command into a complete 64-byte descriptor.
     ///
     /// # Errors
@@ -51,15 +97,31 @@ impl AbiCommand {
     pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
         decode::decode_descriptor(bytes)
     }
+
+    /// Fixed-width command identifier.
+    pub const fn command_id(self) -> AbiId {
+        AbiId::new(self.0.header.command_id)
+    }
+
+    /// Generated payload selected by the descriptor opcode.
+    pub const fn payload(self) -> DescriptorSchemaPayloadValues {
+        self.0.payload
+    }
+
+    /// Complete generated descriptor value.
+    pub const fn values(self) -> DescriptorSchemaValues {
+        self.0
+    }
 }
 
-impl BroadcastDestinationEntry {
+impl IndirectDestinationEntrySchemaValues {
     /// Encodes one destination DMA address into an eight-byte list entry.
     ///
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one entry.
     pub fn encode(self, bytes: &mut [u8]) -> Result<(), AbiEncodeError> {
-        codec::encode_destination(self, bytes)
+        self.encode_into(bytes)
+            .map_err(super::codec::encode_schema_error)
     }
 
     /// Decodes one eight-byte destination DMA address.
@@ -67,184 +129,45 @@ impl BroadcastDestinationEntry {
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one entry.
     pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
-        decode::decode_destination(bytes)
+        Self::from_bytes(bytes)
+            .map_err(super::codec::decode_schema_error)
+            .map_err(DescriptorDecodeError::Codec)
     }
-}
 
-/// Invalid host-side descriptor construction values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DescriptorValueError {
-    /// The indirect destination count is zero or above the advertised maximum.
-    InvalidIndirectCount {
-        /// Supplied count.
-        observed: u32,
-        /// Advertised maximum.
-        maximum: u32,
-    },
-    /// The indirect-list DMA address does not meet the entry alignment.
-    InvalidIndirectAlignment {
-        /// Supplied list DMA address.
-        address: u64,
-        /// Required alignment.
-        alignment: u64,
-    },
-}
-
-/// Failure while decoding an untrusted command descriptor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DescriptorDecodeError {
-    /// A checked scalar codec rejected the source.
-    Codec(AbiDecodeError),
-    /// Canonical descriptor metadata does not contain the required fields.
-    MetadataMismatch,
-    /// Descriptor version differs from ABI v1.
-    InvalidVersion {
-        /// Supplied version.
-        observed: u16,
-        /// Required version.
-        expected: u16,
-    },
-    /// Descriptor record size differs from 64 bytes.
-    InvalidSize {
-        /// Supplied size.
-        observed: u16,
-        /// Required size.
-        expected: u16,
-    },
-    /// Descriptor opcode is not assigned by ABI v1.
-    InvalidOpcode {
-        /// Supplied opcode.
-        observed: u16,
-        /// Highest contiguous ABI-v1 opcode.
-        maximum: u16,
-    },
-    /// Descriptor flags contain bits not accepted by ABI v1.
-    InvalidFlags {
-        /// Supplied flags.
-        observed: u16,
-        /// Accepted flag mask.
-        allowed: u16,
-    },
-    /// An operation-reserved payload word is nonzero.
-    InvalidReserved {
-        /// Reserved word byte offset.
-        offset: u16,
-        /// Supplied word.
-        observed: u64,
-    },
-    /// A fixed-width scalar exceeds its advertised ABI-v1 limit.
-    ValueOutOfRange {
-        /// Scalar byte offset.
-        offset: u16,
-        /// Supplied value.
-        observed: u64,
-        /// Advertised maximum.
-        maximum: u32,
-    },
-    /// The decoded indirect destination count is invalid.
-    InvalidIndirectCount {
-        /// Supplied count.
-        observed: u64,
-        /// Advertised maximum.
-        maximum: u32,
-    },
-    /// The decoded indirect-list DMA address is unaligned.
-    InvalidIndirectAlignment {
-        /// Supplied list DMA address.
-        address: u64,
-        /// Required alignment.
-        alignment: u64,
-    },
-}
-
-impl From<AbiDecodeError> for DescriptorDecodeError {
-    fn from(error: AbiDecodeError) -> Self {
-        Self::Codec(error)
-    }
-}
-
-impl fmt::Display for DescriptorValueError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidIndirectCount { observed, maximum } => {
-                write!(
-                    formatter,
-                    "indirect destination count {observed} is outside 1..={maximum}"
-                )
-            }
-            Self::InvalidIndirectAlignment { address, alignment } => {
-                write!(
-                    formatter,
-                    "indirect list address {address:#x} is not aligned to {alignment}"
-                )
-            }
+    /// Creates one entry from an absolute DMA address.
+    pub const fn new(address: DmaAddress) -> Self {
+        Self {
+            destination_dma_address: address.raw(),
         }
     }
-}
 
-impl fmt::Display for DescriptorDecodeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Codec(error) => error.fmt(formatter),
-            Self::MetadataMismatch => formatter.write_str("descriptor metadata is incomplete"),
-            Self::InvalidVersion { observed, expected } => {
-                write!(formatter, "descriptor version {observed} is not {expected}")
-            }
-            Self::InvalidSize { observed, expected } => {
-                write!(formatter, "descriptor size {observed} is not {expected}")
-            }
-            Self::InvalidOpcode { observed, maximum } => {
-                write!(
-                    formatter,
-                    "descriptor opcode {observed} is outside 1..={maximum}"
-                )
-            }
-            Self::InvalidFlags { observed, allowed } => {
-                write!(
-                    formatter,
-                    "descriptor flags {observed:#x} exceed mask {allowed:#x}"
-                )
-            }
-            Self::InvalidReserved { offset, observed } => {
-                write!(
-                    formatter,
-                    "descriptor reserved word at {offset} is {observed:#x}"
-                )
-            }
-            Self::ValueOutOfRange {
-                offset,
-                observed,
-                maximum,
-            } => write!(
-                formatter,
-                "descriptor value {observed} at {offset} exceeds {maximum}"
-            ),
-            Self::InvalidIndirectCount { observed, maximum } => write!(
-                formatter,
-                "indirect destination count {observed} is outside 1..={maximum}"
-            ),
-            Self::InvalidIndirectAlignment { address, alignment } => write!(
-                formatter,
-                "indirect list address {address:#x} is not aligned to {alignment}"
-            ),
-        }
+    /// Absolute destination DMA address.
+    pub const fn address(self) -> DmaAddress {
+        DmaAddress::new(self.destination_dma_address)
     }
 }
 
-impl std::error::Error for DescriptorValueError {}
-impl std::error::Error for DescriptorDecodeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Codec(error) => Some(error),
-            Self::MetadataMismatch
-            | Self::InvalidVersion { .. }
-            | Self::InvalidSize { .. }
-            | Self::InvalidOpcode { .. }
-            | Self::InvalidFlags { .. }
-            | Self::InvalidReserved { .. }
-            | Self::ValueOutOfRange { .. }
-            | Self::InvalidIndirectCount { .. }
-            | Self::InvalidIndirectAlignment { .. } => None,
+const fn validate_payload(
+    payload: DescriptorSchemaPayloadValues,
+) -> Result<(), DescriptorValueError> {
+    match payload {
+        DescriptorSchemaPayloadValues::Copy(_)
+        | DescriptorSchemaPayloadValues::StridedCopy(_)
+        | DescriptorSchemaPayloadValues::VectorAdd(_) => Ok(()),
+        DescriptorSchemaPayloadValues::BroadcastCopy(values) => {
+            if values.destination_count == 0 {
+                return Err(DescriptorValueError::InvalidIndirectCount {
+                    observed: values.destination_count,
+                    maximum: MAX_INDIRECT_DESTINATIONS,
+                });
+            }
+            if values.destination_list_dma_address % INDIRECT_ENTRY_ALIGNMENT != 0 {
+                return Err(DescriptorValueError::InvalidIndirectAlignment {
+                    address: values.destination_list_dma_address,
+                    alignment: INDIRECT_ENTRY_ALIGNMENT,
+                });
+            }
+            Ok(())
         }
     }
 }

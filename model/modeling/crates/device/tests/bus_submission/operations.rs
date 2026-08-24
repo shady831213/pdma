@@ -1,10 +1,8 @@
 use super::common::{TestResult, activate, allocate, encode, fixture, run_descriptor};
 use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiId, AbiStridedCopy, AbiVectorAdd,
-};
-use pdma_model_contract::abi::{
-    BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses, CopyStrides, RingCursor,
-    StridedCopyShape, VectorDmaAddresses,
+    AbiCommand, AbiId, DescriptorSchemaPayloadBroadcastCopyValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
+    DescriptorSchemaPayloadVectorAddValues, RingCursor,
 };
 use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::ResourceConfig;
@@ -94,16 +92,23 @@ pub(super) async fn multi_queue_arbitration()
     let copy_destination = allocate(&handle, 4).await?;
     handle.write_memory(source_a.base(), &[1, 2, 3, 4]).await?;
     handle.write_memory(source_b.base(), &[4, 3, 2, 1]).await?;
-    let vector = encode(AbiCommand::VectorAdd(AbiVectorAdd::new(
+    let vector = encode(AbiCommand::vector_add(
         AbiId::new(40),
-        VectorDmaAddresses::new(source_a.base(), source_b.base(), vector_destination.base()),
-        4,
-    )))?;
-    let copy = encode(AbiCommand::Copy(AbiCopy::new(
+        DescriptorSchemaPayloadVectorAddValues {
+            source_a_dma_address: source_a.base().raw(),
+            source_b_dma_address: source_b.base().raw(),
+            destination_dma_address: vector_destination.base().raw(),
+            length: 4,
+        },
+    ))?;
+    let copy = encode(AbiCommand::copy(
         AbiId::new(41),
-        CopyDmaAddresses::new(source_a.base(), copy_destination.base()),
-        4,
-    )))?;
+        DescriptorSchemaPayloadCopyValues {
+            source_dma_address: source_a.base().raw(),
+            destination_dma_address: copy_destination.base().raw(),
+            length: 4,
+        },
+    ))?;
     for (queue, slot, descriptor) in [
         (vector_queue, vector_slot, vector),
         (copy_queue, copy_slot, copy),
@@ -160,14 +165,17 @@ pub(super) async fn multi_queue_arbitration()
 
 pub(super) async fn zero_row_strided() -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
-    let descriptor = encode(AbiCommand::StridedCopy(AbiStridedCopy::new(
+    let descriptor = encode(AbiCommand::strided_copy(
         AbiId::new(14),
-        CopyDmaAddresses::new(
-            pdma_model_contract::abi::DmaAddress::new(u64::MAX),
-            pdma_model_contract::abi::DmaAddress::new(u64::MAX),
-        ),
-        StridedCopyShape::new(0, u32::MAX, CopyStrides::new(u32::MAX, u32::MAX)),
-    )))?;
+        DescriptorSchemaPayloadStridedCopyValues {
+            source_dma_address: u64::MAX,
+            destination_dma_address: u64::MAX,
+            rows: 0,
+            row_bytes: u32::MAX,
+            source_stride: u32::MAX,
+            destination_stride: u32::MAX,
+        },
+    ))?;
     let result = run_descriptor(fixture, descriptor, &[]).await?;
     assert!(matches!(
         result.pending,
@@ -188,23 +196,29 @@ pub(super) async fn command(
 ) -> TestResult<(AbiCommand, Vec<u8>, Vec<u8>)> {
     match case {
         OperationCase::Copy => Ok((
-            AbiCommand::Copy(AbiCopy::new(
+            AbiCommand::copy(
                 AbiId::new(10),
-                CopyDmaAddresses::new(
-                    source_a.base().checked_add(2)?,
-                    destination_a.base().checked_add(1)?,
-                ),
-                4,
-            )),
+                DescriptorSchemaPayloadCopyValues {
+                    source_dma_address: source_a.base().checked_add(2)?.raw(),
+                    destination_dma_address: destination_a.base().checked_add(1)?.raw(),
+                    length: 4,
+                },
+            ),
             vec![0, 3, 4, 5, 6, 0, 0, 0],
             vec![0; 8],
         )),
         OperationCase::Strided => Ok((
-            AbiCommand::StridedCopy(AbiStridedCopy::new(
+            AbiCommand::strided_copy(
                 AbiId::new(11),
-                CopyDmaAddresses::new(source_a.base().checked_add(1)?, destination_a.base()),
-                StridedCopyShape::new(2, 2, CopyStrides::new(3, 3)),
-            )),
+                DescriptorSchemaPayloadStridedCopyValues {
+                    source_dma_address: source_a.base().checked_add(1)?.raw(),
+                    destination_dma_address: destination_a.base().raw(),
+                    rows: 2,
+                    row_bytes: 2,
+                    source_stride: 3,
+                    destination_stride: 3,
+                },
+            ),
             vec![2, 3, 0, 5, 6, 0, 0, 0],
             vec![0; 8],
         )),
@@ -215,25 +229,29 @@ pub(super) async fn command(
             entries[8..16].copy_from_slice(&destination_b.base().raw().to_le_bytes());
             handle.write_memory(list.base(), &entries).await?;
             Ok((
-                AbiCommand::BroadcastCopy(AbiBroadcastCopy::try_new(
+                AbiCommand::try_broadcast_copy(
                     AbiId::new(12),
-                    BroadcastDmaAddresses::new(source_a.base().checked_add(2)?, list.base()),
-                    BroadcastShape::new(3, 2),
-                )?),
+                    DescriptorSchemaPayloadBroadcastCopyValues {
+                        source_dma_address: source_a.base().checked_add(2)?.raw(),
+                        destination_list_dma_address: list.base().raw(),
+                        length: 3,
+                        destination_count: 2,
+                    },
+                )?,
                 vec![3, 4, 5, 0, 0, 0, 0, 0],
                 vec![3, 4, 5, 0, 0, 0, 0, 0],
             ))
         }
         OperationCase::Vector => Ok((
-            AbiCommand::VectorAdd(AbiVectorAdd::new(
+            AbiCommand::vector_add(
                 AbiId::new(13),
-                VectorDmaAddresses::new(
-                    source_a.base().checked_add(1)?,
-                    source_b.base().checked_add(1)?,
-                    destination_a.base().checked_add(2)?,
-                ),
-                4,
-            )),
+                DescriptorSchemaPayloadVectorAddValues {
+                    source_a_dma_address: source_a.base().checked_add(1)?.raw(),
+                    source_b_dma_address: source_b.base().checked_add(1)?.raw(),
+                    destination_dma_address: destination_a.base().checked_add(2)?.raw(),
+                    length: 4,
+                },
+            ),
             vec![0, 0, 9, 9, 9, 9, 0, 0],
             vec![0; 8],
         )),

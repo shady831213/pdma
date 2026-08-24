@@ -1,7 +1,7 @@
 use super::vectors;
 use pdma_model_contract::abi::{
     DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaValues,
-    DescriptorSchemaPayloadValues, DescriptorSchemaValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadValues, DescriptorSchemaValues,
 };
 
 #[test]
@@ -20,11 +20,11 @@ fn generated_descriptor_uses_semantic_header_and_payload_fields() {
                 flags: DescriptorHeaderSchemaFlagsValues::ZERO,
                 command_id: 0x0123_4567_89ab_cdef,
             },
-            payload: DescriptorSchemaPayloadValues::Copy {
+            payload: DescriptorSchemaPayloadValues::Copy(DescriptorSchemaPayloadCopyValues {
                 source_dma_address: 0x1020_3040_5060_7080,
                 destination_dma_address: 0x90a0_b0c0_d0e0_f000,
                 length: 0x1122_3344,
-            },
+            }),
         }
     );
     assert_eq!(values.to_bytes(), Ok(vectors::COPY));

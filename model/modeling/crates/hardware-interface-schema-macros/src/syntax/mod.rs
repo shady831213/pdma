@@ -10,7 +10,7 @@ pub(in crate::internal) use map::{MapDecl, RegisterPlacementDecl};
 pub(in crate::internal) use map_ordered::{MapSyntaxProbe, OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{
     BitsDecl, EnumDecl, FieldDecl, FieldShape, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl,
-    RecordDecl, RecordInput, RecordPlacementDecl, ScalarType, ScopedPath, UnionDecl,
+    RecordDecl, RecordInput, RecordPlacementDecl, ScalarType, ScopedPath, UnionCaseDecl, UnionDecl,
     UnionFieldDecl,
 };
 pub(in crate::internal) use register::{

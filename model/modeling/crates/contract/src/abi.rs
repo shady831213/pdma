@@ -13,14 +13,15 @@ mod ring;
 pub use address::{AbiId, DmaAddress};
 pub use codec::copy_u64_le;
 pub use descriptor::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
-    BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses, CopyStrides, DescriptorDecodeError,
-    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
-    DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
-    DescriptorSchema, DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView,
+    AbiCommand, BroadcastDestinationEntry, DescriptorDecodeError, DescriptorHeaderSchema,
+    DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaValues,
+    DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut, DescriptorSchema,
+    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
+    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadValues,
+    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaValues, DescriptorSchemaView,
     DescriptorSchemaViewMut, DescriptorValueError, IndirectDestinationEntrySchema,
     IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
-    IndirectDestinationEntrySchemaViewMut, StridedCopyShape, VectorDmaAddresses,
+    IndirectDestinationEntrySchemaViewMut,
 };
 pub use error::{AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError};
 pub use metadata::{

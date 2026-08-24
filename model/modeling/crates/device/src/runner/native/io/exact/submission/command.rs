@@ -5,7 +5,7 @@ mod vector;
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::native::execution::{ExecutionCommand, ExecutionOperation};
-use pdma_model_contract::abi::{AbiCommand, AbiFault};
+use pdma_model_contract::abi::{AbiCommand, AbiFault, DescriptorSchemaPayloadValues};
 use pdma_model_contract::bridge::AbiEvent;
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 
@@ -53,11 +53,13 @@ pub(super) fn resolve(
         completion: context.completion,
         command: context.command,
     };
-    let result: Result<ExecutionCommand, AbiFault> = match command {
-        AbiCommand::Copy(command) => copy::copy(resolution, command),
-        AbiCommand::StridedCopy(command) => copy::strided(resolution, command),
-        AbiCommand::BroadcastCopy(command) => broadcast::broadcast(resolution, command),
-        AbiCommand::VectorAdd(command) => vector::vector(resolution, command),
+    let result: Result<ExecutionCommand, AbiFault> = match command.payload() {
+        DescriptorSchemaPayloadValues::Copy(values) => copy::copy(resolution, values),
+        DescriptorSchemaPayloadValues::StridedCopy(values) => copy::strided(resolution, values),
+        DescriptorSchemaPayloadValues::BroadcastCopy(values) => {
+            broadcast::broadcast(resolution, values)
+        }
+        DescriptorSchemaPayloadValues::VectorAdd(values) => vector::vector(resolution, values),
     }?;
     Ok(result.map_err(|fault| AbiEvent::new(context.queue, context.command, fault)))
 }

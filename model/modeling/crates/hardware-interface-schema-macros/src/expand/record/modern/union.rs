@@ -1,8 +1,8 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 
 use crate::internal::syntax::{
-    ModernRecordDecl, ModernTypeDecl, ScopedPath, UnionDecl, UnionFieldDecl,
+    ModernRecordDecl, ModernTypeDecl, ScopedPath, UnionCaseDecl, UnionDecl, UnionFieldDecl,
 };
 
 use super::{layout::union_geometry, scalar};
@@ -72,17 +72,18 @@ pub(super) fn expand(
     let root = quote!(value);
     let tag = tag_info(record, &decl.tag, &root)?;
     let tag_type = &tag.ty;
+    let case_declarations = decl
+        .cases
+        .iter()
+        .map(|case| case_declaration(record, field, case, visibility));
     let declarations = decl.cases.iter().map(|case| {
         let case_name = &case.name;
-        let fields = case.fields.iter().map(|field| {
-            let name = &field.name;
-            let ty = scalar::ty(field.scalar);
-            quote!(#[doc = "Generated semantic union field."] #name: #ty)
-        });
-        quote!(#[doc = "Generated tagged-union case."] #case_name { #(#fields,)* })
+        let case_type = case_type(record, field, case_name);
+        quote!(#[doc = "Generated tagged-union case."] #case_name(#case_type))
     });
     let decode_arms = decl.cases.iter().map(|case| {
         let case_name = &case.name;
+        let case_type = case_type(record, field, case_name);
         let reserved = (case.fields.len()..slots).map(|index| {
             let relative = index * quantum;
             let end = relative + quantum;
@@ -101,37 +102,36 @@ pub(super) fn expand(
         });
         quote!(#tag_type::#case_name => {
             #(#reserved)*
-            ::core::result::Result::Ok(Self::#case_name { #(#fields,)* })
+            ::core::result::Result::Ok(Self::#case_name(#case_type { #(#fields,)* }))
         })
     });
     let encode_arms = decl.cases.iter().map(|case| {
         let case_name = &case.name;
+        let case_type = case_type(record, field, case_name);
         let names = case.fields.iter().map(|field| &field.name);
         let encoded =
             case.fields.iter().enumerate().map(|(index, field)| {
                 encode_field(field, index * quantum, quantum, facade, endian)
             });
-        quote!(Self::#case_name { #(#names,)* } => { #(#encoded)* })
+        quote!(Self::#case_name(#case_type { #(#names,)* }) => { #(#encoded)* })
     });
     let tag_arms = decl.cases.iter().map(|case| {
         let case_name = &case.name;
-        quote!(Self::#case_name { .. } => #tag_type::#case_name)
+        quote!(Self::#case_name(_) => #tag_type::#case_name)
     });
     let Some(first) = decl.cases.first() else {
         return Err(syn::Error::new(field.span(), "union requires a case"));
     };
     let first_name = &first.name;
-    let first_zero = first.fields.iter().map(|field| {
-        let name = &field.name;
-        quote!(#name: 0)
-    });
+    let first_type = case_type(record, field, first_name);
     Ok(quote! {
+        #(#case_declarations)*
         #[doc = "Generated semantic tagged-union value."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility enum #name { #(#declarations),* }
         impl #name {
             #[doc = "First declared case used by generated zero records."]
-            pub const ZERO: Self = Self::#first_name { #(#first_zero,)* };
+            pub const ZERO: Self = Self::#first_name(#first_type::ZERO);
             fn decode(bytes: &[u8], base: usize, tag: #tag_type) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 match tag { #(#decode_arms),* }
             }
@@ -139,7 +139,8 @@ pub(super) fn expand(
                 match self { #(#encode_arms),* }
                 ::core::result::Result::Ok(())
             }
-            fn tag(&self) -> #tag_type {
+            #[doc = "Returns the tag selected by this semantic union case."]
+            pub const fn tag(&self) -> #tag_type {
                 match self { #(#tag_arms),* }
             }
         }
@@ -147,6 +148,41 @@ pub(super) fn expand(
             fn default() -> Self { Self::ZERO }
         }
     })
+}
+
+fn case_declaration(
+    record: &ModernRecordDecl,
+    field: &syn::Ident,
+    case: &UnionCaseDecl,
+    visibility: &syn::Visibility,
+) -> TokenStream {
+    let case_type = case_type(record, field, &case.name);
+    let fields = case.fields.iter().map(|field| {
+        let name = &field.name;
+        let ty = scalar::ty(field.scalar);
+        quote!(#[doc = "Generated semantic union-case field."] #visibility #name: #ty)
+    });
+    let zero_fields = case.fields.iter().map(|field| {
+        let name = &field.name;
+        quote!(#name: 0)
+    });
+    quote! {
+        #[doc = "Generated semantic tagged-union case value."]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #visibility struct #case_type { #(#fields,)* }
+        impl #case_type {
+            #[doc = "All-zero semantic case value."]
+            pub const ZERO: Self = Self { #(#zero_fields,)* };
+        }
+        impl ::core::default::Default for #case_type {
+            fn default() -> Self { Self::ZERO }
+        }
+    }
+}
+
+fn case_type(record: &ModernRecordDecl, field: &syn::Ident, case: &syn::Ident) -> syn::Ident {
+    let union = scalar::type_name(&record.name, field, "");
+    format_ident!("{union}{case}Values")
 }
 
 fn decode_field(

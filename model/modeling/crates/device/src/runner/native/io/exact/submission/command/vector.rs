@@ -2,17 +2,19 @@ use super::super::resolve;
 use super::ResolutionContext;
 use crate::runner::native::execution::{ExecutionCommand, ExecutionOperation, VectorAddOperation};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::{AbiFault, AbiOperandVisit, AbiVectorAdd};
+use pdma_model_contract::abi::{
+    AbiFault, AbiOperandVisit, DescriptorSchemaPayloadVectorAddValues, DmaAddress,
+};
 
 pub(super) fn vector(
     context: ResolutionContext<'_>,
-    command: AbiVectorAdd,
+    command: DescriptorSchemaPayloadVectorAddValues,
 ) -> ModelResult<Result<ExecutionCommand, AbiFault>> {
-    let length = usize::try_from(command.length()).map_err(|_| ModelError::DmaSubmissionState)?;
+    let length = usize::try_from(command.length).map_err(|_| ModelError::DmaSubmissionState)?;
     let source_a = operand(
         context,
-        command.source_a(),
-        command.length(),
+        DmaAddress::new(command.source_a_dma_address),
+        command.length,
         AbiOperandVisit::VectorSourceA,
     )?;
     let source_a = match source_a {
@@ -21,8 +23,8 @@ pub(super) fn vector(
     };
     let source_b = operand(
         context,
-        command.source_b(),
-        command.length(),
+        DmaAddress::new(command.source_b_dma_address),
+        command.length,
         AbiOperandVisit::VectorSourceB,
     )?;
     let source_b = match source_b {
@@ -31,8 +33,8 @@ pub(super) fn vector(
     };
     let destination = operand(
         context,
-        command.destination(),
-        command.length(),
+        DmaAddress::new(command.destination_dma_address),
+        command.length,
         AbiOperandVisit::VectorDestination,
     )?;
     Ok(destination.map(|destination| {

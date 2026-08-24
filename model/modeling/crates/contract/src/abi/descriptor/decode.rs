@@ -1,17 +1,12 @@
 use hardware_interface_schema::SchemaCodecError;
 
 use crate::abi::{
-    ABI_VERSION, AbiId, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView, DmaAddress,
-    IndirectDestinationEntrySchemaValues, MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE,
+    ABI_VERSION, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
+    DescriptorSchemaValues, DescriptorSchemaView, MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE,
     codec::decode_schema_error,
 };
 
-use super::{
-    AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
-    BroadcastDmaAddresses, BroadcastShape, CopyDmaAddresses, CopyStrides, DescriptorDecodeError,
-    DescriptorValueError, StridedCopyShape, VectorDmaAddresses,
-};
+use super::{AbiCommand, DescriptorDecodeError, DescriptorValueError, validate_payload};
 
 pub(super) fn decode_descriptor(bytes: &[u8]) -> Result<AbiCommand, DescriptorDecodeError> {
     let view = DescriptorSchemaView::new(bytes).map_err(decode_schema_error)?;
@@ -23,17 +18,8 @@ pub(super) fn decode_descriptor(bytes: &[u8]) -> Result<AbiCommand, DescriptorDe
     validate_header(version, size, opcode, flags)?;
     let values = DescriptorSchemaValues::from_bytes(bytes)
         .map_err(|error| descriptor_schema_error(opcode, error))?;
-    decode_variant(AbiId::new(values.header.command_id), values.payload)
-}
-
-pub(super) fn decode_destination(
-    bytes: &[u8],
-) -> Result<BroadcastDestinationEntry, DescriptorDecodeError> {
-    let values =
-        IndirectDestinationEntrySchemaValues::from_bytes(bytes).map_err(decode_schema_error)?;
-    Ok(BroadcastDestinationEntry::new(DmaAddress::new(
-        values.destination_dma_address,
-    )))
+    validate_payload(values.payload).map_err(map_broadcast_error)?;
+    Ok(AbiCommand::from_validated_values(values))
 }
 
 fn validate_header(
@@ -67,74 +53,6 @@ fn validate_header(
         });
     }
     Ok(())
-}
-
-fn decode_variant(
-    command_id: AbiId,
-    variant: DescriptorSchemaPayloadValues,
-) -> Result<AbiCommand, DescriptorDecodeError> {
-    match variant {
-        DescriptorSchemaPayloadValues::Copy {
-            source_dma_address,
-            destination_dma_address,
-            length,
-        } => Ok(AbiCommand::Copy(AbiCopy::new(
-            command_id,
-            CopyDmaAddresses::new(
-                DmaAddress::new(source_dma_address),
-                DmaAddress::new(destination_dma_address),
-            ),
-            length,
-        ))),
-        DescriptorSchemaPayloadValues::StridedCopy {
-            source_dma_address,
-            destination_dma_address,
-            rows,
-            row_bytes,
-            source_stride,
-            destination_stride,
-        } => Ok(AbiCommand::StridedCopy(AbiStridedCopy::new(
-            command_id,
-            CopyDmaAddresses::new(
-                DmaAddress::new(source_dma_address),
-                DmaAddress::new(destination_dma_address),
-            ),
-            StridedCopyShape::new(
-                rows,
-                row_bytes,
-                CopyStrides::new(source_stride, destination_stride),
-            ),
-        ))),
-        DescriptorSchemaPayloadValues::BroadcastCopy {
-            source_dma_address,
-            destination_list_dma_address,
-            length,
-            destination_count,
-        } => AbiBroadcastCopy::try_new(
-            command_id,
-            BroadcastDmaAddresses::new(
-                DmaAddress::new(source_dma_address),
-                DmaAddress::new(destination_list_dma_address),
-            ),
-            BroadcastShape::new(length, destination_count),
-        )
-        .map(AbiCommand::BroadcastCopy)
-        .map_err(map_broadcast_error),
-        DescriptorSchemaPayloadValues::VectorAdd {
-            source_a_dma_address,
-            source_b_dma_address,
-            destination_dma_address,
-            length,
-        } => Ok(AbiCommand::VectorAdd(AbiVectorAdd::new(
-            command_id,
-            VectorDmaAddresses::new(
-                DmaAddress::new(source_a_dma_address),
-                DmaAddress::new(source_b_dma_address),
-                DmaAddress::new(destination_dma_address),
-            ),
-            length,
-        ))),
-    }
 }
 
 fn map_broadcast_error(error: DescriptorValueError) -> DescriptorDecodeError {

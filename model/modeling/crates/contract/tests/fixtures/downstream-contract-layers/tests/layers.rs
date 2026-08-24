@@ -1,7 +1,8 @@
 //! Standalone downstream layer-boundary behavior.
 
 use pdma_model_contract::abi::{{
-        AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress, RingCursor, RingLayout, RingRecord,
+        AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingLayout,
+        RingRecord,
     }};
 use pdma_model_contract::bridge::{{decode_buffer_id, encode_buffer_id}};
 use pdma_model_contract::semantic::{{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId}};
@@ -11,11 +12,14 @@ fn independent_values_compose_only_through_bridge() {
     // Given: unrelated semantic and exact ABI values.
     let request = CopyRequest::new(BufferId::new(7), BufferId::new(9), 16);
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(3));
-    let exact = AbiCommand::Copy(AbiCopy::new(
+    let exact = AbiCommand::copy(
         AbiId::new(41),
-        CopyDmaAddresses::new(DmaAddress::new(0x1000), DmaAddress::new(0x2000)),
-        16,
-    ));
+        DescriptorSchemaPayloadCopyValues {{
+            source_dma_address: 0x1000,
+            destination_dma_address: 0x2000,
+            length: 16,
+        }},
+    );
 
     // When: the record is encoded and the semantic ID crosses the bridge.
     let mut bytes = [0_u8; 64];

@@ -5,18 +5,19 @@ use crate::runner::native::execution::{
 };
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
-    AbiBroadcastCopy, AbiFault, AbiOperandVisit, BroadcastDestinationEntry,
+    AbiFault, AbiOperandVisit, BroadcastDestinationEntry,
+    DescriptorSchemaPayloadBroadcastCopyValues, DmaAddress,
 };
 
 pub(super) fn broadcast(
     context: ResolutionContext<'_>,
-    command: AbiBroadcastCopy,
+    command: DescriptorSchemaPayloadBroadcastCopyValues,
 ) -> ModelResult<Result<ExecutionCommand, AbiFault>> {
-    let length = usize::try_from(command.length()).map_err(|_| ModelError::DmaSubmissionState)?;
+    let length = usize::try_from(command.length).map_err(|_| ModelError::DmaSubmissionState)?;
     let source = resolve::direct(
         context.dma,
-        command.source(),
-        u64::from(command.length()),
+        DmaAddress::new(command.source_dma_address),
+        u64::from(command.length),
         AbiOperandVisit::BroadcastSource,
     )?;
     let source = match source {
@@ -25,8 +26,8 @@ pub(super) fn broadcast(
     };
     let container = resolve::indirect_container(
         context.dma,
-        command.destination_list(),
-        u64::from(command.destination_count()),
+        DmaAddress::new(command.destination_list_dma_address),
+        u64::from(command.destination_count),
     )?;
     let (_, extent) = match container {
         Ok(container) => container,
@@ -34,12 +35,15 @@ pub(super) fn broadcast(
     };
     let bytes = context
         .dma
-        .read_memory(command.destination_list(), extent)
+        .read_memory(
+            DmaAddress::new(command.destination_list_dma_address),
+            extent,
+        )
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let mut destinations = Vec::new();
     destinations
         .try_reserve_exact(
-            usize::try_from(command.destination_count())
+            usize::try_from(command.destination_count)
                 .map_err(|_| ModelError::DmaSubmissionState)?,
         )
         .map_err(|_| ModelError::DmaSubmissionState)?;
@@ -51,7 +55,7 @@ pub(super) fn broadcast(
         let destination = resolve::direct(
             context.dma,
             address,
-            u64::from(command.length()),
+            u64::from(command.length),
             AbiOperandVisit::BroadcastDestination { index },
         )?;
         match destination {

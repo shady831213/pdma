@@ -15,7 +15,8 @@ pub mod vectors;
 
 use pdma_model_contract::abi::{
     ABI_VERSION, AbiCommand, BroadcastDestinationEntry, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DescriptorDecodeError, DmaAddress, VECTOR_ADD_OPCODE,
+    DescriptorDecodeError, DescriptorSchemaPayloadValues, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
+    VECTOR_ADD_OPCODE,
 };
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, StridedCopyRequest};
 
@@ -66,9 +67,13 @@ fn every_v1_descriptor_matches_golden_bytes() {
     assert_eq!(decoded_entry, Ok(entry));
     let [_, _, broadcast, _] = commands;
     assert_eq!(
-        match broadcast {
-            AbiCommand::BroadcastCopy(value) => value.destination_list_extent(),
-            _ => 0,
+        match broadcast.payload() {
+            DescriptorSchemaPayloadValues::BroadcastCopy(value) => {
+                u64::from(value.destination_count) * INDIRECT_ENTRY_ALIGNMENT
+            }
+            DescriptorSchemaPayloadValues::Copy(_)
+            | DescriptorSchemaPayloadValues::StridedCopy(_)
+            | DescriptorSchemaPayloadValues::VectorAdd(_) => 0,
         },
         24
     );

@@ -4,18 +4,21 @@ use crate::runner::native::execution::{
     CopyOperation, ExecutionCommand, ExecutionOperation, ResolvedStridedRows, StridedCopyOperation,
 };
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::{AbiCopy, AbiFault, AbiOperandVisit, AbiStridedCopy};
+use pdma_model_contract::abi::{
+    AbiFault, AbiOperandVisit, DescriptorSchemaPayloadCopyValues,
+    DescriptorSchemaPayloadStridedCopyValues, DmaAddress,
+};
 use std::num::NonZeroUsize;
 
 pub(super) fn copy(
     context: ResolutionContext<'_>,
-    command: AbiCopy,
+    command: DescriptorSchemaPayloadCopyValues,
 ) -> ModelResult<Result<ExecutionCommand, AbiFault>> {
-    let length = usize::try_from(command.length()).map_err(|_| ModelError::DmaSubmissionState)?;
+    let length = usize::try_from(command.length).map_err(|_| ModelError::DmaSubmissionState)?;
     let source = resolve::direct(
         context.dma,
-        command.source(),
-        u64::from(command.length()),
+        DmaAddress::new(command.source_dma_address),
+        u64::from(command.length),
         AbiOperandVisit::CopySource,
     )?;
     let source = match source {
@@ -24,8 +27,8 @@ pub(super) fn copy(
     };
     let destination = resolve::direct(
         context.dma,
-        command.destination(),
-        u64::from(command.length()),
+        DmaAddress::new(command.destination_dma_address),
+        u64::from(command.length),
         AbiOperandVisit::CopyDestination,
     )?;
     Ok(destination.map(|destination| {
@@ -39,16 +42,16 @@ pub(super) fn copy(
 
 pub(super) fn strided(
     context: ResolutionContext<'_>,
-    command: AbiStridedCopy,
+    command: DescriptorSchemaPayloadStridedCopyValues,
 ) -> ModelResult<Result<ExecutionCommand, AbiFault>> {
-    let row_count = usize::try_from(command.rows()).map_err(|_| ModelError::DmaSubmissionState)?;
+    let row_count = usize::try_from(command.rows).map_err(|_| ModelError::DmaSubmissionState)?;
     let Some(count) = NonZeroUsize::new(row_count) else {
         return Ok(Ok(context.complete(ExecutionOperation::StridedCopy(
             StridedCopyOperation {
                 rows: ResolvedStridedRows::Empty,
-                row_bytes: scalar(command.row_bytes())?,
-                source_stride: scalar(command.source_stride())?,
-                destination_stride: scalar(command.destination_stride())?,
+                row_bytes: scalar(command.row_bytes)?,
+                source_stride: scalar(command.source_stride)?,
+                destination_stride: scalar(command.destination_stride)?,
             },
         ))));
     };
@@ -62,7 +65,7 @@ pub(super) fn strided(
         Ok(destination) => destination,
         Err(fault) => return Ok(Err(fault)),
     };
-    for row in 1..u64::from(command.rows()) {
+    for row in 1..u64::from(command.rows) {
         if let Err(fault) = row_source(context, command, row)? {
             return Ok(Err(fault));
         }
@@ -77,39 +80,39 @@ pub(super) fn strided(
                 destination,
                 count,
             },
-            row_bytes: scalar(command.row_bytes())?,
-            source_stride: scalar(command.source_stride())?,
-            destination_stride: scalar(command.destination_stride())?,
+            row_bytes: scalar(command.row_bytes)?,
+            source_stride: scalar(command.source_stride)?,
+            destination_stride: scalar(command.destination_stride)?,
         },
     ))))
 }
 
 fn row_source(
     context: ResolutionContext<'_>,
-    command: AbiStridedCopy,
+    command: DescriptorSchemaPayloadStridedCopyValues,
     row: u64,
 ) -> ModelResult<Result<pdma_model_contract::semantic::DmaRangeStart, AbiFault>> {
     resolve::strided(
         context.dma,
-        command.source(),
+        DmaAddress::new(command.source_dma_address),
         row,
-        u64::from(command.source_stride()),
-        u64::from(command.row_bytes()),
+        u64::from(command.source_stride),
+        u64::from(command.row_bytes),
         AbiOperandVisit::StridedSource { row },
     )
 }
 
 fn row_destination(
     context: ResolutionContext<'_>,
-    command: AbiStridedCopy,
+    command: DescriptorSchemaPayloadStridedCopyValues,
     row: u64,
 ) -> ModelResult<Result<pdma_model_contract::semantic::DmaRangeStart, AbiFault>> {
     resolve::strided(
         context.dma,
-        command.destination(),
+        DmaAddress::new(command.destination_dma_address),
         row,
-        u64::from(command.destination_stride()),
-        u64::from(command.row_bytes()),
+        u64::from(command.destination_stride),
+        u64::from(command.row_bytes),
         AbiOperandVisit::StridedDestination { row },
     )
 }

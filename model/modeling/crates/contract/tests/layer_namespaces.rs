@@ -1,7 +1,8 @@
 //! Compile and value proofs for the additive contract namespaces.
 
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCopy, AbiId, CopyDmaAddresses, DmaAddress, RingCursor, RingLayout, RingRecord,
+    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingLayout,
+    RingRecord,
 };
 use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
 use pdma_model_contract::semantic::{self, BufferId};
@@ -10,11 +11,14 @@ use pdma_model_contract::semantic::{self, BufferId};
 fn semantic_and_abi_are_independent_and_bridge_is_explicit() {
     // Given: one semantic request and one unrelated exact ABI command.
     let semantic = semantic::CopyRequest::new(BufferId::new(3), BufferId::new(5), 8);
-    let abi = AbiCommand::Copy(AbiCopy::new(
+    let abi = AbiCommand::copy(
         AbiId::new(11),
-        CopyDmaAddresses::new(DmaAddress::new(0x100), DmaAddress::new(0x200)),
-        8,
-    ));
+        DescriptorSchemaPayloadCopyValues {
+            source_dma_address: 0x100,
+            destination_dma_address: 0x200,
+            length: 8,
+        },
+    );
 
     // When: the exact command is encoded and one ID crosses the explicit bridge.
     let mut bytes = [0_u8; 64];

@@ -1,9 +1,8 @@
 use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCopy, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId, DmaAddress,
-    MAX_TRANSFER_BYTES,
+    AbiCommand, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId,
+    DescriptorSchemaPayloadCopyValues, DmaAddress, MAX_TRANSFER_BYTES, RingCursor,
 };
-use pdma_model_contract::abi::{CopyDmaAddresses, RingCursor};
 use pdma_model_contract::semantic::ResourceConfig;
 
 #[derive(Clone, Copy)]
@@ -42,11 +41,14 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
     let source = allocate(&fixture.handle, 4).await?;
     let destination = allocate(&fixture.handle, 4).await?;
-    let mut bytes = encode(AbiCommand::Copy(AbiCopy::new(
+    let mut bytes = encode(AbiCommand::copy(
         AbiId::new(31),
-        CopyDmaAddresses::new(source.base(), destination.base()),
-        4,
-    )))?;
+        DescriptorSchemaPayloadCopyValues {
+            source_dma_address: source.base().raw(),
+            destination_dma_address: destination.base().raw(),
+            length: 4,
+        },
+    ))?;
     let (kind, index, observed, expected) = mutate_header(case, &mut bytes);
     let slot = fixture.submission;
     let result = run_descriptor(fixture, bytes, &[destination]).await?;
@@ -121,11 +123,14 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
     };
     let result = run_descriptor(
         fixture,
-        encode(AbiCommand::Copy(AbiCopy::new(
+        encode(AbiCommand::copy(
             AbiId::new(32),
-            CopyDmaAddresses::new(source, DmaAddress::new(u64::MAX)),
-            4,
-        )))?,
+            DescriptorSchemaPayloadCopyValues {
+                source_dma_address: source.raw(),
+                destination_dma_address: u64::MAX,
+                length: 4,
+            },
+        ))?,
         &[destination],
     )
     .await?;

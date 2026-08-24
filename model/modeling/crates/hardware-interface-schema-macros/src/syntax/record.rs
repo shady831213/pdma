@@ -11,8 +11,8 @@ mod modern;
 use field::parse_u16;
 pub(in crate::internal) use field::{FieldDecl, FieldShape, ScalarType};
 pub(in crate::internal) use modern::{
-    BitsDecl, EnumDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScopedPath, UnionDecl,
-    UnionFieldDecl,
+    BitsDecl, EnumDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScopedPath,
+    UnionCaseDecl, UnionDecl, UnionFieldDecl,
 };
 
 pub(in crate::internal) enum RecordInput {

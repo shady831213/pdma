@@ -2,8 +2,8 @@ use super::super::super::execution::{
     BroadcastCopyOperation, CopyOperation, ExecutionCommand, ExecutionOperation,
     ResolvedStridedRows, StridedCopyOperation, VectorAddOperation,
 };
+use pdma_model_contract::semantic::DmaRangeStart;
 use pdma_model_contract::semantic::desc::ExternalCommand;
-use pdma_model_contract::semantic::{DmaRangeStart, TraceOperation};
 use std::num::NonZeroUsize;
 
 pub(in crate::runner::native::io) fn normalize(command: ExternalCommand) -> ExecutionCommand {
@@ -72,10 +72,4 @@ pub(in crate::runner::native::io) fn normalize(command: ExternalCommand) -> Exec
             )
         }
     }
-}
-
-pub(super) const fn identity(
-    command: &ExecutionCommand,
-) -> (pdma_model_contract::semantic::CommandId, TraceOperation) {
-    (command.command_id(), command.trace_operation())
 }

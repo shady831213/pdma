@@ -64,9 +64,7 @@ impl QueueFrontend for ExactFrontend {
             entry.completion_ring_id(),
         )?;
         Ok(fetched.map(|fetched| match fetched {
-            submission::ExactFetch::Command(command) => {
-                NormalizedFetch::Command(super::semantic::command::normalize(command))
-            }
+            submission::ExactFetch::Command(command) => NormalizedFetch::Command(command),
             submission::ExactFetch::Fault(event) => {
                 self.pending_fault = Some(event);
                 NormalizedFetch::Fault(NormalizedFault {
@@ -175,9 +173,7 @@ impl QueueFrontend for ExactFrontend {
 
 fn normalize(fetched: submission::ExactFetch) -> NormalizedFetch {
     match fetched {
-        submission::ExactFetch::Command(command) => {
-            NormalizedFetch::Command(super::semantic::command::normalize(command))
-        }
+        submission::ExactFetch::Command(command) => NormalizedFetch::Command(command),
         submission::ExactFetch::Fault(event) => NormalizedFetch::Fault(NormalizedFault {
             queue: event.queue_id(),
         }),

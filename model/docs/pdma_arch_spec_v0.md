@@ -319,15 +319,22 @@ metadata with `cargo run -p pdma-model-contract --bin pdma-abi-header -- --write
 include/pdma_model_abi.h`; gates must run the corresponding `--check` command and reject
 any byte mismatch.
 
+`DmaAddress` is the opaque device-visible address carried by descriptors and rings. It
+does not identify whether a platform uses physical, bus, or translated addressing.
+
 ## Conceptual Command Boundary
 
 External commands live in `model/modeling/crates/contract/src/desc.rs` and represent the
 conceptual driver-visible descriptor surface. The `ExternalCommand` enum carries `Copy`,
 `StridedCopy`, `BroadcastCopy`, and `VectorAdd` variants, each with queue ID, completion
-ring ID, command ID, and request payload. The active native runner matches these variants
-exhaustively and derives operation-specific chunks or resource demand internally. ABI-v1
-encodes the equivalent command data through the fixed registry; Rust layout itself is
-never ABI data.
+ring ID, command ID, and request payload. The semantic frontend lowers that public form
+once into a device-private `ExecutionCommand`; the exact frontend decodes ABI-v1 and
+resolves its DMA addresses directly into the same private representation. The shared
+native core matches only private execution operations and derives operation-specific
+chunks and resource demand internally. The selected queue context supplies execution
+queue identity, while the semantic command or exact queue directory supplies completion
+routing. ABI-v1 encodes equivalent command data through the fixed registry; neither the
+public command type nor the private execution type is wire layout.
 
 ## Supported v0 Operations
 

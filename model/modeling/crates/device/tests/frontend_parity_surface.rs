@@ -28,6 +28,7 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync + 's
 
 #[tokio::test(flavor = "current_thread")]
 async fn task17_frontend_parity_surface() -> TestResult {
+    operations::zero_row_strided().await?;
     let mut semantic_results = Vec::new();
     let mut exact_results = Vec::new();
     let mut semantic_traces = Vec::new();

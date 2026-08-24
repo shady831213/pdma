@@ -15,7 +15,7 @@ use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
-    Command(pdma_model_contract::semantic::desc::ExternalCommand),
+    Command(crate::runner::native::execution::ExecutionCommand),
     Fault(AbiEvent),
 }
 
@@ -47,8 +47,12 @@ pub(super) fn fetch(
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let command_id = command_id(&bytes)?;
     match AbiCommand::decode(&bytes) {
-        Ok(command) => command::resolve(dma_space, queue_id, completion_ring, command_id, command)
-            .map(|result| Some(result.map_or_else(ExactFetch::Fault, ExactFetch::Command))),
+        Ok(command) => command::resolve(
+            dma_space,
+            command::ExactCommandContext::new(queue_id, completion_ring, command_id),
+            command,
+        )
+        .map(|result| Some(result.map_or_else(ExactFetch::Fault, ExactFetch::Command))),
         Err(error) => fault::descriptor(slot, &bytes, error).map(|fault| {
             Some(ExactFetch::Fault(AbiEvent::new(
                 queue_id, command_id, fault,

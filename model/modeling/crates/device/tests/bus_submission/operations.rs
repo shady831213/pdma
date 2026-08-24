@@ -158,6 +158,26 @@ pub(super) async fn multi_queue_arbitration()
     Ok(order)
 }
 
+pub(super) async fn zero_row_strided() -> TestResult {
+    let fixture = fixture(ResourceConfig::default()).await?;
+    let descriptor = encode(AbiCommand::StridedCopy(AbiStridedCopy::new(
+        AbiId::new(14),
+        CopyDmaAddresses::new(
+            pdma_model_contract::abi::DmaAddress::new(u64::MAX),
+            pdma_model_contract::abi::DmaAddress::new(u64::MAX),
+        ),
+        StridedCopyShape::new(0, u32::MAX, CopyStrides::new(u32::MAX, u32::MAX)),
+    )))?;
+    let result = run_descriptor(fixture, descriptor, &[]).await?;
+    assert!(matches!(
+        result.pending,
+        Some(PendingDmaResult::Completion(_))
+    ));
+    assert_eq!(result.consumer, RingCursor::new(1));
+    assert_eq!(result.native_steps, 1);
+    Ok(())
+}
+
 pub(super) async fn command(
     case: OperationCase,
     handle: &pdma_model_device::AsyncDeviceHandle,

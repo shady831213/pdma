@@ -39,7 +39,7 @@ impl QueueFrontend for SemanticFrontend {
         pdma_model_contract::semantic::TraceOperation,
     )> {
         let command = command::normalize(command);
-        let identity = command::identity(&command);
+        let identity = (command.command_id(), command.trace_operation());
         self.commands.push(command).map(|()| identity)
     }
 

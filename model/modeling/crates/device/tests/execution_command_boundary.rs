@@ -33,3 +33,41 @@ fn native_execution_core_is_external_command_free() {
         "host-facing types in device core: {leaked:?}"
     );
 }
+
+#[test]
+fn exact_frontend_builds_private_execution_commands_without_external_reconstruction() {
+    // Given: the exact descriptor fetch and operation-resolution boundary.
+    let exact = [
+        include_str!("../src/runner/native/io/exact/submission.rs"),
+        include_str!("../src/runner/native/io/exact/submission/command.rs"),
+        include_str!("../src/runner/native/io/exact/submission/command/copy.rs"),
+        include_str!("../src/runner/native/io/exact/submission/command/broadcast.rs"),
+        include_str!("../src/runner/native/io/exact/submission/command/vector.rs"),
+    ];
+    let public_types = [
+        "semantic::desc",
+        "ExternalCommand",
+        "CopyCommand",
+        "StridedCopyCommand",
+        "BroadcastCopyCommand",
+        "VectorAddCommand",
+        "CopyRequest",
+        "StridedCopyRequest",
+        "BroadcastCopyRequest",
+        "VectorAddRequest",
+        "BufferId::new(0)",
+    ];
+
+    // When: exact resolution source is inspected for semantic reconstruction.
+    let leaked = exact
+        .iter()
+        .flat_map(|source| public_types.iter().filter(|name| source.contains(*name)))
+        .copied()
+        .collect::<Vec<_>>();
+
+    // Then: exact decode produces the private execution representation directly.
+    assert!(
+        leaked.is_empty(),
+        "semantic types in exact resolver: {leaked:?}"
+    );
+}

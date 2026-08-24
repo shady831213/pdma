@@ -1,6 +1,6 @@
 use crate::abi::{
     ABI_VERSION, AbiId, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DescriptorSchema, DescriptorSchemaView, DmaAddress, IndirectDestinationEntrySchemaView,
+    DescriptorSchema, DescriptorSchemaValues, DmaAddress, IndirectDestinationEntrySchemaValues,
     MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
     STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE, codec::decode_schema_error,
 };
@@ -11,41 +11,20 @@ use super::{
     DescriptorValueError, StridedCopyShape, VectorIovas,
 };
 
-struct Payload {
-    word0: u64,
-    word1: u64,
-    word2: u64,
-    word3: u64,
-    word4: u64,
-    word5: u64,
-}
-
 pub(super) fn decode_descriptor(bytes: &[u8]) -> Result<AbiCommand, DescriptorDecodeError> {
-    let view = DescriptorSchemaView::new(bytes).map_err(decode_schema_error)?;
-    let version = view.version().map_err(decode_schema_error)?;
-    let opcode = view.opcode().map_err(decode_schema_error)?;
-    let flags = view.flags().map_err(decode_schema_error)?;
-    let size = view.size().map_err(decode_schema_error)?;
-    let command_id = AbiId::new(view.command_id().map_err(decode_schema_error)?);
-    let payload = Payload {
-        word0: view.word0().map_err(decode_schema_error)?,
-        word1: view.word1().map_err(decode_schema_error)?,
-        word2: view.word2().map_err(decode_schema_error)?,
-        word3: view.word3().map_err(decode_schema_error)?,
-        word4: view.word4().map_err(decode_schema_error)?,
-        word5: view.word5().map_err(decode_schema_error)?,
-    };
-    validate_header(version, size, opcode, flags)?;
-    validate_reserved(opcode, &payload)?;
-    decode_payload(opcode, command_id, &payload)
+    let values = DescriptorSchemaValues::from_bytes(bytes).map_err(decode_schema_error)?;
+    validate_header(values.version, values.size, values.opcode, values.flags)?;
+    validate_reserved(values.opcode, &values)?;
+    decode_payload(values.opcode, AbiId::new(values.command_id), &values)
 }
 
 pub(super) fn decode_destination(
     bytes: &[u8],
 ) -> Result<BroadcastDestinationEntry, DescriptorDecodeError> {
-    let view = IndirectDestinationEntrySchemaView::new(bytes).map_err(decode_schema_error)?;
+    let values =
+        IndirectDestinationEntrySchemaValues::from_bytes(bytes).map_err(decode_schema_error)?;
     Ok(BroadcastDestinationEntry::new(DmaAddress::new(
-        view.destination_iova().map_err(decode_schema_error)?,
+        values.destination_iova,
     )))
 }
 
@@ -82,7 +61,10 @@ fn validate_header(
     Ok(())
 }
 
-fn validate_reserved(opcode: u16, payload: &Payload) -> Result<(), DescriptorDecodeError> {
+fn validate_reserved(
+    opcode: u16,
+    payload: &DescriptorSchemaValues,
+) -> Result<(), DescriptorDecodeError> {
     let reserved = match opcode {
         COPY_OPCODE => [
             Some((payload.word3, DescriptorSchema::WORD3_OFFSET)),
@@ -116,7 +98,7 @@ fn validate_reserved(opcode: u16, payload: &Payload) -> Result<(), DescriptorDec
 fn decode_payload(
     opcode: u16,
     command_id: AbiId,
-    payload: &Payload,
+    payload: &DescriptorSchemaValues,
 ) -> Result<AbiCommand, DescriptorDecodeError> {
     match opcode {
         COPY_OPCODE => Ok(AbiCommand::Copy(AbiCopy::new(
@@ -177,7 +159,7 @@ fn decode_payload(
 
 fn decode_broadcast(
     command_id: AbiId,
-    payload: &Payload,
+    payload: &DescriptorSchemaValues,
 ) -> Result<AbiCommand, DescriptorDecodeError> {
     let length = bounded(
         payload.word2,

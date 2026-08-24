@@ -9,14 +9,16 @@ mod metadata;
 pub mod mmio;
 mod record;
 mod ring;
-mod schema;
 
 pub use address::{AbiId, DmaAddress};
 pub use codec::copy_u64_le;
 pub use descriptor::{
     AbiBroadcastCopy, AbiCommand, AbiCopy, AbiStridedCopy, AbiVectorAdd, BroadcastDestinationEntry,
     BroadcastIovas, BroadcastShape, CopyIovas, CopyStrides, DescriptorDecodeError,
-    DescriptorValueError, StridedCopyShape, VectorIovas,
+    DescriptorSchema, DescriptorSchemaValues, DescriptorSchemaView, DescriptorSchemaViewMut,
+    DescriptorValueError, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
+    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut, StridedCopyShape,
+    VectorIovas,
 };
 pub use error::{AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError};
 pub use metadata::{
@@ -35,15 +37,10 @@ pub use record::{
     AbiBounds, AbiCompletion, AbiEvent as ExactAbiEvent, AbiEventAccess, AbiEventKind,
     AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
     AbiFaultSelectionError, AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit,
-    AbiReservedField, AbiScalarField, AbiStrideOffset,
-    decode_completion as decode_exact_completion, decode_event as decode_exact_event,
-    encode_completion as encode_exact_completion, encode_event as encode_exact_event,
-    select_canonical_fault,
+    AbiReservedField, AbiScalarField, AbiStrideOffset, CompletionSchema, CompletionSchemaValues,
+    CompletionSchemaView, CompletionSchemaViewMut, EventSchema, EventSchemaValues, EventSchemaView,
+    EventSchemaViewMut, decode_completion as decode_exact_completion,
+    decode_event as decode_exact_event, encode_completion as encode_exact_completion,
+    encode_event as encode_exact_event, select_canonical_fault,
 };
 pub use ring::{RingCursor, RingCursors, RingLayout, RingRecord};
-pub use schema::{
-    CompletionSchema, CompletionSchemaView, CompletionSchemaViewMut, DescriptorSchema,
-    DescriptorSchemaView, DescriptorSchemaViewMut, EventSchema, EventSchemaView,
-    EventSchemaViewMut, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
-    IndirectDestinationEntrySchemaViewMut,
-};

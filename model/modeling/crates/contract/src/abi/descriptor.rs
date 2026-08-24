@@ -2,6 +2,7 @@ mod broadcast;
 mod codec;
 mod copy;
 mod decode;
+mod schema;
 mod vector;
 
 use core::fmt;
@@ -10,6 +11,11 @@ use super::{AbiDecodeError, AbiEncodeError};
 
 pub use broadcast::{AbiBroadcastCopy, BroadcastDestinationEntry, BroadcastIovas, BroadcastShape};
 pub use copy::{AbiCopy, AbiStridedCopy, CopyIovas, CopyStrides, StridedCopyShape};
+pub use schema::{
+    DescriptorSchema, DescriptorSchemaValues, DescriptorSchemaView, DescriptorSchemaViewMut,
+    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaValues,
+    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
+};
 pub use vector::{AbiVectorAdd, VectorIovas};
 
 /// One validated ABI-v1 command descriptor.

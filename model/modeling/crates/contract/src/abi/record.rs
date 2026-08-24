@@ -1,11 +1,16 @@
 //! Fixed-width completion and event record codecs.
 
 mod fault;
+mod schema;
 mod value;
 
 pub use fault::{
     AbiFault, AbiFaultCandidate, AbiFaultOrder, AbiFaultSelectionError, AbiHeaderField,
     AbiOperandFaultStep, AbiOperandVisit, AbiReservedField, AbiScalarField, select_canonical_fault,
+};
+pub use schema::{
+    CompletionSchema, CompletionSchemaValues, CompletionSchemaView, CompletionSchemaViewMut,
+    EventSchema, EventSchemaValues, EventSchemaView, EventSchemaViewMut,
 };
 pub use value::{
     AbiBounds, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFaultDetails, AbiFaultSite,
@@ -13,9 +18,8 @@ pub use value::{
 };
 
 use super::{
-    ABI_VERSION, AbiDecodeError, AbiEncodeError, AbiId, COMPLETION_SIZE, CompletionSchema,
-    CompletionSchemaView, CompletionSchemaViewMut, EVENT_SIZE, EventSchema, EventSchemaView,
-    EventSchemaViewMut, SUCCESS_STATUS,
+    ABI_VERSION, AbiDecodeError, AbiEncodeError, AbiId, COMPLETION_SIZE, EVENT_SIZE,
+    SUCCESS_STATUS,
     codec::{decode_schema_error, encode_schema_error},
 };
 

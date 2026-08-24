@@ -1,8 +1,7 @@
 //! Canonical numeric registry for PDMA ABI version 1.
 
-use super::schema::{
-    CompletionSchema, DescriptorSchema, EventSchema, IndirectDestinationEntrySchema,
-};
+use super::descriptor::{DescriptorSchema, IndirectDestinationEntrySchema};
+use super::record::{CompletionSchema, EventSchema};
 use super::{AbiControlError, AbiDecodeError};
 
 /// Canonical generated record metadata.

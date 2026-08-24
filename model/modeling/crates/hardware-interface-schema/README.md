@@ -45,7 +45,9 @@ publication endpoint.
 
 `record_schema!` declares a fixed record. Scalar fields use
 `name: scalar { id, offset, endian }`; arrays use
-`name: [scalar; count] { ids: [...], offset, stride, endian }`. `register_schema!`
+`name: [scalar; count] { ids: [...], offset, stride, endian }`. Records expose the
+same owned `*Values` codec and composable `RecordLayout` contract as nested records.
+`register_schema!`
 declares an offset-free register with explicit width and alignment. `register_map!`
 declares map `alignment`, an optional exact `extent`, and one ordered
 `placements: [...]` list. A placement may omit its offset; the macro then aligns the
@@ -54,13 +56,13 @@ placement's omitted stride is the aligned child extent. Registers and maps imple
 the same `RegisterLayout` contract, so maps compose recursively.
 
 The following executable example declares a record, two registers, and one ordered
-map, then encodes generated owned map values.
+map, then encodes both generated owned-value types.
 
 ```rust
 use hardware_interface_schema::{record_schema, register_schema};
 # use hardware_interface_schema::{
-#     Access, Endian, FieldSpec, OrderedRegisterMapSpec, RecordSpec, RegisterCodecError,
-#     RegisterDefinition, RegisterLayout, RegisterLayoutGeometry, RegisterMapPlacement,
+#     Access, Endian, FieldSpec, OrderedRegisterMapSpec, RecordLayout, RecordSpec,
+#     RegisterCodecError, RegisterDefinition, RegisterLayout, RegisterLayoutGeometry, RegisterMapPlacement,
 #     ResetKind, ScalarKind, SchemaCodecError, checked_align_up, checked_placement_end,
 #     read_scalar, write_scalar,
 # };
@@ -114,11 +116,10 @@ hardware_interface_schema::register_map! {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut bytes = [0_u8; 8];
-    let mut view = PacketViewMut::new(&mut bytes)?;
-    view.set_sequence(0x1122_3344)?;
-    view.set_code(0x5566)?;
-    assert_eq!(bytes, [0x44, 0x33, 0x22, 0x11, 0x55, 0x66, 0, 0]);
+    let packet = PacketValues { sequence: 0x1122_3344, code: 0x5566 };
+    let packet_bytes = packet.to_bytes()?;
+    assert_eq!(packet_bytes, [0x44, 0x33, 0x22, 0x11, 0x55, 0x66, 0, 0]);
+    assert_eq!(PacketValues::from_bytes(&packet_bytes)?, packet);
     assert_eq!(Packet::SPEC.validate(), Ok(()));
     let values = DeviceMapValues { status: 7, producer: [11, 13] };
     let encoded = values.to_bytes()?;
@@ -131,9 +132,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Generated record marker types expose `SPEC`, field-ID types, offset constants, and
-immutable/mutable checked views with typed accessors. Ordered maps expose typed
-placement metadata, checked nested views, and a generated `*Values` owned codec.
+Generated record marker types expose `SPEC`, field-ID types, offset constants,
+immutable/mutable checked views, a composable `RecordLayout`, and a generated `*Values`
+owned codec. Ordered maps expose typed placement metadata, checked nested views, and the
+same owned-codec surface.
 
 Validation is deterministic. `RecordSpec::validate` checks duplicate IDs, duplicate
 names, scalar widths, alignment, extents, and overlaps, in that order and declaration
@@ -219,7 +221,8 @@ file layout, and integration policy to the caller.
 
 ```rust
 # use hardware_interface_schema::{
-#     Endian, FieldSpec, RecordSpec, ScalarKind, SchemaCodecError, read_scalar, write_scalar,
+#     Endian, FieldSpec, RecordLayout, RecordSpec, ScalarKind, SchemaCodecError, read_scalar,
+#     write_scalar,
 # };
 #[cfg(feature = "export-c-header")]
 fn main() {

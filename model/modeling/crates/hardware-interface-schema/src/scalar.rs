@@ -38,6 +38,8 @@ mod private {
 pub trait Scalar: private::Sealed + Copy + Sized {
     /// The schema kind corresponding to this Rust integer type.
     const KIND: ScalarKind;
+    /// The all-zero value of this scalar type.
+    const ZERO: Self;
 
     #[doc(hidden)]
     fn write_to(self, output: &mut [u8], endian: Endian) -> Result<(), SchemaCodecError>;
@@ -48,6 +50,7 @@ pub trait Scalar: private::Sealed + Copy + Sized {
 
 impl Scalar for u8 {
     const KIND: ScalarKind = ScalarKind::U8;
+    const ZERO: Self = 0;
 
     fn write_to(self, output: &mut [u8], _: Endian) -> Result<(), SchemaCodecError> {
         write_exact(output, [self])
@@ -60,6 +63,7 @@ impl Scalar for u8 {
 
 impl Scalar for u16 {
     const KIND: ScalarKind = ScalarKind::U16;
+    const ZERO: Self = 0;
 
     fn write_to(self, output: &mut [u8], endian: Endian) -> Result<(), SchemaCodecError> {
         write_exact(output, endian_u16(self, endian))
@@ -75,6 +79,7 @@ impl Scalar for u16 {
 
 impl Scalar for u32 {
     const KIND: ScalarKind = ScalarKind::U32;
+    const ZERO: Self = 0;
 
     fn write_to(self, output: &mut [u8], endian: Endian) -> Result<(), SchemaCodecError> {
         write_exact(output, endian_u32(self, endian))
@@ -90,6 +95,7 @@ impl Scalar for u32 {
 
 impl Scalar for u64 {
     const KIND: ScalarKind = ScalarKind::U64;
+    const ZERO: Self = 0;
 
     fn write_to(self, output: &mut [u8], endian: Endian) -> Result<(), SchemaCodecError> {
         write_exact(output, endian_u64(self, endian))

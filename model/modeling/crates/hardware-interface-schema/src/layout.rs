@@ -1,5 +1,37 @@
 use crate::SchemaCodecError;
 
+/// Shared byte-layout contract implemented by generated records.
+pub trait RecordLayout {
+    /// Owned decoded value for this layout.
+    type Value: Clone + Copy + Default + Eq + PartialEq;
+    /// Checked immutable view for this layout.
+    type View<'a>
+    where
+        Self: 'a;
+    /// Checked mutable view for this layout.
+    type ViewMut<'a>
+    where
+        Self: 'a;
+
+    /// Stable layout name.
+    const NAME: &'static str;
+    /// Required byte alignment for this record.
+    const ALIGNMENT: usize;
+    /// Encoded byte extent of this record.
+    const EXTENT: usize;
+    /// All-zero owned value.
+    const ZERO: Self::Value;
+
+    /// Decodes one owned value from the start of `bytes`.
+    fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
+    /// Encodes one owned value at the start of `bytes`.
+    fn encode(bytes: &mut [u8], value: &Self::Value) -> Result<(), SchemaCodecError>;
+    /// Creates a checked immutable view.
+    fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError>;
+    /// Creates a checked mutable view.
+    fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+}
+
 /// Shared byte-layout contract implemented by generated registers and register maps.
 pub trait RegisterLayout {
     /// Owned decoded value for this layout.

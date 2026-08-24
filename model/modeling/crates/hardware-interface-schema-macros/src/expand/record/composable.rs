@@ -19,6 +19,7 @@ pub(super) fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
     let view_mut_name = format_ident!("{}ViewMut", marker);
     let size = decl.size.0;
     let alignment = decl.alignment.0;
+    let value_items = super::values::expand(decl, &facade);
     let FieldExpansion {
         mut variants,
         specs,
@@ -65,6 +66,7 @@ pub(super) fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
         impl<'a> #view_name<'a> { #[doc = "Creates a checked immutable view."] pub fn new(bytes: &'a [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get(..#size).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #size, actual })?; Ok(Self { bytes }) } #(#getters)* #(#nested_getters)* }
         #[doc = "Checked mutable byte view for the generated record."] #[derive(Debug)] #visibility struct #view_mut_name<'a> { bytes: &'a mut [u8] }
         impl<'a> #view_mut_name<'a> { #[doc = "Creates a checked mutable view."] pub fn new(bytes: &'a mut [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get_mut(..#size).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #size, actual })?; Ok(Self { bytes }) } #(#getters)* #(#setters)* #(#nested_getters)* #(#nested_mut_getters)* }
+        #value_items
     })
 }
 

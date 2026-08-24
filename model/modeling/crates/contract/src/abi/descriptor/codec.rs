@@ -1,8 +1,8 @@
 use crate::abi::{
     ABI_VERSION, AbiEncodeError, AbiId, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK,
-    DESCRIPTOR_SIZE, DescriptorSchema, DescriptorSchemaViewMut, INDIRECT_DESTINATION_ENTRY_SIZE,
-    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaViewMut, STRIDED_COPY_OPCODE,
-    VECTOR_ADD_OPCODE, codec::encode_schema_error,
+    DESCRIPTOR_SIZE, DescriptorSchemaValues, INDIRECT_DESTINATION_ENTRY_SIZE,
+    IndirectDestinationEntrySchemaValues, STRIDED_COPY_OPCODE, VECTOR_ADD_OPCODE,
+    codec::encode_schema_error,
 };
 
 use super::{AbiCommand, BroadcastDestinationEntry};
@@ -17,22 +17,21 @@ pub(super) fn encode_descriptor(
         .get_mut(..required)
         .ok_or(AbiEncodeError::BufferTooShort { required, actual })?;
     let (command_id, opcode, words) = command_words(command);
-    let mut encoded = [0_u8; DescriptorSchema::SPEC.size()];
-    let mut view = DescriptorSchemaViewMut::new(&mut encoded).map_err(encode_schema_error)?;
-    view.set_version(ABI_VERSION).map_err(encode_schema_error)?;
-    view.set_opcode(opcode).map_err(encode_schema_error)?;
-    view.set_flags(DESCRIPTOR_FLAGS_MASK)
-        .map_err(encode_schema_error)?;
-    view.set_size(DESCRIPTOR_SIZE)
-        .map_err(encode_schema_error)?;
-    view.set_command_id(command_id.raw())
-        .map_err(encode_schema_error)?;
-    view.set_word0(words[0]).map_err(encode_schema_error)?;
-    view.set_word1(words[1]).map_err(encode_schema_error)?;
-    view.set_word2(words[2]).map_err(encode_schema_error)?;
-    view.set_word3(words[3]).map_err(encode_schema_error)?;
-    view.set_word4(words[4]).map_err(encode_schema_error)?;
-    view.set_word5(words[5]).map_err(encode_schema_error)?;
+    let encoded = DescriptorSchemaValues {
+        version: ABI_VERSION,
+        opcode,
+        flags: DESCRIPTOR_FLAGS_MASK,
+        size: DESCRIPTOR_SIZE,
+        command_id: command_id.raw(),
+        word0: words[0],
+        word1: words[1],
+        word2: words[2],
+        word3: words[3],
+        word4: words[4],
+        word5: words[5],
+    }
+    .to_bytes()
+    .map_err(encode_schema_error)?;
     destination.copy_from_slice(&encoded);
     Ok(())
 }
@@ -43,11 +42,11 @@ pub(super) fn encode_destination(
 ) -> Result<(), AbiEncodeError> {
     let required = usize::from(INDIRECT_DESTINATION_ENTRY_SIZE);
     let actual = bytes.len();
-    let mut encoded = [0_u8; IndirectDestinationEntrySchema::SPEC.size()];
-    let mut view =
-        IndirectDestinationEntrySchemaViewMut::new(&mut encoded).map_err(encode_schema_error)?;
-    view.set_destination_iova(entry.address().raw())
-        .map_err(encode_schema_error)?;
+    let encoded = IndirectDestinationEntrySchemaValues {
+        destination_iova: entry.address().raw(),
+    }
+    .to_bytes()
+    .map_err(encode_schema_error)?;
     let destination = bytes
         .get_mut(..required)
         .ok_or(AbiEncodeError::BufferTooShort { required, actual })?;

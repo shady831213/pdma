@@ -9,6 +9,7 @@ use crate::internal::{
 };
 
 mod composable;
+mod values;
 
 pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {
     parse2::<RecordDecl>(input)
@@ -34,6 +35,7 @@ fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
     let view_mut_name = format_ident!("{}ViewMut", marker);
     let size = decl.size.0;
     let alignment = decl.alignment.0;
+    let value_items = values::expand(decl, &facade);
     let mut variants = Vec::new();
     let mut specs = Vec::new();
     let mut constants = Vec::new();
@@ -103,6 +105,7 @@ fn expand(decl: &RecordDecl) -> syn::Result<TokenStream> {
         #[doc = "Checked mutable byte view for the generated record."]
         #[derive(Debug)] #visibility struct #view_mut_name<'a> { bytes: &'a mut [u8] }
         impl<'a> #view_mut_name<'a> { #[doc = "Checks the byte extent and creates a mutable view."] pub fn new(bytes: &'a mut [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get_mut(..#size).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #size, actual })?; Ok(Self { bytes }) } #(#getters)* #(#setters)* }
+        #value_items
     })
 }
 

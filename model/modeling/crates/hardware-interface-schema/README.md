@@ -86,6 +86,7 @@ use hardware_interface_schema::{bits_schema, record_schema, register_schema};
 #     Access, BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError, Endian,
 #     Decode, Encode, FieldSpec, RecordLayout, RecordSpec, RegisterCodecError, RegisterDefinition,
 #     RegisterLayout, RegisterValueError, ResetKind, ScalarKind, SchemaCodecError,
+#     SchemaMemberIdentity, SchemaLocation,
 #     inferred_align_up, inferred_field_id, read_scalar, write_scalar,
 # };
 
@@ -129,7 +130,9 @@ use hardware_interface_schema::{record_schema, register_schema};
 # use hardware_interface_schema::{
 #     Access, Decode, Encode, Endian, FieldSpec, OrderedRegisterMapSpec, RecordLayout, RecordSpec,
 #     RegisterCodecError, RegisterDefinition, RegisterLayout, RegisterLayoutGeometry, RegisterMapPlacement,
-#     ResetKind, ScalarKind, SchemaCodecError, checked_align_up, checked_placement_end,
+#     ResetKind, ScalarKind, SchemaCodecError, SchemaCoordinate, SchemaMemberIdentity,
+#     SchemaLocation,
+#     checked_align_up, checked_placement_end,
 #     read_scalar, write_scalar,
 # };
 # mod register { pub use hardware_interface_schema::register::*; }
@@ -291,7 +294,7 @@ file layout, and integration policy to the caller.
 ```rust
 # use hardware_interface_schema::{
 #     Decode, Encode, Endian, FieldSpec, RecordLayout, RecordSpec, ScalarKind,
-#     SchemaCodecError, read_scalar, write_scalar,
+#     SchemaCodecError, SchemaMemberIdentity, SchemaLocation, read_scalar, write_scalar,
 # };
 #[cfg(feature = "export-c-header")]
 fn main() {

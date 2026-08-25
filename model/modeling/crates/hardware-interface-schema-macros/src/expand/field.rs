@@ -17,6 +17,7 @@ fn expand(decl: &FieldDefinitionDecl) -> syn::Result<TokenStream> {
     let facade = crate_path::facade()?;
     let visibility = &decl.visibility;
     let marker = &decl.name;
+    let marker_name = marker.to_string();
     let endian = &decl.endian;
     if !matches!(endian.to_string().as_str(), "Little" | "Big") {
         return Err(syn::Error::new(
@@ -70,6 +71,9 @@ fn expand(decl: &FieldDefinitionDecl) -> syn::Result<TokenStream> {
         #[doc = "Marker and codec for a reusable scalar field definition."]
         #[derive(Clone, Copy, Debug)] #visibility struct #marker;
         impl #marker {
+            #[doc = "Stable identity for the scalar value member."]
+            pub const IDENTITY: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(#marker_name, "value");
             #[doc = "Reusable scalar field definition."]
             pub const DEFINITION: #facade::FieldDefinition = #facade::FieldDefinition::new(#facade::ScalarKind::#kind).with_endian(#facade::Endian::#endian);
             #[doc = "Reads the scalar from the start of a byte slice."]

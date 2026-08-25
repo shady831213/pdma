@@ -1,4 +1,4 @@
-use crate::{Endian, read_scalar, write_scalar};
+use crate::{Endian, SchemaMemberIdentity, read_scalar, write_scalar};
 
 use super::validation::fits_width;
 use super::{RegisterDefinition, RegisterFieldSpec, RegisterValueError};
@@ -110,7 +110,8 @@ impl<'a, I: Copy> RegisterValueViewMut<'a, I> {
         let field = find_field(self.definition, name)?;
         if !fits_bits(value, field.bit_width()) {
             return Err(RegisterValueError::FieldValueOverflow {
-                field_name: field.name(),
+                location: SchemaMemberIdentity::new(self.definition.name(), field.name())
+                    .at_bit(field.lsb()),
                 bit_width: field.bit_width(),
                 value,
             });
@@ -210,6 +211,9 @@ const fn codec_error(error: crate::SchemaCodecError) -> RegisterValueError {
         crate::SchemaCodecError::UnknownTag { .. }
         | crate::SchemaCodecError::NonZeroReserved { .. }
         | crate::SchemaCodecError::NarrowingOverflow { .. }
-        | crate::SchemaCodecError::ConstantMismatch { .. } => RegisterValueError::InvalidDefinition,
+        | crate::SchemaCodecError::ConstantMismatch { .. }
+        | crate::SchemaCodecError::CoordinateRebaseOverflow { .. } => {
+            RegisterValueError::InvalidDefinition
+        }
     }
 }

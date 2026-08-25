@@ -15,9 +15,20 @@ pub(super) fn expand(
     let alignment = &plan.alignment;
     let extent = &plan.extent;
     let offsets = plan.fields.iter().map(|field| {
-        let name = &field.offset_name;
+        let offset_name = &field.offset_name;
+        let identity_name = format_ident!(
+            "{}_IDENTITY",
+            field.decl.name.to_string().to_ascii_uppercase()
+        );
+        let field_name = field.decl.name.to_string();
         let value = &field.offset;
-        quote!(#[doc = "Inferred field byte offset."] pub const #name: usize = #value;)
+        quote! {
+            #[doc = "Inferred field byte offset."]
+            pub const #offset_name: usize = #value;
+            #[doc = "Stable generated identity for the declared field."]
+            pub const #identity_name: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(stringify!(#marker), #field_name);
+        }
     });
     let field_count_parts = plan.fields.iter().map(|field| match &field.decl.ty {
         ModernTypeDecl::Record(path) => quote!(#path::FIELD_COUNT),

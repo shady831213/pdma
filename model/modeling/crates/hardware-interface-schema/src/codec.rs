@@ -2,6 +2,10 @@ use core::fmt;
 
 use crate::{Endian, Scalar};
 
+mod location;
+
+pub use location::{SchemaCoordinate, SchemaLocation, SchemaMemberIdentity};
+
 /// Converts one typed raw representation into its semantic value.
 pub trait Decode: Sized {
     /// Semantic value produced by decoding.
@@ -26,7 +30,7 @@ pub trait Encode: Sized {
     fn encode(self) -> Result<Self::Encoded, SchemaCodecError>;
 }
 
-/// Failure while reading or writing a fixed-width scalar.
+/// Failure while converting raw schema storage and typed values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SchemaCodecError {
@@ -37,36 +41,104 @@ pub enum SchemaCodecError {
         /// Supplied byte length.
         actual: usize,
     },
-    /// A record union contains an unassigned discriminant.
+    /// A tagged schema member contains an unassigned discriminant.
     UnknownTag {
+        /// Declared leaf member and root-relative coordinate.
+        location: SchemaLocation,
         /// Observed discriminant value.
         observed: u64,
     },
-    /// A record contains nonzero reserved storage.
+    /// A schema member contains nonzero reserved storage.
     NonZeroReserved {
-        /// Reserved scalar byte offset.
-        offset: usize,
+        /// Declared leaf member and root-relative coordinate.
+        location: SchemaLocation,
         /// Observed reserved scalar value.
         observed: u64,
     },
-    /// A stored record scalar does not fit its semantic scalar type.
+    /// A stored scalar does not fit its semantic value type.
     NarrowingOverflow {
-        /// Stored scalar byte offset.
-        offset: usize,
+        /// Declared leaf member and root-relative coordinate.
+        location: SchemaLocation,
         /// Observed stored value.
         observed: u64,
         /// Largest representable semantic value.
         maximum: u64,
     },
-    /// A derived record field does not contain its required constant.
+    /// A derived schema member does not contain its required constant.
     ConstantMismatch {
-        /// Derived scalar byte offset.
-        offset: usize,
+        /// Declared leaf member and root-relative coordinate.
+        location: SchemaLocation,
         /// Observed stored value.
         observed: u64,
         /// Required generated value.
         expected: u64,
     },
+    /// A nested schema location cannot be represented at its parent coordinate.
+    CoordinateRebaseOverflow {
+        /// Original child-local member location.
+        location: SchemaLocation,
+        /// Parent coordinate that could not be added.
+        base: SchemaCoordinate,
+    },
+}
+
+impl SchemaCodecError {
+    /// Rebases a member-bearing failure under `base` without changing its category.
+    #[must_use]
+    pub const fn rebased(self, base: SchemaCoordinate) -> Self {
+        match self {
+            Self::BufferTooShort { required, actual } => Self::BufferTooShort { required, actual },
+            Self::UnknownTag { location, observed } => {
+                let Some(rebased) = location.checked_rebase(base) else {
+                    return Self::CoordinateRebaseOverflow { location, base };
+                };
+                Self::UnknownTag {
+                    location: rebased,
+                    observed,
+                }
+            }
+            Self::NonZeroReserved { location, observed } => {
+                let Some(rebased) = location.checked_rebase(base) else {
+                    return Self::CoordinateRebaseOverflow { location, base };
+                };
+                Self::NonZeroReserved {
+                    location: rebased,
+                    observed,
+                }
+            }
+            Self::NarrowingOverflow {
+                location,
+                observed,
+                maximum,
+            } => {
+                let Some(rebased) = location.checked_rebase(base) else {
+                    return Self::CoordinateRebaseOverflow { location, base };
+                };
+                Self::NarrowingOverflow {
+                    location: rebased,
+                    observed,
+                    maximum,
+                }
+            }
+            Self::ConstantMismatch {
+                location,
+                observed,
+                expected,
+            } => {
+                let Some(rebased) = location.checked_rebase(base) else {
+                    return Self::CoordinateRebaseOverflow { location, base };
+                };
+                Self::ConstantMismatch {
+                    location: rebased,
+                    observed,
+                    expected,
+                }
+            }
+            Self::CoordinateRebaseOverflow { location, base } => {
+                Self::CoordinateRebaseOverflow { location, base }
+            }
+        }
+    }
 }
 
 impl fmt::Display for SchemaCodecError {
@@ -74,29 +146,63 @@ impl fmt::Display for SchemaCodecError {
         match self {
             Self::BufferTooShort { required, actual } => write!(
                 formatter,
-                "scalar buffer is too short: required {required} bytes, received {actual}"
+                "schema buffer is too short: required {required} bytes, received {actual}"
             ),
-            Self::UnknownTag { observed } => write!(formatter, "unknown record tag {observed}"),
-            Self::NonZeroReserved { offset, observed } => write!(
+            Self::UnknownTag { location, observed } => write!(
                 formatter,
-                "reserved record storage at byte {offset} is {observed:#x}"
+                "schema member {}.{} at {} has unknown tag {observed}",
+                location.identity().owner(),
+                location.identity().member(),
+                CoordinateDisplay(location.coordinate())
+            ),
+            Self::NonZeroReserved { location, observed } => write!(
+                formatter,
+                "schema member {}.{} at {} has nonzero reserved storage {observed:#x}",
+                location.identity().owner(),
+                location.identity().member(),
+                CoordinateDisplay(location.coordinate())
             ),
             Self::NarrowingOverflow {
-                offset,
+                location,
                 observed,
                 maximum,
             } => write!(
                 formatter,
-                "record value {observed} at byte {offset} exceeds {maximum}"
+                "schema member {}.{} at {} has value {observed} above {maximum}",
+                location.identity().owner(),
+                location.identity().member(),
+                CoordinateDisplay(location.coordinate())
             ),
             Self::ConstantMismatch {
-                offset,
+                location,
                 observed,
                 expected,
             } => write!(
                 formatter,
-                "record constant at byte {offset} is {observed}, expected {expected}"
+                "schema member {}.{} at {} has constant {observed}, expected {expected}",
+                location.identity().owner(),
+                location.identity().member(),
+                CoordinateDisplay(location.coordinate())
             ),
+            Self::CoordinateRebaseOverflow { location, base } => write!(
+                formatter,
+                "schema member {}.{} at {} cannot be rebased under {}",
+                location.identity().owner(),
+                location.identity().member(),
+                CoordinateDisplay(location.coordinate()),
+                CoordinateDisplay(*base)
+            ),
+        }
+    }
+}
+
+struct CoordinateDisplay(SchemaCoordinate);
+
+impl fmt::Display for CoordinateDisplay {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            SchemaCoordinate::Byte(offset) => write!(formatter, "byte {offset}"),
+            SchemaCoordinate::Bit(offset) => write!(formatter, "bit {offset}"),
         }
     }
 }

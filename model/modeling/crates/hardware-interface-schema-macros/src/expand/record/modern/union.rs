@@ -2,12 +2,15 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use crate::internal::syntax::{
-    ModernRecordDecl, ModernTypeDecl, ScopedPath, UnionCaseDecl, UnionDecl, UnionFieldDecl,
+    ModernRecordDecl, ModernTypeDecl, ScopedPath, UnionCaseDecl, UnionDecl,
 };
 
 use super::{layout::union_geometry, scalar};
 
+mod arms;
+mod case_field;
 mod codec;
+mod identity;
 
 pub(super) struct TagInfo {
     pub(super) ty: TokenStream,
@@ -69,7 +72,6 @@ pub(super) fn expand(
         return Err(syn::Error::new(field.span(), "union has no storage"));
     };
     let storage = geometry.storage;
-    let storage_type = scalar::ty(storage);
     let quantum = storage.width();
     let slots = geometry.slots;
     let extent = quantum * slots;
@@ -80,45 +82,28 @@ pub(super) fn expand(
         .cases
         .iter()
         .map(|case| case_declaration(record, field, case, visibility));
+    let case_identities = decl.cases.iter().map(|case| {
+        let case_type = case_type(record, field, &case.name);
+        identity::expand(&case_type, &case.fields, facade)
+    });
     let declarations = decl.cases.iter().map(|case| {
         let case_name = &case.name;
         let case_type = case_type(record, field, case_name);
         quote!(#[doc = "Generated tagged-union case."] #case_name(#case_type))
     });
-    let decode_arms = decl.cases.iter().map(|case| {
-        let case_name = &case.name;
-        let case_type = case_type(record, field, case_name);
-        let reserved = (case.fields.len()..slots).map(|index| {
-            let relative = index * quantum;
-            let end = relative + quantum;
-            quote!({
-                let offset = base.saturating_add(#relative);
-                let field = bytes.get(offset..base.saturating_add(#end)).ok_or(#facade::SchemaCodecError::BufferTooShort { required: base.saturating_add(#end), actual: bytes.len() })?;
-                let value: #storage_type = #facade::read_scalar(field, #facade::Endian::#endian)?;
-                let observed = u64::from(value);
-                if observed != 0 {
-                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved { offset, observed });
-                }
-            })
-        });
-        let fields = case.fields.iter().enumerate().map(|(index, field)| {
-            decode_field(field, index * quantum, quantum, facade, endian)
-        });
-        quote!(#tag_type::#case_name => {
-            #(#reserved)*
-            ::core::result::Result::Ok(Self::#case_name(#case_type { #(#fields,)* }))
-        })
-    });
-    let encode_arms = decl.cases.iter().map(|case| {
-        let case_name = &case.name;
-        let case_type = case_type(record, field, case_name);
-        let names = case.fields.iter().map(|field| &field.name);
-        let encoded =
-            case.fields.iter().enumerate().map(|(index, field)| {
-                encode_field(field, index * quantum, quantum, facade, endian)
-            });
-        quote!(Self::#case_name(#case_type { #(#names,)* }) => { #(#encoded)* })
-    });
+    let arm_context = arms::Context {
+        record,
+        field,
+        decl,
+        tag_type,
+        storage,
+        slots,
+        quantum,
+        facade,
+        endian,
+    };
+    let decode_arms = arms::decode(&arm_context);
+    let encode_arms = arms::encode(&arm_context);
     let tag_arms = decl.cases.iter().map(|case| {
         let case_name = &case.name;
         quote!(Self::#case_name(_) => #tag_type::#case_name)
@@ -139,6 +124,7 @@ pub(super) fn expand(
     });
     Ok(quote! {
         #(#case_declarations)*
+        #(#case_identities)*
         #[doc = "Generated semantic tagged-union value."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility enum #name { #(#declarations),* }
@@ -194,49 +180,11 @@ fn case_declaration(
     }
 }
 
-fn case_type(record: &ModernRecordDecl, field: &syn::Ident, case: &syn::Ident) -> syn::Ident {
+pub(super) fn case_type(
+    record: &ModernRecordDecl,
+    field: &syn::Ident,
+    case: &syn::Ident,
+) -> syn::Ident {
     let union = scalar::type_name(&record.name, field, "");
     format_ident!("{union}{case}Values")
-}
-
-fn decode_field(
-    field: &UnionFieldDecl,
-    relative: usize,
-    quantum: usize,
-    facade: &TokenStream,
-    endian: &syn::Ident,
-) -> TokenStream {
-    let name = &field.name;
-    let storage_type = scalar::ty(field.storage);
-    let maximum = field.scalar.maximum();
-    let narrowed = scalar::from_u64(field.scalar, quote!(observed));
-    quote!(#name: {
-        let offset = base.saturating_add(#relative);
-        let end = offset.saturating_add(#quantum);
-        let field = bytes.get(offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
-        let stored: #storage_type = #facade::read_scalar(field, #facade::Endian::#endian)?;
-        let observed = u64::from(stored);
-        if observed > #maximum {
-            return ::core::result::Result::Err(#facade::SchemaCodecError::NarrowingOverflow { offset, observed, maximum: #maximum });
-        }
-        #narrowed
-    })
-}
-
-fn encode_field(
-    field: &UnionFieldDecl,
-    relative: usize,
-    quantum: usize,
-    facade: &TokenStream,
-    endian: &syn::Ident,
-) -> TokenStream {
-    let name = &field.name;
-    let stored = scalar::from_u64(field.storage, quote!(u64::from(*#name)));
-    quote!({
-        let offset = base.saturating_add(#relative);
-        let end = offset.saturating_add(#quantum);
-        let actual = bytes.len();
-        let field = bytes.get_mut(offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-        #facade::write_scalar(field, #facade::Endian::#endian, #stored)?;
-    })
 }

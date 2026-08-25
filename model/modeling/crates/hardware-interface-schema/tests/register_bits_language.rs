@@ -1,6 +1,8 @@
 //! Register bit ranges use the shared record bit-field language.
 
-use hardware_interface_schema::{Decode, Encode, RegisterCodecError, register_schema};
+use hardware_interface_schema::{
+    Decode, Encode, RegisterCodecError, SchemaMemberIdentity, register_schema,
+};
 
 register_schema! {
     pub register PackedControl {
@@ -68,10 +70,14 @@ fn narrow_range_when_value_overflows_preserves_prior_bytes() -> Result<(), Regis
     assert_eq!(
         error,
         Err(RegisterCodecError::FieldValueOverflow {
-            field_name: "mode",
+            location: PackedControl::MODE_IDENTITY.at_bit(1),
             bit_width: 3,
             value: 8,
         })
+    );
+    assert_eq!(
+        PackedControl::MODE_IDENTITY,
+        SchemaMemberIdentity::new("PackedControl", "mode")
     );
     assert_eq!(bytes, before);
     Ok(())

@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use crate::{Endian, RegisterValueError, SchemaCodecError};
+use crate::{Endian, RegisterValueError, SchemaCodecError, SchemaLocation, SchemaMemberIdentity};
 
 /// Reusable bit-field shape without identity, name, or bit offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,35 +97,45 @@ impl<I: Copy> BitsFieldSpec<I> {
 /// Overflow observed while encoding a typed bits value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BitsValueError {
-    offset: usize,
-    field_name: &'static str,
+    identity: SchemaMemberIdentity,
+    lsb: usize,
     bit_width: usize,
     value: u64,
     maximum: u64,
 }
 
 impl BitsValueError {
-    /// Creates one field-local overflow observation.
+    /// Creates one bit-member overflow observation.
     pub const fn new(
-        offset: usize,
-        field_name: &'static str,
+        identity: SchemaMemberIdentity,
+        lsb: usize,
         bit_width: usize,
         value: u64,
         maximum: u64,
     ) -> Self {
         Self {
-            offset,
-            field_name,
+            identity,
+            lsb,
             bit_width,
             value,
             maximum,
         }
     }
 
+    /// Returns the declared overflowing bit member.
+    pub const fn identity(self) -> SchemaMemberIdentity {
+        self.identity
+    }
+
+    /// Returns the member's least-significant local bit.
+    pub const fn lsb(self) -> usize {
+        self.lsb
+    }
+
     /// Converts the observation for record encoding.
     pub const fn into_schema_error(self) -> SchemaCodecError {
         SchemaCodecError::NarrowingOverflow {
-            offset: self.offset,
+            location: self.identity.at_bit(self.lsb),
             observed: self.value,
             maximum: self.maximum,
         }
@@ -134,7 +144,7 @@ impl BitsValueError {
     /// Converts the observation for register encoding.
     pub const fn into_register_error(self) -> RegisterValueError {
         RegisterValueError::FieldValueOverflow {
-            field_name: self.field_name,
+            location: self.identity.at_bit(self.lsb),
             bit_width: self.bit_width,
             value: self.value,
         }
@@ -173,7 +183,7 @@ pub trait BitsLayout {
     fn decode_record(
         bytes: &[u8],
         endian: Endian,
-        offset: usize,
+        location: SchemaLocation,
     ) -> Result<Self::Value, SchemaCodecError>;
 
     /// Encodes one record field using its containing record's byte order.
@@ -181,6 +191,6 @@ pub trait BitsLayout {
         bytes: &mut [u8],
         endian: Endian,
         value: &Self::Value,
-        offset: usize,
+        location: SchemaLocation,
     ) -> Result<(), SchemaCodecError>;
 }

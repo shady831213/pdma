@@ -32,6 +32,7 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
     let id_declaration = fields.id_declaration;
     let id_type = fields.id_type;
     let field_specs = fields.specs;
+    let field_identities = fields.identities;
     let getters = fields.getters;
     let setters = fields.setters;
     let value_methods = fields.value_methods;
@@ -64,6 +65,7 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
             #[doc = "Encoded byte extent of this register."] pub const EXTENT: usize = #width;
             #[doc = "Declared reset value."] pub const RESET_VALUE: u64 = #reset_value;
             #[doc = "Declared writable mask."] pub const WRITABLE_MASK: u64 = #mask;
+            #field_identities
             #[doc = "Complete offset-free register definition."] pub const SPEC: #facade::RegisterDefinition<#id_type> = #facade::RegisterDefinition::<#id_type>::new(#marker_name, #width, #facade::Endian::#endian).with_alignment(#alignment).with_access(#facade::Access::#access).with_reset(#facade::ResetKind::#reset_kind, #reset_value).with_writable_mask(#mask).with_fields(#field_specs);
         }
         #owned

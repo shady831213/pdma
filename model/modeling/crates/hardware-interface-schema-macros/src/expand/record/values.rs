@@ -221,12 +221,14 @@ fn push_record(
     output.decoded_fields.push(quote!(#name: {
         let end = #offset.checked_add(<#definition as #facade::RecordLayout>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
         let record = bytes.get(#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
-        <#definition as #facade::RecordLayout>::decode(record)?
+        <#definition as #facade::RecordLayout>::decode(record)
+            .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#offset)))?
     }));
     output.encoded_fields.push(quote!({
         let end = #offset.checked_add(<#definition as #facade::RecordLayout>::EXTENT).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: #size })?;
         let record = encoded.get_mut(#offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: #size })?;
-        <#definition as #facade::RecordLayout>::encode(record, &value.#name)?;
+        <#definition as #facade::RecordLayout>::encode(record, &value.#name)
+            .map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(#offset)))?;
     }));
 }
 

@@ -1,14 +1,26 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-pub(super) fn expand(
-    values: &syn::Ident,
-    raw_name: &syn::Ident,
-    raw_type: &syn::Ident,
-    declared_mask: u64,
-    narrowed_raw: &TokenStream,
-    facade: &TokenStream,
-) -> TokenStream {
+pub(super) struct Context<'a> {
+    pub(super) values: &'a syn::Ident,
+    pub(super) raw_name: &'a syn::Ident,
+    pub(super) raw_type: &'a syn::Ident,
+    pub(super) declared_mask: u64,
+    pub(super) narrowed_raw: &'a TokenStream,
+    pub(super) facade: &'a TokenStream,
+    pub(super) marker: &'a syn::Ident,
+}
+
+pub(super) fn expand(context: &Context<'_>) -> TokenStream {
+    let Context {
+        values,
+        raw_name,
+        raw_type,
+        declared_mask,
+        narrowed_raw,
+        facade,
+        marker,
+    } = context;
     quote! {
         impl #facade::Decode for #raw_name {
             type Decoded = #values;
@@ -16,7 +28,14 @@ pub(super) fn expand(
                 let observed = u64::from(self.0);
                 let reserved = observed & !#declared_mask;
                 if reserved != 0 {
-                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved { offset: 0, observed: reserved });
+                    let mut first_reserved = 0_usize;
+                    while reserved & (1_u64 << first_reserved) == 0 {
+                        first_reserved += 1;
+                    }
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved {
+                        location: #marker::RESERVED_IDENTITY.at_bit(first_reserved),
+                        observed: reserved,
+                    });
                 }
                 ::core::result::Result::Ok(#values::from_raw(observed))
             }
@@ -24,7 +43,7 @@ pub(super) fn expand(
         impl #facade::Encode for #values {
             type Encoded = #raw_name;
             fn encode(self) -> ::core::result::Result<Self::Encoded, #facade::SchemaCodecError> {
-                let raw: u64 = self.raw(0).map_err(#facade::BitsValueError::into_schema_error)?;
+                let raw: u64 = self.raw().map_err(#facade::BitsValueError::into_schema_error)?;
                 let raw: #raw_type = #narrowed_raw;
                 ::core::result::Result::Ok(#raw_name::new(raw))
             }

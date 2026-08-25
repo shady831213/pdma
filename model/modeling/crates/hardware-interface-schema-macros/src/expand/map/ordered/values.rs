@@ -54,10 +54,14 @@ pub(super) fn expand(
             }
             #[doc = "Encodes every child and clears all map padding."] pub fn encode_into(&self, bytes: &mut [u8]) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 let actual = bytes.len();
-                let bytes = bytes.get_mut(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
-                bytes.fill(0);
-                let value = self;
-                #(#encoded_fields)*
+                let output = bytes.get_mut(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
+                let mut encoded = [0; #extent];
+                {
+                    let bytes = &mut encoded[..];
+                    let value = self;
+                    #(#encoded_fields)*
+                }
+                output.copy_from_slice(&encoded);
                 Ok(())
             }
         }
@@ -110,8 +114,7 @@ fn value_members(
             .map(|placement| &placement.visibility);
         let symbol = &item.symbol;
         let definition = &item.definition;
-        let offset = &item.offset;
-        let stride = &item.stride;
+        let placement = &item.placement;
         let count = item.count;
         if count == 1 {
             fields.push(quote!(
@@ -121,17 +124,19 @@ fn value_members(
             zero_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::ZERO));
             default_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::DEFAULT));
             decoded_fields.push(quote!(#symbol: {
-                let start = #marker::#offset;
-                let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
-                let child = bytes.get(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
-                <#definition as #facade::RegisterLayout>::decode(child)?
+                let range = #marker::__placement_range(#marker::#placement, 0)?;
+                let start = range.start;
+                let end = range.end;
+                let child = bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
+                <#definition as #facade::RegisterLayout>::decode(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?
             }));
             encoded_fields.push(quote!({
-                let start = #marker::#offset;
-                let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
+                let range = #marker::__placement_range(#marker::#placement, 0)?;
+                let start = range.start;
+                let end = range.end;
                 let actual = bytes.len();
-                let child = bytes.get_mut(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-                <#definition as #facade::RegisterLayout>::encode(child, &value.#symbol)?;
+                let child = bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
+                <#definition as #facade::RegisterLayout>::encode(child, &value.#symbol).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?;
             }));
         } else {
             fields.push(quote!(
@@ -146,10 +151,11 @@ fn value_members(
             default_fields.push(quote!(#symbol: [#(#default_values),*]));
             let decoded = (0..count).map(|instance| {
                 quote!({
-                    let start = #marker::#offset + #instance * #marker::#stride;
-                    let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
-                    let child = bytes.get(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
-                    <#definition as #facade::RegisterLayout>::decode(child)?
+                    let range = #marker::__placement_range(#marker::#placement, #instance)?;
+                    let start = range.start;
+                    let end = range.end;
+                    let child = bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
+                    <#definition as #facade::RegisterLayout>::decode(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?
                 })
             });
             decoded_fields.push(quote!(#symbol: [#(#decoded),*]));
@@ -158,11 +164,12 @@ fn value_members(
                 .collect::<Vec<_>>();
             let writes = bindings.iter().enumerate().map(|(instance, binding)| {
                 quote!({
-                    let start = #marker::#offset + #instance * #marker::#stride;
-                    let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
+                    let range = #marker::__placement_range(#marker::#placement, #instance)?;
+                    let start = range.start;
+                    let end = range.end;
                     let actual = bytes.len();
-                    let child = bytes.get_mut(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-                    <#definition as #facade::RegisterLayout>::encode(child, #binding)?;
+                    let child = bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
+                    <#definition as #facade::RegisterLayout>::encode(child, #binding).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?;
                 })
             });
             encoded_fields.push(quote!({

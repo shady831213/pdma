@@ -20,7 +20,10 @@ pub mod register_map;
 pub mod scalar;
 
 pub use bits::{BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError};
-pub use codec::{Decode, Encode, SchemaCodecError, read_scalar, write_scalar};
+pub use codec::{
+    Decode, Encode, SchemaCodecError, SchemaCoordinate, SchemaLocation, SchemaMemberIdentity,
+    read_scalar, write_scalar,
+};
 pub use endian::Endian;
 pub use hardware_interface_schema_macros::{
     bits_schema, field_schema, record_schema, register_map, register_schema,

@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 
 use crate::internal::{syntax::EnumDecl, validate::record::modern::enum_variants};
 
@@ -14,6 +14,7 @@ pub(super) fn expand(
 ) -> syn::Result<TokenStream> {
     let name = scalar::type_name(record, field, "");
     let raw_name = scalar::type_name(record, field, "Raw");
+    let identity = format_ident!("{}_IDENTITY", field.to_string().to_ascii_uppercase());
     let raw_type = scalar::ty(decl.storage);
     let variants = enum_variants(decl)?;
     let declarations = variants
@@ -47,9 +48,12 @@ pub(super) fn expand(
             pub const ZERO: Self = Self::#first;
             #[doc = "Parses one raw discriminant."]
             pub fn from_raw(raw: #raw_type) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
+                Self::from_raw_at(raw, #record::#identity.at(0))
+            }
+            fn from_raw_at(raw: #raw_type, location: #facade::SchemaLocation) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 match u64::from(raw) {
                     #(#from_arms)*
-                    observed => ::core::result::Result::Err(#facade::SchemaCodecError::UnknownTag { observed }),
+                    observed => ::core::result::Result::Err(#facade::SchemaCodecError::UnknownTag { location, observed }),
                 }
             }
             #[doc = "Returns the assigned raw discriminant."]

@@ -1,6 +1,5 @@
 //! Reusable register definition, placement, resolution, and checked-view coverage.
 
-use hardware_interface_schema::Endian;
 use hardware_interface_schema::register::{
     Access, RegisterDefinition, RegisterFieldDefinition, RegisterFieldSpec, RegisterValueError,
     ResetKind,
@@ -8,6 +7,7 @@ use hardware_interface_schema::register::{
 use hardware_interface_schema::register_map::{
     RegisterMapError, RegisterMapSpec, RegisterSpec, RepeatedRegisterBank,
 };
+use hardware_interface_schema::{Endian, SchemaMemberIdentity};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FieldId {
@@ -123,7 +123,7 @@ fn checked_views_reject_short_buffers_and_field_overflow_without_mutation() {
     assert_eq!(
         overflow,
         Err(RegisterValueError::FieldValueOverflow {
-            field_name: "mode",
+            location: SchemaMemberIdentity::new("Control", "mode").at_bit(4),
             bit_width: 3,
             value: 8,
         })

@@ -86,6 +86,21 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
             #[doc = "Exact encoded byte extent for this map."] pub const EXTENT: usize = #extent;
             const __PLACEMENTS: &'static [#facade::RegisterMapPlacement<#id_name>] = &[#(#placements),*];
             #[doc = "Ordered child-layout metadata."] pub const SPEC: #facade::OrderedRegisterMapSpec<#id_name> = #facade::OrderedRegisterMapSpec::new(#marker_name, #alignment, #extent, Self::__PLACEMENTS);
+            fn __placement_range(
+                placement: #facade::RegisterMapPlacement<#id_name>,
+                instance: usize,
+            ) -> ::core::result::Result<::core::ops::Range<usize>, #facade::SchemaCodecError> {
+                let Some(step) = instance.checked_mul(placement.stride()) else {
+                    return Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
+                };
+                let Some(start) = placement.offset().checked_add(step) else {
+                    return Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
+                };
+                let Some(end) = start.checked_add(placement.extent()) else {
+                    return Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
+                };
+                Ok(start..end)
+            }
         }
         #(#assertions)*
         #value_items
@@ -96,8 +111,7 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
 pub(super) struct Geometry {
     pub(super) symbol: syn::Ident,
     pub(super) definition: syn::Path,
-    pub(super) offset: syn::Ident,
-    pub(super) stride: syn::Ident,
+    pub(super) placement: syn::Ident,
     pub(super) count: usize,
 }
 
@@ -132,6 +146,7 @@ fn placement_geometry(
     let definition = &placement.definition;
     let item_variant = variant(&symbol.to_string());
     let constant = format_ident!("{}", symbol.to_string().to_uppercase());
+    let identity_name = format_ident!("{}_IDENTITY", constant);
     let offset_name = format_ident!("__{}_OFFSET", constant);
     let stride_name = format_ident!("__{}_STRIDE", constant);
     let end_name = format_ident!("__{}_END", constant);
@@ -154,6 +169,7 @@ fn placement_geometry(
         quote!(const #end_name: usize = match #facade::checked_placement_end(Self::#offset_name, #count, Self::#stride_name, <#definition as #facade::RegisterLayout>::EXTENT) { Some(value) => value, None => 0 };),
         quote!(const #high_water_name: usize = if #cursor > Self::#end_name { #cursor } else { Self::#end_name };),
         quote!(#[doc = "Generated ordered child placement."] pub const #constant: #facade::RegisterMapPlacement<#id_name> = #spec;),
+        quote!(#[doc = "Stable generated placement member identity."] pub const #identity_name: #facade::SchemaMemberIdentity = #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);),
     ];
     let alignment_check =
         quote!(#map_alignment % <#definition as #facade::RegisterLayout>::ALIGNMENT == 0);
@@ -208,8 +224,7 @@ fn placement_geometry(
         geometry: Geometry {
             symbol: placement.symbol.clone(),
             definition: placement.definition.clone(),
-            offset: offset_name,
-            stride: stride_name,
+            placement: constant,
             count,
         },
     }

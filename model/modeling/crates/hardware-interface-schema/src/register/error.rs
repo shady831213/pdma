@@ -1,5 +1,7 @@
 use core::fmt;
 
+use crate::SchemaLocation;
+
 /// Failure while validating legacy whole-register metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -218,8 +220,8 @@ pub enum RegisterValueError {
     },
     /// A field value exceeds its declared bit width.
     FieldValueOverflow {
-        /// Field name.
-        field_name: &'static str,
+        /// Exact schema member and root-relative bit coordinate.
+        location: SchemaLocation,
         /// Field width in bits.
         bit_width: usize,
         /// Supplied value.

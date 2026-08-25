@@ -7,6 +7,7 @@ pub(super) struct FieldsExpansion {
     pub(super) id_declaration: TokenStream,
     pub(super) id_type: TokenStream,
     pub(super) specs: TokenStream,
+    pub(super) identities: TokenStream,
     pub(super) getters: Vec<TokenStream>,
     pub(super) setters: Vec<TokenStream>,
     pub(super) value_methods: Vec<TokenStream>,
@@ -80,6 +81,7 @@ fn expand_reference(
         },
         id_type: quote!(u16),
         specs: quote!(<#path as #facade::BitsLayout>::FIELDS),
+        identities: TokenStream::new(),
         getters,
         setters,
         value_methods,
@@ -100,16 +102,23 @@ fn expand_inline(
 ) -> syn::Result<FieldsExpansion> {
     let mut variants = Vec::new();
     let mut fields = Vec::new();
+    let mut identities = Vec::new();
     let mut getters = Vec::new();
     let mut setters = Vec::new();
     let mut value_methods = Vec::new();
     for (index, field) in declared.iter().enumerate() {
         let method = &field.name;
         let name = method.to_string();
+        let identity = format_ident!("{}_IDENTITY", name.to_ascii_uppercase());
         let id = u16::try_from(index.saturating_add(1))
             .map_err(|_| syn::Error::new(method.span(), "register field ID exceeds u16"))?;
         let lsb = field.start.0;
         let bit_width = crate::internal::expand::bits::width(field);
+        identities.push(quote! {
+            #[doc = "Stable identity for one declared register field."]
+            pub const #identity: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);
+        });
         let semantic_type = crate::internal::expand::bits::semantic_type(field);
         variants.push(super::super::variant(&name));
         fields.push(quote!(#facade::BitsFieldSpec::place(#id, #name, #lsb, #facade::BitsFieldDefinition::new(#bit_width)).with_declaration_index(#index)));
@@ -137,7 +146,7 @@ fn expand_inline(
             pub fn #with_method(self, value: #semantic_type) -> ::core::result::Result<Self, #facade::RegisterCodecError> {
                 let observed = u64::from(value);
                 if observed > #maximum {
-                    return ::core::result::Result::Err(#facade::RegisterCodecError::FieldValueOverflow { field_name: #name, bit_width: #bit_width, value: observed });
+                    return ::core::result::Result::Err(#facade::RegisterCodecError::FieldValueOverflow { location: #marker::#identity.at_bit(#lsb), bit_width: #bit_width, value: observed });
                 }
                 let combined = (u64::from(self.0) & !#field_mask) | (observed << #lsb);
                 ::core::result::Result::Ok(Self(#narrowed))
@@ -155,6 +164,7 @@ fn expand_inline(
         },
         id_type: quote!(u16),
         specs: quote!(&[#(#fields),*]),
+        identities: quote!(#(#identities)*),
         getters,
         setters,
         value_methods,

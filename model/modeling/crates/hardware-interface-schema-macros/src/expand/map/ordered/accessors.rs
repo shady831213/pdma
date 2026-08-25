@@ -22,37 +22,38 @@ pub(super) fn expand(
         let method = &item.symbol;
         let mutable_method = format_ident!("{}_mut", method);
         let definition = &item.definition;
-        let offset = &item.offset;
-        let stride = &item.stride;
+        let placement = &item.placement;
         let count = item.count;
-        let (parameters, check, start) = if count == 1 {
-            (quote!(), quote!(), quote!(#marker::#offset))
+        let (parameters, check, instance) = if count == 1 {
+            (quote!(), quote!(), quote!(0usize))
         } else {
             (
                 quote!(instance: usize),
                 quote!(if instance >= #count { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count, actual: instance }); }),
-                quote!(#marker::#offset + instance * #marker::#stride),
+                quote!(instance),
             )
         };
         getters.push(quote! {
             #[doc = "Returns one checked immutable child-layout view."]
             pub fn #method(&self, #parameters) -> ::core::result::Result<<#definition as #facade::RegisterLayout>::View<'_>, #facade::SchemaCodecError> {
                 #check
-                let start = #start;
-                let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
-                let child = self.bytes.get(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: self.bytes.len() })?;
-                <#definition as #facade::RegisterLayout>::view(child)
+                let range = #marker::__placement_range(#marker::#placement, #instance)?;
+                let start = range.start;
+                let end = range.end;
+                let child = self.bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: self.bytes.len() })?;
+                <#definition as #facade::RegisterLayout>::view(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))
             }
         });
         mutable_getters.push(quote! {
             #[doc = "Returns one checked mutable child-layout view."]
             pub fn #mutable_method(&mut self, #parameters) -> ::core::result::Result<<#definition as #facade::RegisterLayout>::ViewMut<'_>, #facade::SchemaCodecError> {
                 #check
-                let start = #start;
-                let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
+                let range = #marker::__placement_range(#marker::#placement, #instance)?;
+                let start = range.start;
+                let end = range.end;
                 let actual = self.bytes.len();
-                let child = self.bytes.get_mut(start..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-                <#definition as #facade::RegisterLayout>::view_mut(child)
+                let child = self.bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
+                <#definition as #facade::RegisterLayout>::view_mut(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))
             }
         });
     }

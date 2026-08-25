@@ -55,6 +55,32 @@ record_schema! {
     }
 }
 
+record_schema! {
+    pub record ComposableErrorChild {
+        endian: Little,
+        fields: {
+            kind: enum(u8) {
+                variants: {
+                    Known = 1,
+                },
+            },
+        },
+    }
+}
+
+record_schema! {
+    pub record ComposableErrorParent {
+        size: 8,
+        alignment: 4,
+        fields: {
+            prefix: u32 { id: 1, offset: 0, endian: Little },
+        },
+        records: {
+            child: ComposableErrorChild { id: 2, offset: 4 },
+        },
+    }
+}
+
 #[test]
 fn owned_values_round_trip_scalars_arrays_references_and_nested_records()
 -> Result<(), SchemaCodecError> {
@@ -113,4 +139,25 @@ fn owned_values_reject_short_output_before_mutation() {
         })
     );
     assert_eq!(bytes, before);
+}
+
+#[test]
+fn composable_record_when_nested_modern_child_is_malformed_rebases_the_child_location()
+-> Result<(), SchemaCodecError> {
+    // Given: a composable parent with a modern enum child at nonzero byte offset four.
+    let mut bytes = ComposableErrorParentValues::ZERO.to_bytes()?;
+    bytes[4] = 9;
+
+    // When: the parent decodes the malformed nested child.
+    let result = ComposableErrorParentValues::from_bytes(&bytes);
+
+    // Then: the child identity remains intact at the parent-root byte coordinate.
+    assert_eq!(
+        result,
+        Err(SchemaCodecError::UnknownTag {
+            location: ComposableErrorChild::KIND_IDENTITY.at_byte(4),
+            observed: 9,
+        })
+    );
+    Ok(())
 }

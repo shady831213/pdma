@@ -49,6 +49,7 @@ fn identities(context: &SchemaContext<'_>) -> TokenStream {
 fn values(context: &SchemaContext<'_>) -> TokenStream {
     let facade = &context.facade;
     let visibility = &context.decl.visibility;
+    let marker = &context.decl.name;
     let values = &context.values;
     let raw_name = format_ident!("{}Raw", context.decl.name);
     let raw_type = format_ident!("u{}", context.extent * 8);
@@ -71,7 +72,8 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
     });
     let encoded_fields = context.decl.fields.iter().map(|field| {
         let name = &field.name;
-        let field_name = name.to_string();
+        let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+        let lsb = field.start.0;
         let bit_width = super::width(field);
         let maximum = validate::bits::bit_mask(bit_width);
         let encoded = super::encode(field, &quote!(value.#name));
@@ -79,20 +81,21 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
             let observed = u64::from(value.#name);
             if observed > #maximum {
                 return ::core::result::Result::Err(#facade::BitsValueError::new(
-                    offset, #field_name, #bit_width, observed, #maximum,
+                    #marker::#identity, #lsb, #bit_width, observed, #maximum,
                 ));
             }
             raw |= #encoded;
         })
     });
-    let codec = codec::expand(
+    let codec = codec::expand(&codec::Context {
         values,
-        &raw_name,
-        &raw_type,
+        raw_name: &raw_name,
+        raw_type: &raw_type,
         declared_mask,
-        &narrowed_raw,
+        narrowed_raw: &narrowed_raw,
         facade,
-    );
+        marker,
+    });
     quote! {
         #[doc = "Typed raw scalar for one reusable bits schema."]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -116,7 +119,7 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
             #[doc = "All-zero typed bits value."]
             pub const ZERO: Self = Self { #(#zero_fields,)* };
             fn from_raw(raw: u64) -> Self { Self { #(#decoded_fields,)* } }
-            fn raw(&self, offset: usize) -> ::core::result::Result<u64, #facade::BitsValueError> {
+            fn raw(&self) -> ::core::result::Result<u64, #facade::BitsValueError> {
                 let value = self;
                 let mut raw = 0_u64;
                 #(#encoded_fields)*
@@ -131,10 +134,10 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
 }
 
 fn narrow_raw(raw_type: &syn::Ident, extent: usize) -> TokenStream {
-    let bytes = (0..extent).map(syn::Index::from);
+    let indexes = (0..extent).map(syn::Index::from);
     quote!({
-        let bytes = raw.to_le_bytes();
-        #raw_type::from_le_bytes([#(bytes[#bytes]),*])
+        let raw_bytes = raw.to_le_bytes();
+        #raw_type::from_le_bytes([#(raw_bytes[#indexes]),*])
     })
 }
 
@@ -149,14 +152,28 @@ fn marker(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
     let extent = context.extent;
     let declared_mask = context.declared_mask;
     let raw_type = format_ident!("u{}", extent * 8);
+    let narrowed_raw = narrow_raw(&raw_type, extent);
     let scalar_kind = format_ident!("U{}", extent * 8);
     let specs = specs(context)?;
     let field_count = context.decl.fields.len();
+    let member_identities = context.decl.fields.iter().map(|field| {
+        let identity = format_ident!("{}_IDENTITY", field.name.to_string().to_ascii_uppercase());
+        let member = field.name.to_string();
+        quote! {
+            #[doc = "Stable identity for one declared bit member."]
+            pub const #identity: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(#marker_name, #member);
+        }
+    });
     Ok(quote! {
         #[doc = "Marker and metadata namespace for one reusable bits schema."]
         #[derive(Clone, Copy, Debug)]
         #visibility struct #marker;
         impl #marker {
+            #[doc = "Stable identity for reserved bits outside declared members."]
+            pub const RESERVED_IDENTITY: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(#marker_name, "reserved");
+            #(#member_identities)*
             #[doc = "Highest exclusive declared bit endpoint."]
             pub const BIT_WIDTH: usize = #bit_width;
             #[doc = "Smallest supported scalar byte extent containing every field."]
@@ -178,20 +195,29 @@ fn marker(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
             const FIELDS: &'static [#facade::BitsFieldSpec] = &Self::FIELDS;
             fn decode_register(raw: u64) -> Self::Value { #values::from_raw(raw) }
             fn encode_register(value: &Self::Value) -> ::core::result::Result<u64, #facade::RegisterValueError> {
-                value.raw(0).map_err(#facade::BitsValueError::into_register_error)
+                value.raw().map_err(#facade::BitsValueError::into_register_error)
             }
-            fn decode_record(bytes: &[u8], endian: #facade::Endian, offset: usize) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> {
+            fn decode_record(bytes: &[u8], endian: #facade::Endian, location: #facade::SchemaLocation) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> {
                 let raw: #raw_type = #facade::read_scalar(bytes, endian)?;
                 let raw = u64::from(raw);
                 let reserved = raw & !#declared_mask;
                 if reserved != 0 {
-                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved { offset, observed: reserved });
+                    let mut first_reserved = 0_usize;
+                    while reserved & (1_u64 << first_reserved) == 0 {
+                        first_reserved += 1;
+                    }
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved {
+                        location: Self::RESERVED_IDENTITY.at_bit(first_reserved),
+                        observed: reserved,
+                    }.rebased(location.coordinate()));
                 }
                 ::core::result::Result::Ok(#values::from_raw(raw))
             }
-            fn encode_record(bytes: &mut [u8], endian: #facade::Endian, value: &Self::Value, offset: usize) -> ::core::result::Result<(), #facade::SchemaCodecError> {
-                let raw = value.raw(offset).map_err(#facade::BitsValueError::into_schema_error)?;
-                let raw = #raw_type::from_le_bytes(raw.to_le_bytes()[..#extent].try_into().map_err(|_| #facade::SchemaCodecError::NarrowingOverflow { offset, observed: raw, maximum: #declared_mask })?);
+            fn encode_record(bytes: &mut [u8], endian: #facade::Endian, value: &Self::Value, location: #facade::SchemaLocation) -> ::core::result::Result<(), #facade::SchemaCodecError> {
+                let raw = value
+                    .raw()
+                    .map_err(|error| error.into_schema_error().rebased(location.coordinate()))?;
+                let raw: #raw_type = #narrowed_raw;
                 #facade::write_scalar(bytes, endian, raw)
             }
         }

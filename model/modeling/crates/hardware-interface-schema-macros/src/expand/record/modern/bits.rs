@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 
 use crate::internal::syntax::BitsDecl;
 
@@ -37,32 +37,12 @@ pub(super) fn expand(
         let value = crate::internal::expand::bits::decode(field, &observed);
         quote!(#name: #value)
     });
-    let encoded_fields = decl.fields.iter().map(|field| {
-        let name = &field.name;
-        let width = crate::internal::expand::bits::width(field);
-        let maximum = crate::internal::validate::bits::bit_mask(width);
-        let value = quote!(self.#name);
-        let encoded = crate::internal::expand::bits::encode(field, &value);
-        if width == 1 {
-            quote!(observed |= #encoded;)
-        } else {
-            quote!({
-                let value = u64::from(self.#name);
-                if value > #maximum {
-                    return ::core::result::Result::Err(#facade::SchemaCodecError::NarrowingOverflow {
-                        offset,
-                        observed: value,
-                        maximum: #maximum,
-                    });
-                }
-                observed |= #encoded;
-            })
-        }
-    });
+    let encoded_fields = encoded_fields(decl, facade);
     let used_mask = crate::internal::validate::bits::declared_mask(&decl.fields);
     let reserved_mask = raw_maximum & !used_mask;
     let narrowed_raw = scalar::from_u64(decl.storage, quote!(observed));
     let codec = codec(&name, &raw_name, facade);
+    let member_identities = member_identities(decl, &name, facade);
     quote! {
         #[doc = "Typed raw scalar for the generated packed-bit field."]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -77,21 +57,38 @@ pub(super) fn expand(
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #name { #(#declarations,)* }
         impl #name {
+            #[doc = "Stable identity for reserved bits outside declared members."]
+            pub const RESERVED_IDENTITY: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(stringify!(#name), "reserved");
+            #member_identities
             #[doc = "All-zero packed-bit value."]
             pub const ZERO: Self = Self { #(#zero_fields,)* };
             #[doc = "Parses packed bits and rejects nonzero reserved ranges."]
             pub fn from_raw(raw: #raw_type, offset: usize) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
+                Self::from_raw_at(raw, #facade::SchemaCoordinate::Byte(offset))
+            }
+            fn from_raw_at(raw: #raw_type, base: #facade::SchemaCoordinate) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let observed = u64::from(raw);
                 let reserved = observed & #reserved_mask;
                 if reserved != 0 {
-                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved { offset, observed: reserved });
+                    let mut first_reserved = 0_usize;
+                    while reserved & (1_u64 << first_reserved) == 0 {
+                        first_reserved += 1;
+                    }
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::NonZeroReserved {
+                        location: Self::RESERVED_IDENTITY.at_bit(first_reserved),
+                        observed: reserved,
+                    }.rebased(base));
                 }
                 ::core::result::Result::Ok(Self { #(#decoded_fields,)* })
             }
             #[doc = "Packs typed fields into their raw integer storage."]
             pub fn raw(self, offset: usize) -> ::core::result::Result<#raw_type, #facade::SchemaCodecError> {
+                self.raw_at(#facade::SchemaCoordinate::Byte(offset))
+            }
+            fn raw_at(self, base: #facade::SchemaCoordinate) -> ::core::result::Result<#raw_type, #facade::SchemaCodecError> {
                 let mut observed = 0_u64;
-                #(#encoded_fields)*
+                #encoded_fields
                 ::core::result::Result::Ok(#narrowed_raw)
             }
         }
@@ -100,6 +97,47 @@ pub(super) fn expand(
         }
         #codec
     }
+}
+
+fn encoded_fields(decl: &BitsDecl, facade: &TokenStream) -> TokenStream {
+    let fields = decl.fields.iter().map(|field| {
+        let name = &field.name;
+        let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+        let lsb = field.start.0;
+        let width = crate::internal::expand::bits::width(field);
+        let maximum = crate::internal::validate::bits::bit_mask(width);
+        let value = quote!(self.#name);
+        let encoded = crate::internal::expand::bits::encode(field, &value);
+        if width == 1 {
+            quote!(observed |= #encoded;)
+        } else {
+            quote!({
+                let value = u64::from(self.#name);
+                if value > #maximum {
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::NarrowingOverflow {
+                        location: Self::#identity.at_bit(#lsb),
+                        observed: value,
+                        maximum: #maximum,
+                    }.rebased(base));
+                }
+                observed |= #encoded;
+            })
+        }
+    });
+    quote!(#(#fields)*)
+}
+
+fn member_identities(decl: &BitsDecl, owner: &syn::Ident, facade: &TokenStream) -> TokenStream {
+    let identities = decl.fields.iter().map(|field| {
+        let identity = format_ident!("{}_IDENTITY", field.name.to_string().to_ascii_uppercase());
+        let member = field.name.to_string();
+        quote! {
+            #[doc = "Stable identity for one declared bit member."]
+            pub const #identity: #facade::SchemaMemberIdentity =
+                #facade::SchemaMemberIdentity::new(stringify!(#owner), #member);
+        }
+    });
+    quote!(#(#identities)*)
 }
 
 fn codec(values: &syn::Ident, raw: &syn::Ident, facade: &TokenStream) -> TokenStream {

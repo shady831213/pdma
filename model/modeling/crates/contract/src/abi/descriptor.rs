@@ -2,12 +2,11 @@ mod conversion;
 mod error;
 mod schema;
 
-use super::{
-    ABI_VERSION, AbiEncodeError, AbiId, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
-    MAX_INDIRECT_DESTINATIONS,
-};
+use super::{ABI_VERSION, AbiEncodeError, AbiId, DmaAddress, INDIRECT_ENTRY_ALIGNMENT};
 
 pub use error::{DescriptorDecodeError, DescriptorValueError};
+
+use error::DescriptorPayloadViolation;
 
 pub use schema::{
     DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsRaw, DescriptorHeaderSchemaFlagsValues,
@@ -57,7 +56,7 @@ impl AbiCommand {
         values: DescriptorSchemaPayloadBroadcastCopyValues,
     ) -> Result<Self, DescriptorValueError> {
         let payload = DescriptorSchemaPayloadValues::BroadcastCopy(values);
-        validate_payload(payload)?;
+        validate_payload(payload).map_err(DescriptorValueError::from)?;
         Ok(Self::from_payload(command_id, payload))
     }
 
@@ -193,22 +192,20 @@ impl IndirectDestinationEntrySchemaValues {
 
 const fn validate_payload(
     payload: DescriptorSchemaPayloadValues,
-) -> Result<(), DescriptorValueError> {
+) -> Result<(), DescriptorPayloadViolation> {
     match payload {
         DescriptorSchemaPayloadValues::Copy(_)
         | DescriptorSchemaPayloadValues::StridedCopy(_)
         | DescriptorSchemaPayloadValues::VectorAdd(_) => Ok(()),
         DescriptorSchemaPayloadValues::BroadcastCopy(values) => {
             if values.destination_count == 0 {
-                return Err(DescriptorValueError::InvalidIndirectCount {
+                return Err(DescriptorPayloadViolation::InvalidIndirectCount {
                     observed: values.destination_count,
-                    maximum: MAX_INDIRECT_DESTINATIONS,
                 });
             }
             if values.destination_list_dma_address % INDIRECT_ENTRY_ALIGNMENT != 0 {
-                return Err(DescriptorValueError::InvalidIndirectAlignment {
+                return Err(DescriptorPayloadViolation::InvalidIndirectAlignment {
                     address: values.destination_list_dma_address,
-                    alignment: INDIRECT_ENTRY_ALIGNMENT,
                 });
             }
             Ok(())

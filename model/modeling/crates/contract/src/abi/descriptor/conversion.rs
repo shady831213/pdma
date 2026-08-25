@@ -1,12 +1,12 @@
-use hardware_interface_schema::SchemaCodecError;
+use hardware_interface_schema::{SchemaCodecError, SchemaCoordinate, SchemaLocation};
 
 use crate::abi::{
-    ABI_VERSION, AbiEncodeError, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK,
-    DESCRIPTOR_SIZE, DescriptorSchemaRaw, DescriptorSchemaValues, DescriptorSchemaView,
-    MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE, codec::decode_schema_error,
+    ABI_VERSION, AbiEncodeError, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
+    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaRaw, DescriptorSchemaValues,
+    DescriptorSchemaView, MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE, codec::decode_schema_error,
 };
 
-use super::{AbiCommand, DescriptorDecodeError, DescriptorValueError, validate_payload};
+use super::{AbiCommand, DescriptorDecodeError, validate_payload};
 
 impl TryFrom<DescriptorSchemaRaw> for AbiCommand {
     type Error = DescriptorDecodeError;
@@ -19,9 +19,8 @@ impl TryFrom<DescriptorSchemaRaw> for AbiCommand {
         let opcode = header.opcode().map_err(decode_schema_error)?;
         let flags = header.flags().map_err(decode_schema_error)?;
         validate_header(version, size, opcode, flags)?;
-        let values = DescriptorSchemaValues::try_from(raw)
-            .map_err(|error| descriptor_schema_error(opcode, error))?;
-        validate_payload(values.payload).map_err(map_broadcast_error)?;
+        let values = DescriptorSchemaValues::try_from(raw).map_err(descriptor_schema_error)?;
+        validate_payload(values.payload).map_err(DescriptorDecodeError::from)?;
         Ok(Self::from_validated_values(values))
     }
 }
@@ -67,26 +66,12 @@ fn validate_header(
     Ok(())
 }
 
-fn map_broadcast_error(error: DescriptorValueError) -> DescriptorDecodeError {
-    match error {
-        DescriptorValueError::InvalidIndirectCount { observed, maximum } => {
-            DescriptorDecodeError::InvalidIndirectCount {
-                observed: u64::from(observed),
-                maximum,
-            }
-        }
-        DescriptorValueError::InvalidIndirectAlignment { address, alignment } => {
-            DescriptorDecodeError::InvalidIndirectAlignment { address, alignment }
-        }
-    }
-}
-
-fn descriptor_schema_error(opcode: u16, error: SchemaCodecError) -> DescriptorDecodeError {
+fn descriptor_schema_error(error: SchemaCodecError) -> DescriptorDecodeError {
     match error {
         SchemaCodecError::BufferTooShort { .. } => {
             DescriptorDecodeError::Codec(decode_schema_error(error))
         }
-        SchemaCodecError::UnknownTag { observed } => {
+        SchemaCodecError::UnknownTag { observed, .. } => {
             let Ok(observed) = u16::try_from(observed) else {
                 return DescriptorDecodeError::MetadataMismatch;
             };
@@ -95,22 +80,24 @@ fn descriptor_schema_error(opcode: u16, error: SchemaCodecError) -> DescriptorDe
                 maximum: VECTOR_ADD_OPCODE,
             }
         }
-        SchemaCodecError::NonZeroReserved { offset, observed } => field_offset(offset)
+        SchemaCodecError::NonZeroReserved { location, observed } => location_offset(location)
             .map_or(DescriptorDecodeError::MetadataMismatch, |offset| {
                 DescriptorDecodeError::InvalidReserved { offset, observed }
             }),
         SchemaCodecError::NarrowingOverflow {
-            offset,
+            location,
             observed,
             maximum,
         } => {
-            if opcode == BROADCAST_COPY_OPCODE && offset == 40 {
+            if location.identity()
+                == DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+            {
                 return DescriptorDecodeError::InvalidIndirectCount {
                     observed,
                     maximum: MAX_INDIRECT_DESTINATIONS,
                 };
             }
-            let Ok(offset) = field_offset(offset) else {
+            let Ok(offset) = location_offset(location) else {
                 return DescriptorDecodeError::MetadataMismatch;
             };
             let Ok(maximum) = u32::try_from(maximum) else {
@@ -122,8 +109,19 @@ fn descriptor_schema_error(opcode: u16, error: SchemaCodecError) -> DescriptorDe
                 maximum,
             }
         }
+        SchemaCodecError::ConstantMismatch { .. }
+        | SchemaCodecError::CoordinateRebaseOverflow { .. } => {
+            DescriptorDecodeError::MetadataMismatch
+        }
         _ => DescriptorDecodeError::MetadataMismatch,
     }
+}
+
+fn location_offset(location: SchemaLocation) -> Result<u16, DescriptorDecodeError> {
+    let SchemaCoordinate::Byte(offset) = location.coordinate() else {
+        return Err(DescriptorDecodeError::MetadataMismatch);
+    };
+    field_offset(offset)
 }
 
 fn field_offset(offset: usize) -> Result<u16, DescriptorDecodeError> {

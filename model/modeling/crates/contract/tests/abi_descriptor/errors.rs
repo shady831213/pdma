@@ -94,6 +94,26 @@ pub fn assert_reserved_and_scalar_errors() {
 /// # Panics
 /// Panics when a malformed boundary value is not rejected with its exact typed error.
 pub fn assert_count_alignment_and_slice_errors() {
+    assert_decode_count_alignment_errors();
+    assert_short_slice_errors();
+    assert_construction_errors();
+}
+
+fn assert_decode_count_alignment_errors() {
+    let mut zero_count_and_misaligned = vectors::BROADCAST;
+    assert!(support::replace_u64(
+        &mut zero_count_and_misaligned,
+        24,
+        0x1003
+    ));
+    assert!(support::replace_u64(&mut zero_count_and_misaligned, 40, 0));
+    assert_decode_error(
+        &zero_count_and_misaligned,
+        DescriptorDecodeError::InvalidIndirectCount {
+            observed: 0,
+            maximum: MAX_INDIRECT_DESTINATIONS,
+        },
+    );
     let mut zero_count = vectors::BROADCAST;
     assert!(support::replace_u64(&mut zero_count, 40, 0));
     assert_decode_error(
@@ -125,6 +145,9 @@ pub fn assert_count_alignment_and_slice_errors() {
             alignment: INDIRECT_ENTRY_ALIGNMENT,
         },
     );
+}
+
+fn assert_short_slice_errors() {
     assert_eq!(
         AbiCommand::decode(&vectors::COPY[..63]),
         Err(DescriptorDecodeError::Codec(
@@ -156,12 +179,30 @@ pub fn assert_count_alignment_and_slice_errors() {
             actual: 63,
         })
     );
+}
+
+fn assert_construction_errors() {
     assert_eq!(
         AbiCommand::try_broadcast_copy(
             AbiId::new(1),
             DescriptorSchemaPayloadBroadcastCopyValues {
                 source_dma_address: 2,
                 destination_list_dma_address: 8,
+                length: 0,
+                destination_count: 0,
+            },
+        ),
+        Err(DescriptorValueError::InvalidIndirectCount {
+            observed: 0,
+            maximum: MAX_INDIRECT_DESTINATIONS,
+        })
+    );
+    assert_eq!(
+        AbiCommand::try_broadcast_copy(
+            AbiId::new(1),
+            DescriptorSchemaPayloadBroadcastCopyValues {
+                source_dma_address: 2,
+                destination_list_dma_address: 11,
                 length: 0,
                 destination_count: 0,
             },

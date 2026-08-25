@@ -1,9 +1,11 @@
 use super::{support, vectors};
+use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::abi::{
     ABI_VERSION, AbiCommand, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE, DescriptorDecodeError,
     DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadValues, DescriptorSchemaRaw,
-    DescriptorSchemaValues, VECTOR_ADD_OPCODE,
+    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
+    DescriptorSchemaPayloadValues, DescriptorSchemaRaw, DescriptorSchemaValues,
+    MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE,
 };
 
 #[test]
@@ -30,6 +32,68 @@ fn generated_descriptor_uses_semantic_header_and_payload_fields() {
         }
     );
     assert_eq!(values.to_bytes(), Ok(vectors::COPY));
+}
+
+#[test]
+fn generated_descriptor_error_identifies_broadcast_destination_count() {
+    // Given: a broadcast descriptor whose stored count exceeds its semantic width.
+    let mut bytes = vectors::BROADCAST;
+    let observed = u64::from(u32::MAX) + 1;
+    assert!(support::replace_u64(&mut bytes, 40, observed));
+
+    // When: the generated schema converts the exact raw descriptor.
+    let decoded = DescriptorSchemaValues::try_from(DescriptorSchemaRaw::from(bytes));
+
+    // Then: the error names the union leaf while retaining its wire offset.
+    assert_eq!(
+        decoded,
+        Err(SchemaCodecError::NarrowingOverflow {
+            location: DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY.at(40),
+            observed,
+            maximum: u64::from(u32::MAX),
+        })
+    );
+}
+
+#[test]
+fn destination_count_identity_maps_count_error_at_its_generated_byte() {
+    // Given: a broadcast count above its semantic width at the generated count member byte.
+    let mut bytes = vectors::BROADCAST;
+    let observed = u64::from(u32::MAX) + 1;
+    assert!(support::replace_u64(&mut bytes, 40, observed));
+
+    // When: the public descriptor boundary decodes the raw schema value.
+    let decoded = AbiCommand::try_from(DescriptorSchemaRaw::from(bytes));
+
+    // Then: the count member maps to its descriptor-specific public error.
+    assert_eq!(
+        decoded,
+        Err(DescriptorDecodeError::InvalidIndirectCount {
+            observed,
+            maximum: MAX_INDIRECT_DESTINATIONS,
+        })
+    );
+}
+
+#[test]
+fn vector_length_at_broadcast_count_byte_remains_value_error() {
+    // Given: vector length at byte 40, shared with the broadcast count's wire placement.
+    let mut bytes = vectors::VECTOR_ADD;
+    let observed = u64::from(u32::MAX) + 1;
+    assert!(support::replace_u64(&mut bytes, 40, observed));
+
+    // When: the public descriptor boundary decodes the raw schema value.
+    let decoded = AbiCommand::try_from(DescriptorSchemaRaw::from(bytes));
+
+    // Then: the distinct generated member remains an ordinary scalar range error.
+    assert_eq!(
+        decoded,
+        Err(DescriptorDecodeError::ValueOutOfRange {
+            offset: 40,
+            observed,
+            maximum: u32::MAX,
+        })
+    );
 }
 
 #[test]

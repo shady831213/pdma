@@ -1,5 +1,4 @@
-mod codec;
-mod decode;
+mod conversion;
 mod error;
 mod schema;
 
@@ -11,14 +10,16 @@ use super::{
 pub use error::{DescriptorDecodeError, DescriptorValueError};
 
 pub use schema::{
-    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
+    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsRaw, DescriptorHeaderSchemaFlagsValues,
+    DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaOpcodeRaw, DescriptorHeaderSchemaRaw,
     DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
     DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
-    DescriptorSchemaPayloadValues, DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadRaw,
+    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadValues,
+    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaRaw, DescriptorSchemaValues,
     DescriptorSchemaView, DescriptorSchemaViewMut, IndirectDestinationEntrySchema,
-    IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
-    IndirectDestinationEntrySchemaViewMut,
+    IndirectDestinationEntrySchemaRaw, IndirectDestinationEntrySchemaValues,
+    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
 };
 
 /// One validated ABI-v1 command backed by the generated descriptor value.
@@ -27,6 +28,8 @@ pub struct AbiCommand(DescriptorSchemaValues);
 
 /// Canonical generated value representation of one indirect destination entry.
 pub type BroadcastDestinationEntry = IndirectDestinationEntrySchemaValues;
+
+const DESTINATION_ENTRY_SIZE: usize = IndirectDestinationEntrySchema::SPEC.size();
 
 impl AbiCommand {
     /// Creates a canonical linear-copy descriptor.
@@ -87,7 +90,16 @@ impl AbiCommand {
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one descriptor.
     pub fn encode(self, bytes: &mut [u8]) -> Result<(), AbiEncodeError> {
-        codec::encode_descriptor(self, bytes)
+        let actual = bytes.len();
+        let destination = bytes.get_mut(..DescriptorSchema::RECORD_SIZE).ok_or(
+            AbiEncodeError::BufferTooShort {
+                required: DescriptorSchema::RECORD_SIZE,
+                actual,
+            },
+        )?;
+        let raw = DescriptorSchemaRaw::try_from(self)?;
+        destination.copy_from_slice(raw.as_bytes());
+        Ok(())
     }
 
     /// Decodes and validates one complete ABI-v1 descriptor.
@@ -95,7 +107,18 @@ impl AbiCommand {
     /// # Errors
     /// Returns the first canonical validation failure.
     pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
-        decode::decode_descriptor(bytes)
+        let actual = bytes.len();
+        let source = bytes.get(..DescriptorSchema::RECORD_SIZE).ok_or_else(|| {
+            DescriptorDecodeError::Codec(super::codec::decode_schema_error(
+                hardware_interface_schema::SchemaCodecError::BufferTooShort {
+                    required: DescriptorSchema::RECORD_SIZE,
+                    actual,
+                },
+            ))
+        })?;
+        let mut raw = [0_u8; DescriptorSchema::RECORD_SIZE];
+        raw.copy_from_slice(source);
+        Self::try_from(DescriptorSchemaRaw::from(raw))
     }
 
     /// Fixed-width command identifier.
@@ -120,8 +143,18 @@ impl IndirectDestinationEntrySchemaValues {
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one entry.
     pub fn encode(self, bytes: &mut [u8]) -> Result<(), AbiEncodeError> {
-        self.encode_into(bytes)
-            .map_err(super::codec::encode_schema_error)
+        let actual = bytes.len();
+        let destination =
+            bytes
+                .get_mut(..DESTINATION_ENTRY_SIZE)
+                .ok_or(AbiEncodeError::BufferTooShort {
+                    required: DESTINATION_ENTRY_SIZE,
+                    actual,
+                })?;
+        let raw = IndirectDestinationEntrySchemaRaw::try_from(self)
+            .map_err(super::codec::encode_schema_error)?;
+        destination.copy_from_slice(raw.as_bytes());
+        Ok(())
     }
 
     /// Decodes one eight-byte destination DMA address.
@@ -129,7 +162,18 @@ impl IndirectDestinationEntrySchemaValues {
     /// # Errors
     /// Returns a typed error when `bytes` is shorter than one entry.
     pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
-        Self::from_bytes(bytes)
+        let actual = bytes.len();
+        let source = bytes.get(..DESTINATION_ENTRY_SIZE).ok_or_else(|| {
+            DescriptorDecodeError::Codec(super::codec::decode_schema_error(
+                hardware_interface_schema::SchemaCodecError::BufferTooShort {
+                    required: DESTINATION_ENTRY_SIZE,
+                    actual,
+                },
+            ))
+        })?;
+        let mut raw = [0_u8; DESTINATION_ENTRY_SIZE];
+        raw.copy_from_slice(source);
+        Self::try_from(IndirectDestinationEntrySchemaRaw::from(raw))
             .map_err(super::codec::decode_schema_error)
             .map_err(DescriptorDecodeError::Codec)
     }

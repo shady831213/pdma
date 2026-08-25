@@ -2,6 +2,30 @@ use core::fmt;
 
 use crate::{Endian, Scalar};
 
+/// Converts one typed raw representation into its semantic value.
+pub trait Decode: Sized {
+    /// Semantic value produced by decoding.
+    type Decoded;
+
+    /// Decodes this raw representation.
+    ///
+    /// # Errors
+    /// Returns a typed codec failure when the raw representation is invalid.
+    fn decode(self) -> Result<Self::Decoded, SchemaCodecError>;
+}
+
+/// Converts one semantic value into its typed raw representation.
+pub trait Encode: Sized {
+    /// Typed raw representation produced by encoding.
+    type Encoded;
+
+    /// Encodes this semantic value.
+    ///
+    /// # Errors
+    /// Returns a typed codec failure when the semantic value cannot be represented.
+    fn encode(self) -> Result<Self::Encoded, SchemaCodecError>;
+}
+
 /// Failure while reading or writing a fixed-width scalar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]

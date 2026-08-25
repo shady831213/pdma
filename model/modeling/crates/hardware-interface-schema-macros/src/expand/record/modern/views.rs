@@ -32,7 +32,7 @@ pub(super) fn expand(
         .flat_map(|field| setters(marker, field, facade, &decl.endian));
     quote! {
         #[doc = "Checked immutable view over one inferred record."]
-        #[derive(Debug, Eq, PartialEq)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #view<'a> { bytes: &'a [u8] }
         impl<'a> #view<'a> {
             #[doc = "Checks the inferred extent and creates a view."]
@@ -66,6 +66,12 @@ pub(super) fn expand(
             #[doc = "Atomically replaces the complete semantic value."]
             pub fn set_values(&mut self, value: &#values) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 value.encode_into(self.bytes)
+            }
+        }
+        impl<'a> #facade::Decode for #view<'a> {
+            type Decoded = #values;
+            fn decode(self) -> ::core::result::Result<Self::Decoded, #facade::SchemaCodecError> {
+                #values::from_bytes(self.bytes)
             }
         }
     }

@@ -5,6 +5,7 @@ use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl};
 
 use super::{layout::RecordPlan, scalar, union};
 
+mod codec;
 mod field;
 
 pub(super) fn expand(
@@ -15,6 +16,7 @@ pub(super) fn expand(
     let marker = &decl.name;
     let visibility = &decl.visibility;
     let values_name = format_ident!("{marker}Values");
+    let raw_name = format_ident!("{marker}Raw");
     let endian = &decl.endian;
     let declarations = plan
         .fields
@@ -68,6 +70,7 @@ pub(super) fn expand(
             const _: () = assert!(#path <= #maximum, "record constant exceeds scalar storage");
         ))
     });
+    let codec = codec::expand(visibility, marker, &values_name, &raw_name, facade);
     Ok(quote! {
         #(#constant_assertions)*
         #[doc = "Generated owned semantic record value."]
@@ -106,6 +109,7 @@ pub(super) fn expand(
         impl ::core::default::Default for #values_name {
             fn default() -> Self { Self::ZERO }
         }
+        #codec
     })
 }
 

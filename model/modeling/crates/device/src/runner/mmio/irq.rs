@@ -76,15 +76,15 @@ pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScala
         IrqRegister::Detail0 => MmioScalar::U64(detail0),
         IrqRegister::Detail1 => MmioScalar::U64(detail1),
         IrqRegister::Detail2 => MmioScalar::U64(detail2),
-        IrqRegister::RspEpoch => MmioScalar::U64(response.epoch),
-        IrqRegister::RspSourceId => MmioScalar::U64(response.source_id),
-        IrqRegister::RspSourceKind => MmioScalar::U32(response.source_kind),
-        IrqRegister::RspState => MmioScalar::U32(response.state),
-        IrqRegister::RspRouteKind => MmioScalar::U32(response.route_kind),
-        IrqRegister::RspNotificationKind => MmioScalar::U32(response.notification_kind),
-        IrqRegister::RspVector => MmioScalar::U64(response.vector),
-        IrqRegister::RspMessageId => MmioScalar::U64(response.message_id),
-        IrqRegister::RspPendingMessages => MmioScalar::U64(response.pending_messages),
+        IrqRegister::RspEpoch => MmioScalar::U64(response.epoch.raw()),
+        IrqRegister::RspSourceId => MmioScalar::U64(response.source_id.raw()),
+        IrqRegister::RspSourceKind => MmioScalar::U32(response.source_kind.raw()),
+        IrqRegister::RspState => MmioScalar::U32(response.state.raw()),
+        IrqRegister::RspRouteKind => MmioScalar::U32(response.route_kind.raw()),
+        IrqRegister::RspNotificationKind => MmioScalar::U32(response.notification_kind.raw()),
+        IrqRegister::RspVector => MmioScalar::U64(response.vector.raw()),
+        IrqRegister::RspMessageId => MmioScalar::U64(response.message_id.raw()),
+        IrqRegister::RspPendingMessages => MmioScalar::U64(response.pending_messages.raw()),
     }
 }
 
@@ -204,23 +204,23 @@ fn source_response(view: IrqSourceView) -> IrqResponseBank {
     let (source_kind, source_id) = encode_source(view.source.source());
     let (route_kind, vector) = encode_route(view.route);
     IrqResponseBank {
-        epoch: view.source.epoch().raw(),
-        source_id,
-        source_kind,
-        state: view.status.bits(),
-        route_kind,
-        notification_kind: 0,
-        vector,
-        message_id: 0,
-        pending_messages: usize_to_u64(view.pending_messages),
+        epoch: view.source.epoch().raw().into(),
+        source_id: source_id.into(),
+        source_kind: source_kind.into(),
+        state: view.status.bits().into(),
+        route_kind: route_kind.into(),
+        notification_kind: 0.into(),
+        vector: vector.into(),
+        message_id: 0.into(),
+        pending_messages: usize_to_u64(view.pending_messages).into(),
     }
 }
 
 fn line_response(view: IrqSourceView, vector: usize) -> IrqResponseBank {
     IrqResponseBank {
-        notification_kind: 1,
-        vector: usize_to_u64(vector),
-        pending_messages: 0,
+        notification_kind: 1.into(),
+        vector: usize_to_u64(vector).into(),
+        pending_messages: 0.into(),
         ..source_response(view)
     }
 }

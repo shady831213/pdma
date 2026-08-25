@@ -5,6 +5,8 @@ use crate::internal::syntax::OrderedMapDecl;
 
 use super::{ExpansionContext, Geometry};
 
+mod codec;
+
 pub(super) fn expand(
     decl: &OrderedMapDecl,
     context: &ExpansionContext<'_>,
@@ -13,6 +15,7 @@ pub(super) fn expand(
     let facade = context.facade;
     let marker = context.marker;
     let values_name = context.values_name;
+    let raw_name = format_ident!("{}Raw", marker);
     let view_name = context.view_name;
     let view_mut_name = context.view_mut_name;
     let extent = context.extent;
@@ -20,14 +23,24 @@ pub(super) fn expand(
     let members = value_members(decl, context, geometry);
     let fields = members.fields;
     let zero_fields = members.zero_fields;
+    let default_fields = members.default_fields;
     let decoded_fields = members.decoded_fields;
     let encoded_fields = members.encoded_fields;
+    let codec = codec::expand(
+        visibility,
+        &raw_name,
+        values_name,
+        view_name,
+        extent,
+        facade,
+    );
     quote! {
         #[doc = "Owned typed values for the generated register map."]
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #values_name { #(#fields),* }
         impl #values_name {
             #[doc = "All-zero values for every declared child."] pub const ZERO: Self = Self { #(#zero_fields),* };
+            #[doc = "Reset-derived defaults for every declared child."] pub const DEFAULT: Self = Self { #(#default_fields),* };
             #[doc = "Decodes one complete owned map value."] pub fn from_bytes(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { <#marker as #facade::RegisterLayout>::decode(bytes) }
             #[doc = "Decodes one complete owned map value."] pub fn decode_from(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let actual = bytes.len();
@@ -48,6 +61,9 @@ pub(super) fn expand(
                 Ok(())
             }
         }
+        impl ::core::default::Default for #values_name {
+            fn default() -> Self { Self::DEFAULT }
+        }
         impl #facade::RegisterLayout for #marker {
             type Value = #values_name;
             type View<'a> = #view_name<'a>;
@@ -56,17 +72,20 @@ pub(super) fn expand(
             const ALIGNMENT: usize = #marker::ALIGNMENT;
             const EXTENT: usize = #marker::EXTENT;
             const ZERO: Self::Value = #values_name::ZERO;
+            const DEFAULT: Self::Value = #values_name::DEFAULT;
             fn decode(bytes: &[u8]) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> { #values_name::decode_from(bytes) }
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> { value.encode_into(bytes) }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { #view_name::new(bytes) }
             fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> { #view_mut_name::new(bytes) }
         }
+        #codec
     }
 }
 
 struct ValueMembers {
     fields: Vec<TokenStream>,
     zero_fields: Vec<TokenStream>,
+    default_fields: Vec<TokenStream>,
     decoded_fields: Vec<TokenStream>,
     encoded_fields: Vec<TokenStream>,
 }
@@ -80,6 +99,7 @@ fn value_members(
     let marker = context.marker;
     let mut fields = Vec::new();
     let mut zero_fields = Vec::new();
+    let mut default_fields = Vec::new();
     let mut decoded_fields = Vec::new();
     let mut encoded_fields = Vec::new();
     for item in geometry {
@@ -99,6 +119,7 @@ fn value_members(
                 #field_visibility #symbol: <#definition as #facade::RegisterLayout>::Value
             ));
             zero_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::ZERO));
+            default_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::DEFAULT));
             decoded_fields.push(quote!(#symbol: {
                 let start = #marker::#offset;
                 let end = start + <#definition as #facade::RegisterLayout>::EXTENT;
@@ -120,6 +141,9 @@ fn value_members(
             let zero_values =
                 (0..count).map(|_| quote!(<#definition as #facade::RegisterLayout>::ZERO));
             zero_fields.push(quote!(#symbol: [#(#zero_values),*]));
+            let default_values =
+                (0..count).map(|_| quote!(<#definition as #facade::RegisterLayout>::DEFAULT));
+            default_fields.push(quote!(#symbol: [#(#default_values),*]));
             let decoded = (0..count).map(|instance| {
                 quote!({
                     let start = #marker::#offset + #instance * #marker::#stride;
@@ -150,6 +174,7 @@ fn value_members(
     ValueMembers {
         fields,
         zero_fields,
+        default_fields,
         decoded_fields,
         encoded_fields,
     }

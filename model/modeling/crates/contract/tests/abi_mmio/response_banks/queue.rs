@@ -16,15 +16,15 @@ const QUEUE_WORDS: [u64; 9] = [
 fn queue_response_bank_publishes_all_nine_words_for_every_command() {
     // Given: a queue bank where every response word has a distinct literal byte pattern.
     let bank = QueueResponseBank {
-        epoch: QUEUE_WORDS[0],
-        queue_id: QUEUE_WORDS[1],
-        sq_producer: QUEUE_WORDS[2],
-        sq_captured: QUEUE_WORDS[3],
-        sq_consumer: QUEUE_WORDS[4],
-        cq_producer: QUEUE_WORDS[5],
-        cq_consumer: QUEUE_WORDS[6],
-        eq_producer: QUEUE_WORDS[7],
-        eq_consumer: QUEUE_WORDS[8],
+        epoch: QUEUE_WORDS[0].into(),
+        queue_id: QUEUE_WORDS[1].into(),
+        sq_producer: QUEUE_WORDS[2].into(),
+        sq_captured: QUEUE_WORDS[3].into(),
+        sq_consumer: QUEUE_WORDS[4].into(),
+        cq_producer: QUEUE_WORDS[5].into(),
+        cq_consumer: QUEUE_WORDS[6].into(),
+        eq_producer: QUEUE_WORDS[7].into(),
+        eq_consumer: QUEUE_WORDS[8].into(),
     };
     let responses = [
         QueueResponse::Activate(bank),
@@ -50,15 +50,15 @@ fn queue_response_bank_publishes_all_nine_words_for_every_command() {
     for response in responses {
         assert_eq!(
             [
-                response.bank().epoch,
-                response.bank().queue_id,
-                response.bank().sq_producer,
-                response.bank().sq_captured,
-                response.bank().sq_consumer,
-                response.bank().cq_producer,
-                response.bank().cq_consumer,
-                response.bank().eq_producer,
-                response.bank().eq_consumer,
+                response.bank().epoch.raw(),
+                response.bank().queue_id.raw(),
+                response.bank().sq_producer.raw(),
+                response.bank().sq_captured.raw(),
+                response.bank().sq_consumer.raw(),
+                response.bank().cq_producer.raw(),
+                response.bank().cq_consumer.raw(),
+                response.bank().eq_producer.raw(),
+                response.bank().eq_consumer.raw(),
             ],
             QUEUE_WORDS
         );

@@ -13,6 +13,7 @@ pub(super) fn expand(
     facade: &TokenStream,
 ) -> syn::Result<TokenStream> {
     let name = scalar::type_name(record, field, "");
+    let raw_name = scalar::type_name(record, field, "Raw");
     let raw_type = scalar::ty(decl.storage);
     let variants = enum_variants(decl)?;
     let declarations = variants
@@ -29,6 +30,15 @@ pub(super) fn expand(
         return Err(syn::Error::new(field.span(), "enum requires a variant"));
     };
     Ok(quote! {
+        #[doc = "Typed raw discriminant for the generated record enum."]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #visibility struct #raw_name(#raw_type);
+        impl #raw_name {
+            #[doc = "Creates one typed raw discriminant."]
+            pub const fn new(value: #raw_type) -> Self { Self(value) }
+            #[doc = "Returns the raw discriminant."]
+            pub const fn value(self) -> #raw_type { self.0 }
+        }
         #[doc = "Generated typed record enum."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility enum #name { #(#declarations),* }
@@ -49,6 +59,30 @@ pub(super) fn expand(
         }
         impl ::core::default::Default for #name {
             fn default() -> Self { Self::ZERO }
+        }
+        impl #facade::Decode for #raw_name {
+            type Decoded = #name;
+            fn decode(self) -> ::core::result::Result<Self::Decoded, #facade::SchemaCodecError> {
+                #name::from_raw(self.0)
+            }
+        }
+        impl #facade::Encode for #name {
+            type Encoded = #raw_name;
+            fn encode(self) -> ::core::result::Result<Self::Encoded, #facade::SchemaCodecError> {
+                ::core::result::Result::Ok(#raw_name::new(self.raw()))
+            }
+        }
+        impl ::core::convert::TryFrom<#raw_name> for #name {
+            type Error = #facade::SchemaCodecError;
+            fn try_from(raw: #raw_name) -> ::core::result::Result<Self, Self::Error> {
+                <#raw_name as #facade::Decode>::decode(raw)
+            }
+        }
+        impl ::core::convert::TryFrom<#name> for #raw_name {
+            type Error = #facade::SchemaCodecError;
+            fn try_from(value: #name) -> ::core::result::Result<Self, Self::Error> {
+                <#name as #facade::Encode>::encode(value)
+            }
         }
     })
 }

@@ -1,7 +1,8 @@
 //! Named bits schemas are reusable across record and register layouts.
 
 use hardware_interface_schema::{
-    RegisterCodecError, SchemaCodecError, bits_schema, record_schema, register_schema,
+    Decode, Encode, RegisterCodecError, SchemaCodecError, bits_schema, record_schema,
+    register_schema,
 };
 
 bits_schema! {
@@ -72,6 +73,31 @@ fn named_bits_when_embedded_in_record_and_register_reuse_one_value_type()
     assert_eq!(SharedFlags::EXTENT, 2);
     assert_eq!(SharedFlagsRegister::SPEC.fields(), &SharedFlags::FIELDS);
     assert_eq!(SharedFlagsRegisterBig::SPEC.fields(), &SharedFlags::FIELDS);
+    Ok(())
+}
+
+#[test]
+fn named_bits_raw_when_converted_remains_endian_neutral() -> Result<(), SchemaCodecError> {
+    // Given: one normalized scalar raw value independent of any byte container.
+    let raw = SharedFlagsRaw::new(0x0501);
+
+    // When: the typed raw value is decoded and encoded through both public surfaces.
+    let decoded = raw.decode()?;
+    let converted = SharedFlagsValues::try_from(raw)?;
+    let encoded = decoded.encode()?;
+    let converted_raw = SharedFlagsRaw::try_from(converted)?;
+
+    // Then: only the logical scalar is preserved; endian remains a container concern.
+    assert_eq!(
+        decoded,
+        SharedFlagsValues {
+            ready: true,
+            mode: 5
+        }
+    );
+    assert_eq!(decoded, converted);
+    assert_eq!(encoded.value(), 0x0501);
+    assert_eq!(converted_raw.value(), 0x0501);
     Ok(())
 }
 

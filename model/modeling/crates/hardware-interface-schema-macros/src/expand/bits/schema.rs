@@ -3,6 +3,8 @@ use quote::{format_ident, quote};
 
 use crate::internal::{crate_path, syntax::BitsSchemaDecl, validate};
 
+mod codec;
+
 struct SchemaContext<'a> {
     decl: &'a BitsSchemaDecl,
     facade: TokenStream,
@@ -48,6 +50,10 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
     let facade = &context.facade;
     let visibility = &context.decl.visibility;
     let values = &context.values;
+    let raw_name = format_ident!("{}Raw", context.decl.name);
+    let raw_type = format_ident!("u{}", context.extent * 8);
+    let declared_mask = context.declared_mask;
+    let narrowed_raw = narrow_raw(&raw_type, context.extent);
     let declarations = context.decl.fields.iter().map(|field| {
         let name = &field.name;
         let ty = super::semantic_type(field);
@@ -79,7 +85,30 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
             raw |= #encoded;
         })
     });
+    let codec = codec::expand(
+        values,
+        &raw_name,
+        &raw_type,
+        declared_mask,
+        &narrowed_raw,
+        facade,
+    );
     quote! {
+        #[doc = "Typed raw scalar for one reusable bits schema."]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #visibility struct #raw_name(#raw_type);
+        impl #raw_name {
+            #[doc = "Creates one typed raw scalar."]
+            pub const fn new(value: #raw_type) -> Self { Self(value) }
+            #[doc = "Returns the normalized raw scalar."]
+            pub const fn value(self) -> #raw_type { self.0 }
+        }
+        impl ::core::convert::From<#raw_type> for #raw_name {
+            fn from(value: #raw_type) -> Self { Self::new(value) }
+        }
+        impl ::core::convert::From<#raw_name> for #raw_type {
+            fn from(value: #raw_name) -> Self { value.value() }
+        }
         #[doc = "Owned typed value for one reusable bits schema."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #values { #(#declarations,)* }
@@ -97,7 +126,16 @@ fn values(context: &SchemaContext<'_>) -> TokenStream {
         impl ::core::default::Default for #values {
             fn default() -> Self { Self::ZERO }
         }
+        #codec
     }
+}
+
+fn narrow_raw(raw_type: &syn::Ident, extent: usize) -> TokenStream {
+    let bytes = (0..extent).map(syn::Index::from);
+    quote!({
+        let bytes = raw.to_le_bytes();
+        #raw_type::from_le_bytes([#(bytes[#bytes]),*])
+    })
 }
 
 fn marker(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {

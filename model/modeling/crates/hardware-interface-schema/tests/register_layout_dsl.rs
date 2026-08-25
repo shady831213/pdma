@@ -1,6 +1,8 @@
 //! Ordered register-layout macro behavior.
 
-use hardware_interface_schema::{Endian, RegisterLayout, register_map, register_schema};
+use hardware_interface_schema::{
+    Decode, Encode, Endian, RegisterLayout, register_map, register_schema,
+};
 
 register_schema! {
     pub register ControlRegister {
@@ -8,7 +10,7 @@ register_schema! {
         alignment: 4,
         endian: Little,
         access: ReadWrite,
-        reset: Zero(0),
+        reset: Constant(0x1020_3040),
         writable_mask: 0xffff_ffff,
         fields: {},
     }
@@ -20,7 +22,7 @@ register_schema! {
         alignment: 8,
         endian: Little,
         access: ReadOnly,
-        reset: Zero(0),
+        reset: PostReset(0x0102_0304_0506_0708),
         writable_mask: 0,
         fields: {},
     }
@@ -69,18 +71,18 @@ fn ordered_placements_infer_aligned_offsets_extent_and_stride() {
 #[test]
 fn generated_owned_values_round_trip_nested_map_bytes() {
     let values = DeviceRegistersValues {
-        header: 0x1122_3344,
+        header: ControlRegisterValues::new(0x1122_3344),
         lanes: [
             LaneRegistersValues {
-                control: 7,
-                counter: 9,
+                control: ControlRegisterValues::new(7),
+                counter: CounterRegisterValues::new(9),
             },
             LaneRegistersValues {
-                control: 11,
-                counter: 13,
+                control: ControlRegisterValues::new(11),
+                counter: CounterRegisterValues::new(13),
             },
         ],
-        tail: 0xaabb_ccdd,
+        tail: ControlRegisterValues::new(0xaabb_ccdd),
     };
     let encoded = values.to_bytes();
     assert!(encoded.is_ok());
@@ -110,6 +112,34 @@ fn generated_owned_values_round_trip_nested_map_bytes() {
         return;
     };
     assert_eq!(counter.value(), Ok(13));
+}
+
+#[test]
+fn generated_map_default_recursively_composes_register_resets()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: nested and repeated registers with nonzero declared reset values.
+    let values = DeviceRegistersValues::default();
+
+    // When: the reset-derived semantic map is encoded and decoded.
+    let raw = values.encode()?;
+    let decoded = raw.decode()?;
+    let converted = DeviceRegistersValues::try_from(raw)?;
+
+    // Then: every child reset occupies its inferred placement and padding stays zero.
+    assert_eq!(values.header.raw(), 0x1020_3040);
+    assert_eq!(values.lanes[0].control.raw(), 0x1020_3040);
+    assert_eq!(values.lanes[0].counter.raw(), 0x0102_0304_0506_0708);
+    assert_eq!(values.lanes[1], values.lanes[0]);
+    assert_eq!(values.tail.raw(), 0x1020_3040);
+    assert_eq!(&raw.as_bytes()[0..4], &0x1020_3040_u32.to_le_bytes());
+    assert_eq!(
+        &raw.as_bytes()[16..24],
+        &0x0102_0304_0506_0708_u64.to_le_bytes()
+    );
+    assert!(raw.as_bytes()[40..56].iter().all(|byte| *byte == 0));
+    assert_eq!(decoded, values);
+    assert_eq!(converted, values);
+    Ok(())
 }
 
 #[test]

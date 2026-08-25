@@ -53,6 +53,8 @@ pub trait RegisterLayout {
     const EXTENT: usize;
     /// All-zero owned value.
     const ZERO: Self::Value;
+    /// Declared default value used when constructing this layout.
+    const DEFAULT: Self::Value;
 
     /// Decodes one owned value from the start of `bytes`.
     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;

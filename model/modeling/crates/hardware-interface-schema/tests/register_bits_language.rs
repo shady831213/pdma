@@ -1,6 +1,6 @@
 //! Register bit ranges use the shared record bit-field language.
 
-use hardware_interface_schema::{RegisterCodecError, register_schema};
+use hardware_interface_schema::{Decode, Encode, RegisterCodecError, register_schema};
 
 register_schema! {
     pub register PackedControl {
@@ -74,5 +74,32 @@ fn narrow_range_when_value_overflows_preserves_prior_bytes() -> Result<(), Regis
         })
     );
     assert_eq!(bytes, before);
+    Ok(())
+}
+
+#[test]
+fn register_values_when_defaulted_use_reset_and_preserve_undeclared_bits()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: a nonzero reset register and a full scalar containing undeclared bits.
+    let reset = PackedControlValues::default();
+    let reset_raw = PackedControlRaw::default();
+    let current = PackedControlValues::new(0xab15);
+
+    // When: typed fields are replaced and both codec directions are exercised.
+    let updated = current.with_mode(7)?;
+    let encoded = reset.encode()?;
+    let decoded = reset_raw.decode()?;
+    let converted = PackedControlValues::try_from(reset_raw)?;
+    let converted_raw = PackedControlRaw::try_from(reset)?;
+
+    // Then: default means reset, endian belongs to the register, and other bits survive.
+    assert_eq!(reset.raw(), 0x15);
+    assert_eq!(reset_raw.as_bytes(), &[0x15, 0]);
+    assert_eq!(updated.raw(), 0xab1f);
+    assert_eq!(updated.mode(), 7);
+    assert_eq!(encoded, reset_raw);
+    assert_eq!(decoded, reset);
+    assert_eq!(converted, reset);
+    assert_eq!(converted_raw, reset_raw);
     Ok(())
 }

@@ -7,6 +7,8 @@ use crate::internal::syntax::{
 
 use super::{layout::union_geometry, scalar};
 
+mod codec;
+
 pub(super) struct TagInfo {
     pub(super) ty: TokenStream,
     pub(super) access: TokenStream,
@@ -62,6 +64,7 @@ pub(super) fn expand(
     endian: &syn::Ident,
 ) -> syn::Result<TokenStream> {
     let name = scalar::type_name(&record.name, field, "Values");
+    let raw_name = scalar::type_name(&record.name, field, "Raw");
     let Some(geometry) = union_geometry(decl) else {
         return Err(syn::Error::new(field.span(), "union has no storage"));
     };
@@ -69,6 +72,7 @@ pub(super) fn expand(
     let storage_type = scalar::ty(storage);
     let quantum = storage.width();
     let slots = geometry.slots;
+    let extent = quantum * slots;
     let root = quote!(value);
     let tag = tag_info(record, &decl.tag, &root)?;
     let tag_type = &tag.ty;
@@ -124,6 +128,15 @@ pub(super) fn expand(
     };
     let first_name = &first.name;
     let first_type = case_type(record, field, first_name);
+    let codec = codec::expand(codec::Context {
+        visibility,
+        values: &name,
+        raw: &raw_name,
+        tag: tag_type,
+        first_case: first_name,
+        extent,
+        facade,
+    });
     Ok(quote! {
         #(#case_declarations)*
         #[doc = "Generated semantic tagged-union value."]
@@ -135,7 +148,7 @@ pub(super) fn expand(
             fn decode(bytes: &[u8], base: usize, tag: #tag_type) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 match tag { #(#decode_arms),* }
             }
-            fn encode(&self, bytes: &mut [u8], base: usize) -> ::core::result::Result<(), #facade::SchemaCodecError> {
+            fn encode_into(&self, bytes: &mut [u8], base: usize) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 match self { #(#encode_arms),* }
                 ::core::result::Result::Ok(())
             }
@@ -147,6 +160,7 @@ pub(super) fn expand(
         impl ::core::default::Default for #name {
             fn default() -> Self { Self::ZERO }
         }
+        #codec
     })
 }
 

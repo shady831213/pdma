@@ -14,12 +14,15 @@ pub use address::{AbiId, DmaAddress};
 pub use codec::copy_u64_le;
 pub use descriptor::{
     AbiCommand, BroadcastDestinationEntry, DescriptorDecodeError, DescriptorHeaderSchema,
-    DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaValues,
-    DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut, DescriptorSchema,
-    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
+    DescriptorHeaderSchemaFlagsRaw, DescriptorHeaderSchemaFlagsValues,
+    DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaOpcodeRaw, DescriptorHeaderSchemaRaw,
+    DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
+    DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadRaw,
     DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadValues,
-    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaValues, DescriptorSchemaView,
-    DescriptorSchemaViewMut, DescriptorValueError, IndirectDestinationEntrySchema,
+    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaRaw, DescriptorSchemaValues,
+    DescriptorSchemaView, DescriptorSchemaViewMut, DescriptorValueError,
+    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaRaw,
     IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
     IndirectDestinationEntrySchemaViewMut,
 };

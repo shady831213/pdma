@@ -1,8 +1,23 @@
 //! Generated owned record-value behavior.
 
-use hardware_interface_schema::{SchemaCodecError, field_schema, record_schema};
+use hardware_interface_schema::{Decode, Encode, SchemaCodecError, field_schema, record_schema};
 
 field_schema! { pub field LeWord { scalar: u32, endian: Little } }
+
+#[test]
+fn reusable_field_raw_when_converted_owns_its_declared_endian() -> Result<(), SchemaCodecError> {
+    // Given: one little-endian raw field owner.
+    let raw = LeWordRaw::from([0x04, 0x03, 0x02, 0x01]);
+
+    // When: the generated field codec crosses both directions.
+    let value = raw.decode()?;
+    let encoded = value.encode()?;
+
+    // Then: the field itself applies endian and preserves the exact bytes.
+    assert_eq!(value.value(), 0x0102_0304);
+    assert_eq!(encoded.as_bytes(), &[0x04, 0x03, 0x02, 0x01]);
+    Ok(())
+}
 
 record_schema! {
     pub record FlatRecord {

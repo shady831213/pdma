@@ -185,15 +185,17 @@ pub async fn bootstrap(
 
 pub fn response(status: pdma_model_device::QueueStatus) -> QueueResponseBank {
     QueueResponseBank {
-        epoch: status.queue().epoch().raw(),
-        queue_id: u64::try_from(status.queue().queue_id().raw()).unwrap_or(u64::MAX),
-        sq_producer: status.submission().producer().raw(),
-        sq_captured: status.captured_submission_producer().raw(),
-        sq_consumer: status.submission().consumer().raw(),
-        cq_producer: status.completion().producer().raw(),
-        cq_consumer: status.completion().consumer().raw(),
-        eq_producer: status.event().producer().raw(),
-        eq_consumer: status.event().consumer().raw(),
+        epoch: status.queue().epoch().raw().into(),
+        queue_id: u64::try_from(status.queue().queue_id().raw())
+            .unwrap_or(u64::MAX)
+            .into(),
+        sq_producer: status.submission().producer().raw().into(),
+        sq_captured: status.captured_submission_producer().raw().into(),
+        sq_consumer: status.submission().consumer().raw().into(),
+        cq_producer: status.completion().producer().raw().into(),
+        cq_consumer: status.completion().consumer().raw().into(),
+        eq_producer: status.event().producer().raw().into(),
+        eq_consumer: status.event().consumer().raw().into(),
     }
 }
 

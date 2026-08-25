@@ -1,6 +1,6 @@
 //! Modern record type-language behavior.
 
-use hardware_interface_schema::{SchemaCodecError, record_schema};
+use hardware_interface_schema::{Decode, Encode, SchemaCodecError, record_schema};
 
 record_schema! {
     pub record ModernHeader {
@@ -89,6 +89,25 @@ fn composed_types_when_encoded_derive_layout_tag_and_constant() -> Result<(), Sc
             ..values
         }
     );
+    Ok(())
+}
+
+#[test]
+fn typed_raw_when_converted_uses_the_recursive_record_codec() -> Result<(), SchemaCodecError> {
+    // Given: one independently specified raw packet with nested header, enum, bits, and union.
+    let bytes = [7, 0, 1, 5, 12, 0, 0x44, 0x33, 0x22, 0x11, 7, 0];
+    let raw = ModernPacketRaw::from(bytes);
+
+    // When: the raw owner and semantic value cross both generated codec surfaces.
+    let decoded = raw.decode()?;
+    let converted = ModernPacketValues::try_from(raw)?;
+    let encoded = decoded.encode()?;
+    let converted_raw = ModernPacketRaw::try_from(converted)?;
+
+    // Then: every path delegates to the same exact recursive wire representation.
+    assert_eq!(decoded, converted);
+    assert_eq!(encoded.as_bytes(), &bytes);
+    assert_eq!(converted_raw.as_bytes(), &bytes);
     Ok(())
 }
 

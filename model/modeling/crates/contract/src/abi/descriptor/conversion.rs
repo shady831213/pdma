@@ -1,25 +1,37 @@
 use hardware_interface_schema::SchemaCodecError;
 
 use crate::abi::{
-    ABI_VERSION, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DescriptorSchemaValues, DescriptorSchemaView, MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE,
-    codec::decode_schema_error,
+    ABI_VERSION, AbiEncodeError, BROADCAST_COPY_OPCODE, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK,
+    DESCRIPTOR_SIZE, DescriptorSchemaRaw, DescriptorSchemaValues, DescriptorSchemaView,
+    MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE, codec::decode_schema_error,
 };
 
 use super::{AbiCommand, DescriptorDecodeError, DescriptorValueError, validate_payload};
 
-pub(super) fn decode_descriptor(bytes: &[u8]) -> Result<AbiCommand, DescriptorDecodeError> {
-    let view = DescriptorSchemaView::new(bytes).map_err(decode_schema_error)?;
-    let header = view.header().map_err(decode_schema_error)?;
-    let version = header.version().map_err(decode_schema_error)?;
-    let size = header.size().map_err(decode_schema_error)?;
-    let opcode = header.opcode().map_err(decode_schema_error)?;
-    let flags = header.flags().map_err(decode_schema_error)?;
-    validate_header(version, size, opcode, flags)?;
-    let values = DescriptorSchemaValues::from_bytes(bytes)
-        .map_err(|error| descriptor_schema_error(opcode, error))?;
-    validate_payload(values.payload).map_err(map_broadcast_error)?;
-    Ok(AbiCommand::from_validated_values(values))
+impl TryFrom<DescriptorSchemaRaw> for AbiCommand {
+    type Error = DescriptorDecodeError;
+
+    fn try_from(raw: DescriptorSchemaRaw) -> Result<Self, Self::Error> {
+        let view = DescriptorSchemaView::new(raw.as_bytes()).map_err(decode_schema_error)?;
+        let header = view.header().map_err(decode_schema_error)?;
+        let version = header.version().map_err(decode_schema_error)?;
+        let size = header.size().map_err(decode_schema_error)?;
+        let opcode = header.opcode().map_err(decode_schema_error)?;
+        let flags = header.flags().map_err(decode_schema_error)?;
+        validate_header(version, size, opcode, flags)?;
+        let values = DescriptorSchemaValues::try_from(raw)
+            .map_err(|error| descriptor_schema_error(opcode, error))?;
+        validate_payload(values.payload).map_err(map_broadcast_error)?;
+        Ok(Self::from_validated_values(values))
+    }
+}
+
+impl TryFrom<AbiCommand> for DescriptorSchemaRaw {
+    type Error = AbiEncodeError;
+
+    fn try_from(command: AbiCommand) -> Result<Self, Self::Error> {
+        Self::try_from(command.values()).map_err(crate::abi::codec::encode_schema_error)
+    }
 }
 
 fn validate_header(

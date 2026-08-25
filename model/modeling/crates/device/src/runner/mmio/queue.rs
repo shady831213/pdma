@@ -141,15 +141,15 @@ pub(super) const fn read(state: &DeviceCore, register: QueueRegister) -> MmioSca
         QueueRegister::Detail0 => MmioScalar::U64(detail0),
         QueueRegister::Detail1 => MmioScalar::U64(detail1),
         QueueRegister::Detail2 => MmioScalar::U64(detail2),
-        QueueRegister::RspEpoch => MmioScalar::U64(response.epoch),
-        QueueRegister::RspId => MmioScalar::U64(response.queue_id),
-        QueueRegister::RspSqProducer => MmioScalar::U64(response.sq_producer),
-        QueueRegister::RspSqCaptured => MmioScalar::U64(response.sq_captured),
-        QueueRegister::RspSqConsumer => MmioScalar::U64(response.sq_consumer),
-        QueueRegister::RspCqProducer => MmioScalar::U64(response.cq_producer),
-        QueueRegister::RspCqConsumer => MmioScalar::U64(response.cq_consumer),
-        QueueRegister::RspEqProducer => MmioScalar::U64(response.eq_producer),
-        QueueRegister::RspEqConsumer => MmioScalar::U64(response.eq_consumer),
+        QueueRegister::RspEpoch => MmioScalar::U64(response.epoch.raw()),
+        QueueRegister::RspId => MmioScalar::U64(response.queue_id.raw()),
+        QueueRegister::RspSqProducer => MmioScalar::U64(response.sq_producer.raw()),
+        QueueRegister::RspSqCaptured => MmioScalar::U64(response.sq_captured.raw()),
+        QueueRegister::RspSqConsumer => MmioScalar::U64(response.sq_consumer.raw()),
+        QueueRegister::RspCqProducer => MmioScalar::U64(response.cq_producer.raw()),
+        QueueRegister::RspCqConsumer => MmioScalar::U64(response.cq_consumer.raw()),
+        QueueRegister::RspEqProducer => MmioScalar::U64(response.eq_producer.raw()),
+        QueueRegister::RspEqConsumer => MmioScalar::U64(response.eq_consumer.raw()),
     }
 }
 
@@ -157,20 +157,22 @@ pub(in crate::runner) fn status_response(
     status: crate::runner::QueueStatus,
 ) -> Result<QueueResponseBank, pdma_model_contract::abi::mmio::MmioResultDetails> {
     Ok(QueueResponseBank {
-        epoch: status.queue().epoch().raw(),
-        queue_id: u64::try_from(status.queue().queue_id().raw()).map_err(|_| {
-            queue_control::fail(
-                pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction,
-                [0; 3],
-            )
-        })?,
-        sq_producer: status.submission().producer().raw(),
-        sq_captured: status.captured_submission_producer().raw(),
-        sq_consumer: status.submission().consumer().raw(),
-        cq_producer: status.completion().producer().raw(),
-        cq_consumer: status.completion().consumer().raw(),
-        eq_producer: status.event().producer().raw(),
-        eq_consumer: status.event().consumer().raw(),
+        epoch: status.queue().epoch().raw().into(),
+        queue_id: u64::try_from(status.queue().queue_id().raw())
+            .map_err(|_| {
+                queue_control::fail(
+                    pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction,
+                    [0; 3],
+                )
+            })?
+            .into(),
+        sq_producer: status.submission().producer().raw().into(),
+        sq_captured: status.captured_submission_producer().raw().into(),
+        sq_consumer: status.submission().consumer().raw().into(),
+        cq_producer: status.completion().producer().raw().into(),
+        cq_consumer: status.completion().consumer().raw().into(),
+        eq_producer: status.event().producer().raw().into(),
+        eq_consumer: status.event().consumer().raw().into(),
     })
 }
 

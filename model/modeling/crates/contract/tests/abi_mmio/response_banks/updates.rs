@@ -13,15 +13,15 @@ fn typed_response_failures_preserve_prior_bytes() {
     }
     .bank();
     let queue = QueueResponseBank {
-        epoch: 1,
-        queue_id: 2,
-        sq_producer: 3,
-        sq_captured: 4,
-        sq_consumer: 5,
-        cq_producer: 6,
-        cq_consumer: 7,
-        eq_producer: 8,
-        eq_consumer: 9,
+        epoch: 1.into(),
+        queue_id: 2.into(),
+        sq_producer: 3.into(),
+        sq_captured: 4.into(),
+        sq_consumer: 5.into(),
+        cq_producer: 6.into(),
+        cq_consumer: 7.into(),
+        eq_producer: 8.into(),
+        eq_consumer: 9.into(),
     };
     let irq = IrqResponse::ObserveSource(IrqSourceResponse {
         epoch: 1,

@@ -39,21 +39,21 @@ fn reset_response_is_epoch_only_with_literal_zero_fill() {
 fn queue_response_bank_has_named_fields_and_literal_architecture_order() {
     // Given: every named queue response field has a distinct word pattern.
     let bank = QueueResponseBank {
-        epoch: 0x0102_0304_0506_0708,
-        queue_id: 0x1112_1314_1516_1718,
-        sq_producer: 0x2122_2324_2526_2728,
-        sq_captured: 0x3132_3334_3536_3738,
-        sq_consumer: 0x4142_4344_4546_4748,
-        cq_producer: 0x5152_5354_5556_5758,
-        cq_consumer: 0x6162_6364_6566_6768,
-        eq_producer: 0x7172_7374_7576_7778,
-        eq_consumer: 0x8182_8384_8586_8788,
+        epoch: 0x0102_0304_0506_0708.into(),
+        queue_id: 0x1112_1314_1516_1718.into(),
+        sq_producer: 0x2122_2324_2526_2728.into(),
+        sq_captured: 0x3132_3334_3536_3738.into(),
+        sq_consumer: 0x4142_4344_4546_4748.into(),
+        cq_producer: 0x5152_5354_5556_5758.into(),
+        cq_consumer: 0x6162_6364_6566_6768.into(),
+        eq_producer: 0x7172_7374_7576_7778.into(),
+        eq_consumer: 0x8182_8384_8586_8788.into(),
     };
 
     // When: the typed named-field bank is encoded.
     // Then: all nine words appear in the architecture's literal register order.
-    assert_eq!(bank.epoch, 0x0102_0304_0506_0708);
-    assert_eq!(bank.queue_id, 0x1112_1314_1516_1718);
+    assert_eq!(bank.epoch.raw(), 0x0102_0304_0506_0708);
+    assert_eq!(bank.queue_id.raw(), 0x1112_1314_1516_1718);
     assert_eq!(
         bank.to_bytes()
             .expect("generated response view must encode"),

@@ -68,17 +68,17 @@ pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioSc
         GlobalRegister::Detail0 => MmioScalar::U64(detail0),
         GlobalRegister::Detail1 => MmioScalar::U64(detail1),
         GlobalRegister::Detail2 => MmioScalar::U64(detail2),
-        GlobalRegister::RspAbiVersion => MmioScalar::U32(response.abi_version),
-        GlobalRegister::RspRunState => MmioScalar::U32(response.run_state),
-        GlobalRegister::RspFeatures => MmioScalar::U64(response.features),
-        GlobalRegister::RspEpoch => MmioScalar::U64(response.epoch),
-        GlobalRegister::MaxRingDepth => MmioScalar::U32(response.max_ring_depth),
+        GlobalRegister::RspAbiVersion => MmioScalar::U32(response.abi_version.raw()),
+        GlobalRegister::RspRunState => MmioScalar::U32(response.run_state.raw()),
+        GlobalRegister::RspFeatures => MmioScalar::U64(response.features.raw()),
+        GlobalRegister::RspEpoch => MmioScalar::U64(response.epoch.raw()),
+        GlobalRegister::MaxRingDepth => MmioScalar::U32(response.max_ring_depth.raw()),
         GlobalRegister::MaxIndirectDestinations => {
-            MmioScalar::U32(response.max_indirect_destinations)
+            MmioScalar::U32(response.max_indirect_destinations.raw())
         }
-        GlobalRegister::MaxTransferBytes => MmioScalar::U32(response.max_transfer_bytes),
-        GlobalRegister::MaxStridedRows => MmioScalar::U32(response.max_strided_rows),
-        GlobalRegister::MaxStride => MmioScalar::U32(response.max_stride),
+        GlobalRegister::MaxTransferBytes => MmioScalar::U32(response.max_transfer_bytes.raw()),
+        GlobalRegister::MaxStridedRows => MmioScalar::U32(response.max_strided_rows.raw()),
+        GlobalRegister::MaxStride => MmioScalar::U32(response.max_stride.raw()),
     }
 }
 
@@ -132,7 +132,7 @@ fn reset(state: &mut DeviceCore) {
             complete_success(
                 state,
                 GlobalResponseBank {
-                    epoch: epoch.raw(),
+                    epoch: epoch.raw().into(),
                     ..GlobalResponseBank::default()
                 },
             );
@@ -153,8 +153,8 @@ fn discover(state: &mut DeviceCore) {
             complete_success(
                 state,
                 GlobalResponseBank {
-                    abi_version: u32::from(discovery.version()),
-                    features: discovery.features().bits(),
+                    abi_version: u32::from(discovery.version()).into(),
+                    features: discovery.features().bits().into(),
                     ..GlobalResponseBank::default()
                 },
             );
@@ -168,11 +168,11 @@ fn read_limits(state: &mut DeviceCore) {
     complete_success(
         state,
         GlobalResponseBank {
-            max_ring_depth: limits.max_ring_depth(),
-            max_indirect_destinations: limits.max_indirect_destinations(),
-            max_transfer_bytes: limits.max_transfer_bytes(),
-            max_strided_rows: limits.max_strided_rows(),
-            max_stride: limits.max_stride(),
+            max_ring_depth: limits.max_ring_depth().into(),
+            max_indirect_destinations: limits.max_indirect_destinations().into(),
+            max_transfer_bytes: limits.max_transfer_bytes().into(),
+            max_strided_rows: limits.max_strided_rows().into(),
+            max_stride: limits.max_stride().into(),
             ..GlobalResponseBank::default()
         },
     );
@@ -197,8 +197,8 @@ fn read_status(state: &mut DeviceCore) {
     complete_success(
         state,
         GlobalResponseBank {
-            run_state: encoded,
-            epoch: state.backend.epoch().raw(),
+            run_state: encoded.into(),
+            epoch: state.backend.epoch().raw().into(),
             ..GlobalResponseBank::default()
         },
     );

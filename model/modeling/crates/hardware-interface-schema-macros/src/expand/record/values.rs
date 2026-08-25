@@ -3,14 +3,25 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::{FieldDecl, FieldShape, RecordDecl, RecordPlacementDecl, ScalarType};
 
+mod codec;
+
 pub(super) fn expand(decl: &RecordDecl, facade: &TokenStream) -> TokenStream {
     let visibility = &decl.visibility;
     let marker = &decl.name;
     let values_name = format_ident!("{}Values", marker);
+    let raw_name = format_ident!("{}Raw", marker);
     let view_name = format_ident!("{}View", marker);
     let view_mut_name = format_ident!("{}ViewMut", marker);
     let size = decl.size.0;
     let alignment = decl.alignment.0;
+    let codec = codec::expand(
+        visibility,
+        &values_name,
+        &raw_name,
+        &view_name,
+        size,
+        facade,
+    );
     let ValueMembers {
         fields,
         zero_fields,
@@ -19,6 +30,7 @@ pub(super) fn expand(decl: &RecordDecl, facade: &TokenStream) -> TokenStream {
     } = value_members(decl, facade);
 
     quote! {
+        #codec
         #[doc = "Owned typed values for the generated record."]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         #visibility struct #values_name { #(#fields),* }

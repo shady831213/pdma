@@ -26,7 +26,47 @@ fn expand(decl: &FieldDefinitionDecl) -> syn::Result<TokenStream> {
     }
     let scalar = scalar_tokens(decl.scalar);
     let kind = kind(decl.scalar);
+    let width = scalar_width(decl.scalar);
+    let raw = format_ident!("{}Raw", marker);
+    let value = format_ident!("{}Value", marker);
     Ok(quote! {
+        #[doc = "Typed raw bytes for one reusable scalar field definition."]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #visibility struct #raw([u8; #width]);
+        impl #raw {
+            #[doc = "All-zero raw field bytes."]
+            pub const ZERO: Self = Self([0; #width]);
+            #[doc = "Creates typed raw field bytes."]
+            pub const fn new(bytes: [u8; #width]) -> Self { Self(bytes) }
+            #[doc = "Borrows the raw field bytes."]
+            pub const fn as_bytes(&self) -> &[u8; #width] { &self.0 }
+            #[doc = "Returns the raw field bytes."]
+            pub const fn into_bytes(self) -> [u8; #width] { self.0 }
+        }
+        impl ::core::default::Default for #raw {
+            fn default() -> Self { Self::ZERO }
+        }
+        impl ::core::convert::From<[u8; #width]> for #raw {
+            fn from(bytes: [u8; #width]) -> Self { Self::new(bytes) }
+        }
+        impl ::core::convert::From<#raw> for [u8; #width] {
+            fn from(raw: #raw) -> Self { raw.into_bytes() }
+        }
+        #[doc = "Owned semantic value for one reusable scalar field definition."]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #visibility struct #value(#scalar);
+        impl #value {
+            #[doc = "Creates one semantic field value."]
+            pub const fn new(value: #scalar) -> Self { Self(value) }
+            #[doc = "Returns the semantic scalar."]
+            pub const fn value(self) -> #scalar { self.0 }
+        }
+        impl ::core::convert::From<#scalar> for #value {
+            fn from(value: #scalar) -> Self { Self::new(value) }
+        }
+        impl ::core::convert::From<#value> for #scalar {
+            fn from(value: #value) -> Self { value.value() }
+        }
         #[doc = "Marker and codec for a reusable scalar field definition."]
         #[derive(Clone, Copy, Debug)] #visibility struct #marker;
         impl #marker {
@@ -43,6 +83,32 @@ fn expand(decl: &FieldDefinitionDecl) -> syn::Result<TokenStream> {
             fn read(bytes: &[u8]) -> ::core::result::Result<Self::Scalar, #facade::SchemaCodecError> { Self::read(bytes) }
             fn write(bytes: &mut [u8], value: Self::Scalar) -> ::core::result::Result<(), #facade::SchemaCodecError> { Self::write(bytes, value) }
         }
+        impl #facade::Decode for #raw {
+            type Decoded = #value;
+            fn decode(self) -> ::core::result::Result<Self::Decoded, #facade::SchemaCodecError> {
+                #marker::read(&self.0).map(#value::new)
+            }
+        }
+        impl #facade::Encode for #value {
+            type Encoded = #raw;
+            fn encode(self) -> ::core::result::Result<Self::Encoded, #facade::SchemaCodecError> {
+                let mut bytes = [0_u8; #width];
+                #marker::write(&mut bytes, self.0)?;
+                ::core::result::Result::Ok(#raw::new(bytes))
+            }
+        }
+        impl ::core::convert::TryFrom<#raw> for #value {
+            type Error = #facade::SchemaCodecError;
+            fn try_from(raw: #raw) -> ::core::result::Result<Self, Self::Error> {
+                <#raw as #facade::Decode>::decode(raw)
+            }
+        }
+        impl ::core::convert::TryFrom<#value> for #raw {
+            type Error = #facade::SchemaCodecError;
+            fn try_from(value: #value) -> ::core::result::Result<Self, Self::Error> {
+                <#value as #facade::Encode>::encode(value)
+            }
+        }
     })
 }
 
@@ -52,6 +118,15 @@ fn scalar_tokens(scalar: ScalarType) -> TokenStream {
         ScalarType::U16 => quote!(u16),
         ScalarType::U32 => quote!(u32),
         ScalarType::U64 => quote!(u64),
+    }
+}
+
+const fn scalar_width(scalar: ScalarType) -> usize {
+    match scalar {
+        ScalarType::U8 => 1,
+        ScalarType::U16 => 2,
+        ScalarType::U32 => 4,
+        ScalarType::U64 => 8,
     }
 }
 

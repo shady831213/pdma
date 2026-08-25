@@ -13,6 +13,7 @@ pub(super) fn expand(
     facade: &TokenStream,
 ) -> TokenStream {
     let name = scalar::type_name(record, field, "Values");
+    let raw_name = scalar::type_name(record, field, "Raw");
     let raw_type = scalar::ty(decl.storage);
     let raw_maximum = decl.storage.maximum();
     let declarations = decl.fields.iter().map(|field| {
@@ -61,7 +62,17 @@ pub(super) fn expand(
     let used_mask = crate::internal::validate::bits::declared_mask(&decl.fields);
     let reserved_mask = raw_maximum & !used_mask;
     let narrowed_raw = scalar::from_u64(decl.storage, quote!(observed));
+    let codec = codec(&name, &raw_name, facade);
     quote! {
+        #[doc = "Typed raw scalar for the generated packed-bit field."]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #visibility struct #raw_name(#raw_type);
+        impl #raw_name {
+            #[doc = "Creates one typed raw scalar."]
+            pub const fn new(value: #raw_type) -> Self { Self(value) }
+            #[doc = "Returns the raw scalar."]
+            pub const fn value(self) -> #raw_type { self.0 }
+        }
         #[doc = "Generated typed packed-bit record value."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #name { #(#declarations,)* }
@@ -86,6 +97,36 @@ pub(super) fn expand(
         }
         impl ::core::default::Default for #name {
             fn default() -> Self { Self::ZERO }
+        }
+        #codec
+    }
+}
+
+fn codec(values: &syn::Ident, raw: &syn::Ident, facade: &TokenStream) -> TokenStream {
+    quote! {
+        impl #facade::Decode for #raw {
+            type Decoded = #values;
+            fn decode(self) -> ::core::result::Result<Self::Decoded, #facade::SchemaCodecError> {
+                #values::from_raw(self.0, 0)
+            }
+        }
+        impl #facade::Encode for #values {
+            type Encoded = #raw;
+            fn encode(self) -> ::core::result::Result<Self::Encoded, #facade::SchemaCodecError> {
+                self.raw(0).map(#raw::new)
+            }
+        }
+        impl ::core::convert::TryFrom<#raw> for #values {
+            type Error = #facade::SchemaCodecError;
+            fn try_from(raw: #raw) -> ::core::result::Result<Self, Self::Error> {
+                <#raw as #facade::Decode>::decode(raw)
+            }
+        }
+        impl ::core::convert::TryFrom<#values> for #raw {
+            type Error = #facade::SchemaCodecError;
+            fn try_from(value: #values) -> ::core::result::Result<Self, Self::Error> {
+                <#values as #facade::Encode>::encode(value)
+            }
         }
     }
 }

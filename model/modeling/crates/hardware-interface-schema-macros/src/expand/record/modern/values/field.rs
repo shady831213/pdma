@@ -151,7 +151,7 @@ pub(super) fn encode(
             <#path as #facade::RecordLayout>::encode(field, &normalized.#name)?;
         }),
         ModernTypeDecl::Union(_) => {
-            quote!(normalized.#name.encode(&mut encoded, #marker::#offset)?;)
+            quote!(normalized.#name.encode_into(&mut encoded, #marker::#offset)?;)
         }
     }
 }

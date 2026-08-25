@@ -1,5 +1,9 @@
 use crate::abi::mmio::GlobalCommand;
-use crate::abi::mmio::register::global::GlobalResponseRegistersValues;
+use crate::abi::mmio::register::global::{
+    GMaxIndirectDestinationsValues, GMaxRingDepthValues, GMaxStrideValues, GMaxStridedRowsValues,
+    GMaxTransferBytesValues, GRspAbiVersionValues, GRspEpochValues, GRspFeaturesValues,
+    GRspRunStateValues, GlobalResponseRegistersValues,
+};
 pub use crate::abi::mmio::register::global::{
     GlobalResponseRegisters, GlobalResponseRegistersRegisterId, GlobalResponseRegistersView,
     GlobalResponseRegistersViewMut,
@@ -75,25 +79,27 @@ impl GlobalResponse {
                 abi_version,
                 features,
             } => GlobalResponseBank {
-                abi_version,
-                features,
+                abi_version: GRspAbiVersionValues::new(abi_version),
+                features: GRspFeaturesValues::new(features),
                 ..GlobalResponseBank::zero()
             },
             Self::ReadLimits(response) => GlobalResponseBank {
-                max_ring_depth: response.max_ring_depth,
-                max_indirect_destinations: response.max_indirect_destinations,
-                max_transfer_bytes: response.max_transfer_bytes,
-                max_strided_rows: response.max_strided_rows,
-                max_stride: response.max_stride,
+                max_ring_depth: GMaxRingDepthValues::new(response.max_ring_depth),
+                max_indirect_destinations: GMaxIndirectDestinationsValues::new(
+                    response.max_indirect_destinations,
+                ),
+                max_transfer_bytes: GMaxTransferBytesValues::new(response.max_transfer_bytes),
+                max_strided_rows: GMaxStridedRowsValues::new(response.max_strided_rows),
+                max_stride: GMaxStrideValues::new(response.max_stride),
                 ..GlobalResponseBank::zero()
             },
             Self::ReadStatus(response) => GlobalResponseBank {
-                run_state: response.run_state,
-                epoch: response.epoch,
+                run_state: GRspRunStateValues::new(response.run_state),
+                epoch: GRspEpochValues::new(response.epoch),
                 ..GlobalResponseBank::zero()
             },
             Self::Reset(response) => GlobalResponseBank {
-                epoch: response.epoch,
+                epoch: GRspEpochValues::new(response.epoch),
                 ..GlobalResponseBank::zero()
             },
         }

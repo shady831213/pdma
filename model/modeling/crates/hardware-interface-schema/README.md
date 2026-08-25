@@ -70,6 +70,13 @@ current high-water mark to the child layout. `count` defaults to one and a repea
 placement's omitted stride is the aligned child extent. Registers and maps implement
 the same `RegisterLayout` contract, so maps compose recursively.
 
+Every generated schema boundary has a distinct raw owner and semantic value. `Decode`
+converts the raw owner into the semantic value, `Encode` performs the reverse, and the
+macros provide matching concrete `TryFrom` implementations. Record and register owners
+apply their declared byte order internally, while named bits use an endian-neutral
+integer raw owner. A register value defaults to its declared reset value; a register-map
+value recursively composes its child defaults.
+
 The following executable example declares a record, two registers, and one ordered
 map, then encodes both generated owned-value types.
 
@@ -77,7 +84,7 @@ map, then encodes both generated owned-value types.
 use hardware_interface_schema::{bits_schema, record_schema, register_schema};
 # use hardware_interface_schema::{
 #     Access, BitsFieldDefinition, BitsFieldSpec, BitsLayout, BitsValueError, Endian,
-#     FieldSpec, RecordLayout, RecordSpec, RegisterCodecError, RegisterDefinition,
+#     Decode, Encode, FieldSpec, RecordLayout, RecordSpec, RegisterCodecError, RegisterDefinition,
 #     RegisterLayout, RegisterValueError, ResetKind, ScalarKind, SchemaCodecError,
 #     inferred_align_up, inferred_field_id, read_scalar, write_scalar,
 # };
@@ -120,7 +127,7 @@ assert_eq!(register, [0xf1, 0xa5, 0x5a, 0xc3]);
 ```rust
 use hardware_interface_schema::{record_schema, register_schema};
 # use hardware_interface_schema::{
-#     Access, Endian, FieldSpec, OrderedRegisterMapSpec, RecordLayout, RecordSpec,
+#     Access, Decode, Encode, Endian, FieldSpec, OrderedRegisterMapSpec, RecordLayout, RecordSpec,
 #     RegisterCodecError, RegisterDefinition, RegisterLayout, RegisterLayoutGeometry, RegisterMapPlacement,
 #     ResetKind, ScalarKind, SchemaCodecError, checked_align_up, checked_placement_end,
 #     read_scalar, write_scalar,
@@ -180,7 +187,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(packet_bytes, [0x44, 0x33, 0x22, 0x11, 0x55, 0x66, 0, 0]);
     assert_eq!(PacketValues::from_bytes(&packet_bytes)?, packet);
     assert_eq!(Packet::SPEC.validate(), Ok(()));
-    let values = DeviceMapValues { status: 7, producer: [11, 13] };
+    let values = DeviceMapValues {
+        status: StatusValues::new(7),
+        producer: [ProducerValues::new(11), ProducerValues::new(13)],
+    };
     let encoded = values.to_bytes()?;
     assert_eq!(&encoded[..12], &[7, 0, 0, 0, 11, 0, 0, 0, 13, 0, 0, 0]);
     assert_eq!(DeviceMap::STATUS.offset(), 0);
@@ -280,8 +290,8 @@ file layout, and integration policy to the caller.
 
 ```rust
 # use hardware_interface_schema::{
-#     Endian, FieldSpec, RecordLayout, RecordSpec, ScalarKind, SchemaCodecError, read_scalar,
-#     write_scalar,
+#     Decode, Encode, Endian, FieldSpec, RecordLayout, RecordSpec, ScalarKind,
+#     SchemaCodecError, read_scalar, write_scalar,
 # };
 #[cfg(feature = "export-c-header")]
 fn main() {

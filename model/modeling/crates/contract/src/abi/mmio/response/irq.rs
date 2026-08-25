@@ -1,4 +1,8 @@
-use crate::abi::mmio::register::irq::IrqResponseRegistersValues;
+use crate::abi::mmio::register::irq::{
+    IRspEpochValues, IRspMessageIdValues, IRspNotificationKindValues, IRspPendingMessagesValues,
+    IRspRouteKindValues, IRspSourceIdValues, IRspSourceKindValues, IRspStateValues,
+    IRspVectorValues, IrqResponseRegistersValues,
+};
 pub use crate::abi::mmio::register::irq::{
     IrqResponseRegisters, IrqResponseRegistersRegisterId, IrqResponseRegistersView,
     IrqResponseRegistersViewMut,
@@ -148,43 +152,43 @@ impl IrqResponseBank {
 
     const fn source(response: IrqSourceResponse) -> Self {
         Self {
-            epoch: response.epoch,
-            source_id: response.source_id,
-            source_kind: response.source_kind,
-            state: response.state.bits(),
-            route_kind: response.route_kind,
-            notification_kind: 0,
-            vector: response.vector,
-            message_id: 0,
-            pending_messages: response.pending_messages,
+            epoch: IRspEpochValues::new(response.epoch),
+            source_id: IRspSourceIdValues::new(response.source_id),
+            source_kind: IRspSourceKindValues::new(response.source_kind),
+            state: IRspStateValues::new(response.state.bits()),
+            route_kind: IRspRouteKindValues::new(response.route_kind),
+            notification_kind: IRspNotificationKindValues::new(0),
+            vector: IRspVectorValues::new(response.vector),
+            message_id: IRspMessageIdValues::new(0),
+            pending_messages: IRspPendingMessagesValues::new(response.pending_messages),
         }
     }
 
     const fn line(response: IrqLineSnapshotResponse) -> Self {
         Self {
-            epoch: response.epoch,
-            source_id: response.source_id,
-            source_kind: response.source_kind,
-            state: response.state.bits(),
-            route_kind: response.route_kind,
-            notification_kind: 1,
-            vector: response.vector,
-            message_id: 0,
-            pending_messages: 0,
+            epoch: IRspEpochValues::new(response.epoch),
+            source_id: IRspSourceIdValues::new(response.source_id),
+            source_kind: IRspSourceKindValues::new(response.source_kind),
+            state: IRspStateValues::new(response.state.bits()),
+            route_kind: IRspRouteKindValues::new(response.route_kind),
+            notification_kind: IRspNotificationKindValues::new(1),
+            vector: IRspVectorValues::new(response.vector),
+            message_id: IRspMessageIdValues::new(0),
+            pending_messages: IRspPendingMessagesValues::new(0),
         }
     }
 
     const fn message(response: IrqMessageNotificationResponse) -> Self {
         Self {
-            epoch: response.epoch,
-            source_id: response.source_id,
-            source_kind: response.source_kind,
-            state: response.state.bits(),
-            route_kind: response.route_kind,
-            notification_kind: 2,
-            vector: response.vector,
-            message_id: response.message_id,
-            pending_messages: response.pending_messages,
+            epoch: IRspEpochValues::new(response.epoch),
+            source_id: IRspSourceIdValues::new(response.source_id),
+            source_kind: IRspSourceKindValues::new(response.source_kind),
+            state: IRspStateValues::new(response.state.bits()),
+            route_kind: IRspRouteKindValues::new(response.route_kind),
+            notification_kind: IRspNotificationKindValues::new(2),
+            vector: IRspVectorValues::new(response.vector),
+            message_id: IRspMessageIdValues::new(response.message_id),
+            pending_messages: IRspPendingMessagesValues::new(response.pending_messages),
         }
     }
 }

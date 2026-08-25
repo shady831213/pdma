@@ -37,9 +37,9 @@ pub(super) fn claim(state: &mut DeviceCore) -> Result<CommandOutcome, MmioResult
         }
         IrqNotification::Message(message) => {
             let mut response = source_response(view);
-            response.notification_kind = 2;
-            response.vector = usize_to_u64(message.vector().raw());
-            response.message_id = usize_to_u64(message.id().raw());
+            response.notification_kind = 2.into();
+            response.vector = usize_to_u64(message.vector().raw()).into();
+            response.message_id = usize_to_u64(message.id().raw()).into();
             response
         }
     };

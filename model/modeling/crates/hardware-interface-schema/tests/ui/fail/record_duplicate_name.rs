@@ -1,6 +1,6 @@
 use hardware_interface_schema::record_schema;
-record_schema! { pub record Bad { size: 4, alignment: 1, fields: {
-    same: u16 { id: 1, offset: 0, endian: Little },
-    same: u16 { id: 2, offset: 2, endian: Little },
+record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+    same: u16,
+    same: u16,
 } } }
 fn main() {}

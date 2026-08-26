@@ -1,5 +1,5 @@
 error: endian must be Little or Big
- --> tests/ui/fail/record_bad_endian.rs:3:44
+ --> tests/ui/fail/record_bad_endian.rs:2:57
   |
-3 |     value: u32 { id: 1, offset: 0, endian: Native },
-  |                                            ^^^^^^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Native, fields: {
+  |                                                         ^^^^^^

@@ -1,5 +1,8 @@
-error: expanded register declarations collide
- --> tests/ui/fail/map_collision.rs:7:48
+error[E0080]: evaluation panicked: register map placements overlap
+ --> tests/ui/fail/map_collision.rs:4:1
   |
-7 |         value: { id: 2, name: "value", offset: 0, width: 4, access: ReadOnly,
-  |                                                ^
+4 | / register_map! { pub map Bad { alignment: 4, extent: 32, placements: [
+5 | |     fixed: Word { offset: 8 },
+6 | |     lane: Word { offset: 0, count: 2, stride: 8 },
+7 | | ] } }
+  | |_____^ evaluation of `_` failed here

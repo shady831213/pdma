@@ -1,0 +1,5 @@
+error: expected `endian`
+ --> tests/ui/fail/retired_record_syntax.rs:5:9
+  |
+5 |         size: 4,
+  |         ^^^^

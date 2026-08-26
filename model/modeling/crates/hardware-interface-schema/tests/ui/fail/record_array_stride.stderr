@@ -1,5 +1,0 @@
-error: array stride is smaller than scalar width
- --> tests/ui/fail/record_array_stride.rs:3:56
-  |
-3 |     values: [u16; 2] { ids: [1, 2], offset: 0, stride: 1, endian: Little },
-  |                                                        ^

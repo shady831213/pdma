@@ -1,5 +1,5 @@
 use hardware_interface_schema::record_schema;
-record_schema! { pub record Bad { size: 4, alignment: 1, fields: {
-    value: i32 { id: 1, offset: 0, endian: Little },
+record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+    value: i32,
 } } }
 fn main() {}

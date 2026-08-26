@@ -6,9 +6,8 @@ register_schema! { pub register Control {
     fields: {},
 } }
 record_schema! { pub record Bad {
-    size: 4, alignment: 4,
-    fields: { value: Control { id: 1, offset: 0 }, },
-    records: {},
+    alignment: 4, endian: Little,
+    fields: { value: Control, },
 } }
 
 fn main() {}

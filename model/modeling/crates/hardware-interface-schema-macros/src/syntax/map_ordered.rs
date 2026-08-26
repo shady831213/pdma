@@ -23,25 +23,6 @@ pub(in crate::internal) struct OrderedPlacementDecl {
     pub(in crate::internal) stride: Option<(usize, proc_macro2::Span)>,
 }
 
-pub(in crate::internal) struct MapSyntaxProbe {
-    pub(in crate::internal) ordered: bool,
-}
-
-impl Parse for MapSyntaxProbe {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let _: Visibility = input.parse()?;
-        keyword(input, "map")?;
-        let _: Ident = input.parse()?;
-        let body;
-        braced!(body in input);
-        let first: Ident = body.parse()?;
-        let _: proc_macro2::TokenStream = body.parse()?;
-        Ok(Self {
-            ordered: first == "alignment",
-        })
-    }
-}
-
 impl Parse for OrderedMapDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let visibility = input.parse()?;

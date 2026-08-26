@@ -126,3 +126,120 @@ impl<I: Copy> OrderedRegisterMapSpec<I> {
         self.placements
     }
 }
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct RegisterCollection<'a, I: 'static> {
+    #[doc(hidden)]
+    pub id: I,
+    #[doc(hidden)]
+    pub name: &'static str,
+    #[doc(hidden)]
+    pub path: String,
+    #[doc(hidden)]
+    pub offset: usize,
+    #[doc(hidden)]
+    pub declaration_index: &'a mut usize,
+    #[doc(hidden)]
+    pub repeated: Option<(&'static str, usize)>,
+    #[doc(hidden)]
+    pub output: &'a mut Vec<ResolvedRegister<I>>,
+}
+
+#[doc(hidden)]
+pub fn append_register_leaf<I: Copy + 'static>(
+    collection: RegisterCollection<'_, I>,
+    definition: RegisterDefinition<u16>,
+) {
+    let index = *collection.declaration_index;
+    let mut register = RegisterSpec::place(
+        collection.id,
+        collection.name,
+        collection.offset,
+        definition,
+    )
+    .with_declaration_index(index);
+    if let Ok(numeric_id) = u16::try_from(index) {
+        register = register.with_numeric_id(numeric_id);
+    }
+    collection.output.push(ResolvedRegister::ordered(
+        collection.path,
+        collection.offset,
+        index,
+        register,
+        collection.repeated,
+    ));
+    *collection.declaration_index = collection.declaration_index.saturating_add(1);
+}
+
+#[doc(hidden)]
+pub fn finish_ordered_register_map<I>(
+    root: &'static str,
+    extent: usize,
+    registers: Vec<ResolvedRegister<I>>,
+) -> Result<ResolvedRegisterMap<I>, RegisterMapError<I>>
+where
+    I: Copy + Eq + fmt::Debug + 'static,
+{
+    for (position, register) in registers.iter().enumerate() {
+        register
+            .definition()
+            .validate_at(root, register.path(), register.declaration_index())
+            .map_err(RegisterMapError::Definition)?;
+        let end = register
+            .offset()
+            .checked_add(register.definition().width())
+            .ok_or_else(|| RegisterMapError::RegisterOutOfBounds {
+                root,
+                path: register.path().to_owned(),
+                declaration_index: register.declaration_index(),
+                offset: register.offset(),
+                width: register.definition().width(),
+                map_size: extent,
+            })?;
+        if end > extent {
+            return Err(RegisterMapError::RegisterOutOfBounds {
+                root,
+                path: register.path().to_owned(),
+                declaration_index: register.declaration_index(),
+                offset: register.offset(),
+                width: register.definition().width(),
+                map_size: extent,
+            });
+        }
+        for previous in registers.iter().take(position) {
+            if previous.offset() == register.offset() {
+                return Err(RegisterMapError::DuplicateExpandedStart {
+                    root,
+                    path: register.path().to_owned(),
+                    declaration_index: register.declaration_index(),
+                    offset: register.offset(),
+                    first_path: previous.path().to_owned(),
+                });
+            }
+            let previous_end = previous.offset() + previous.definition().width();
+            if previous.offset() < end && register.offset() < previous_end {
+                return Err(RegisterMapError::ExpandedOverlap {
+                    root,
+                    path: register.path().to_owned(),
+                    declaration_index: register.declaration_index(),
+                    first_path: previous.path().to_owned(),
+                });
+            }
+            if previous.path() == register.path() {
+                return Err(RegisterMapError::ResolvedPathCollision {
+                    root,
+                    path: register.path().to_owned(),
+                    declaration_index: register.declaration_index(),
+                    first_declaration_index: previous.declaration_index(),
+                });
+            }
+        }
+    }
+    Ok(ResolvedRegisterMap::ordered(root, extent, registers))
+}
+use core::fmt;
+
+use crate::register::{RegisterDefinition, RegisterSpec};
+
+use super::{RegisterMapError, ResolvedRegister, ResolvedRegisterMap};

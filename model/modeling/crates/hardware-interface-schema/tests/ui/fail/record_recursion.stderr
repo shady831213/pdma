@@ -1,5 +1,5 @@
 error: record definition recursively references itself
- --> tests/ui/fail/record_recursion.rs:5:23
+ --> tests/ui/fail/record_recursion.rs:5:22
   |
-5 |     records: { child: Recursive { id: 1, offset: 0 }, },
-  |                       ^^^^^^^^^
+5 |     fields: { child: Recursive, },
+  |                      ^^^^^^^^^

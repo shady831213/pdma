@@ -14,11 +14,11 @@ fn generated_pdma_map_preserves_all_literal_rows_and_exact_starts() {
     assert_generated_id_derives::<PdmaMmioMapRegisterId>();
     assert_eq!(expected::len(), 66);
     assert_eq!(MMIO_REGION_SIZE, 0x1000);
-    assert_eq!(PdmaMmioMap::SPEC.size(), 0x1000);
+    assert_eq!(PdmaMmioMap::EXTENT, 0x1000);
 
     // When: every literal row is queried through the sole generated placement graph.
     for (id, name, offset, width, access, reset, reset_value, writable_mask) in expected::iter() {
-        let actual = PdmaMmioMap::register(id);
+        let actual = PdmaMmioMap::register(id).expect("generated placement identity must resolve");
         assert_eq!(actual.name(), name);
         assert_eq!(actual.offset(), usize::try_from(offset).unwrap());
         assert_eq!(actual.width(), usize::try_from(width).unwrap());

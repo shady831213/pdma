@@ -1,22 +1,14 @@
 mod bits;
-mod field;
-mod map;
 mod map_ordered;
 mod record;
 mod register;
 
-pub(in crate::internal) use field::FieldDefinitionDecl;
-pub(in crate::internal) use map::{MapDecl, RegisterPlacementDecl};
-pub(in crate::internal) use map_ordered::{MapSyntaxProbe, OrderedMapDecl, OrderedPlacementDecl};
+pub(in crate::internal) use map_ordered::{OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{
-    BitsDecl, EnumDecl, FieldDecl, FieldShape, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl,
-    RecordDecl, RecordInput, RecordPlacementDecl, ScalarType, ScopedPath, UnionCaseDecl, UnionDecl,
-    UnionFieldDecl,
+    BitsDecl, EnumDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, ScopedPath,
+    UnionCaseDecl, UnionDecl, UnionFieldDecl,
 };
-pub(in crate::internal) use register::{
-    AccessValue, RegisterDecl, RegisterDefinitionDecl, RegisterFieldsDecl, RegisterInput,
-    RegistersDecl,
-};
+pub(in crate::internal) use register::{AccessValue, RegisterDefinitionDecl, RegisterFieldsDecl};
 
 use syn::{Ident, LitInt, Result, Token, parse::ParseStream};
 

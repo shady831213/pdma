@@ -2,13 +2,17 @@ use hardware_interface_schema::{bits_schema, record_schema, register_map, regist
 
 bits_schema! { pub bits PassBits { enable: 0..1, } }
 
-record_schema! { pub record PassRecord { size: 8, alignment: 4, fields: {
-    value: u32 { id: 1, offset: 0, endian: Little },
-    items: [u16; 2] { ids: [2, 3], offset: 4, stride: 2, endian: Big },
+record_schema! { pub record PassItems { endian: Big, fields: {
+    item0: u16,
+    item1: u16,
 } } }
-register_schema! { pub registers PassRegisters {
-    value: { id: 1, name: "value", offset: 0, width: 4, access: ReadWrite,
-        reset: Constant(0), writable_mask: 0xffff_ffff },
+record_schema! { pub record PassRecord { alignment: 4, endian: Little, fields: {
+    value: u32,
+    items: PassItems,
+} } }
+register_schema! { pub register PassValue {
+    width: 4, endian: Little, access: ReadWrite,
+    reset: Constant(0), writable_mask: 0xffff_ffff, fields: {},
 } }
 register_schema! { pub register PassControl {
     width: 1, endian: Little, access: ReadWrite,
@@ -17,18 +21,28 @@ register_schema! { pub register PassControl {
 record_schema! { pub record PassInferredRecord { endian: Little, fields: {
     flags: bits(PassBits),
 } } }
-register_map! { pub map PassMap { size: 32, fixed: {
-    value: { id: 1, name: "value", offset: 0, width: 4, access: ReadOnly,
-        reset: Zero(0), writable_mask: 0 },
-}, banks: { lane: { count: 2, base: 8, stride: 8, members: {
-    data: { id: 2, name: "data", offset: 0, width: 4, access: ReadWrite,
-        reset: PostReset(0), writable_mask: 0xffff_ffff },
-} }, } } }
+register_schema! { pub register PassStatus {
+    width: 4, endian: Little, access: ReadOnly,
+    reset: Zero(0), writable_mask: 0, fields: {},
+} }
+register_schema! { pub register PassData {
+    width: 4, endian: Little, access: ReadWrite,
+    reset: PostReset(0), writable_mask: 0xffff_ffff, fields: {},
+} }
+register_map! { pub map PassLane { alignment: 4, placements: [data: PassData], } }
+register_map! { pub map PassMap {
+    alignment: 4,
+    extent: 32,
+    placements: [
+        value: PassStatus,
+        lane: PassLane { offset: 8, count: 2, stride: 8 },
+    ],
+} }
 
 fn main() {
     let mut bytes = [0; 8];
     let mut view = PassRecordViewMut::new(&mut bytes).unwrap();
-    view.set_items(1, 0x1234).unwrap();
+    view.items_mut().unwrap().set_item1(0x1234).unwrap();
     let flags = PassBitsValues { enable: true };
     let mut control = [0_u8; 1];
     PassControlViewMut::new(&mut control).unwrap().set_fields(flags).unwrap();

@@ -1,0 +1,5 @@
+error: expected `alignment`
+  --> tests/ui/fail/retired_register_map_syntax.rs:16:9
+   |
+16 |         size: 4,
+   |         ^^^^

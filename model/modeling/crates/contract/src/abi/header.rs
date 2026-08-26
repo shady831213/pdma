@@ -85,8 +85,7 @@ impl PdmaHeaderSchemas {
                 resolve_record(EventSchema::SPEC)?,
                 resolve_record(IndirectDestinationEntrySchema::SPEC)?,
             ],
-            mmio: PdmaMmioMap::SPEC
-                .resolve()
+            mmio: PdmaMmioMap::resolve()
                 .map_err(|error| HeaderRenderError(HeaderSchemaError::Map(error)))?,
         })
     }

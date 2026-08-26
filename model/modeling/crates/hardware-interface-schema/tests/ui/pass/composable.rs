@@ -1,19 +1,17 @@
-use hardware_interface_schema::{field_schema, record_schema, register_map, register_schema};
+use hardware_interface_schema::{record_schema, register_map, register_schema};
 
-field_schema! { pub field LeU32 { scalar: u32, endian: Little } }
 record_schema! { pub record Header {
-    size: 8, alignment: 4,
+    alignment: 4, endian: Little,
     fields: {
-        sequence: LeU32 { id: 1, offset: 0 },
-        flags: u16 { id: 2, offset: 4, endian: Little },
+        sequence: u32,
+        flags: u16,
     },
-    records: {},
 } }
 record_schema! { pub record Pair {
-    size: 16, alignment: 8, fields: {},
-    records: {
-        left: Header { id: 1, offset: 0 },
-        right: Header { id: 2, offset: 8 },
+    alignment: 8, endian: Little,
+    fields: {
+        left: Header,
+        right: Header,
     },
 } }
 register_schema! { pub register Control {
@@ -26,12 +24,17 @@ register_schema! { pub register Status {
     reset: Constant(0), writable_mask: 0xffff,
     fields: {},
 } }
+register_map! { pub map ChannelMap {
+    alignment: 4,
+    placements: [control: Control],
+} }
 register_map! { pub map DeviceMap {
-    size: 64,
-    fixed: { control: Control { id: 1, name: "control", offset: 0 }, },
-    banks: { channel: { count: 2, base: 16, stride: 16, members: {
-        control: Control { id: 2, name: "control", offset: 0 },
-    } }, },
+    alignment: 4,
+    extent: 64,
+    placements: [
+        control: Control,
+        channel: ChannelMap { offset: 16, count: 2, stride: 16 },
+    ],
 } }
 
 fn main() {
@@ -49,5 +52,5 @@ fn main() {
         .set_enable(true)
         .unwrap();
     assert_eq!(DeviceMapView::new(&registers).unwrap().control().unwrap().enable(), Ok(true));
-    assert_eq!(DeviceMapView::new(&registers).unwrap().channel_control(0).unwrap().enable(), Ok(false));
+    assert_eq!(DeviceMapView::new(&registers).unwrap().channel(0).unwrap().control().unwrap().enable(), Ok(false));
 }

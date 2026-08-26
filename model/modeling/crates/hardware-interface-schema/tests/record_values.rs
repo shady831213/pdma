@@ -1,57 +1,49 @@
 //! Generated owned record-value behavior.
 
-use hardware_interface_schema::{Decode, Encode, SchemaCodecError, field_schema, record_schema};
-
-field_schema! { pub field LeWord { scalar: u32, endian: Little } }
-
-#[test]
-fn reusable_field_raw_when_converted_owns_its_declared_endian() -> Result<(), SchemaCodecError> {
-    // Given: one little-endian raw field owner.
-    let raw = LeWordRaw::from([0x04, 0x03, 0x02, 0x01]);
-
-    // When: the generated field codec crosses both directions.
-    let value = raw.decode()?;
-    let encoded = value.encode()?;
-
-    // Then: the field itself applies endian and preserves the exact bytes.
-    assert_eq!(value.value(), 0x0102_0304);
-    assert_eq!(encoded.as_bytes(), &[0x04, 0x03, 0x02, 0x01]);
-    Ok(())
-}
+use hardware_interface_schema::{SchemaCodecError, record_schema};
 
 record_schema! {
     pub record FlatRecord {
-        size: 16,
         alignment: 8,
+        endian: Little,
         fields: {
-            tag: u16 { id: 1, offset: 0, endian: Little },
-            lanes: [u32; 2] { ids: [2, 3], offset: 4, stride: 4, endian: Little },
+            tag: u16,
+            lane0: u32,
+            lane1: u32,
+        }
+    }
+}
+
+record_schema! {
+    pub record LittleSequence {
+        alignment: 4,
+        endian: Little,
+        fields: {
+            value: u32,
         }
     }
 }
 
 record_schema! {
     pub record HeaderRecord {
-        size: 8,
         alignment: 4,
+        endian: Big,
         fields: {
-            sequence: LeWord { id: 1, offset: 0 },
-            flags: u16 { id: 2, offset: 4, endian: Big },
-        },
-        records: {},
+            sequence: LittleSequence,
+            flags: u16,
+        }
     }
 }
 
 record_schema! {
     pub record NestedRecord {
-        size: 24,
         alignment: 8,
+        endian: Little,
         fields: {
-            kind: u16 { id: 1, offset: 0, endian: Little },
-        },
-        records: {
-            header: HeaderRecord { id: 2, offset: 8 },
-        },
+            kind: u16,
+            padding: u32,
+            header: HeaderRecord,
+        }
     }
 }
 
@@ -70,14 +62,12 @@ record_schema! {
 
 record_schema! {
     pub record ComposableErrorParent {
-        size: 8,
         alignment: 4,
+        endian: Little,
         fields: {
-            prefix: u32 { id: 1, offset: 0, endian: Little },
-        },
-        records: {
-            child: ComposableErrorChild { id: 2, offset: 4 },
-        },
+            prefix: u32,
+            child: ComposableErrorChild,
+        }
     }
 }
 
@@ -87,12 +77,14 @@ fn owned_values_round_trip_scalars_arrays_references_and_nested_records()
     // Given: owned values spanning every record placement shape and nonzero padding.
     let flat = FlatRecordValues {
         tag: 0x1122,
-        lanes: [0x3344_5566, 0x7788_99aa],
+        lane0: 0x3344_5566,
+        lane1: 0x7788_99aa,
     };
     let nested = NestedRecordValues {
         kind: 0xa1b2,
+        padding: 0,
         header: HeaderRecordValues {
-            sequence: 0x0102_0304,
+            sequence: LittleSequenceValues { value: 0x0102_0304 },
             flags: 0x0506,
         },
     };
@@ -111,8 +103,7 @@ fn owned_values_round_trip_scalars_arrays_references_and_nested_records()
     assert_eq!(
         nested_bytes,
         [
-            0xb2, 0xa1, 0, 0, 0, 0, 0, 0, 0x04, 0x03, 0x02, 0x01, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0,
+            0xb2, 0xa1, 0, 0, 0, 0, 0, 0, 0x04, 0x03, 0x02, 0x01, 0x05, 0x06, 0, 0,
         ]
     );
     assert_eq!(FlatRecordValues::from_bytes(&flat_bytes)?, flat);

@@ -1,5 +1,0 @@
-error: expected integer literal
- --> tests/ui/fail/wrong_register_field.rs:7:23
-  |
-7 |     fields: { enable: LeU32 { id: 1, lsb: 0 }, },
-  |                       ^^^^^

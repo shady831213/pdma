@@ -1,5 +1,5 @@
 error: register width must be 1, 2, 4, or 8
- --> tests/ui/fail/register_bad_width.rs:3:54
+ --> tests/ui/fail/register_bad_width.rs:3:12
   |
-3 |     value: { id: 1, name: "value", offset: 0, width: 3, access: ReadOnly,
-  |                                                      ^
+3 |     width: 3, endian: Little, access: ReadOnly,
+  |            ^

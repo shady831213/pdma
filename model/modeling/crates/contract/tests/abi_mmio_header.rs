@@ -121,8 +121,10 @@ fn generated_header_matches_every_literal_mmio_macro() {
         assert!(header.lines().any(|actual| actual == expected));
     }
 
-    for register in PdmaMmioMap::SPEC.registers() {
+    let resolved = PdmaMmioMap::resolve().expect("canonical MMIO map must resolve");
+    for register in resolved.registers() {
         let name = register.name();
+        let definition = register.definition();
         assert_define(
             &header,
             &format!("{name}_OFFSET"),
@@ -133,27 +135,27 @@ fn generated_header_matches_every_literal_mmio_macro() {
             &header,
             &format!("{name}_WIDTH"),
             "UINT32_C",
-            register.width(),
+            definition.width(),
         );
         assert_u32(
             &header,
             &format!("{name}_ACCESS"),
-            access_code(register.access()),
+            access_code(definition.access()),
         );
         assert_u32(
             &header,
             &format!("{name}_RESET_CLASS"),
-            reset_code(register.reset_kind()),
+            reset_code(definition.reset_kind()),
         );
         assert_u64(
             &header,
             &format!("{name}_RESET_VALUE"),
-            register.reset_value(),
+            definition.reset_value(),
         );
         assert_u64(
             &header,
             &format!("{name}_WRITABLE_MASK"),
-            register.writable_mask(),
+            definition.writable_mask(),
         );
     }
     for (name, value) in COMMANDS {

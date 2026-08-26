@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+extern crate self as hardware_interface_schema;
+
 /// Reusable typed bit-field layout contract.
 pub mod bits;
 /// Scalar encoding and decoding functions plus their typed errors.
@@ -26,7 +28,7 @@ pub use codec::{
 };
 pub use endian::Endian;
 pub use hardware_interface_schema_macros::{
-    bits_schema, field_schema, record_schema, register_map, register_schema,
+    bits_schema, record_schema, register_map, register_schema,
 };
 pub use layout::{
     RecordLayout, RegisterLayout, checked_align_up, checked_placement_end, inferred_align_up,
@@ -42,28 +44,12 @@ pub use register::{
     RegisterValueView, RegisterValueViewMut, ResetKind,
 };
 pub use register_map::{
-    OrderedRegisterMapSpec, RegisterLayoutGeometry, RegisterLocation, RegisterMapError,
-    RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError, RepeatedRegisterBank,
-    ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
+    OrderedRegisterMapSpec, RegisterCollection, RegisterLayoutGeometry, RegisterLocation,
+    RegisterMapError, RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError,
+    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
+    append_register_leaf, finish_ordered_register_map,
 };
 pub use scalar::{Scalar, ScalarKind};
-
-/// Typed contract implemented by markers generated with [`field_schema!`].
-pub trait FieldSchema {
-    /// Rust scalar encoded by the definition.
-    type Scalar: Scalar;
-
-    /// Reusable scalar definition.
-    const DEFINITION: FieldDefinition;
-    /// All-zero scalar value.
-    const ZERO: Self::Scalar = <Self::Scalar as Scalar>::ZERO;
-
-    /// Reads a scalar from the start of a checked byte slice.
-    fn read(bytes: &[u8]) -> Result<Self::Scalar, SchemaCodecError>;
-
-    /// Writes a scalar at the start of a checked byte slice.
-    fn write(bytes: &mut [u8], value: Self::Scalar) -> Result<(), SchemaCodecError>;
-}
 
 /// Failure while inserting a value through a generated register-field marker.
 pub type RegisterCodecError = RegisterValueError;

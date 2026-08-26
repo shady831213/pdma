@@ -1,5 +1,0 @@
-error[E0080]: evaluation panicked: nested record placement overlaps a scalar placement
-  --> tests/ui/fail/nested_record_partial_overlap.rs:11:46
-   |
-11 |     records: { child: Child { id: 2, offset: 2 }, },
-   |                                              ^ evaluation of `_` failed here

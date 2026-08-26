@@ -81,6 +81,9 @@ pub(super) fn expand(
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> { value.encode_into(bytes) }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { #view_name::new(bytes) }
             fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> { #view_mut_name::new(bytes) }
+            fn append_registers<I: Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
+                #marker::__append_registers(collection.id, collection.path, collection.offset, collection.declaration_index, collection.repeated, collection.output);
+            }
         }
         #codec
     }

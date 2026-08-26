@@ -67,6 +67,26 @@ pub struct ResolvedRegister<I: 'static = u16, F: 'static = u16> {
 }
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegister<I, F> {
+    pub(crate) fn ordered(
+        path: String,
+        offset: usize,
+        declaration_index: usize,
+        register: RegisterSpec<I, F>,
+        repeated: Option<(&'static str, usize)>,
+    ) -> Self {
+        let (bank_name, instance) = repeated.map_or((None, None), |(name, instance)| {
+            (Some(name), Some(instance))
+        });
+        Self {
+            path,
+            offset,
+            declaration_index,
+            register,
+            bank_name,
+            instance,
+        }
+    }
+
     /// Returns the root-qualified instance path.
     pub fn path(&self) -> &str {
         &self.path
@@ -118,6 +138,19 @@ pub struct ResolvedRegisterMap<I: 'static = u16, F: 'static = u16> {
 }
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
+    pub(crate) const fn ordered(
+        root: &'static str,
+        size: usize,
+        registers: Vec<ResolvedRegister<I, F>>,
+    ) -> Self {
+        Self {
+            root,
+            size,
+            registers,
+            banks: Vec::new(),
+        }
+    }
+
     /// Returns the root map name.
     pub const fn root(&self) -> &'static str {
         self.root

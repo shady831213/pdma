@@ -1,6 +1,6 @@
 //! ABI-v1 numeric registry and checked boundary conformance.
 
-use hardware_interface_schema::SchemaCodecError;
+use hardware_interface_schema::{RecordSpec, ResolvedMemberKind, SchemaCodecError};
 use pdma_model_contract::abi::{
     ABI_VERSION, AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError, AbiId,
     AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK,
@@ -12,35 +12,35 @@ use pdma_model_contract::abi::{
     STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE, SUCCESS_STATUS, VECTOR_ADD_FEATURE,
     VECTOR_ADD_OPCODE, copy_u64_le, validate_abi_version,
 };
-use pdma_model_contract::abi::{
-    COMPLETION, DESCRIPTOR, EVENT, FEATURES, FieldSpec, OPCODES, OpcodeSpec,
-};
+use pdma_model_contract::abi::{COMPLETION, DESCRIPTOR, EVENT, FEATURES, OPCODES, OpcodeSpec};
 use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
 use pdma_model_contract::bridge::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
 
-fn assert_fields_cover_record(fields: &[FieldSpec], record_size: usize) {
-    for (index, field) in fields.iter().enumerate() {
-        assert!(field.width() > 0);
-        let end = field.offset().checked_add(field.width());
-        assert!(end.is_some_and(|value| value <= record_size));
+fn assert_field_ranges(record: RecordSpec, expected: &[(usize, usize)]) {
+    let resolved = record.resolve();
+    assert!(resolved.is_ok());
+    let Ok(resolved) = resolved else {
+        return;
+    };
+    let fields = resolved
+        .members()
+        .iter()
+        .filter(|member| matches!(member.kind(), ResolvedMemberKind::Field { .. }))
+        .collect::<Vec<_>>();
+    assert_eq!(fields.len(), expected.len());
+    for (index, (field, &(start, end))) in fields.iter().zip(expected).enumerate() {
+        assert_eq!(field.range(), start..end);
+        assert!(start < end);
+        assert!(end <= resolved.size());
         for other in fields.iter().skip(index + 1) {
-            let other_end = other.offset().checked_add(other.width());
             assert!(
-                end.is_some_and(|value| value <= other.offset())
-                    || other_end.is_some_and(|value| value <= field.offset()),
+                end <= other.absolute_offset() || other.range().end <= start,
                 "{} overlaps {}",
-                field.name(),
-                other.name()
+                field.path(),
+                other.path()
             );
         }
-    }
-}
-
-fn assert_field_ranges(fields: &[FieldSpec], expected: &[(usize, usize)]) {
-    assert_eq!(fields.len(), expected.len());
-    for (field, &(start, end)) in fields.iter().zip(expected) {
-        assert_eq!(field.range(), Some(start..end));
     }
 }
 
@@ -56,7 +56,7 @@ fn assert_record_registry() {
         [64, 32, 64, 8]
     );
     assert_field_ranges(
-        DESCRIPTOR.fields(),
+        DESCRIPTOR,
         &[
             (0, 2),
             (2, 4),
@@ -72,11 +72,11 @@ fn assert_record_registry() {
         ],
     );
     assert_field_ranges(
-        COMPLETION.fields(),
+        COMPLETION,
         &[(0, 2), (2, 4), (4, 6), (6, 8), (8, 16), (16, 24), (24, 32)],
     );
     assert_field_ranges(
-        EVENT.fields(),
+        EVENT,
         &[
             (0, 2),
             (2, 4),
@@ -93,9 +93,6 @@ fn assert_record_registry() {
             (56, 64),
         ],
     );
-    assert_fields_cover_record(DESCRIPTOR.fields(), 64);
-    assert_fields_cover_record(COMPLETION.fields(), 32);
-    assert_fields_cover_record(EVENT.fields(), 64);
     assert_eq!(
         [DESCRIPTOR.size(), COMPLETION.size(), EVENT.size(),],
         [64, 32, 64]

@@ -7,7 +7,7 @@ pub(super) async fn write<A: CanonicalAccess>(
     id: RegisterId,
     value: u64,
 ) -> PdmaPortResult<()> {
-    let register = PdmaMmioMap::register(id);
+    let register = register(id)?;
     let mut bytes = vec![0; register.width()];
     register
         .definition()
@@ -27,7 +27,7 @@ pub(super) async fn read<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     id: RegisterId,
 ) -> PdmaPortResult<u64> {
-    let register = PdmaMmioMap::register(id);
+    let register = register(id)?;
     let mut bytes = vec![0; register.width()];
     port.poll_register(RegisterAccess::read(
         &port.access,
@@ -48,13 +48,14 @@ pub(super) async fn read_bank<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     ids: &[RegisterId],
 ) -> PdmaPortResult<Vec<u8>> {
-    let capacity = ids
+    let registers = ids
         .iter()
-        .map(|id| PdmaMmioMap::register(*id).width())
-        .sum();
+        .copied()
+        .map(register)
+        .collect::<PdmaPortResult<Vec<_>>>()?;
+    let capacity = registers.iter().map(|register| register.width()).sum();
     let mut bank = Vec::with_capacity(capacity);
-    for id in ids {
-        let register = PdmaMmioMap::register(*id);
+    for register in registers {
         let mut bytes = vec![0; register.width()];
         port.poll_register(RegisterAccess::read(
             &port.access,
@@ -65,6 +66,12 @@ pub(super) async fn read_bank<A: CanonicalAccess>(
         bank.extend_from_slice(&bytes);
     }
     Ok(bank)
+}
+
+fn register(id: RegisterId) -> PdmaPortResult<pdma_model_contract::abi::mmio::RegisterSpec> {
+    PdmaMmioMap::register(id)
+        .ok_or(crate::ModelError::DmaSubmissionState)
+        .map_err(Into::into)
 }
 
 fn offset(value: usize) -> PdmaPortResult<u32> {

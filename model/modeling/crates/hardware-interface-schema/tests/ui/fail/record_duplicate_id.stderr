@@ -1,5 +1,0 @@
-error: duplicate field ID
- --> tests/ui/fail/record_duplicate_id.rs:4:23
-  |
-4 |     second: u16 { id: 1, offset: 2, endian: Little },
-  |                       ^

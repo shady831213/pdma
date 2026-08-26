@@ -5,28 +5,27 @@ use core::convert::Infallible;
 use his::{
     bits_schema,
     export::{Artifact, ArtifactSink, Exporter},
-    field_schema, record_schema, register_map,
+    record_schema, register_map,
     register_map::RegisterLocation,
     register_schema,
 };
 
-field_schema! { pub field DownLeU32 { scalar: u32, endian: Little } }
 bits_schema! { pub bits DownControlBits { enable: 0..1, mode: 1..3, } }
 record_schema! { pub record DownControlRecord { endian: Little, fields: {
     flags: bits(DownControlBits),
 } } }
 record_schema! { pub record DownHeader {
-    size: 8, alignment: 4,
+    alignment: 4, endian: Little,
     fields: {
-        sequence: DownLeU32 { id: 1, offset: 0 },
-        flags: u16 { id: 2, offset: 4, endian: Little },
-    }, records: {},
+        sequence: u32,
+        flags: u16,
+    },
 } }
 record_schema! { pub record DownPair {
-    size: 16, alignment: 8, fields: {},
-    records: {
-        left: DownHeader { id: 1, offset: 0 },
-        right: DownHeader { id: 2, offset: 8 },
+    alignment: 8, endian: Little,
+    fields: {
+        left: DownHeader,
+        right: DownHeader,
     },
 } }
 register_schema! { pub register DownControl {
@@ -39,53 +38,84 @@ register_schema! { pub register DownStatus {
     reset: Constant(0), writable_mask: 0xffff,
     fields: {},
 } }
+register_map! { pub map DownLaneMap {
+    alignment: 2,
+    placements: [status: DownStatus],
+} }
 register_map! { pub map DownMap {
-    size: 32,
-    fixed: { control: DownControl { id: 1, name: "control", offset: 0 }, },
-    banks: { lane: { count: 1, base: 16, stride: 16, members: {
-        status: DownStatus { id: 2, name: "status", offset: 0 },
-    } }, },
+    alignment: 4,
+    extent: 32,
+    placements: [
+        control: DownControl,
+        lane: DownLaneMap { offset: 16 },
+    ],
+} }
+
+record_schema! { pub record TelemetrySamples {
+    endian: Little,
+    fields: {
+        sample0: u16,
+        sample1: u16,
+    },
 } }
 
 record_schema! {
     pub record TelemetryRecord {
-        size: 12,
         alignment: 4,
+        endian: Little,
         fields: {
-            sequence: u32 { id: 1, offset: 0, endian: Little },
-            temperature: u16 { id: 2, offset: 4, endian: Big },
-            flags: u8 { id: 3, offset: 6, endian: Little },
-            samples: [u16; 2] { ids: [4, 5], offset: 8, stride: 2, endian: Little },
+            sequence: u32,
+            temperature: u16,
+            flags: u8,
+            samples: TelemetrySamples,
         }
     }
 }
 
 register_schema! {
-    pub registers TelemetryRegisters {
-        heartbeat: { id: 1, name: "heartbeat", offset: 0, width: 4, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        mode: { id: 2, name: "mode", offset: 4, width: 4, access: ReadWrite,
-            reset: Constant(1), writable_mask: 0xffff_ffff },
+    pub register TelemetryController {
+        width: 4, endian: Little, access: ReadWrite,
+        reset: Constant(0), writable_mask: 0xffff_ffff, fields: {},
     }
 }
 
+register_schema! {
+    pub register TelemetryStatus {
+        width: 4, endian: Little, access: ReadOnly,
+        reset: Zero(0), writable_mask: 0, fields: {},
+    }
+}
+register_schema! {
+    pub register TelemetryPublish {
+        width: 4, endian: Little, access: ReadWrite,
+        reset: Zero(0), writable_mask: 0xffff_ffff, fields: {},
+    }
+}
+register_schema! {
+    pub register TelemetryFault {
+        width: 4, endian: Little, access: ReadOnly,
+        reset: Zero(0), writable_mask: 0, fields: {},
+    }
+}
+register_map! {
+    pub map TelemetryLaneMap {
+        alignment: 4,
+        extent: 32,
+        placements: [
+            publish: TelemetryPublish,
+            fault: TelemetryFault { offset: 8 },
+        ],
+    }
+}
 register_map! {
     pub map TelemetryMap {
-        size: 128,
-        fixed: {
-            controller: { id: 1, name: "controller", offset: 4, width: 4, access: ReadWrite,
-                reset: Constant(0), writable_mask: 0xffff_ffff },
-            status: { id: 2, name: "status", offset: 12, width: 4, access: ReadOnly,
-                reset: Zero(0), writable_mask: 0 },
-        },
-        banks: {
-            lane: { count: 2, base: 32, stride: 32, members: {
-                publish: { id: 3, name: "publish", offset: 0, width: 4, access: ReadWrite,
-                    reset: Zero(0), writable_mask: 0xffff_ffff },
-                fault: { id: 4, name: "fault", offset: 8, width: 4, access: ReadOnly,
-                    reset: Zero(0), writable_mask: 0 },
-            } },
-        }
+        alignment: 4,
+        extent: 128,
+        placements: [
+            controller: TelemetryController { offset: 4 },
+            status: TelemetryStatus { offset: 12 },
+            lane: TelemetryLaneMap { offset: 32, count: 2, stride: 32 },
+        ],
     }
 }
 
@@ -127,7 +157,7 @@ pub struct TelemetryResolved {
 pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
     let resolved = TelemetryResolved {
         record: DownPair::SPEC.resolve().ok()?,
-        map: TelemetryMap::SPEC.resolve().ok()?,
+        map: TelemetryMap::resolve().ok()?,
     };
     TelemetryExporter.export(&resolved, sink).ok()
 }
@@ -161,7 +191,13 @@ impl Exporter<TelemetryResolved> for TelemetryExporter {
             .map
             .registers()
             .iter()
-            .map(|register| format!("{}@{}", register.path(), register.offset()))
+            .map(|register| {
+                let path = register
+                    .path()
+                    .strip_prefix("TelemetryMap.")
+                    .unwrap_or(register.path());
+                format!("{path}@{}", register.offset())
+            })
             .collect::<Vec<_>>()
             .join(",");
         sink.emit(Artifact {
@@ -208,11 +244,11 @@ pub fn composable_output_line() -> Option<String> {
     let mut map = DownMapViewMut::new(&mut registers).ok()?;
     let flags = DownControlBitsValues { enable: true, mode: 2 };
     map.control_mut().ok()?.set_fields(flags).ok()?;
-    map.lane_status_mut(0).ok()?.set_value(0x1234).ok()?;
+    map.lane_mut().ok()?.status_mut().ok()?.set_value(0x1234).ok()?;
     let map = DownMapView::new(&registers).ok()?;
     let control = map.control().ok()?.fields().ok()?;
     let bits = DownControlRecordValues { flags }.to_bytes().ok()?;
-    let status = map.lane_status(0).ok()?.value().ok()?;
+    let status = map.lane().ok()?.status().ok()?.value().ok()?;
     Some(format!(
         "nested={nested:02x?};le={:02x?};be={:02x?};bits={bits:02x?};left={left:#010x};enable={};mode={};status={status:#06x}",
         &registers[..4],

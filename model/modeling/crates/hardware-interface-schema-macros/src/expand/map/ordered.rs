@@ -61,7 +61,10 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     assertions.push(quote!(const _: () = assert!(#cursor <= #extent, "register map placement extends beyond its explicit extent");));
     let documented_variants = variants
         .iter()
-        .map(|item| quote!(#[doc = "Stable generated placement ID."] #item));
+        .map(|item| quote!(#[doc = "Stable generated placement ID."] #item))
+        .collect();
+    let all_variants = variants.iter().map(|item| quote!(Self::#item)).collect();
+    let variant_count = variants.len();
     let context = ExpansionContext {
         facade: &facade,
         marker,
@@ -72,11 +75,78 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     };
     let value_items = values::expand(decl, &context, &geometry);
     let accessor_items = accessors::expand(decl, &context, &geometry);
+    let root_collectors = leaf_collectors(decl, marker, &id_name, &facade, &geometry, true);
+    let nested_collectors = leaf_collectors(decl, marker, &id_name, &facade, &geometry, false);
 
-    Ok(quote! {
+    Ok(emit(Emission {
+        visibility,
+        id_name: &id_name,
+        documented_variants,
+        all_variants,
+        variant_count,
+        marker,
+        marker_name,
+        internals,
+        alignment,
+        extent,
+        facade: &facade,
+        placements,
+        root_collectors,
+        nested_collectors,
+        assertions,
+        value_items,
+        accessor_items,
+    }))
+}
+
+struct Emission<'a> {
+    visibility: &'a syn::Visibility,
+    id_name: &'a syn::Ident,
+    documented_variants: Vec<TokenStream>,
+    all_variants: Vec<TokenStream>,
+    variant_count: usize,
+    marker: &'a syn::Ident,
+    marker_name: String,
+    internals: Vec<TokenStream>,
+    alignment: usize,
+    extent: TokenStream,
+    facade: &'a TokenStream,
+    placements: Vec<TokenStream>,
+    root_collectors: TokenStream,
+    nested_collectors: TokenStream,
+    assertions: Vec<TokenStream>,
+    value_items: TokenStream,
+    accessor_items: TokenStream,
+}
+
+fn emit(input: Emission<'_>) -> TokenStream {
+    let Emission {
+        visibility,
+        id_name,
+        documented_variants,
+        all_variants,
+        variant_count,
+        marker,
+        marker_name,
+        internals,
+        alignment,
+        extent,
+        facade,
+        placements,
+        root_collectors,
+        nested_collectors,
+        assertions,
+        value_items,
+        accessor_items,
+    } = input;
+    quote! {
         #[doc = "Stable identities for ordered map placements."]
         #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         #visibility enum #id_name { #(#documented_variants),* }
+        impl #id_name {
+            #[doc = "Every generated top-level placement identity in declaration order."]
+            pub const ALL: [Self; #variant_count] = [#(#all_variants),*];
+        }
         #[doc = "Marker and metadata namespace for the generated ordered register map."]
         #[derive(Clone, Copy, Debug)]
         #visibility struct #marker;
@@ -86,6 +156,38 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
             #[doc = "Exact encoded byte extent for this map."] pub const EXTENT: usize = #extent;
             const __PLACEMENTS: &'static [#facade::RegisterMapPlacement<#id_name>] = &[#(#placements),*];
             #[doc = "Ordered child-layout metadata."] pub const SPEC: #facade::OrderedRegisterMapSpec<#id_name> = #facade::OrderedRegisterMapSpec::new(#marker_name, #alignment, #extent, Self::__PLACEMENTS);
+            #[doc = "Resolves every recursively placed leaf register."]
+            pub fn resolve() -> ::core::result::Result<#facade::ResolvedRegisterMap<#id_name>, #facade::RegisterMapError<#id_name>> {
+                Self::__resolved().clone()
+            }
+            #[doc = "Returns the first leaf carrying one top-level placement identity."]
+            pub fn register(id: #id_name) -> ::core::option::Option<#facade::register::RegisterSpec<#id_name>> {
+                let resolved = Self::__resolved().as_ref().ok()?;
+                let leaf = resolved.registers().iter().find(|leaf| leaf.id() == id)?;
+                ::core::option::Option::Some(#facade::register::RegisterSpec::place(leaf.id(), leaf.name(), leaf.offset(), leaf.definition()))
+            }
+            #[doc = "Locates a leaf register only at its exact expanded start."]
+            pub fn locate(offset: usize) -> ::core::option::Option<#facade::RegisterLocation<#id_name>> {
+                let resolved = Self::__resolved().as_ref().ok()?;
+                let leaf = resolved.locate(offset)?;
+                let register = #facade::register::RegisterSpec::place(leaf.id(), leaf.name(), leaf.offset(), leaf.definition());
+                match (leaf.bank_name(), leaf.instance()) {
+                    (::core::option::Option::Some(bank_name), ::core::option::Option::Some(instance)) => ::core::option::Option::Some(#facade::RegisterLocation::Repeated { bank_name, instance, register, offset }),
+                    _ => ::core::option::Option::Some(#facade::RegisterLocation::Fixed { register, offset }),
+                }
+            }
+            fn __resolved() -> &'static ::core::result::Result<#facade::ResolvedRegisterMap<#id_name>, #facade::RegisterMapError<#id_name>> {
+                static RESOLVED: ::std::sync::OnceLock<::core::result::Result<#facade::ResolvedRegisterMap<#id_name>, #facade::RegisterMapError<#id_name>>> = ::std::sync::OnceLock::new();
+                RESOLVED.get_or_init(|| {
+                    let mut registers = ::std::vec::Vec::new();
+                    let mut declaration_index = 0usize;
+                    #root_collectors
+                    #facade::finish_ordered_register_map(#marker_name, Self::EXTENT, registers)
+                })
+            }
+            fn __append_registers<I: Copy + 'static>(id: I, path: ::std::string::String, offset: usize, declaration_index: &mut usize, repeated: ::core::option::Option<(&'static str, usize)>, output: &mut ::std::vec::Vec<#facade::ResolvedRegister<I>>) {
+                #nested_collectors
+            }
             fn __placement_range(
                 placement: #facade::RegisterMapPlacement<#id_name>,
                 instance: usize,
@@ -105,7 +207,76 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
         #(#assertions)*
         #value_items
         #accessor_items
-    })
+    }
+}
+
+fn leaf_collectors(
+    decl: &OrderedMapDecl,
+    marker: &syn::Ident,
+    id_name: &syn::Ident,
+    facade: &TokenStream,
+    geometry: &[Geometry],
+    root: bool,
+) -> TokenStream {
+    let marker_name = marker.to_string();
+    let calls = decl
+        .placements
+        .iter()
+        .zip(geometry)
+        .flat_map(|(placement, geometry)| {
+            let definition = &geometry.definition;
+            let placement_constant = &geometry.placement;
+            let symbol = placement.symbol.to_string();
+            let register_name = symbol.to_ascii_uppercase();
+            let item_variant = variant(&symbol);
+            let id = if root {
+                quote!(#id_name::#item_variant)
+            } else {
+                quote!(id)
+            };
+            let parent_path = if root {
+                quote!(::std::string::String::from(#marker_name))
+            } else {
+                quote!(path.clone())
+            };
+            let base = if root { quote!(0usize) } else { quote!(offset) };
+            let declaration_index = if root {
+                quote!(&mut declaration_index)
+            } else {
+                quote!(declaration_index)
+            };
+            let output = if root {
+                quote!(&mut registers)
+            } else {
+                quote!(output)
+            };
+            (0..geometry.count)
+                .map(move |instance| {
+                    let child_path = if geometry.count == 1 {
+                        quote!(::std::format!("{}.{}", #parent_path, #symbol))
+                    } else {
+                        quote!(::std::format!("{}.{}[{}]", #parent_path, #symbol, #instance))
+                    };
+                    let repeated = if geometry.count == 1 {
+                        if root { quote!(::core::option::Option::None) } else { quote!(repeated) }
+                    } else {
+                        quote!(::core::option::Option::Some((#symbol, #instance)))
+                    };
+                    quote! {
+                        <#definition as #facade::RegisterLayout>::append_registers(#facade::RegisterCollection {
+                            id: #id,
+                            name: #register_name,
+                            path: #child_path,
+                            offset: #base + #marker::#placement_constant.offset() + #instance * #marker::#placement_constant.stride(),
+                            declaration_index: #declaration_index,
+                            repeated: #repeated,
+                            output: #output,
+                        });
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
+    quote!(#(#calls)*)
 }
 
 pub(super) struct Geometry {
@@ -171,11 +342,11 @@ fn placement_geometry(
         quote!(#[doc = "Generated ordered child placement."] pub const #constant: #facade::RegisterMapPlacement<#id_name> = #spec;),
         quote!(#[doc = "Stable generated placement member identity."] pub const #identity_name: #facade::SchemaMemberIdentity = #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);),
     ];
-    let alignment_check =
-        quote!(#map_alignment % <#definition as #facade::RegisterLayout>::ALIGNMENT == 0);
-    let offset_alignment =
-        quote!(#marker::#offset_name % <#definition as #facade::RegisterLayout>::ALIGNMENT == 0);
-    let stride_alignment = quote!(#marker::#stride_name >= <#definition as #facade::RegisterLayout>::EXTENT && #marker::#stride_name % <#definition as #facade::RegisterLayout>::ALIGNMENT == 0);
+    let alignment_mask =
+        quote!(<#definition as #facade::RegisterLayout>::ALIGNMENT.saturating_sub(1));
+    let alignment_check = quote!(#map_alignment & #alignment_mask == 0);
+    let offset_alignment = quote!(#marker::#offset_name & #alignment_mask == 0);
+    let stride_alignment = quote!(#marker::#stride_name >= <#definition as #facade::RegisterLayout>::EXTENT && #marker::#stride_name & #alignment_mask == 0);
     let mut assertions = vec![
         quote!(
             const _: () = assert!(<#definition as #facade::RegisterLayout>::ALIGNMENT != 0 && <#definition as #facade::RegisterLayout>::ALIGNMENT.is_power_of_two(), "child layout alignment must be a nonzero power of two");

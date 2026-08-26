@@ -1,602 +1,759 @@
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-note: required by a bound in `hardware_interface_schema::Decode::Decoded`
- --> src/codec.rs
-  |
-  |     type Decoded;
-  |     ^^^^^^^^^^^^^ required by this bound in `Decode::Decoded`
-  = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-note: required by an implicit `Sized` bound in `Result`
-  --> $RUST/core/src/result.rs
-   |
-   | pub enum Result<T, E> {
-   |                 ^ required by the implicit `Sized` requirement on this type parameter in `Result`
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-note: required by a bound in `Encode`
-  --> src/codec.rs
-   |
-   | pub trait Encode: Sized {
-   |                   ^^^^^ required by this bound in `Encode`
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-note: required by a bound in `Encode`
- --> src/codec.rs
-  |
-  | pub trait Encode: Sized {
-  |                   ^^^^^ required by this bound in `Encode`
-  = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-note: required by a bound in `TryFrom`
- --> $RUST/core/src/convert/mod.rs
-  |
-  | pub const trait TryFrom<T>: Sized {
-  |                             ^^^^^ required by this bound in `TryFrom`
-  = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-note: required by an implicit `Sized` bound in `TryFrom`
-  --> $RUST/core/src/convert/mod.rs
-   |
-   | pub const trait TryFrom<T>: Sized {
-   |                         ^ required by the implicit `Sized` requirement on this type parameter in `TryFrom`
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-  = note: required for `BadValues` to implement `Clone`
-note: required by a bound in `TrivialClone`
- --> $RUST/core/src/clone.rs
-  |
-  | pub const unsafe trait TrivialClone: [const] Clone {}
-  |                                      ^^^^^^^^^^^^^ required by this bound in `TrivialClone`
-  = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-note: required by a bound in `Clone`
- --> $RUST/core/src/clone.rs
-  |
-  | pub const trait Clone: Sized {
-  |                        ^^^^^ required by this bound in `Clone`
-  = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-  = note: required for `BadValues` to implement `Clone`
-note: required by a bound in `Copy`
- --> $RUST/core/src/marker.rs
-  |
-  | pub trait Copy: Clone {
-  |                 ^^^^^ required by this bound in `Copy`
-  = note: this error originates in the derive macro `Copy` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-note: required by a bound in `Default`
- --> $RUST/core/src/default.rs
-  |
-  | pub const trait Default: Sized {
-  |                          ^^^^^ required by this bound in `Default`
-  = note: this error originates in the derive macro `Default` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-note: required by a bound in `StructuralPartialEq`
- --> $RUST/core/src/marker.rs
-  |
-  | / pub trait StructuralPartialEq {
-  | |     // Empty.
-  | | }
-  | |_^ required by this bound in `StructuralPartialEq`
-  = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-  = note: required for `<Bad as RecordLayout>::Value` to implement `Copy`
-note: required by a bound in `hardware_interface_schema::RecordLayout::Value`
- --> src/layout.rs
-  |
-  |     type Value: Clone + Copy + Default + Eq + PartialEq;
-  |                         ^^^^ required by this bound in `RecordLayout::Value`
-  = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-note: required by a bound in `TryFrom`
-  --> $RUST/core/src/convert/mod.rs
-   |
-   | pub const trait TryFrom<T>: Sized {
-   |                             ^^^^^ required by this bound in `TryFrom`
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-   = note: the return type of a function must have a statically known size
-   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-   = note: the return type of a function must have a statically known size
-   = note: this error originates in the derive macro `Default` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
-   |
- 8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
-   | |___^ unsatisfied trait bound
-   |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-   |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-   |
- 8 | record_schema! { pub record Bad {
-   |                             ^^^
-   = note: statics and constants must have a statically known size
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0599]: no associated function or constant named `DEFINITION` found for struct `Control` in the current scope
-  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
-   |
- 3 | register_schema! { pub register Control {
-   | --------------------------------------- associated function or constant `DEFINITION` not found for this struct
-...
-10 |     fields: { value: Control { id: 1, offset: 0 }, },
-   |                      ^^^^^^^ associated function or constant not found in `Control`
-   |
-   = help: items from traits can only be used if the trait is implemented and in scope
-   = note: the following trait defines an item `DEFINITION`, perhaps you need to implement it:
-           candidate #1: `FieldSchema`
-
-error[E0599]: no associated function or constant named `DEFINITION` found for struct `Control` in the current scope
+error[E0599]: no associated function or constant named `RECORD_ALIGNMENT` found for struct `Control` in the current scope
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  3 |   register_schema! { pub register Control {
-   |   --------------------------------------- associated function or constant `DEFINITION` not found for this struct
+   |   --------------------------------------- associated function or constant `RECORD_ALIGNMENT` not found for this struct
 ...
  8 |   record_schema! { pub record Bad {
    |  _^
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |___^ associated function or constant not found in `Control`
    |
-   = help: items from traits can only be used if the trait is implemented and in scope
-   = note: the following trait defines an item `DEFINITION`, perhaps you need to implement it:
-           candidate #1: `FieldSchema`
    = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: you are looking for the module in `std`, not the primitive type
    |
  8 | std::record_schema! { pub record Bad {
    | +++++
 
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
-  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
+error[E0599]: no associated function or constant named `RECORD_SIZE` found for struct `Control` in the current scope
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
-10 |     fields: { value: Control { id: 1, offset: 0 }, },
-   |                      ^^^^^^^ unsatisfied trait bound
+ 3 |   register_schema! { pub register Control {
+   |   --------------------------------------- associated function or constant `RECORD_SIZE` not found for this struct
+...
+ 8 |   record_schema! { pub record Bad {
+   |  _^
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ associated function or constant not found in `Control`
    |
-help: the trait `FieldSchema` is not implemented for `Control`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: you are looking for the module in `std`, not the primitive type
    |
- 3 | register_schema! { pub register Control {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+ 8 | std::record_schema! { pub record Bad {
+   | +++++
 
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
+help: the trait `RecordLayout` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
-   |                             ^^^
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: function arguments must have a statically known size, borrowed types always have a known size
-   |
- 8 | &record_schema! { pub record Bad {
-   | +
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^ unsatisfied trait bound
-  |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
- --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
-  |
-3 | register_schema! { pub register Control {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
-  |
-8 | record_schema! { pub record Bad {
-  |                             ^^^
-  = note: this error originates in the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: function arguments must have a statically known size, borrowed types always have a known size
-  |
-8 | record_schema! { pub record &Bad {
-  |                             +
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied in `BadValues`
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
-   |                             ^^^
-   = note: all function arguments must have a statically known size
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: required for `BadValues` to implement `Clone`
+note: required by a bound in `TrivialClone`
+  --> $RUST/core/src/clone.rs
+   |
+   | pub const unsafe trait TrivialClone: [const] Clone {}
+   |                                      ^^^^^^^^^^^^^ required by this bound in `TrivialClone`
+   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: the trait `FieldSchema` is not implemented for `Control`
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the derive macro `Debug` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `Clone`
+  --> $RUST/core/src/clone.rs
+   |
+   | pub const trait Clone: Sized {
+   |                        ^^^^^ required by this bound in `Clone`
+   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: the trait `FieldSchema` is not implemented for `Control`
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the derive macro `Default` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `Control: FieldSchema` is not satisfied
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
   --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: required for `BadValues` to implement `Clone`
+note: required by a bound in `Copy`
+  --> $RUST/core/src/marker.rs
+   |
+   | pub trait Copy: Clone {
+   |                 ^^^^^ required by this bound in `Copy`
+   = note: this error originates in the derive macro `Copy` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |___^ unsatisfied trait bound
    |
-help: the trait `FieldSchema` is not implemented for `Control`
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: `?` couldn't convert the error: `Control: FieldSchema` is not satisfied
-  --> tests/ui/fail/wrong_referenced_scalar.rs:12:3
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | / record_schema! { pub record Bad {
- 9 | |     size: 4, alignment: 4,
-10 | |     fields: { value: Control { id: 1, offset: 0 }, },
-11 | |     records: {},
-12 | | } }
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `StructuralPartialEq`
+  --> $RUST/core/src/marker.rs
+   |
+   | / pub trait StructuralPartialEq {
+   | |     // Empty.
+   | | }
+   | |_^ required by this bound in `StructuralPartialEq`
+   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `Default`
+  --> $RUST/core/src/default.rs
+   |
+   | pub const trait Default: Sized {
+   |                          ^^^^^ required by this bound in `Default`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `hardware_interface_schema::Decode::Decoded`
+  --> src/codec.rs
+   |
+   |     type Decoded;
+   |     ^^^^^^^^^^^^^ required by this bound in `Decode::Decoded`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by an implicit `Sized` bound in `Result`
+  --> $RUST/core/src/result.rs
+   |
+   | pub enum Result<T, E> {
+   |                 ^ required by the implicit `Sized` requirement on this type parameter in `Result`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `Encode`
+  --> src/codec.rs
+   |
+   | pub trait Encode: Sized {
+   |                   ^^^^^ required by this bound in `Encode`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `TryFrom`
+  --> $RUST/core/src/convert/mod.rs
+   |
+   | pub const trait TryFrom<T>: Sized {
+   |                             ^^^^^ required by this bound in `TryFrom`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by an implicit `Sized` bound in `TryFrom`
+  --> $RUST/core/src/convert/mod.rs
+   |
+   | pub const trait TryFrom<T>: Sized {
+   |                         ^ required by the implicit `Sized` requirement on this type parameter in `TryFrom`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: required for `<Bad as RecordLayout>::Value` to implement `Copy`
+note: required by a bound in `hardware_interface_schema::RecordLayout::Value`
+  --> src/layout.rs
+   |
+   |     type Value: Clone + Copy + Default + Eq + PartialEq;
+   |                         ^^^^ required by this bound in `RecordLayout::Value`
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: the return type of a function must have a statically known size
+   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: statics and constants must have a statically known size
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: the return type of a function must have a statically known size
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0308]: mismatched types
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
    | |   ^
    | |   |
-   | |___within `BadValues`, the trait `FieldSchema` is not implemented for `Control`
+   | |___expected `&RecordSpec`, found `&RegisterDefinition`
+   |     arguments to this function are incorrect
+   |
+   = note: expected reference `&'static RecordSpec`
+              found reference `&RegisterDefinition`
+note: associated function defined here
+  --> src/record/placement.rs
+   |
+   |     pub const fn new(
+   |                  ^^^
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:10:22
+   |
+10 |     fields: { value: Control, },
+   |                      ^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the derive macro `Debug` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `?` couldn't convert the error: `Control: RecordLayout` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:11:3
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |   ^
+   | |   |
+   | |___within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
    |     this can't be annotated with `?` because it has type `Result<_, SchemaCodecError>`
    |
-note: `Control` needs to implement `FieldSchema`
+note: `Control` needs to implement `RecordLayout`
   --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
    |
  3 | register_schema! { pub register Control {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
-note: required because it appears within the type `BadValues`
-  --> tests/ui/fail/wrong_referenced_scalar.rs:8:29
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
    |
  8 | record_schema! { pub record Bad {
-   |                             ^^^
-   = note: this error originates in the macro `record_schema` which comes from the expansion of the macro `register_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied
+  --> tests/ui/fail/wrong_referenced_scalar.rs:10:15
+   |
+10 |     fields: { value: Control, },
+   |               ^^^^^ unsatisfied trait bound
+   |
+help: the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `register_schema` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+note: required by a bound in `Ok`
+  --> $RUST/core/src/result.rs
+   |
+   | pub enum Result<T, E> {
+   |                 ^ required by this bound in `Ok`
+...
+   |     Ok(#[stable(feature = "rust1", since = "1.0.0")] T),
+   |     -- required by a bound in this tuple variant
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: function arguments must have a statically known size, borrowed types always have a known size
+   |
+ 8 | &record_schema! { pub record Bad {
+   | +
+
+error[E0277]: the trait bound `Control: RecordLayout` is not satisfied in `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^ unsatisfied trait bound
+   |
+help: within `BadValues`, the trait `RecordLayout` is not implemented for `Control`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:3:1
+   |
+ 3 | register_schema! { pub register Control {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: the trait `RecordLayout` is implemented for `Bad`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | record_schema! { pub record Bad {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `BadValues`
+  --> tests/ui/fail/wrong_referenced_scalar.rs:8:1
+   |
+ 8 | / record_schema! { pub record Bad {
+ 9 | |     alignment: 4, endian: Little,
+10 | |     fields: { value: Control, },
+11 | | } }
+   | |___^
+   = note: all local variables must have a statically known size
+   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

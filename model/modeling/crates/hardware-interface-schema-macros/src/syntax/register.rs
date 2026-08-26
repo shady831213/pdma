@@ -1,21 +1,9 @@
 use syn::{
-    Ident, LitStr, Path, Result, Token, Visibility, braced,
+    Ident, Path, Result, Token, Visibility, braced,
     parse::{Parse, ParseStream},
 };
 
 use super::{BitFieldDecl, key, keyword, u64_lit, usize_lit};
-
-pub(in crate::internal) struct RegistersDecl {
-    pub(in crate::internal) visibility: Visibility,
-    pub(in crate::internal) name: Ident,
-    pub(in crate::internal) external_id: Option<Path>,
-    pub(in crate::internal) registers: Vec<RegisterDecl>,
-}
-
-pub(in crate::internal) enum RegisterInput {
-    Legacy(RegistersDecl),
-    Definition(RegisterDefinitionDecl),
-}
 
 pub(in crate::internal) struct RegisterDefinitionDecl {
     pub(in crate::internal) visibility: Visibility,
@@ -34,18 +22,6 @@ pub(in crate::internal) enum RegisterFieldsDecl {
     Reference(Path),
 }
 
-#[derive(Clone)]
-pub(in crate::internal) struct RegisterDecl {
-    pub(in crate::internal) symbol: Ident,
-    pub(in crate::internal) id: (u16, proc_macro2::Span),
-    pub(in crate::internal) name: LitStr,
-    pub(in crate::internal) offset: (usize, proc_macro2::Span),
-    pub(in crate::internal) width: (usize, proc_macro2::Span),
-    pub(in crate::internal) access: AccessValue,
-    pub(in crate::internal) reset: ResetValue,
-    pub(in crate::internal) mask: (u64, proc_macro2::Span),
-}
-
 #[derive(Clone, Copy)]
 pub(in crate::internal) enum AccessValue {
     ReadOnly,
@@ -53,54 +29,9 @@ pub(in crate::internal) enum AccessValue {
     WriteOnly,
 }
 
-#[derive(Clone)]
 pub(in crate::internal) struct ResetValue {
     pub(in crate::internal) kind: Ident,
     pub(in crate::internal) value: (u64, proc_macro2::Span),
-}
-
-impl Parse for RegistersDecl {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let visibility = input.parse()?;
-        keyword(input, "registers")?;
-        let name = input.parse()?;
-        let external_id = if input.peek(Token![<]) {
-            input.parse::<Token![<]>()?;
-            let path = input.parse()?;
-            input.parse::<Token![>]>()?;
-            Some(path)
-        } else {
-            None
-        };
-        let body;
-        braced!(body in input);
-        let registers = body
-            .parse_terminated(RegisterDecl::parse, Token![,])?
-            .into_iter()
-            .collect();
-        Ok(Self {
-            visibility,
-            name,
-            external_id,
-            registers,
-        })
-    }
-}
-
-impl Parse for RegisterInput {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let fork = input.fork();
-        let _: Visibility = fork.parse()?;
-        let keyword: Ident = fork.parse()?;
-        match keyword.to_string().as_str() {
-            "registers" => input.parse().map(Self::Legacy),
-            "register" => input.parse().map(Self::Definition),
-            _ => Err(syn::Error::new(
-                keyword.span(),
-                "expected `register` or `registers`",
-            )),
-        }
-    }
 }
 
 impl Parse for RegisterDefinitionDecl {
@@ -125,8 +56,7 @@ impl Parse for RegisterDefinitionDecl {
         let endian = body.parse()?;
         body.parse::<Token![,]>()?;
         key(&body, "access")?;
-        let access_ident: Ident = body.parse()?;
-        let access = parse_access(&access_ident)?;
+        let access = parse_access(&body.parse()?)?;
         body.parse::<Token![,]>()?;
         key(&body, "reset")?;
         let reset = parse_reset(&body)?;
@@ -158,50 +88,6 @@ impl Parse for RegisterDefinitionDecl {
             reset,
             mask,
             fields,
-        })
-    }
-}
-
-impl Parse for RegisterDecl {
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let symbol = input.parse()?;
-        input.parse::<Token![:]>()?;
-        let body;
-        braced!(body in input);
-        key(&body, "id")?;
-        let (raw_id, id_span) = usize_lit(&body)?;
-        let id = u16::try_from(raw_id)
-            .map_err(|_| syn::Error::new(id_span, "register ID must fit u16"))?;
-        body.parse::<Token![,]>()?;
-        key(&body, "name")?;
-        let name = body.parse()?;
-        body.parse::<Token![,]>()?;
-        key(&body, "offset")?;
-        let offset = usize_lit(&body)?;
-        u32::try_from(offset.0)
-            .map_err(|_| syn::Error::new(offset.1, "register offset must fit u32"))?;
-        body.parse::<Token![,]>()?;
-        key(&body, "width")?;
-        let width = usize_lit(&body)?;
-        body.parse::<Token![,]>()?;
-        key(&body, "access")?;
-        let access_ident: Ident = body.parse()?;
-        let access = parse_access(&access_ident)?;
-        body.parse::<Token![,]>()?;
-        key(&body, "reset")?;
-        let reset = parse_reset(&body)?;
-        body.parse::<Token![,]>()?;
-        key(&body, "writable_mask")?;
-        let mask = u64_lit(&body)?;
-        Ok(Self {
-            symbol,
-            id: (id, id_span),
-            name,
-            offset,
-            width,
-            access,
-            reset,
-            mask,
         })
     }
 }

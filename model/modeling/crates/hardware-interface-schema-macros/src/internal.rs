@@ -12,10 +12,6 @@ impl crate::Expansion for () {
         expand::bits::run(input)
     }
 
-    fn field(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-        expand::field::run(input)
-    }
-
     fn record(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         expand::record::run(input)
     }

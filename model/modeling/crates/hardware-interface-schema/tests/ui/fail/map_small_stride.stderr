@@ -1,5 +1,7 @@
-error: bank stride is smaller than member extent
- --> tests/ui/fail/map_small_stride.rs:3:40
+error[E0080]: evaluation panicked: register map placement stride is invalid
+ --> tests/ui/fail/map_small_stride.rs:7:1
   |
-3 |     lane: { count: 2, base: 0, stride: 4, members: {
-  |                                        ^
+7 | / register_map! { pub map Bad { alignment: 4, extent: 32, placements: [
+8 | |     lane: Lane { count: 2, stride: 4 },
+9 | | ] } }
+  | |_____^ evaluation of `_` failed here

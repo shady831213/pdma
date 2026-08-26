@@ -2,10 +2,8 @@
 
 use hardware_interface_schema::{
     Decode, Encode, RegisterCodecError, SchemaCodecError, SchemaMemberIdentity, bits_schema,
-    field_schema, record_schema, register_schema,
+    record_schema, register_schema,
 };
-
-field_schema! { pub field StandaloneWord { scalar: u16, endian: Little } }
 
 bits_schema! {
     pub bits SharedFlags {
@@ -121,7 +119,7 @@ fn named_bits_raw_when_converted_remains_endian_neutral() -> Result<(), SchemaCo
 
 #[test]
 fn bits_members_when_generated_have_stable_leaf_identities() {
-    // Given: standalone, reusable, and inline bit-schema declarations.
+    // Given: reusable and inline bit-schema declarations.
     let invalid = SharedFlagsValues {
         ready: false,
         mode: 16,
@@ -131,10 +129,6 @@ fn bits_members_when_generated_have_stable_leaf_identities() {
     let result = invalid.encode();
 
     // Then: each leaf has its own public identity and bits retain their local coordinates.
-    assert_eq!(
-        StandaloneWord::IDENTITY,
-        SchemaMemberIdentity::new("StandaloneWord", "value")
-    );
     assert_eq!(
         SharedFlags::MODE_IDENTITY,
         SchemaMemberIdentity::new("SharedFlags", "mode")

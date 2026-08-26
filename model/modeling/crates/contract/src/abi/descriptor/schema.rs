@@ -64,10 +64,10 @@ record_schema! {
 
 record_schema! {
     pub record IndirectDestinationEntrySchema {
-        size: 8,
         alignment: 8,
+        endian: Little,
         fields: {
-            destination_dma_address: u64 { id: 1, offset: 0, endian: Little },
+            destination_dma_address: u64,
         }
     }
 }

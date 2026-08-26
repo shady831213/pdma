@@ -4,7 +4,7 @@ use quote::{format_ident, quote};
 
 pub(in crate::internal) fn facade() -> syn::Result<TokenStream> {
     match crate_name("hardware-interface-schema") {
-        Ok(FoundCrate::Itself) => Ok(quote!(crate)),
+        Ok(FoundCrate::Itself) => Ok(quote!(::hardware_interface_schema)),
         Ok(FoundCrate::Name(name)) => {
             let ident = format_ident!("{name}");
             Ok(quote!(::#ident))

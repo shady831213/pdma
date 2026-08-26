@@ -1,4 +1,4 @@
-use crate::SchemaCodecError;
+use crate::{RegisterCollection, SchemaCodecError};
 
 /// Shared byte-layout contract implemented by generated records.
 pub trait RecordLayout {
@@ -64,6 +64,10 @@ pub trait RegisterLayout {
     fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError>;
     /// Creates a checked mutable view.
     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+
+    /// Appends every leaf register below one placement to a resolved map.
+    #[doc(hidden)]
+    fn append_registers<I: Copy + 'static>(_collection: RegisterCollection<'_, I>) {}
 }
 
 /// Computes the next aligned offset without wrapping.

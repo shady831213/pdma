@@ -1,6 +1,8 @@
 #![allow(clippy::redundant_pub_crate)]
 
-pub(crate) use hardware_interface_schema::{Endian, RecordSpec, ScalarKind, SchemaCodecError};
+pub(crate) use hardware_interface_schema::{
+    Endian, RecordSpec, ResolvedMemberKind, ScalarKind, SchemaCodecError,
+};
 
 pub(crate) const COPY: [u8; 64] = [
     1, 0, 1, 0, 0, 0, 64, 0, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 1, 0x80, 0x70, 0x60, 0x50,
@@ -60,15 +62,31 @@ pub(crate) const EVENT_FIELDS: [Field; 13] = [
 pub(crate) const INDIRECT_FIELDS: [Field; 1] = [("destination_dma_address", 0, 8, ScalarKind::U64)];
 
 pub(crate) fn assert_schema_parity(schema: RecordSpec, expected: &[Field]) {
-    assert_eq!(schema.fields().len(), expected.len());
-    for (field, &(name, offset, width, scalar)) in schema.fields().iter().zip(expected) {
+    let resolved = schema.resolve();
+    assert!(resolved.is_ok());
+    let Ok(resolved) = resolved else {
+        return;
+    };
+    let fields = resolved
+        .members()
+        .iter()
+        .filter_map(|member| match member.kind() {
+            ResolvedMemberKind::Field { definition, .. } => Some((member, definition)),
+            ResolvedMemberKind::Record { .. } => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(fields.len(), expected.len());
+    for ((field, definition), &(name, offset, width, scalar)) in fields.iter().zip(expected) {
         assert_eq!(
             (
-                field.name(),
-                field.offset(),
-                field.width(),
-                field.scalar(),
-                field.endian()
+                field
+                    .path()
+                    .rsplit_once('.')
+                    .map_or_else(|| field.path(), |(_, name)| name),
+                field.absolute_offset(),
+                definition.width(),
+                definition.scalar(),
+                definition.endian()
             ),
             (
                 name,

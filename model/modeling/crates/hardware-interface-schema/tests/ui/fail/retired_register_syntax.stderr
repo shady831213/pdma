@@ -1,0 +1,5 @@
+error: expected `register`
+ --> tests/ui/fail/retired_register_syntax.rs:4:9
+  |
+4 |     pub registers LegacyRegisters {
+  |         ^^^^^^^^^

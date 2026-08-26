@@ -86,6 +86,9 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> { #facade::write_scalar(bytes, #facade::Endian::#endian, value.raw()) }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get(..#width).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #width, actual })?; Ok(#view_name { bytes }) }
             fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> { let actual = bytes.len(); let bytes = bytes.get_mut(..#width).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #width, actual })?; Ok(#view_mut_name { bytes }) }
+            fn append_registers<I: Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
+                #facade::append_register_leaf(collection, Self::SPEC);
+            }
         }
     })
 }

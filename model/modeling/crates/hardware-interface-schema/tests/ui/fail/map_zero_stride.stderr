@@ -1,5 +1,7 @@
-error: bank stride must be nonzero
- --> tests/ui/fail/map_zero_stride.rs:3:40
+error[E0080]: evaluation panicked: register map placement stride is invalid
+ --> tests/ui/fail/map_zero_stride.rs:4:1
   |
-3 |     lane: { count: 2, base: 0, stride: 0, members: {
-  |                                        ^
+4 | / register_map! { pub map Bad { alignment: 4, extent: 32, placements: [
+5 | |     lane: Word { count: 2, stride: 0 },
+6 | | ] } }
+  | |_____^ evaluation of `_` failed here

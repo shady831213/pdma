@@ -90,6 +90,36 @@ fn ordered_placements_infer_aligned_offsets_extent_and_stride() {
 }
 
 #[test]
+fn ordered_resolution_flattens_nested_leaf_registers_from_the_same_placements()
+-> Result<(), Box<dyn std::error::Error>> {
+    let resolved = DeviceRegisters::resolve()?;
+    let paths = resolved
+        .registers()
+        .iter()
+        .map(|register| (register.path(), register.offset()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paths,
+        [
+            ("DeviceRegisters.header", 0),
+            ("DeviceRegisters.lanes[0].control", 8),
+            ("DeviceRegisters.lanes[0].counter", 16),
+            ("DeviceRegisters.lanes[1].control", 24),
+            ("DeviceRegisters.lanes[1].counter", 32),
+            ("DeviceRegisters.tail", 56),
+        ]
+    );
+    assert_eq!(
+        resolved
+            .locate(24)
+            .map(hardware_interface_schema::ResolvedRegister::path),
+        Some("DeviceRegisters.lanes[1].control")
+    );
+    assert_eq!(resolved.locate(25), None);
+    Ok(())
+}
+
+#[test]
 fn generated_owned_values_round_trip_nested_map_bytes() {
     let values = DeviceRegistersValues {
         header: ControlRegisterValues::new(0x1122_3344),

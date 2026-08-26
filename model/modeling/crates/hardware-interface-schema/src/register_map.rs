@@ -7,7 +7,10 @@ mod validation;
 
 pub use crate::register::RegisterSpec;
 pub use error::{RegisterMapError, RegisterMapValidationError};
-pub use ordered::{OrderedRegisterMapSpec, RegisterLayoutGeometry, RegisterMapPlacement};
+pub use ordered::{
+    OrderedRegisterMapSpec, RegisterCollection, RegisterLayoutGeometry, RegisterMapPlacement,
+    append_register_leaf, finish_ordered_register_map,
+};
 pub use resolved::{ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap};
 
 /// One immutable repeated register-bank declaration.

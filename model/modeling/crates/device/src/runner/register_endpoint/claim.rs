@@ -91,22 +91,17 @@ pub(super) fn prepare_claim(state: &mut DeviceCore) -> Result<CommittedClaim, Mm
 }
 
 fn prepare_for_id(id: RegisterId, bytes: &[u8]) -> PreparedWrite {
-    let register = PdmaMmioMap::register(id);
-    prepare_write(
-        id,
-        decode_scalar(bytes),
-        u32::try_from(register.offset()).unwrap_or(u32::MAX),
-        bytes,
-    )
+    let offset = PdmaMmioMap::register(id)
+        .and_then(|register| u32::try_from(register.offset()).ok())
+        .unwrap_or(u32::MAX);
+    prepare_write(id, decode_scalar(bytes), offset, bytes)
 }
 
 fn read_for_id(state: &DeviceCore, id: RegisterId) -> PreparedRead {
-    let register = PdmaMmioMap::register(id);
-    prepare_read(
-        state,
-        id,
-        u32::try_from(register.offset()).unwrap_or(u32::MAX),
-    )
+    let offset = PdmaMmioMap::register(id)
+        .and_then(|register| u32::try_from(register.offset()).ok())
+        .unwrap_or(u32::MAX);
+    prepare_read(state, id, offset)
 }
 
 fn command_observation(item: &PreparedWrite, sequence: u64) -> RegisterObservation {

@@ -3,23 +3,22 @@
 use std::collections::{BTreeSet, HashSet};
 
 use hardware_interface_schema::{
-    RegisterValueError, SchemaCodecError, field_schema, record_schema, register_map,
+    RegisterValueError, SchemaCodecError, record_schema, register_map,
     register_map::RegisterLocation, register_schema,
 };
 
-field_schema! { pub field LeU32 { scalar: u32, endian: Little } }
 record_schema! { pub record Header {
-    size: 8, alignment: 4,
+    alignment: 4, endian: Little,
     fields: {
-        sequence: LeU32 { id: 1, offset: 0 },
-        flags: u16 { id: 2, offset: 4, endian: Little },
-    }, records: {},
+        sequence: u32,
+        flags: u16,
+    },
 } }
 record_schema! { pub record Pair {
-    size: 16, alignment: 8, fields: {},
-    records: {
-        left: Header { id: 1, offset: 0 },
-        right: Header { id: 2, offset: 8 },
+    alignment: 8, endian: Little,
+    fields: {
+        left: Header,
+        right: Header,
     },
 } }
 register_schema! { pub register Control {
@@ -33,80 +32,113 @@ register_schema! { pub register BeStatus {
     fields: {},
 } }
 register_map! { pub map ComposableMap {
-    size: 64,
-    fixed: { control: Control { id: 1, name: "control", offset: 0 }, },
-    banks: { channel: { count: 2, base: 16, stride: 16, members: {
-        status: BeStatus { id: 2, name: "status", offset: 0 },
-    } }, },
+    alignment: 4,
+    extent: 64,
+    placements: [
+        control: Control,
+        channel_status: BeStatus { offset: 16, count: 2, stride: 16 },
+    ],
+} }
+
+record_schema! { pub record TelemetrySamples {
+    alignment: 4,
+    endian: Little,
+    fields: {
+        sample0: u16,
+        sample1: u16,
+    },
 } }
 
 record_schema! {
     pub record Telemetry {
-        size: 16,
         alignment: 8,
+        endian: Little,
         fields: {
-            sequence: u32 { id: 1, offset: 0, endian: Little },
-            code: u16 { id: 2, offset: 4, endian: Big },
-            samples: [u16; 2] { ids: [3, 4], offset: 8, stride: 2, endian: Little },
+            sequence: u32,
+            code: u16,
+            samples: TelemetrySamples,
         }
     }
 }
 
 register_schema! {
-    pub registers Controls {
-        status: { id: 1, name: "status", offset: 0, width: 4, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-        command: { id: 2, name: "command", offset: 4, width: 2, access: WriteOnly,
-            reset: PostReset(0x12), writable_mask: 0xff },
+    pub register StatusRegister {
+        width: 4, endian: Little, access: ReadOnly,
+        reset: Zero(0), writable_mask: 0, fields: {},
+    }
+}
+
+register_schema! {
+    pub register CommandRegister {
+        width: 2, endian: Little, access: WriteOnly,
+        reset: PostReset(0x12), writable_mask: 0xff, fields: {},
+    }
+}
+
+register_schema! {
+    pub register SensorData {
+        width: 4, endian: Little, access: ReadWrite,
+        reset: Constant(0), writable_mask: 0xffff_ffff, fields: {},
+    }
+}
+
+register_schema! {
+    pub register SensorFlags {
+        width: 1, endian: Little, access: ReadOnly,
+        reset: Zero(0), writable_mask: 0, fields: {},
     }
 }
 
 register_map! {
     pub map SensorMap {
-        size: 64,
-        fixed: {
-            status: { id: 1, name: "status", offset: 0, width: 4, access: ReadOnly,
-                reset: Zero(0), writable_mask: 0 },
-        },
-        banks: {
-            channel: { count: 2, base: 16, stride: 16, members: {
-                data: { id: 2, name: "data", offset: 0, width: 4, access: ReadWrite,
-                    reset: Constant(0), writable_mask: 0xffff_ffff },
-                flags: { id: 3, name: "flags", offset: 8, width: 1, access: ReadOnly,
-                    reset: Zero(0), writable_mask: 0 },
-            } },
-        }
+        alignment: 4,
+        extent: 64,
+        placements: [
+            status: StatusRegister,
+            channel_data: SensorData { offset: 16, count: 2, stride: 16 },
+            channel_flags: SensorFlags { offset: 24, count: 2, stride: 16 },
+        ],
     }
 }
 
 #[test]
-fn record_accessors_when_mixed_endian_and_array_are_used() -> Result<(), SchemaCodecError> {
+fn record_accessors_when_nested_sequence_is_used() -> Result<(), SchemaCodecError> {
     let mut bytes = [0_u8; 16];
     let mut view = TelemetryViewMut::new(&mut bytes)?;
     view.set_sequence(0x1122_3344)?;
     view.set_code(0x5566)?;
-    view.set_samples(0, 0x7788)?;
-    view.set_samples(1, 0x99aa)?;
+    view.samples_mut()?.set_sample0(0x7788)?;
+    view.samples_mut()?.set_sample1(0x99aa)?;
     assert_eq!(view.sequence()?, 0x1122_3344);
     assert_eq!(
         &bytes[..12],
         &[
-            0x44, 0x33, 0x22, 0x11, 0x55, 0x66, 0, 0, 0x88, 0x77, 0xaa, 0x99
+            0x44, 0x33, 0x22, 0x11, 0x66, 0x55, 0, 0, 0x88, 0x77, 0xaa, 0x99
         ]
     );
     let view = TelemetryView::new(&bytes)?;
     assert_eq!(view.sequence()?, 0x1122_3344);
     assert_eq!(view.code()?, 0x5566);
-    assert_eq!(view.samples(1)?, 0x99aa);
+    assert_eq!(view.samples()?.sample1()?, 0x99aa);
     assert_eq!(Telemetry::SEQUENCE_OFFSET, 0);
     assert_eq!(Telemetry::SAMPLES_OFFSET, 8);
-    assert_eq!(Telemetry::SPEC.fields().len(), 4);
+    assert_eq!(Telemetry::SPEC.fields().len(), 2);
+    assert_eq!(Telemetry::SPEC.records().len(), 1);
+    assert_eq!(
+        Telemetry::SPEC
+            .resolve()
+            .map(|resolved| resolved.members().len()),
+        Ok(5)
+    );
     Ok(())
 }
 
 #[test]
 fn generated_ids_when_used_in_hash_and_order_sets() {
-    let hash = HashSet::from([TelemetryFieldId::Sequence, TelemetryFieldId::Samples0]);
+    let hash = HashSet::from([
+        SensorMapRegisterId::ChannelFlags,
+        SensorMapRegisterId::Status,
+    ]);
     let order = BTreeSet::from([
         SensorMapRegisterId::ChannelData,
         SensorMapRegisterId::Status,
@@ -117,21 +149,17 @@ fn generated_ids_when_used_in_hash_and_order_sets() {
 
 #[test]
 fn register_metadata_when_schema_is_generated() {
-    let command = Controls::COMMAND;
-    assert_eq!(command.id(), ControlsRegisterId::Command);
-    assert_eq!(command.numeric_id(), Some(2));
-    assert_eq!(command.reset_value(), 0x12);
-    assert_eq!(
-        Controls::register(ControlsRegisterId::Status),
-        Controls::STATUS
-    );
+    assert_eq!(StatusRegister::SPEC.reset_value(), 0);
+    assert_eq!(CommandRegister::SPEC.reset_value(), 0x12);
+    assert_eq!(CommandRegister::SPEC.writable_mask(), 0xff);
 }
 
 #[test]
 fn map_lookup_when_fixed_repeated_interior_and_unmapped_offsets_are_used() {
     assert_eq!(
-        SensorMap::register(SensorMapRegisterId::ChannelFlags).name(),
-        "flags"
+        SensorMap::register(SensorMapRegisterId::ChannelFlags)
+            .map(hardware_interface_schema::RegisterSpec::name),
+        Some("CHANNEL_FLAGS")
     );
     assert!(matches!(
         SensorMap::locate(0),
@@ -172,7 +200,7 @@ fn nested_record_views_when_definition_is_placed_twice_use_exact_bytes()
     let pair = PairView::new(&bytes)?;
     assert_eq!(pair.left()?.sequence()?, 0x1122_3344);
     assert_eq!(pair.right()?.flags()?, 0x5566);
-    assert_eq!(Pair::LEFT_DEFINITION.name(), "Header");
+    assert_eq!(Pair::LEFT_IDENTITY.member(), "left");
     Ok(())
 }
 

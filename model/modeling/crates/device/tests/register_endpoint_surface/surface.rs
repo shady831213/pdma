@@ -25,15 +25,17 @@ pub async fn run() -> TestResult {
     let endpoint = handle.register_endpoint();
 
     // When: the runtime trait accesses every generated register and claims one real message.
-    for register in PdmaMmioMap::SPEC.registers() {
+    let resolved = PdmaMmioMap::resolve()?;
+    for register in resolved.registers() {
         let offset = u32::try_from(register.offset())?;
-        match register.access() {
+        let definition = register.definition();
+        match definition.access() {
             MmioAccess::ReadOnly | MmioAccess::ReadWrite => {
-                let mut response = vec![0_u8; register.width()];
+                let mut response = vec![0_u8; definition.width()];
                 endpoint.read(offset, &mut response).await?;
             }
             MmioAccess::WriteOnly => {
-                let request = vec![0_u8; register.width()];
+                let request = vec![0_u8; definition.width()];
                 endpoint.write(offset, &request).await?;
             }
         }
@@ -66,7 +68,7 @@ pub async fn run() -> TestResult {
         .map(|item| format!("{:#x}/{}", item.offset, item.width))
         .collect::<Vec<_>>()
         .join(",");
-    assert_eq!(direct.len(), PdmaMmioMap::SPEC.registers().len());
+    assert_eq!(direct.len(), resolved.registers().len());
     assert_eq!(compound.len(), 11);
     assert!(
         observations
@@ -77,7 +79,7 @@ pub async fn run() -> TestResult {
     assert!(ordered);
     println!(
         "registers={};direct_sequences={};compound_items={};compound_offsets={};origins=direct;ordered={};claim_same_poll=true;notification=message",
-        PdmaMmioMap::SPEC.registers().len(),
+        resolved.registers().len(),
         direct.len(),
         compound.len(),
         offsets,

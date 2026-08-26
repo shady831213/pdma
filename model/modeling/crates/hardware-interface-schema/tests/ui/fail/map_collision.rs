@@ -1,11 +1,8 @@
-use hardware_interface_schema::register_map;
-register_map! { pub map Bad { size: 32, fixed: {
-    fixed: { id: 1, name: "fixed", offset: 8, width: 4, access: ReadOnly,
-        reset: Zero(0), writable_mask: 0 },
-}, banks: {
-    lane: { count: 2, base: 0, stride: 8, members: {
-        value: { id: 2, name: "value", offset: 0, width: 4, access: ReadOnly,
-            reset: Zero(0), writable_mask: 0 },
-    } },
-} } }
+use hardware_interface_schema::{register_map, register_schema};
+register_schema! { pub register Word { width: 4, endian: Little, access: ReadOnly,
+    reset: Zero(0), writable_mask: 0, fields: {}, } }
+register_map! { pub map Bad { alignment: 4, extent: 32, placements: [
+    fixed: Word { offset: 8 },
+    lane: Word { offset: 0, count: 2, stride: 8 },
+] } }
 fn main() {}

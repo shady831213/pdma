@@ -1,5 +1,7 @@
-error: register extends beyond map size
- --> tests/ui/fail/map_extent.rs:3:44
+error[E0080]: evaluation panicked: register map placement extends beyond its explicit extent
+ --> tests/ui/fail/map_extent.rs:4:1
   |
-3 |     value: { id: 1, name: "value", offset: 2, width: 4, access: ReadOnly,
-  |                                            ^
+4 | / register_map! { pub map Bad { alignment: 4, extent: 4, placements: [
+5 | |     value: Word { offset: 4 },
+6 | | ] } }
+  | |_____^ evaluation of `_` failed here

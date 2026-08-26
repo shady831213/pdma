@@ -1,6 +1,7 @@
-use hardware_interface_schema::register_map;
-register_map! { pub map Bad { size: 4, fixed: {
-    value: { id: 1, name: "value", offset: 2, width: 4, access: ReadOnly,
-        reset: Zero(0), writable_mask: 0 },
-}, banks: {} } }
+use hardware_interface_schema::{register_map, register_schema};
+register_schema! { pub register Word { width: 4, endian: Little, access: ReadOnly,
+    reset: Zero(0), writable_mask: 0, fields: {}, } }
+register_map! { pub map Bad { alignment: 4, extent: 4, placements: [
+    value: Word { offset: 4 },
+] } }
 fn main() {}

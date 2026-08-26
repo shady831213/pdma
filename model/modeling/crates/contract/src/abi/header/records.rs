@@ -48,7 +48,11 @@ fn push_record(output: &mut String, record: &CRecord, model: &RecordCHeaderModel
     let _ = writeln!(output, "typedef struct {} {{", record.c_type);
     for field in model.fields() {
         let field_macro = field_macro(&prefix, field);
-        let _ = writeln!(output, "    uint8_t {}[{field_macro}_SIZE];", field.name());
+        let _ = writeln!(
+            output,
+            "    uint8_t {}[{field_macro}_SIZE];",
+            leaf_name(field)
+        );
     }
     let _ = writeln!(output, "}} {};", record.c_type);
     let _ = writeln!(
@@ -90,19 +94,26 @@ fn push_field_assertions(output: &mut String, assertion: FieldAssertion<'_>) {
     let _ = writeln!(
         output,
         "_Static_assert(offsetof({type_name}, {}) == {field_macro}_OFFSET, \"{} offset\");",
-        field.name(),
-        field.name()
+        leaf_name(field),
+        leaf_name(field)
     );
     let _ = writeln!(
         output,
         "_Static_assert(sizeof((({type_name} *)0)->{}) == {field_macro}_SIZE, \"{} width\");",
-        field.name(),
-        field.name()
+        leaf_name(field),
+        leaf_name(field)
     );
 }
 
 fn field_macro(prefix: &str, field: &RecordCHeaderField) -> String {
-    format!("{prefix}_{}", field.name().to_ascii_uppercase())
+    format!("{prefix}_{}", leaf_name(field).to_ascii_uppercase())
+}
+
+fn leaf_name(field: &RecordCHeaderField) -> &str {
+    field
+        .name()
+        .rsplit_once('.')
+        .map_or_else(|| field.name(), |(_, name)| name)
 }
 
 #[derive(Clone, Copy)]

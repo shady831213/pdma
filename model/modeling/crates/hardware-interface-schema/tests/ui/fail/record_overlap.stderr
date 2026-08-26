@@ -1,5 +1,0 @@
-error: record fields overlap
- --> tests/ui/fail/record_overlap.rs:4:34
-  |
-4 |     second: u32 { id: 2, offset: 2, endian: Little },
-  |                                  ^

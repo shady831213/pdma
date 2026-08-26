@@ -14,24 +14,26 @@ use pdma_model_contract::abi::mmio::{
 #[test]
 fn literal_register_inventory_is_exact() {
     assert_eq!(MMIO_REGION_SIZE, 0x1000);
-    let registers = PdmaMmioMap::SPEC.registers();
+    let resolved = PdmaMmioMap::resolve().expect("canonical MMIO map must resolve");
+    let registers = resolved.registers();
     assert_eq!(registers.len(), register_literals::len());
     for (actual, expected) in registers.iter().zip(register_literals::iter()) {
+        let definition = actual.definition();
         assert_eq!(
             (
                 actual.id(),
                 actual.name(),
                 u32::try_from(actual.offset()).expect("literal offset fits u32"),
-                u128::try_from(actual.width()).expect("literal width fits u128"),
-                actual.access(),
-                actual.reset_kind(),
-                actual.reset_value(),
-                actual.writable_mask()
+                u128::try_from(definition.width()).expect("literal width fits u128"),
+                definition.access(),
+                definition.reset_kind(),
+                definition.reset_value(),
+                definition.writable_mask()
             ),
             expected
         );
-        assert_eq!(actual.offset() % actual.width(), 0);
-        assert!(actual.offset() + actual.width() <= PdmaMmioMap::SPEC.size());
+        assert_eq!(actual.offset() % definition.width(), 0);
+        assert!(actual.offset() + actual.definition().width() <= PdmaMmioMap::EXTENT);
     }
     println!(
         "literal MMIO registers checked: {}",

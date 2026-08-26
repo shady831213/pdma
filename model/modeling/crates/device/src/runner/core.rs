@@ -163,9 +163,9 @@ impl DeviceCore {
     pub fn reset_partition_snapshot_for_test(&self) -> ResetPartitionSnapshot {
         let (queues, results, work, retirement, irq_sources) =
             self.backend.reset_partition_counts(&self.bus_control);
-        let registers = PdmaMmioMap::SPEC
-            .registers()
-            .iter()
+        let registers = pdma_model_contract::abi::mmio::PdmaMmioMapRegisterId::ALL
+            .into_iter()
+            .filter_map(PdmaMmioMap::register)
             .map(|register| super::mmio::dispatch::read(self, register.id()).encode())
             .collect();
         ResetPartitionSnapshot {

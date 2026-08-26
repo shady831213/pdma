@@ -43,10 +43,8 @@ publication endpoint.
 
 ## Declare and inspect a schema
 
-`record_schema!` supports both explicit fixed layouts and inferred typed records. The
-explicit form keeps `name: scalar { id, offset, endian }` and array declarations for
-existing schemas. The inferred form declares record-level `endian`, optional
-`alignment`, and ordered fields whose aligned offsets and final size are generated.
+`record_schema!` declares record-level `endian`, optional `alignment`, and ordered
+fields whose aligned offsets and final size are generated.
 Its field types are scalars, nested records, `enum(storage)`, `bits(storage)` with
 LSB0 half-open ranges such as `0..5`, and `union` cases selected by a local or nested
 `self` tag. Enum values may omit assignments after an explicit value. Union fields may
@@ -140,11 +138,11 @@ use hardware_interface_schema::{record_schema, register_schema};
 
 record_schema! {
     pub record Packet {
-        size: 8,
         alignment: 4,
+        endian: Little,
         fields: {
-            sequence: u32 { id: 1, offset: 0, endian: Little },
-            code: u16 { id: 2, offset: 4, endian: Big },
+            sequence: u32,
+            code: u16,
         }
     }
 }
@@ -187,7 +185,7 @@ hardware_interface_schema::register_map! {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let packet = PacketValues { sequence: 0x1122_3344, code: 0x5566 };
     let packet_bytes = packet.to_bytes()?;
-    assert_eq!(packet_bytes, [0x44, 0x33, 0x22, 0x11, 0x55, 0x66, 0, 0]);
+    assert_eq!(packet_bytes, [0x44, 0x33, 0x22, 0x11, 0x66, 0x55, 0, 0]);
     assert_eq!(PacketValues::from_bytes(&packet_bytes)?, packet);
     assert_eq!(Packet::SPEC.validate(), Ok(()));
     let values = DeviceMapValues {
@@ -306,9 +304,9 @@ fn main() {
 
     record_schema! {
         record Header {
-            size: 4,
             alignment: 4,
-            fields: { value: u32 { id: 1, offset: 0, endian: Little }, }
+            endian: Little,
+            fields: { value: u32, }
         }
     }
 

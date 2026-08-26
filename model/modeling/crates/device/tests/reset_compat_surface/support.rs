@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver, SharedMemory};
 use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::bridge::{
+use pdma_model_contract::binding::{
     PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
 };
 use pdma_model_contract::semantic::{

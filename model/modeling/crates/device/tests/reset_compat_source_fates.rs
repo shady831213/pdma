@@ -21,9 +21,9 @@ fn require_error<T, E>(result: Result<T, E>) -> TestResult<E> {
 }
 
 fn activation(
-    regions: &[pdma_model_contract::bridge::PdmaMemoryRegion],
+    regions: &[pdma_model_contract::binding::PdmaMemoryRegion],
     epoch: pdma_model_contract::semantic::DeviceEpoch,
-) -> Result<pdma_model_contract::bridge::QueueActivation, pdma_model_contract::abi::AbiControlError>
+) -> Result<pdma_model_contract::binding::QueueActivation, pdma_model_contract::abi::AbiControlError>
 {
     let [submission, completion, event] = regions else {
         return Err(
@@ -34,7 +34,7 @@ fn activation(
             },
         );
     };
-    pdma_model_contract::bridge::QueueActivation::try_new(
+    pdma_model_contract::binding::QueueActivation::try_new(
         epoch,
         pdma_model_contract::semantic::QueueId::new(0),
         pdma_model_contract::semantic::QueueConfig::new(
@@ -43,18 +43,18 @@ fn activation(
             pdma_model_contract::semantic::EventRouting::QueueLocal,
             pdma_model_contract::semantic::SoftwareOwnerId::new(0),
         ),
-        pdma_model_contract::bridge::QueueRingRegions::new(
-            pdma_model_contract::bridge::RingLayout::try_new(
+        pdma_model_contract::binding::QueueRingRegions::new(
+            pdma_model_contract::binding::RingLayout::try_new(
                 *submission,
                 2,
                 pdma_model_contract::abi::RingRecord::Submission,
             )?,
-            pdma_model_contract::bridge::RingLayout::try_new(
+            pdma_model_contract::binding::RingLayout::try_new(
                 *completion,
                 2,
                 pdma_model_contract::abi::RingRecord::Completion,
             )?,
-            pdma_model_contract::bridge::RingLayout::try_new(
+            pdma_model_contract::binding::RingLayout::try_new(
                 *event,
                 2,
                 pdma_model_contract::abi::RingRecord::Event,

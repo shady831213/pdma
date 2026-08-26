@@ -1,6 +1,6 @@
 use pdma_model_contract::abi::mmio::{MmioByteCount, QueueResponseBank};
 use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::bridge::{
+use pdma_model_contract::binding::{
     PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions, RingLayout,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};

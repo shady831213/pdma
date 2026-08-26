@@ -4,7 +4,7 @@ use crate::register::{
 };
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_device::{MmioBatchError, MmioRegisterError, PdmaMemoryError};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 

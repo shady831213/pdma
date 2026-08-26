@@ -1,11 +1,11 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
 use pdma_model_contract::abi::RingCursor;
-use pdma_model_contract::bridge::{decode_completion, decode_event};
 use pdma_model_contract::semantic::{
     CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::translation::{decode_completion, decode_event};
 use pdma_model_device::PendingDmaResult;
 
 /// Exercises exact event visibility and retry ordering.

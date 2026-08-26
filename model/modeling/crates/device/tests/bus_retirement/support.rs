@@ -2,7 +2,7 @@ use super::TestResult;
 use pdma_model_contract::abi::{
     AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingRecord,
 };
-use pdma_model_contract::bridge::{
+use pdma_model_contract::binding::{
     QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
 };
 use pdma_model_contract::semantic::{
@@ -155,8 +155,8 @@ impl Fixture {
 pub(super) async fn allocate_pair(
     handle: &AsyncDeviceHandle,
 ) -> TestResult<(
-    pdma_model_contract::bridge::PdmaMemoryRegion,
-    pdma_model_contract::bridge::PdmaMemoryRegion,
+    pdma_model_contract::binding::PdmaMemoryRegion,
+    pdma_model_contract::binding::PdmaMemoryRegion,
 )> {
     let stage = handle.stage_memory_regions(&[4, 4]).await?;
     let [source, destination] = stage.regions() else {

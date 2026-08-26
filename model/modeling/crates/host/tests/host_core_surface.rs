@@ -10,9 +10,9 @@ use pdma_model_host::{
     DriverPort, ModelError,
     adapters::AdapterError,
     compat::CompatError,
-    core::{AsyncDriver, DriverError, ManualDriver, PortError},
     interrupt::InterruptError,
     register::RegisterError,
+    semantic::{AsyncDriver, DriverError, ManualDriver, PortError},
 };
 use std::{collections::VecDeque, error::Error, future::poll_fn, task::Poll};
 

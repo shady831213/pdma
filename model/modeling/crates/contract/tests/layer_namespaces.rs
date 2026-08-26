@@ -1,14 +1,14 @@
 //! Compile and value proofs for the additive contract namespaces.
 
 use pdma_model_contract::abi::{
-    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingLayout,
-    RingRecord,
+    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingRecord,
 };
-use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
+use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
 use pdma_model_contract::semantic::{self, BufferId};
+use pdma_model_contract::translation::{decode_buffer_id, encode_buffer_id};
 
 #[test]
-fn semantic_and_abi_are_independent_and_bridge_is_explicit() {
+fn semantic_and_abi_are_independent_and_translation_is_explicit() {
     // Given: one semantic request and one unrelated exact ABI command.
     let semantic = semantic::CopyRequest::new(BufferId::new(3), BufferId::new(5), 8);
     let abi = AbiCommand::copy(
@@ -20,17 +20,17 @@ fn semantic_and_abi_are_independent_and_bridge_is_explicit() {
         },
     );
 
-    // When: the exact command is encoded and one ID crosses the explicit bridge.
+    // When: the exact command is encoded and one ID crosses the explicit translation.
     let mut bytes = [0_u8; 64];
     let encoded_record = abi.encode(&mut bytes);
     let encoded_id = encode_buffer_id(semantic.src());
-    let bridged = encoded_id.map(decode_buffer_id);
+    let translationd = encoded_id.map(decode_buffer_id);
 
     // Then: each layer has a real value and composition preserves identity.
     assert_eq!(encoded_record, Ok(()));
     assert_eq!(bytes.len(), 64);
     assert_eq!(encoded_id, Ok(AbiId::new(3)));
-    assert_eq!(bridged, Ok(Ok(semantic.src())));
+    assert_eq!(translationd, Ok(Ok(semantic.src())));
 }
 
 #[test]
@@ -48,9 +48,11 @@ fn semantic_capabilities_and_exact_abi_rings_have_direct_owners() {
     // Given: an epoch-qualified semantic queue and an unrelated exact ABI ring.
     let queue =
         semantic::EpochQueue::new(semantic::DeviceEpoch::initial(), semantic::QueueId::new(7));
-    let ring = RingLayout::try_new(DmaAddress::new(0x4000), 64, 1, RingRecord::Submission);
+    let region = PdmaMemoryRegion::try_new(BufferId::new(9), DmaAddress::new(0x4000), 64)
+        .expect("exact region must fit");
+    let ring = RingLayout::try_new(region, 1, RingRecord::Submission);
 
-    // When/Then: both owner namespaces construct usable values without a bridge.
+    // When/Then: both owner namespaces construct usable values without a translation.
     assert_eq!(queue.queue_id(), semantic::QueueId::new(7));
     assert_eq!(ring.map(|layout| layout.slot(RingCursor::new(3))), Ok(0));
     assert_eq!(

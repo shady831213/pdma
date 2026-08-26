@@ -4,9 +4,9 @@
 mod support;
 
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::bridge::decode_event;
 use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
+use pdma_model_contract::translation::decode_event;
 use pdma_model_device::AsyncDevice;
 use support::{
     RawActivation, activate_raw, issue_queue_command, program_activation, read_response, read_u32,

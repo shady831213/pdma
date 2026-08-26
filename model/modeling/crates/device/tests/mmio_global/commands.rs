@@ -1,6 +1,6 @@
 use super::support::{TestResult, read_u32, response, result, write_u32, write_u64};
 use pdma_model_contract::abi::mmio::MmioAccessError;
-use pdma_model_contract::bridge::{AbiDiscovery, AbiLimits};
+use pdma_model_contract::abi::{AbiDiscovery, AbiLimits};
 use pdma_model_device::AsyncDevice;
 
 pub async fn assert_global_commands() -> TestResult {

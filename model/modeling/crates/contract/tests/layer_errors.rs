@@ -1,29 +1,30 @@
-//! Layer-owned contract error and pure bridge behavior.
+//! Layer-owned contract error and pure translation behavior.
 
 use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::abi::{
     ABI_VERSION, AbiAddressError, AbiCommand, AbiDecodeError, AbiEncodeError,
     DescriptorDecodeError, DescriptorHeaderSchema, DescriptorViolationKind,
 };
-use pdma_model_contract::bridge::{
-    BridgeError, CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
-};
 use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId, SemanticError,
+};
+use pdma_model_contract::translation::{
+    CopyBufferContext, CopyRuntimeAddresses, TranslationError, decode_copy_command,
+    encode_copy_command,
 };
 use std::error::Error;
 
 #[test]
-fn bridge_wraps_identifier_range_with_typed_source() {
+fn translation_wraps_identifier_range_with_typed_source() {
     // Given: a semantic ID that cannot fit ABI-v1 on wide targets.
-    let error = BridgeError::from(AbiEncodeError::UnrepresentableId {
+    let error = TranslationError::from(AbiEncodeError::UnrepresentableId {
         value: u128::from(u64::MAX) + 1,
     });
 
     // When: the standard source chain is inspected.
     let source = error.source();
 
-    // Then: the bridge wrapper exposes the exact ABI cause.
+    // Then: the translation wrapper exposes the exact ABI cause.
     assert_eq!(
         source.and_then(|cause| cause.downcast_ref()),
         Some(&AbiEncodeError::UnrepresentableId {
@@ -42,19 +43,20 @@ fn semantic_errors_are_layer_owned_leaf_errors() {
 }
 
 #[test]
-fn every_bridge_wrapper_exposes_its_typed_cause() {
-    // Given: each cause-carrying bridge wrapper and one bridge-owned leaf.
-    let encode = BridgeError::from(AbiEncodeError::InvalidRecordMetadata);
-    let decode = BridgeError::from(AbiDecodeError::InvalidRecordMetadata);
-    let address = BridgeError::from(AbiAddressError::RangeOverflow {
+fn every_translation_wrapper_exposes_its_typed_cause() {
+    // Given: each cause-carrying translation wrapper and one translation-owned leaf.
+    let encode = TranslationError::from(AbiEncodeError::InvalidRecordMetadata);
+    let decode = TranslationError::from(AbiDecodeError::InvalidRecordMetadata);
+    let address = TranslationError::from(AbiAddressError::RangeOverflow {
         base: u64::MAX,
         length: 1,
     });
-    let descriptor =
-        BridgeError::from(AbiCommand::decode(&[0_u8; 1]).expect_err("short descriptor must fail"));
-    let locator = BridgeError::MissingEventLocator;
+    let descriptor = TranslationError::from(
+        AbiCommand::decode(&[0_u8; 1]).expect_err("short descriptor must fail"),
+    );
+    let opcode = TranslationError::UnexpectedOpcode;
 
-    // When/Then: each wrapper exposes the concrete cause and the bridge leaf has none.
+    // When/Then: each wrapper exposes the concrete cause and the translation leaf has none.
     assert!(
         encode
             .source()
@@ -79,11 +81,11 @@ fn every_bridge_wrapper_exposes_its_typed_cause() {
             .and_then(|cause| cause.downcast_ref::<DescriptorDecodeError>())
             .is_some()
     );
-    assert!(locator.source().is_none());
+    assert!(opcode.source().is_none());
 }
 
 #[test]
-fn copy_bridge_round_trips_with_explicit_address_and_identity_context() {
+fn copy_translation_round_trips_with_explicit_address_and_identity_context() {
     // Given: semantic identities and explicit runtime addresses.
     let command = CopyCommand::new(
         CommandId::new(7),
@@ -95,15 +97,15 @@ fn copy_bridge_round_trips_with_explicit_address_and_identity_context() {
         CopyRuntimeAddresses::new(MemoryAddress::new(0x1000), MemoryAddress::new(0x2000));
     let context = CopyBufferContext::from_command(command);
 
-    // When: bridge output is encoded, decoded, and rebuilt semantically.
-    let exact = encode_copy_command(command, addresses).expect("copy bridge must encode");
+    // When: translation output is encoded, decoded, and rebuilt semantically.
+    let exact = encode_copy_command(command, addresses).expect("copy translation must encode");
     let mut bytes = [0_u8; 64];
     exact
         .encode(&mut bytes)
         .expect("descriptor buffer is exact");
     let decoded = AbiCommand::decode(&bytes).expect("descriptor bytes must decode");
     let (round_trip, decoded_addresses) =
-        decode_copy_command(decoded, context).expect("copy bridge must decode");
+        decode_copy_command(decoded, context).expect("copy translation must decode");
 
     // Then: exact bytes retain the ABI address and semantic values round trip.
     assert_eq!(round_trip, command);

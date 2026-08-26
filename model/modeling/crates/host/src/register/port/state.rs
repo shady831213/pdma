@@ -3,7 +3,7 @@ use crate::register::{BusQueueStatus, PdmaMappedRegion, PdmaPreparedProposal, Pd
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{DmaAddress, RingRecord};
-use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
     BufferId, CompletionRingId, DeviceEpoch, QueueConfig, QueueConfigHandle, QueueDirectoryEntry,
     QueueId,
@@ -201,7 +201,7 @@ fn ring_length(depth: usize, record: RingRecord) -> ModelResult<u64> {
 }
 
 fn layout(region: PdmaMappedRegion, length: u64, record: RingRecord) -> ModelResult<RingLayout> {
-    let projected = pdma_model_contract::bridge::PdmaMemoryRegion::try_new(
+    let projected = pdma_model_contract::binding::PdmaMemoryRegion::try_new(
         region.object(),
         dma_address(region.base()),
         region.length(),

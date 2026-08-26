@@ -2,7 +2,7 @@ use hardware_interface_runtime::{
     AccessKind, AccessOrigin, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
     RegisterAccess, RegisterObservation, RegisterObserver,
 };
-use pdma_model_contract::bridge::QueueActivation;
+use pdma_model_contract::binding::QueueActivation;
 use pdma_model_host::{
     adapters::{AsyncDeviceAccess, AsyncDevicePreparedRegions},
     register::{

@@ -1,5 +1,5 @@
 use super::SyncDevice;
-use crate::runner::backend::ModelStepStatus;
+use crate::runner::types::ModelStepStatus;
 use crate::runner::{AsyncRunSummary, AsyncStepStatus, DeviceCore};
 use crate::{ModelError, ModelResult};
 

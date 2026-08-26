@@ -2,7 +2,7 @@ use super::DeviceCore;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::semantic::completion::CompletionRecord;
 use pdma_model_contract::semantic::desc::ExternalCommand;
@@ -30,7 +30,7 @@ impl SyncDevice {
     pub(crate) fn reset_core(
         &mut self,
         request: pdma_model_contract::semantic::WholeDeviceReset,
-    ) -> Result<pdma_model_contract::semantic::DeviceEpoch, super::bus::PdmaControlError> {
+    ) -> Result<pdma_model_contract::semantic::DeviceEpoch, super::abi::bus::PdmaControlError> {
         self.core.reset_runner(request)
     }
 

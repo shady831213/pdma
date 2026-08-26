@@ -4,12 +4,12 @@
 fn native_execution_core_is_external_command_free() {
     // Given: the device files below the semantic and exact frontend boundary.
     let core = [
-        include_str!("../src/runner/native/step.rs"),
-        include_str!("../src/runner/native/resources.rs"),
-        include_str!("../src/runner/native/copy.rs"),
-        include_str!("../src/runner/native/broadcast.rs"),
-        include_str!("../src/runner/native/vector_add.rs"),
-        include_str!("../src/trace.rs"),
+        include_str!("../src/runner/execution/step.rs"),
+        include_str!("../src/runner/execution/resources.rs"),
+        include_str!("../src/runner/execution/copy.rs"),
+        include_str!("../src/runner/execution/broadcast.rs"),
+        include_str!("../src/runner/execution/vector_add.rs"),
+        include_str!("../src/trace/mod.rs"),
         include_str!("../src/trace/event.rs"),
     ];
     let public_types = [
@@ -38,11 +38,11 @@ fn native_execution_core_is_external_command_free() {
 fn exact_frontend_builds_private_execution_commands_without_external_reconstruction() {
     // Given: the exact descriptor fetch and operation-resolution boundary.
     let exact = [
-        include_str!("../src/runner/native/io/exact/submission.rs"),
-        include_str!("../src/runner/native/io/exact/submission/command.rs"),
-        include_str!("../src/runner/native/io/exact/submission/command/copy.rs"),
-        include_str!("../src/runner/native/io/exact/submission/command/broadcast.rs"),
-        include_str!("../src/runner/native/io/exact/submission/command/vector.rs"),
+        include_str!("../src/runner/execution/io/exact/submission.rs"),
+        include_str!("../src/runner/execution/io/exact/submission/command.rs"),
+        include_str!("../src/runner/execution/io/exact/submission/command/copy.rs"),
+        include_str!("../src/runner/execution/io/exact/submission/command/broadcast.rs"),
+        include_str!("../src/runner/execution/io/exact/submission/command/vector.rs"),
     ];
     let public_types = [
         "semantic::desc",

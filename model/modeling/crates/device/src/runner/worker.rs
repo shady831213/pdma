@@ -1,6 +1,6 @@
 use super::AsyncStepStatus;
-use super::backend::ModelStepStatus;
 use super::state::{DeviceCore, RunnerShared, publish};
+use crate::runner::types::ModelStepStatus;
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
     while run_one(shared).await {}

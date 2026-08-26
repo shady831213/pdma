@@ -5,8 +5,10 @@
 //! translation behavior.
 //!
 //! Consumers import model vocabulary through [`semantic`], fixed wire and MMIO
-//! vocabulary through [`abi`], and cross-layer conversions through [`bridge`].
+//! vocabulary through [`abi`], runtime-bound associations through [`binding`],
+//! and cross-layer value conversions through [`translation`].
 
 pub mod abi;
-pub mod bridge;
+pub mod binding;
 pub mod semantic;
+pub mod translation;

@@ -1,6 +1,6 @@
 use pdma_model_contract::abi::{AbiCommand, DmaAddress};
 use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::bridge::{
+use pdma_model_contract::binding::{
     AbiEvent, PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
     RingLayout,
 };

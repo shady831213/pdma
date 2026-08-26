@@ -1,6 +1,6 @@
 use super::support::{TestResult, response, result, write_u32};
 use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::bridge::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
+use pdma_model_contract::binding::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
     CommandId, DeviceEpoch, EpochQueue, ExternalCommand, QueueId, ResourceConfig, WholeDeviceReset,
     desc::{CopyCommand, CopyRequest},

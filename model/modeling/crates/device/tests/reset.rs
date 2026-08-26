@@ -3,7 +3,7 @@
 use pdma_model_device::ModelError;
 
 use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::bridge::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
+use pdma_model_contract::binding::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
     CommandId, CopyCommand, CopyRequest, DeviceEpoch, EpochIrqSource, EventRouting,
     ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueId, ResourceConfig,

@@ -3,7 +3,7 @@ use pdma_model_contract::abi::{
     AbiCommand, CompletionSchemaView, DescriptorSchemaPayloadValues, DescriptorSchemaValues,
     DescriptorSchemaView, EventSchemaView, IndirectDestinationEntrySchemaView,
 };
-use pdma_model_contract::bridge::{
+use pdma_model_contract::translation::{
     CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
 };
 use pdma_model_contract::semantic::{BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId};

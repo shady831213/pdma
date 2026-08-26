@@ -1,7 +1,7 @@
 use super::{PdmaMemoryError, PdmaMemoryMappings};
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::dma::DmaRangeStart;
 use pdma_model_contract::semantic::event::{EventErrorKind, MemoryFault};
 use pdma_model_contract::semantic::ids::BufferId;

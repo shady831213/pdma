@@ -1,4 +1,4 @@
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 
 /// Read-only proposal for one atomic DMA allocation batch.
 #[derive(Debug, Clone, PartialEq, Eq)]

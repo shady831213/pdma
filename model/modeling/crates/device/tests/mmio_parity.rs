@@ -5,8 +5,8 @@ mod irq;
 #[path = "mmio_parity/queue.rs"]
 mod queue;
 
+use pdma_model_contract::abi::DiscoveryRequest;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount, MmioResult};
-use pdma_model_contract::bridge::DiscoveryRequest;
 use pdma_model_contract::semantic::{DeviceEpoch, DeviceRunState, DeviceStatus, WholeDeviceReset};
 use pdma_model_device::AsyncDevice;
 

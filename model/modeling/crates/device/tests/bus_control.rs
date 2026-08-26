@@ -6,7 +6,7 @@ pub mod support;
 
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::bridge::{
+use pdma_model_contract::binding::{
     PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
     RingLayout,
 };

@@ -120,7 +120,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
 
 const fn list_fields(
     case: BroadcastFaultCase,
-    list: pdma_model_contract::bridge::PdmaMemoryRegion,
+    list: pdma_model_contract::binding::PdmaMemoryRegion,
 ) -> (DmaAddress, u64) {
     match case {
         BroadcastFaultCase::Count => (list.base(), 0),
@@ -134,7 +134,7 @@ const fn list_fields(
 fn expected_tuple(
     case: BroadcastFaultCase,
     base: DmaAddress,
-    list: pdma_model_contract::bridge::PdmaMemoryRegion,
+    list: pdma_model_contract::binding::PdmaMemoryRegion,
 ) -> (AbiEventKind, u64, u64, u64, u16, u16, u64) {
     let (kind, locator, detail0, detail1, access) = match case {
         BroadcastFaultCase::Count => (

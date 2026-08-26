@@ -4,7 +4,7 @@ use std::sync::Arc;
 use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::{AbiControlError, DmaAddress};
-use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId, ResourceConfig};
 use pdma_model_device::compat::ModelErrorAdapter;
 use pdma_model_device::{

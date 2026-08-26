@@ -1,5 +1,5 @@
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, SoftwareCpu};
-use pdma_model_contract::{abi::DmaAddress, bridge::PdmaMemoryRegion, semantic::BufferId};
+use pdma_model_contract::{abi::DmaAddress, binding::PdmaMemoryRegion, semantic::BufferId};
 use pdma_model_host::{
     DriverPort,
     adapters::AsyncDeviceAccess,

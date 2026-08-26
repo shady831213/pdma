@@ -142,7 +142,7 @@ pub enum PdmaRegisterPortError {
     /// The port was polled outside its owning software CPU.
     Cpu(CpuContextError),
     /// Host semantic validation rejected the request.
-    Semantic(crate::core::PortError),
+    Semantic(crate::semantic::PortError),
     /// Host-owned memory provisioning failed.
     Provisioning(PdmaProvisioningError),
     /// One generated register access failed.
@@ -223,9 +223,9 @@ impl From<ResponseCodecError> for PdmaRegisterPortError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterError {
     /// A register request was structurally rejected.
-    Access(crate::core::PortError),
+    Access(crate::semantic::PortError),
     /// A structurally valid request produced an invalid response.
-    Response(crate::core::PortError),
+    Response(crate::semantic::PortError),
 }
 
 impl From<crate::ModelError> for RegisterError {

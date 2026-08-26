@@ -14,7 +14,7 @@ use pdma_model_contract::abi::{
 };
 use pdma_model_contract::abi::{COMPLETION, DESCRIPTOR, EVENT, FEATURES, OPCODES, OpcodeSpec};
 use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
 
 fn assert_field_ranges(record: RecordSpec, expected: &[(usize, usize)]) {

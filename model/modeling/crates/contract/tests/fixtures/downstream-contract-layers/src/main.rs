@@ -1,9 +1,9 @@
 use pdma_model_contract::abi::{
-    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingLayout,
-    RingRecord,
+    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingRecord,
 };
-use pdma_model_contract::bridge::{decode_buffer_id, encode_buffer_id};
+use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
+use pdma_model_contract::translation::{decode_buffer_id, encode_buffer_id};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = BufferId::new(7);
@@ -21,18 +21,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut record = [0_u8; 64];
     exact.encode(&mut record)?;
-    let ring = RingLayout::try_new(
-        DmaAddress::new(0x4000),
-        64,
-        1,
-        RingRecord::Submission,
-    )?;
+    let region = PdmaMemoryRegion::try_new(BufferId::new(11), DmaAddress::new(0x4000), 64)?;
+    let ring = RingLayout::try_new(region, 1, RingRecord::Submission)?;
     let cursor = RingCursor::new(3);
 
     let encoded = encode_buffer_id(semantic.src())?;
     let roundtrip = decode_buffer_id(encoded)? == semantic.src();
     println!(
-        "semantic=independent;abi_record={};bridge=explicit;roundtrip={roundtrip}",
+        "semantic=independent;abi_record={};translation=explicit;roundtrip={roundtrip}",
         record.len()
     );
     assert_eq!(ring.slot(cursor), 0);

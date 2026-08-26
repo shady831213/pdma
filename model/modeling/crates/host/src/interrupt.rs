@@ -9,8 +9,8 @@ pub use pdma::{
 };
 pub use trace::PdmaInterruptTrace;
 
-use crate::core::PortError;
-pub use crate::driver::DriverIrqRecord;
+pub use crate::semantic::DriverIrqRecord;
+use crate::semantic::PortError;
 use pdma_model_contract::semantic::IrqVector;
 use std::{error::Error, fmt};
 

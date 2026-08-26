@@ -4,13 +4,13 @@ use hardware_interface_runtime::{
     ObservationGate, RegisterObserver, SharedMemory, SharedRegisterObserver,
 };
 use pdma_model_contract::abi::mmio::PdmaMmioMap;
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::trace::TraceEvent;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 
-use super::backend::DeviceModel;
-use super::bus::control::BusControlState;
-use super::mmio::RegisterBanks;
+use super::abi::bus::control::BusControlState;
+use super::abi::mmio::RegisterBanks;
+use super::execution::DeviceExecution;
 use super::{AsyncRunSnapshot, AsyncStepStatus, PdmaMemoryError, PdmaMemoryMappings};
 
 /// Direct, named reset partitions exposed solely to integration-test support.
@@ -81,7 +81,7 @@ pub struct DeviceStateSnapshot {
 /// ```
 #[derive(Debug)]
 pub struct DeviceCore {
-    pub(super) backend: DeviceModel,
+    pub(super) backend: DeviceExecution,
     pub(super) dma_space: PdmaMemoryMappings,
     pub(super) bus_control: BusControlState,
     pub(super) mmio: RegisterBanks,
@@ -95,7 +95,7 @@ pub struct DeviceCore {
     pub(super) register_gate: ObservationGate,
     reset_runner_calls: usize,
     #[cfg(test)]
-    pub(super) batch_fault: std::cell::Cell<Option<super::bus::BatchPreparationFault>>,
+    pub(super) batch_fault: std::cell::Cell<Option<super::abi::bus::BatchPreparationFault>>,
 }
 
 impl DeviceCore {
@@ -107,7 +107,7 @@ impl DeviceCore {
     ) -> Self {
         let observer = SharedRegisterObserver::new(observer);
         Self {
-            backend: DeviceModel::queue_port_with_resource_config(config),
+            backend: DeviceExecution::with_resource_config(config),
             dma_space: PdmaMemoryMappings::new(memory),
             bus_control: BusControlState::new(),
             mmio: RegisterBanks::new(),
@@ -154,7 +154,8 @@ impl DeviceCore {
     ) -> Result<Self, pdma_model_contract::abi::mmio::MmioAccessError> {
         let mut core = Self::new_at_epoch_for_test(memory, config, observer, epoch);
         let (register, value) = pdma_model_contract::abi::mmio::decode_write(offset, request)?;
-        super::register_endpoint::prepare_write(register, value, offset, request).commit(&mut core);
+        super::abi::register_endpoint::prepare_write(register, value, offset, request)
+            .commit(&mut core);
         Ok(core)
     }
 
@@ -166,7 +167,7 @@ impl DeviceCore {
         let registers = pdma_model_contract::abi::mmio::PdmaMmioMapRegisterId::ALL
             .into_iter()
             .filter_map(PdmaMmioMap::register)
-            .map(|register| super::mmio::dispatch::read(self, register.id()).encode())
+            .map(|register| super::abi::mmio::dispatch::read(self, register.id()).encode())
             .collect();
         ResetPartitionSnapshot {
             queues,
@@ -212,11 +213,11 @@ impl DeviceCore {
     pub(crate) fn reset_runner(
         &mut self,
         request: WholeDeviceReset,
-    ) -> Result<DeviceEpoch, super::bus::PdmaControlError> {
+    ) -> Result<DeviceEpoch, super::abi::bus::PdmaControlError> {
         let backend_epoch = self.backend.epoch();
         let control_epoch = self.bus_control.epoch();
         if request.expected_epoch() != backend_epoch || control_epoch != backend_epoch {
-            return Err(super::bus::PdmaControlError::StaleEpoch {
+            return Err(super::abi::bus::PdmaControlError::StaleEpoch {
                 expected: backend_epoch,
                 actual: request.expected_epoch(),
             });
@@ -224,11 +225,11 @@ impl DeviceCore {
         let next_backend = backend_epoch.next()?;
         let next_control = control_epoch.next()?;
         if next_backend != next_control {
-            return Err(super::bus::PdmaControlError::InvalidTransaction);
+            return Err(super::abi::bus::PdmaControlError::InvalidTransaction);
         }
         self.backend.reset(next_backend);
         self.bus_control.reset(next_control);
-        super::mmio::reset::register_banks(self);
+        super::abi::mmio::reset::register_banks(self);
         self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
         Ok(next_backend)
     }

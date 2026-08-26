@@ -142,7 +142,7 @@ impl TraceSink {
         );
     }
 
-    pub(crate) fn dma_event_published(&mut self, record: pdma_model_contract::bridge::AbiEvent) {
+    pub(crate) fn dma_event_published(&mut self, record: pdma_model_contract::binding::AbiEvent) {
         self.push(
             TraceEventKind::EventPublished,
             None,

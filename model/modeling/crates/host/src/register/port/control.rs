@@ -6,7 +6,7 @@ use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseRegistersView, RegisterId,
     ResponseCodecError,
 };
-use pdma_model_contract::bridge::{QueueRingRegions, RingCursors};
+use pdma_model_contract::binding::{QueueRingRegions, RingCursors};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId};
 
 const QUEUE_RESPONSE: [RegisterId; 9] = [
@@ -184,7 +184,7 @@ pub(super) fn decode_status(
 }
 
 fn cursors(
-    layout: pdma_model_contract::bridge::RingLayout,
+    layout: pdma_model_contract::binding::RingLayout,
     producer: RingCursor,
     consumer: RingCursor,
 ) -> PdmaPortResult<RingCursors> {
@@ -197,7 +197,7 @@ mod tests {
     use super::*;
     use crate::register::PdmaRegisterPortError;
     use pdma_model_contract::abi::{DmaAddress, RingRecord};
-    use pdma_model_contract::bridge::{PdmaMemoryRegion, RingLayout};
+    use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
     use pdma_model_contract::semantic::BufferId;
     use std::error::Error;
 

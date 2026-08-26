@@ -2,10 +2,10 @@ use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::abi::{AbiEventKind, DmaAddress, RingCursor};
-use pdma_model_contract::bridge::{decode_completion, decode_event};
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EventErrorKind, EventRecord, QueueConfigHandle,
 };
+use pdma_model_contract::translation::{decode_completion, decode_event};
 
 pub(super) async fn completion<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
@@ -111,7 +111,7 @@ async fn commit_consumer<A: CanonicalAccess>(
 }
 
 fn slot_address(
-    layout: pdma_model_contract::bridge::RingLayout,
+    layout: pdma_model_contract::binding::RingLayout,
     cursor: RingCursor,
 ) -> ModelResult<DmaAddress> {
     let offset = layout
@@ -127,7 +127,7 @@ fn slot_address(
 
 fn semantic_event<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    event: pdma_model_contract::bridge::AbiEvent,
+    event: pdma_model_contract::binding::AbiEvent,
 ) -> PdmaPortResult<EventRecord> {
     let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
     let locator = DmaAddress::new(locator);

@@ -3,7 +3,7 @@ use pdma_model_contract::abi::{
     AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadVectorAddValues,
     RingCursor,
 };
-use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{
     CommandId, CompletionStatus, EventRouting, ExternalCommand, QueueConfig, ResourceConfig,

@@ -1,14 +1,14 @@
 #[test]
 fn device_source_has_one_contract_decoder_and_no_competing_codec_or_table() {
     // Given: the complete device-owned MMIO source framework.
-    let root = include_str!("../../src/runner/mmio.rs");
+    let root = include_str!("../../src/runner/abi/mmio/mod.rs");
     let sources = [
-        include_str!("../../src/runner/mmio/bank.rs"),
-        include_str!("../../src/runner/mmio/dispatch.rs"),
-        include_str!("../../src/runner/mmio/global.rs"),
-        include_str!("../../src/runner/mmio/queue.rs"),
-        include_str!("../../src/runner/mmio/irq.rs"),
-        include_str!("../../src/runner/mmio/reset.rs"),
+        include_str!("../../src/runner/abi/mmio/bank.rs"),
+        include_str!("../../src/runner/abi/mmio/dispatch.rs"),
+        include_str!("../../src/runner/abi/mmio/global.rs"),
+        include_str!("../../src/runner/abi/mmio/queue.rs"),
+        include_str!("../../src/runner/abi/mmio/irq.rs"),
+        include_str!("../../src/runner/abi/mmio/reset.rs"),
     ];
 
     // When: decoder calls and forbidden duplicate boundary mechanisms are counted.

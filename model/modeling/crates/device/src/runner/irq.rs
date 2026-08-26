@@ -1,7 +1,6 @@
 //! Async device IRQ control surface.
 
 use super::AsyncDeviceHandle;
-use super::backend::DeviceModel;
 use super::state::DeviceCore;
 use crate::ModelResult;
 use pdma_model_contract::abi::mmio::{
@@ -25,9 +24,9 @@ pub(in crate::runner) fn observe_irq_source(
     state: &DeviceCore,
     source: EpochIrqSource,
 ) -> ModelResult<IrqSourceView> {
-    let (observed, records_pending) = match &state.backend {
-        DeviceModel::QueuePort(device) => device.observe_irq_source(&state.bus_control, source)?,
-    };
+    let (observed, records_pending) = state
+        .backend
+        .observe_irq_source(&state.bus_control, source)?;
     let mut bits = IrqStateBit::Present.mask();
     for (set, bit) in [
         (observed.enabled(), IrqStateBit::Enabled),
@@ -52,9 +51,7 @@ pub(in crate::runner) fn observe_irq_source(
 }
 
 pub(in crate::runner) fn irq_notification_ready(state: &DeviceCore) -> bool {
-    match &state.backend {
-        DeviceModel::QueuePort(device) => device.irq_notification_ready(),
-    }
+    state.backend.irq_notification_ready()
 }
 
 pub(in crate::runner) fn decode_source(epoch: u64, kind: u32, id: u64) -> Option<EpochIrqSource> {

@@ -4,7 +4,7 @@ use pdma_model_contract::abi::{
     DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
     DescriptorSchemaPayloadVectorAddValues, RingCursor,
 };
-use pdma_model_contract::bridge::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
@@ -189,10 +189,10 @@ pub(super) async fn zero_row_strided() -> TestResult {
 pub(super) async fn command(
     case: OperationCase,
     handle: &pdma_model_device::AsyncDeviceHandle,
-    source_a: pdma_model_contract::bridge::PdmaMemoryRegion,
-    source_b: pdma_model_contract::bridge::PdmaMemoryRegion,
-    destination_a: pdma_model_contract::bridge::PdmaMemoryRegion,
-    destination_b: pdma_model_contract::bridge::PdmaMemoryRegion,
+    source_a: pdma_model_contract::binding::PdmaMemoryRegion,
+    source_b: pdma_model_contract::binding::PdmaMemoryRegion,
+    destination_a: pdma_model_contract::binding::PdmaMemoryRegion,
+    destination_b: pdma_model_contract::binding::PdmaMemoryRegion,
 ) -> TestResult<(AbiCommand, Vec<u8>, Vec<u8>)> {
     match case {
         OperationCase::Copy => Ok((

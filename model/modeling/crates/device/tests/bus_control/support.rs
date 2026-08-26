@@ -1,5 +1,5 @@
 use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::bridge::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::AsyncDeviceHandle;
 

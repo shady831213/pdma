@@ -1,8 +1,8 @@
 use crate::ModelError;
-use crate::core::PortError;
 use crate::register::{
     PdmaBatchError, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegisterPortError,
 };
+use crate::semantic::PortError;
 use pdma_model_contract::abi::mmio::MmioResult;
 
 pub(super) const fn provisioning(error: PdmaProvisioningError) -> ModelError {

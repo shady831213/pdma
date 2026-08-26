@@ -9,13 +9,10 @@ use pdma_model_contract::abi::{
     DescriptorSchemaPayloadStridedCopyValues, DescriptorViolationKind, DmaAddress,
     select_canonical_fault,
 };
-use pdma_model_contract::bridge::BridgeError;
-use pdma_model_contract::bridge::{
-    AbiEvent, decode_completion, decode_event, encode_completion, encode_event,
-    encode_semantic_event,
-};
-use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord, QueueId,
+use pdma_model_contract::binding::AbiEvent;
+use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
+use pdma_model_contract::translation::{
+    decode_completion, decode_event, encode_completion, encode_event,
 };
 
 include!("abi_records/fixtures.rs");
@@ -80,14 +77,8 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
 }
 
 #[test]
-fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
-    // Given: a model-only event and malformed completion/event bytes.
-    let model_only = EventRecord::new(
-        QueueId::new(1),
-        CommandId::new(2),
-        EventErrorKind::UnknownBuffer,
-        BufferId::new(0xfeed),
-    );
+fn rejects_unknown_values_and_noncanonical_details() {
+    // Given: malformed completion/event bytes.
     let mut completion = [0_u8; 32];
     completion[0..2].copy_from_slice(&1_u16.to_le_bytes());
     completion[2..4].copy_from_slice(&32_u16.to_le_bytes());
@@ -110,7 +101,6 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
     event_access[50..52].copy_from_slice(&99_u16.to_le_bytes());
 
     // When: values that are not canonical ABI-v1 records cross the boundary.
-    let missing_dma_address = encode_semantic_event(model_only);
     let unknown_status = decode_completion(&completion);
     let unknown_kind = decode_event(&event);
     let noncanonical = encode_event(AbiEvent::new(
@@ -125,8 +115,7 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
     let mismatched_order = mismatched_header_order();
     let mixed_operations = select_canonical_fault([copy_source_unmapped(), vector_source_a()]);
 
-    // Then: each malformed class is rejected and no object identifier is serialized.
-    assert_eq!(missing_dma_address, Err(BridgeError::MissingEventLocator));
+    // Then: each malformed class is rejected.
     assert_eq!(
         unknown_status,
         Err(AbiDecodeError::UnknownCompletionStatus { value: 9 })
@@ -174,9 +163,7 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
             Err(AbiEncodeError::NonCanonicalEventDetails)
         );
     }
-    println!(
-        "errors: {missing_dma_address:?}; {unknown_status:?}; {unknown_kind:?}; {noncanonical:?}"
-    );
+    println!("errors: {unknown_status:?}; {unknown_kind:?}; {noncanonical:?}");
     println!("ordering errors: {mismatched_order:?}; {mixed_operations:?}");
     println!(
         "malformed: {completion_flags_error:?}; {completion_reserved_error:?}; \

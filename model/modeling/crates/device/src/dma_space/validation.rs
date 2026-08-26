@@ -1,5 +1,5 @@
 use super::{MAPPING_ALIGNMENT, PdmaMemoryError, PdmaMemoryMappings, reserved_end};
-use pdma_model_contract::bridge::PdmaMemoryRegion;
+use pdma_model_contract::binding::PdmaMemoryRegion;
 
 impl PdmaMemoryMappings {
     /// Validates that a region set is aligned, exactly mapped, and pairwise disjoint.

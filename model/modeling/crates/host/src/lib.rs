@@ -9,17 +9,15 @@
 
 #[cfg(test)]
 mod context;
-mod driver;
 mod error;
 #[cfg(test)]
 mod irq_delivery;
 
 pub mod adapters;
 pub mod compat;
-pub mod core;
 pub mod interrupt;
 pub mod register;
+pub mod semantic;
 
-pub use driver::{AsyncDriver, DriverIrqRecord, ManualDriver};
 pub use error::{ModelError, ModelResult};
-pub use register::DriverPort;
+pub use semantic::{AsyncDriver, DriverIrqRecord, DriverPort, ManualDriver};

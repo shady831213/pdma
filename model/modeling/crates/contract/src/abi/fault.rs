@@ -1,20 +1,23 @@
 //! Canonical ABI-v1 fault locator and auxiliary tuple.
 
+mod descriptor;
 mod order;
 mod validation;
+mod value;
 
 pub use order::{
-    AbiFaultCandidate, AbiFaultOrder, AbiFaultSelectionError, AbiHeaderField, AbiOperandFaultStep,
-    AbiOperandVisit, AbiReservedField, AbiScalarField, select_canonical_fault,
+    AbiFaultCandidate, AbiFaultOrder, AbiFaultSelectionError, AbiOperandFaultStep, AbiOperandVisit,
+    select_canonical_fault,
 };
-
-use super::{
+pub use value::{
     AbiBounds, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFaultDetails, AbiFaultSite,
     AbiStrideOffset,
 };
+
+use crate::abi::descriptor::{DescriptorHeaderSchema, location_offset};
 use crate::abi::{
-    ABI_VERSION, DESCRIPTOR_SIZE, DescriptorHeaderSchema, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
-    MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
+    ABI_VERSION, DESCRIPTOR_SIZE, DmaAddress, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS,
+    MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
 };
 
 /// Canonical address-aware fault carried by one ABI event.
@@ -23,6 +26,17 @@ pub struct AbiFault {
     kind: AbiEventKind,
     locator: DmaAddress,
     details: AbiFaultDetails,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct FaultTuple {
+    pub(super) kind: AbiEventKind,
+    pub(super) locator: u64,
+    pub(super) observed: u64,
+    pub(super) expected: u64,
+    pub(super) stage: u16,
+    pub(super) access: u16,
+    pub(super) index: u64,
 }
 
 impl AbiFault {
@@ -47,7 +61,10 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(ABI_VERSION),
-                descriptor_site(DescriptorHeaderSchema::VERSION_OFFSET as u64),
+                descriptor_site(location_offset(
+                    DescriptorHeaderSchema::VERSION_IDENTITY
+                        .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+                )),
             ),
         )
     }
@@ -60,7 +77,10 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(DESCRIPTOR_SIZE),
-                descriptor_site(DescriptorHeaderSchema::SIZE_OFFSET as u64),
+                descriptor_site(location_offset(
+                    DescriptorHeaderSchema::SIZE_IDENTITY
+                        .at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+                )),
             ),
         )
     }
@@ -73,7 +93,10 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 u64::from(VECTOR_ADD_OPCODE),
-                descriptor_site(DescriptorHeaderSchema::OPCODE_OFFSET as u64),
+                descriptor_site(location_offset(
+                    DescriptorHeaderSchema::OPCODE_IDENTITY
+                        .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+                )),
             ),
         )
     }
@@ -86,7 +109,10 @@ impl AbiFault {
             AbiFaultDetails::new(
                 u64::from(observed),
                 0,
-                descriptor_site(DescriptorHeaderSchema::FLAGS_OFFSET as u64),
+                descriptor_site(location_offset(
+                    DescriptorHeaderSchema::FLAGS_IDENTITY
+                        .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+                )),
             ),
         )
     }
@@ -200,16 +226,29 @@ impl AbiFault {
 
     /// Returns kind, locator, details, stage, access, and index as fixed-width values.
     pub const fn tuple(self) -> (AbiEventKind, u64, u64, u64, u16, u16, u64) {
-        let (detail0, detail1, stage, access, index) = self.details.values();
+        let tuple = self.parts();
         (
-            self.kind,
-            self.locator.raw(),
-            detail0,
-            detail1,
-            stage.value(),
-            access.value(),
-            index,
+            tuple.kind,
+            tuple.locator,
+            tuple.observed,
+            tuple.expected,
+            tuple.stage,
+            tuple.access,
+            tuple.index,
         )
+    }
+
+    pub(super) const fn parts(self) -> FaultTuple {
+        let (detail0, detail1, stage, access, index) = self.details.values();
+        FaultTuple {
+            kind: self.kind,
+            locator: self.locator.raw(),
+            observed: detail0,
+            expected: detail1,
+            stage: stage.value(),
+            access: access.value(),
+            index,
+        }
     }
 
     /// Returns the assigned event kind.

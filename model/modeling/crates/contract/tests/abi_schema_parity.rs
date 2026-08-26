@@ -3,7 +3,10 @@
 #[path = "abi_schema_parity/support.rs"]
 pub(crate) mod support;
 
-use pdma_model_contract::abi::{AbiCommand, AbiDecodeError};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiDecodeError, DescriptorDecodeError, DescriptorHeaderSchema,
+    DescriptorViolationKind,
+};
 use pdma_model_contract::abi::{
     BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
     DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadCopyValues,
@@ -132,15 +135,16 @@ fn public_error_order_when_malformed_input_crosses_old_and_new_boundaries() {
     let event_error = decode_event(&event);
 
     // Then: public precedence remains ABI-first while generated views retain exact short errors.
-    assert_eq!(
+    assert!(matches!(
         descriptor_error,
-        Err(
-            pdma_model_contract::abi::DescriptorDecodeError::InvalidVersion {
-                observed: 2,
-                expected: 1
-            }
-        )
-    );
+        Err(DescriptorDecodeError::Violation(violation))
+            if violation.kind() == DescriptorViolationKind::Header(
+                DescriptorHeaderSchema::VERSION_IDENTITY
+                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+            )
+                && violation.observed() == 2
+                && violation.expected() == 1
+    ));
     assert_eq!(
         completion_error,
         Err(AbiDecodeError::InvalidRecordField {

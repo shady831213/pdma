@@ -1,9 +1,8 @@
-use super::fault::canonical;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
-    AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultOrder, AbiFaultSite,
-    AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DmaAddress,
+    AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultSite, AbiOperandVisit,
+    AbiStrideOffset, DmaAddress,
 };
 use pdma_model_contract::bridge::PdmaMemoryRegion;
 use pdma_model_contract::semantic::DmaRangeStart;
@@ -16,13 +15,7 @@ pub(super) fn direct(
 ) -> ModelResult<Result<DmaRangeStart, AbiFault>> {
     let site = site(visit);
     let Ok(end) = address.checked_add(length) else {
-        return Ok(Err(canonical(
-            AbiFault::range_overflow_direct(address, length, site),
-            AbiFaultOrder::Operand {
-                visit,
-                step: AbiOperandFaultStep::CheckedEnd,
-            },
-        )));
+        return Ok(Err(AbiFault::range_overflow_direct(address, length, site)));
     };
     resolve_representable(dma_space, address, end, length, visit)
 }
@@ -41,16 +34,10 @@ pub(super) fn strided(
     {
         Some(start) => DmaAddress::new(start),
         None => {
-            return Ok(Err(canonical(
-                AbiFault::range_overflow_strided(
-                    base,
-                    AbiStrideOffset::new(row, stride),
-                    site(visit),
-                ),
-                AbiFaultOrder::Operand {
-                    visit,
-                    step: AbiOperandFaultStep::CheckedStart,
-                },
+            return Ok(Err(AbiFault::range_overflow_strided(
+                base,
+                AbiStrideOffset::new(row, stride),
+                site(visit),
             )));
         }
     };
@@ -64,22 +51,10 @@ pub(super) fn indirect_container(
 ) -> ModelResult<Result<(DmaRangeStart, u64), AbiFault>> {
     let visit = AbiOperandVisit::BroadcastList;
     let Some(extent) = count.checked_mul(8) else {
-        return Ok(Err(canonical(
-            AbiFault::range_overflow_indirect(base, count),
-            AbiFaultOrder::Operand {
-                visit,
-                step: AbiOperandFaultStep::CheckedEnd,
-            },
-        )));
+        return Ok(Err(AbiFault::range_overflow_indirect(base, count)));
     };
     let Ok(end) = base.checked_add(extent) else {
-        return Ok(Err(canonical(
-            AbiFault::range_overflow_indirect(base, count),
-            AbiFaultOrder::Operand {
-                visit,
-                step: AbiOperandFaultStep::CheckedEnd,
-            },
-        )));
+        return Ok(Err(AbiFault::range_overflow_indirect(base, count)));
     };
     resolve_representable(dma_space, base, end, extent, visit)
         .map(|result| result.map(|start| (start, extent)))
@@ -93,25 +68,13 @@ fn resolve_representable(
     visit: AbiOperandVisit,
 ) -> ModelResult<Result<DmaRangeStart, AbiFault>> {
     let Some(region) = dma_space.region_containing(start) else {
-        return Ok(Err(canonical(
-            AbiFault::unmapped(start, length, site(visit)),
-            AbiFaultOrder::Operand {
-                visit,
-                step: AbiOperandFaultStep::Unmapped,
-            },
-        )));
+        return Ok(Err(AbiFault::unmapped(start, length, site(visit))));
     };
     if end > region.abi_exclusive_end() {
-        return Ok(Err(canonical(
-            AbiFault::out_of_bounds(
-                region.abi_exclusive_end(),
-                AbiBounds::new(region.length(), end.raw()),
-                site(visit),
-            ),
-            AbiFaultOrder::Operand {
-                visit,
-                step: AbiOperandFaultStep::OutOfBounds,
-            },
+        return Ok(Err(AbiFault::out_of_bounds(
+            region.abi_exclusive_end(),
+            AbiBounds::new(region.length(), end.raw()),
+            site(visit),
         )));
     }
     range_start(region, start).map(Ok)

@@ -1,14 +1,13 @@
 mod command;
-mod fault;
 mod resolve;
 
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::bus::BusControlError;
 use crate::runner::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::AbiCommand;
-use pdma_model_contract::abi::DescriptorSchemaView;
-use pdma_model_contract::abi::RingRecord;
+use pdma_model_contract::abi::{
+    AbiCommand, DescriptorDecodeError, DescriptorSchemaView, RingRecord,
+};
 use pdma_model_contract::bridge::AbiEvent;
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
@@ -53,11 +52,12 @@ pub(super) fn fetch(
             command,
         )
         .map(|result| Some(result.map_or_else(ExactFetch::Fault, ExactFetch::Command))),
-        Err(error) => fault::descriptor(slot, &bytes, error).map(|fault| {
-            Some(ExactFetch::Fault(AbiEvent::new(
-                queue_id, command_id, fault,
-            )))
-        }),
+        Err(DescriptorDecodeError::Violation(violation)) => Ok(Some(ExactFetch::Fault(
+            AbiEvent::new(queue_id, command_id, violation.into_abi_fault(slot)),
+        ))),
+        Err(DescriptorDecodeError::Codec(_) | DescriptorDecodeError::MetadataMismatch) => {
+            Err(ModelError::DmaSubmissionState)
+        }
     }
 }
 

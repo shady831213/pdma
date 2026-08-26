@@ -2,11 +2,25 @@ use super::{support, vectors};
 use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::abi::{
     ABI_VERSION, AbiCommand, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE, DescriptorDecodeError,
-    DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaValues,
-    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
-    DescriptorSchemaPayloadValues, DescriptorSchemaRaw, DescriptorSchemaValues,
-    MAX_INDIRECT_DESTINATIONS, VECTOR_ADD_OPCODE,
+    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsValues, DescriptorHeaderSchemaOpcode,
+    DescriptorHeaderSchemaValues, DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadValues,
+    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaRaw, DescriptorSchemaValues,
+    DescriptorViolationKind, VECTOR_ADD_OPCODE,
 };
+
+fn assert_violation(
+    result: Result<AbiCommand, DescriptorDecodeError>,
+    kind: DescriptorViolationKind,
+    observed: u64,
+) {
+    assert!(matches!(result, Err(DescriptorDecodeError::Violation(_))));
+    let Err(DescriptorDecodeError::Violation(violation)) = result else {
+        return;
+    };
+    assert_eq!(violation.kind(), kind);
+    assert_eq!(violation.observed(), observed);
+}
 
 #[test]
 fn generated_descriptor_uses_semantic_header_and_payload_fields() {
@@ -66,12 +80,13 @@ fn destination_count_identity_maps_count_error_at_its_generated_byte() {
     let decoded = AbiCommand::try_from(DescriptorSchemaRaw::from(bytes));
 
     // Then: the count member maps to its descriptor-specific public error.
-    assert_eq!(
+    assert_violation(
         decoded,
-        Err(DescriptorDecodeError::InvalidIndirectCount {
-            observed,
-            maximum: MAX_INDIRECT_DESTINATIONS,
-        })
+        DescriptorViolationKind::Scalar(
+            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
+        observed,
     );
 }
 
@@ -86,13 +101,13 @@ fn vector_length_at_broadcast_count_byte_remains_value_error() {
     let decoded = AbiCommand::try_from(DescriptorSchemaRaw::from(bytes));
 
     // Then: the distinct generated member remains an ordinary scalar range error.
-    assert_eq!(
+    assert_violation(
         decoded,
-        Err(DescriptorDecodeError::ValueOutOfRange {
-            offset: 40,
-            observed,
-            maximum: u32::MAX,
-        })
+        DescriptorViolationKind::Scalar(
+            DescriptorSchemaPayloadVectorAddValues::LENGTH_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
+        observed,
     );
 }
 
@@ -132,43 +147,45 @@ fn generated_descriptor_raw_try_from_preserves_error_precedence() {
     assert!(support::replace_u64(&mut bytes, 40, 1));
 
     // When/Then: direct raw conversion keeps the canonical validation order.
-    assert_eq!(
+    assert_violation(
         AbiCommand::try_from(DescriptorSchemaRaw::from(bytes)),
-        Err(DescriptorDecodeError::InvalidVersion {
-            observed: ABI_VERSION + 1,
-            expected: ABI_VERSION,
-        })
+        DescriptorViolationKind::Header(
+            DescriptorHeaderSchema::VERSION_IDENTITY
+                .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+        ),
+        u64::from(ABI_VERSION + 1),
     );
     assert!(support::replace_u16(&mut bytes, 0, ABI_VERSION));
-    assert_eq!(
+    assert_violation(
         AbiCommand::try_from(DescriptorSchemaRaw::from(bytes)),
-        Err(DescriptorDecodeError::InvalidSize {
-            observed: DESCRIPTOR_SIZE - 1,
-            expected: DESCRIPTOR_SIZE,
-        })
+        DescriptorViolationKind::Header(
+            DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+        ),
+        u64::from(DESCRIPTOR_SIZE - 1),
     );
     assert!(support::replace_u16(&mut bytes, 6, DESCRIPTOR_SIZE));
-    assert_eq!(
+    assert_violation(
         AbiCommand::try_from(DescriptorSchemaRaw::from(bytes)),
-        Err(DescriptorDecodeError::InvalidOpcode {
-            observed: VECTOR_ADD_OPCODE + 1,
-            maximum: VECTOR_ADD_OPCODE,
-        })
+        DescriptorViolationKind::Header(
+            DescriptorHeaderSchema::OPCODE_IDENTITY.at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+        ),
+        u64::from(VECTOR_ADD_OPCODE + 1),
     );
     assert!(support::replace_u16(&mut bytes, 2, 1));
-    assert_eq!(
+    assert_violation(
         AbiCommand::try_from(DescriptorSchemaRaw::from(bytes)),
-        Err(DescriptorDecodeError::InvalidFlags {
-            observed: 1,
-            allowed: DESCRIPTOR_FLAGS_MASK,
-        })
+        DescriptorViolationKind::Header(
+            DescriptorHeaderSchema::FLAGS_IDENTITY.at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+        ),
+        1,
     );
     assert!(support::replace_u16(&mut bytes, 4, DESCRIPTOR_FLAGS_MASK));
-    assert_eq!(
+    assert_violation(
         AbiCommand::try_from(DescriptorSchemaRaw::from(bytes)),
-        Err(DescriptorDecodeError::InvalidReserved {
-            offset: 40,
-            observed: 1,
-        })
+        DescriptorViolationKind::Reserved {
+            opcode: DescriptorHeaderSchemaOpcode::Copy,
+            location: DescriptorSchema::PAYLOAD_IDENTITY.at_byte(DescriptorSchema::WORD3_OFFSET),
+        },
+        1,
     );
 }

@@ -4,6 +4,7 @@ mod address;
 mod codec;
 mod descriptor;
 mod error;
+mod fault;
 pub mod header;
 mod metadata;
 pub mod mmio;
@@ -21,12 +22,17 @@ pub use descriptor::{
     DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadRaw,
     DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadValues,
     DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaRaw, DescriptorSchemaValues,
-    DescriptorSchemaView, DescriptorSchemaViewMut, DescriptorValueError,
-    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaRaw,
+    DescriptorSchemaView, DescriptorSchemaViewMut, DescriptorValueError, DescriptorViolation,
+    DescriptorViolationKind, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaRaw,
     IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
     IndirectDestinationEntrySchemaViewMut,
 };
 pub use error::{AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError};
+pub use fault::{
+    AbiBounds, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultCandidate,
+    AbiFaultDetails, AbiFaultOrder, AbiFaultSelectionError, AbiFaultSite, AbiOperandFaultStep,
+    AbiOperandVisit, AbiStrideOffset, select_canonical_fault,
+};
 pub use metadata::{
     ABI_VERSION, AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION, COMPLETION_ALIGNMENT,
     COMPLETION_FLAGS_MASK, COMPLETION_SIZE, COMPLETION_V1_FEATURE, COPY_FEATURE, COPY_OPCODE,
@@ -40,13 +46,10 @@ pub use metadata::{
     VECTOR_ADD_OPCODE, validate_abi_version,
 };
 pub use record::{
-    AbiBounds, AbiCompletion, AbiEvent as ExactAbiEvent, AbiEventAccess, AbiEventKind,
-    AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
-    AbiFaultSelectionError, AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit,
-    AbiReservedField, AbiScalarField, AbiStrideOffset, CompletionSchema, CompletionSchemaValues,
-    CompletionSchemaView, CompletionSchemaViewMut, EventSchema, EventSchemaValues, EventSchemaView,
-    EventSchemaViewMut, decode_completion as decode_exact_completion,
+    AbiCompletion, CompletionSchema, CompletionSchemaValues, CompletionSchemaView,
+    CompletionSchemaViewMut, EventSchema, EventSchemaValues, EventSchemaView, EventSchemaViewMut,
+    ExactAbiEvent, decode_completion as decode_exact_completion,
     decode_event as decode_exact_event, encode_completion as encode_exact_completion,
-    encode_event as encode_exact_event, select_canonical_fault,
+    encode_event as encode_exact_event,
 };
 pub use ring::{RingCursor, RingCursors, RingLayout, RingRecord};

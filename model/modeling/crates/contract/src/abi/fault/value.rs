@@ -1,4 +1,4 @@
-//! Typed numeric values carried by ABI-v1 event records.
+//! Typed values carried by canonical ABI-v1 faults.
 
 use crate::abi::{AbiDecodeError, EVENT_ACCESSES, EVENT_KINDS, EVENT_STAGES};
 
@@ -47,7 +47,7 @@ impl AbiEventKind {
         }
     }
 
-    pub(super) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
+    pub(in crate::abi) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
         match value {
             value if value == EVENT_KINDS[0].value => Ok(Self::UnmappedDmaAddress),
             value if value == EVENT_KINDS[1].value => Ok(Self::RangeOverflow),
@@ -89,7 +89,7 @@ impl AbiEventStage {
         }
     }
 
-    pub(super) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
+    pub(in crate::abi) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
         match value {
             value if value == EVENT_STAGES[0].value => Ok(Self::Descriptor),
             value if value == EVENT_STAGES[1].value => Ok(Self::IndirectList),
@@ -212,7 +212,7 @@ impl AbiEventAccess {
         }
     }
 
-    pub(super) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
+    pub(in crate::abi) const fn parse(value: u16) -> Result<Self, AbiDecodeError> {
         match value {
             value if value == EVENT_ACCESSES[0].value => Ok(Self::None),
             value if value == EVENT_ACCESSES[1].value => Ok(Self::Read),

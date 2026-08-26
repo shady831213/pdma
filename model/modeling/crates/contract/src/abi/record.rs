@@ -1,26 +1,17 @@
 //! Fixed-width completion and event record codecs.
 
-mod fault;
 mod schema;
-mod value;
 
-pub use fault::{
-    AbiFault, AbiFaultCandidate, AbiFaultOrder, AbiFaultSelectionError, AbiHeaderField,
-    AbiOperandFaultStep, AbiOperandVisit, AbiReservedField, AbiScalarField, select_canonical_fault,
-};
 pub use schema::{
     CompletionSchema, CompletionSchemaValues, CompletionSchemaView, CompletionSchemaViewMut,
     EventSchema, EventSchemaValues, EventSchemaView, EventSchemaViewMut,
-};
-pub use value::{
-    AbiBounds, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFaultDetails, AbiFaultSite,
-    AbiStrideOffset,
 };
 
 use super::{
     ABI_VERSION, AbiDecodeError, AbiEncodeError, AbiId, COMPLETION_SIZE, EVENT_SIZE,
     SUCCESS_STATUS,
     codec::{decode_schema_error, encode_schema_error},
+    fault::{AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultDetails, AbiFaultSite},
 };
 
 /// Exact ABI-v1 successful completion value.
@@ -52,13 +43,13 @@ impl AbiCompletion {
 
 /// Address-aware event value used by the DMA ABI path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AbiEvent {
+pub struct ExactAbiEvent {
     queue_id: AbiId,
     command_id: AbiId,
     fault: AbiFault,
 }
 
-impl AbiEvent {
+impl ExactAbiEvent {
     /// Creates one event after runtime first-match classification.
     pub const fn new(queue_id: AbiId, command_id: AbiId, fault: AbiFault) -> Self {
         Self {
@@ -133,7 +124,9 @@ pub fn decode_completion(bytes: &[u8]) -> Result<AbiCompletion, AbiDecodeError> 
 }
 
 /// Encodes one canonical address-aware event into exactly 64 ABI-v1 bytes.
-pub fn encode_event(event: AbiEvent) -> Result<[u8; EventSchema::SPEC.size()], AbiEncodeError> {
+pub fn encode_event(
+    event: ExactAbiEvent,
+) -> Result<[u8; EventSchema::SPEC.size()], AbiEncodeError> {
     if !event.fault.is_canonical() {
         return Err(AbiEncodeError::NonCanonicalEventDetails);
     }
@@ -161,7 +154,7 @@ pub fn encode_event(event: AbiEvent) -> Result<[u8; EventSchema::SPEC.size()], A
 }
 
 /// Decodes and validates one canonical address-aware ABI-v1 event.
-pub fn decode_event(bytes: &[u8]) -> Result<AbiEvent, AbiDecodeError> {
+pub fn decode_event(bytes: &[u8]) -> Result<ExactAbiEvent, AbiDecodeError> {
     let view = EventSchemaView::new(bytes).map_err(decode_schema_error)?;
     require_field(
         "version",
@@ -200,7 +193,7 @@ pub fn decode_event(bytes: &[u8]) -> Result<AbiEvent, AbiDecodeError> {
     if !fault.is_canonical() {
         return Err(AbiDecodeError::NonCanonicalEventDetails);
     }
-    Ok(AbiEvent::new(queue_id, command_id, fault))
+    Ok(ExactAbiEvent::new(queue_id, command_id, fault))
 }
 
 const fn require_field(

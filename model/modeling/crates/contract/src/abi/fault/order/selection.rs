@@ -2,12 +2,14 @@ use core::cmp::Ordering;
 use core::fmt;
 
 use super::types::{
-    AbiFaultOrder, AbiFaultSelectionError, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit,
-    AbiScalarField, OrderKey,
+    AbiFaultOrder, AbiFaultSelectionError, AbiOperandFaultStep, AbiOperandVisit, OrderKey,
 };
-use super::{operand_context, operation_for, order_key, reserved_offset};
-use crate::abi::record::{AbiEventKind, AbiFault};
-use crate::abi::{DescriptorHeaderSchema, DescriptorSchema};
+use super::{operand_context, operation_for, order_key};
+use crate::abi::descriptor::{
+    DescriptorHeaderSchema, DescriptorViolationKind, is_indirect_alignment_location,
+    is_indirect_count_location, is_reserved_location, is_scalar_location, location_offset,
+};
+use crate::abi::fault::{AbiEventKind, AbiFault, FaultTuple};
 
 /// One canonical fault paired with its typed first-match location.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,70 +80,67 @@ impl fmt::Display for AbiFaultSelectionError {
 impl std::error::Error for AbiFaultSelectionError {}
 
 fn fault_matches_order(fault: AbiFault, order: AbiFaultOrder) -> bool {
-    let tuple = fault.tuple();
+    let tuple = fault.parts();
     match order {
-        AbiFaultOrder::Header(field) => header_matches(tuple, field),
-        AbiFaultOrder::Reserved(field) => {
-            tuple.0 == AbiEventKind::InvalidReserved && tuple.6 == reserved_offset(field)
-        }
-        AbiFaultOrder::Scalar(field) => scalar_matches(tuple, field),
+        AbiFaultOrder::Descriptor(kind) => descriptor_matches(tuple, kind),
         AbiFaultOrder::Operand { visit, step } => {
-            operand_matches(tuple, visit) && step_matches(tuple.0, visit, step)
+            operand_matches(tuple, visit) && step_matches(tuple.kind, visit, step)
         }
     }
 }
 
-fn header_matches(tuple: FaultTuple, field: AbiHeaderField) -> bool {
-    let (kind, index) = match field {
-        AbiHeaderField::Version => (
-            AbiEventKind::InvalidVersion,
-            DescriptorHeaderSchema::VERSION_OFFSET as u64,
-        ),
-        AbiHeaderField::Size => (
-            AbiEventKind::InvalidSize,
-            DescriptorHeaderSchema::SIZE_OFFSET as u64,
-        ),
-        AbiHeaderField::Opcode => (
-            AbiEventKind::InvalidOpcode,
-            DescriptorHeaderSchema::OPCODE_OFFSET as u64,
-        ),
-        AbiHeaderField::Flags => (
-            AbiEventKind::InvalidFlags,
-            DescriptorHeaderSchema::FLAGS_OFFSET as u64,
-        ),
-    };
-    tuple.0 == kind && tuple.6 == index
+fn descriptor_matches(tuple: FaultTuple, kind: DescriptorViolationKind) -> bool {
+    match kind {
+        DescriptorViolationKind::Header(location) => header_matches(tuple, location),
+        DescriptorViolationKind::Reserved { opcode, location } => {
+            is_reserved_location(opcode, location)
+                && tuple.kind == AbiEventKind::InvalidReserved
+                && tuple.index == location_offset(location)
+        }
+        DescriptorViolationKind::Scalar(location) => scalar_matches(tuple, location),
+    }
 }
 
-fn scalar_matches(tuple: FaultTuple, field: AbiScalarField) -> bool {
-    let (kind, index) = match field {
-        AbiScalarField::CopyLength
-        | AbiScalarField::StridedRows
-        | AbiScalarField::BroadcastLength => (
-            AbiEventKind::ValueOutOfRange,
-            DescriptorSchema::WORD2_OFFSET as u64,
-        ),
-        AbiScalarField::StridedRowBytes | AbiScalarField::VectorLength => (
-            AbiEventKind::ValueOutOfRange,
-            DescriptorSchema::WORD3_OFFSET as u64,
-        ),
-        AbiScalarField::StridedSourceStride => (
-            AbiEventKind::ValueOutOfRange,
-            DescriptorSchema::WORD4_OFFSET as u64,
-        ),
-        AbiScalarField::StridedDestinationStride => (
-            AbiEventKind::ValueOutOfRange,
-            DescriptorSchema::WORD5_OFFSET as u64,
-        ),
-        AbiScalarField::BroadcastDestinationCount => (AbiEventKind::InvalidIndirectCount, 0),
-        AbiScalarField::BroadcastListAlignment => (AbiEventKind::InvalidIndirectAlignment, 0),
+fn header_matches(tuple: FaultTuple, location: hardware_interface_schema::SchemaLocation) -> bool {
+    let kind = if location
+        == DescriptorHeaderSchema::VERSION_IDENTITY.at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+    {
+        AbiEventKind::InvalidVersion
+    } else if location
+        == DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET)
+    {
+        AbiEventKind::InvalidSize
+    } else if location
+        == DescriptorHeaderSchema::OPCODE_IDENTITY.at_byte(DescriptorHeaderSchema::OPCODE_OFFSET)
+    {
+        AbiEventKind::InvalidOpcode
+    } else if location
+        == DescriptorHeaderSchema::FLAGS_IDENTITY.at_byte(DescriptorHeaderSchema::FLAGS_OFFSET)
+    {
+        AbiEventKind::InvalidFlags
+    } else {
+        return false;
     };
-    tuple.0 == kind && tuple.6 == index
+    tuple.kind == kind && tuple.index == location_offset(location)
+}
+
+fn scalar_matches(tuple: FaultTuple, location: hardware_interface_schema::SchemaLocation) -> bool {
+    if !is_scalar_location(location) {
+        return false;
+    }
+    let (kind, index) = if is_indirect_count_location(location) {
+        (AbiEventKind::InvalidIndirectCount, 0)
+    } else if is_indirect_alignment_location(location) {
+        (AbiEventKind::InvalidIndirectAlignment, 0)
+    } else {
+        (AbiEventKind::ValueOutOfRange, location_offset(location))
+    };
+    tuple.kind == kind && tuple.index == index
 }
 
 const fn operand_matches(tuple: FaultTuple, visit: AbiOperandVisit) -> bool {
     let (stage, access, index) = operand_context(visit);
-    tuple.4 == stage.value() && tuple.5 == access.value() && tuple.6 == index
+    tuple.stage == stage.value() && tuple.access == access.value() && tuple.index == index
 }
 
 fn step_matches(kind: AbiEventKind, visit: AbiOperandVisit, step: AbiOperandFaultStep) -> bool {
@@ -159,5 +158,3 @@ fn step_matches(kind: AbiEventKind, visit: AbiOperandVisit, step: AbiOperandFaul
         AbiOperandFaultStep::OutOfBounds => kind == AbiEventKind::OutOfBounds,
     }
 }
-
-type FaultTuple = (AbiEventKind, u64, u64, u64, u16, u16, u64);

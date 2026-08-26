@@ -1,10 +1,13 @@
 //! ABI-v1 completion and event record boundary scenarios.
 
+use hardware_interface_schema::{SchemaCoordinate, SchemaLocation, SchemaMemberIdentity};
 use pdma_model_contract::abi::{
     AbiBounds, AbiDecodeError, AbiEncodeError, AbiEventAccess, AbiEventKind, AbiEventStage,
     AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder, AbiFaultSelectionError,
-    AbiFaultSite, AbiHeaderField, AbiOperandFaultStep, AbiOperandVisit, AbiReservedField,
-    AbiScalarField, AbiStrideOffset, DmaAddress, select_canonical_fault,
+    AbiFaultSite, AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DescriptorHeaderSchema,
+    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadCopyValues,
+    DescriptorSchemaPayloadStridedCopyValues, DescriptorViolationKind, DmaAddress,
+    select_canonical_fault,
 };
 use pdma_model_contract::bridge::BridgeError;
 use pdma_model_contract::bridge::{
@@ -119,10 +122,7 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
             AbiFaultDetails::new(8, 9, site(AbiEventStage::Source, AbiEventAccess::Read, 0)),
         ),
     ));
-    let mismatched_order = AbiFaultCandidate::try_new(
-        AbiFault::invalid_size(DmaAddress::new(0x1000), 63),
-        AbiFaultOrder::Header(AbiHeaderField::Version),
-    );
+    let mismatched_order = mismatched_header_order();
     let mixed_operations = select_canonical_fault([copy_source_unmapped(), vector_source_a()]);
 
     // Then: each malformed class is rejected and no object identifier is serialized.
@@ -183,4 +183,14 @@ fn rejects_model_only_locations_unknown_values_and_noncanonical_details() {
          {event_flags_error:?}; {event_reserved_error:?}; \
          {short_completion_error:?}; {short_event_error:?}"
     );
+}
+
+fn mismatched_header_order() -> Result<AbiFaultCandidate, AbiFaultSelectionError> {
+    AbiFaultCandidate::try_new(
+        AbiFault::invalid_size(DmaAddress::new(0x1000), 63),
+        AbiFaultOrder::Descriptor(DescriptorViolationKind::Header(
+            DescriptorHeaderSchema::VERSION_IDENTITY
+                .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+        )),
+    )
 }

@@ -2,7 +2,8 @@
 
 use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiAddressError, AbiCommand, AbiDecodeError, AbiEncodeError, DescriptorDecodeError,
+    ABI_VERSION, AbiAddressError, AbiCommand, AbiDecodeError, AbiEncodeError,
+    DescriptorDecodeError, DescriptorHeaderSchema, DescriptorViolationKind,
 };
 use pdma_model_contract::bridge::{
     BridgeError, CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
@@ -122,13 +123,16 @@ fn descriptor_version_precedes_opcode_for_literal_malformed_bytes() {
     let error = AbiCommand::decode(&bytes).expect_err("malformed descriptor must fail");
 
     // Then: literal version validation wins before opcode validation.
-    assert_eq!(
+    assert!(matches!(
         error,
-        DescriptorDecodeError::InvalidVersion {
-            observed: ABI_VERSION + 1,
-            expected: ABI_VERSION,
-        }
-    );
+        DescriptorDecodeError::Violation(violation)
+            if violation.kind() == DescriptorViolationKind::Header(
+                DescriptorHeaderSchema::VERSION_IDENTITY
+                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+            )
+                && violation.observed() == u64::from(ABI_VERSION + 1)
+                && violation.expected() == u64::from(ABI_VERSION)
+    ));
 }
 
 #[test]

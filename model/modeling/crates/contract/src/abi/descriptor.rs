@@ -1,10 +1,18 @@
 mod conversion;
 mod error;
+mod location;
 mod schema;
+mod violation;
 
 use super::{ABI_VERSION, AbiEncodeError, AbiId, DmaAddress, INDIRECT_ENTRY_ALIGNMENT};
 
 pub use error::{DescriptorDecodeError, DescriptorValueError};
+pub(in crate::abi) use location::{
+    header_rank, is_indirect_alignment_location, is_indirect_count_location, is_narrowing_location,
+    is_reserved_location, is_scalar_location, location_offset, scalar_opcode, scalar_rank,
+};
+pub(in crate::abi) use violation::DescriptorViolationValue;
+pub use violation::{DescriptorViolation, DescriptorViolationKind};
 
 use error::DescriptorPayloadViolation;
 
@@ -200,6 +208,7 @@ const fn validate_payload(
         DescriptorSchemaPayloadValues::BroadcastCopy(values) => {
             if values.destination_count == 0 {
                 return Err(DescriptorPayloadViolation::InvalidIndirectCount {
+                    list: values.destination_list_dma_address,
                     observed: values.destination_count,
                 });
             }

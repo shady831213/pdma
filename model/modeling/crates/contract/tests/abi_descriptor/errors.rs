@@ -1,13 +1,20 @@
 use super::{support, vectors};
 use pdma_model_contract::abi::{
     AbiCommand, AbiDecodeError, AbiEncodeError, AbiId, BroadcastDestinationEntry,
-    DescriptorDecodeError, DescriptorSchemaPayloadBroadcastCopyValues, DescriptorValueError,
-    INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS,
-    MAX_TRANSFER_BYTES,
+    DescriptorDecodeError, DescriptorHeaderSchemaOpcode, DescriptorSchema,
+    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
+    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadVectorAddValues,
+    DescriptorValueError, DescriptorViolationKind, INDIRECT_ENTRY_ALIGNMENT,
+    MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
 };
 
-fn assert_decode_error(bytes: &[u8], expected: DescriptorDecodeError) {
-    assert_eq!(AbiCommand::decode(bytes), Err(expected));
+fn assert_decode_violation(bytes: &[u8], expected: DescriptorViolationKind) {
+    let decoded = AbiCommand::decode(bytes);
+    assert!(matches!(decoded, Err(DescriptorDecodeError::Violation(_))));
+    let Err(DescriptorDecodeError::Violation(violation)) = decoded else {
+        return;
+    };
+    assert_eq!(violation.kind(), expected);
 }
 
 /// Checks every operation-reserved word and bounded scalar.
@@ -15,60 +22,114 @@ fn assert_decode_error(bytes: &[u8], expected: DescriptorDecodeError) {
 /// # Panics
 /// Panics when a malformed fixture is not rejected with its exact typed error.
 pub fn assert_reserved_and_scalar_errors() {
-    for (base, offsets) in [
-        (vectors::COPY, &[40_usize, 48, 56][..]),
-        (vectors::BROADCAST, &[48_usize, 56][..]),
-        (vectors::VECTOR_ADD, &[48_usize, 56][..]),
+    assert_reserved_errors();
+    assert_scalar_errors();
+    assert_reserved_precedence();
+}
+
+fn assert_reserved_errors() {
+    for (base, fields) in [
+        (
+            vectors::COPY,
+            &[
+                (40_usize, DescriptorHeaderSchemaOpcode::Copy),
+                (48, DescriptorHeaderSchemaOpcode::Copy),
+                (56, DescriptorHeaderSchemaOpcode::Copy),
+            ][..],
+        ),
+        (
+            vectors::BROADCAST,
+            &[
+                (48_usize, DescriptorHeaderSchemaOpcode::BroadcastCopy),
+                (56, DescriptorHeaderSchemaOpcode::BroadcastCopy),
+            ][..],
+        ),
+        (
+            vectors::VECTOR_ADD,
+            &[
+                (48_usize, DescriptorHeaderSchemaOpcode::VectorAdd),
+                (56, DescriptorHeaderSchemaOpcode::VectorAdd),
+            ][..],
+        ),
     ] {
-        for &offset in offsets {
+        for &(offset, opcode) in fields {
             let mut bytes = base;
             assert!(support::replace_u64(
                 &mut bytes,
                 offset,
                 0x0102_0304_0506_0708
             ));
-            let offset = u16::try_from(offset);
-            assert!(offset.is_ok());
-            let Ok(offset) = offset else {
-                return;
-            };
-            assert_decode_error(
+            assert_decode_violation(
                 &bytes,
-                DescriptorDecodeError::InvalidReserved {
-                    offset,
-                    observed: 0x0102_0304_0506_0708,
+                DescriptorViolationKind::Reserved {
+                    opcode,
+                    location: DescriptorSchema::PAYLOAD_IDENTITY.at_byte(offset),
                 },
             );
         }
     }
+}
 
-    for (base, offset, maximum) in [
-        (vectors::COPY, 32, MAX_TRANSFER_BYTES),
-        (vectors::STRIDED, 32, MAX_STRIDED_ROWS),
-        (vectors::STRIDED, 40, MAX_TRANSFER_BYTES),
-        (vectors::STRIDED, 48, MAX_STRIDE),
-        (vectors::STRIDED, 56, MAX_STRIDE),
-        (vectors::BROADCAST, 32, MAX_TRANSFER_BYTES),
-        (vectors::VECTOR_ADD, 40, MAX_TRANSFER_BYTES),
+fn assert_scalar_errors() {
+    for (base, offset, maximum, location) in [
+        (
+            vectors::COPY,
+            32,
+            MAX_TRANSFER_BYTES,
+            DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY
+                .at_byte(DescriptorSchema::WORD2_OFFSET),
+        ),
+        (
+            vectors::STRIDED,
+            32,
+            MAX_STRIDED_ROWS,
+            DescriptorSchemaPayloadStridedCopyValues::ROWS_IDENTITY
+                .at_byte(DescriptorSchema::WORD2_OFFSET),
+        ),
+        (
+            vectors::STRIDED,
+            40,
+            MAX_TRANSFER_BYTES,
+            DescriptorSchemaPayloadStridedCopyValues::ROW_BYTES_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
+        (
+            vectors::STRIDED,
+            48,
+            MAX_STRIDE,
+            DescriptorSchemaPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
+                .at_byte(DescriptorSchema::WORD4_OFFSET),
+        ),
+        (
+            vectors::STRIDED,
+            56,
+            MAX_STRIDE,
+            DescriptorSchemaPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
+                .at_byte(DescriptorSchema::WORD5_OFFSET),
+        ),
+        (
+            vectors::BROADCAST,
+            32,
+            MAX_TRANSFER_BYTES,
+            DescriptorSchemaPayloadBroadcastCopyValues::LENGTH_IDENTITY
+                .at_byte(DescriptorSchema::WORD2_OFFSET),
+        ),
+        (
+            vectors::VECTOR_ADD,
+            40,
+            MAX_TRANSFER_BYTES,
+            DescriptorSchemaPayloadVectorAddValues::LENGTH_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
     ] {
         let mut bytes = base;
         let observed = u64::from(maximum) + 1;
         assert!(support::replace_u64(&mut bytes, offset, observed));
-        let offset = u16::try_from(offset);
-        assert!(offset.is_ok());
-        let Ok(offset) = offset else {
-            return;
-        };
-        assert_decode_error(
-            &bytes,
-            DescriptorDecodeError::ValueOutOfRange {
-                offset,
-                observed,
-                maximum,
-            },
-        );
+        assert_decode_violation(&bytes, DescriptorViolationKind::Scalar(location));
     }
+}
 
+fn assert_reserved_precedence() {
     let mut reserved_and_scalar = vectors::COPY;
     assert!(support::replace_u64(
         &mut reserved_and_scalar,
@@ -80,11 +141,11 @@ pub fn assert_reserved_and_scalar_errors() {
         40,
         0x0102_0304_0506_0708
     ));
-    assert_decode_error(
+    assert_decode_violation(
         &reserved_and_scalar,
-        DescriptorDecodeError::InvalidReserved {
-            offset: 40,
-            observed: 0x0102_0304_0506_0708,
+        DescriptorViolationKind::Reserved {
+            opcode: DescriptorHeaderSchemaOpcode::Copy,
+            location: DescriptorSchema::PAYLOAD_IDENTITY.at_byte(DescriptorSchema::WORD3_OFFSET),
         },
     );
 }
@@ -107,21 +168,21 @@ fn assert_decode_count_alignment_errors() {
         0x1003
     ));
     assert!(support::replace_u64(&mut zero_count_and_misaligned, 40, 0));
-    assert_decode_error(
+    assert_decode_violation(
         &zero_count_and_misaligned,
-        DescriptorDecodeError::InvalidIndirectCount {
-            observed: 0,
-            maximum: MAX_INDIRECT_DESTINATIONS,
-        },
+        DescriptorViolationKind::Scalar(
+            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
     );
     let mut zero_count = vectors::BROADCAST;
     assert!(support::replace_u64(&mut zero_count, 40, 0));
-    assert_decode_error(
+    assert_decode_violation(
         &zero_count,
-        DescriptorDecodeError::InvalidIndirectCount {
-            observed: 0,
-            maximum: MAX_INDIRECT_DESTINATIONS,
-        },
+        DescriptorViolationKind::Scalar(
+            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
     );
     let mut large_count = vectors::BROADCAST;
     assert!(support::replace_u64(
@@ -129,21 +190,21 @@ fn assert_decode_count_alignment_errors() {
         40,
         u64::from(u32::MAX) + 1
     ));
-    assert_decode_error(
+    assert_decode_violation(
         &large_count,
-        DescriptorDecodeError::InvalidIndirectCount {
-            observed: u64::from(u32::MAX) + 1,
-            maximum: MAX_INDIRECT_DESTINATIONS,
-        },
+        DescriptorViolationKind::Scalar(
+            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(DescriptorSchema::WORD3_OFFSET),
+        ),
     );
     let mut misaligned = vectors::BROADCAST;
     assert!(support::replace_u64(&mut misaligned, 24, 0x1003));
-    assert_decode_error(
+    assert_decode_violation(
         &misaligned,
-        DescriptorDecodeError::InvalidIndirectAlignment {
-            address: 0x1003,
-            alignment: INDIRECT_ENTRY_ALIGNMENT,
-        },
+        DescriptorViolationKind::Scalar(
+            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+                .at_byte(DescriptorSchema::WORD1_OFFSET),
+        ),
     );
 }
 

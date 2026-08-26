@@ -12,11 +12,14 @@ pub mod support;
 /// Independent literal ABI-v1 golden byte arrays.
 #[path = "abi_descriptor/vectors.rs"]
 pub mod vectors;
+/// Hardware-visible descriptor violation assertions.
+#[path = "abi_descriptor/violations.rs"]
+pub mod violations;
 
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiCommand, BroadcastDestinationEntry, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DescriptorDecodeError, DescriptorSchemaPayloadValues, DmaAddress, INDIRECT_ENTRY_ALIGNMENT,
-    VECTOR_ADD_OPCODE,
+    ABI_VERSION, AbiCommand, BroadcastDestinationEntry, DESCRIPTOR_SIZE, DescriptorDecodeError,
+    DescriptorHeaderSchema, DescriptorSchemaPayloadValues, DescriptorViolationKind, DmaAddress,
+    INDIRECT_ENTRY_ALIGNMENT,
 };
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, StridedCopyRequest};
 
@@ -119,34 +122,42 @@ fn rejects_wrong_version_size_opcode_flags_reserved_count_and_alignment() {
     let flags_error = AbiCommand::decode(&malformed);
 
     // Then: validation is ordered and every malformed class has one exact typed failure.
-    assert_eq!(
+    assert!(matches!(
         first_error,
-        Err(DescriptorDecodeError::InvalidVersion {
-            observed: 2,
-            expected: 1
-        })
-    );
-    assert_eq!(
+        Err(DescriptorDecodeError::Violation(violation))
+            if violation.kind() == DescriptorViolationKind::Header(
+                DescriptorHeaderSchema::VERSION_IDENTITY
+                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+            )
+                && violation.observed() == 2
+    ));
+    assert!(matches!(
         size_error,
-        Err(DescriptorDecodeError::InvalidSize {
-            observed: 63,
-            expected: 64
-        })
-    );
-    assert_eq!(
+        Err(DescriptorDecodeError::Violation(violation))
+            if violation.kind() == DescriptorViolationKind::Header(
+                DescriptorHeaderSchema::SIZE_IDENTITY
+                    .at_byte(DescriptorHeaderSchema::SIZE_OFFSET)
+            )
+                && violation.observed() == 63
+    ));
+    assert!(matches!(
         opcode_error,
-        Err(DescriptorDecodeError::InvalidOpcode {
-            observed: 9,
-            maximum: VECTOR_ADD_OPCODE,
-        })
-    );
-    assert_eq!(
+        Err(DescriptorDecodeError::Violation(violation))
+            if violation.kind() == DescriptorViolationKind::Header(
+                DescriptorHeaderSchema::OPCODE_IDENTITY
+                    .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET)
+            )
+                && violation.observed() == 9
+    ));
+    assert!(matches!(
         flags_error,
-        Err(DescriptorDecodeError::InvalidFlags {
-            observed: 1,
-            allowed: DESCRIPTOR_FLAGS_MASK,
-        })
-    );
+        Err(DescriptorDecodeError::Violation(violation))
+            if violation.kind() == DescriptorViolationKind::Header(
+                DescriptorHeaderSchema::FLAGS_IDENTITY
+                    .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET)
+            )
+                && violation.observed() == 1
+    ));
 
     errors::assert_reserved_and_scalar_errors();
     errors::assert_count_alignment_and_slice_errors();

@@ -1,59 +1,6 @@
-//! Typed first-match positions for ABI-v1 fault candidates.
+//! Typed positions for canonical ABI-v1 fault selection.
 
-/// Descriptor header fields in their canonical validation order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AbiHeaderField {
-    /// Descriptor version at byte zero.
-    Version,
-    /// Descriptor record size at byte six.
-    Size,
-    /// Descriptor opcode at byte two.
-    Opcode,
-    /// Descriptor flags at byte four.
-    Flags,
-}
-
-/// Operation-specific required-zero words ordered by payload offset.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AbiReservedField {
-    /// Copy word at byte 40.
-    CopyOffset40,
-    /// Copy word at byte 48.
-    CopyOffset48,
-    /// Copy word at byte 56.
-    CopyOffset56,
-    /// Broadcast word at byte 48.
-    BroadcastOffset48,
-    /// Broadcast word at byte 56.
-    BroadcastOffset56,
-    /// Vector-add word at byte 48.
-    VectorOffset48,
-    /// Vector-add word at byte 56.
-    VectorOffset56,
-}
-
-/// Non-address fields in their operation-specific validation order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AbiScalarField {
-    /// Copy transfer length at byte 32.
-    CopyLength,
-    /// Strided row count at byte 32.
-    StridedRows,
-    /// Strided row length at byte 40.
-    StridedRowBytes,
-    /// Strided source stride at byte 48.
-    StridedSourceStride,
-    /// Strided destination stride at byte 56.
-    StridedDestinationStride,
-    /// Broadcast transfer length at byte 32.
-    BroadcastLength,
-    /// Broadcast destination count at byte 40.
-    BroadcastDestinationCount,
-    /// Broadcast list-base alignment after count validation.
-    BroadcastListAlignment,
-    /// Vector-add transfer length at byte 40.
-    VectorLength,
-}
+use crate::abi::descriptor::DescriptorViolationKind;
 
 /// One operand visit in exact per-operation execution order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,12 +52,8 @@ pub enum AbiOperandFaultStep {
 /// Typed location of one candidate in ABI-v1 first-match order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbiFaultOrder {
-    /// Descriptor header validation.
-    Header(AbiHeaderField),
-    /// Required-zero payload validation.
-    Reserved(AbiReservedField),
-    /// Non-address scalar validation.
-    Scalar(AbiScalarField),
+    /// One generated descriptor-validation location.
+    Descriptor(DescriptorViolationKind),
     /// One check within one visited operand.
     Operand {
         /// Exact operation-specific visit.
@@ -131,14 +74,6 @@ pub enum AbiFaultSelectionError {
     MixedOperations,
     /// Two candidates claim the same earliest typed order location.
     AmbiguousFirstFault,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Operation {
-    Copy,
-    Strided,
-    Broadcast,
-    Vector,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

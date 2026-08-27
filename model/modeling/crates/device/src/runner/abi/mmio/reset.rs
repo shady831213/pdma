@@ -1,5 +1,5 @@
 use super::RegisterBanks;
-use crate::runner::abi::bus::BusControlError;
+use crate::runner::abi::bus::PdmaControlError;
 use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
@@ -8,11 +8,11 @@ use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runner) enum ResetOutcome {
     Success(DeviceEpoch),
-    Rejected(BusControlError, MmioResultDetails),
+    Rejected(PdmaControlError, MmioResultDetails),
 }
 
 impl ResetOutcome {
-    pub(in crate::runner) const fn typed_result(self) -> Result<DeviceEpoch, BusControlError> {
+    pub(in crate::runner) const fn typed_result(self) -> Result<DeviceEpoch, PdmaControlError> {
         match self {
             Self::Success(epoch) => Ok(epoch),
             Self::Rejected(error, _) => Err(error),
@@ -34,15 +34,15 @@ pub(super) const fn details(result: MmioResult, values: [u64; 3]) -> MmioResultD
     }
 }
 
-const fn map_error(error: BusControlError) -> MmioResultDetails {
+const fn map_error(error: PdmaControlError) -> MmioResultDetails {
     match error {
-        BusControlError::StaleEpoch { expected, actual } => {
+        PdmaControlError::StaleEpoch { expected, actual } => {
             details(MmioResult::StaleEpoch, [expected.raw(), actual.raw(), 0])
         }
-        BusControlError::Abi(AbiControlError::DeviceEpochOverflow { current }) => {
+        PdmaControlError::Abi(AbiControlError::DeviceEpochOverflow { current }) => {
             details(MmioResult::DeviceEpochOverflow, [current, 0, 0])
         }
-        BusControlError::Abi(
+        PdmaControlError::Abi(
             AbiControlError::UnsupportedVersion { .. }
             | AbiControlError::UnknownFeatureBits { .. }
             | AbiControlError::InvalidRingDepth { .. }
@@ -58,9 +58,11 @@ const fn map_error(error: BusControlError) -> MmioResultDetails {
             | AbiControlError::EventDepthMismatch { .. }
             | AbiControlError::UnknownStatusValue { .. },
         )
-        | BusControlError::Dma(_)
-        | BusControlError::InvalidQueue
-        | BusControlError::InvalidTransaction => details(MmioResult::InvalidTransaction, [4, 0, 0]),
+        | PdmaControlError::Dma(_)
+        | PdmaControlError::InvalidQueue
+        | PdmaControlError::InvalidTransaction => {
+            details(MmioResult::InvalidTransaction, [4, 0, 0])
+        }
     }
 }
 

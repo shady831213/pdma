@@ -92,7 +92,7 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
         handle
             .control_queue(QueueControl::ReadStatus(old_status.queue()))
             .await,
-        Err(pdma_model_device::BusControlError::StaleEpoch {
+        Err(pdma_model_device::PdmaControlError::StaleEpoch {
             expected: DeviceEpoch::new(1),
             actual: DeviceEpoch::initial(),
         })

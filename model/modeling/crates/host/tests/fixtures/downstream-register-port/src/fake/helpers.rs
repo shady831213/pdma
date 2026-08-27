@@ -3,11 +3,14 @@ use hardware_interface_runtime::{
     AccessOrigin, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     RegisterObservation,
 };
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::abi::RingRecord;
 use pdma_model_contract::abi::mmio::{QueueResponseBank, decode_read, decode_write};
-use pdma_model_contract::semantic::{CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqSource, IrqVector, QueueConfig, QueueId, SoftwareOwnerId};
-use pdma_model_contract::abi::{RingRecord};
-use pdma_model_contract::abi::{DmaAddress};
 use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::semantic::{
+    CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification,
+    IrqSource, IrqVector, QueueConfig, QueueId, SoftwareOwnerId,
+};
 use pdma_model_host::register::{
     PdmaBatchError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
     PdmaRegisterAccessError,
@@ -81,7 +84,7 @@ pub(super) fn response(
     epoch: u64,
     queue: usize,
     producer: u64,
-) -> Result<[u8; 72], PdmaBatchError> {
+) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, PdmaBatchError> {
     QueueResponseBank {
         epoch: epoch.into(),
         queue_id: u64::try_from(queue)
@@ -89,7 +92,9 @@ pub(super) fn response(
             .into(),
         sq_producer: producer.into(),
         ..QueueResponseBank::default()
-    }.to_bytes()
+    }
+    .to_bytes()
+    .map(Into::into)
     .map_err(|_| PdmaBatchError::InvalidShape)
 }
 

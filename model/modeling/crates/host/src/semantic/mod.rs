@@ -5,5 +5,5 @@ mod error;
 mod port;
 
 pub use driver::{AsyncDriver, DriverIrqRecord, ManualDriver};
-pub use error::{DriverError, PortError};
+pub use error::{DriverError, DriverResult, PortError, PortResult};
 pub use port::DriverPort;

@@ -10,11 +10,11 @@ use pdma_model_host::register::{
 use std::error::Error;
 use std::sync::atomic::Ordering;
 
-mod helpers;
 mod fates;
+mod helpers;
 mod state;
-pub use helpers::{activation, message};
 pub(crate) use fates::verify_fates;
+pub use helpers::{activation, message};
 use helpers::{claim_observations, crossing, lock, response, validate_read, validate_write};
 pub use state::{FakeAccess, FakeProposal, FakeSnapshot};
 
@@ -133,7 +133,7 @@ impl PdmaBatchAccess for FakeAccess {
         &self,
         proposal: Self::Proposal,
         activation: QueueActivation,
-    ) -> Result<[u8; 72], Self::BatchError> {
+    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
         if let Some(error) = lock(&self.next_batch_error).take() {
             return Err(error);
         }
@@ -149,7 +149,7 @@ impl PdmaBatchAccess for FakeAccess {
     async fn submit_queue(
         &self,
         request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> Result<[u8; 72], Self::BatchError> {
+    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
         if let Some(error) = lock(&self.next_batch_error).take() {
             return Err(error);
         }

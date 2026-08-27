@@ -22,6 +22,20 @@ impl QueueFrontend {
         matches!(self, Self::Exact(_))
     }
 
+    fn behavior(&self) -> &dyn FrontendBehavior {
+        match self {
+            Self::Semantic(frontend) => frontend,
+            Self::Exact(frontend) => frontend,
+        }
+    }
+
+    fn behavior_mut(&mut self) -> &mut dyn FrontendBehavior {
+        match self {
+            Self::Semantic(frontend) => frontend,
+            Self::Exact(frontend) => frontend,
+        }
+    }
+
     pub(in crate::runner::execution) fn submit_semantic(
         &mut self,
         queue: QueueId,
@@ -52,10 +66,12 @@ impl QueueFrontend {
         }
     }
 
-    pub(in crate::runner::execution) fn pending_exact_fault_bytes(&self) -> Option<[u8; 64]> {
+    pub(in crate::runner::execution) const fn pending_exact_fault(
+        &self,
+    ) -> Option<pdma_model_contract::abi::ExactAbiEvent> {
         match self {
             Self::Semantic(_) => None,
-            Self::Exact(frontend) => frontend.pending_fault_bytes(),
+            Self::Exact(frontend) => frontend.pending_fault(),
         }
     }
 
@@ -65,10 +81,7 @@ impl QueueFrontend {
         control: &BusControlState,
         entry: QueueDirectoryEntry,
     ) -> ModelResult<Option<NormalizedFetch>> {
-        match self {
-            Self::Semantic(frontend) => frontend.probe(memory, control, entry),
-            Self::Exact(frontend) => frontend.probe(memory, control, entry),
-        }
+        self.behavior().probe(memory, control, entry)
     }
 
     pub(in crate::runner::execution) fn fetch(
@@ -77,10 +90,7 @@ impl QueueFrontend {
         control: &BusControlState,
         entry: QueueDirectoryEntry,
     ) -> ModelResult<Option<NormalizedFetch>> {
-        match self {
-            Self::Semantic(frontend) => frontend.fetch(memory, control, entry),
-            Self::Exact(frontend) => frontend.fetch(memory, control, entry),
-        }
+        self.behavior_mut().fetch(memory, control, entry)
     }
 
     pub(in crate::runner::execution) fn consume(
@@ -88,10 +98,7 @@ impl QueueFrontend {
         control: &mut BusControlState,
         queue: QueueId,
     ) -> ModelResult<()> {
-        match self {
-            Self::Semantic(frontend) => frontend.consume(control, queue),
-            Self::Exact(frontend) => frontend.consume(control, queue),
-        }
+        self.behavior_mut().consume(control, queue)
     }
 
     pub(in crate::runner::execution) fn has_pending(
@@ -99,10 +106,7 @@ impl QueueFrontend {
         control: &BusControlState,
         queue: QueueId,
     ) -> bool {
-        match self {
-            Self::Semantic(frontend) => frontend.has_pending(control, queue),
-            Self::Exact(frontend) => frontend.has_pending(control, queue),
-        }
+        self.behavior().has_pending(control, queue)
     }
 
     pub(in crate::runner::execution) fn publish_completion(
@@ -112,20 +116,15 @@ impl QueueFrontend {
         queue: QueueId,
         record: CompletionRecord,
     ) -> PublicationOutcome {
-        match self {
-            Self::Semantic(frontend) => frontend.publish_completion(memory, control, queue, record),
-            Self::Exact(frontend) => frontend.publish_completion(memory, control, queue, record),
-        }
+        self.behavior_mut()
+            .publish_completion(memory, control, queue, record)
     }
 
     pub(in crate::runner::execution) fn stage_execution_fault(
         &mut self,
         fault: FaultRetirement,
     ) -> ModelResult<ModelError> {
-        match self {
-            Self::Semantic(frontend) => frontend.stage_execution_fault(fault),
-            Self::Exact(frontend) => frontend.stage_execution_fault(fault),
-        }
+        self.behavior_mut().stage_execution_fault(fault)
     }
 
     pub(in crate::runner::execution) fn publish_fault(
@@ -134,10 +133,7 @@ impl QueueFrontend {
         control: &mut BusControlState,
         trace: &mut TraceSink,
     ) -> PublicationOutcome {
-        match self {
-            Self::Semantic(frontend) => frontend.publish_fault(memory, control, trace),
-            Self::Exact(frontend) => frontend.publish_fault(memory, control, trace),
-        }
+        self.behavior_mut().publish_fault(memory, control, trace)
     }
 
     pub(in crate::runner::execution) fn completion_blocked(
@@ -146,12 +142,8 @@ impl QueueFrontend {
         queue: QueueId,
         publication_slots: usize,
     ) -> bool {
-        match self {
-            Self::Semantic(frontend) => {
-                frontend.completion_blocked(control, queue, publication_slots)
-            }
-            Self::Exact(frontend) => frontend.completion_blocked(control, queue, publication_slots),
-        }
+        self.behavior()
+            .completion_blocked(control, queue, publication_slots)
     }
 
     pub(in crate::runner::execution) fn fault_blocked(
@@ -160,10 +152,8 @@ impl QueueFrontend {
         queue: QueueId,
         publication_slots: usize,
     ) -> bool {
-        match self {
-            Self::Semantic(frontend) => frontend.fault_blocked(control, queue, publication_slots),
-            Self::Exact(frontend) => frontend.fault_blocked(control, queue, publication_slots),
-        }
+        self.behavior()
+            .fault_blocked(control, queue, publication_slots)
     }
 
     pub(in crate::runner::execution) fn records_pending(
@@ -172,9 +162,6 @@ impl QueueFrontend {
         queue: QueueId,
         completion: bool,
     ) -> ModelResult<bool> {
-        match self {
-            Self::Semantic(frontend) => frontend.records_pending(control, queue, completion),
-            Self::Exact(frontend) => frontend.records_pending(control, queue, completion),
-        }
+        self.behavior().records_pending(control, queue, completion)
     }
 }

@@ -1,11 +1,13 @@
 #![allow(missing_docs)]
 
-use pdma_model_host::ModelError;
+use pdma_model_host::DriverError;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{EventErrorKind, desc::CopyRequest};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver, adapters::AsyncDeviceAccess, compat::AsyncDevicePort, register::PdmaRegisterPort,
+};
 
 #[path = "error_event/recovery.rs"]
 mod recovery;
@@ -21,7 +23,8 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, queue_id, command_id, src, no_completion, no_event) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -87,7 +90,8 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
     let worker = tokio::spawn(worker.run());
     let (second_before, snapshot, event, queue_id, submit_after_ok) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
                 .await
                 .expect("queue setup is valid");
@@ -126,7 +130,7 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
     let summary = worker.await.expect("runner joins cleanly");
 
     // Then: polling the event reclaims the command slot for this driver.
-    assert_eq!(second_before, Err(ModelError::DriverQueueFull));
+    assert_eq!(second_before, Err(DriverError::QueueFull));
     assert_eq!(snapshot.errors, 1);
     assert_eq!(event.queue_id(), queue_id);
     assert!(submit_after_ok);
@@ -210,6 +214,6 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     assert_eq!(wrong_event, None);
     assert_eq!(owner_event.queue_id(), owner_queue_id);
     assert!(first_submit_ok);
-    assert_eq!(second_submit, Err(ModelError::DriverQueueFull));
+    assert_eq!(second_submit, Err(DriverError::QueueFull));
     assert_eq!(summary.errors, 1);
 }

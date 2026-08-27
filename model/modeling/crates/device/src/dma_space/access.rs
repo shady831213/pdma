@@ -1,6 +1,7 @@
-use super::{PdmaMemoryError, PdmaMemoryMappings};
+use super::{PdmaMemoryError, PdmaMemoryMappings, runtime_address, runtime_end, runtime_start};
 use crate::{ModelError, ModelResult};
-use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAlignment};
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::dma::DmaRangeStart;
 use pdma_model_contract::semantic::event::{EventErrorKind, MemoryFault};
@@ -15,14 +16,21 @@ impl PdmaMemoryMappings {
     }
 
     /// Resolves an address contained by one non-empty logical mapping.
-    pub fn region_containing(&self, address: impl Into<MemoryAddress>) -> Option<PdmaMemoryRegion> {
-        let address = address.into();
+    pub fn region_containing(&self, address: DmaAddress) -> Option<PdmaMemoryRegion> {
+        let address = runtime_address(address);
         self.regions
             .iter()
             .find(|backing| {
-                backing.region.memory_base() <= address
-                    && address.raw() < backing.region.memory_exclusive_end().raw()
+                runtime_start(backing.region) <= address
+                    && address.raw() < runtime_end(backing.region).raw()
             })
+            .map(|backing| backing.region)
+    }
+
+    pub(crate) fn region_ending_at(&self, address: DmaAddress) -> Option<PdmaMemoryRegion> {
+        self.regions
+            .iter()
+            .find(|backing| backing.region.abi_exclusive_end() == address)
             .map(|backing| backing.region)
     }
 
@@ -72,7 +80,7 @@ impl PdmaMemoryMappings {
         &self,
         start: DmaRangeStart,
         length: usize,
-    ) -> Result<MemoryAddress, MemoryFault> {
+    ) -> Result<DmaAddress, MemoryFault> {
         let backing = self
             .regions
             .get(start.object().raw())
@@ -86,12 +94,10 @@ impl PdmaMemoryMappings {
             return Err(self.out_of_bounds_fault(start.object(), end));
         }
         let offset = u64::try_from(start.offset()).map_err(|_| self.range_overflow_fault(start))?;
-        backing
-            .region
-            .memory_base()
+        runtime_start(backing.region)
             .raw()
             .checked_add(offset)
-            .map(MemoryAddress::new)
+            .map(DmaAddress::new)
             .ok_or_else(|| self.range_overflow_fault(start))
     }
 
@@ -101,8 +107,8 @@ impl PdmaMemoryMappings {
         };
         let locator = u64::try_from(start.offset())
             .ok()
-            .and_then(|offset| backing.region.memory_base().raw().checked_add(offset))
-            .filter(|address| *address < backing.region.memory_exclusive_end().raw());
+            .and_then(|offset| runtime_start(backing.region).raw().checked_add(offset))
+            .filter(|address| *address < runtime_end(backing.region).raw());
         locator.map_or_else(
             || MemoryFault::new(start.object(), EventErrorKind::RangeOverflow),
             |address| {
@@ -118,10 +124,9 @@ impl PdmaMemoryMappings {
     /// Reads one checked logical extent from the injected store.
     pub fn read_memory(
         &self,
-        address: impl Into<MemoryAddress>,
+        address: DmaAddress,
         length: u64,
     ) -> Result<Vec<u8>, PdmaMemoryError> {
-        let address = address.into();
         let backing = self.resolve_extent(address, length)?;
         if backing.storage.is_none() {
             return Ok(Vec::new());
@@ -129,25 +134,20 @@ impl PdmaMemoryMappings {
         let length = usize::try_from(length).map_err(|_| PdmaMemoryError::StorageExhausted)?;
         let mut bytes = vec![0; length];
         self.memory
-            .read(address, BYTE_ALIGNMENT, &mut bytes)
+            .read(runtime_address(address), BYTE_ALIGNMENT, &mut bytes)
             .map_err(map_access_error)?;
         Ok(bytes)
     }
 
     /// Writes one checked logical extent into the injected store.
-    pub fn write_memory(
-        &self,
-        address: impl Into<MemoryAddress>,
-        data: &[u8],
-    ) -> Result<(), PdmaMemoryError> {
-        let address = address.into();
+    pub fn write_memory(&self, address: DmaAddress, data: &[u8]) -> Result<(), PdmaMemoryError> {
         let length = u64::try_from(data.len()).map_err(|_| PdmaMemoryError::AddressExhausted)?;
         let backing = self.resolve_extent(address, length)?;
         if backing.storage.is_none() {
             return Ok(());
         }
         self.memory
-            .write(address, BYTE_ALIGNMENT, data)
+            .write(runtime_address(address), BYTE_ALIGNMENT, data)
             .map_err(map_access_error)
     }
 
@@ -158,18 +158,19 @@ impl PdmaMemoryMappings {
 
     fn resolve_extent(
         &self,
-        address: MemoryAddress,
+        address: DmaAddress,
         length: u64,
     ) -> Result<&RegionBacking, PdmaMemoryError> {
+        let runtime = runtime_address(address);
         let backing = self
             .regions
             .iter()
             .find(|backing| {
                 if backing.region.is_empty() {
-                    backing.region.memory_base() == address
+                    runtime_start(backing.region) == runtime
                 } else {
-                    backing.region.memory_base() <= address
-                        && address.raw() < backing.region.memory_exclusive_end().raw()
+                    runtime_start(backing.region) <= runtime
+                        && runtime.raw() < runtime_end(backing.region).raw()
                 }
             })
             .ok_or(PdmaMemoryError::Unmapped)?;
@@ -177,7 +178,7 @@ impl PdmaMemoryMappings {
             .raw()
             .checked_add(length)
             .ok_or(PdmaMemoryError::AddressExhausted)?;
-        if end > backing.region.memory_exclusive_end().raw() {
+        if end > runtime_end(backing.region).raw() {
             return Err(PdmaMemoryError::CrossesRegion);
         }
         Ok(backing)
@@ -201,7 +202,7 @@ impl PdmaMemoryMappings {
                     object,
                     error_kind,
                     pdma_model_contract::semantic::FaultAddress::new(
-                        backing.region.memory_exclusive_end().raw(),
+                        runtime_end(backing.region).raw(),
                     ),
                 )
             },

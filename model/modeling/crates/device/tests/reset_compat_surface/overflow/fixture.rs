@@ -2,8 +2,11 @@ use std::sync::Arc;
 
 use hardware_interface_runtime::SharedMemory;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
+use pdma_model_device::DeviceCore;
 use pdma_model_device::compat::SyncDevice;
-use pdma_model_device::{DeviceCore, DeviceStateSnapshot};
+use pdma_model_device::test_support::{
+    DeviceStateSnapshot, device_core_at_epoch_with_mmio_write, state_snapshot,
+};
 
 use super::super::support::{RecordingObserver, TestResult, queue_config, submit_copy};
 
@@ -16,15 +19,14 @@ pub(super) struct Fixture {
 pub(super) fn populated() -> TestResult<Fixture> {
     let memory = Arc::new(SharedMemory::new());
     let observer = Arc::new(RecordingObserver::default());
-    let defaults = DeviceCore::new(
+    let defaults = state_snapshot(&DeviceCore::new(
         Arc::new(SharedMemory::new()),
         ResourceConfig::default(),
         Arc::new(hardware_interface_runtime::NoopRegisterObserver),
-    )
-    .state_snapshot_for_test()?
+    ))?
     .partitions
     .registers;
-    let core = DeviceCore::new_at_epoch_with_mmio_write_for_test(
+    let core = device_core_at_epoch_with_mmio_write(
         Arc::clone(&memory),
         ResourceConfig::default(),
         observer.clone(),

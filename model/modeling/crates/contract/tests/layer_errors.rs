@@ -1,37 +1,11 @@
-//! Layer-owned contract error and pure translation behavior.
+//! Contract error boundary tests.
 
-use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiAddressError, AbiCommand, AbiDecodeError, AbiEncodeError,
-    DescriptorDecodeError, DescriptorHeaderSchema, DescriptorViolationKind,
+    ABI_VERSION, AbiCommand, AbiDecodeError, DescriptorDecodeError, DescriptorHeaderSchema,
+    DescriptorViolationKind,
 };
-use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId, SemanticError,
-};
-use pdma_model_contract::translation::{
-    CopyBufferContext, CopyRuntimeAddresses, TranslationError, decode_copy_command,
-    encode_copy_command,
-};
+use pdma_model_contract::semantic::SemanticError;
 use std::error::Error;
-
-#[test]
-fn translation_wraps_identifier_range_with_typed_source() {
-    // Given: a semantic ID that cannot fit ABI-v1 on wide targets.
-    let error = TranslationError::from(AbiEncodeError::UnrepresentableId {
-        value: u128::from(u64::MAX) + 1,
-    });
-
-    // When: the standard source chain is inspected.
-    let source = error.source();
-
-    // Then: the translation wrapper exposes the exact ABI cause.
-    assert_eq!(
-        source.and_then(|cause| cause.downcast_ref()),
-        Some(&AbiEncodeError::UnrepresentableId {
-            value: u128::from(u64::MAX) + 1,
-        })
-    );
-}
 
 #[test]
 fn semantic_errors_are_layer_owned_leaf_errors() {
@@ -40,77 +14,6 @@ fn semantic_errors_are_layer_owned_leaf_errors() {
 
     // When/Then: it is a typed leaf at the semantic boundary.
     assert!(error.source().is_none());
-}
-
-#[test]
-fn every_translation_wrapper_exposes_its_typed_cause() {
-    // Given: each cause-carrying translation wrapper and one translation-owned leaf.
-    let encode = TranslationError::from(AbiEncodeError::InvalidRecordMetadata);
-    let decode = TranslationError::from(AbiDecodeError::InvalidRecordMetadata);
-    let address = TranslationError::from(AbiAddressError::RangeOverflow {
-        base: u64::MAX,
-        length: 1,
-    });
-    let descriptor = TranslationError::from(
-        AbiCommand::decode(&[0_u8; 1]).expect_err("short descriptor must fail"),
-    );
-    let opcode = TranslationError::UnexpectedOpcode;
-
-    // When/Then: each wrapper exposes the concrete cause and the translation leaf has none.
-    assert!(
-        encode
-            .source()
-            .and_then(|cause| cause.downcast_ref::<AbiEncodeError>())
-            .is_some()
-    );
-    assert!(
-        decode
-            .source()
-            .and_then(|cause| cause.downcast_ref::<AbiDecodeError>())
-            .is_some()
-    );
-    assert!(
-        address
-            .source()
-            .and_then(|cause| cause.downcast_ref::<AbiAddressError>())
-            .is_some()
-    );
-    assert!(
-        descriptor
-            .source()
-            .and_then(|cause| cause.downcast_ref::<DescriptorDecodeError>())
-            .is_some()
-    );
-    assert!(opcode.source().is_none());
-}
-
-#[test]
-fn copy_translation_round_trips_with_explicit_address_and_identity_context() {
-    // Given: semantic identities and explicit runtime addresses.
-    let command = CopyCommand::new(
-        CommandId::new(7),
-        QueueId::new(3),
-        CompletionRingId::new(5),
-        CopyRequest::new(BufferId::new(11), BufferId::new(12), 64),
-    );
-    let addresses =
-        CopyRuntimeAddresses::new(MemoryAddress::new(0x1000), MemoryAddress::new(0x2000));
-    let context = CopyBufferContext::from_command(command);
-
-    // When: translation output is encoded, decoded, and rebuilt semantically.
-    let exact = encode_copy_command(command, addresses).expect("copy translation must encode");
-    let mut bytes = [0_u8; 64];
-    exact
-        .encode(&mut bytes)
-        .expect("descriptor buffer is exact");
-    let decoded = AbiCommand::decode(&bytes).expect("descriptor bytes must decode");
-    let (round_trip, decoded_addresses) =
-        decode_copy_command(decoded, context).expect("copy translation must decode");
-
-    // Then: exact bytes retain the ABI address and semantic values round trip.
-    assert_eq!(round_trip, command);
-    assert_eq!(decoded_addresses, addresses);
-    assert_eq!(&bytes[16..24], &0x1000_u64.to_le_bytes());
 }
 
 #[test]

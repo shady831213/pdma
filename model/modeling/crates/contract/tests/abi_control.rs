@@ -77,7 +77,7 @@ fn assert_cursor_errors(actual: [Option<AbiControlError>; 5]) {
     );
 }
 
-fn assert_control_errors(actual: [Option<AbiControlError>; 4]) {
+fn assert_control_errors(actual: [Option<AbiControlError>; 3]) {
     assert_eq!(
         actual,
         [
@@ -86,7 +86,6 @@ fn assert_control_errors(actual: [Option<AbiControlError>; 4]) {
                 actual: 2,
             }),
             Some(AbiControlError::DeviceEpochOverflow { current: u64::MAX }),
-            Some(AbiControlError::UnknownStatusValue { value: u16::MAX }),
             Some(AbiControlError::UnknownFeatureBits { bits: 1_u64 << 63 }),
         ]
     );
@@ -238,7 +237,6 @@ fn invalid_cursor_layout_event_depth_epoch_and_control_values_are_rejected() {
         QueueRingRegions::new(submission, completion, mismatched_event),
     );
     let epoch_overflow = DeviceEpoch::new(u64::MAX).next();
-    let unknown_status = DeviceRunState::try_from(u16::MAX);
     let unknown_features = DiscoveryRequest::try_new(1, 1_u64 << 63);
 
     // Then: each exact failure is typed, and immutable input values remain unchanged.
@@ -259,12 +257,11 @@ fn invalid_cursor_layout_event_depth_epoch_and_control_values_are_rejected() {
     assert_control_errors([
         activation.err(),
         epoch_overflow.err(),
-        unknown_status.err(),
         unknown_features.err(),
     ]);
     assert_eq!(one.depth(), 1);
     assert_eq!(config.event_depth(), 1);
     println!(
-        "typed errors: depth={depth_zero:?} extent={extent_overflow:?} regression={regression:?} overrun={overrun:?} epoch={epoch_overflow:?} status={unknown_status:?}"
+        "typed errors: depth={depth_zero:?} extent={extent_overflow:?} regression={regression:?} overrun={overrun:?} epoch={epoch_overflow:?}"
     );
 }

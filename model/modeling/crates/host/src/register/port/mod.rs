@@ -2,7 +2,6 @@ mod api;
 mod control;
 mod driver;
 mod irq;
-mod mapping;
 mod registers;
 mod retirement;
 mod state;
@@ -13,7 +12,7 @@ use super::{
     PdmaExactInterruptClaim, PdmaMemoryProvisioning, PdmaProvisioningError,
     PdmaRegisterAccessError, PdmaRegisterPortError,
 };
-use crate::{ModelError, ModelResult};
+use crate::PortError;
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, RegisterAccess};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, IrqNotification};
 use std::{future::Future, future::poll_fn, sync::Arc, task::Poll};
@@ -32,12 +31,12 @@ pub struct PdmaRegisterPort<A> {
 
 impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     /// Captures the active CPU and starts at the initial device epoch.
-    pub fn new(access: A) -> ModelResult<Self> {
-        Self::try_new_at(access, DeviceEpoch::initial()).map_err(|error| mapping::legacy(&error))
+    pub fn new(access: A) -> PdmaPortResult<Self> {
+        Self::try_new_at(access, DeviceEpoch::initial())
     }
     /// Captures the active CPU at an explicit device epoch.
-    pub fn new_at(access: A, epoch: DeviceEpoch) -> ModelResult<Self> {
-        Self::try_new_at(access, epoch).map_err(|error| mapping::legacy(&error))
+    pub fn new_at(access: A, epoch: DeviceEpoch) -> PdmaPortResult<Self> {
+        Self::try_new_at(access, epoch)
     }
     /// Captures the active CPU while preserving its typed failure.
     pub fn try_new_at(access: A, epoch: DeviceEpoch) -> PdmaPortResult<Self> {
@@ -54,20 +53,18 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
         &self.access
     }
     /// Reads one queue status through this port's clone-shared selector state.
-    pub async fn queue_status(&self, queue: EpochQueue) -> ModelResult<BusQueueStatus> {
-        self.try_queue_status(queue)
-            .await
-            .map_err(|error| mapping::legacy(&error))
+    pub async fn queue_status(&self, queue: EpochQueue) -> PdmaPortResult<BusQueueStatus> {
+        self.try_queue_status(queue).await
     }
     /// Reads one queue status without erasing register or response failures.
     pub async fn try_queue_status(&self, queue: EpochQueue) -> PdmaPortResult<BusQueueStatus> {
         let state = self.with_state(|state| {
             state.queue.ok_or_else(|| {
-                PdmaRegisterPortError::from(ModelError::UnknownQueue(queue.queue_id()))
+                PdmaRegisterPortError::from(PortError::UnknownQueue(queue.queue_id()))
             })
         })??;
         if state.status.queue() != queue {
-            return Err(ModelError::UnknownQueue(queue.queue_id()).into());
+            return Err(PortError::UnknownQueue(queue.queue_id()).into());
         }
         control::read_status(self, queue, state.rings).await
     }

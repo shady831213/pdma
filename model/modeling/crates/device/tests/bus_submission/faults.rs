@@ -45,7 +45,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     let result = run_descriptor(malformed, bytes, &[destination]).await?;
     assert_eq!(result.consumer, RingCursor::new(1));
     assert_eq!(result.destinations, [vec![0; 4]]);
-    assert_eq!(result.steps, 1);
+    assert_eq!(result.steps, 0);
     assert_eq!(result.native_steps, 1);
     assert!(!result.irq_pending);
     assert_eq!(

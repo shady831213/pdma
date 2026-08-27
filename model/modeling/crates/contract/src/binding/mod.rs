@@ -2,20 +2,16 @@
 
 /// Runtime-bound control requests and queue activation values.
 pub mod control;
-/// Exact fault tuples associated with semantic command identity.
-pub mod event;
 /// Ring regions and cursors bound to semantic memory objects.
 pub mod ring;
 
 pub use control::{
     ControlRequest, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
 };
-pub use event::AbiEvent;
 pub use ring::{RingCursors, RingLayout};
 
 use crate::abi::{AbiAddressError, DmaAddress};
 use crate::semantic::BufferId;
-use hardware_interface_runtime::MemoryAddress;
 
 /// One checked association between a semantic object and its exact DMA extent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,11 +55,6 @@ impl PdmaMemoryRegion {
         self.base
     }
 
-    /// Returns the neutral runtime base address.
-    pub const fn memory_base(self) -> MemoryAddress {
-        MemoryAddress::new(self.base.raw())
-    }
-
     /// Returns the fixed-width byte length.
     pub const fn length(self) -> u64 {
         self.length
@@ -77,11 +68,6 @@ impl PdmaMemoryRegion {
     /// Returns the frozen ABI-v1 exclusive end address.
     pub const fn abi_exclusive_end(self) -> DmaAddress {
         self.exclusive_end
-    }
-
-    /// Returns the neutral runtime exclusive end address.
-    pub const fn memory_exclusive_end(self) -> MemoryAddress {
-        MemoryAddress::new(self.exclusive_end.raw())
     }
 
     /// Returns whether the region contains no bytes.

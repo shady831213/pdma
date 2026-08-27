@@ -108,13 +108,13 @@ impl PdmaBatchAccess for RecordingMemoryAccess {
         &self,
         proposal: Self::Proposal,
         activation: QueueActivation,
-    ) -> Result<[u8; 72], Self::BatchError> {
+    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
         self.inner.bootstrap_queue(proposal, activation).await
     }
     async fn submit_queue(
         &self,
         request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> Result<[u8; 72], Self::BatchError> {
+    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
         self.inner.submit_queue(request).await
     }
 }

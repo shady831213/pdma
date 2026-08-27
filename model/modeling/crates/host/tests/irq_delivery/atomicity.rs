@@ -3,8 +3,7 @@ use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFu
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::AsyncDriver;
-use pdma_model_host::ModelResult;
+use pdma_model_host::{AsyncDriver, DriverError, compat::AsyncDevicePort};
 use tokio::sync::{mpsc, oneshot};
 
 struct BlockingHandler {
@@ -49,7 +48,7 @@ impl IrqHandler for SequencedHandler {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
+async fn handler_is_atomic_against_main_and_irq_nesting() -> Result<(), Box<dyn std::error::Error>> {
     // Given: two queued IRQ messages, one CPU token, and a handler blocked on its first call.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -57,7 +56,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut device_port = device.handle();
+    let mut device_port = AsyncDevicePort::new(device.handle());
     let cpu = SoftwareCpu::new();
     let (mut driver, src, first_dst, second_dst) = cpu
         .run_main(async {
@@ -83,7 +82,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;
-            Ok::<_, pdma_model_host::ModelError>((driver, src, first_dst, second_dst))
+            Ok::<_, DriverError>((driver, src, first_dst, second_dst))
         })
         .await?;
     let (started_tx, mut started_rx) = mpsc::unbounded_channel();
@@ -106,7 +105,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
         driver
             .submit_copy_on(&mut device_port, CopyRequest::new(src, second_dst, 4))
             .await?;
-        Ok::<_, pdma_model_host::ModelError>(())
+        Ok::<_, DriverError>(())
     })
     .await?;
     assert_eq!(started_rx.recv().await, Some(1));
@@ -141,7 +140,7 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> ModelResult<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_handler_blocks_main_and_another_vector() -> ModelResult<()> {
+async fn pending_handler_blocks_main_and_another_vector() -> Result<(), Box<dyn std::error::Error>> {
     // Given: vector A owns the CPU, main is queued, and vector B is pending behind A.
     let cpu = SoftwareCpu::new();
     let vector_a = IrqVector::new(31);

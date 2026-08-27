@@ -25,12 +25,14 @@ async fn closed_batches_commit_exact_order_and_codec() -> TestResult {
         bootstrap_bytes,
         support::response(bootstrap_status)
             .to_bytes()
+            .map(Into::into)
             .expect("generated queue response view must encode")
     );
     assert_eq!(
         submission_bytes,
         support::response(submission_status)
             .to_bytes()
+            .map(Into::into)
             .expect("generated queue response view must encode")
     );
     assert_eq!(
@@ -76,6 +78,7 @@ async fn submission_batch_commits_one_exact_indirect_region_before_descriptor() 
         response,
         support::response(status)
             .to_bytes()
+            .map(Into::into)
             .expect("generated queue response view must encode")
     );
     assert_eq!(handle.read_memory(region.base(), 16).await?, vec![0x33; 16]);

@@ -5,15 +5,15 @@ use super::{
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqLine, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::ModelResult;
 use pdma_model_host::{
-    AsyncDriver, DriverPort, adapters::AsyncDeviceAccess, compat::AsyncDevicePort,
+    AsyncDriver, DriverError, DriverPort, DriverResult, adapters::AsyncDeviceAccess,
+    compat::AsyncDevicePort,
 };
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 #[tokio::test(flavor = "current_thread")]
-async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() -> ModelResult<()> {
+async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() -> DriverResult<()> {
     // Given: a line-routed completion and independently running device, main, and delivery actors.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -86,7 +86,7 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
                 .submit_copy_on(&mut main_port, CopyRequest::new(src, dst, 4))
                 .await?;
             done_rx.recv().await.expect("line handler completes");
-            Ok::<_, pdma_model_host::ModelError>((
+            Ok::<_, DriverError>((
                 main_port.read_buffer(dst, 0, 4).await?,
                 main_port.irq_snapshot().await,
             ))

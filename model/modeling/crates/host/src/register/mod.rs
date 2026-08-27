@@ -11,7 +11,7 @@ pub use bus::BusQueueStatus;
 pub use capability::{PdmaBatchAccess, PdmaExactInterruptClaim, PdmaMemoryProvisioning};
 pub use error::{
     PdmaBatchError, PdmaClaimError, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegisterAccessError, PdmaRegisterPortError, RegisterError,
+    PdmaRegisterAccessError, PdmaRegisterPortError,
 };
 pub use port::PdmaRegisterPort;
 pub use types::{

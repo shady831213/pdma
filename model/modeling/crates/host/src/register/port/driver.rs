@@ -1,5 +1,5 @@
-use super::{CanonicalAccess, PdmaRegisterPort, irq, mapping, retirement, state, submission};
-use crate::{DriverPort, ModelResult};
+use super::{CanonicalAccess, PdmaRegisterPort, irq, retirement, state, submission};
+use crate::{DriverPort, PortError, PortResult};
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
@@ -9,57 +9,55 @@ impl<A: CanonicalAccess> DriverPort for PdmaRegisterPort<A>
 where
     A::Proposal: Send,
 {
-    async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+    async fn create_queue(&mut self, config: QueueConfig) -> PortResult<QueueConfigHandle> {
         state::create_queue(self, config)
             .await
-            .map_err(|error| mapping::legacy(&error))
+            .map_err(PortError::from)
     }
-    async fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
-        self.try_allocate_buffer(len)
-            .await
-            .map_err(|error| mapping::legacy(&error))
+    async fn allocate_buffer(&mut self, len: usize) -> PortResult<BufferId> {
+        self.try_allocate_buffer(len).await.map_err(PortError::from)
     }
-    async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        state::write_buffer(self, id, offset, data).map_err(|error| mapping::legacy(&error))
+    async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> PortResult<()> {
+        state::write_buffer(self, id, offset, data).map_err(PortError::from)
     }
-    async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
-        state::read_buffer(self, id, offset, len).map_err(|error| mapping::legacy(&error))
+    async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> PortResult<Vec<u8>> {
+        state::read_buffer(self, id, offset, len).map_err(PortError::from)
     }
     async fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
         command: ExternalCommand,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         submission::submit(self, queue, command)
             .await
-            .map_err(|error| mapping::legacy(&error))
+            .map_err(PortError::from)
     }
-    async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
+    async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> PortResult<()> {
         submission::doorbell(self, queue)
             .await
-            .map_err(|error| mapping::legacy(&error))
+            .map_err(PortError::from)
     }
     async fn poll_completion(
         &mut self,
         queue: QueueConfigHandle,
-    ) -> ModelResult<Option<CompletionRecord>> {
+    ) -> PortResult<Option<CompletionRecord>> {
         retirement::completion(self, queue)
             .await
-            .map_err(|error| mapping::legacy(&error))
+            .map_err(PortError::from)
     }
     async fn poll_queue_event(
         &mut self,
         queue: QueueConfigHandle,
-    ) -> ModelResult<Option<EventRecord>> {
+    ) -> PortResult<Option<EventRecord>> {
         retirement::event(self, queue)
             .await
-            .map_err(|error| mapping::legacy(&error))
+            .map_err(PortError::from)
     }
     async fn configure_irq_route(
         &mut self,
         source: EpochIrqSource,
         route: IrqRoute,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         irq_command(
             self,
             source,
@@ -68,7 +66,7 @@ where
         )
         .await
     }
-    async fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    async fn enable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
         irq_command(
             self,
             source,
@@ -77,7 +75,7 @@ where
         )
         .await
     }
-    async fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    async fn disable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
         irq_command(
             self,
             source,
@@ -86,7 +84,7 @@ where
         )
         .await
     }
-    async fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    async fn mask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
         irq_command(
             self,
             source,
@@ -95,7 +93,7 @@ where
         )
         .await
     }
-    async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
         irq_command(
             self,
             source,
@@ -104,7 +102,7 @@ where
         )
         .await
     }
-    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
+    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
         irq_command(
             self,
             source,
@@ -129,8 +127,8 @@ async fn irq_command<A: CanonicalAccess>(
     source: EpochIrqSource,
     route: Option<IrqRoute>,
     command: pdma_model_contract::abi::mmio::IrqCommand,
-) -> ModelResult<()> {
+) -> PortResult<()> {
     irq::source_command(port, source, route, command)
         .await
-        .map_err(|error| mapping::legacy(&error))
+        .map_err(PortError::from)
 }

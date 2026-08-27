@@ -2,12 +2,11 @@ use super::{NotificationPort, message};
 use crate::register::legacy_test_support::{IrqDelivery, irq_handler};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CompletionRingId, IrqSource, IrqVector, QueueId};
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::interrupt::{InterruptError, InterruptResult};
 use tokio::sync::mpsc;
 
 #[tokio::test(flavor = "current_thread")]
-async fn batch_registration_publishes_two_handler_types_implicitly() -> ModelResult<()> {
+async fn batch_registration_publishes_two_handler_types_implicitly() -> InterruptResult<()> {
     // Given: a deferred actor and notifications for two distinct vectors.
     let vector_a = IrqVector::new(31);
     let vector_b = IrqVector::new(32);
@@ -67,8 +66,8 @@ async fn empty_batch_registration_does_not_publish_delivery() {
     // Then: both software and runner observe typed bootstrap failures.
     assert!(matches!(
         registration,
-        Err(ModelError::EmptyIrqHandlerRegistry)
+        Err(InterruptError::EmptyRegistry)
     ));
-    assert_eq!(runner.run().await, Err(ModelError::IrqDeliveryUnavailable));
+    assert_eq!(runner.run().await, Err(InterruptError::DeliveryUnavailable));
 }
 use crate::register::legacy_integration_tests::pdma_model_host;

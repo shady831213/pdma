@@ -3,10 +3,10 @@ use pdma_model_contract::semantic::{
     BufferId, CompletionRingId, DeviceEpoch, EventErrorKind, IrqSource, QueueId, SemanticError,
 };
 
-/// Result returned by legacy device-model operations.
+/// Result returned by semantic device-model operations.
 pub type ModelResult<T> = Result<T, ModelError>;
 
-/// Temporary leaf-compatible device error projection retained until Task 26.
+/// Typed error projection for semantic device-model operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelError {
     /// A resettable capability belongs to another device generation.
@@ -111,7 +111,7 @@ impl std::error::Error for ModelError {}
 /// Device execution failure independent of control, batch, and reset protocols.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PdmaRunError {
-    /// The semantic compatibility executor returned a legacy typed cause.
+    /// The semantic compatibility executor returned a typed cause.
     Semantic(ModelError),
 }
 

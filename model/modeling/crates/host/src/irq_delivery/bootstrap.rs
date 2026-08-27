@@ -3,8 +3,7 @@ use super::{
     IrqHandlerRegistry, NoHandler,
 };
 use crate::DriverPort;
-use crate::ModelError;
-use crate::ModelResult;
+use crate::interrupt::{InterruptError, InterruptResult};
 use pdma_model_contract::semantic::IrqVector;
 use tokio::sync::oneshot;
 
@@ -43,7 +42,7 @@ impl<P> IrqDeliveryBootstrap<P> {
         self,
         vector: IrqVector,
         handler: H,
-    ) -> ModelResult<IrqDeliveryHandle>
+    ) -> InterruptResult<IrqDeliveryHandle>
     where
         H: IrqHandler + 'static,
     {
@@ -51,9 +50,9 @@ impl<P> IrqDeliveryBootstrap<P> {
     }
 
     /// Registers all vector handlers atomically, then publishes the actor to the runner.
-    pub(crate) fn register_handlers<F>(self, configure: F) -> ModelResult<IrqDeliveryHandle>
+    pub(crate) fn register_handlers<F>(self, configure: F) -> InterruptResult<IrqDeliveryHandle>
     where
-        F: FnOnce(&mut IrqHandlerRegistry<'static>) -> ModelResult<()>,
+        F: FnOnce(&mut IrqHandlerRegistry<'static>) -> InterruptResult<()>,
     {
         let mut registry = IrqHandlerRegistry::new();
         configure(&mut registry)?;
@@ -61,7 +60,7 @@ impl<P> IrqDeliveryBootstrap<P> {
         let (delivery, handle) = self.delivery.with_handlers(handler);
         self.start
             .send(delivery)
-            .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+            .map_err(|_| InterruptError::DeliveryUnavailable)?;
         Ok(handle)
     }
 }
@@ -71,11 +70,11 @@ where
     P: DriverPort + 'static,
 {
     /// Waits for software registration, then runs the host delivery actor.
-    pub(crate) async fn run(self) -> ModelResult<IrqDeliverySummary> {
+    pub(crate) async fn run(self) -> InterruptResult<IrqDeliverySummary> {
         let delivery = self
             .start
             .await
-            .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+            .map_err(|_| InterruptError::DeliveryUnavailable)?;
         delivery.run().await
     }
 }

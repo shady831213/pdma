@@ -5,10 +5,9 @@ use pdma_model_contract::abi::{
 };
 use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
 use pdma_model_contract::semantic::{self, BufferId};
-use pdma_model_contract::translation::{decode_buffer_id, encode_buffer_id};
 
 #[test]
-fn semantic_and_abi_are_independent_and_translation_is_explicit() {
+fn semantic_and_abi_are_independent_and_conversion_is_owner_defined() {
     // Given: one semantic request and one unrelated exact ABI command.
     let semantic = semantic::CopyRequest::new(BufferId::new(3), BufferId::new(5), 8);
     let abi = AbiCommand::copy(
@@ -20,27 +19,27 @@ fn semantic_and_abi_are_independent_and_translation_is_explicit() {
         },
     );
 
-    // When: the exact command is encoded and one ID crosses the explicit translation.
+    // When: the exact command is encoded and one ID uses its owning checked conversions.
     let mut bytes = [0_u8; 64];
     let encoded_record = abi.encode(&mut bytes);
-    let encoded_id = encode_buffer_id(semantic.src());
-    let translationd = encoded_id.map(decode_buffer_id);
+    let encoded_id = AbiId::try_from(semantic.src().raw());
+    let decoded_id = encoded_id.map(|id| id.try_into_model().map(BufferId::new));
 
     // Then: each layer has a real value and composition preserves identity.
     assert_eq!(encoded_record, Ok(()));
     assert_eq!(bytes.len(), 64);
     assert_eq!(encoded_id, Ok(AbiId::new(3)));
-    assert_eq!(translationd, Ok(Ok(semantic.src())));
+    assert_eq!(decoded_id, Ok(Ok(semantic.src())));
 }
 
 #[test]
-fn legacy_root_and_semantic_paths_are_equal() {
-    // Given: values constructed through the legacy root and semantic namespace.
-    let legacy = pdma_model_contract::semantic::QueueId::new(17);
-    let namespaced = semantic::QueueId::new(17);
+fn fully_qualified_and_imported_semantic_paths_are_equal() {
+    // Given: values constructed through fully qualified and imported semantic paths.
+    let fully_qualified = pdma_model_contract::semantic::QueueId::new(17);
+    let imported = semantic::QueueId::new(17);
 
-    // When/Then: additive names preserve literal type identity and equality.
-    assert_eq!(legacy, namespaced);
+    // When/Then: one semantic owner preserves literal type identity and equality.
+    assert_eq!(fully_qualified, imported);
 }
 
 #[test]

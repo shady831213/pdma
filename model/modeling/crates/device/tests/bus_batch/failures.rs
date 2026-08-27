@@ -4,7 +4,7 @@ use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{MmioByteCount, MmioResult};
 use pdma_model_contract::binding::QueueControl;
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
-use pdma_model_device::{DmaWrite, MmioBatchError, QueueBootstrapBatch, SubmissionBatch};
+use pdma_model_device::{DmaWrite, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch};
 
 #[tokio::test]
 async fn malformed_cardinality_and_exact_write_shapes_commit_nothing() -> TestResult {
@@ -43,9 +43,9 @@ async fn malformed_cardinality_and_exact_write_shapes_commit_nothing() -> TestRe
     let indirect = handle.submit_queue_batch(extra_indirect).await;
 
     // Then: the closed shapes reject before mappings, queue state, or wake state change.
-    assert_eq!(bootstrap, Err(MmioBatchError::InvalidShape));
-    assert_eq!(submission, Err(MmioBatchError::InvalidShape));
-    assert_eq!(indirect, Err(MmioBatchError::InvalidShape));
+    assert_eq!(bootstrap, Err(PdmaBatchError::InvalidShape));
+    assert_eq!(submission, Err(PdmaBatchError::InvalidShape));
+    assert_eq!(indirect, Err(PdmaBatchError::InvalidShape));
     assert_eq!(handle.memory_generation().await, 0);
     assert_eq!(handle.snapshot().await, before);
     assert_eq!(
@@ -78,7 +78,7 @@ async fn terminal_command_failure_preserves_dma_cursor_and_standalone_latch() ->
 
     // Then: terminal non-OK is returned without applying earlier projected writes.
     assert!(
-        matches!(result, Err(MmioBatchError::Command(details)) if details.result == MmioResult::InvalidTransaction)
+        matches!(result, Err(PdmaBatchError::Command(details)) if details.result == MmioResult::InvalidTransaction)
     );
     assert_eq!(
         handle.read_memory(submission.base(), 64).await?,
@@ -120,7 +120,7 @@ async fn final_dma_operation_failure_discards_prepared_indirect_state() -> TestR
 
     // Then: neither prepared mapping/write nor any terminal state becomes visible.
     assert!(
-        matches!(result, Err(MmioBatchError::Dma(details)) if details.result == MmioResult::DmaUnmapped && details.details == [0xdead_0000, 64, 0])
+        matches!(result, Err(PdmaBatchError::Dma(details)) if details.result == MmioResult::DmaUnmapped && details.details == [0xdead_0000, 64, 0])
     );
     assert_eq!(handle.memory_generation().await, 1);
     assert_eq!(
@@ -166,7 +166,7 @@ async fn stale_epoch_terminal_failure_and_unpolled_drop_preserve_state() -> Test
 
     // Then: both paths leave DMA, queue, latch, and publication state untouched.
     assert!(
-        matches!(stale, Err(MmioBatchError::Command(details)) if details.result == MmioResult::StaleEpoch)
+        matches!(stale, Err(PdmaBatchError::Command(details)) if details.result == MmioResult::StaleEpoch)
     );
     assert_eq!(handle.memory_generation().await, 0);
     assert_eq!(handle.snapshot().await, before);

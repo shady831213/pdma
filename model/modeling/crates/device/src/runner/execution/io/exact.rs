@@ -5,12 +5,14 @@ use super::{FrontendBehavior, NormalizedFault, NormalizedFetch, PublicationOutco
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::abi::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
+use pdma_model_contract::abi::{AbiEventKind, DmaAddress, ExactAbiEvent};
+use pdma_model_contract::semantic::BufferId;
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CompletionRecord, QueueDirectoryEntry, QueueId};
 
 #[derive(Debug)]
 pub(in crate::runner::execution) struct ExactFrontend {
-    pending_fault: Option<pdma_model_contract::binding::AbiEvent>,
+    pending_fault: Option<ExactAbiEvent>,
 }
 
 impl ExactFrontend {
@@ -20,9 +22,8 @@ impl ExactFrontend {
         }
     }
 
-    pub(super) fn pending_fault_bytes(&self) -> Option<[u8; 64]> {
+    pub(super) const fn pending_fault(&self) -> Option<ExactAbiEvent> {
         self.pending_fault
-            .and_then(|event| pdma_model_contract::translation::encode_event(event).ok())
     }
 }
 
@@ -39,7 +40,7 @@ impl FrontendBehavior for ExactFrontend {
             entry.queue_id(),
             entry.completion_ring_id(),
         )
-        .map(|fetched| fetched.map(normalize))
+        .map(|fetched| fetched.map(|fetched| normalize(memory, fetched)))
     }
 
     fn fetch(
@@ -56,10 +57,11 @@ impl FrontendBehavior for ExactFrontend {
         )?;
         Ok(fetched.map(|fetched| match fetched {
             submission::ExactFetch::Command(command) => NormalizedFetch::Command(command),
-            submission::ExactFetch::Fault(event) => {
+            submission::ExactFetch::Fault(queue, event) => {
                 self.pending_fault = Some(event);
                 NormalizedFetch::Fault(NormalizedFault {
-                    queue: event.queue_id(),
+                    queue,
+                    source: fault_source(memory, event),
                 })
             }
         }))
@@ -145,19 +147,44 @@ impl FrontendBehavior for ExactFrontend {
     }
 }
 
-fn normalize(fetched: submission::ExactFetch) -> NormalizedFetch {
+fn normalize(memory: &PdmaMemoryMappings, fetched: submission::ExactFetch) -> NormalizedFetch {
     match fetched {
         submission::ExactFetch::Command(command) => NormalizedFetch::Command(command),
-        submission::ExactFetch::Fault(event) => NormalizedFetch::Fault(NormalizedFault {
-            queue: event.queue_id(),
+        submission::ExactFetch::Fault(queue, event) => NormalizedFetch::Fault(NormalizedFault {
+            queue,
+            source: fault_source(memory, event),
         }),
     }
 }
 
-pub(in crate::runner::execution) fn decode_event(
-    bytes: &[u8],
-) -> Option<pdma_model_contract::binding::AbiEvent> {
-    pdma_model_contract::translation::decode_event(bytes).ok()
+fn fault_source(memory: &PdmaMemoryMappings, event: ExactAbiEvent) -> ModelError {
+    let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
+    match kind {
+        AbiEventKind::UnmappedDmaAddress => ModelError::UnknownBuffer(BufferId::new(usize::MAX)),
+        AbiEventKind::RangeOverflow => ModelError::RangeOverflow,
+        AbiEventKind::OutOfBounds => memory
+            .region_ending_at(DmaAddress::new(locator))
+            .and_then(|region| {
+                let len = usize::try_from(detail0).ok()?;
+                let end = detail1.checked_sub(region.abi_base().raw())?;
+                usize::try_from(end)
+                    .ok()
+                    .map(|end| ModelError::OutOfBounds {
+                        buffer: region.object(),
+                        len,
+                        end,
+                    })
+            })
+            .unwrap_or(ModelError::DmaSubmissionState),
+        AbiEventKind::InvalidVersion
+        | AbiEventKind::InvalidSize
+        | AbiEventKind::InvalidOpcode
+        | AbiEventKind::InvalidFlags
+        | AbiEventKind::InvalidReserved
+        | AbiEventKind::InvalidIndirectCount
+        | AbiEventKind::InvalidIndirectAlignment
+        | AbiEventKind::ValueOutOfRange => ModelError::DmaSubmissionState,
+    }
 }
 
 pub(super) fn ring_is_full(control: &BusControlState, queue: QueueId, completion: bool) -> bool {

@@ -3,63 +3,12 @@ use std::sync::Arc;
 use hardware_interface_runtime::{
     ObservationGate, RegisterObserver, SharedMemory, SharedRegisterObserver,
 };
-use pdma_model_contract::abi::mmio::PdmaMmioMap;
-use pdma_model_contract::binding::PdmaMemoryRegion;
-use pdma_model_contract::semantic::trace::TraceEvent;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 
 use super::abi::bus::control::BusControlState;
 use super::abi::mmio::RegisterBanks;
 use super::execution::DeviceExecution;
-use super::{AsyncRunSnapshot, AsyncStepStatus, PdmaMemoryError, PdmaMemoryMappings};
-
-/// Direct, named reset partitions exposed solely to integration-test support.
-#[doc(hidden)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResetPartitionSnapshot {
-    /// Number of configured queues in the canonical backend.
-    pub queues: usize,
-    /// Number of queues with a completion or event record pending.
-    pub results: usize,
-    /// Number of canonical runnable work entries.
-    pub work: usize,
-    /// Number of pending retirement entries.
-    pub retirement: usize,
-    /// Number of directly stored IRQ source states.
-    pub irq_sources: usize,
-    /// Direct reads of every canonical MMIO register in generated declaration order.
-    pub registers: Vec<Vec<u8>>,
-    /// Canonical backend epoch.
-    pub backend_epoch: DeviceEpoch,
-    /// Canonical typed-control epoch.
-    pub control_epoch: DeviceEpoch,
-}
-
-/// Complete typed core state exposed solely to integration-test support.
-#[doc(hidden)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeviceStateSnapshot {
-    /// All logical DMA mappings in object order.
-    pub mappings: Vec<PdmaMemoryRegion>,
-    /// Exact bytes for every logical DMA mapping in object order.
-    pub bytes: Vec<Vec<u8>>,
-    /// Persistent DMA allocator generation.
-    pub memory_generation: u64,
-    /// Persistent resource configuration.
-    pub resources: ResourceConfig,
-    /// Persistent trace history.
-    pub trace: Vec<TraceEvent>,
-    /// Complete runner lifecycle state.
-    pub runner: AsyncRunSnapshot,
-    /// Monotonic publication generation held by the runner core.
-    pub runner_generation: usize,
-    /// Resettable backend/control/MMIO partitions.
-    pub partitions: ResetPartitionSnapshot,
-    /// Current PDMA-local IRQ state.
-    pub irq: Option<pdma_model_contract::semantic::IrqSnapshot>,
-    /// Committed calls to the sole reset runner.
-    pub reset_runner_calls: usize,
-}
+use super::{AsyncStepStatus, PdmaMemoryMappings};
 
 /// Sole device-owned state consumed by one asynchronous or synchronous facade.
 ///
@@ -123,90 +72,6 @@ impl DeviceCore {
             #[cfg(test)]
             batch_fault: std::cell::Cell::new(None),
         }
-    }
-
-    /// Constructs a core at an explicit epoch for integration-test support only.
-    ///
-    /// This remains a construction fixture: public reset operations still enter
-    /// [`Self::reset_runner`] and therefore retain the canonical overflow path.
-    #[doc(hidden)]
-    pub fn new_at_epoch_for_test(
-        memory: Arc<SharedMemory>,
-        config: ResourceConfig,
-        observer: Arc<dyn RegisterObserver>,
-        epoch: DeviceEpoch,
-    ) -> Self {
-        let mut core = Self::new(memory, config, observer);
-        core.backend.reset(epoch);
-        core.bus_control.reset(epoch);
-        core
-    }
-
-    /// Constructs an epoch-seeded core with one typed writable MMIO commit for tests.
-    #[doc(hidden)]
-    pub fn new_at_epoch_with_mmio_write_for_test(
-        memory: Arc<SharedMemory>,
-        config: ResourceConfig,
-        observer: Arc<dyn RegisterObserver>,
-        epoch: DeviceEpoch,
-        offset: u32,
-        request: &[u8],
-    ) -> Result<Self, pdma_model_contract::abi::mmio::MmioAccessError> {
-        let mut core = Self::new_at_epoch_for_test(memory, config, observer, epoch);
-        let (register, value) = pdma_model_contract::abi::mmio::decode_write(offset, request)?;
-        super::abi::register_endpoint::prepare_write(register, value, offset, request)
-            .commit(&mut core);
-        Ok(core)
-    }
-
-    /// Snapshots independent reset partitions without formatting or aggregation.
-    #[doc(hidden)]
-    pub fn reset_partition_snapshot_for_test(&self) -> ResetPartitionSnapshot {
-        let (queues, results, work, retirement, irq_sources) =
-            self.backend.reset_partition_counts(&self.bus_control);
-        let registers = pdma_model_contract::abi::mmio::PdmaMmioMapRegisterId::ALL
-            .into_iter()
-            .filter_map(PdmaMmioMap::register)
-            .map(|register| super::abi::mmio::dispatch::read(self, register.id()).encode())
-            .collect();
-        ResetPartitionSnapshot {
-            queues,
-            results,
-            work,
-            retirement,
-            irq_sources,
-            registers,
-            backend_epoch: self.backend.epoch(),
-            control_epoch: self.bus_control.epoch(),
-        }
-    }
-
-    /// Snapshots every typed core partition without formatting or aggregation.
-    #[doc(hidden)]
-    pub fn state_snapshot_for_test(&self) -> Result<DeviceStateSnapshot, PdmaMemoryError> {
-        let mappings = (0..self.dma_space.mapped_region_count())
-            .map(|raw| {
-                self.dma_space
-                    .region_for_object(pdma_model_contract::semantic::BufferId::new(raw))
-                    .ok_or(PdmaMemoryError::InvalidRegion)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let bytes = mappings
-            .iter()
-            .map(|region| self.dma_space.read_memory(region.base(), region.length()))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(DeviceStateSnapshot {
-            mappings,
-            bytes,
-            memory_generation: self.dma_space.generation(),
-            resources: self.backend.resource_config(),
-            trace: self.backend.trace_events(),
-            runner: super::state::snapshot(self),
-            runner_generation: self.generation,
-            partitions: self.reset_partition_snapshot_for_test(),
-            irq: self.backend.irq_snapshot(),
-            reset_runner_calls: self.reset_runner_calls(),
-        })
     }
 
     /// Atomically resets all resettable runner state through the sole reset seam.

@@ -57,12 +57,13 @@ pub enum PendingDmaResult {
     /// Successful execution waiting for completion-ring publication.
     Completion(pdma_model_contract::semantic::CompletionRecord),
     /// Canonical submission fault waiting for event-ring publication.
-    Event(pdma_model_contract::binding::AbiEvent),
+    Event(pdma_model_contract::abi::ExactAbiEvent),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ModelStepStatus {
     Progressed,
+    FaultCached,
     Idle,
     Stalled(AsyncStallReason),
 }

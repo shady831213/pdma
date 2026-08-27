@@ -1,7 +1,7 @@
 use super::*;
 use hardware_interface_runtime::{GateFault, MemoryRegion, ObservationGateError};
-use pdma_model_contract::semantic::BufferId;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
+use pdma_model_contract::semantic::BufferId;
 use pdma_model_host::register::PdmaPreparedProposal;
 
 pub(crate) async fn verify_fates(alignment: MemoryAlignment) -> TestResult<bool> {
@@ -21,7 +21,10 @@ async fn verify_provisioning(alignment: MemoryAlignment) -> TestResult<()> {
         .expect_err("storage exhaustion must win before allocation");
     let cause = PdmaProvisioningCause::StorageExhausted;
     assert_eq!(error, PdmaProvisioningError::Provisioning(cause));
-    assert_eq!(Error::source(&error).and_then(|value| value.downcast_ref()), Some(&cause));
+    assert_eq!(
+        Error::source(&error).and_then(|value| value.downcast_ref()),
+        Some(&cause)
+    );
     assert_eq!(storage_fake.snapshot(), before);
 
     let fake = FakeAccess::new(message());
@@ -29,7 +32,10 @@ async fn verify_provisioning(alignment: MemoryAlignment) -> TestResult<()> {
         .allocate_region(PdmaRegionRequest::new(1, alignment))
         .await?;
     let mut one = [0];
-    let address = mapped.base().checked_add(64).ok_or("unmapped address overflow")?;
+    let address = mapped
+        .base()
+        .checked_add(64)
+        .ok_or("unmapped address overflow")?;
     let before = fake.snapshot();
     let unmapped = MemoryAccess::read(&fake, address, alignment, &mut one)
         .expect_err("unmapped read must fail");

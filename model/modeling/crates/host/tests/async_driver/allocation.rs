@@ -6,24 +6,32 @@ use support::BlockingPort;
 #[tokio::test(flavor = "current_thread")]
 async fn fallible_allocation_propagates_through_both_driver_facades() {
     // Given: the CPU-bound and manual driver facades each own a queue on one real device.
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
-    let async_driver = SoftwareCpu::new()
-        .run_main(AsyncDriver::setup_on(&mut device, 1, 1))
-        .await
-        .expect("async setup");
-    let manual_driver = ManualDriver::setup_on(&mut device, 1, 1)
-        .await
-        .expect("manual setup");
+    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
+    let (async_object, manual_object) = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        let async_driver = SoftwareCpu::new()
+            .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
+            .await
+            .expect("async setup");
+        let manual_driver = ManualDriver::setup_on(&mut port, 1, 1)
+            .await
+            .expect("manual setup");
 
-    // When: both facades allocate through their semantic result surfaces.
-    let async_object = async_driver
-        .allocate_buffer_on(&mut device, 3)
-        .await
-        .expect("async allocation");
-    let manual_object = manual_driver
-        .allocate_buffer_on(&mut device, 5)
-        .await
-        .expect("manual allocation");
+        // When: both facades allocate through their semantic result surfaces.
+        let async_object = async_driver
+            .allocate_buffer_on(&mut port, 3)
+            .await
+            .expect("async allocation");
+        let manual_object = manual_driver
+            .allocate_buffer_on(&mut port, 5)
+            .await
+            .expect("manual allocation");
+        (async_object, manual_object)
+    };
 
     // Then: each result is only a BufferId correlated with one exact committed DMA region.
     let async_region = device
@@ -45,7 +53,11 @@ async fn fallible_allocation_propagates_through_both_driver_facades() {
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
     // Given: an async driver whose allocation port can pause before the real device call.
-    let (runner, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()), pdma_model_contract::semantic::ResourceConfig::default(), std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver)));
+    let (runner, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
+    ));
     let handle = runner.handle();
     handle.enable_tracing().await;
     let mut port = BlockingPort::new(handle.clone());
@@ -71,7 +83,7 @@ async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
     let exhausted = driver.allocate_buffer_on(&mut port, usize::MAX).await;
 
     // Then: neither attempt commits mapping, bytes, trace, or the next object/base.
-    assert_eq!(exhausted, Err(ModelError::DmaAllocationExhausted));
+    assert_eq!(exhausted, Err(DriverError::Port(pdma_model_host::PortError::AllocationExhausted)));
     assert_eq!(handle.region_for_object(BufferId::new(0)).await, None);
     assert_eq!(handle.trace_events().await, trace_before);
     let object = driver

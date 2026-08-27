@@ -1,15 +1,13 @@
-use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
+use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, ResourceConfig, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, DeviceCore};
 use pdma_model_host::adapters::AsyncDeviceAccess;
 use pdma_model_host::compat::{AsyncDevicePort, SemanticDevicePort};
 use pdma_model_host::register::PdmaRegisterPort;
-use pdma_model_host::{AsyncDriver, DriverPort, ManualDriver, ModelError};
-use hardware_interface_runtime::{SoftwareCpu};
+use pdma_model_host::{AsyncDriver, DriverError, DriverPort, ManualDriver, PortError};
 use std::{path::Path, sync::Arc};
 
 mod compiler;
-mod inventory;
 
 fn core() -> DeviceCore {
     DeviceCore::new(
@@ -21,12 +19,6 @@ fn core() -> DeviceCore {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    if std::env::args().nth(1).as_deref() == Some("--print-inventory") {
-        if let Some(manifest) = inventory::render() {
-            print!("{manifest}");
-        }
-        return;
-    }
     let (device, worker) = AsyncDevice::from_core(core());
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
@@ -53,19 +45,19 @@ async fn main() {
             let shared = matches!(
                 peer.submit_copy_on(&mut async_port, CopyRequest::new(source, destination, 1),)
                     .await,
-                Err(ModelError::DriverQueueFull)
+                Err(DriverError::QueueFull)
             );
             device.wait_for_progress_after(0).await;
             let completion = driver.poll_completion_on(&mut async_port).await?;
             let bytes = driver.read_buffer_on(&async_port, destination, 1).await?;
-            Ok::<_, ModelError>((completion.is_some() && bytes == [9], shared, true))
+            Ok::<_, DriverError>((completion.is_some() && bytes == [9], shared, true))
         })
         .await
         .expect("async semantic operation must succeed");
     let async_store_count = usize::from(handle.memory_generation().await == 2);
     let async_fault = matches!(
         async_port.read_buffer(BufferId::new(99), 0, 1).await,
-        Err(ModelError::UnknownBuffer(_))
+        Err(PortError::UnknownBuffer(_))
     );
     let before_cancel = handle.memory_generation().await;
     let mut cancelled = Box::pin(async_port.allocate_buffer(1));
@@ -109,7 +101,7 @@ async fn main() {
             .expect("sync submit must succeed");
         let fault = matches!(
             sync_port.read_buffer(BufferId::new(99), 0, 1).await,
-            Err(ModelError::UnknownBuffer(_))
+            Err(PortError::UnknownBuffer(_))
         );
         (manual, destination, fault)
     };
@@ -132,9 +124,6 @@ async fn main() {
     let register_port = SoftwareCpu::new()
         .run_main(async { PdmaRegisterPort::new(access).is_ok() })
         .await;
-    let legacy_manifest_complete =
-        inventory::is_complete(include_str!("../transitional-consumers.tsv"))
-            && inventory::transition_evidence_complete();
     let sync_register_rejected = compiler::rejects(
         Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -153,6 +142,17 @@ async fn main() {
         env!("CARGO_MANIFEST_DIR"),
         "/positive/legacy_paths.rs"
     )));
+    let final_error_names_compile = compiler::accepts(Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/positive/final_error_names.rs"
+    )));
+    let transitional_error_aliases_rejected = compiler::rejects_all(
+        Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/negative/transitional_error_aliases.rs"
+        )),
+        &["unresolved imports", "BusControlError", "MmioBatchError"],
+    );
     let retired_roots_rejected = compiler::rejects(
         Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -160,8 +160,13 @@ async fn main() {
         )),
         "unresolved import",
     );
-    let new_aliases = inventory::new_alias_count();
-
+    let raw_devices_rejected = compiler::rejects(
+        Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/negative/raw_devices.rs"
+        )),
+        "the trait bound",
+    );
     assert!(
         async_operation
             && sync_operation
@@ -178,15 +183,18 @@ async fn main() {
             && sync_fault
             && sync_register_rejected
             && manual_irq_rejected
-            && legacy_manifest_complete
             && successor_paths_compile
+            && final_error_names_compile
+            && transitional_error_aliases_rejected
             && retired_roots_rejected
-            && new_aliases == 0
+            && raw_devices_rejected,
+        "async_operation={async_operation};sync_operation={sync_operation};async_store_count={async_store_count};sync_store_count={sync_store_count};shared_accounting={shared_accounting};reset={reset};irq_control={irq_control};sync_borrow_released={sync_borrow_released};register_port={register_port};async_fault={async_fault};async_cancelled={async_cancelled};cancel_unchanged={};sync_fault={sync_fault};sync_register_rejected={sync_register_rejected};manual_irq_rejected={manual_irq_rejected};successor_paths_compile={successor_paths_compile};final_error_names_compile={final_error_names_compile};transitional_error_aliases_rejected={transitional_error_aliases_rejected};retired_roots_rejected={retired_roots_rejected};raw_devices_rejected={raw_devices_rejected}",
+        before_cancel == after_cancel
     );
     println!(
         "async_operation={async_operation};sync_operation={sync_operation};async_store_count={async_store_count};sync_store_count={sync_store_count};shared_accounting={shared_accounting};reset={reset};irq_control={irq_control};sync_borrow_released={sync_borrow_released};register_port={register_port}"
     );
     println!(
-        "async_fault={async_fault};async_cancelled={async_cancelled};sync_fault={sync_fault};sync_register_rejected={sync_register_rejected};manual_irq_rejected={manual_irq_rejected};legacy_manifest_complete={legacy_manifest_complete};successor_paths_compile={successor_paths_compile};retired_roots_rejected={retired_roots_rejected};new_aliases={new_aliases}"
+        "async_fault={async_fault};async_cancelled={async_cancelled};sync_fault={sync_fault};sync_register_rejected={sync_register_rejected};manual_irq_rejected={manual_irq_rejected};successor_paths_compile={successor_paths_compile};final_error_names_compile={final_error_names_compile};transitional_error_aliases_rejected={transitional_error_aliases_rejected};retired_roots_rejected={retired_roots_rejected};raw_devices_rejected={raw_devices_rejected}"
     );
 }

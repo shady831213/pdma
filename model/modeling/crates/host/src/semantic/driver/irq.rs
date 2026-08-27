@@ -1,7 +1,6 @@
 //! Driver-side PDMA IRQ source demultiplexing.
 
-use crate::ModelError;
-use crate::ModelResult;
+use crate::{DriverError, DriverResult, PortError};
 
 use super::AsyncDriver;
 use crate::DriverPort;
@@ -22,25 +21,28 @@ impl AsyncDriver {
         &mut self,
         device: &mut impl DriverPort,
         notification: IrqNotification,
-    ) -> ModelResult<Vec<DriverIrqRecord>> {
+    ) -> DriverResult<Vec<DriverIrqRecord>> {
         let source = self.validate_irq_notification(notification)?;
         let records = self.drain_irq_source_on(device, source).await?;
-        device.ack_irq_source(source).await?;
+        device
+            .ack_irq_source(source)
+            .await
+            .map_err(DriverError::from)?;
         Ok(records)
     }
 
     pub(crate) fn validate_irq_notification(
         &self,
         notification: IrqNotification,
-    ) -> ModelResult<pdma_model_contract::semantic::EpochIrqSource> {
+    ) -> DriverResult<pdma_model_contract::semantic::EpochIrqSource> {
         self.core.accounting.validate()?;
         let source = notification.source_capability();
         let expected_epoch = self.core.queue_config.epoch();
         if source.epoch() != expected_epoch {
-            return Err(ModelError::StaleDeviceEpoch {
+            return Err(DriverError::Port(PortError::StaleEpoch {
                 expected: expected_epoch,
                 actual: source.epoch(),
-            });
+            }));
         }
         match source.source() {
             IrqSource::Completion(completion_ring_id)
@@ -49,7 +51,9 @@ impl AsyncDriver {
                 Ok(source)
             }
             IrqSource::Event(queue_id) if queue_id == self.queue_id() => Ok(source),
-            _ => Err(ModelError::UnknownIrqSource(source.source())),
+            _ => Err(DriverError::Port(PortError::UnknownIrqSource(
+                source.source(),
+            ))),
         }
     }
 
@@ -57,7 +61,7 @@ impl AsyncDriver {
         &mut self,
         device: &mut impl DriverPort,
         source: pdma_model_contract::semantic::EpochIrqSource,
-    ) -> ModelResult<Vec<DriverIrqRecord>> {
+    ) -> DriverResult<Vec<DriverIrqRecord>> {
         match source.source() {
             IrqSource::Completion(_) => self.drain_completions(device).await,
             IrqSource::Event(_) => self.drain_events(device).await,
@@ -67,7 +71,7 @@ impl AsyncDriver {
     async fn drain_completions(
         &mut self,
         device: &mut impl DriverPort,
-    ) -> ModelResult<Vec<DriverIrqRecord>> {
+    ) -> DriverResult<Vec<DriverIrqRecord>> {
         let mut records = Vec::new();
         while let Some(completion) = self.poll_completion_on(device).await? {
             records.push(DriverIrqRecord::Completion(completion));
@@ -78,7 +82,7 @@ impl AsyncDriver {
     async fn drain_events(
         &mut self,
         device: &mut impl DriverPort,
-    ) -> ModelResult<Vec<DriverIrqRecord>> {
+    ) -> DriverResult<Vec<DriverIrqRecord>> {
         let mut records = Vec::new();
         while let Some(event) = self.poll_event_on(device).await? {
             records.push(DriverIrqRecord::Event(event));

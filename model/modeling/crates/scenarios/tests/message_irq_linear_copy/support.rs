@@ -1,4 +1,3 @@
-use pdma_model_host::ModelResult;
 #[path = "assertions.rs"]
 mod assertions;
 #[path = "recording.rs"]
@@ -44,13 +43,13 @@ pub struct LinearCopyHandler {
 }
 
 impl PdmaIrqHandler for LinearCopyHandler {
-    type Error = pdma_model_host::ModelError;
+    type Error = hardware_interface_runtime::CpuContextError;
 
     async fn handle(
         &mut self,
         notification: IrqNotification,
         records: &[DriverIrqRecord],
-    ) -> ModelResult<()> {
+    ) -> Result<(), Self::Error> {
         self.phase.with(|phase| *phase = SoftwarePhase::Handler)?;
         // This report is scenario evidence, not part of IRQ handler mechanics.
         if let Some(report) = self.report.take() {

@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use pdma_model_host::ModelError;
+use pdma_model_host::DriverError;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
@@ -97,7 +97,7 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
 
     // Then: the explicit command depth is enforced and the handle records ownership.
     assert_eq!(command_id.raw(), 0);
-    assert_eq!(second_submit, Err(ModelError::DriverQueueFull));
+    assert_eq!(second_submit, Err(DriverError::QueueFull));
     assert_eq!(queue_handle.command_depth(), 1);
     assert_eq!(queue_handle.completion_depth(), 2);
     assert_eq!(queue_handle.software_owner(), SoftwareOwnerId::new(7));
@@ -203,6 +203,6 @@ async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
     assert_eq!(owner_event.queue_id(), owner_queue_id);
     assert!(owner_submit_ok);
     assert!(other_submit_ok);
-    assert_eq!(other_second_submit, Err(ModelError::DriverQueueFull));
+    assert_eq!(other_second_submit, Err(DriverError::QueueFull));
     assert_eq!(summary.errors, 1);
 }

@@ -1,5 +1,5 @@
 use super::AsyncDeviceHandle;
-use super::abi::bus::BusControlError;
+use super::abi::bus::PdmaControlError;
 #[cfg(test)]
 use super::state::DeviceCore;
 use super::state::{publish, wake};
@@ -7,7 +7,7 @@ use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 impl AsyncDeviceHandle {
     /// Atomically resets device-owned state and advances recovery identity.
-    pub async fn reset(&self, request: WholeDeviceReset) -> Result<DeviceEpoch, BusControlError> {
+    pub async fn reset(&self, request: WholeDeviceReset) -> Result<DeviceEpoch, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result =
@@ -57,7 +57,7 @@ mod tests {
         assert_eq!(
             stale_outcome,
             ResetOutcome::Rejected(
-                BusControlError::StaleEpoch {
+                PdmaControlError::StaleEpoch {
                     expected: DeviceEpoch::new(1),
                     actual: DeviceEpoch::initial(),
                 },
@@ -99,9 +99,9 @@ mod tests {
         // Then: the typed overflow leaves identity, DMA, counters, and lifecycle unchanged.
         assert_eq!(
             result,
-            Err(BusControlError::Abi(AbiControlError::DeviceEpochOverflow {
-                current: u64::MAX
-            }))
+            Err(PdmaControlError::Abi(
+                AbiControlError::DeviceEpochOverflow { current: u64::MAX }
+            ))
         );
         assert_eq!(state.backend.epoch(), exhausted);
         assert_eq!(state.bus_control.epoch(), exhausted);
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(
             raw,
             ResetOutcome::Rejected(
-                BusControlError::Abi(AbiControlError::DeviceEpochOverflow { current: u64::MAX }),
+                PdmaControlError::Abi(AbiControlError::DeviceEpochOverflow { current: u64::MAX }),
                 pdma_model_contract::abi::mmio::MmioResultDetails {
                     result: pdma_model_contract::abi::mmio::MmioResult::DeviceEpochOverflow,
                     details: [u64::MAX, 0, 0],

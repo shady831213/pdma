@@ -31,6 +31,9 @@ impl SyncDevice {
                     self.steps = self.steps.saturating_add(1);
                     self.last_status = AsyncStepStatus::Progressed;
                 }
+                ModelStepStatus::FaultCached => {
+                    self.last_status = AsyncStepStatus::Progressed;
+                }
                 ModelStepStatus::Idle => {
                     self.last_status = AsyncStepStatus::Idle;
                     return self.idle_or_budget_exhausted(max_steps, start_steps);
@@ -52,6 +55,9 @@ impl SyncDevice {
             match self.step_once()? {
                 ModelStepStatus::Progressed => {
                     self.steps = self.steps.saturating_add(1);
+                    self.last_status = AsyncStepStatus::Progressed;
+                }
+                ModelStepStatus::FaultCached => {
                     self.last_status = AsyncStepStatus::Progressed;
                 }
                 ModelStepStatus::Idle => {

@@ -226,9 +226,9 @@ pub(super) fn cache_frontend_fault(
     state::consume_command(device, bus_control, fault.queue)?;
     device.pending_retirement = Some(PendingRetirement::Fault {
         queue: fault.queue,
-        source: None,
+        source: Some(fault.source),
     });
-    Ok(ModelStepStatus::Progressed)
+    Ok(ModelStepStatus::FaultCached)
 }
 
 mod state;

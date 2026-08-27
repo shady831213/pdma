@@ -65,8 +65,10 @@ async fn task19_prepared_batch_surface() -> support::TestResult {
         .map_err(|_| "exactly two observations required")?;
     let expected = support::response(support::queue_status(&handle, activation.queue()).await?)
         .to_bytes()
+        .map(Into::into)
         .map_err(|_| "submission response encode failed")?;
-    let responses_exact = submission_response == expected && bootstrap_response.len() == 72;
+    let responses_exact =
+        submission_response == expected && bootstrap_response.as_bytes().len() == 72;
     let commands = observations
         .each_ref()
         .map(|item| {

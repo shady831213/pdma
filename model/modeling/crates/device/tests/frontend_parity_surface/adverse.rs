@@ -102,7 +102,8 @@ async fn fault_reexecuted() -> TestResult<bool> {
         .await?;
     fault_fixture.capture(1).await?;
     let fault_worker = fault_fixture.start()?;
-    fault_fixture.handle.wait_for_progress_after(1).await;
+    let snapshot = fault_fixture.handle.wait_for_error_after(0).await;
+    assert_eq!(snapshot.errors, 1);
     let fault_trace = fault_fixture.handle.trace_events().await;
     let fault_publications = fault_trace
         .iter()

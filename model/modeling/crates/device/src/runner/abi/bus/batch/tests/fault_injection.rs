@@ -150,22 +150,22 @@ fn faults() -> [super::super::BatchPreparationFault; 6] {
 
 fn assert_injected_error(
     fault: super::super::BatchPreparationFault,
-    result: Result<QueueResponseBytes, super::super::MmioBatchError>,
+    result: Result<QueueResponseBytes, super::super::PdmaBatchError>,
 ) {
     use super::super::BatchPreparationFault as F;
     match (fault, result) {
-        (F::Capacity, Err(error @ super::super::MmioBatchError::Dma(details))) => {
+        (F::Capacity, Err(error @ super::super::PdmaBatchError::Dma(details))) => {
             assert_eq!(details.result, MmioResult::DmaStorageExhausted);
             assert!(error.source().is_none());
         }
-        (F::Overlap, Err(error @ super::super::MmioBatchError::Dma(details))) => {
+        (F::Overlap, Err(error @ super::super::PdmaBatchError::Dma(details))) => {
             assert_eq!(details.result, MmioResult::DmaOverlap);
             assert!(error.source().is_none());
         }
         (
             F::Decode,
             Err(
-                error @ super::super::MmioBatchError::Access(MmioAccessError::ReservedOffset {
+                error @ super::super::PdmaBatchError::Access(MmioAccessError::ReservedOffset {
                     ..
                 }),
             ),
@@ -176,7 +176,7 @@ fn assert_injected_error(
         (
             F::Access,
             Err(
-                error @ super::super::MmioBatchError::Access(MmioAccessError::WriteToReadOnly {
+                error @ super::super::PdmaBatchError::Access(MmioAccessError::WriteToReadOnly {
                     ..
                 }),
             ),
@@ -187,7 +187,7 @@ fn assert_injected_error(
         (
             F::Mask,
             Err(
-                error @ super::super::MmioBatchError::Access(MmioAccessError::ReservedBits {
+                error @ super::super::PdmaBatchError::Access(MmioAccessError::ReservedBits {
                     ..
                 }),
             ),
@@ -198,7 +198,7 @@ fn assert_injected_error(
                 bits: 4,
             })
         ),
-        (F::Response, Err(error @ super::super::MmioBatchError::InvalidShape)) => {
+        (F::Response, Err(error @ super::super::PdmaBatchError::InvalidShape)) => {
             assert!(error.source().is_none());
         }
         unexpected => panic!("unexpected injected preparation result: {unexpected:?}"),

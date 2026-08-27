@@ -142,12 +142,18 @@ impl TraceSink {
         );
     }
 
-    pub(crate) fn dma_event_published(&mut self, record: pdma_model_contract::binding::AbiEvent) {
+    pub(crate) fn dma_event_published(&mut self, record: pdma_model_contract::abi::ExactAbiEvent) {
+        let (Ok(queue_id), Ok(command_id)) = (
+            record.queue_id().try_into_model().map(QueueId::new),
+            record.command_id().try_into_model().map(CommandId::new),
+        ) else {
+            return;
+        };
         self.push(
             TraceEventKind::EventPublished,
             None,
-            Some(record.queue_id()),
-            Some(record.command_id()),
+            Some(queue_id),
+            Some(command_id),
             "ABI event",
         );
     }

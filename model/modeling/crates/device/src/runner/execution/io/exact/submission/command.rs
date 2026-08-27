@@ -5,26 +5,30 @@ mod vector;
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::execution::command::{ExecutionCommand, ExecutionOperation};
-use pdma_model_contract::abi::{AbiCommand, AbiFault, DescriptorSchemaPayloadValues};
-use pdma_model_contract::binding::AbiEvent;
-use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiFault, AbiId, DescriptorSchemaPayloadValues, ExactAbiEvent,
+};
+use pdma_model_contract::semantic::{CommandId, CompletionRingId};
 
 #[derive(Clone, Copy)]
 pub(super) struct ExactCommandContext {
-    queue: QueueId,
+    queue: AbiId,
     completion: CompletionRingId,
+    exact_command: AbiId,
     command: CommandId,
 }
 
 impl ExactCommandContext {
     pub(super) const fn new(
-        queue: QueueId,
+        queue: AbiId,
         completion: CompletionRingId,
+        exact_command: AbiId,
         command: CommandId,
     ) -> Self {
         Self {
             queue,
             completion,
+            exact_command,
             command,
         }
     }
@@ -47,7 +51,7 @@ pub(super) fn resolve(
     dma: &PdmaMemoryMappings,
     context: ExactCommandContext,
     command: AbiCommand,
-) -> ModelResult<Result<ExecutionCommand, AbiEvent>> {
+) -> ModelResult<Result<ExecutionCommand, ExactAbiEvent>> {
     let resolution = ResolutionContext {
         dma,
         completion: context.completion,
@@ -61,5 +65,5 @@ pub(super) fn resolve(
         }
         DescriptorSchemaPayloadValues::VectorAdd(values) => vector::vector(resolution, values),
     }?;
-    Ok(result.map_err(|fault| AbiEvent::new(context.queue, context.command, fault)))
+    Ok(result.map_err(|fault| ExactAbiEvent::new(context.queue, context.exact_command, fault)))
 }

@@ -1,11 +1,10 @@
 use super::super::PublicationOutcome;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::abi::bus::control::{ActiveQueue, BusControlState};
-use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::binding::AbiEvent;
+use pdma_model_contract::abi::record::{encode_completion, encode_event};
+use pdma_model_contract::abi::{AbiCompletion, DmaAddress, ExactAbiEvent};
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CompletionRecord, QueueId};
-use pdma_model_contract::translation::{encode_completion, encode_event};
 
 pub(super) fn completion(
     dma_space: &PdmaMemoryMappings,
@@ -17,7 +16,10 @@ pub(super) fn completion(
     let Ok(active) = control.queue_mut(queue) else {
         return PublicationOutcome::Retry;
     };
-    let Ok(bytes) = encode_completion(record) else {
+    let Ok(exact) = AbiCompletion::try_from(record) else {
+        return PublicationOutcome::Retry;
+    };
+    let Ok(bytes) = encode_completion(exact) else {
         return PublicationOutcome::Retry;
     };
     publish(dma_space, active, ResultRing::Completion, &bytes)
@@ -26,9 +28,12 @@ pub(super) fn completion(
 pub(super) fn event(
     dma_space: &PdmaMemoryMappings,
     control: &mut BusControlState,
-    event: AbiEvent,
+    event: ExactAbiEvent,
 ) -> PublicationOutcome {
-    let queue = EpochQueue::new(control.epoch(), event.queue_id());
+    let Ok(queue_id) = event.queue_id().try_into_model().map(QueueId::new) else {
+        return PublicationOutcome::Retry;
+    };
+    let queue = EpochQueue::new(control.epoch(), queue_id);
     let Ok(active) = control.queue_mut(queue) else {
         return PublicationOutcome::Retry;
     };

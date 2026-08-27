@@ -7,7 +7,7 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_host::{
-    AsyncDriver, DriverPort, ModelError, ModelResult, adapters::AsyncDeviceAccess,
+    AsyncDriver, DriverPort, adapters::AsyncDeviceAccess, interrupt::InterruptError,
     register::PdmaRegisterPort,
 };
 use std::sync::Arc;
@@ -18,7 +18,8 @@ use support::{
 use tokio::sync::oneshot;
 
 #[tokio::test(flavor = "current_thread")]
-async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelResult<()> {
+async fn message_irq_linear_copy_runs_main_handler_main_end_to_end()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let observer = Arc::new(RecordingRegisterObserver::default());
     let (device, worker) = fresh_device(observer.clone());
     let worker = tokio::spawn(worker.run());
@@ -37,13 +38,12 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
         report: report_tx,
     });
 
-    let mut main_port = cpu
-        .run_main(async { PdmaRegisterPort::new(access.clone()) })
-        .await?;
+    let main_access = access.clone();
     let main_cpu = Arc::clone(&cpu);
     let main = tokio::spawn(async move {
         main_cpu
             .run_main(async move {
+                let mut main_port = PdmaRegisterPort::new(main_access)?;
                 let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
                 let queue = driver.queue_config_handle();
                 let source_capability = driver.completion_irq_source();
@@ -51,11 +51,11 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
                 delivery
                     .bootstrap
                     .send((driver.clone(), main_port.clone()))
-                    .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+                    .map_err(|_| InterruptError::DeliveryUnavailable)?;
                 delivery
                     .ready
                     .await
-                    .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+                    .map_err(|_| InterruptError::DeliveryUnavailable)?;
                 main_port
                     .configure_irq_route(source_capability, IrqRoute::Message(vector))
                     .await?;
@@ -71,7 +71,7 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
                     .await?;
                 let report = report_rx
                     .await
-                    .map_err(|_| ModelError::IrqDeliveryUnavailable)?;
+                    .map_err(|_| InterruptError::DeliveryUnavailable)?;
                 let phase = phase.with(|phase| {
                     assert_eq!(*phase, SoftwarePhase::Handler);
                     *phase = SoftwarePhase::MainAfterHandler;
@@ -81,7 +81,7 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
                 let queue_status = main_port
                     .queue_status(EpochQueue::new(queue.epoch(), queue.queue_id()))
                     .await?;
-                Ok::<_, ModelError>(MainOutcome {
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(MainOutcome {
                     command,
                     queue,
                     source,
@@ -98,7 +98,7 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end() -> ModelRes
     delivery
         .shutdown
         .await
-        .map_err(|_| ModelError::IrqDeliveryUnavailable)?
+        .map_err(|_| InterruptError::DeliveryUnavailable)?
         .request_shutdown();
     let _ = delivery.join.send(());
     device.request_shutdown().await;

@@ -11,6 +11,7 @@ mod status;
 pub use access::{decode_read, decode_write};
 pub use codec::{decode_u32, decode_u64, encode_u32, encode_u64};
 pub use error::MmioAccessError;
+pub use register::queue::QueueResponseRegistersRaw;
 pub use register::{
     MMIO_REGION_SIZE, MmioAccess, MmioByteCount, MmioReset, PdmaMmioMap, PdmaMmioMapRegisterId,
     PdmaMmioMapView, PdmaMmioMapViewMut, RegisterId, RegisterSpec, global, irq, queue,

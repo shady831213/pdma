@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use pdma_model_host::ModelError;
+use pdma_model_host::{DriverError, PortError};
 
 include!("async_driver/allocation.rs");
 #[path = "async_driver/cancellation.rs"]
@@ -23,7 +23,10 @@ use pdma_model_contract::semantic::{
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::{AsyncDevice, SyncDevice};
-use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver, DriverPort,
+    compat::{AsyncDevicePort, SemanticDevicePort},
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
@@ -39,7 +42,12 @@ async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
     let off_cpu = AsyncDriver::setup_on(&mut port, 1, 1).await;
 
     // Then: setup is rejected before consuming the device's first queue ID.
-    assert!(matches!(off_cpu, Err(ModelError::SoftwareCpuInactive)));
+    assert!(matches!(
+        off_cpu,
+        Err(DriverError::InactiveCpu(
+            hardware_interface_runtime::CpuContextError::Inactive
+        ))
+    ));
     assert_eq!(port.create_calls(), 0);
     let driver = SoftwareCpu::new()
         .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
@@ -61,34 +69,35 @@ async fn cloned_drivers_share_depth_one_command_credit() {
         pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
+    let mut port = SemanticDevicePort::new(&mut device);
 
     // When: one capability consumes the only slot and the other submits.
     let (first, second) = cpu
         .run_main(async {
-            let mut first_driver = AsyncDriver::setup_on(&mut device, 1, 1).await?;
+            let mut first_driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;
             let mut second_driver = first_driver.clone();
             let src = first_driver
-                .allocate_buffer_on(&mut device, 4)
+                .allocate_buffer_on(&mut port, 4)
                 .await
                 .expect("allocation");
             let dst = first_driver
-                .allocate_buffer_on(&mut device, 4)
+                .allocate_buffer_on(&mut port, 4)
                 .await
                 .expect("allocation");
             let first = first_driver
-                .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
+                .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
                 .await;
             let second = second_driver
-                .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
+                .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
                 .await;
-            Ok::<_, ModelError>((first, second))
+            Ok::<_, DriverError>((first, second))
         })
         .await
         .expect("setup remains valid");
 
     // Then: shared accounting rejects the second submit before the device ring does.
     assert_eq!(first, Ok(CommandId::new(0)));
-    assert_eq!(second, Err(ModelError::DriverQueueFull));
+    assert_eq!(second, Err(DriverError::QueueFull));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -100,7 +109,7 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut handle = runner.handle();
+    let mut handle = AsyncDevicePort::new(runner.handle());
     let (first, second) = SoftwareCpu::new()
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4).await?;
@@ -120,16 +129,16 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
             let second = driver
                 .submit_copy_on(&mut handle, CopyRequest::new(src, dst, 4))
                 .await;
-            Ok::<_, ModelError>((first, second))
+            Ok::<_, DriverError>((first, second))
         })
         .await
         .expect("queue setup and first submit are valid");
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
-    // Then: second submit returns ModelError::DriverQueueFull.
+    // Then: second submit returns DriverError::QueueFull.
     assert_eq!(first, CommandId::new(0));
-    assert_eq!(second, Err(ModelError::DriverQueueFull));
+    assert_eq!(second, Err(DriverError::QueueFull));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -154,108 +163,20 @@ async fn irq_controls_are_available_through_async_device_port() {
         pdma_model_contract::semantic::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
 
     // When: host code controls IRQ state through the AsyncDevicePort abstraction.
-    let enable_result = AsyncDevicePort::enable_irq_source(&mut device, valid_source).await;
-    let unmask_result = AsyncDevicePort::unmask_irq_source(&mut device, valid_source).await;
-    let invalid_result = AsyncDevicePort::enable_irq_source(&mut device, unknown_capability).await;
-    let wait_result = AsyncDevicePort::wait_irq(&device).await;
+    let mut port = SemanticDevicePort::new(&mut device);
+    let enable_result = DriverPort::enable_irq_source(&mut port, valid_source).await;
+    let unmask_result = DriverPort::unmask_irq_source(&mut port, valid_source).await;
+    let invalid_result = DriverPort::enable_irq_source(&mut port, unknown_capability).await;
+    let wait_result = DriverPort::wait_irq(&port).await;
 
     // Then: valid controls succeed, unknown controls fail, and wait-line access is callable.
     assert_eq!(enable_result, Ok(()));
     assert_eq!(unmask_result, Ok(()));
     assert_eq!(
         invalid_result,
-        Err(ModelError::UnknownIrqSource(unknown_source))
+        Err(PortError::UnknownIrqSource(unknown_source))
     );
     assert_eq!(wait_result, None);
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn stale_queue_and_result_capabilities_commit_nothing() {
-    // Given: one real queue and a same-ID capability from a later device epoch.
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
-    ));
-    let queue = device
-        .create_queue(QueueConfig::new(
-            2,
-            2,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .expect("queue setup is valid");
-    let stale_epoch = queue.epoch().next().expect("initial epoch can advance");
-    let stale_queue = QueueConfigHandle::new(stale_epoch, queue.directory_entry());
-    let source = device.allocate_buffer(1).expect("allocation");
-    let destination = device.allocate_buffer(1).expect("allocation");
-    let command = ExternalCommand::Copy(CopyCommand::new(
-        CommandId::new(0),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        CopyRequest::new(source, destination, 1),
-    ));
-    device.enable_tracing();
-    let before_submit = device.trace_events();
-
-    // When: stale queue capabilities reach submission and doorbell commit boundaries.
-    let stale_submit =
-        AsyncDevicePort::submit_command(&mut device, stale_queue, command.clone()).await;
-    let stale_doorbell = AsyncDevicePort::ring_doorbell(&mut device, stale_queue).await;
-
-    // Then: both fail with the typed epoch error and leave trace and queue cursors unchanged.
-    assert_ne!(queue, stale_queue);
-    assert_eq!(
-        stale_submit,
-        Err(ModelError::StaleDeviceEpoch {
-            expected: DeviceEpoch::initial(),
-            actual: stale_epoch,
-        })
-    );
-    assert_eq!(
-        stale_doorbell,
-        Err(ModelError::StaleDeviceEpoch {
-            expected: DeviceEpoch::initial(),
-            actual: stale_epoch,
-        })
-    );
-    assert_eq!(device.trace_events(), before_submit);
-    AsyncDevicePort::submit_command(&mut device, queue, command)
-        .await
-        .expect("current queue capability submits");
-    AsyncDevicePort::ring_doorbell(&mut device, queue)
-        .await
-        .expect("current queue capability rings");
-    device
-        .run_until_idle(1)
-        .expect("current command retires exactly once");
-    let before_result_poll = device.trace_events();
-    let stale_completion = AsyncDevicePort::poll_completion(&mut device, stale_queue).await;
-    let stale_event = AsyncDevicePort::poll_queue_event(&mut device, stale_queue).await;
-    assert_eq!(
-        stale_completion,
-        Err(ModelError::StaleDeviceEpoch {
-            expected: DeviceEpoch::initial(),
-            actual: stale_epoch,
-        })
-    );
-    assert_eq!(
-        stale_event,
-        Err(ModelError::StaleDeviceEpoch {
-            expected: DeviceEpoch::initial(),
-            actual: stale_epoch,
-        })
-    );
-    assert_eq!(device.trace_events(), before_result_poll);
-    let current_completion = AsyncDevicePort::poll_completion(&mut device, queue)
-        .await
-        .expect("current result capability is valid");
-    assert!(current_completion.is_some());
-    println!(
-        "queue epochs current={} stale={} stale_submit={stale_submit:?} \
-         stale_doorbell={stale_doorbell:?} stale_completion={stale_completion:?} \
-         stale_event={stale_event:?} trace_unchanged=true record_retained=true",
-        queue.epoch().raw(),
-        stale_epoch.raw(),
-    );
-}
+include!("async_driver/stale_capability.rs");

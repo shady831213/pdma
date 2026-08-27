@@ -1,5 +1,5 @@
 use crate::register::{PdmaClaimResult, PdmaExactInterruptClaim};
-use crate::{AsyncDriver, DriverIrqRecord, DriverPort, ModelError};
+use crate::{AsyncDriver, DriverError, DriverIrqRecord, DriverPort, PortError};
 use hardware_interface_runtime::{
     FrozenHandlerRegistry, InterruptDispatcher, InterruptDispatcherTask, InterruptEnvelope,
     InterruptHandler, InterruptSource, RegisterObservation, SharedInterruptObserver, SoftwareCpu,
@@ -135,13 +135,13 @@ pub trait PdmaIrqHandler: Send + 'static {
 #[derive(Debug)]
 pub enum PdmaIrqServiceError<E> {
     /// Epoch or source identity validation failed before any drain.
-    Validation(ModelError),
+    Validation(DriverError),
     /// Completion or event polling failed before ACK.
-    Drain(ModelError),
+    Drain(DriverError),
     /// Persistent software processing failed before ACK.
     Handler(E),
     /// ACK failed after every prior phase succeeded.
-    Ack(ModelError),
+    Ack(PortError),
 }
 
 impl<E> fmt::Display for PdmaIrqServiceError<E> {
@@ -158,7 +158,8 @@ impl<E> fmt::Display for PdmaIrqServiceError<E> {
 impl<E: Error + 'static> Error for PdmaIrqServiceError<E> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Validation(source) | Self::Drain(source) | Self::Ack(source) => Some(source),
+            Self::Validation(source) | Self::Drain(source) => Some(source),
+            Self::Ack(source) => Some(source),
             Self::Handler(source) => Some(source),
         }
     }

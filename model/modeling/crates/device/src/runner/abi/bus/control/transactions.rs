@@ -1,4 +1,4 @@
-use super::{ActiveQueue, BusControlError, QueueStatus};
+use super::{ActiveQueue, PdmaControlError, QueueStatus};
 use crate::runner::abi::bus::{DmaWrite, SubmissionAcceptance};
 use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::{RingCursor, RingRecord};
@@ -20,10 +20,10 @@ impl PreparedSubmissionPublication {
 pub(in crate::runner::abi::bus) fn accept_submission(
     state: &mut DeviceCore,
     request: SubmissionAcceptance,
-) -> Result<QueueStatus, BusControlError> {
+) -> Result<QueueStatus, PdmaControlError> {
     let queue = *state.bus_control.queue(request.queue)?;
     if queue.submission.producer() != request.expected_producer || queue.submission.is_full() {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     let next = request.expected_producer.checked_increment(1)?;
     let submission = queue.submission.update_producer(next)?;
@@ -44,24 +44,24 @@ pub(in crate::runner::abi::bus) fn accept_submission(
     Ok(active.status())
 }
 
-fn validate_descriptor(queue: &ActiveQueue, write: &DmaWrite) -> Result<(), BusControlError> {
+fn validate_descriptor(queue: &ActiveQueue, write: &DmaWrite) -> Result<(), PdmaControlError> {
     let layout = queue.activation.rings().submission();
     let slot_offset = layout
         .slot(queue.submission.producer())
         .checked_mul(u64::from(RingRecord::Submission.record_size()))
-        .ok_or(BusControlError::InvalidTransaction)?;
+        .ok_or(PdmaControlError::InvalidTransaction)?;
     let expected = pdma_model_contract::abi::DmaAddress::new(
         layout
             .region()
             .base()
             .raw()
             .checked_add(slot_offset)
-            .ok_or(BusControlError::InvalidTransaction)?,
+            .ok_or(PdmaControlError::InvalidTransaction)?,
     );
     if write.address() != expected
         || write.bytes().len() != usize::from(RingRecord::Submission.record_size())
     {
-        Err(BusControlError::InvalidTransaction)
+        Err(PdmaControlError::InvalidTransaction)
     } else {
         Ok(())
     }
@@ -70,18 +70,18 @@ fn validate_descriptor(queue: &ActiveQueue, write: &DmaWrite) -> Result<(), BusC
 fn validate_indirect(
     state: &DeviceCore,
     indirect: Option<&(crate::dma_space::PdmaMemoryStage, DmaWrite)>,
-) -> Result<(), BusControlError> {
+) -> Result<(), PdmaControlError> {
     let Some((proposal, write)) = indirect else {
         return Ok(());
     };
     let [region] = proposal.regions() else {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     };
     if proposal.generation() != state.dma_space.generation()
         || write.address() != region.abi_base()
         || u64::try_from(write.bytes().len()) != Ok(region.length())
     {
-        Err(BusControlError::InvalidTransaction)
+        Err(PdmaControlError::InvalidTransaction)
     } else {
         Ok(())
     }
@@ -90,10 +90,10 @@ fn validate_indirect(
 pub(in crate::runner) fn prepare_submission_publication(
     state: &DeviceCore,
     request: &SubmissionAcceptance,
-) -> Result<PreparedSubmissionPublication, BusControlError> {
+) -> Result<PreparedSubmissionPublication, PdmaControlError> {
     let queue = *state.bus_control.queue(request.queue)?;
     if queue.submission.producer() != request.expected_producer || queue.submission.is_full() {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     let next = request.expected_producer.checked_increment(1)?;
     let submission = queue.submission.update_producer(next)?;
@@ -124,7 +124,7 @@ pub(in crate::runner) fn install_submission_publication(
 pub(in crate::runner) fn control(
     state: &mut DeviceCore,
     request: QueueControl,
-) -> (Result<QueueStatus, BusControlError>, bool) {
+) -> (Result<QueueStatus, PdmaControlError>, bool) {
     match request {
         QueueControl::ReadStatus(queue) => {
             (state.bus_control.queue(queue).map(|q| q.status()), false)
@@ -143,20 +143,20 @@ pub(in crate::runner) fn control(
                 .validate_dma_bus_queue(update.queue())
                 .is_err()
             {
-                return (Err(BusControlError::InvalidQueue), false);
+                return (Err(PdmaControlError::InvalidQueue), false);
             }
             let (result, changed) = update_queue(state, update, |queue, cursor| {
                 if cursor < queue.captured_submission_producer
                     || cursor > queue.submission.producer()
                 {
-                    return Err(BusControlError::InvalidTransaction);
+                    return Err(PdmaControlError::InvalidTransaction);
                 }
                 let changed = cursor != queue.captured_submission_producer;
                 queue.captured_submission_producer = cursor;
                 Ok(changed)
             });
             if result.is_ok() && state.backend.ring_dma_bus_doorbell(update.queue()).is_err() {
-                return (Err(BusControlError::InvalidQueue), false);
+                return (Err(PdmaControlError::InvalidQueue), false);
             }
             (result, changed)
         }
@@ -206,12 +206,12 @@ pub(in crate::runner) fn control(
 pub(in crate::runner) fn advance_submission_consumer_raw(
     control: &mut super::BusControlState,
     queue_id: pdma_model_contract::semantic::QueueId,
-) -> Result<(), BusControlError> {
+) -> Result<(), PdmaControlError> {
     let queue = pdma_model_contract::semantic::EpochQueue::new(control.epoch(), queue_id);
     let active = control.queue_mut(queue)?;
     let next = active.submission.consumer().checked_increment(1)?;
     if next > active.captured_submission_producer {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     active.submission = active.submission.update_consumer(next)?;
     Ok(())
@@ -220,8 +220,8 @@ pub(in crate::runner) fn advance_submission_consumer_raw(
 fn update_queue(
     state: &mut DeviceCore,
     update: QueueCursorUpdate,
-    apply: impl FnOnce(&mut ActiveQueue, RingCursor) -> Result<bool, BusControlError>,
-) -> (Result<QueueStatus, BusControlError>, bool) {
+    apply: impl FnOnce(&mut ActiveQueue, RingCursor) -> Result<bool, PdmaControlError>,
+) -> (Result<QueueStatus, PdmaControlError>, bool) {
     let result = state
         .bus_control
         .queue_mut(update.queue())

@@ -3,9 +3,7 @@ use pdma_model_contract::semantic::{
     IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::AsyncDeviceHandle;
-use pdma_model_host::DriverPort as AsyncDevicePort;
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::{DriverPort, PortError, PortResult, compat::AsyncDevicePort};
 use std::sync::{
     Arc,
     atomic::{AtomicU8, AtomicUsize, Ordering},
@@ -46,13 +44,13 @@ impl OperationGate {
         self.release.notify_one();
     }
 
-    async fn enter(&self) -> ModelResult<()> {
+    async fn enter(&self) -> PortResult<()> {
         self.entered.notify_one();
         if self.mode.load(Ordering::Acquire) == BLOCK {
             self.release.notified().await;
         }
         if self.mode.swap(READY, Ordering::AcqRel) == FAIL {
-            return Err(ModelError::RingFull);
+            return Err(PortError::RingFull);
         }
         Ok(())
     }
@@ -74,14 +72,14 @@ struct PortControl {
 
 #[derive(Debug, Clone)]
 pub struct BlockingPort {
-    inner: AsyncDeviceHandle,
+    inner: AsyncDevicePort,
     control: Arc<PortControl>,
 }
 
 impl BlockingPort {
     pub fn new(inner: AsyncDeviceHandle) -> Self {
         Self {
-            inner,
+            inner: AsyncDevicePort::new(inner),
             control: Arc::new(PortControl::default()),
         }
     }
@@ -179,108 +177,87 @@ impl BlockingPort {
     }
 }
 
-impl AsyncDevicePort for BlockingPort {
-    async fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+impl DriverPort for BlockingPort {
+    async fn create_queue(&mut self, config: QueueConfig) -> PortResult<QueueConfigHandle> {
         self.control.create.enter().await?;
         self.control.create.record_inner_call();
-        self.inner.create_queue(config).await.map_err(Into::into)
+        self.inner.create_queue(config).await
     }
 
-    async fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
+    async fn allocate_buffer(&mut self, len: usize) -> PortResult<BufferId> {
         self.control.allocation.enter().await?;
         self.control.allocation.record_inner_call();
-        self.inner.allocate_buffer(len).await.map_err(Into::into)
+        self.inner.allocate_buffer(len).await
     }
 
-    async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        self.inner
-            .write_buffer(id, offset, data)
-            .await
-            .map_err(Into::into)
+    async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> PortResult<()> {
+        self.inner.write_buffer(id, offset, data).await
     }
 
-    async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
-        self.inner
-            .read_buffer(id, offset, len)
-            .await
-            .map_err(Into::into)
+    async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> PortResult<Vec<u8>> {
+        self.inner.read_buffer(id, offset, len).await
     }
 
     async fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
         command: ExternalCommand,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         self.control.submit.enter().await?;
         self.control.submit.record_inner_call();
-        self.inner
-            .submit_command(queue, command)
-            .await
-            .map_err(Into::into)
+        self.inner.submit_command(queue, command).await
     }
 
-    async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
+    async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> PortResult<()> {
         self.control.doorbell.enter().await?;
         self.control.doorbell.record_inner_call();
-        self.inner.ring_doorbell(queue).await.map_err(Into::into)
+        self.inner.ring_doorbell(queue).await
     }
 
     async fn poll_completion(
         &mut self,
         queue: QueueConfigHandle,
-    ) -> ModelResult<Option<CompletionRecord>> {
+    ) -> PortResult<Option<CompletionRecord>> {
         self.control.completion.enter().await?;
         self.control.completion.record_inner_call();
-        self.inner.poll_completion(queue).await.map_err(Into::into)
+        self.inner.poll_completion(queue).await
     }
 
     async fn poll_queue_event(
         &mut self,
         queue: QueueConfigHandle,
-    ) -> ModelResult<Option<EventRecord>> {
+    ) -> PortResult<Option<EventRecord>> {
         self.control.event.enter().await?;
         self.control.event.record_inner_call();
-        self.inner.poll_queue_event(queue).await.map_err(Into::into)
+        self.inner.poll_queue_event(queue).await
     }
 
     async fn configure_irq_route(
         &mut self,
         source: EpochIrqSource,
         route: IrqRoute,
-    ) -> ModelResult<()> {
-        self.inner
-            .configure_irq_route(source, route)
-            .await
-            .map_err(Into::into)
+    ) -> PortResult<()> {
+        self.inner.configure_irq_route(source, route).await
     }
 
-    async fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner
-            .enable_irq_source(source)
-            .await
-            .map_err(Into::into)
+    async fn enable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
+        self.inner.enable_irq_source(source).await
     }
 
-    async fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner
-            .disable_irq_source(source)
-            .await
-            .map_err(Into::into)
+    async fn disable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
+        self.inner.disable_irq_source(source).await
     }
 
-    async fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.mask_irq_source(source).await.map_err(Into::into)
+    async fn mask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
+        self.inner.mask_irq_source(source).await
     }
 
-    async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner
-            .unmask_irq_source(source)
-            .await
-            .map_err(Into::into)
+    async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
+        self.inner.unmask_irq_source(source).await
     }
 
-    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.inner.ack_irq_source(source).await.map_err(Into::into)
+    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
+        self.inner.ack_irq_source(source).await
     }
 
     async fn irq_snapshot(&self) -> Option<IrqSnapshot> {

@@ -7,7 +7,8 @@ use pdma_model_contract::semantic::{
     EventRouting, ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueConfigHandle,
     QueueDirectoryEntry, QueueId, ResourceConfig, SoftwareOwnerId, WholeDeviceReset,
 };
-use pdma_model_device::{DeviceStateSnapshot, ModelError, PdmaRunError, SyncDevice};
+use pdma_model_device::test_support::{DeviceStateSnapshot, sync_state_snapshot};
+use pdma_model_device::{ModelError, PdmaRunError, SyncDevice};
 
 use super::{TestResult, require_error};
 
@@ -94,7 +95,7 @@ fn model_fate_rows_have_literal_leaf_sources() -> TestResult {
 
 fn assert_run_and_stale(device: &mut SyncDevice, queue: QueueConfigHandle) -> TestResult {
     device.ring_doorbell(queue)?;
-    let before_run = device.state_snapshot_for_test()?;
+    let before_run = sync_state_snapshot(device)?;
     let run = require_error(device.run_until_idle_typed(0))?;
     assert_eq!(
         run,
@@ -106,7 +107,7 @@ fn assert_run_and_stale(device: &mut SyncDevice, queue: QueueConfigHandle) -> Te
     );
     assert_unchanged(device, &before_run)?;
     device.reset(WholeDeviceReset::new(DeviceEpoch::initial()))?;
-    let before_stale = device.state_snapshot_for_test()?;
+    let before_stale = sync_state_snapshot(device)?;
     assert_leaf(
         device,
         |core| core.ring_doorbell(queue),
@@ -123,7 +124,7 @@ fn assert_leaf<T>(
     operation: impl FnOnce(&mut SyncDevice) -> Result<T, ModelError>,
     expected: ModelError,
 ) -> TestResult {
-    let before = device.state_snapshot_for_test()?;
+    let before = sync_state_snapshot(device)?;
     let error = require_error(operation(device))?;
     assert_eq!(error, expected);
     assert!(error.source().is_none());
@@ -131,7 +132,7 @@ fn assert_leaf<T>(
 }
 
 fn assert_unchanged(device: &SyncDevice, before: &DeviceStateSnapshot) -> TestResult {
-    let after = device.state_snapshot_for_test()?;
+    let after = sync_state_snapshot(device)?;
     assert_eq!(after.mappings, before.mappings);
     assert_eq!(after.bytes, before.bytes);
     assert_eq!(after.memory_generation, before.memory_generation);

@@ -23,6 +23,7 @@ pub(super) enum NormalizedFetch {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(super) struct NormalizedFault {
     pub(super) queue: QueueId,
+    pub(super) source: ModelError,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

@@ -12,8 +12,8 @@ use pdma_model_contract::semantic::{
 };
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDriver, DriverIrqRecord, DriverPort, ModelError, ModelResult, adapters::AsyncDeviceAccess,
-    compat::AsyncDevicePort, interrupt::PdmaIrqHandler,
+    AsyncDriver, DriverError, DriverIrqRecord, DriverPort, DriverResult, PortError,
+    adapters::AsyncDeviceAccess, interrupt::PdmaIrqHandler, register::PdmaRegisterPort,
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -40,16 +40,16 @@ struct DriverHandler {
 }
 
 impl PdmaIrqHandler for DriverHandler {
-    type Error = ModelError;
+    type Error = DriverError;
 
     async fn handle(
         &mut self,
         notification: IrqNotification,
         records: &[DriverIrqRecord],
-    ) -> ModelResult<()> {
+    ) -> DriverResult<()> {
         if notification_source(notification) != self.source {
-            return Err(ModelError::UnknownIrqSource(notification_source(
-                notification,
+            return Err(DriverError::Port(PortError::UnknownIrqSource(
+                notification_source(notification),
             )));
         }
         self.calls = self.calls.saturating_add(1);
@@ -70,6 +70,7 @@ impl PdmaIrqHandler for DriverHandler {
 #[derive(Debug)]
 pub struct DeliveryBootstrap {
     driver: AsyncDriver,
+    port: PdmaRegisterPort<AsyncDeviceAccess>,
     completion_source: IrqSource,
     event_source: IrqSource,
 }
@@ -83,12 +84,13 @@ pub struct MainOutcome {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
+async fn message_irq_two_handlers_share_driver_accounting()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let raw_port = device.handle();
-    let access = AsyncDeviceAccess::new(raw_port.clone());
-    let port = AsyncDevicePort::new(raw_port);
+    let access = AsyncDeviceAccess::new(raw_port);
+    let main_access = access.clone();
     let cpu = Arc::new(SoftwareCpu::new());
     let completion_vector = IrqVector::new(65);
     let event_vector = IrqVector::new(66);
@@ -102,14 +104,13 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
     } = delivery::spawn(delivery::DeliveryConfig {
         cpu: Arc::clone(&cpu),
         access,
-        port: port.clone(),
         vectors: [completion_vector, event_vector],
         report: report_tx,
     });
 
-    let mut main_port = port.clone();
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
+            let mut main_port = PdmaRegisterPort::new(main_access)?;
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
             let completion_capability = driver.completion_irq_source();
             let event_capability = driver.event_irq_source();
@@ -118,6 +119,7 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
             bootstrap
                 .send(DeliveryBootstrap {
                     driver: driver.clone(),
+                    port: main_port.clone(),
                     completion_source,
                     event_source,
                 })
@@ -161,7 +163,7 @@ async fn message_irq_two_handlers_share_driver_accounting() -> ModelResult<()> {
                 .await
                 .expect("completion handler reports again");
             let copied = driver.read_buffer_on(&main_port, dst, 4).await?;
-            Ok::<_, ModelError>(MainOutcome {
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(MainOutcome {
                 commands: [first, fault, final_command],
                 sources: [completion_source, event_source],
                 observations: vec![first_report, fault_report, final_report],

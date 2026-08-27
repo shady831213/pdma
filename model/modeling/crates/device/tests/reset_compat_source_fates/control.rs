@@ -6,10 +6,9 @@ use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::{AbiControlError, DmaAddress};
 use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId, ResourceConfig};
-use pdma_model_device::compat::ModelErrorAdapter;
+use pdma_model_device::test_support::{DeviceStateSnapshot, async_state_snapshot};
 use pdma_model_device::{
-    AsyncDevice, AsyncDeviceHandle, DeviceStateSnapshot, DmaWrite, PdmaControlError,
-    SubmissionAcceptance,
+    AsyncDevice, AsyncDeviceHandle, DmaWrite, PdmaControlError, SubmissionAcceptance,
 };
 
 use super::{TestResult, require_error};
@@ -25,7 +24,7 @@ async fn control_fate_rows_have_literal_sources_and_precedence() -> TestResult {
     let handle = device.handle();
     let uncommitted = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let uncommitted_activation = super::activation(uncommitted.regions(), DeviceEpoch::initial())?;
-    let before = handle.state_snapshot_for_test().await?;
+    let before = async_state_snapshot(&handle).await?;
     let dma = require_error(handle.activate_mapped_queue(uncommitted_activation).await)?;
     assert_eq!(
         dma,
@@ -47,7 +46,7 @@ async fn assert_remaining_control_fates(
     handle: &pdma_model_device::AsyncDeviceHandle,
     queue: EpochQueue,
 ) -> TestResult {
-    let abi_before = handle.state_snapshot_for_test().await?;
+    let abi_before = async_state_snapshot(handle).await?;
     let abi = require_error(
         handle
             .control_queue(QueueControl::PublishCompletionProducer(
@@ -73,7 +72,7 @@ async fn assert_remaining_control_fates(
     );
     assert_state_unchanged(handle, &abi_before).await?;
 
-    let stale_before = handle.state_snapshot_for_test().await?;
+    let stale_before = async_state_snapshot(handle).await?;
     let stale_control = require_error(
         handle
             .control_queue(QueueControl::ReadStatus(EpochQueue::new(
@@ -92,7 +91,7 @@ async fn assert_remaining_control_fates(
     assert!(stale_control.source().is_none());
     assert_state_unchanged(handle, &stale_before).await?;
 
-    let invalid_queue_before = handle.state_snapshot_for_test().await?;
+    let invalid_queue_before = async_state_snapshot(handle).await?;
     let invalid_queue = require_error(
         handle
             .control_queue(QueueControl::ReadStatus(EpochQueue::new(
@@ -105,7 +104,7 @@ async fn assert_remaining_control_fates(
     assert!(invalid_queue.source().is_none());
     assert_state_unchanged(handle, &invalid_queue_before).await?;
 
-    let transaction_before = handle.state_snapshot_for_test().await?;
+    let transaction_before = async_state_snapshot(handle).await?;
     let invalid_transaction = require_error(
         handle
             .accept_submission(SubmissionAcceptance::new(
@@ -119,9 +118,6 @@ async fn assert_remaining_control_fates(
     assert_eq!(invalid_transaction, PdmaControlError::InvalidTransaction);
     assert!(invalid_transaction.source().is_none());
     assert_state_unchanged(handle, &transaction_before).await?;
-    let legacy = ModelErrorAdapter::from_control(invalid_transaction, QueueId::new(0));
-    assert_eq!(legacy, pdma_model_device::ModelError::DmaSubmissionState);
-    assert!(legacy.source().is_none());
     Ok(())
 }
 
@@ -129,7 +125,7 @@ async fn assert_state_unchanged(
     handle: &AsyncDeviceHandle,
     before: &DeviceStateSnapshot,
 ) -> TestResult {
-    let after = handle.state_snapshot_for_test().await?;
+    let after = async_state_snapshot(handle).await?;
     assert_eq!(after.mappings, before.mappings);
     assert_eq!(after.bytes, before.bytes);
     assert_eq!(after.memory_generation, before.memory_generation);

@@ -4,7 +4,7 @@ use pdma_model_contract::semantic::{
     desc::{CopyRequest, StridedCopyRequest},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{AsyncDriver, adapters::AsyncDeviceAccess, register::PdmaRegisterPort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_many_memory_fault_events_without_masking_original_error() {
@@ -17,8 +17,9 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
     let worker = tokio::spawn(worker.run());
     let (snapshot, error_kinds, no_event) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
-            let mut driver = AsyncDriver::setup_on(&mut handle, 65, 4)
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
+            let mut driver = AsyncDriver::setup_on(&mut handle, 66, 66)
                 .await
                 .expect("queue setup is valid");
             let src = driver
@@ -85,7 +86,8 @@ async fn async_runner_publishes_one_event_and_later_command_still_completes_afte
         no_event,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

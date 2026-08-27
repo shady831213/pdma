@@ -1,5 +1,5 @@
 use super::super::SoftwareCpu;
-use crate::ModelError;
+use hardware_interface_runtime::CpuContextError;
 use std::{future::Future, pin::Pin, task::Poll};
 use tokio::sync::oneshot;
 
@@ -36,10 +36,7 @@ fn cpu_local_rejects_access_off_context() {
     let cpu = SoftwareCpu::new();
     let state = cpu.local(0_u8);
 
-    assert_eq!(
-        state.with(|value| *value),
-        Err(ModelError::SoftwareCpuInactive)
-    );
+    assert_eq!(state.with(|value| *value), Err(CpuContextError::Inactive));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -58,7 +55,7 @@ async fn cpu_local_rejects_access_from_another_cpu() {
                     foreign_state.with(|value| *value)
                 })
                 .await;
-            assert_eq!(nested_result, Err(ModelError::SoftwareCpuMismatch));
+            assert_eq!(nested_result, Err(CpuContextError::Mismatch));
             state.with(|value| *value += 1)
         })
         .await;
@@ -103,15 +100,12 @@ async fn cancelled_main_releases_context_and_cpu_for_reacquisition() {
     let mut cancelled = Box::pin(cpu.run_main(async move {
         cancelled_state.with(|value| *value += 1)?;
         let _ = resume_rx.await;
-        Ok::<(), ModelError>(())
+        Ok::<(), CpuContextError>(())
     }));
 
     assert_eq!(poll_once(cancelled.as_mut()), Poll::Pending);
     drop(cancelled);
-    assert_eq!(
-        state.with(|value| *value),
-        Err(ModelError::SoftwareCpuInactive)
-    );
+    assert_eq!(state.with(|value| *value), Err(CpuContextError::Inactive));
 
     let reacquired = cpu
         .run_main(async move { state.with(|value| *value += 1) })
@@ -132,10 +126,7 @@ async fn handler_identity_is_inactive_between_polls() {
     }));
 
     assert_eq!(poll_once(handler.as_mut()), Poll::Pending);
-    assert_eq!(
-        state.with(|value| *value),
-        Err(ModelError::SoftwareCpuInactive)
-    );
+    assert_eq!(state.with(|value| *value), Err(CpuContextError::Inactive));
     let _ = resume_tx.send(());
     assert_eq!(poll_once(handler.as_mut()), Poll::Ready(Ok(())));
 }
@@ -150,5 +141,5 @@ async fn cpu_local_reports_reentrant_state_access_as_busy() {
         .run_main(async move { state.with(|_| nested.with(|value| *value)) })
         .await;
 
-    assert_eq!(result, Ok(Err(ModelError::SoftwareCpuStateBusy)));
+    assert_eq!(result, Ok(Err(CpuContextError::StateBusy)));
 }

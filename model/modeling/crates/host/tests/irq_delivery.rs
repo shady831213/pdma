@@ -1,8 +1,7 @@
 #![allow(missing_docs)]
 
 use super::pdma_model_host;
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::{DriverError, PortError, PortResult};
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
@@ -11,7 +10,7 @@ use pdma_model_contract::semantic::{
     IrqVector, QueueConfig, QueueConfigHandle, desc::CopyRequest,
 };
 use pdma_model_device::SyncDevice;
-use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort};
+use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -27,11 +26,11 @@ impl NotificationPort {
 }
 
 impl AsyncDevicePort for NotificationPort {
-    async fn create_queue(&mut self, _config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+    async fn create_queue(&mut self, _config: QueueConfig) -> PortResult<QueueConfigHandle> {
         std::future::pending().await
     }
 
-    async fn allocate_buffer(&mut self, _len: usize) -> ModelResult<BufferId> {
+    async fn allocate_buffer(&mut self, _len: usize) -> PortResult<BufferId> {
         std::future::pending().await
     }
 
@@ -40,7 +39,7 @@ impl AsyncDevicePort for NotificationPort {
         _id: BufferId,
         _offset: usize,
         _data: &[u8],
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         std::future::pending().await
     }
 
@@ -49,7 +48,7 @@ impl AsyncDevicePort for NotificationPort {
         _id: BufferId,
         _offset: usize,
         _len: usize,
-    ) -> ModelResult<Vec<u8>> {
+    ) -> PortResult<Vec<u8>> {
         std::future::pending().await
     }
 
@@ -57,25 +56,25 @@ impl AsyncDevicePort for NotificationPort {
         &mut self,
         _queue: QueueConfigHandle,
         _command: ExternalCommand,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> ModelResult<()> {
+    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> PortResult<()> {
         std::future::pending().await
     }
 
     async fn poll_completion(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> ModelResult<Option<CompletionRecord>> {
+    ) -> PortResult<Option<CompletionRecord>> {
         std::future::pending().await
     }
 
     async fn poll_queue_event(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> ModelResult<Option<EventRecord>> {
+    ) -> PortResult<Option<EventRecord>> {
         std::future::pending().await
     }
 
@@ -83,27 +82,27 @@ impl AsyncDevicePort for NotificationPort {
         &mut self,
         _source: EpochIrqSource,
         _route: IrqRoute,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn ack_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn ack_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
@@ -147,11 +146,13 @@ async fn stale_notification_fails_before_drain_or_ack() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let cpu = SoftwareCpu::new();
+    let mut port = SemanticDevicePort::new(&mut device);
     let mut driver = cpu
-        .run_main(AsyncDriver::setup_on(&mut device, 1, 1))
+        .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
         .await
         .expect("active setup succeeds");
     let current = driver.queue_config_handle().completion_irq_source();
+    drop(port);
     device
         .enable_irq_source(current)
         .expect("current completion source enables");
@@ -160,19 +161,20 @@ async fn stale_notification_fails_before_drain_or_ack() {
         .expect("current completion source unmasks");
     let (source, destination) = cpu
         .run_main(async {
+            let mut port = SemanticDevicePort::new(&mut device);
             let source = driver
-                .allocate_buffer_on(&mut device, 1)
+                .allocate_buffer_on(&mut port, 1)
                 .await
                 .expect("allocation");
             let destination = driver
-                .allocate_buffer_on(&mut device, 1)
+                .allocate_buffer_on(&mut port, 1)
                 .await
                 .expect("allocation");
-            driver.write_buffer_on(&mut device, source, &[9]).await?;
+            driver.write_buffer_on(&mut port, source, &[9]).await?;
             driver
-                .submit_copy_on(&mut device, CopyRequest::new(source, destination, 1))
+                .submit_copy_on(&mut port, CopyRequest::new(source, destination, 1))
                 .await?;
-            Ok::<_, ModelError>((source, destination))
+            Ok::<_, DriverError>((source, destination))
         })
         .await
         .expect("current capability submits");
@@ -199,37 +201,52 @@ async fn stale_notification_fails_before_drain_or_ack() {
     let before = device.trace_events();
 
     // When: a wrong CPU and then the owning CPU service the stale host-owned notification.
-    let wrong_cpu = SoftwareCpu::new()
-        .run_main(driver.service_irq_on(&mut device, stale_notification))
-        .await;
-    let result = cpu
-        .run_main(driver.service_irq_on(&mut device, stale_notification))
-        .await;
+    let wrong_cpu = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        SoftwareCpu::new()
+            .run_main(driver.service_irq_on(&mut port, stale_notification))
+            .await
+    };
+    let result = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        cpu.run_main(driver.service_irq_on(&mut port, stale_notification))
+            .await
+    };
 
     // Then: CPU precedence and stale epoch rejection preserve the record and accounting.
-    assert_eq!(wrong_cpu, Err(ModelError::SoftwareCpuMismatch));
+    assert_eq!(
+        wrong_cpu,
+        Err(DriverError::WrongCpu(
+            hardware_interface_runtime::CpuContextError::Mismatch,
+        ))
+    );
     assert_eq!(
         result,
-        Err(ModelError::StaleDeviceEpoch {
+        Err(DriverError::Port(PortError::StaleEpoch {
             expected: DeviceEpoch::initial(),
             actual: stale_epoch,
-        })
+        }))
     );
     assert_eq!(device.trace_events(), before);
-    assert_eq!(
-        cpu.run_main(driver.submit_copy_on(&mut device, CopyRequest::new(source, destination, 1)))
-            .await,
-        Err(ModelError::DriverQueueFull)
-    );
-    let records = cpu
-        .run_main(driver.service_irq_on(&mut device, current_notification))
-        .await
-        .expect("current notification drains and acknowledges");
+    let blocked_submit = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        cpu.run_main(driver.submit_copy_on(&mut port, CopyRequest::new(source, destination, 1)))
+            .await
+    };
+    assert_eq!(blocked_submit, Err(DriverError::QueueFull));
+    let records = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        cpu.run_main(driver.service_irq_on(&mut port, current_notification))
+            .await
+            .expect("current notification drains and acknowledges")
+    };
     assert_eq!(records.len(), 1);
     assert!(device.irq_snapshot().is_none());
-    let resumed_submit = cpu
-        .run_main(driver.submit_copy_on(&mut device, CopyRequest::new(source, destination, 1)))
-        .await;
+    let resumed_submit = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        cpu.run_main(driver.submit_copy_on(&mut port, CopyRequest::new(source, destination, 1)))
+            .await
+    };
     assert!(resumed_submit.is_ok());
     println!(
         "delivery epochs current={} stale={} wrong_cpu={wrong_cpu:?} stale={result:?} \
@@ -255,6 +272,6 @@ mod shutdown;
 pub(super) mod stale_reset;
 
 #[tokio::test(flavor = "current_thread")]
-async fn stale_notification_terminates_old_delivery_without_ack() -> ModelResult<()> {
+async fn stale_notification_terminates_old_delivery_without_ack() -> Result<(), Box<dyn std::error::Error>> {
     stale_reset::run().await
 }

@@ -11,14 +11,15 @@ pub mod support;
 use std::error::Error;
 use std::sync::Arc;
 
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{
+    NoopRegisterObserver, RegisterAccess, RegisterObservation, SharedMemory,
+};
 use pdma_model_contract::semantic::{
     DeviceEpoch, IrqRoute, IrqVector, ResourceConfig, WholeDeviceReset,
 };
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{
-    AsyncDevice, MmioBatchError, ModelError, NoopRegisterObserver, PdmaControlError,
-    PdmaMemoryError, QueueBootstrapBatch, SharedMemory,
+    AsyncDevice, ModelError, PdmaBatchError, PdmaControlError, PdmaMemoryError, QueueBootstrapBatch,
 };
 use support::{
     RecordingObserver, TestResult, activation, core, queue_config, raw_reset, read_u64,
@@ -136,9 +137,7 @@ async fn reset_compat_surface() -> TestResult {
     Ok(())
 }
 
-fn observation_sequences(
-    observations: &[pdma_model_device::RegisterObservation],
-) -> TestResult<(u64, u64)> {
+fn observation_sequences(observations: &[RegisterObservation]) -> TestResult<(u64, u64)> {
     let [first, second] = observations else {
         return Err("exactly two observations required".into());
     };
@@ -221,7 +220,7 @@ async fn error_sources() -> TestResult {
             .await,
         "invalid batch shape was accepted",
     )?;
-    assert_eq!(batch, MmioBatchError::InvalidShape);
+    assert_eq!(batch, PdmaBatchError::InvalidShape);
     assert!(batch.source().is_none());
 
     let mut run = SyncDevice::from_core(core(

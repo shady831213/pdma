@@ -5,7 +5,6 @@ use hardware_interface_runtime::{
 use pdma_model_contract::semantic::IrqVector;
 use pdma_model_host::{
     adapters::AsyncDeviceAccess,
-    compat::AsyncDevicePort,
     interrupt::{PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqService},
 };
 use std::sync::Arc;
@@ -27,7 +26,6 @@ pub struct DeliveryActor {
 pub struct DeliveryConfig {
     pub cpu: Arc<SoftwareCpu>,
     pub access: AsyncDeviceAccess,
-    pub port: AsyncDevicePort,
     pub vectors: [IrqVector; 2],
     pub report: mpsc::Sender<HandlerObservation>,
 }
@@ -55,7 +53,7 @@ pub fn spawn(config: DeliveryConfig) -> DeliveryActor {
         if registry
             .register(
                 config.vectors[0],
-                PdmaIrqService::new(state.driver.clone(), config.port.clone(), completion),
+                PdmaIrqService::new(state.driver.clone(), state.port.clone(), completion),
             )
             .is_err()
         {
@@ -64,7 +62,7 @@ pub fn spawn(config: DeliveryConfig) -> DeliveryActor {
         if registry
             .register(
                 config.vectors[1],
-                PdmaIrqService::new(state.driver, config.port, event),
+                PdmaIrqService::new(state.driver, state.port, event),
             )
             .is_err()
         {

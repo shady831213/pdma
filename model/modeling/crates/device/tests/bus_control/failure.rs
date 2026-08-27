@@ -18,11 +18,11 @@ async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged
         handle
             .activate_queue(stale.clone(), activation(&stale, QueueId::new(0))?)
             .await,
-        Err(BusControlError::InvalidTransaction)
+        Err(PdmaControlError::InvalidTransaction)
     );
     assert_eq!(
         handle.activate_queue(invalid, invalid_activation).await,
-        Err(BusControlError::InvalidQueue)
+        Err(PdmaControlError::InvalidQueue)
     );
 
     // Then: only the independent winner exists and the original ID/base remains reusable.

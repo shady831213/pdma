@@ -1,6 +1,7 @@
 use super::{
     PdmaClaimResult, PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch,
 };
+use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
 use pdma_model_contract::binding::QueueActivation;
 use std::error::Error;
 
@@ -34,13 +35,13 @@ pub trait PdmaBatchAccess: PdmaMemoryProvisioning {
         &self,
         proposal: Self::Proposal,
         activation: QueueActivation,
-    ) -> impl Future<Output = Result<[u8; 72], Self::BatchError>> + Send;
+    ) -> impl Future<Output = Result<QueueResponseRegistersRaw, Self::BatchError>> + Send;
 
     /// Commits optional prepared indirect storage, writes and producer publication.
     fn submit_queue(
         &self,
         request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> impl Future<Output = Result<[u8; 72], Self::BatchError>> + Send;
+    ) -> impl Future<Output = Result<QueueResponseRegistersRaw, Self::BatchError>> + Send;
 }
 
 /// PDMA-specific readiness plus atomic exact interrupt claim.

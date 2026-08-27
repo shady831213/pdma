@@ -4,9 +4,9 @@
 mod support;
 
 use pdma_model_contract::abi::mmio::MmioResult;
+use pdma_model_contract::abi::record::decode_event;
 use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
-use pdma_model_contract::translation::decode_event;
 use pdma_model_device::AsyncDevice;
 use support::{
     RawActivation, activate_raw, issue_queue_command, program_activation, read_response, read_u32,
@@ -224,7 +224,8 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     support::write_u64(&handle, 0x110, 0).await?;
     issue_queue_command(&handle, 4).await?;
     let worker = tokio::spawn(worker.run());
-    handle.wait_for_progress_after(0).await;
+    let snapshot = handle.wait_for_error_after(0).await;
+    assert_eq!((snapshot.steps, snapshot.errors), (0, 1));
 
     // Then: the existing retirement core consumes one SQ slot and publishes one fault event.
     issue_queue_command(&handle, 2).await?;

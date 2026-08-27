@@ -1,5 +1,3 @@
-use crate::ModelError;
-use crate::ModelResult;
 use hardware_interface_runtime::{CpuContextError, CpuLocal as RuntimeCpuLocal};
 use std::fmt;
 
@@ -38,16 +36,11 @@ impl<T> CpuLocal<T> {
     }
 
     /// Applies one synchronous operation while the owning CPU is active.
-    pub(super) fn with<R>(&self, operation: impl FnOnce(&mut T) -> R) -> ModelResult<R> {
-        self.0.with(operation).map_err(map_context_error)
-    }
-}
-
-const fn map_context_error(error: CpuContextError) -> ModelError {
-    match error {
-        CpuContextError::Inactive => ModelError::SoftwareCpuInactive,
-        CpuContextError::Mismatch => ModelError::SoftwareCpuMismatch,
-        CpuContextError::StateBusy => ModelError::SoftwareCpuStateBusy,
+    pub(super) fn with<R>(
+        &self,
+        operation: impl FnOnce(&mut T) -> R,
+    ) -> Result<R, CpuContextError> {
+        self.0.with(operation)
     }
 }
 

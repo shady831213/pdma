@@ -6,14 +6,13 @@ use super::{
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{IrqVector, TraceEventKind};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::ModelResult;
-use pdma_model_host::{adapters::AsyncDeviceAccess, compat::AsyncDevicePort};
+use pdma_model_host::{DriverResult, adapters::AsyncDeviceAccess, compat::AsyncDevicePort};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 #[tokio::test(flavor = "current_thread")]
 async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_accounting()
--> ModelResult<()> {
+-> DriverResult<()> {
     // Given: one retained main capability and handlers registered for distinct MSI-style vectors.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),

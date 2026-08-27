@@ -183,9 +183,9 @@ impl From<CpuContextError> for PdmaRegisterPortError {
         Self::Cpu(source)
     }
 }
-impl From<crate::ModelError> for PdmaRegisterPortError {
-    fn from(source: crate::ModelError) -> Self {
-        Self::Semantic(source.into())
+impl From<crate::semantic::PortError> for PdmaRegisterPortError {
+    fn from(source: crate::semantic::PortError) -> Self {
+        Self::Semantic(source)
     }
 }
 impl From<PdmaProvisioningError> for PdmaRegisterPortError {
@@ -216,37 +216,5 @@ impl From<MemoryAccessError> for PdmaRegisterPortError {
 impl From<ResponseCodecError> for PdmaRegisterPortError {
     fn from(source: ResponseCodecError) -> Self {
         Self::Response(source)
-    }
-}
-
-/// Transitional Task 21 register procedure error retained through Task 26.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegisterError {
-    /// A register request was structurally rejected.
-    Access(crate::semantic::PortError),
-    /// A structurally valid request produced an invalid response.
-    Response(crate::semantic::PortError),
-}
-
-impl From<crate::ModelError> for RegisterError {
-    fn from(source: crate::ModelError) -> Self {
-        Self::Response(source.into())
-    }
-}
-
-impl fmt::Display for RegisterError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Access(_) => formatter.write_str("host register access failed"),
-            Self::Response(_) => formatter.write_str("host register response failed"),
-        }
-    }
-}
-
-impl Error for RegisterError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Access(source) | Self::Response(source) => Some(source),
-        }
     }
 }

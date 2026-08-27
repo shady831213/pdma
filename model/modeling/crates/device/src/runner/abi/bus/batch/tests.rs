@@ -111,7 +111,7 @@ async fn response_latches(
             .map_err(|_| "queue response register was not eight bytes")?;
         slot.copy_from_slice(&value);
     }
-    Ok(response)
+    Ok(response.into())
 }
 
 fn queue_latch_offsets() -> [(u32, MmioByteCount); 13] {

@@ -5,7 +5,7 @@ use pdma_model_contract::semantic::{
     EpochIrqSource, EventErrorKind, EventRecord, ExternalCommand, IrqRoute, IrqSnapshot,
     QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
-use pdma_model_host::{DriverPort, ModelError};
+use pdma_model_host::{DriverPort, PortError};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -82,14 +82,14 @@ impl ProbePort {
 }
 
 impl DriverPort for ProbePort {
-    async fn create_queue(&mut self, config: QueueConfig) -> Result<QueueConfigHandle, ModelError> {
+    async fn create_queue(&mut self, config: QueueConfig) -> Result<QueueConfigHandle, PortError> {
         Ok(QueueConfigHandle::new(
             DeviceEpoch::initial(),
             QueueDirectoryEntry::new(QueueId::new(0), CompletionRingId::new(0), config),
         ))
     }
 
-    async fn allocate_buffer(&mut self, _len: usize) -> Result<BufferId, ModelError> {
+    async fn allocate_buffer(&mut self, _len: usize) -> Result<BufferId, PortError> {
         Ok(BufferId::new(0))
     }
 
@@ -98,7 +98,7 @@ impl DriverPort for ProbePort {
         _id: BufferId,
         _offset: usize,
         _data: &[u8],
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
 
@@ -107,7 +107,7 @@ impl DriverPort for ProbePort {
         _id: BufferId,
         _offset: usize,
         len: usize,
-    ) -> Result<Vec<u8>, ModelError> {
+    ) -> Result<Vec<u8>, PortError> {
         Ok(vec![0; len])
     }
 
@@ -115,22 +115,22 @@ impl DriverPort for ProbePort {
         &mut self,
         _queue: QueueConfigHandle,
         _command: ExternalCommand,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> Result<(), ModelError> {
+    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> Result<(), PortError> {
         Ok(())
     }
 
     async fn poll_completion(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<CompletionRecord>, ModelError> {
+    ) -> Result<Option<CompletionRecord>, PortError> {
         let mut state = lock(&self.state);
         state.polls = state.polls.saturating_add(1);
         if state.fail_poll {
-            return Err(ModelError::UnknownCompletionRing(CompletionRingId::new(0)));
+            return Err(PortError::UnknownCompletionRing(CompletionRingId::new(0)));
         }
         Ok(state.completions.pop_front())
     }
@@ -138,11 +138,11 @@ impl DriverPort for ProbePort {
     async fn poll_queue_event(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<EventRecord>, ModelError> {
+    ) -> Result<Option<EventRecord>, PortError> {
         let mut state = lock(&self.state);
         state.polls = state.polls.saturating_add(1);
         if state.fail_poll {
-            return Err(ModelError::UnknownQueue(QueueId::new(0)));
+            return Err(PortError::UnknownQueue(QueueId::new(0)));
         }
         Ok(state.events.pop_front())
     }
@@ -151,26 +151,26 @@ impl DriverPort for ProbePort {
         &mut self,
         _source: EpochIrqSource,
         _route: IrqRoute,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
-    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
-    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
-    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
-    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn ack_irq_source(&mut self, source: EpochIrqSource) -> Result<(), PortError> {
         let mut state = lock(&self.state);
         if state.fail_ack {
-            return Err(ModelError::UnknownIrqSource(source.source()));
+            return Err(PortError::UnknownIrqSource(source.source()));
         }
         state.acks = state.acks.saturating_add(1);
         drop(state);

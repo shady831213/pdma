@@ -4,19 +4,16 @@ pub mod compat;
 pub mod dma_space;
 mod error;
 mod runner;
+/// Explicit snapshot and construction support for device integration tests.
+pub mod test_support;
 pub mod trace;
 
 pub use dma_space::{PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
-pub use error::{ModelError, ModelResult, PdmaResetError, PdmaRunError};
-pub use hardware_interface_runtime::{
-    NoopRegisterObserver, RegisterObservation, RegisterObserver, SharedMemory,
-    SharedRegisterObserver,
-};
+pub use error::{ModelError, ModelError as DeviceError, ModelResult, PdmaResetError, PdmaRunError};
 pub use runner::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
-    AsyncStallReason, AsyncStepStatus, BusControlError, DeviceCore, DeviceStateSnapshot,
-    DmaBatchContext, DmaWrite, MmioBatchError, MmioRegisterEndpoint, MmioRegisterError,
-    PdmaBatchError, PdmaControlError, PendingDmaResult, QueueBootstrapBatch, QueueResponseBytes,
-    QueueStatus, ResetPartitionSnapshot, SubmissionAcceptance, SubmissionBatch, SyncDevice,
+    AsyncStallReason, AsyncStepStatus, DeviceCore, DmaBatchContext, DmaWrite, MmioRegisterEndpoint,
+    MmioRegisterError, PdmaBatchError, PdmaControlError, PendingDmaResult, QueueBootstrapBatch,
+    QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch, SyncDevice,
 };
 pub use trace::TraceSink;

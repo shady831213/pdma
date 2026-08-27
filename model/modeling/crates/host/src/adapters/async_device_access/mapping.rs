@@ -5,7 +5,9 @@ use crate::register::{
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::binding::PdmaMemoryRegion;
-use pdma_model_device::{MmioBatchError, MmioRegisterError, PdmaMemoryError};
+use pdma_model_device::{
+    DeviceError, MmioRegisterError, PdmaBatchError as DevicePdmaBatchError, PdmaMemoryError,
+};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub(super) fn validate_alignment(alignment: MemoryAlignment) -> Result<(), PdmaProvisioningError> {
@@ -42,9 +44,7 @@ pub(super) fn device_write(write: PdmaDmaWrite) -> pdma_model_device::DmaWrite {
     )
 }
 
-pub(super) const fn map_model_allocation(
-    _: pdma_model_device::ModelError,
-) -> PdmaProvisioningError {
+pub(super) const fn map_model_allocation(_: DeviceError) -> PdmaProvisioningError {
     PdmaProvisioningError::Provisioning(PdmaProvisioningCause::AddressExhausted)
 }
 
@@ -81,11 +81,11 @@ pub(super) const fn map_claim(error: MmioRegisterError) -> PdmaClaimError {
     }
 }
 
-pub(super) const fn map_batch(error: MmioBatchError) -> PdmaBatchError {
+pub(super) const fn map_batch(error: DevicePdmaBatchError) -> PdmaBatchError {
     match error {
-        MmioBatchError::InvalidShape => PdmaBatchError::InvalidShape,
-        MmioBatchError::Access(error) => PdmaBatchError::Access(error),
-        MmioBatchError::Dma(details) => {
+        DevicePdmaBatchError::InvalidShape => PdmaBatchError::InvalidShape,
+        DevicePdmaBatchError::Access(error) => PdmaBatchError::Access(error),
+        DevicePdmaBatchError::Dma(details) => {
             let cause = match details.result {
                 MmioResult::DmaAddressExhausted => PdmaProvisioningCause::AddressExhausted,
                 MmioResult::DmaStorageExhausted => PdmaProvisioningCause::StorageExhausted,
@@ -100,8 +100,8 @@ pub(super) const fn map_batch(error: MmioBatchError) -> PdmaBatchError {
             };
             PdmaBatchError::Provisioning(PdmaProvisioningError::Provisioning(cause))
         }
-        MmioBatchError::Command(details) => PdmaBatchError::Result(details),
-        MmioBatchError::Observation(error) => PdmaBatchError::Observation(error),
+        DevicePdmaBatchError::Command(details) => PdmaBatchError::Result(details),
+        DevicePdmaBatchError::Observation(error) => PdmaBatchError::Observation(error),
     }
 }
 

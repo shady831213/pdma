@@ -70,12 +70,12 @@ pub(super) async fn read_bank<A: CanonicalAccess>(
 
 fn register(id: RegisterId) -> PdmaPortResult<pdma_model_contract::abi::mmio::RegisterSpec> {
     PdmaMmioMap::register(id)
-        .ok_or(crate::ModelError::DmaSubmissionState)
+        .ok_or(crate::PortError::SubmissionState)
         .map_err(Into::into)
 }
 
 fn offset(value: usize) -> PdmaPortResult<u32> {
     u32::try_from(value)
-        .map_err(|_| crate::ModelError::DmaSubmissionState)
+        .map_err(|_| crate::PortError::SubmissionState)
         .map_err(Into::into)
 }

@@ -1,11 +1,11 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
-use crate::{ModelError, ModelResult};
+use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::abi::{AbiEventKind, DmaAddress, RingCursor};
+use pdma_model_contract::abi::record::{decode_completion, decode_event};
+use pdma_model_contract::abi::{AbiEventKind, DmaAddress, ExactAbiEvent, RingCursor};
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EventErrorKind, EventRecord, QueueConfigHandle,
 };
-use pdma_model_contract::translation::{decode_completion, decode_event};
 
 pub(super) async fn completion<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
@@ -26,11 +26,12 @@ pub(super) async fn completion<A: CanonicalAccess>(
         &mut bytes,
     )
     .map_err(crate::register::PdmaRegisterPortError::from)?;
-    let record = decode_completion(&bytes).map_err(|_| ModelError::DmaSubmissionState)?;
+    let decoded = decode_completion(&bytes).map_err(|_| PortError::SubmissionState)?;
+    let record = CompletionRecord::try_from(decoded).map_err(|_| PortError::SubmissionState)?;
     let next = cursors
         .consumer()
         .checked_increment(1)
-        .map_err(|_| ModelError::DmaSubmissionState)?;
+        .map_err(|_| PortError::SubmissionState)?;
     commit_consumer(
         port,
         handle,
@@ -61,12 +62,12 @@ pub(super) async fn event<A: CanonicalAccess>(
         &mut bytes,
     )
     .map_err(crate::register::PdmaRegisterPortError::from)?;
-    let decoded = decode_event(&bytes).map_err(|_| ModelError::DmaSubmissionState)?;
+    let decoded = decode_event(&bytes).map_err(|_| PortError::SubmissionState)?;
     let record = semantic_event(port, decoded)?;
     let next = cursors
         .consumer()
         .checked_increment(1)
-        .map_err(|_| ModelError::DmaSubmissionState)?;
+        .map_err(|_| PortError::SubmissionState)?;
     commit_consumer(
         port,
         handle,
@@ -92,7 +93,7 @@ async fn commit_consumer<A: CanonicalAccess>(
         queue.status.event().consumer()
     };
     if observed != expected {
-        return Err(ModelError::DmaSubmissionState.into());
+        return Err(PortError::SubmissionState.into());
     }
     let status = super::control::update_cursor(
         port,
@@ -113,40 +114,69 @@ async fn commit_consumer<A: CanonicalAccess>(
 fn slot_address(
     layout: pdma_model_contract::binding::RingLayout,
     cursor: RingCursor,
-) -> ModelResult<DmaAddress> {
+) -> PortResult<DmaAddress> {
     let offset = layout
         .slot(cursor)
         .checked_mul(u64::from(layout.record().record_size()))
-        .ok_or(ModelError::DmaSubmissionState)?;
+        .ok_or(PortError::SubmissionState)?;
     layout
         .region()
         .abi_base()
         .checked_add(offset)
-        .map_err(|_| ModelError::DmaSubmissionState)
+        .map_err(|_| PortError::SubmissionState)
 }
 
 fn semantic_event<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    event: pdma_model_contract::binding::AbiEvent,
+    event: ExactAbiEvent,
 ) -> PdmaPortResult<EventRecord> {
     let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
     let locator = DmaAddress::new(locator);
-    let buffer = port.with_state(|state| {
+    let region = port.with_state(|state| {
         state
             .regions
             .iter()
             .find(|region| {
                 let base = region.base().raw();
-                base <= locator.raw() && locator.raw() < base.saturating_add(region.length())
+                let Some(exclusive_end) = base.checked_add(region.length()) else {
+                    return false;
+                };
+                match kind {
+                    AbiEventKind::OutOfBounds => {
+                        locator.raw() == exclusive_end && detail0 == region.length()
+                    }
+                    AbiEventKind::UnmappedDmaAddress
+                    | AbiEventKind::RangeOverflow
+                    | AbiEventKind::InvalidVersion
+                    | AbiEventKind::InvalidSize
+                    | AbiEventKind::InvalidOpcode
+                    | AbiEventKind::InvalidFlags
+                    | AbiEventKind::InvalidReserved
+                    | AbiEventKind::InvalidIndirectCount
+                    | AbiEventKind::InvalidIndirectAlignment
+                    | AbiEventKind::ValueOutOfRange => {
+                        base <= locator.raw() && locator.raw() < exclusive_end
+                    }
+                }
             })
-            .map_or(BufferId::new(usize::MAX), |region| region.object())
+            .copied()
     })?;
+    let buffer = region.map_or(
+        BufferId::new(usize::MAX),
+        crate::register::PdmaMappedRegion::object,
+    );
     let error_kind = match kind {
         AbiEventKind::UnmappedDmaAddress => EventErrorKind::UnknownBuffer,
-        AbiEventKind::OutOfBounds => EventErrorKind::OutOfBounds {
-            len: usize::try_from(detail0).map_err(|_| ModelError::RangeOverflow)?,
-            end: usize::try_from(detail1).map_err(|_| ModelError::RangeOverflow)?,
-        },
+        AbiEventKind::OutOfBounds => {
+            let region = region.ok_or(PortError::SubmissionState)?;
+            let end = detail1
+                .checked_sub(region.base().raw())
+                .ok_or(PortError::SubmissionState)?;
+            EventErrorKind::OutOfBounds {
+                len: usize::try_from(detail0).map_err(|_| PortError::RangeOverflow)?,
+                end: usize::try_from(end).map_err(|_| PortError::RangeOverflow)?,
+            }
+        }
         AbiEventKind::RangeOverflow
         | AbiEventKind::InvalidVersion
         | AbiEventKind::InvalidSize
@@ -158,8 +188,18 @@ fn semantic_event<A: CanonicalAccess>(
         | AbiEventKind::ValueOutOfRange => EventErrorKind::RangeOverflow,
     };
     Ok(EventRecord::new(
-        event.queue_id(),
-        event.command_id(),
+        pdma_model_contract::semantic::QueueId::new(
+            event
+                .queue_id()
+                .try_into_model()
+                .map_err(|_| PortError::SubmissionState)?,
+        ),
+        pdma_model_contract::semantic::CommandId::new(
+            event
+                .command_id()
+                .try_into_model()
+                .map_err(|_| PortError::SubmissionState)?,
+        ),
         error_kind,
         buffer,
     ))

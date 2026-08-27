@@ -12,7 +12,8 @@ pub(super) mod pdma_model_host {
 
     pub(super) use super::super::legacy_test_support::*;
     pub(super) use crate::{
-        AsyncDriver, DriverIrqRecord, DriverPort, ManualDriver, ModelError, ModelResult,
+        AsyncDriver, DriverError, DriverIrqRecord, DriverPort, DriverResult, ManualDriver,
+        PortError, PortResult,
     };
 }
 

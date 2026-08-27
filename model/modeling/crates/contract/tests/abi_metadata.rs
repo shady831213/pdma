@@ -10,7 +10,7 @@ use pdma_model_contract::abi::{
     INDIRECT_BROADCAST_FEATURE, INDIRECT_ENTRY_ALIGNMENT, KNOWN_FEATURE_MASK,
     MAX_INDIRECT_DESTINATIONS, MAX_RING_DEPTH, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
     STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE, SUCCESS_STATUS, VECTOR_ADD_FEATURE,
-    VECTOR_ADD_OPCODE, copy_u64_le, validate_abi_version,
+    VECTOR_ADD_OPCODE, validate_abi_version,
 };
 use pdma_model_contract::abi::{COMPLETION, DESCRIPTOR, EVENT, FEATURES, OPCODES, OpcodeSpec};
 use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
@@ -192,10 +192,6 @@ fn abi_v1_registry_is_exact() {
     );
     assert_eq!(decoded_version, 0x2301);
     assert_eq!(decoded_sentinel, sentinel);
-    assert_eq!(
-        copy_u64_le(sentinel),
-        [0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01]
-    );
     println!(
         "ABI v{ABI_VERSION}: features={expected_features:?} opcodes={:?} event_kinds={:?} bytes={bytes:02x?}",
         OPCODES.map(OpcodeSpec::value),

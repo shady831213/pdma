@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_device::test_support::sync_state_snapshot;
 use pdma_model_device::{PdmaControlError, PdmaResetError};
 
 use super::support::TestResult;
@@ -15,7 +16,7 @@ mod fixture;
 /// Panics when a required exact error/source or zero-mutation assertion regresses.
 pub fn run() -> TestResult<(bool, usize)> {
     let mut fixture = fixture::populated()?;
-    let before = fixture.device.state_snapshot_for_test()?;
+    let before = sync_state_snapshot(&fixture.device)?;
     fixture.assert_preconditions(&before);
     let overflow = fixture
         .device
@@ -39,7 +40,7 @@ pub fn run() -> TestResult<(bool, usize)> {
         control.and_then(|error| error.source().and_then(|source| source.downcast_ref())),
         Some(&pdma_model_contract::abi::AbiControlError::DeviceEpochOverflow { current: u64::MAX })
     );
-    let after = fixture.device.state_snapshot_for_test()?;
+    let after = sync_state_snapshot(&fixture.device)?;
     let mutations = fixture.assert_unchanged(&before, &after);
     assert_eq!(mutations, 0);
     Ok((epoch_overflow, mutations))

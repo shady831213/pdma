@@ -1,5 +1,6 @@
 use super::{
     MAPPING_ALIGNMENT, PdmaMemoryError, PdmaMemoryMappings, PreparedPdmaMapping, RegionBacking,
+    runtime_start,
 };
 use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory};
 use std::sync::Arc;
@@ -30,7 +31,7 @@ impl PdmaMemoryMappings {
             .regions
             .iter()
             .filter(|region| !region.is_empty())
-            .map(|region| MemoryRegion::try_new(region.memory_base(), region.length(), alignment))
+            .map(|region| MemoryRegion::try_new(runtime_start(*region), region.length(), alignment))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| PdmaMemoryError::InvalidRegion)?;
         let final_count = self

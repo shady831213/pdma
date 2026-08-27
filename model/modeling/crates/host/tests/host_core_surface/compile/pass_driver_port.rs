@@ -1,5 +1,5 @@
 use pdma_model_contract::semantic::{BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle};
-use pdma_model_host::{DriverPort, ModelError};
+use pdma_model_host::{DriverPort, PortError};
 
 struct DownstreamPort;
 
@@ -7,12 +7,12 @@ impl DriverPort for DownstreamPort {
     async fn create_queue(
         &mut self,
         _config: QueueConfig,
-    ) -> Result<QueueConfigHandle, ModelError> {
-        Err(ModelError::DmaSubmissionState)
+    ) -> Result<QueueConfigHandle, PortError> {
+        Err(PortError::SubmissionState)
     }
 
-    async fn allocate_buffer(&mut self, _len: usize) -> Result<BufferId, ModelError> {
-        Err(ModelError::DmaAllocationExhausted)
+    async fn allocate_buffer(&mut self, _len: usize) -> Result<BufferId, PortError> {
+        Err(PortError::AllocationExhausted)
     }
 
     async fn write_buffer(
@@ -20,7 +20,7 @@ impl DriverPort for DownstreamPort {
         _id: BufferId,
         _offset: usize,
         _data: &[u8],
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
 
@@ -29,7 +29,7 @@ impl DriverPort for DownstreamPort {
         _id: BufferId,
         _offset: usize,
         _len: usize,
-    ) -> Result<Vec<u8>, ModelError> {
+    ) -> Result<Vec<u8>, PortError> {
         Ok(Vec::new())
     }
 
@@ -37,25 +37,25 @@ impl DriverPort for DownstreamPort {
         &mut self,
         _queue: QueueConfigHandle,
         _command: ExternalCommand,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> Result<(), ModelError> {
+    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> Result<(), PortError> {
         Ok(())
     }
 
     async fn poll_completion(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<CompletionRecord>, ModelError> {
+    ) -> Result<Option<CompletionRecord>, PortError> {
         Ok(None)
     }
 
     async fn poll_queue_event(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<EventRecord>, ModelError> {
+    ) -> Result<Option<EventRecord>, PortError> {
         Ok(None)
     }
 
@@ -63,27 +63,27 @@ impl DriverPort for DownstreamPort {
         &mut self,
         _source: EpochIrqSource,
         _route: IrqRoute,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
 
-    async fn ack_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), ModelError> {
+    async fn ack_irq_source(&mut self, _source: EpochIrqSource) -> Result<(), PortError> {
         Ok(())
     }
 

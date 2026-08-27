@@ -3,7 +3,6 @@ use pdma_model_contract::abi::{
 };
 use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
-use pdma_model_contract::translation::{decode_buffer_id, encode_buffer_id};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = BufferId::new(7);
@@ -25,10 +24,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ring = RingLayout::try_new(region, 1, RingRecord::Submission)?;
     let cursor = RingCursor::new(3);
 
-    let encoded = encode_buffer_id(semantic.src())?;
-    let roundtrip = decode_buffer_id(encoded)? == semantic.src();
+    let encoded = AbiId::try_from(semantic.src().raw())?;
+    let roundtrip = BufferId::new(encoded.try_into_model()?) == semantic.src();
     println!(
-        "semantic=independent;abi_record={};translation=explicit;roundtrip={roundtrip}",
+        "semantic=independent;abi_record={};conversion=owned;roundtrip={roundtrip}",
         record.len()
     );
     assert_eq!(ring.slot(cursor), 0);

@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
+use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 use pdma_model_device::compat::SyncDevice;
-use pdma_model_device::{NoopRegisterObserver, SharedMemory};
 
 use super::support::{TestResult, core, queue_config, submit_copy};
 

@@ -1,0 +1,13 @@
+error[E0624]: associated function `decode_from` is private
+  --> tests/ui/fail/map_values_decode_from_is_private.rs:25:41
+   |
+15 | /     register_map! {
+16 | |         pub map DeviceMap {
+17 | |             alignment: 4,
+18 | |             placements: [word: Word],
+19 | |         }
+20 | |     }
+   | |_____- private associated function defined here
+...
+25 |       let _ = generated::DeviceMapValues::decode_from(&bytes);
+   |                                           ^^^^^^^^^^^ private associated function

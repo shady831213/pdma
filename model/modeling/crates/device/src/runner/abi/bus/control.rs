@@ -1,4 +1,4 @@
-use super::BusControlError;
+use super::PdmaControlError;
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::binding::{QueueActivation, RingCursors};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
@@ -78,31 +78,31 @@ impl BusControlState {
     pub(in crate::runner) fn queue(
         &self,
         queue: EpochQueue,
-    ) -> Result<&ActiveQueue, BusControlError> {
+    ) -> Result<&ActiveQueue, PdmaControlError> {
         self.validate_queue(queue)?;
         self.queues
             .get(queue.queue_id().raw())
-            .ok_or(BusControlError::InvalidQueue)
+            .ok_or(PdmaControlError::InvalidQueue)
     }
 
     pub(in crate::runner) fn queue_mut(
         &mut self,
         queue: EpochQueue,
-    ) -> Result<&mut ActiveQueue, BusControlError> {
+    ) -> Result<&mut ActiveQueue, PdmaControlError> {
         self.validate_queue(queue)?;
         self.queues
             .get_mut(queue.queue_id().raw())
-            .ok_or(BusControlError::InvalidQueue)
+            .ok_or(PdmaControlError::InvalidQueue)
     }
 
-    fn validate_queue(&self, queue: EpochQueue) -> Result<(), BusControlError> {
+    fn validate_queue(&self, queue: EpochQueue) -> Result<(), PdmaControlError> {
         if queue.epoch() != self.epoch {
-            Err(BusControlError::StaleEpoch {
+            Err(PdmaControlError::StaleEpoch {
                 expected: self.epoch,
                 actual: queue.epoch(),
             })
         } else if queue.queue_id().raw() >= self.queues.len() {
-            Err(BusControlError::InvalidQueue)
+            Err(PdmaControlError::InvalidQueue)
         } else {
             Ok(())
         }
@@ -110,7 +110,7 @@ impl BusControlState {
 }
 
 impl ActiveQueue {
-    fn new(activation: QueueActivation) -> Result<Self, BusControlError> {
+    fn new(activation: QueueActivation) -> Result<Self, PdmaControlError> {
         let rings = activation.rings();
         let zero = RingCursor::new(0);
         Ok(Self {

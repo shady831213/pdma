@@ -170,7 +170,11 @@ pub fn activation(
 
 pub async fn bootstrap(
     handle: &AsyncDeviceHandle,
-) -> TestResult<(EpochQueue, PdmaMemoryRegion, [u8; 72])> {
+) -> TestResult<(
+    EpochQueue,
+    PdmaMemoryRegion,
+    pdma_model_device::QueueResponseBytes,
+)> {
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [submission, _, _] = stage.regions() else {
         return Err("three staged regions required".into());

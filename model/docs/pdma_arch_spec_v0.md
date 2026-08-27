@@ -74,12 +74,12 @@ separately. Worker and dispatcher shutdown/join finish before the collector snap
 
 Schema definitions and resolved layouts belong to `hardware-interface-schema`; shared
 memory, raw registers, CPU-local state, generic interrupt dispatch, and trace storage
-belong to `hardware-interface-runtime`. Contract `semantic`, `abi`, and `bridge` modules
-own conceptual vocabulary, exact bytes/registers, and cross-layer conversion
-respectively. Device owns mappings and execution/retirement. Host owns the canonical
-register port, PDMA interrupt adapter, driver accounting, and explicit semantic/sync
-compatibility adapters. Compatibility does not create a second executor or canonical
-E2E.
+belong to `hardware-interface-runtime`. Contract `semantic` owns conceptual vocabulary,
+while `abi` owns exact bytes/registers and record conversion; `binding` owns runtime-bound
+associations. Device owns runtime projection, mappings, and execution/retirement. Host
+owns adapters: the canonical register port, PDMA interrupt adapter, driver accounting,
+and explicit semantic/sync compatibility adapters. Compatibility does not create a
+second executor or canonical E2E.
 
 ## Software/Driver Responsibility Boundary
 

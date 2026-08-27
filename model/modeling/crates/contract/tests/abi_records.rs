@@ -1,19 +1,18 @@
 //! ABI-v1 completion and event record boundary scenarios.
 
 use hardware_interface_schema::{SchemaCoordinate, SchemaLocation, SchemaMemberIdentity};
-use pdma_model_contract::abi::{
-    AbiBounds, AbiDecodeError, AbiEncodeError, AbiEventAccess, AbiEventKind, AbiEventStage,
-    AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder, AbiFaultSelectionError,
-    AbiFaultSite, AbiOperandFaultStep, AbiOperandVisit, AbiStrideOffset, DescriptorHeaderSchema,
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadCopyValues,
-    DescriptorSchemaPayloadStridedCopyValues, DescriptorViolationKind, DmaAddress,
-    select_canonical_fault,
-};
-use pdma_model_contract::binding::AbiEvent;
-use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
-use pdma_model_contract::translation::{
+use pdma_model_contract::abi::record::{
     decode_completion, decode_event, encode_completion, encode_event,
 };
+use pdma_model_contract::abi::{
+    AbiBounds, AbiCompletion, AbiDecodeError, AbiEncodeError, AbiEventAccess, AbiEventKind,
+    AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
+    AbiFaultSelectionError, AbiFaultSite, AbiId, AbiOperandFaultStep, AbiOperandVisit,
+    AbiStrideOffset, DescriptorHeaderSchema, DescriptorHeaderSchemaOpcode, DescriptorSchema,
+    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
+    DescriptorViolationKind, DmaAddress, ExactAbiEvent, select_canonical_fault,
+};
+use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 
 include!("abi_records/fixtures.rs");
 include!("abi_records/ordering.rs");
@@ -31,7 +30,8 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
     let events = canonical_events();
 
     // When: the records cross the ABI-v1 byte boundary.
-    let completion_bytes = encode_completion(completion).expect("completion must encode");
+    let exact_completion = AbiCompletion::try_from(completion).expect("completion must fit ABI");
+    let completion_bytes = encode_completion(exact_completion).expect("completion must encode");
     let event_bytes = events.map(|event| encode_event(event).expect("canonical event must encode"));
     let golden_tuples = [
         (1, 0x2000, 0x20, 0, 3, 1, 0),
@@ -63,7 +63,10 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
     completion_golden[16..24].copy_from_slice(&0x3344_u64.to_le_bytes());
     assert_eq!(completion_bytes, completion_golden);
     assert_eq!(
-        decode_completion(&completion_bytes).expect("golden completion must decode"),
+        CompletionRecord::try_from(
+            decode_completion(&completion_bytes).expect("golden completion must decode")
+        )
+        .expect("completion must fit the model"),
         completion
     );
     for ((encoded, expected), golden) in event_bytes.into_iter().zip(events).zip(golden_tuples) {
@@ -103,9 +106,9 @@ fn rejects_unknown_values_and_noncanonical_details() {
     // When: values that are not canonical ABI-v1 records cross the boundary.
     let unknown_status = decode_completion(&completion);
     let unknown_kind = decode_event(&event);
-    let noncanonical = encode_event(AbiEvent::new(
-        QueueId::new(1),
-        CommandId::new(2),
+    let noncanonical = encode_event(ExactAbiEvent::new(
+        AbiId::new(1),
+        AbiId::new(2),
         AbiFault::from_parts(
             AbiEventKind::UnmappedDmaAddress,
             DmaAddress::new(0x4000),

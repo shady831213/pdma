@@ -6,7 +6,7 @@ pub use types::*;
 use hardware_interface_runtime::{CpuLocal, HandlerRegistry, InterruptLifecycleObserver};
 use pdma_model_contract::semantic::{IrqNotification, IrqSource};
 use pdma_model_host::{
-    DriverIrqRecord, ModelError,
+    DriverError, DriverIrqRecord, PortError,
     interrupt::{
         PdmaInterruptSource, PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
     },
@@ -54,7 +54,7 @@ impl DriverHandler {
 }
 
 impl PdmaIrqHandler for DriverHandler {
-    type Error = ModelError;
+    type Error = DriverError;
 
     async fn handle(
         &mut self,
@@ -68,7 +68,7 @@ impl PdmaIrqHandler for DriverHandler {
             IrqNotification::Message(message) => message.source(),
         };
         if !self.sources.contains(source) {
-            return Err(ModelError::UnknownIrqSource(source));
+            return Err(DriverError::Port(PortError::UnknownIrqSource(source)));
         }
         let entry_depth = self.depth.with(|depth| {
             *depth = depth.saturating_add(1);

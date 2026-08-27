@@ -2,8 +2,7 @@ use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFu
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqNotification, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::AsyncDriver;
-use pdma_model_host::ModelResult;
+use pdma_model_host::{AsyncDriver, DriverError, compat::AsyncDevicePort};
 use tokio::sync::mpsc;
 
 struct CountingHandler {
@@ -20,7 +19,7 @@ impl IrqHandler for CountingHandler {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn shutdown_wins_over_a_ready_notification() -> ModelResult<()> {
+async fn shutdown_wins_over_a_ready_notification() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a pending message notification and a delivery actor not yet running.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -28,7 +27,7 @@ async fn shutdown_wins_over_a_ready_notification() -> ModelResult<()> {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut device_port = device.handle();
+    let mut device_port = AsyncDevicePort::new(device.handle());
     let cpu = SoftwareCpu::new();
     let (mut driver, src, dst) = cpu
         .run_main(async {
@@ -50,7 +49,7 @@ async fn shutdown_wins_over_a_ready_notification() -> ModelResult<()> {
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;
-            Ok::<_, pdma_model_host::ModelError>((driver, src, dst))
+            Ok::<_, DriverError>((driver, src, dst))
         })
         .await?;
     let (calls_tx, mut calls_rx) = mpsc::unbounded_channel();

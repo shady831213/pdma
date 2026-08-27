@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use pdma_model_host::ModelError;
+use pdma_model_host::DriverError;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
@@ -183,7 +183,7 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
                 .expect("repeated queue second command completes third");
             let peer_copy = peer.read_buffer_on(&handle, peer_dst, 1).await;
             let repeated_copy = repeated.read_buffer_on(&handle, repeated_dst, 2).await;
-            Ok::<_, ModelError>((
+            Ok::<_, DriverError>((
                 peer.queue_id(),
                 repeated.queue_id(),
                 peer_command,

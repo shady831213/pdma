@@ -1,8 +1,7 @@
 use super::support::{DriverBootstrap, HandlerIdentity, Milestone};
 use hardware_interface_runtime::{CpuLocal, SoftwareCpu};
 use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
-use pdma_model_host::ModelResult;
-use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
+use pdma_model_host::{AsyncDriver, DriverPort, DriverResult, compat::AsyncDevicePort};
 use std::sync::Arc;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -35,7 +34,7 @@ pub struct MainProgram {
 ///
 /// # Panics
 /// Panics if a bounded bootstrap, readiness, milestone, or completion channel closes early.
-pub fn spawn_main(mut program: MainProgram) -> JoinHandle<ModelResult<MainOutcome>> {
+pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutcome>> {
     tokio::spawn(async move {
         program
             .cpu

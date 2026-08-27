@@ -11,7 +11,7 @@ use pdma_model_contract::semantic::{
     SoftwareOwnerId,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
-use pdma_model_device::{AsyncDevice, BusControlError};
+use pdma_model_device::{AsyncDevice, PdmaControlError};
 use support::{TestResult, raw_reset, read_u32, read_u64, write_u64};
 
 const fn config() -> QueueConfig {
@@ -113,7 +113,7 @@ async fn stale_typed_reset_rejects_before_any_mutation() -> TestResult {
     assert_eq!(epoch, DeviceEpoch::new(1));
     assert_eq!(
         result,
-        Err(BusControlError::StaleEpoch {
+        Err(PdmaControlError::StaleEpoch {
             expected: DeviceEpoch::new(1),
             actual: DeviceEpoch::initial(),
         })

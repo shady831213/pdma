@@ -91,8 +91,7 @@ impl DeviceExecution {
             Some(super::retirement::PendingRetirement::Fault { queue, .. }) => self
                 .queue(queue)
                 .ok()
-                .and_then(|context| context.frontend.pending_exact_fault_bytes())
-                .and_then(|bytes| io::exact::decode_event(&bytes))
+                .and_then(|context| context.frontend.pending_exact_fault())
                 .map(super::super::PendingDmaResult::Event),
             None => None,
         }

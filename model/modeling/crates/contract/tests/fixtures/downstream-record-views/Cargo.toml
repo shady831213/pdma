@@ -6,7 +6,6 @@ publish = false
 default-run = "downstream-record-views"
 
 [dependencies]
-hardware-interface-runtime = { path = "../../../../hardware-interface-runtime" }
 pdma-model-contract = { path = "../../.." }
 
 [[bin]]

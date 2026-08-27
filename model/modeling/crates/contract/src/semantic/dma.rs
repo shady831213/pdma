@@ -1,4 +1,4 @@
-//! DMA-visible range vocabulary without address translation semantics.
+//! DMA-visible range vocabulary without runtime address-projection semantics.
 
 use crate::semantic::ids::DmaObjectId;
 
@@ -92,7 +92,7 @@ mod tests {
         // When: the range is constructed for eight bytes.
         let range = DmaRange::new(start, 8);
 
-        // Then: accessors return the contract fields without translation.
+        // Then: accessors return the contract fields without runtime projection.
         assert_eq!(range.object(), object);
         assert_eq!(range.start().object(), object);
         assert_eq!(range.offset(), 16);

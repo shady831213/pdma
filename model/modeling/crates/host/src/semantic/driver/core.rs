@@ -1,6 +1,6 @@
 use super::accounting::SharedAccounting;
 use crate::DriverPort;
-use crate::ModelResult;
+use crate::DriverResult;
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, QueueConfig,
     QueueConfigHandle, QueueId,
@@ -17,7 +17,7 @@ impl DriverCore {
         device: &mut impl DriverPort,
         config: QueueConfig,
         accounting: SharedAccounting,
-    ) -> ModelResult<Self> {
+    ) -> DriverResult<Self> {
         let queue_config = accounting.poll_valid(device.create_queue(config)).await?;
         Ok(Self {
             queue_config,
@@ -29,8 +29,8 @@ impl DriverCore {
         &self,
         device: &mut impl DriverPort,
         len: usize,
-    ) -> ModelResult<BufferId> {
-        device.allocate_buffer(len).await
+    ) -> DriverResult<BufferId> {
+        device.allocate_buffer(len).await.map_err(Into::into)
     }
 
     pub(super) async fn write_buffer_on(
@@ -38,8 +38,11 @@ impl DriverCore {
         device: &mut impl DriverPort,
         buffer: BufferId,
         data: &[u8],
-    ) -> ModelResult<()> {
-        device.write_buffer(buffer, 0, data).await
+    ) -> DriverResult<()> {
+        device
+            .write_buffer(buffer, 0, data)
+            .await
+            .map_err(Into::into)
     }
 
     pub(super) async fn read_buffer_on(
@@ -47,14 +50,14 @@ impl DriverCore {
         device: &impl DriverPort,
         buffer: BufferId,
         len: usize,
-    ) -> ModelResult<Vec<u8>> {
-        device.read_buffer(buffer, 0, len).await
+    ) -> DriverResult<Vec<u8>> {
+        device.read_buffer(buffer, 0, len).await.map_err(Into::into)
     }
 
     pub(super) async fn poll_completion_on(
         &self,
         device: &mut impl DriverPort,
-    ) -> ModelResult<Option<CompletionRecord>> {
+    ) -> DriverResult<Option<CompletionRecord>> {
         let completion = self
             .accounting
             .poll_valid(device.poll_completion(self.queue_config))
@@ -68,7 +71,7 @@ impl DriverCore {
     pub(super) async fn poll_event_on(
         &self,
         device: &mut impl DriverPort,
-    ) -> ModelResult<Option<EventRecord>> {
+    ) -> DriverResult<Option<EventRecord>> {
         let event = match self.queue_config.event_routing() {
             EventRouting::QueueLocal => {
                 self.accounting

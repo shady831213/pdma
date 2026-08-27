@@ -1,5 +1,4 @@
-use crate::ModelError;
-use crate::ModelResult;
+use crate::{DriverError, DriverResult, PortResult};
 use hardware_interface_runtime::CpuLocal;
 use pdma_model_contract::semantic::CommandId;
 use std::{
@@ -40,11 +39,11 @@ pub(super) struct SharedAccounting {
 }
 
 impl SharedAccounting {
-    pub(super) fn capture_active(command_depth: usize) -> ModelResult<Self> {
+    pub(super) fn capture_active(command_depth: usize) -> DriverResult<Self> {
         Ok(Self {
             state: AccountingState::Cpu(
                 CpuLocal::capture_active(DriverAccounting::new(command_depth))
-                    .map_err(ModelError::from)?,
+                    .map_err(DriverError::from)?,
             ),
             pending_rollbacks: Arc::new(AtomicUsize::new(0)),
         })
@@ -59,10 +58,10 @@ impl SharedAccounting {
         }
     }
 
-    pub(super) fn prepare(&self) -> ModelResult<CommandReservation> {
+    pub(super) fn prepare(&self) -> DriverResult<CommandReservation> {
         let command_id = self.with(|accounting| {
             if accounting.free_command_slots == 0 {
-                return Err(ModelError::DriverQueueFull);
+                return Err(DriverError::QueueFull);
             }
             let command_id = CommandId::new(accounting.next_command);
             accounting.next_command = accounting.next_command.saturating_add(1);
@@ -76,7 +75,7 @@ impl SharedAccounting {
         })
     }
 
-    pub(super) fn reclaim(&self) -> ModelResult<()> {
+    pub(super) fn reclaim(&self) -> DriverResult<()> {
         self.with(|accounting| {
             accounting.free_command_slots = accounting
                 .free_command_slots
@@ -85,13 +84,13 @@ impl SharedAccounting {
         })
     }
 
-    pub(super) fn validate(&self) -> ModelResult<()> {
+    pub(super) fn validate(&self) -> DriverResult<()> {
         self.with(|_| ())
     }
 
-    pub(super) async fn poll_valid<F, T>(&self, future: F) -> ModelResult<T>
+    pub(super) async fn poll_valid<F, T>(&self, future: F) -> DriverResult<T>
     where
-        F: Future<Output = ModelResult<T>>,
+        F: Future<Output = PortResult<T>>,
     {
         let mut future = Box::pin(future);
         poll_fn(|context| {
@@ -99,21 +98,23 @@ impl SharedAccounting {
             if let Err(error) = self.validate() {
                 return std::task::Poll::Ready(Err(error));
             }
-            future.as_mut().poll(context)
+            future.as_mut().poll(context).map_err(DriverError::from)
         })
         .await
     }
 
-    fn with<R>(&self, operation: impl FnOnce(&mut DriverAccounting) -> R) -> ModelResult<R> {
+    fn with<R>(&self, operation: impl FnOnce(&mut DriverAccounting) -> R) -> DriverResult<R> {
         match &self.state {
             AccountingState::Cpu(state) => state
                 .with(|accounting| {
                     self.drain_rollbacks(accounting);
                     operation(accounting)
                 })
-                .map_err(ModelError::from),
+                .map_err(DriverError::from),
             AccountingState::Manual(state) => {
-                let mut state = state.lock().map_err(|_| ModelError::SoftwareCpuStateBusy)?;
+                let mut state = state.lock().map_err(|_| {
+                    DriverError::StateBusy(hardware_interface_runtime::CpuContextError::StateBusy)
+                })?;
                 self.drain_rollbacks(&mut state);
                 Ok(operation(&mut state))
             }

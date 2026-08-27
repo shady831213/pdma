@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, NoopRegisterObserver, SharedMemory,
+    MemoryAccess, MemoryAlignment, NoopRegisterObserver, SharedMemory,
 };
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::compat::SyncDevice;
 use pdma_model_device::{AsyncDevice, DeviceCore, PdmaMemoryError};
@@ -82,7 +83,7 @@ async fn task16_shared_store_surface() {
         Err(PdmaMemoryError::CrossesRegion)
     );
     assert_eq!(
-        zero_device.read_memory(MemoryAddress::new(zero.base().raw() + 1), 0),
+        zero_device.read_memory(DmaAddress::new(zero.base().raw() + 1), 0),
         Err(PdmaMemoryError::Unmapped)
     );
     assert_eq!(async_memory.regions().len(), 2);
@@ -118,8 +119,8 @@ fn task16_shared_store_adverse() {
 
     // When: stale, unmapped, and crossing operations are rejected.
     let stale_result = device.commit_memory_stage(stale);
-    let unmapped = device.read_memory(MemoryAddress::new(0), 1);
-    let crossing = device.write_memory(MemoryAddress::new(initial.base().raw() + 3), &[9, 9]);
+    let unmapped = device.read_memory(DmaAddress::new(0), 1);
+    let crossing = device.write_memory(DmaAddress::new(initial.base().raw() + 3), &[9, 9]);
 
     // Then: every rejection preserves bytes, mappings, generation, and runtime regions.
     assert!(matches!(
@@ -147,7 +148,11 @@ fn injected_store_is_the_real_memory_access_surface() {
 
     // When: the injected runtime API writes the region.
     memory
-        .write(region.memory_base(), ALIGNMENT, &[4, 3, 2, 1])
+        .write(
+            hardware_interface_runtime::MemoryAddress::new(region.abi_base().raw()),
+            ALIGNMENT,
+            &[4, 3, 2, 1],
+        )
         .expect("runtime write");
 
     // Then: the device facade observes those same bytes.

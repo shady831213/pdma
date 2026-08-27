@@ -42,7 +42,7 @@ pub(super) fn expand(
             #[doc = "All-zero values for every declared child."] pub const ZERO: Self = Self { #(#zero_fields),* };
             #[doc = "Reset-derived defaults for every declared child."] pub const DEFAULT: Self = Self { #(#default_fields),* };
             #[doc = "Decodes one complete owned map value."] pub fn from_bytes(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> { <#marker as #facade::RegisterLayout>::decode(bytes) }
-            #[doc = "Decodes one complete owned map value."] pub fn decode_from(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
+            fn decode_from(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let actual = bytes.len();
                 let bytes = bytes.get(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
                 Ok(Self { #(#decoded_fields),* })

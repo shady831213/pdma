@@ -1,5 +1,5 @@
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::{DriverError, DriverResult, PortError, PortResult};
+use pdma_model_host::interrupt::InterruptError;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -11,7 +11,7 @@ use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
     IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
-use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort};
+use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use tokio::sync::{Mutex, mpsc};
 
 use super::message;
@@ -24,11 +24,11 @@ struct ResetPort {
 }
 
 impl AsyncDevicePort for ResetPort {
-    async fn create_queue(&mut self, _config: QueueConfig) -> ModelResult<QueueConfigHandle> {
+    async fn create_queue(&mut self, _config: QueueConfig) -> PortResult<QueueConfigHandle> {
         std::future::pending().await
     }
 
-    async fn allocate_buffer(&mut self, _len: usize) -> ModelResult<BufferId> {
+    async fn allocate_buffer(&mut self, _len: usize) -> PortResult<BufferId> {
         std::future::pending().await
     }
 
@@ -37,7 +37,7 @@ impl AsyncDevicePort for ResetPort {
         _id: BufferId,
         _offset: usize,
         _data: &[u8],
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         std::future::pending().await
     }
 
@@ -46,7 +46,7 @@ impl AsyncDevicePort for ResetPort {
         _id: BufferId,
         _offset: usize,
         _len: usize,
-    ) -> ModelResult<Vec<u8>> {
+    ) -> PortResult<Vec<u8>> {
         std::future::pending().await
     }
 
@@ -54,20 +54,20 @@ impl AsyncDevicePort for ResetPort {
         &mut self,
         _queue: QueueConfigHandle,
         _command: ExternalCommand,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> ModelResult<()> {
+    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> PortResult<()> {
         std::future::pending().await
     }
 
     async fn poll_completion(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> ModelResult<Option<CompletionRecord>> {
+    ) -> PortResult<Option<CompletionRecord>> {
         self.polls.fetch_add(1, Ordering::SeqCst);
-        Err(ModelError::StaleDeviceEpoch {
+        Err(PortError::StaleEpoch {
             expected: DeviceEpoch::new(1),
             actual: DeviceEpoch::initial(),
         })
@@ -76,7 +76,7 @@ impl AsyncDevicePort for ResetPort {
     async fn poll_queue_event(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> ModelResult<Option<EventRecord>> {
+    ) -> PortResult<Option<EventRecord>> {
         std::future::pending().await
     }
 
@@ -84,27 +84,27 @@ impl AsyncDevicePort for ResetPort {
         &mut self,
         _source: EpochIrqSource,
         _route: IrqRoute,
-    ) -> ModelResult<()> {
+    ) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn enable_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn disable_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn mask_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn unmask_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         std::future::pending().await
     }
 
-    async fn ack_irq_source(&mut self, _source: EpochIrqSource) -> ModelResult<()> {
+    async fn ack_irq_source(&mut self, _source: EpochIrqSource) -> PortResult<()> {
         self.acknowledgements.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -128,7 +128,7 @@ struct ResetHandler {
 }
 
 impl StatefulIrqHandler for ResetHandler {
-    async fn handle(&mut self, notification: IrqNotification) -> ModelResult<()> {
+    async fn handle(&mut self, notification: IrqNotification) -> DriverResult<()> {
         self.driver
             .service_irq_on(&mut self.port, notification)
             .await
@@ -140,7 +140,7 @@ impl StatefulIrqHandler for ResetHandler {
 ///
 /// # Panics
 /// Panics when stale service reaches acknowledgement or returns the wrong typed error.
-pub(crate) async fn run() -> ModelResult<()> {
+pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Given: an old driver and host-owned notification facing a reset epoch service port.
     let mut device = pdma_model_device::SyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -148,8 +148,9 @@ pub(crate) async fn run() -> ModelResult<()> {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let cpu = SoftwareCpu::new();
+    let mut device_port = SemanticDevicePort::new(&mut device);
     let driver = cpu
-        .run_main(AsyncDriver::setup_on(&mut device, 1, 1))
+        .run_main(AsyncDriver::setup_on(&mut device_port, 1, 1))
         .await?;
     let source = driver.completion_irq_source();
     let notification = message(
@@ -161,7 +162,7 @@ pub(crate) async fn run() -> ModelResult<()> {
     sender
         .send(notification)
         .await
-        .map_err(|_| ModelError::DriverQueueFull)?;
+        .map_err(|_| DriverError::QueueFull)?;
     drop(sender);
     let polls = Arc::new(AtomicUsize::new(0));
     let acknowledgements = Arc::new(AtomicUsize::new(0));
@@ -181,10 +182,12 @@ pub(crate) async fn run() -> ModelResult<()> {
     // Then: stale queue service terminates delivery before device acknowledgement.
     assert_eq!(
         result,
-        Err(ModelError::StaleDeviceEpoch {
-            expected: DeviceEpoch::new(1),
-            actual: DeviceEpoch::initial(),
-        })
+        Err(InterruptError::Driver(DriverError::Port(
+            PortError::StaleEpoch {
+                expected: DeviceEpoch::new(1),
+                actual: DeviceEpoch::initial(),
+            },
+        )))
     );
     assert_eq!(polls.load(Ordering::SeqCst), 1);
     assert_eq!(acknowledgements.load(Ordering::SeqCst), 0);

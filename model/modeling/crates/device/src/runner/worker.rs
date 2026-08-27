@@ -25,6 +25,11 @@ async fn run_one(shared: &RunnerShared) -> bool {
                 state.generation = state.generation.saturating_add(1);
                 WorkerOutcome::Continue(state.generation)
             }
+            Ok(ModelStepStatus::FaultCached) => {
+                state.last_status = AsyncStepStatus::Progressed;
+                state.generation = state.generation.saturating_add(1);
+                WorkerOutcome::Continue(state.generation)
+            }
             Ok(ModelStepStatus::Idle) => {
                 state.last_status = AsyncStepStatus::Idle;
                 WorkerOutcome::Wait(wait_for_wake(shared, &mut state))

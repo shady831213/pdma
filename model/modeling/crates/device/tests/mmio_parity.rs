@@ -7,7 +7,7 @@ mod queue;
 
 use pdma_model_contract::abi::DiscoveryRequest;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount, MmioResult};
-use pdma_model_contract::semantic::{DeviceEpoch, DeviceRunState, DeviceStatus, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, DeviceRunState, WholeDeviceReset};
 use pdma_model_device::AsyncDevice;
 
 pub(crate) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -115,10 +115,8 @@ async fn typed_and_raw_discovery_and_current_status_match() -> TestResult {
         raw.read_mmio(0x048, 8).await?,
     );
     write_u32(&raw, 0x020, 3).await?;
-    let raw_status = DeviceStatus::new(
-        DeviceEpoch::new(read_u64(&raw, 0x050).await?),
-        DeviceRunState::try_from(u16::try_from(read_u32(&raw, 0x044).await?)?)?,
-    );
+    let raw_epoch = DeviceEpoch::new(read_u64(&raw, 0x050).await?);
+    let raw_run_state = read_u32(&raw, 0x044).await?;
 
     // Then: both real surfaces return the same discovery and current status values.
     assert_eq!(
@@ -130,7 +128,8 @@ async fn typed_and_raw_discovery_and_current_status_match() -> TestResult {
         typed_discovery.features().bits().to_le_bytes()
     );
     assert_eq!(read_u32(&raw, 0x024).await?, MmioResult::Ok.code());
-    assert_eq!(typed_status, raw_status);
+    assert_eq!(typed_status.epoch(), raw_epoch);
+    assert_eq!(raw_run_state, 0);
     assert_eq!(typed_status.run_state(), DeviceRunState::Idle);
     Ok(())
 }
@@ -204,7 +203,7 @@ async fn stale_raw_reset_matches_typed_error_without_publication() -> TestResult
     // Then: typed identity and raw bytes agree, and rejection publishes no generation.
     assert_eq!(
         typed_error,
-        Err(pdma_model_device::BusControlError::StaleEpoch {
+        Err(pdma_model_device::PdmaControlError::StaleEpoch {
             expected: DeviceEpoch::new(1),
             actual: DeviceEpoch::initial(),
         })

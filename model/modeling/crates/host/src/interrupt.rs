@@ -10,12 +10,12 @@ pub use pdma::{
 pub use trace::PdmaInterruptTrace;
 
 pub use crate::semantic::DriverIrqRecord;
-use crate::semantic::PortError;
+use crate::semantic::{DriverError, PortError};
 use pdma_model_contract::semantic::IrqVector;
 use std::{error::Error, fmt};
 
 /// Failure from host interrupt registration or delivery.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum InterruptError {
     /// The vector already has a registered handler.
     DuplicateVector(IrqVector),
@@ -27,17 +27,22 @@ pub enum InterruptError {
     DeliveryUnavailable,
     /// A device-facing interrupt operation failed.
     Port(PortError),
+    /// A CPU-bound driver turn failed.
+    Driver(DriverError),
 }
 
-impl From<crate::ModelError> for InterruptError {
-    fn from(source: crate::ModelError) -> Self {
-        match source {
-            crate::ModelError::DuplicateIrqVector(vector) => Self::DuplicateVector(vector),
-            crate::ModelError::UnregisteredIrqVector(vector) => Self::UnregisteredVector(vector),
-            crate::ModelError::EmptyIrqHandlerRegistry => Self::EmptyRegistry,
-            crate::ModelError::IrqDeliveryUnavailable => Self::DeliveryUnavailable,
-            source => Self::Port(source.into()),
-        }
+/// Result returned by host interrupt registration or delivery.
+pub type InterruptResult<T> = Result<T, InterruptError>;
+
+impl From<PortError> for InterruptError {
+    fn from(source: PortError) -> Self {
+        Self::Port(source)
+    }
+}
+
+impl From<DriverError> for InterruptError {
+    fn from(source: DriverError) -> Self {
+        Self::Driver(source)
     }
 }
 
@@ -53,6 +58,7 @@ impl fmt::Display for InterruptError {
             Self::EmptyRegistry => formatter.write_str("interrupt registry is empty"),
             Self::DeliveryUnavailable => formatter.write_str("interrupt delivery is unavailable"),
             Self::Port(_) => formatter.write_str("interrupt port operation failed"),
+            Self::Driver(_) => formatter.write_str("interrupt driver operation failed"),
         }
     }
 }
@@ -61,6 +67,7 @@ impl Error for InterruptError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Port(source) => Some(source),
+            Self::Driver(source) => Some(source),
             Self::DuplicateVector(_)
             | Self::UnregisteredVector(_)
             | Self::EmptyRegistry

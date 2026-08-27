@@ -2,7 +2,7 @@ use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
 use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
-use pdma_model_device::{DmaBatchContext, MmioBatchError, PdmaMemoryError};
+use pdma_model_device::{DmaBatchContext, PdmaBatchError, PdmaMemoryError};
 
 #[test]
 fn all_dma_errors_map_exhaustively_with_attempted_context() {
@@ -64,8 +64,8 @@ fn all_dma_errors_map_exhaustively_with_attempted_context() {
     // When/Then: each source maps to its assigned result and exact three details.
     for (source, context, result, details) in cases {
         assert_eq!(
-            MmioBatchError::from_dma(source, context),
-            MmioBatchError::Dma(MmioResultDetails { result, details })
+            PdmaBatchError::from_dma(source, context),
+            PdmaBatchError::Dma(MmioResultDetails { result, details })
         );
     }
     println!("{{\"dma_error_variants\":7,\"access\":[4660,64,0],\"region\":[8192,128,0]}}");

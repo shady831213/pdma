@@ -3,19 +3,18 @@
 #[path = "abi_schema_parity/support.rs"]
 pub(crate) mod support;
 
+use pdma_model_contract::abi::record::{
+    decode_completion, decode_event, encode_completion, encode_event,
+};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiDecodeError, DescriptorDecodeError, DescriptorHeaderSchema,
-    DescriptorViolationKind,
+    AbiCommand, AbiCompletion, AbiDecodeError, CompletionSchemaRaw, DescriptorDecodeError,
+    DescriptorHeaderSchema, DescriptorViolationKind, EventSchemaRaw, ExactAbiEvent,
 };
 use pdma_model_contract::abi::{
     BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
     DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadCopyValues,
     DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView, EventSchema,
     EventSchemaView, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
-};
-use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
-use pdma_model_contract::translation::{
-    decode_completion, decode_event, encode_completion, encode_event,
 };
 use support::{
     COMPLETION_BYTES, COMPLETION_FIELDS, COPY, DESCRIPTOR_FIELDS, EVENT_BYTES, EVENT_FIELDS,
@@ -91,13 +90,80 @@ fn descriptor_owned_values_expose_the_complete_frozen_wire_record() {
 }
 
 #[test]
+fn record_raw_owners_are_the_public_typed_conversion_seam() {
+    // Given: independently frozen completion and event bytes.
+    let completion_raw = CompletionSchemaRaw::new(COMPLETION_BYTES);
+    let event_raw = EventSchemaRaw::new(EVENT_BYTES);
+
+    // When: the exact raw owners cross the public typed conversion seam in both directions.
+    let completion = AbiCompletion::try_from(completion_raw);
+    let event = ExactAbiEvent::try_from(event_raw);
+
+    // Then: validation succeeds and reverse conversion preserves every frozen byte.
+    assert!(completion.is_ok());
+    assert!(event.is_ok());
+    let Ok(completion) = completion else {
+        return;
+    };
+    let Ok(event) = event else {
+        return;
+    };
+    assert_eq!(
+        CompletionSchemaRaw::try_from(completion),
+        Ok(completion_raw)
+    );
+    assert_eq!(EventSchemaRaw::try_from(event), Ok(event_raw));
+}
+
+#[test]
+fn record_raw_conversion_preserves_first_error_order() {
+    // Given: raw records with multiple independently invalid fields.
+    let mut completion = COMPLETION_BYTES;
+    completion[6] = 1;
+    completion[24] = 1;
+    let mut event = EVENT_BYTES;
+    event[48] = 99;
+    event[50] = 98;
+    event[52] = 1;
+
+    // When: the raw owners cross the typed validation seam.
+    let completion_error = AbiCompletion::try_from(CompletionSchemaRaw::new(completion));
+    let event_error = ExactAbiEvent::try_from(EventSchemaRaw::new(event));
+
+    // Then: the earliest ABI-v1 violation is returned for each record.
+    assert_eq!(
+        completion_error,
+        Err(AbiDecodeError::InvalidRecordField {
+            field: "flags",
+            value: 1
+        })
+    );
+    assert_eq!(
+        event_error,
+        Err(AbiDecodeError::UnknownEventStage { value: 99 })
+    );
+}
+
+#[test]
+fn record_raw_conversion_rejects_noncanonical_event_details() {
+    // Given: an unmapped-address event with a forbidden secondary detail.
+    let mut event = EVENT_BYTES;
+    event[40] = 1;
+
+    // When: the raw event crosses the typed validation seam.
+    let result = ExactAbiEvent::try_from(EventSchemaRaw::new(event));
+
+    // Then: semantic tuple canonicality is enforced after field validation.
+    assert_eq!(result, Err(AbiDecodeError::NonCanonicalEventDetails));
+}
+
+#[test]
 fn public_codecs_when_given_canonical_bytes_round_trip_without_drift() {
     // Given: frozen descriptor, completion, event, and indirect-entry bytes.
     let command = AbiCommand::decode(&COPY).unwrap();
-    let completion = CompletionRecord::new(
-        QueueId::new(0x1122),
-        CommandId::new(0x3344),
-        CompletionStatus::Success,
+    let completion = AbiCompletion::new(
+        pdma_model_contract::abi::AbiId::new(0x1122),
+        pdma_model_contract::abi::AbiId::new(0x3344),
     );
     let event = decode_event(&EVENT_BYTES).unwrap();
     let entry = BroadcastDestinationEntry::decode(&INDIRECT_BYTES).unwrap();

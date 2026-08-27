@@ -1,7 +1,7 @@
 use super::*;
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_host::register::{PdmaPreparedProposal, PdmaRegisterPort, PdmaRegisterPortError};
-use pdma_model_host::{DriverPort, ModelError};
-use hardware_interface_runtime::{SoftwareCpu};
+use pdma_model_host::{DriverPort, PortError};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
@@ -72,7 +72,12 @@ async fn cpu_preflight_rejects_before_allocation_when_port_is_inactive() -> Test
     let result = port.allocate_buffer(8).await;
 
     // Then: CPU precedence rejects before provisioning mutates any fake state.
-    assert_eq!(result, Err(ModelError::SoftwareCpuInactive));
+    assert_eq!(
+        result,
+        Err(PortError::Cpu(
+            hardware_interface_runtime::CpuContextError::Inactive,
+        ))
+    );
     assert_eq!(fake.snapshot(), before);
     Ok(())
 }
@@ -150,7 +155,7 @@ fn poll_pending<F: Future>(future: &mut Pin<Box<F>>) -> bool {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn canonical_port_preserves_provisioning_source_before_legacy_projection() -> TestResult<()> {
+async fn canonical_port_preserves_provisioning_source() -> TestResult<()> {
     let fake = FakeAccess::new(message());
     let owner = SoftwareCpu::new();
     owner
@@ -185,9 +190,8 @@ async fn canonical_port_preserves_batch_register_and_claim_sources() -> TestResu
         .run_main(async {
             let batch_fake = FakeAccess::new(message());
             let mut batch_port = PdmaRegisterPort::new(batch_fake.clone())?;
-            let provisioning = PdmaProvisioningError::Provisioning(
-                PdmaProvisioningCause::StorageExhausted,
-            );
+            let provisioning =
+                PdmaProvisioningError::Provisioning(PdmaProvisioningCause::StorageExhausted);
             batch_fake.fail_next_batch(PdmaBatchError::Provisioning(provisioning));
             let batch = batch_port
                 .try_create_queue(queue_config())

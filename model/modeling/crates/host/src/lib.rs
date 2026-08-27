@@ -9,7 +9,6 @@
 
 #[cfg(test)]
 mod context;
-mod error;
 #[cfg(test)]
 mod irq_delivery;
 
@@ -19,5 +18,7 @@ pub mod interrupt;
 pub mod register;
 pub mod semantic;
 
-pub use error::{ModelError, ModelResult};
-pub use semantic::{AsyncDriver, DriverIrqRecord, DriverPort, ManualDriver};
+pub use semantic::{
+    AsyncDriver, DriverError, DriverIrqRecord, DriverPort, DriverResult, ManualDriver, PortError,
+    PortResult,
+};

@@ -120,12 +120,8 @@ impl From<AbiControlError> for PdmaControlError {
     }
 }
 
-/// Transitional queue-control error name retained through Task 25.
-pub type BusControlError = PdmaControlError;
-
 pub use batch::{
-    DmaBatchContext, MmioBatchError, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes,
-    SubmissionBatch,
+    DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
 };
 pub use control::QueueStatus;
 
@@ -142,7 +138,7 @@ impl AsyncDeviceHandle {
         &self,
         proposal: PdmaMemoryStage,
         activation: QueueActivation,
-    ) -> Result<QueueStatus, BusControlError> {
+    ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut runner = self.shared.state.lock().await;
             let result = control::activate_staged(&mut runner, proposal, activation);
@@ -161,7 +157,7 @@ impl AsyncDeviceHandle {
     pub async fn activate_mapped_queue(
         &self,
         activation: QueueActivation,
-    ) -> Result<QueueStatus, BusControlError> {
+    ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut runner = self.shared.state.lock().await;
             let result = control::activate_mapped(&mut runner, activation);
@@ -180,7 +176,7 @@ impl AsyncDeviceHandle {
     pub async fn accept_submission(
         &self,
         request: SubmissionAcceptance,
-    ) -> Result<QueueStatus, BusControlError> {
+    ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result = control::transactions::accept_submission(&mut state, request);
@@ -199,7 +195,7 @@ impl AsyncDeviceHandle {
     pub async fn control_queue(
         &self,
         request: QueueControl,
-    ) -> Result<QueueStatus, BusControlError> {
+    ) -> Result<QueueStatus, PdmaControlError> {
         let (result, changed, generation) = {
             let mut state = self.shared.state.lock().await;
             let (result, changed) = control::transactions::control(&mut state, request);

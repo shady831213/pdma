@@ -17,11 +17,11 @@ mod worker;
 use crate::ModelResult;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryMappings};
 pub use abi::bus::{
-    BusControlError, DmaBatchContext, DmaWrite, MmioBatchError, PdmaBatchError, PdmaControlError,
-    QueueBootstrapBatch, QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch,
+    DmaBatchContext, DmaWrite, PdmaBatchError, PdmaControlError, QueueBootstrapBatch,
+    QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch,
 };
 pub use abi::{MmioRegisterEndpoint, MmioRegisterError};
-pub use core::{DeviceCore, DeviceStateSnapshot, ResetPartitionSnapshot};
+pub use core::DeviceCore;
 use execution::DeviceExecution;
 pub use manual::SyncDevice;
 use pdma_model_contract::semantic::trace::TraceEvent;

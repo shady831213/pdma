@@ -9,13 +9,26 @@ mod validation;
 pub use error::PdmaMemoryError;
 pub use stage::PdmaMemoryStage;
 
-use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::ids::BufferId;
 use std::sync::Arc;
 
 const FIRST_MEMORY_ADDRESS: u64 = 0x1_0000;
 const MAPPING_ALIGNMENT: u64 = 64;
+
+pub(crate) const fn runtime_address(address: DmaAddress) -> MemoryAddress {
+    MemoryAddress::new(address.raw())
+}
+
+const fn runtime_start(region: PdmaMemoryRegion) -> MemoryAddress {
+    runtime_address(region.abi_base())
+}
+
+const fn runtime_end(region: PdmaMemoryRegion) -> MemoryAddress {
+    runtime_address(region.abi_exclusive_end())
+}
 
 #[derive(Debug)]
 struct RegionBacking {
@@ -107,7 +120,7 @@ impl PdmaMemoryMappings {
             .regions
             .iter()
             .filter(|region| !region.is_empty())
-            .map(|region| MemoryRegion::try_new(region.memory_base(), region.length(), alignment))
+            .map(|region| MemoryRegion::try_new(runtime_start(*region), region.length(), alignment))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| PdmaMemoryError::InvalidRegion)?;
         let prepared = self

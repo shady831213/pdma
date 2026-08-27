@@ -2,20 +2,19 @@ mod command;
 mod resolve;
 
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::BusControlError;
+use crate::runner::abi::bus::PdmaControlError;
 use crate::runner::abi::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
-    AbiCommand, DescriptorDecodeError, DescriptorSchemaView, RingRecord,
+    AbiCommand, AbiId, DescriptorDecodeError, DescriptorSchemaView, ExactAbiEvent, RingRecord,
 };
-use pdma_model_contract::binding::AbiEvent;
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
     Command(crate::runner::execution::command::ExecutionCommand),
-    Fault(AbiEvent),
+    Fault(QueueId, ExactAbiEvent),
 }
 
 pub(super) fn fetch(
@@ -44,16 +43,33 @@ pub(super) fn fetch(
     let bytes = dma_space
         .read_memory(slot, u64::from(RingRecord::Submission.record_size()))
         .map_err(|_| ModelError::DmaSubmissionState)?;
-    let command_id = command_id(&bytes)?;
+    let (exact_command_id, command_id) = command_id(&bytes)?;
+    let exact_queue_id =
+        AbiId::try_from(queue_id.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
     match AbiCommand::decode(&bytes) {
         Ok(command) => command::resolve(
             dma_space,
-            command::ExactCommandContext::new(queue_id, completion_ring, command_id),
+            command::ExactCommandContext::new(
+                exact_queue_id,
+                completion_ring,
+                exact_command_id,
+                command_id,
+            ),
             command,
         )
-        .map(|result| Some(result.map_or_else(ExactFetch::Fault, ExactFetch::Command))),
+        .map(|result| {
+            Some(result.map_or_else(
+                |event| ExactFetch::Fault(queue_id, event),
+                ExactFetch::Command,
+            ))
+        }),
         Err(DescriptorDecodeError::Violation(violation)) => Ok(Some(ExactFetch::Fault(
-            AbiEvent::new(queue_id, command_id, violation.into_abi_fault(slot)),
+            queue_id,
+            ExactAbiEvent::new(
+                exact_queue_id,
+                exact_command_id,
+                violation.into_abi_fault(slot),
+            ),
         ))),
         Err(DescriptorDecodeError::Codec(_) | DescriptorDecodeError::MetadataMismatch) => {
             Err(ModelError::DmaSubmissionState)
@@ -64,7 +80,7 @@ pub(super) fn fetch(
 pub(super) fn consume(
     control: &mut BusControlState,
     queue_id: QueueId,
-) -> Result<(), BusControlError> {
+) -> Result<(), PdmaControlError> {
     transactions::advance_submission_consumer_raw(control, queue_id)
 }
 
@@ -75,13 +91,13 @@ pub(super) fn has_pending(control: &BusControlState, queue_id: QueueId) -> bool 
         .is_ok_and(|active| active.submission.consumer() < active.captured_submission_producer)
 }
 
-fn command_id(bytes: &[u8]) -> ModelResult<CommandId> {
+fn command_id(bytes: &[u8]) -> ModelResult<(AbiId, CommandId)> {
     let view = DescriptorSchemaView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
     let raw = view
         .header()
         .and_then(|header| header.command_id())
         .map_err(|_| ModelError::DmaSubmissionState)?;
     usize::try_from(raw)
-        .map(CommandId::new)
+        .map(|model| (AbiId::new(raw), CommandId::new(model)))
         .map_err(|_| ModelError::DmaSubmissionState)
 }

@@ -8,15 +8,15 @@ use super::{
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::ModelResult;
 use pdma_model_host::{
-    AsyncDriver, DriverPort, adapters::AsyncDeviceAccess, compat::AsyncDevicePort,
+    AsyncDriver, DriverError, DriverPort, DriverResult, adapters::AsyncDeviceAccess,
+    compat::AsyncDevicePort,
 };
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 #[tokio::test(flavor = "current_thread")]
-async fn completion_and_event_sources_share_one_persistent_vector_handler() -> ModelResult<()> {
+async fn completion_and_event_sources_share_one_persistent_vector_handler() -> DriverResult<()> {
     // Given: both driver sources route to one vector and one persistent handler instance.
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
@@ -91,7 +91,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
                 .submit_copy_on(&mut main_port, CopyRequest::new(src, dst, 8))
                 .await?;
             done_rx.recv().await.expect("event handler turn ends");
-            Ok::<_, pdma_model_host::ModelError>((
+            Ok::<_, DriverError>((
                 main_depth.with(|depth| *depth)?,
                 main_port.irq_snapshot().await,
                 main_port.read_buffer(dst, 0, 4).await?,
@@ -122,7 +122,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> M
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelResult<()> {
+async fn shared_vector_redundant_messages_use_one_persistent_handler() -> DriverResult<()> {
     // Given: two masked fault messages accumulate for one source and one registered vector.
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
@@ -197,7 +197,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> ModelR
             main_port.unmask_irq_source(event_capability).await?;
             done_rx.recv().await.expect("first message is serviced");
             done_rx.recv().await.expect("redundant message is serviced");
-            Ok::<_, pdma_model_host::ModelError>(main_port.irq_snapshot().await)
+            Ok::<_, DriverError>(main_port.irq_snapshot().await)
         })
         .await
     });

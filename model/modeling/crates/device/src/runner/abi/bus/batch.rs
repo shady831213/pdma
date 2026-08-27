@@ -1,4 +1,4 @@
-use super::{AsyncDeviceHandle, BusControlError, SubmissionAcceptance};
+use super::{AsyncDeviceHandle, PdmaControlError, SubmissionAcceptance};
 use crate::runner::abi::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
 use crate::runner::abi::register_endpoint::PreparedWrite;
 use crate::runner::state::publish;
@@ -6,7 +6,7 @@ use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::binding::QueueActivation;
 
 mod error;
-pub use error::{DmaBatchContext, MmioBatchError, PdmaBatchError};
+pub use error::{DmaBatchContext, PdmaBatchError};
 mod commit;
 use commit::{commit_bootstrap, commit_submission};
 
@@ -29,37 +29,37 @@ pub(super) fn reject_injected(
     state: &crate::runner::state::DeviceCore,
     expected: BatchPreparationFault,
     context: DmaBatchContext,
-) -> Result<(), MmioBatchError> {
+) -> Result<(), PdmaBatchError> {
     if state.batch_fault.get() != Some(expected) {
         return Ok(());
     }
     state.batch_fault.set(None);
     let error = match expected {
         BatchPreparationFault::Capacity => {
-            MmioBatchError::from_dma(crate::PdmaMemoryError::StorageExhausted, context)
+            PdmaBatchError::from_dma(crate::PdmaMemoryError::StorageExhausted, context)
         }
         BatchPreparationFault::Overlap => {
-            MmioBatchError::from_dma(crate::PdmaMemoryError::OverlappingRegion, context)
+            PdmaBatchError::from_dma(crate::PdmaMemoryError::OverlappingRegion, context)
         }
-        BatchPreparationFault::Decode => MmioBatchError::Access(
+        BatchPreparationFault::Decode => PdmaBatchError::Access(
             pdma_model_contract::abi::mmio::MmioAccessError::ReservedOffset { offset: 0x168 },
         ),
-        BatchPreparationFault::Access => MmioBatchError::Access(
+        BatchPreparationFault::Access => PdmaBatchError::Access(
             pdma_model_contract::abi::mmio::MmioAccessError::WriteToReadOnly { offset: 0x168 },
         ),
-        BatchPreparationFault::Mask => MmioBatchError::Access(
+        BatchPreparationFault::Mask => PdmaBatchError::Access(
             pdma_model_contract::abi::mmio::MmioAccessError::ReservedBits {
                 offset: 0x168,
                 bits: 4,
             },
         ),
-        BatchPreparationFault::Response => MmioBatchError::InvalidShape,
+        BatchPreparationFault::Response => PdmaBatchError::InvalidShape,
     };
     Err(error)
 }
 
 /// Exact raw queue response-bank bytes.
-pub type QueueResponseBytes = [u8; 72];
+pub type QueueResponseBytes = pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
 
 /// The one closed queue-bootstrap batch request.
 #[derive(Debug)]
@@ -101,7 +101,7 @@ impl AsyncDeviceHandle {
     pub async fn bootstrap_queue_batch(
         &self,
         request: QueueBootstrapBatch,
-    ) -> Result<QueueResponseBytes, MmioBatchError> {
+    ) -> Result<QueueResponseBytes, PdmaBatchError> {
         let committed = {
             let mut state = self.shared.state.lock().await;
             commit_bootstrap(&mut state, &request)?
@@ -113,7 +113,7 @@ impl AsyncDeviceHandle {
     pub async fn submit_queue_batch(
         &self,
         request: SubmissionBatch,
-    ) -> Result<QueueResponseBytes, MmioBatchError> {
+    ) -> Result<QueueResponseBytes, PdmaBatchError> {
         let committed = {
             let mut state = self.shared.state.lock().await;
             commit_submission(&mut state, &request.0)?
@@ -133,7 +133,7 @@ impl CommittedBatch {
     fn emit(
         self,
         shared: &crate::runner::state::RunnerShared,
-    ) -> Result<QueueResponseBytes, MmioBatchError> {
+    ) -> Result<QueueResponseBytes, PdmaBatchError> {
         let observation = self
             .command
             .observation(self.reservation.start_sequence(), AccessOrigin::Batch);
@@ -144,12 +144,12 @@ impl CommittedBatch {
 }
 
 pub(super) fn command_error(
-    error: BusControlError,
+    error: PdmaControlError,
     queue_id: usize,
     command: u32,
-) -> MmioBatchError {
+) -> PdmaBatchError {
     let numeric_id = u64::try_from(queue_id).unwrap_or(u64::MAX);
-    MmioBatchError::Command(crate::runner::abi::mmio::queue::map_bus_error(
+    PdmaBatchError::Command(crate::runner::abi::mmio::queue::map_bus_error(
         error, numeric_id, command, 0,
     ))
 }
@@ -157,8 +157,8 @@ pub(super) fn command_error(
 pub(super) fn map_access_error(
     error: crate::PdmaMemoryError,
     write: &super::DmaWrite,
-) -> MmioBatchError {
-    MmioBatchError::from_dma(
+) -> PdmaBatchError {
+    PdmaBatchError::from_dma(
         error,
         DmaBatchContext::Access {
             address: write.address(),
@@ -170,18 +170,18 @@ pub(super) fn map_access_error(
 pub(super) fn validate_submission_shape(
     _state: &crate::runner::state::DeviceCore,
     request: &SubmissionAcceptance,
-) -> Result<(), MmioBatchError> {
+) -> Result<(), PdmaBatchError> {
     if request.descriptor.bytes().len() != 64 {
-        return Err(MmioBatchError::InvalidShape);
+        return Err(PdmaBatchError::InvalidShape);
     }
     if let Some((stage, write)) = &request.indirect {
         let [region] = stage.regions() else {
-            return Err(MmioBatchError::InvalidShape);
+            return Err(PdmaBatchError::InvalidShape);
         };
         if write.address() != region.abi_base()
             || u64::try_from(write.bytes().len()) != Ok(region.length())
         {
-            return Err(MmioBatchError::InvalidShape);
+            return Err(PdmaBatchError::InvalidShape);
         }
     }
     Ok(())
@@ -189,14 +189,14 @@ pub(super) fn validate_submission_shape(
 
 pub(super) fn bootstrap_staging(
     activation: QueueActivation,
-) -> Result<BootstrapBatchStaging, MmioBatchError> {
+) -> Result<BootstrapBatchStaging, PdmaBatchError> {
     let rings = activation.rings();
     Ok(BootstrapBatchStaging {
         expected_epoch: activation.queue().epoch().raw(),
         id: u64::try_from(activation.queue().queue_id().raw())
-            .map_err(|_| MmioBatchError::InvalidShape)?,
+            .map_err(|_| PdmaBatchError::InvalidShape)?,
         cfg_software_owner: u64::try_from(activation.config().software_owner().raw())
-            .map_err(|_| MmioBatchError::InvalidShape)?,
+            .map_err(|_| PdmaBatchError::InvalidShape)?,
         sq_base: rings.submission().region().base().raw(),
         sq_depth: rings.submission().depth(),
         cq_base: rings.completion().region().base().raw(),

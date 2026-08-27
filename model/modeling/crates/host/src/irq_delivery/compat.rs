@@ -1,5 +1,6 @@
 use super::{HostIrqTrace, IrqDeliverySummary, IrqHandler};
-use crate::{DriverPort, ModelError, ModelResult};
+use crate::interrupt::{InterruptError, InterruptResult};
+use crate::{DriverError, DriverPort, DriverResult};
 use hardware_interface_runtime::{
     InterruptDispatchError, InterruptEnvelope, InterruptHandler, InterruptLifecycleEvent,
     InterruptLifecycleObserver, InterruptSource, InterruptSummary,
@@ -31,9 +32,9 @@ impl<'handler> CompatHandler<'handler> {
 }
 
 impl InterruptHandler<CompatNotification> for CompatHandler<'_> {
-    type Error = ModelError;
+    type Error = DriverError;
 
-    async fn handle(&mut self, notification: &CompatNotification) -> ModelResult<()> {
+    async fn handle(&mut self, notification: &CompatNotification) -> DriverResult<()> {
         self.0.handle(notification.0).await
     }
 }
@@ -111,12 +112,12 @@ impl InterruptLifecycleObserver<CompatNotification> for CompatObserver {
 }
 
 pub(super) fn project_result(
-    result: &Result<
+    result: Result<
         InterruptSummary,
-        InterruptDispatchError<IrqVector, CompatSourceClosed, ModelError>,
+        InterruptDispatchError<IrqVector, CompatSourceClosed, DriverError>,
     >,
     trace: &Mutex<HostIrqTrace>,
-) -> ModelResult<IrqDeliverySummary> {
+) -> InterruptResult<IrqDeliverySummary> {
     match result {
         Ok(summary) => Ok(IrqDeliverySummary {
             deliveries: summary.deliveries(),
@@ -128,11 +129,11 @@ pub(super) fn project_result(
                 .successful_deliveries(),
         }),
         Err(InterruptDispatchError::UnregisteredVector(vector)) => {
-            Err(ModelError::UnregisteredIrqVector(*vector))
+            Err(InterruptError::UnregisteredVector(vector))
         }
-        Err(InterruptDispatchError::Handler { source, .. }) => Err(*source),
+        Err(InterruptDispatchError::Handler { source, .. }) => Err(InterruptError::Driver(source)),
         Err(InterruptDispatchError::Claim(CompatSourceClosed)) => {
-            Err(ModelError::IrqDeliveryUnavailable)
+            Err(InterruptError::DeliveryUnavailable)
         }
     }
 }

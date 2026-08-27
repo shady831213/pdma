@@ -98,6 +98,3 @@ impl std::error::Error for PdmaBatchError {
         }
     }
 }
-
-/// Transitional exact-batch error name retained through Task 25.
-pub type MmioBatchError = PdmaBatchError;

@@ -1,6 +1,6 @@
 use super::{AsyncDriver, ManualDriver, core::DriverCore};
 use crate::DriverPort;
-use crate::ModelResult;
+use crate::DriverResult;
 use pdma_model_contract::semantic::{
     BroadcastCopyCommand, BroadcastCopyRequest, CommandId, CopyCommand, CopyRequest,
     ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
@@ -11,7 +11,7 @@ impl DriverCore {
         &self,
         device: &mut impl DriverPort,
         request: CopyRequest,
-    ) -> ModelResult<CommandId> {
+    ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
         let command = CopyCommand::new(
             reservation.command_id(),
@@ -27,7 +27,7 @@ impl DriverCore {
         &self,
         device: &mut impl DriverPort,
         request: StridedCopyRequest,
-    ) -> ModelResult<CommandId> {
+    ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
         let command = StridedCopyCommand::new(
             reservation.command_id(),
@@ -43,7 +43,7 @@ impl DriverCore {
         &self,
         device: &mut impl DriverPort,
         request: BroadcastCopyRequest,
-    ) -> ModelResult<CommandId> {
+    ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
         let command = BroadcastCopyCommand::new(
             reservation.command_id(),
@@ -63,7 +63,7 @@ impl DriverCore {
         &self,
         device: &mut impl DriverPort,
         request: VectorAddRequest,
-    ) -> ModelResult<CommandId> {
+    ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
         let command = VectorAddCommand::new(
             reservation.command_id(),
@@ -80,7 +80,7 @@ impl DriverCore {
         device: &mut impl DriverPort,
         reservation: super::accounting::CommandReservation,
         command: ExternalCommand,
-    ) -> ModelResult<CommandId> {
+    ) -> DriverResult<CommandId> {
         let command_id = reservation.command_id();
         self.accounting
             .poll_valid(device.submit_command(self.queue_config, command))
@@ -102,7 +102,7 @@ macro_rules! impl_driver_submission {
                 &mut self,
                 device: &mut impl DriverPort,
                 request: CopyRequest,
-            ) -> ModelResult<CommandId> {
+            ) -> DriverResult<CommandId> {
                 self.core.submit_copy_on(device, request).await
             }
 
@@ -111,7 +111,7 @@ macro_rules! impl_driver_submission {
                 &mut self,
                 device: &mut impl DriverPort,
                 request: StridedCopyRequest,
-            ) -> ModelResult<CommandId> {
+            ) -> DriverResult<CommandId> {
                 self.core.submit_strided_copy_on(device, request).await
             }
 
@@ -120,7 +120,7 @@ macro_rules! impl_driver_submission {
                 &mut self,
                 device: &mut impl DriverPort,
                 request: BroadcastCopyRequest,
-            ) -> ModelResult<CommandId> {
+            ) -> DriverResult<CommandId> {
                 self.core.submit_broadcast_copy_on(device, request).await
             }
 
@@ -129,7 +129,7 @@ macro_rules! impl_driver_submission {
                 &mut self,
                 device: &mut impl DriverPort,
                 request: VectorAddRequest,
-            ) -> ModelResult<CommandId> {
+            ) -> DriverResult<CommandId> {
                 self.core.submit_vector_add_on(device, request).await
             }
         }

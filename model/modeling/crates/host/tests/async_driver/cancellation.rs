@@ -3,11 +3,11 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CommandId, CopyRequest};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::DriverError;
+use pdma_model_host::DriverResult;
 use tokio::sync::oneshot;
 
-async fn setup_copy(port: &mut BlockingPort) -> ModelResult<(AsyncDriver, CopyRequest)> {
+async fn setup_copy(port: &mut BlockingPort) -> DriverResult<(AsyncDriver, CopyRequest)> {
     let driver = AsyncDriver::setup_on(port, 1, 1).await?;
     let src = driver.allocate_buffer_on(port, 4).await?;
     let dst = driver.allocate_buffer_on(port, 4).await?;
@@ -31,13 +31,16 @@ async fn submit_failure_restores_slot_but_consumes_command_id() {
             let (mut driver, request) = setup_copy(&mut port).await?;
             let failed = driver.submit_copy_on(&mut port, request).await;
             let retried = driver.submit_copy_on(&mut port, request).await;
-            Ok::<_, ModelError>((failed, retried))
+            Ok::<_, DriverError>((failed, retried))
         })
         .await
         .expect("setup remains valid");
 
     // Then: the credit returns while the failed command ID remains consumed.
-    assert_eq!(failed, Err(ModelError::RingFull));
+    assert_eq!(
+        failed,
+        Err(DriverError::Port(pdma_model_host::PortError::RingFull))
+    );
     assert_eq!(retried, Ok(CommandId::new(1)));
 }
 
@@ -64,7 +67,7 @@ async fn inner_select_cancellation_restores_slot_but_consumes_command_id() {
                 tokio::select! {
                     biased;
                     result = &mut submit => return result.map(|_| CommandId::new(usize::MAX)),
-                    result = cancel_rx => result.map_err(|_| ModelError::RingFull)?,
+                    result = cancel_rx => result.map_err(|_| DriverError::Port(pdma_model_host::PortError::RingFull))?,
                 }
             }
             control.allow_submit();
@@ -108,7 +111,7 @@ async fn aborted_run_main_restores_slot_for_retained_clone() {
                 let (mut driver, request) = setup_copy(&mut main_port).await?;
                 retained_tx
                     .send((driver.clone(), request))
-                    .map_err(|_| ModelError::RingFull)?;
+                    .map_err(|_| DriverError::Port(pdma_model_host::PortError::RingFull))?;
                 driver.submit_copy_on(&mut main_port, request).await
             })
             .await
@@ -147,14 +150,17 @@ async fn doorbell_failure_keeps_accepted_command_slot_consumed() {
             let (mut driver, request) = setup_copy(&mut port).await?;
             let failed = driver.submit_copy_on(&mut port, request).await;
             let second = driver.submit_copy_on(&mut port, request).await;
-            Ok::<_, ModelError>((failed, second))
+            Ok::<_, DriverError>((failed, second))
         })
         .await
         .expect("setup remains valid");
 
     // Then: acceptance commits the slot before the doorbell await.
-    assert_eq!(failed, Err(ModelError::RingFull));
-    assert_eq!(second, Err(ModelError::DriverQueueFull));
+    assert_eq!(
+        failed,
+        Err(DriverError::Port(pdma_model_host::PortError::RingFull))
+    );
+    assert_eq!(second, Err(DriverError::QueueFull));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -178,11 +184,11 @@ async fn cancelled_doorbell_keeps_accepted_command_slot_consumed() {
                 tokio::pin!(submit);
                 tokio::select! {
                     biased;
-                    result = &mut submit => return result.map(|_| Err(ModelError::RingFull)),
-                    result = cancel_rx => result.map_err(|_| ModelError::RingFull)?,
+                    result = &mut submit => return result.map(|_| Err(DriverError::Port(pdma_model_host::PortError::RingFull))),
+                    result = cancel_rx => result.map_err(|_| DriverError::Port(pdma_model_host::PortError::RingFull))?,
                 }
             }
-            Ok::<_, ModelError>(driver.submit_copy_on(&mut port, request).await)
+            Ok::<_, DriverError>(driver.submit_copy_on(&mut port, request).await)
         })
         .await
     });
@@ -199,5 +205,5 @@ async fn cancelled_doorbell_keeps_accepted_command_slot_consumed() {
     observer.allow_doorbell();
 
     // Then: no rollback is queued for a device-accepted command.
-    assert_eq!(second, Err(ModelError::DriverQueueFull));
+    assert_eq!(second, Err(DriverError::QueueFull));
 }

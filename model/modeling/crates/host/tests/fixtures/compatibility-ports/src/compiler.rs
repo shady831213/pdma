@@ -5,12 +5,17 @@ fn library(deps: &Path, prefix: &str) -> Option<std::path::PathBuf> {
         .ok()?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .find(|path| {
+        .filter(|path| {
             path.extension()
                 .is_some_and(|extension| extension == "rlib")
                 && path
                     .file_name()
                     .is_some_and(|name| name.to_string_lossy().starts_with(prefix))
+        })
+        .max_by_key(|path| {
+            path.metadata()
+                .and_then(|metadata| metadata.modified())
+                .ok()
         })
 }
 
@@ -51,5 +56,12 @@ pub fn accepts(source: &Path) -> bool {
 pub fn rejects(source: &Path, expected: &str) -> bool {
     compile(source).is_some_and(|output| {
         !output.status.success() && String::from_utf8_lossy(&output.stderr).contains(expected)
+    })
+}
+
+pub fn rejects_all(source: &Path, expected: &[&str]) -> bool {
+    compile(source).is_some_and(|output| {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        !output.status.success() && expected.iter().all(|message| stderr.contains(message))
     })
 }

@@ -1,7 +1,7 @@
 use crate::ModelResult;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::runner::{AsyncDeviceHandle, publish, wake};
-use hardware_interface_runtime::MemoryAddress;
+use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
 use std::sync::Arc;
@@ -95,7 +95,7 @@ impl AsyncDeviceHandle {
     /// Reads one checked mapped-memory extent.
     pub async fn read_memory(
         &self,
-        address: impl Into<MemoryAddress>,
+        address: DmaAddress,
         length: u64,
     ) -> Result<Vec<u8>, PdmaMemoryError> {
         self.shared
@@ -103,18 +103,18 @@ impl AsyncDeviceHandle {
             .lock()
             .await
             .dma_space
-            .read_memory(address.into(), length)
+            .read_memory(address, length)
     }
 
     /// Writes one checked mapped-memory extent.
     pub async fn write_memory(
         &self,
-        address: impl Into<MemoryAddress>,
+        address: DmaAddress,
         data: &[u8],
     ) -> Result<(), PdmaMemoryError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = state.dma_space.write_memory(address.into(), data);
+            let result = state.dma_space.write_memory(address, data);
             if result.is_ok() {
                 wake(&mut state);
             }

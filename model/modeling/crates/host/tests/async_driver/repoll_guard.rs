@@ -3,8 +3,8 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest, QueueId};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
 use pdma_model_host::AsyncDriver;
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::DriverError;
+use pdma_model_host::DriverResult;
 use std::{
     future::{Future, poll_fn},
     pin::Pin,
@@ -18,10 +18,14 @@ enum InvalidContext {
 }
 
 impl InvalidContext {
-    const fn error(self) -> ModelError {
+    const fn error(self) -> DriverError {
         match self {
-            Self::Inactive => ModelError::SoftwareCpuInactive,
-            Self::WrongCpu => ModelError::SoftwareCpuMismatch,
+            Self::Inactive => {
+                DriverError::InactiveCpu(hardware_interface_runtime::CpuContextError::Inactive)
+            }
+            Self::WrongCpu => {
+                DriverError::WrongCpu(hardware_interface_runtime::CpuContextError::Mismatch)
+            }
         }
     }
 
@@ -44,7 +48,7 @@ async fn poll_pending_on<F: Future>(cpu: &SoftwareCpu, mut future: Pin<&mut F>) 
 async fn setup_copy(
     cpu: &SoftwareCpu,
     port: &mut BlockingPort,
-) -> ModelResult<(AsyncDriver, CopyRequest)> {
+) -> DriverResult<(AsyncDriver, CopyRequest)> {
     cpu.run_main(async {
         let driver = AsyncDriver::setup_on(port, 1, 1).await?;
         let src = driver.allocate_buffer_on(port, 4).await?;
@@ -85,7 +89,7 @@ async fn create_repoll(context: InvalidContext) {
     assert_eq!(retried.map(|driver| driver.queue_id()), Ok(QueueId::new(0)));
 }
 
-async fn submit_repoll(context: InvalidContext) -> ModelResult<()> {
+async fn submit_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one reserved command blocked before device acceptance.
     let (device, _worker) = fresh_device();
     let mut port = BlockingPort::new(device.handle());
@@ -112,7 +116,7 @@ async fn submit_repoll(context: InvalidContext) -> ModelResult<()> {
     Ok(())
 }
 
-async fn doorbell_repoll(context: InvalidContext) -> ModelResult<()> {
+async fn doorbell_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one command accepted before its doorbell blocks.
     let (device, _worker) = fresh_device();
     let mut port = BlockingPort::new(device.handle());
@@ -136,11 +140,11 @@ async fn doorbell_repoll(context: InvalidContext) -> ModelResult<()> {
     // Then: acceptance remains committed but the runnable doorbell does not.
     assert_eq!(control.submit_calls(), 1);
     assert_eq!(control.doorbell_calls(), 0);
-    assert_eq!(second, Err(ModelError::DriverQueueFull));
+    assert_eq!(second, Err(DriverError::QueueFull));
     Ok(())
 }
 
-async fn completion_repoll(context: InvalidContext) -> ModelResult<()> {
+async fn completion_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one completion blocked after its driver's entry validation.
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
@@ -169,7 +173,7 @@ async fn completion_repoll(context: InvalidContext) -> ModelResult<()> {
         .run_main(async {
             let completion = driver.poll_completion_on(&mut port).await?;
             let next = driver.submit_copy_on(&mut port, request).await;
-            Ok::<_, ModelError>((
+            Ok::<_, DriverError>((
                 completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
                 next,
             ))
@@ -187,7 +191,7 @@ async fn completion_repoll(context: InvalidContext) -> ModelResult<()> {
     Ok(())
 }
 
-async fn event_repoll(context: InvalidContext) -> ModelResult<()> {
+async fn event_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one fault event blocked after its driver's entry validation.
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
@@ -214,7 +218,7 @@ async fn event_repoll(context: InvalidContext) -> ModelResult<()> {
         .run_main(async {
             let event = driver.poll_event_on(&mut port).await?;
             let next = driver.submit_copy_on(&mut port, request).await;
-            Ok::<_, ModelError>((
+            Ok::<_, DriverError>((
                 event.map(pdma_model_contract::semantic::EventRecord::command_id),
                 next,
             ))
@@ -263,22 +267,23 @@ async fn pending_doorbell_repoll_rejects_wrong_cpu_without_runnable_side_effect(
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_completion_repoll_rejects_inactive_cpu_without_consuming_record() -> ModelResult<()>
-{
+async fn pending_completion_repoll_rejects_inactive_cpu_without_consuming_record()
+-> DriverResult<()> {
     completion_repoll(InvalidContext::Inactive).await
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_completion_repoll_rejects_wrong_cpu_without_consuming_record() -> ModelResult<()> {
+async fn pending_completion_repoll_rejects_wrong_cpu_without_consuming_record() -> DriverResult<()>
+{
     completion_repoll(InvalidContext::WrongCpu).await
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_event_repoll_rejects_inactive_cpu_without_consuming_record() -> ModelResult<()> {
+async fn pending_event_repoll_rejects_inactive_cpu_without_consuming_record() -> DriverResult<()> {
     event_repoll(InvalidContext::Inactive).await
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_event_repoll_rejects_wrong_cpu_without_consuming_record() -> ModelResult<()> {
+async fn pending_event_repoll_rejects_wrong_cpu_without_consuming_record() -> DriverResult<()> {
     event_repoll(InvalidContext::WrongCpu).await
 }

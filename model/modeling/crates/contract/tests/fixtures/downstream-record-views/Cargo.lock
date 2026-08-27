@@ -6,7 +6,6 @@ version = 4
 name = "downstream-record-views"
 version = "0.1.0"
 dependencies = [
- "hardware-interface-runtime",
  "pdma-model-contract",
 ]
 

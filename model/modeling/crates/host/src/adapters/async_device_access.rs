@@ -12,6 +12,7 @@ use crate::register::{
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
 };
+use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
 use pdma_model_contract::binding::QueueActivation;
 use pdma_model_device::AsyncDeviceHandle;
 use std::collections::BTreeSet;
@@ -163,7 +164,7 @@ impl PdmaBatchAccess for AsyncDeviceAccess {
         &self,
         proposal: Self::Proposal,
         activation: QueueActivation,
-    ) -> Result<[u8; 72], Self::BatchError> {
+    ) -> Result<QueueResponseRegistersRaw, Self::BatchError> {
         let regions = proposal.regions.clone();
         let request = pdma_model_device::QueueBootstrapBatch::new(proposal.stage, activation);
         let response = self
@@ -178,7 +179,7 @@ impl PdmaBatchAccess for AsyncDeviceAccess {
     async fn submit_queue(
         &self,
         request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> Result<[u8; 72], Self::BatchError> {
+    ) -> Result<QueueResponseRegistersRaw, Self::BatchError> {
         let (queue, producer, descriptor, indirect) = request.into_parts();
         let descriptor = device_write(descriptor);
         let (indirect, regions) = match indirect {

@@ -1,6 +1,6 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::register::{PdmaDmaWrite, PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch};
-use crate::{ModelError, ModelResult};
+use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
     AbiCommand, AbiId, BroadcastDestinationEntry, DescriptorSchemaPayloadBroadcastCopyValues,
@@ -18,29 +18,29 @@ pub(super) async fn submit<A: CanonicalAccess>(
     let (abi, indirect) = encode_command(port, command).await?;
     let mut descriptor = vec![0_u8; usize::from(RingRecord::Submission.record_size())];
     abi.encode(&mut descriptor)
-        .map_err(|_| ModelError::DmaSubmissionState)?;
+        .map_err(|_| PortError::SubmissionState)?;
     let producer = queue.status.submission().producer();
     let slot_offset = queue
         .rings
         .submission()
         .slot(producer)
         .checked_mul(u64::from(RingRecord::Submission.record_size()))
-        .ok_or(ModelError::DmaSubmissionState)?;
+        .ok_or(PortError::SubmissionState)?;
     let address = queue
         .rings
         .submission()
         .region()
         .abi_base()
         .checked_add(slot_offset)
-        .map_err(|_| ModelError::DmaSubmissionState)?;
+        .map_err(|_| PortError::SubmissionState)?;
     let descriptor = PdmaDmaWrite::new(MemoryAddress::new(address.raw()), descriptor);
     let request = PdmaSubmissionBatch::new(queue.status.queue(), producer, descriptor, indirect);
     let bytes = port.poll_batch(port.access.submit_queue(request)).await?;
-    let status = super::control::decode_status(&bytes, queue.rings)?;
-    Ok(port.with_state(|state| -> ModelResult<()> {
+    let status = super::control::decode_status(bytes.as_bytes(), queue.rings)?;
+    Ok(port.with_state(|state| -> PortResult<()> {
         let active = state.queue(handle)?;
         if active.status.submission().producer() != producer {
-            return Err(ModelError::DmaSubmissionState);
+            return Err(PortError::SubmissionState);
         }
         state.queue = Some(super::state::QueueState { status, ..active });
         Ok(())
@@ -63,7 +63,7 @@ pub(super) async fn doorbell<A: CanonicalAccess>(
         proposed,
     )
     .await?;
-    Ok(port.with_state(|state| -> ModelResult<()> {
+    Ok(port.with_state(|state| -> PortResult<()> {
         let active = state.queue(handle)?;
         state.queue = Some(super::state::QueueState { status, ..active });
         Ok(())
@@ -182,8 +182,8 @@ async fn broadcast<A: CanonicalAccess>(
     let count = scalar(request.destinations().len())?;
     let extent = u64::from(count)
         .checked_mul(8)
-        .ok_or(ModelError::DmaAllocationExhausted)?;
-    let alignment = MemoryAlignment::try_new(64).map_err(|_| ModelError::DmaAllocationExhausted)?;
+        .ok_or(PortError::AllocationExhausted)?;
+    let alignment = MemoryAlignment::try_new(64).map_err(|_| PortError::AllocationExhausted)?;
     let proposal = port
         .poll_provision(
             port.access
@@ -191,15 +191,15 @@ async fn broadcast<A: CanonicalAccess>(
         )
         .await?;
     let [region] = proposal.regions() else {
-        return Err(ModelError::DmaSubmissionState.into());
+        return Err(PortError::SubmissionState.into());
     };
     let region = *region;
     let mut bytes =
-        vec![0_u8; usize::try_from(extent).map_err(|_| ModelError::DmaAllocationExhausted)?];
+        vec![0_u8; usize::try_from(extent).map_err(|_| PortError::AllocationExhausted)?];
     for (destination, slot) in request.destinations().iter().zip(bytes.chunks_exact_mut(8)) {
         BroadcastDestinationEntry::new(operand(port, destination.dst(), destination.dst_offset())?)
             .encode(slot)
-            .map_err(|_| ModelError::DmaSubmissionState)?;
+            .map_err(|_| PortError::SubmissionState)?;
     }
     let abi = AbiCommand::try_broadcast_copy(
         abi_id(command.command_id().raw())?,
@@ -210,7 +210,7 @@ async fn broadcast<A: CanonicalAccess>(
             destination_count: count,
         },
     )
-    .map_err(|_| ModelError::DmaSubmissionState)?;
+    .map_err(|_| PortError::SubmissionState)?;
     let write = PdmaDmaWrite::new(region.base(), bytes);
     Ok((abi, Some((proposal, write))))
 }
@@ -224,10 +224,10 @@ fn operand<A: CanonicalAccess>(
     Ok(super::state::dma_address(address))
 }
 
-fn scalar(value: usize) -> ModelResult<u32> {
-    u32::try_from(value).map_err(|_| ModelError::DmaSubmissionState)
+fn scalar(value: usize) -> PortResult<u32> {
+    u32::try_from(value).map_err(|_| PortError::SubmissionState)
 }
 
-fn abi_id(value: usize) -> ModelResult<AbiId> {
-    AbiId::try_from(value).map_err(|_| ModelError::DmaSubmissionState)
+fn abi_id(value: usize) -> PortResult<AbiId> {
+    AbiId::try_from(value).map_err(|_| PortError::SubmissionState)
 }

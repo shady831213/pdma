@@ -1,6 +1,6 @@
 //! SDK/driver-like async submission and completion polling model.
 
-use crate::ModelResult;
+use crate::DriverResult;
 
 mod accounting;
 mod core;
@@ -41,7 +41,7 @@ impl AsyncDriver {
         device: &mut impl DriverPort,
         command_depth: usize,
         completion_depth: usize,
-    ) -> ModelResult<Self> {
+    ) -> DriverResult<Self> {
         Self::setup_with_config_on(
             device,
             QueueConfig::new(
@@ -58,7 +58,7 @@ impl AsyncDriver {
     pub async fn setup_with_config_on(
         device: &mut impl DriverPort,
         config: QueueConfig,
-    ) -> ModelResult<Self> {
+    ) -> DriverResult<Self> {
         let accounting = accounting::SharedAccounting::capture_active(config.command_depth())?;
         let core = DriverCore::setup_on(device, config, accounting).await?;
         Ok(Self { core })
@@ -71,7 +71,7 @@ impl ManualDriver {
         device: &mut impl DriverPort,
         command_depth: usize,
         completion_depth: usize,
-    ) -> ModelResult<Self> {
+    ) -> DriverResult<Self> {
         Self::setup_with_config_on(
             device,
             QueueConfig::new(
@@ -88,7 +88,7 @@ impl ManualDriver {
     pub async fn setup_with_config_on(
         device: &mut impl DriverPort,
         config: QueueConfig,
-    ) -> ModelResult<Self> {
+    ) -> DriverResult<Self> {
         let accounting = accounting::SharedAccounting::manual(config.command_depth());
         let core = DriverCore::setup_on(device, config, accounting).await?;
         Ok(Self { core })
@@ -103,7 +103,7 @@ macro_rules! impl_driver_data_plane {
                 &self,
                 device: &mut impl DriverPort,
                 len: usize,
-            ) -> ModelResult<BufferId> {
+            ) -> DriverResult<BufferId> {
                 self.core.allocate_buffer_on(device, len).await
             }
 
@@ -113,7 +113,7 @@ macro_rules! impl_driver_data_plane {
                 device: &mut impl DriverPort,
                 buffer: BufferId,
                 data: &[u8],
-            ) -> ModelResult<()> {
+            ) -> DriverResult<()> {
                 self.core.write_buffer_on(device, buffer, data).await
             }
 
@@ -123,7 +123,7 @@ macro_rules! impl_driver_data_plane {
                 device: &impl DriverPort,
                 buffer: BufferId,
                 len: usize,
-            ) -> ModelResult<Vec<u8>> {
+            ) -> DriverResult<Vec<u8>> {
                 self.core.read_buffer_on(device, buffer, len).await
             }
 
@@ -131,7 +131,7 @@ macro_rules! impl_driver_data_plane {
             pub async fn poll_completion_on(
                 &mut self,
                 device: &mut impl DriverPort,
-            ) -> ModelResult<Option<CompletionRecord>> {
+            ) -> DriverResult<Option<CompletionRecord>> {
                 self.core.poll_completion_on(device).await
             }
 
@@ -139,7 +139,7 @@ macro_rules! impl_driver_data_plane {
             pub async fn poll_event_on(
                 &mut self,
                 device: &mut impl DriverPort,
-            ) -> ModelResult<Option<EventRecord>> {
+            ) -> DriverResult<Option<EventRecord>> {
                 self.core.poll_event_on(device).await
             }
 

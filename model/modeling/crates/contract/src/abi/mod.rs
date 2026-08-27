@@ -9,11 +9,10 @@ mod fault;
 pub mod header;
 mod metadata;
 pub mod mmio;
-mod record;
+pub mod record;
 mod ring;
 
 pub use address::{AbiId, DmaAddress};
-pub use codec::copy_u64_le;
 pub use control::{AbiDiscovery, AbiLimits, DiscoveryRequest};
 pub use descriptor::{
     AbiCommand, BroadcastDestinationEntry, DescriptorDecodeError, DescriptorHeaderSchema,
@@ -48,10 +47,10 @@ pub use metadata::{
     VECTOR_ADD_OPCODE, validate_abi_version,
 };
 pub use record::{
-    AbiCompletion, CompletionSchema, CompletionSchemaValues, CompletionSchemaView,
-    CompletionSchemaViewMut, EventSchema, EventSchemaValues, EventSchemaView, EventSchemaViewMut,
-    ExactAbiEvent, decode_completion as decode_exact_completion,
-    decode_event as decode_exact_event, encode_completion as encode_exact_completion,
-    encode_event as encode_exact_event,
+    AbiCompletion, CompletionSchema, CompletionSchemaRaw, CompletionSchemaValues,
+    CompletionSchemaView, CompletionSchemaViewMut, EventSchema, EventSchemaRaw, EventSchemaValues,
+    EventSchemaView, EventSchemaViewMut, ExactAbiEvent,
+    decode_completion as decode_exact_completion, decode_event as decode_exact_event,
+    encode_completion as encode_exact_completion, encode_event as encode_exact_event,
 };
 pub use ring::{RingCursor, RingRecord};

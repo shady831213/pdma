@@ -1,5 +1,5 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, registers};
-use crate::ModelError;
+use crate::PortError;
 use crate::register::BusQueueStatus;
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{
@@ -46,10 +46,10 @@ pub(super) async fn update_cursor<A: CanonicalAccess>(
         QueueCommand::CaptureSqProducer => before.captured_submission_producer(),
         QueueCommand::PublishCqConsumer => before.completion().consumer(),
         QueueCommand::PublishEqConsumer => before.event().consumer(),
-        _ => return Err(ModelError::DmaSubmissionState.into()),
+        _ => return Err(PortError::SubmissionState.into()),
     };
     if observed != current {
-        return Err(ModelError::DmaSubmissionState.into());
+        return Err(PortError::SubmissionState.into());
     }
     registers::write(port, RegisterId::QExpectedCursor, current.raw()).await?;
     registers::write(port, RegisterId::QNewCursor, proposed.raw()).await?;
@@ -61,7 +61,7 @@ async fn stage_queue<A: CanonicalAccess>(
     queue: EpochQueue,
 ) -> PdmaPortResult<()> {
     registers::write(port, RegisterId::QExpectedEpoch, queue.epoch().raw()).await?;
-    let id = u64::try_from(queue.queue_id().raw()).map_err(|_| ModelError::DmaSubmissionState)?;
+    let id = u64::try_from(queue.queue_id().raw()).map_err(|_| PortError::SubmissionState)?;
     registers::write(port, RegisterId::QId, id).await
 }
 
@@ -73,7 +73,7 @@ async fn command_status<A: CanonicalAccess>(
 ) -> PdmaPortResult<BusQueueStatus> {
     registers::write(port, RegisterId::QCommand, u64::from(command.code())).await?;
     let result = u32::try_from(registers::read(port, RegisterId::QResult).await?)
-        .map_err(|_| ModelError::DmaSubmissionState)?;
+        .map_err(|_| PortError::SubmissionState)?;
     if result != MmioResult::Ok.code() {
         return map_result(port, result, queue).await;
     }
@@ -85,7 +85,7 @@ async fn map_result<A: CanonicalAccess>(
     result: u32,
     queue: EpochQueue,
 ) -> PdmaPortResult<BusQueueStatus> {
-    let result = MmioResult::try_from(result).map_err(|_| ModelError::DmaSubmissionState)?;
+    let result = MmioResult::try_from(result).map_err(|_| PortError::SubmissionState)?;
     let details = [
         registers::read(port, RegisterId::QDetail0).await?,
         registers::read(port, RegisterId::QDetail1).await?,
@@ -95,7 +95,7 @@ async fn map_result<A: CanonicalAccess>(
         MmioResultDetails {
             result: MmioResult::StaleEpoch,
             details: [expected, actual, _],
-        } => Err(ModelError::StaleDeviceEpoch {
+        } => Err(PortError::StaleEpoch {
             expected: DeviceEpoch::new(expected),
             actual: DeviceEpoch::new(actual),
         }
@@ -103,8 +103,8 @@ async fn map_result<A: CanonicalAccess>(
         MmioResultDetails {
             result: MmioResult::InvalidQueue,
             ..
-        } => Err(ModelError::UnknownQueue(queue.queue_id()).into()),
-        _ => Err(ModelError::DmaSubmissionState.into()),
+        } => Err(PortError::UnknownQueue(queue.queue_id()).into()),
+        _ => Err(PortError::SubmissionState.into()),
     }
 }
 
@@ -127,7 +127,7 @@ pub(super) fn decode_status(
     Ok(BusQueueStatus::new(
         EpochQueue::new(
             DeviceEpoch::new(epoch),
-            QueueId::new(usize::try_from(queue_id).map_err(|_| ModelError::DmaSubmissionState)?),
+            QueueId::new(usize::try_from(queue_id).map_err(|_| PortError::SubmissionState)?),
         ),
         cursors(
             rings.submission(),
@@ -188,8 +188,7 @@ fn cursors(
     producer: RingCursor,
     consumer: RingCursor,
 ) -> PdmaPortResult<RingCursors> {
-    RingCursors::try_new(layout, producer, consumer)
-        .map_err(|_| ModelError::DmaSubmissionState.into())
+    RingCursors::try_new(layout, producer, consumer).map_err(|_| PortError::SubmissionState.into())
 }
 
 #[cfg(test)]

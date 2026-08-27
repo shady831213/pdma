@@ -12,7 +12,7 @@ use pdma_model_contract::binding::{
 };
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{BufferId, DeviceEpoch, QueueId};
-use pdma_model_device::{BusControlError, DmaWrite, SubmissionAcceptance};
+use pdma_model_device::{DmaWrite, PdmaControlError, SubmissionAcceptance};
 use support::{activation, new_handle};
 
 include!("bus_control/happy.rs");

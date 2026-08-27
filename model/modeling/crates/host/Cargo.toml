@@ -32,7 +32,3 @@ path = "tests/host_core_surface.rs"
 [[test]]
 name = "irq_runtime_surface"
 path = "tests/irq_runtime_surface.rs"
-
-[[test]]
-name = "module_layout"
-path = "tests/module_layout.rs"

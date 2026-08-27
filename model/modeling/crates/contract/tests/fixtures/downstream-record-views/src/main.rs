@@ -1,12 +1,7 @@
-use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::abi::{
     AbiCommand, CompletionSchemaView, DescriptorSchemaPayloadValues, DescriptorSchemaValues,
     DescriptorSchemaView, EventSchemaView, IndirectDestinationEntrySchemaView,
 };
-use pdma_model_contract::translation::{
-    CopyBufferContext, CopyRuntimeAddresses, decode_copy_command, encode_copy_command,
-};
-use pdma_model_contract::semantic::{BufferId, CommandId, CompletionRingId, CopyCommand, CopyRequest, QueueId};
 
 const DESCRIPTOR: [u8; 64] = [
     1, 0, 1, 0, 0, 0, 64, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 32,
@@ -35,31 +30,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     else {
         return Err(std::io::Error::other("copy fixture decoded as another variant").into());
     };
-    let semantic = CopyCommand::new(
-        CommandId::new(usize::try_from(values.header.command_id)?),
-        QueueId::new(usize::try_from(completion.origin_queue_id()?)?),
-        CompletionRingId::new(5),
-        CopyRequest::new(
-            BufferId::new(11),
-            BufferId::new(12),
-            usize::try_from(copy.length)?,
-        ),
-    );
-    let context = CopyBufferContext::from_command(semantic);
-    let addresses = CopyRuntimeAddresses::new(
-        MemoryAddress::new(copy.source_dma_address),
-        MemoryAddress::new(copy.destination_dma_address),
-    );
-    let exact = encode_copy_command(semantic, addresses)?;
+    let exact = AbiCommand::decode(&DESCRIPTOR)?;
     let mut encoded = [0_u8; 64];
     exact.encode(&mut encoded)?;
-    let decoded = AbiCommand::decode(&encoded)?;
-    let (roundtrip, decoded_addresses) = decode_copy_command(decoded, context)?;
-    let roundtrip = roundtrip == semantic
-        && decoded_addresses == addresses
-        && encoded == DESCRIPTOR
+    let roundtrip = encoded == DESCRIPTOR
         && event.version()? == header.version()?
         && values.header.version == header.version()?
+        && completion.command_id()? == values.header.command_id
         && indirect.destination_dma_address()? == copy.destination_dma_address;
     println!(
         "descriptor={};completion={};event={};indirect={};roundtrip={roundtrip}",

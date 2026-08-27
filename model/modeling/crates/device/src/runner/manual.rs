@@ -1,7 +1,6 @@
 use super::DeviceCore;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::{ModelError, ModelResult};
-use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::semantic::completion::CompletionRecord;
@@ -102,7 +101,7 @@ impl SyncDevice {
     /// Reads one checked mapped-memory extent.
     pub fn read_memory(
         &self,
-        address: impl Into<MemoryAddress>,
+        address: pdma_model_contract::abi::DmaAddress,
         length: u64,
     ) -> Result<Vec<u8>, PdmaMemoryError> {
         self.dma_space.read_memory(address, length)
@@ -111,7 +110,7 @@ impl SyncDevice {
     /// Writes one checked mapped-memory extent.
     pub fn write_memory(
         &mut self,
-        address: impl Into<MemoryAddress>,
+        address: pdma_model_contract::abi::DmaAddress,
         data: &[u8],
     ) -> Result<(), PdmaMemoryError> {
         self.dma_space.write_memory(address, data)

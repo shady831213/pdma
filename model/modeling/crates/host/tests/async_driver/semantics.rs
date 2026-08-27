@@ -1,8 +1,11 @@
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus, SyncDevice};
-use pdma_model_host::ModelError;
-use pdma_model_host::{AsyncDriver, ManualDriver};
+use pdma_model_host::{
+    AsyncDriver, ManualDriver,
+    compat::{AsyncDevicePort, SemanticDevicePort},
+};
+use pdma_model_host::{DriverError, PortError};
 
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
@@ -16,25 +19,26 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
     // When: software pops the completion and immediately submits another command.
     let (completion, next) = SoftwareCpu::new()
         .run_main(async {
-            let mut driver = AsyncDriver::setup_on(&mut device, 1, 1).await?;
-            let src = driver
-                .allocate_buffer_on(&mut device, 4)
-                .await
-                .expect("allocation");
-            let dst = driver
-                .allocate_buffer_on(&mut device, 4)
-                .await
-                .expect("allocation");
-            driver
-                .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
-                .await?;
-            let summary = device.run_until_idle(8)?;
+            let (mut driver, src, dst) = {
+                let mut port = SemanticDevicePort::new(&mut device);
+                let mut driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;
+                let src = driver.allocate_buffer_on(&mut port, 4).await?;
+                let dst = driver.allocate_buffer_on(&mut port, 4).await?;
+                driver
+                    .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
+                    .await?;
+                (driver, src, dst)
+            };
+            let summary = device
+                .run_until_idle(8)
+                .map_err(|_| DriverError::Port(PortError::SubmissionState))?;
             assert_eq!(summary.last_status, AsyncStepStatus::Idle);
-            let completion = driver.poll_completion_on(&mut device).await?;
+            let mut port = SemanticDevicePort::new(&mut device);
+            let completion = driver.poll_completion_on(&mut port).await?;
             let next = driver
-                .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
+                .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
                 .await;
-            Ok::<_, ModelError>((completion, next))
+            Ok::<_, DriverError>((completion, next))
         })
         .await
         .expect("manual execution remains valid");
@@ -56,7 +60,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut port = device.handle();
+    let mut port = AsyncDevicePort::new(device.handle());
 
     // When: software pops the event and immediately submits another command.
     let (event, next) = SoftwareCpu::new()
@@ -74,7 +78,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
             let next = driver
                 .submit_copy_on(&mut port, CopyRequest::new(dst, dst, 4))
                 .await;
-            Ok::<_, ModelError>((event, next))
+            Ok::<_, DriverError>((event, next))
         })
         .await
         .expect("manual execution remains valid");
@@ -97,38 +101,43 @@ async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
         pdma_model_contract::semantic::ResourceConfig::default(),
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
-    let mut first = ManualDriver::setup_on(&mut device, 1, 1)
-        .await
-        .expect("manual setup is valid");
-    let mut second = first.clone();
-    let src = first
-        .allocate_buffer_on(&mut device, 4)
-        .await
-        .expect("allocation");
-    let dst = first
-        .allocate_buffer_on(&mut device, 4)
-        .await
-        .expect("allocation");
+    let (mut first, mut second, src, dst, submitted, full) = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        let mut first = ManualDriver::setup_on(&mut port, 1, 1)
+            .await
+            .expect("manual setup is valid");
+        let mut second = first.clone();
+        let src = first
+            .allocate_buffer_on(&mut port, 4)
+            .await
+            .expect("allocation");
+        let dst = first
+            .allocate_buffer_on(&mut port, 4)
+            .await
+            .expect("allocation");
 
-    // When: one clone consumes, the peer observes full, then reclaims the completion.
-    let submitted = first
-        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
-        .await;
-    let full = second
-        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
-        .await;
+        // When: one clone consumes and the peer observes full.
+        let submitted = first
+            .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
+            .await;
+        let full = second
+            .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
+            .await;
+        (first, second, src, dst, submitted, full)
+    };
     assert_eq!(
         device.run_until_idle(8).map(|summary| summary.last_status),
         Ok(AsyncStepStatus::Idle)
     );
-    let completion = second.poll_completion_on(&mut device).await;
+    let mut port = SemanticDevicePort::new(&mut device);
+    let completion = second.poll_completion_on(&mut port).await;
     let retried = first
-        .submit_copy_on(&mut device, CopyRequest::new(src, dst, 4))
+        .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
         .await;
 
     // Then: manual mode uses the same canonical accounting allocation.
     assert_eq!(submitted, Ok(CommandId::new(0)));
-    assert_eq!(full, Err(ModelError::DriverQueueFull));
+    assert_eq!(full, Err(DriverError::QueueFull));
     assert!(matches!(completion, Ok(Some(_))));
     assert_eq!(retried, Ok(CommandId::new(1)));
 }

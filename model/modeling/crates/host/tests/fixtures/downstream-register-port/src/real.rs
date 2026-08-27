@@ -2,7 +2,10 @@ use hardware_interface_runtime::{
     AccessOrigin, MemoryAccess, MemoryAlignment, RegisterObservation, RegisterObserver,
     SharedMemory,
 };
-use pdma_model_contract::semantic::{CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, IrqNotification, IrqRoute, IrqVector, QueueConfig, ResourceConfig, SoftwareOwnerId};
+use pdma_model_contract::semantic::{
+    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, IrqNotification, IrqRoute,
+    IrqVector, QueueConfig, ResourceConfig, SoftwareOwnerId,
+};
 use pdma_model_device::{AsyncDevice, DeviceCore};
 use pdma_model_host::adapters::AsyncDeviceAccess;
 use pdma_model_host::register::{

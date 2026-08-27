@@ -4,8 +4,7 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CompletionRingId, IrqNotification, IrqSource, IrqVector, QueueId, TraceEventKind,
 };
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::interrupt::{InterruptError, InterruptResult};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::{mpsc, oneshot};
 
@@ -49,7 +48,7 @@ impl IrqHandler for HoldingHandler {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn different_vectors_dispatch_to_distinct_handlers() -> ModelResult<()> {
+async fn different_vectors_dispatch_to_distinct_handlers() -> InterruptResult<()> {
     // Given: borrowed, heterogeneous handler instances registered for two vectors.
     let vector_a = IrqVector::new(21);
     let vector_b = IrqVector::new(22);
@@ -114,7 +113,7 @@ async fn different_vectors_dispatch_to_distinct_handlers() -> ModelResult<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn sources_sharing_a_vector_use_one_persistent_handler() -> ModelResult<()> {
+async fn sources_sharing_a_vector_use_one_persistent_handler() -> InterruptResult<()> {
     // Given: two sources routed to one registered vector.
     let vector = IrqVector::new(23);
     let source_a = IrqSource::Completion(CompletionRingId::new(0));
@@ -151,7 +150,7 @@ async fn sources_sharing_a_vector_use_one_persistent_handler() -> ModelResult<()
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn duplicate_vector_keeps_the_original_handler() -> ModelResult<()> {
+async fn duplicate_vector_keeps_the_original_handler() -> InterruptResult<()> {
     // Given: one registered vector and a distinct replacement candidate.
     let vector = IrqVector::new(24);
     let source = IrqSource::Completion(CompletionRingId::new(0));
@@ -184,7 +183,7 @@ async fn duplicate_vector_keeps_the_original_handler() -> ModelResult<()> {
     );
 
     // Then: the typed error leaves the original mapping intact.
-    assert_eq!(result, Err(ModelError::DuplicateIrqVector(vector)));
+    assert_eq!(result, Err(InterruptError::DuplicateVector(vector)));
     assert_eq!(delivery.run().await?.deliveries(), 1);
     assert_eq!(calls_rx.recv().await, Some(("original", 1, source)));
     assert_eq!(replacement_calls.load(Ordering::SeqCst), 0);
@@ -192,7 +191,7 @@ async fn duplicate_vector_keeps_the_original_handler() -> ModelResult<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn unregistered_vector_fails_before_cpu_and_trace() -> ModelResult<()> {
+async fn unregistered_vector_fails_before_cpu_and_trace() -> InterruptResult<()> {
     // Given: one handler holds the CPU while another actor has an unregistered vector ready.
     let registered = IrqVector::new(25);
     let unregistered = IrqVector::new(26);
@@ -236,7 +235,7 @@ async fn unregistered_vector_fails_before_cpu_and_trace() -> ModelResult<()> {
     let result = delivery.run().await;
 
     // Then: lookup fails immediately and emits no handler lifecycle trace.
-    assert_eq!(result, Err(ModelError::UnregisteredIrqVector(unregistered)));
+    assert_eq!(result, Err(InterruptError::UnregisteredVector(unregistered)));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert!(handle.trace_events().await.is_empty());
     let _ = release_tx.send(());

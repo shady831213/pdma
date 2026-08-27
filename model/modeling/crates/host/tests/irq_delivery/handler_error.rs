@@ -4,9 +4,8 @@ use pdma_model_contract::semantic::{
     CopyRequest, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::AsyncDriver;
-use pdma_model_host::ModelError;
-use pdma_model_host::ModelResult;
+use pdma_model_host::{AsyncDriver, DriverError, compat::AsyncDevicePort};
+use pdma_model_host::interrupt::InterruptError;
 use tokio::sync::oneshot;
 
 struct FailingHandler {
@@ -19,13 +18,13 @@ impl IrqHandler for FailingHandler {
             if let Some(started) = self.started.take() {
                 let _ = started.send(());
             }
-            Err(ModelError::DriverQueueFull)
+            Err(DriverError::QueueFull)
         })
     }
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult<()> {
+async fn handler_error_terminates_without_a_successful_delivery() -> Result<(), Box<dyn std::error::Error>> {
     // Given: one pending IRQ and a handler that reports a typed failure.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -33,7 +32,7 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
-    let mut device_port = device.handle();
+    let mut device_port = AsyncDevicePort::new(device.handle());
     let cpu = SoftwareCpu::new();
     let (mut driver, src, dst) = cpu
         .run_main(async {
@@ -55,7 +54,7 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
             driver
                 .write_buffer_on(&mut device_port, src, &[1, 2, 3, 4])
                 .await?;
-            Ok::<_, ModelError>((driver, src, dst))
+            Ok::<_, DriverError>((driver, src, dst))
         })
         .await?;
     let (started_tx, started_rx) = oneshot::channel();
@@ -75,7 +74,10 @@ async fn handler_error_terminates_without_a_successful_delivery() -> ModelResult
     let result = delivery.await.expect("delivery task joins cleanly");
 
     // Then: the actor propagates the failure and traces no successful completion.
-    assert_eq!(result, Err(ModelError::DriverQueueFull));
+    assert_eq!(
+        result,
+        Err(InterruptError::Driver(DriverError::QueueFull))
+    );
     let trace = delivery_handle.trace_events().await;
     let trace = trace
         .iter()

@@ -6,9 +6,9 @@ use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_device::test_support::{DeviceStateSnapshot, async_state_snapshot};
 use pdma_model_device::{
-    AsyncDeviceHandle, DeviceStateSnapshot, DmaWrite, MmioBatchError, QueueBootstrapBatch,
-    SubmissionBatch,
+    AsyncDeviceHandle, DmaWrite, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch,
 };
 
 use super::{TestResult, require_error};
@@ -20,21 +20,21 @@ async fn batch_fate_rows_have_literal_sources() -> TestResult {
     let canonical = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let activation = super::activation(canonical.regions(), DeviceEpoch::initial())?;
     let short = handle.stage_memory_regions(&[128, 64]).await?;
-    let before = handle.state_snapshot_for_test().await?;
+    let before = async_state_snapshot(&handle).await?;
     let shape = require_error(
         handle
             .bootstrap_queue_batch(QueueBootstrapBatch::new(short, activation))
             .await,
     )?;
-    assert_eq!(shape, MmioBatchError::InvalidShape);
+    assert_eq!(shape, PdmaBatchError::InvalidShape);
     assert!(shape.source().is_none());
     assert_state_unchanged(&handle, &before).await?;
 
     let queue = handle
         .bootstrap_queue_batch(QueueBootstrapBatch::new(canonical, activation))
         .await?;
-    assert_eq!(queue.len(), 72);
-    let dma_before = handle.state_snapshot_for_test().await?;
+    assert_eq!(queue.as_bytes().len(), 72);
+    let dma_before = async_state_snapshot(&handle).await?;
     let dma = require_error(
         handle
             .submit_queue_batch(SubmissionBatch::new(
@@ -47,13 +47,13 @@ async fn batch_fate_rows_have_literal_sources() -> TestResult {
     )?;
     assert!(matches!(
         dma,
-        MmioBatchError::Dma(details)
+        PdmaBatchError::Dma(details)
             if details.result == pdma_model_contract::abi::mmio::MmioResult::DmaUnmapped
     ));
     assert!(dma.source().is_none());
     assert_state_unchanged(&handle, &dma_before).await?;
 
-    let command_before = handle.state_snapshot_for_test().await?;
+    let command_before = async_state_snapshot(&handle).await?;
     let command = require_error(
         handle
             .submit_queue_batch(SubmissionBatch::new(
@@ -66,7 +66,7 @@ async fn batch_fate_rows_have_literal_sources() -> TestResult {
     )?;
     assert!(matches!(
         command,
-        MmioBatchError::Command(details)
+        PdmaBatchError::Command(details)
             if details.result == pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction
     ));
     assert!(command.source().is_none());
@@ -83,7 +83,7 @@ async fn assert_observation_source() -> TestResult {
         .stage_memory_regions(&[128, 64, 128])
         .await?;
     let observer_activation = super::activation(stage.regions(), DeviceEpoch::initial())?;
-    let observation_before = observer_handle.state_snapshot_for_test().await?;
+    let observation_before = async_state_snapshot(&observer_handle).await?;
     let observation = require_error(
         observer_handle
             .bootstrap_queue_batch(QueueBootstrapBatch::new(stage, observer_activation))
@@ -97,7 +97,7 @@ async fn assert_observation_source() -> TestResult {
             reason: hardware_interface_runtime::GateFault::ObserverPanicked,
         })
     );
-    let observation_after = observer_handle.state_snapshot_for_test().await?;
+    let observation_after = async_state_snapshot(&observer_handle).await?;
     assert_ne!(observation_after.mappings, observation_before.mappings);
     assert_ne!(observation_after.bytes, observation_before.bytes);
     assert_eq!(
@@ -170,7 +170,7 @@ async fn assert_state_unchanged(
     handle: &AsyncDeviceHandle,
     before: &DeviceStateSnapshot,
 ) -> TestResult {
-    let after = handle.state_snapshot_for_test().await?;
+    let after = async_state_snapshot(handle).await?;
     assert_eq!(after.mappings, before.mappings);
     assert_eq!(after.bytes, before.bytes);
     assert_eq!(after.memory_generation, before.memory_generation);

@@ -2,7 +2,7 @@ use super::{QueueStaging, status_response};
 use crate::dma_space::PdmaMemoryError;
 use crate::runner::abi::bus::control::transactions;
 use crate::runner::state::DeviceCore;
-use crate::runner::{BusControlError, QueueStatus};
+use crate::runner::{PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{
@@ -126,19 +126,19 @@ fn invalid_transaction(command: QueueCommand) -> MmioResultDetails {
 }
 
 pub(in crate::runner) fn map_bus(
-    error: BusControlError,
+    error: PdmaControlError,
     queue_id: u64,
     command: u32,
     role: u64,
 ) -> MmioResultDetails {
     match error {
-        BusControlError::Dma(error) => map_dma(error),
-        BusControlError::Abi(error) => map_abi(error, role),
-        BusControlError::StaleEpoch { expected, actual } => {
+        PdmaControlError::Dma(error) => map_dma(error),
+        PdmaControlError::Abi(error) => map_abi(error, role),
+        PdmaControlError::StaleEpoch { expected, actual } => {
             fail(MmioResult::StaleEpoch, [expected.raw(), actual.raw(), 0])
         }
-        BusControlError::InvalidQueue => fail(MmioResult::InvalidQueue, [queue_id, 0, 0]),
-        BusControlError::InvalidTransaction => fail(
+        PdmaControlError::InvalidQueue => fail(MmioResult::InvalidQueue, [queue_id, 0, 0]),
+        PdmaControlError::InvalidTransaction => fail(
             MmioResult::InvalidTransaction,
             [(1_u64 << 32) | u64::from(command), 0, 0],
         ),

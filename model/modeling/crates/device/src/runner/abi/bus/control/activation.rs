@@ -1,4 +1,4 @@
-use super::{ActiveQueue, BusControlError, QueueStatus};
+use super::{ActiveQueue, PdmaControlError, QueueStatus};
 use crate::dma_space::PdmaMemoryStage;
 use crate::runner::execution::exact_api::PreparedExactQueue;
 use crate::runner::state::DeviceCore;
@@ -23,7 +23,7 @@ pub(in crate::runner) fn activate_staged(
     runner: &mut DeviceCore,
     stage: PdmaMemoryStage,
     activation: QueueActivation,
-) -> Result<QueueStatus, BusControlError> {
+) -> Result<QueueStatus, PdmaControlError> {
     let prepared = prepare_staged(runner, &stage, activation)?;
     runner.dma_space.commit(stage)?;
     Ok(install(runner, prepared))
@@ -32,7 +32,7 @@ pub(in crate::runner) fn activate_staged(
 pub(in crate::runner) fn activate_mapped(
     runner: &mut DeviceCore,
     activation: QueueActivation,
-) -> Result<QueueStatus, BusControlError> {
+) -> Result<QueueStatus, PdmaControlError> {
     let prepared = prepare_mapped(runner, activation)?;
     Ok(install(runner, prepared))
 }
@@ -41,7 +41,7 @@ pub(in crate::runner) fn prepare_staged(
     runner: &mut DeviceCore,
     stage: &PdmaMemoryStage,
     activation: QueueActivation,
-) -> Result<PreparedQueueActivation, BusControlError> {
+) -> Result<PreparedQueueActivation, PdmaControlError> {
     let validated = validate_staged(runner, stage, activation)?;
     prepare(runner, &validated)
 }
@@ -49,7 +49,7 @@ pub(in crate::runner) fn prepare_staged(
 pub(in crate::runner) fn prepare_mapped(
     runner: &mut DeviceCore,
     activation: QueueActivation,
-) -> Result<PreparedQueueActivation, BusControlError> {
+) -> Result<PreparedQueueActivation, PdmaControlError> {
     let validated = validate_mapped(runner, activation)?;
     prepare(runner, &validated)
 }
@@ -58,14 +58,14 @@ fn validate_staged(
     runner: &DeviceCore,
     stage: &PdmaMemoryStage,
     activation: QueueActivation,
-) -> Result<ValidatedMappedActivation, BusControlError> {
+) -> Result<ValidatedMappedActivation, PdmaControlError> {
     validate_identity(runner, activation)?;
     if stage.generation() != runner.dma_space.generation() || stage.regions().len() != 3 {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     runner.dma_space.validate_stage(stage)?;
     if stage.regions() != activation_regions(activation) {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     validate_layouts(activation)?;
     Ok(ValidatedMappedActivation(activation))
@@ -74,7 +74,7 @@ fn validate_staged(
 fn validate_mapped(
     runner: &DeviceCore,
     activation: QueueActivation,
-) -> Result<ValidatedMappedActivation, BusControlError> {
+) -> Result<ValidatedMappedActivation, PdmaControlError> {
     validate_identity(runner, activation)?;
     validate_layouts(activation)?;
     runner
@@ -86,9 +86,9 @@ fn validate_mapped(
 fn validate_identity(
     runner: &DeviceCore,
     activation: QueueActivation,
-) -> Result<(), BusControlError> {
+) -> Result<(), PdmaControlError> {
     if activation.queue().epoch() != runner.bus_control.epoch {
-        return Err(BusControlError::StaleEpoch {
+        return Err(PdmaControlError::StaleEpoch {
             expected: runner.bus_control.epoch,
             actual: activation.queue().epoch(),
         });
@@ -97,17 +97,17 @@ fn validate_identity(
     if queue_id != QueueId::new(runner.bus_control.queues.len())
         || queue_id != runner.backend.next_queue_id()
     {
-        return Err(BusControlError::InvalidQueue);
+        return Err(PdmaControlError::InvalidQueue);
     }
     Ok(())
 }
 
-fn validate_layouts(activation: QueueActivation) -> Result<(), BusControlError> {
+fn validate_layouts(activation: QueueActivation) -> Result<(), PdmaControlError> {
     let rings = activation.rings();
     if usize::try_from(rings.event().depth()) != Ok(activation.config().completion_depth())
         || u64::try_from(activation.config().software_owner().raw()).is_err()
     {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     validate_layout(rings.submission(), RingRecord::Submission)?;
     validate_layout(rings.completion(), RingRecord::Completion)?;
@@ -117,7 +117,7 @@ fn validate_layouts(activation: QueueActivation) -> Result<(), BusControlError> 
         || regions_overlap(submission, event)
         || regions_overlap(completion, event)
     {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     Ok(())
 }
@@ -125,20 +125,20 @@ fn validate_layouts(activation: QueueActivation) -> Result<(), BusControlError> 
 fn prepare(
     runner: &mut DeviceCore,
     validated: &ValidatedMappedActivation,
-) -> Result<PreparedQueueActivation, BusControlError> {
+) -> Result<PreparedQueueActivation, PdmaControlError> {
     let activation = validated.0;
     let shadow = ActiveQueue::new(activation)?;
     runner
         .bus_control
         .queues
         .try_reserve_exact(1)
-        .map_err(|_| BusControlError::InvalidTransaction)?;
+        .map_err(|_| PdmaControlError::InvalidTransaction)?;
     let native = runner
         .backend
         .prepare_dma_bus_queue(activation.config())
-        .map_err(|_| BusControlError::InvalidTransaction)?;
+        .map_err(|_| PdmaControlError::InvalidTransaction)?;
     if native.queue_id() != activation.queue().queue_id() {
-        return Err(BusControlError::InvalidTransaction);
+        return Err(PdmaControlError::InvalidTransaction);
     }
     Ok(PreparedQueueActivation { shadow, native })
 }
@@ -152,12 +152,12 @@ pub(in crate::runner) fn install(
     prepared.shadow.status()
 }
 
-fn validate_layout(layout: RingLayout, record: RingRecord) -> Result<(), BusControlError> {
+fn validate_layout(layout: RingLayout, record: RingRecord) -> Result<(), PdmaControlError> {
     if layout.record() != record
         || layout.extent() != layout.region().length()
         || layout.region().base().raw() % record.alignment() != 0
     {
-        Err(BusControlError::InvalidTransaction)
+        Err(PdmaControlError::InvalidTransaction)
     } else {
         Ok(())
     }

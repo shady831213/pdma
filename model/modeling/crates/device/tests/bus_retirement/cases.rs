@@ -1,11 +1,11 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
-use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::abi::record::{decode_completion, decode_event};
+use pdma_model_contract::abi::{AbiId, RingCursor};
 use pdma_model_contract::semantic::{
     CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
-use pdma_model_contract::translation::{decode_completion, decode_event};
 use pdma_model_device::PendingDmaResult;
 
 /// Exercises exact event visibility and retry ordering.
@@ -47,9 +47,9 @@ pub async fn visible_before_irq_and_retry() -> TestResult {
     // Then: bytes precede producer/trace/IRQ and retry publishes the cached result once.
     assert_eq!(before_retry.completion().producer(), RingCursor::new(1));
     assert_eq!(before_retry.submission().consumer(), RingCursor::new(2));
-    assert_eq!(first_record.command_id(), CommandId::new(10));
+    assert_eq!(first_record.command_id(), AbiId::new(10));
     assert_eq!(after_retry.completion().producer(), RingCursor::new(2));
-    assert_eq!(second_record.command_id(), CommandId::new(11));
+    assert_eq!(second_record.command_id(), AbiId::new(11));
     assert_eq!(
         trace_after_retry
             .iter()
@@ -82,7 +82,7 @@ pub async fn visible_before_irq_and_retry() -> TestResult {
     event_fixture.submit_bytes(0, [0; 64]).await?;
     event_fixture.capture(1).await?;
     let event_worker = event_fixture.start()?;
-    event_fixture.handle.wait_for_progress_after(1).await;
+    event_fixture.handle.wait_for_error_after(0).await;
     let first_event = event_fixture
         .handle
         .read_memory(event_fixture.event, 64)

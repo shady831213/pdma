@@ -5,6 +5,8 @@ pub use crate::abi::mmio::register::queue::{
     QueueResponseRegistersViewMut,
 };
 
+const _: () = assert!(QueueResponseRegisters::EXTENT == 72);
+
 /// Exact typed queue response register bank.
 pub type QueueResponseBank = QueueResponseRegistersValues;
 

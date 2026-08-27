@@ -2,7 +2,7 @@ use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
     ExternalCommand, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
-use pdma_model_host::{DriverPort, ModelError};
+use pdma_model_host::{DriverPort, PortError};
 use std::future::pending;
 
 use super::ProbePort;
@@ -22,7 +22,7 @@ impl ProbePort {
 }
 
 impl DriverPort for ProbePort {
-    async fn create_queue(&mut self, config: QueueConfig) -> Result<QueueConfigHandle, ModelError> {
+    async fn create_queue(&mut self, config: QueueConfig) -> Result<QueueConfigHandle, PortError> {
         let queue = QueueId::new(self.queues);
         self.queues += 1;
         Ok(QueueConfigHandle::new(
@@ -31,7 +31,7 @@ impl DriverPort for ProbePort {
         ))
     }
 
-    async fn allocate_buffer(&mut self, _len: usize) -> Result<BufferId, ModelError> {
+    async fn allocate_buffer(&mut self, _len: usize) -> Result<BufferId, PortError> {
         let buffer = BufferId::new(self.allocations);
         self.allocations += 1;
         Ok(buffer)
@@ -42,24 +42,28 @@ impl DriverPort for ProbePort {
         _id: BufferId,
         _offset: usize,
         _data: &[u8],
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         Ok(())
     }
 
     async fn read_buffer(
         &self,
-        _id: BufferId,
+        id: BufferId,
         _offset: usize,
         len: usize,
-    ) -> Result<Vec<u8>, ModelError> {
-        Ok(vec![0; len])
+    ) -> Result<Vec<u8>, PortError> {
+        if id.raw() >= self.allocations {
+            Err(PortError::UnknownBuffer(id))
+        } else {
+            Ok(vec![0; len])
+        }
     }
 
     async fn submit_command(
         &mut self,
         _queue: QueueConfigHandle,
         command: ExternalCommand,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         if self.submit_blocked {
             pending::<()>().await;
         }
@@ -73,7 +77,7 @@ impl DriverPort for ProbePort {
         Ok(())
     }
 
-    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> Result<(), ModelError> {
+    async fn ring_doorbell(&mut self, _queue: QueueConfigHandle) -> Result<(), PortError> {
         if self.doorbell_blocked {
             pending::<()>().await;
         }
@@ -83,7 +87,7 @@ impl DriverPort for ProbePort {
     async fn poll_completion(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<CompletionRecord>, ModelError> {
+    ) -> Result<Option<CompletionRecord>, PortError> {
         let completion = self.pending.pop_front();
         self.completions += usize::from(completion.is_some());
         Ok(completion)
@@ -92,7 +96,7 @@ impl DriverPort for ProbePort {
     async fn poll_queue_event(
         &mut self,
         _queue: QueueConfigHandle,
-    ) -> Result<Option<pdma_model_contract::semantic::EventRecord>, ModelError> {
+    ) -> Result<Option<pdma_model_contract::semantic::EventRecord>, PortError> {
         Ok(None)
     }
 
@@ -100,7 +104,7 @@ impl DriverPort for ProbePort {
         &mut self,
         _source: pdma_model_contract::semantic::EpochIrqSource,
         _route: pdma_model_contract::semantic::IrqRoute,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         self.irq_calls += 1;
         Ok(())
     }
@@ -108,7 +112,7 @@ impl DriverPort for ProbePort {
     async fn enable_irq_source(
         &mut self,
         _source: pdma_model_contract::semantic::EpochIrqSource,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         self.irq_calls += 1;
         Ok(())
     }
@@ -116,7 +120,7 @@ impl DriverPort for ProbePort {
     async fn disable_irq_source(
         &mut self,
         _source: pdma_model_contract::semantic::EpochIrqSource,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         self.irq_calls += 1;
         Ok(())
     }
@@ -124,7 +128,7 @@ impl DriverPort for ProbePort {
     async fn mask_irq_source(
         &mut self,
         _source: pdma_model_contract::semantic::EpochIrqSource,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         self.irq_calls += 1;
         Ok(())
     }
@@ -132,7 +136,7 @@ impl DriverPort for ProbePort {
     async fn unmask_irq_source(
         &mut self,
         _source: pdma_model_contract::semantic::EpochIrqSource,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         self.irq_calls += 1;
         Ok(())
     }
@@ -140,7 +144,7 @@ impl DriverPort for ProbePort {
     async fn ack_irq_source(
         &mut self,
         _source: pdma_model_contract::semantic::EpochIrqSource,
-    ) -> Result<(), ModelError> {
+    ) -> Result<(), PortError> {
         self.irq_calls += 1;
         Ok(())
     }

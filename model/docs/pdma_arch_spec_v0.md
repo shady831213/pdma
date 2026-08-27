@@ -83,7 +83,7 @@ second executor or canonical E2E.
 
 ## Software/Driver Responsibility Boundary
 
-The driver model, implemented in `model/modeling/crates/host/src/driver.rs`, owns the following responsibilities:
+The driver model, implemented in `model/modeling/crates/host/src/semantic/driver/`, owns the following responsibilities:
 
 - Allocate device-visible buffers through the active `DriverPort` implementation and
   fill source data through `write_buffer_on`. The canonical path is

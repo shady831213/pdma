@@ -1,11 +1,11 @@
-use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::interrupt::InterruptError;
+use crate::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::{AsyncDriver, DriverError, DriverPort as _, compat::AsyncDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CopyRequest, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, DriverError, compat::AsyncDevicePort};
-use pdma_model_host::interrupt::InterruptError;
 use tokio::sync::oneshot;
 
 struct FailingHandler {
@@ -24,7 +24,8 @@ impl IrqHandler for FailingHandler {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn handler_error_terminates_without_a_successful_delivery() -> Result<(), Box<dyn std::error::Error>> {
+async fn handler_error_terminates_without_a_successful_delivery()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: one pending IRQ and a handler that reports a typed failure.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -74,10 +75,7 @@ async fn handler_error_terminates_without_a_successful_delivery() -> Result<(), 
     let result = delivery.await.expect("delivery task joins cleanly");
 
     // Then: the actor propagates the failure and traces no successful completion.
-    assert_eq!(
-        result,
-        Err(InterruptError::Driver(DriverError::QueueFull))
-    );
+    assert_eq!(result, Err(InterruptError::Driver(DriverError::QueueFull)));
     let trace = delivery_handle.trace_events().await;
     let trace = trace
         .iter()
@@ -94,4 +92,3 @@ async fn handler_error_terminates_without_a_successful_delivery() -> Result<(), 
     worker.await.expect("device worker joins cleanly");
     Ok(())
 }
-use crate::register::legacy_integration_tests::pdma_model_host;

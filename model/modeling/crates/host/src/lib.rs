@@ -1,11 +1,4 @@
 //! Async PDMA host model.
-#![cfg_attr(
-    test,
-    allow(
-        clippy::items_after_test_module,
-        reason = "the crate-private legacy regression harness is compiled only for host unit tests"
-    )
-)]
 
 #[cfg(test)]
 mod context;

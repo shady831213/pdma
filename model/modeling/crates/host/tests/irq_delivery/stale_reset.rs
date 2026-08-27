@@ -1,17 +1,17 @@
-use pdma_model_host::{DriverError, DriverResult, PortError, PortResult};
-use pdma_model_host::interrupt::InterruptError;
+use crate::interrupt::InterruptError;
+use crate::{DriverError, DriverResult, PortError, PortResult};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 
-use crate::register::legacy_test_support::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
+use crate::irq_delivery::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
+use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
     IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
-use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use tokio::sync::{Mutex, mpsc};
 
 use super::message;
@@ -41,12 +41,7 @@ impl AsyncDevicePort for ResetPort {
         std::future::pending().await
     }
 
-    async fn read_buffer(
-        &self,
-        _id: BufferId,
-        _offset: usize,
-        _len: usize,
-    ) -> PortResult<Vec<u8>> {
+    async fn read_buffer(&self, _id: BufferId, _offset: usize, _len: usize) -> PortResult<Vec<u8>> {
         std::future::pending().await
     }
 
@@ -193,4 +188,3 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(acknowledgements.load(Ordering::SeqCst), 0);
     Ok(())
 }
-use crate::register::legacy_integration_tests::pdma_model_host;

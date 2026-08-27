@@ -1,10 +1,10 @@
 use super::{NotificationPort, line, message};
-use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::interrupt::{InterruptError, InterruptResult};
+use crate::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CompletionRingId, IrqNotification, IrqSource, IrqVector, QueueId, TraceEventKind,
 };
-use pdma_model_host::interrupt::{InterruptError, InterruptResult};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::{mpsc, oneshot};
 
@@ -235,7 +235,10 @@ async fn unregistered_vector_fails_before_cpu_and_trace() -> InterruptResult<()>
     let result = delivery.run().await;
 
     // Then: lookup fails immediately and emits no handler lifecycle trace.
-    assert_eq!(result, Err(InterruptError::UnregisteredVector(unregistered)));
+    assert_eq!(
+        result,
+        Err(InterruptError::UnregisteredVector(unregistered))
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert!(handle.trace_events().await.is_empty());
     let _ = release_tx.send(());
@@ -243,4 +246,3 @@ async fn unregistered_vector_fails_before_cpu_and_trace() -> InterruptResult<()>
     assert_eq!(summary.deliveries(), 1);
     Ok(())
 }
-use crate::register::legacy_integration_tests::pdma_model_host;

@@ -1,9 +1,9 @@
 use super::{NotificationPort, message};
-use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::{AsyncDriver, DriverError, DriverPort as _, compat::AsyncDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, DriverError, compat::AsyncDevicePort};
 use tokio::sync::{mpsc, oneshot};
 
 struct BlockingHandler {
@@ -48,7 +48,8 @@ impl IrqHandler for SequencedHandler {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn handler_is_atomic_against_main_and_irq_nesting() -> Result<(), Box<dyn std::error::Error>> {
+async fn handler_is_atomic_against_main_and_irq_nesting() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given: two queued IRQ messages, one CPU token, and a handler blocked on its first call.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -140,7 +141,8 @@ async fn handler_is_atomic_against_main_and_irq_nesting() -> Result<(), Box<dyn 
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn pending_handler_blocks_main_and_another_vector() -> Result<(), Box<dyn std::error::Error>> {
+async fn pending_handler_blocks_main_and_another_vector() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given: vector A owns the CPU, main is queued, and vector B is pending behind A.
     let cpu = SoftwareCpu::new();
     let vector_a = IrqVector::new(31);
@@ -202,4 +204,3 @@ async fn pending_handler_blocks_main_and_another_vector() -> Result<(), Box<dyn 
     assert_eq!(summary.deliveries(), 2);
     Ok(())
 }
-use crate::register::legacy_integration_tests::pdma_model_host;

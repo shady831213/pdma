@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
-use super::pdma_model_host;
-use pdma_model_host::{DriverError, PortError, PortResult};
+use crate::{DriverError, PortError, PortResult};
 
+use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
@@ -10,7 +10,6 @@ use pdma_model_contract::semantic::{
     IrqVector, QueueConfig, QueueConfigHandle, desc::CopyRequest,
 };
 use pdma_model_device::SyncDevice;
-use pdma_model_host::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -43,12 +42,7 @@ impl AsyncDevicePort for NotificationPort {
         std::future::pending().await
     }
 
-    async fn read_buffer(
-        &self,
-        _id: BufferId,
-        _offset: usize,
-        _len: usize,
-    ) -> PortResult<Vec<u8>> {
+    async fn read_buffer(&self, _id: BufferId, _offset: usize, _len: usize) -> PortResult<Vec<u8>> {
         std::future::pending().await
     }
 
@@ -137,6 +131,19 @@ const fn message(id: usize, vector: IrqVector, source: IrqSource) -> IrqNotifica
     ))
 }
 
+const fn at_epoch(notification: IrqNotification, epoch: DeviceEpoch) -> IrqNotification {
+    let source = EpochIrqSource::new(epoch, notification.source());
+    match notification {
+        IrqNotification::Line(snapshot) => IrqNotification::Line(IrqSnapshot::new(
+            IrqCause::new(snapshot.cause().line(), source),
+            snapshot.asserted(),
+        )),
+        IrqNotification::Message(message) => {
+            IrqNotification::Message(IrqMessage::new(message.id(), message.vector(), source))
+        }
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn stale_notification_fails_before_drain_or_ack() {
     // Given: one pending real completion and a same-source notification from a later epoch.
@@ -146,13 +153,13 @@ async fn stale_notification_fails_before_drain_or_ack() {
         std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let cpu = SoftwareCpu::new();
-    let mut port = SemanticDevicePort::new(&mut device);
-    let mut driver = cpu
-        .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
-        .await
-        .expect("active setup succeeds");
+    let mut driver = {
+        let mut port = SemanticDevicePort::new(&mut device);
+        cpu.run_main(AsyncDriver::setup_on(&mut port, 1, 1))
+            .await
+            .expect("active setup succeeds")
+    };
     let current = driver.queue_config_handle().completion_irq_source();
-    drop(port);
     device
         .enable_irq_source(current)
         .expect("current completion source enables");
@@ -182,21 +189,8 @@ async fn stale_notification_fails_before_drain_or_ack() {
     let current_notification = device
         .wait_irq_notification()
         .expect("current completion produces a notification");
-    let stale_epoch = DeviceEpoch::initial()
-        .next()
-        .expect("initial epoch can advance");
-    let stale_source = EpochIrqSource::new(stale_epoch, current.source());
-    let stale_notification = match current_notification {
-        IrqNotification::Line(snapshot) => IrqNotification::Line(IrqSnapshot::new(
-            IrqCause::new(snapshot.cause().line(), stale_source),
-            snapshot.asserted(),
-        )),
-        IrqNotification::Message(message) => IrqNotification::Message(IrqMessage::new(
-            message.id(),
-            message.vector(),
-            stale_source,
-        )),
-    };
+    let stale_epoch = DeviceEpoch::new(1);
+    let stale_notification = at_epoch(current_notification, stale_epoch);
     device.enable_tracing();
     let before = device.trace_events();
 
@@ -272,6 +266,7 @@ mod shutdown;
 pub(super) mod stale_reset;
 
 #[tokio::test(flavor = "current_thread")]
-async fn stale_notification_terminates_old_delivery_without_ack() -> Result<(), Box<dyn std::error::Error>> {
+async fn stale_notification_terminates_old_delivery_without_ack()
+-> Result<(), Box<dyn std::error::Error>> {
     stale_reset::run().await
 }

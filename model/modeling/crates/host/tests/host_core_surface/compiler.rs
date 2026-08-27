@@ -33,27 +33,15 @@ impl Drop for CompileDirectory {
 }
 
 fn verify_downstream_compile_surface() -> Result<CompileSurfaceObservables, String> {
-    let current_exe = env::current_exe().map_err(|error| error.to_string())?;
-    let deps = current_exe
-        .parent()
-        .ok_or_else(|| String::from("test executable has no dependency directory"))?;
-    let host = find_rlib(deps, "libpdma_model_host-")?;
-    let contract = find_rlib(deps, "libpdma_model_contract-")?;
-    let runtime = find_rlib(deps, "libhardware_interface_runtime-")?;
     let output = CompileDirectory::create()?;
+    create_compile_crate(&output.0)?;
     let pass = compile_fixture(
-        deps,
         &output.0,
-        "pass_driver_port",
         "tests/host_core_surface/compile/pass_driver_port.rs",
-        [&host, &contract, &runtime],
     )?;
     let fail = compile_fixture(
-        deps,
         &output.0,
-        "manual_driver_irq",
         "tests/host_core_surface/compile/manual_driver_irq.rs",
-        [&host, &contract, &runtime],
     )?;
     let device_types = usize::from(!pass.status.success());
     let manual_irq_methods = usize::from(fail.status.success());
@@ -75,48 +63,28 @@ fn verify_downstream_compile_surface() -> Result<CompileSurfaceObservables, Stri
     })
 }
 
-fn find_rlib(deps: &Path, prefix: &str) -> Result<PathBuf, String> {
-    fs::read_dir(deps)
-        .map_err(|error| error.to_string())?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|extension| extension == "rlib")
-                && path
-                    .file_name()
-                    .is_some_and(|name| name.to_string_lossy().starts_with(prefix))
-        })
-        .max_by_key(|path| {
-            path.metadata()
-                .and_then(|metadata| metadata.modified())
-                .ok()
-        })
-        .ok_or_else(|| format!("missing {prefix}*.rlib in {}", deps.display()))
+fn create_compile_crate(output: &Path) -> Result<(), String> {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| String::from("host crate has no workspace directory"))?;
+    fs::create_dir(output.join("src"))
+        .map_err(|error| format!("create compile fixture source: {error}"))?;
+    let manifest = format!(
+        "[package]\nname = \"pdma-host-compile-surface\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\npdma-model-contract = {{ path = \"{}\" }}\npdma-model-host = {{ path = \"{}\" }}\n\n[workspace]\n",
+        workspace.join("crates/contract").display(),
+        workspace.join("crates/host").display(),
+    );
+    fs::write(output.join("Cargo.toml"), manifest)
+        .map_err(|error| format!("write compile fixture manifest: {error}"))
 }
 
-fn compile_fixture(
-    deps: &Path,
-    output: &Path,
-    crate_name: &str,
-    source: &str,
-    libraries: [&Path; 3],
-) -> Result<Output, String> {
-    Command::new("rustc")
-        .args([source, "--edition=2024", "--crate-name", crate_name])
-        .arg("--out-dir")
-        .arg(output)
-        .arg("-L")
-        .arg(format!("dependency={}", deps.display()))
-        .arg("--extern")
-        .arg(format!("pdma_model_host={}", libraries[0].display()))
-        .arg("--extern")
-        .arg(format!("pdma_model_contract={}", libraries[1].display()))
-        .arg("--extern")
-        .arg(format!(
-            "hardware_interface_runtime={}",
-            libraries[2].display()
-        ))
+fn compile_fixture(output: &Path, source: &str) -> Result<Output, String> {
+    fs::copy(source, output.join("src/main.rs"))
+        .map_err(|error| format!("copy {source}: {error}"))?;
+    Command::new(env!("CARGO"))
+        .args(["check", "--quiet", "--offline", "--manifest-path"])
+        .arg(output.join("Cargo.toml"))
         .output()
         .map_err(|error| error.to_string())
 }

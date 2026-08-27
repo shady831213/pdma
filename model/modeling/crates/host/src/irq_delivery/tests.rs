@@ -2,6 +2,9 @@ use super::{IrqHandlerRegistry, irq_handler};
 use crate::interrupt::InterruptError;
 use pdma_model_contract::semantic::IrqVector;
 
+#[path = "../../tests/irq_delivery.rs"]
+mod behavior;
+
 #[test]
 fn empty_registry_returns_interrupt_error() {
     // Given: an interrupt registry with no handlers.

@@ -1,8 +1,8 @@
-use crate::register::legacy_test_support::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::{AsyncDriver, DriverError, DriverPort as _, compat::AsyncDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqNotification, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, DriverError, compat::AsyncDevicePort};
 use tokio::sync::mpsc;
 
 struct CountingHandler {
@@ -71,4 +71,3 @@ async fn shutdown_wins_over_a_ready_notification() -> Result<(), Box<dyn std::er
     worker.await.expect("device worker joins cleanly");
     Ok(())
 }
-use crate::register::legacy_integration_tests::pdma_model_host;

@@ -1,8 +1,8 @@
 use super::{NotificationPort, message};
-use crate::register::legacy_test_support::{IrqDelivery, irq_handler};
+use crate::interrupt::{InterruptError, InterruptResult};
+use crate::irq_delivery::{IrqDelivery, irq_handler};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CompletionRingId, IrqSource, IrqVector, QueueId};
-use pdma_model_host::interrupt::{InterruptError, InterruptResult};
 use tokio::sync::mpsc;
 
 #[tokio::test(flavor = "current_thread")]
@@ -64,10 +64,6 @@ async fn empty_batch_registration_does_not_publish_delivery() {
     let registration = delivery.register_handlers(|_registry| Ok(()));
 
     // Then: both software and runner observe typed bootstrap failures.
-    assert!(matches!(
-        registration,
-        Err(InterruptError::EmptyRegistry)
-    ));
+    assert!(matches!(registration, Err(InterruptError::EmptyRegistry)));
     assert_eq!(runner.run().await, Err(InterruptError::DeliveryUnavailable));
 }
-use crate::register::legacy_integration_tests::pdma_model_host;

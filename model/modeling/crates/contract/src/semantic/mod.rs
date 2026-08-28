@@ -21,9 +21,8 @@ pub use error::{SemanticError, SemanticResult};
 
 pub use completion::{CompletionRecord, CompletionStatus};
 pub use desc::{
-    BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,
-    CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand,
-    VectorAddRequest, VectorBufferRange,
+    BroadcastCopyRequest, BroadcastDestinationRange, Command, CommandOperation, CopyRequest,
+    StridedCopyRequest, VectorAddRequest, VectorBufferRange,
 };
 pub use dma::{DmaRange, DmaRangeStart};
 pub use event::{EventErrorKind, EventRecord, FaultAddress, MemoryFault};
@@ -33,7 +32,8 @@ pub use irq::{
     IrqVector,
 };
 pub use queue::{
-    EventRouting, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, SoftwareOwnerId,
+    EventRouting, QueueActivation, QueueConfig, QueueConfigHandle, QueueControl, QueueCursorUpdate,
+    QueueDirectoryEntry, QueueRingObjects, RingCursor, RingCursors, SoftwareOwnerId,
 };
 pub use resources::ResourceConfig;
 pub use trace::{TraceEvent, TraceEventKind, TraceOperation};

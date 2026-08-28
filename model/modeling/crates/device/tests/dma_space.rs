@@ -1,9 +1,9 @@
 //! Checked DMA allocation, atomic staging, access, and backend-persistence tests.
 
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::ids::BufferId;
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_device::MappedDmaRegion;
 use pdma_model_device::{PdmaMemoryError, PdmaMemoryMappings, SyncDevice};
 
 #[test]
@@ -126,7 +126,7 @@ fn allocations_and_checked_dma_address_access_survive_backend_reset() {
     assert_eq!(device.memory_generation(), 1);
     assert_eq!(
         device.region_for_object(region.object()),
-        Some(PdmaMemoryRegion::try_new(region.object(), region.base(), 8).expect("valid region"))
+        Some(MappedDmaRegion::try_new(region.object(), region.base(), 8).expect("valid region"))
     );
     assert_eq!(
         device.read_memory(region.base().checked_add(2).expect("offset"), 3),
@@ -192,19 +192,19 @@ fn rejects_exhausted_overlapping_unmapped_and_cross_region_access() {
     space
         .write_memory(first.base(), &[0xaa])
         .expect("sentinel write");
-    let malformed_overlap = PdmaMemoryRegion::try_new(
+    let malformed_overlap = MappedDmaRegion::try_new(
         second.object(),
         first.base().checked_add(32).expect("overlap base"),
         second.length(),
     )
     .expect("checked malformed region");
-    let misaligned = PdmaMemoryRegion::try_new(
+    let misaligned = MappedDmaRegion::try_new(
         second.object(),
         second.base().checked_add(1).expect("misaligned base"),
         second.length(),
     )
     .expect("checked misaligned region");
-    let mismatched = PdmaMemoryRegion::try_new(
+    let mismatched = MappedDmaRegion::try_new(
         second.object(),
         second.base().checked_add(64).expect("mismatched base"),
         second.length(),

@@ -1,7 +1,6 @@
 use crate::operations::OperationCase;
 use pdma_model_contract::semantic::desc::{
-    BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange, CopyCommand,
-    CopyRequest, ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand,
+    BroadcastCopyRequest, BroadcastDestinationRange, Command, CopyRequest, StridedCopyRequest,
     VectorAddRequest, VectorBufferRange,
 };
 use pdma_model_contract::semantic::{
@@ -46,7 +45,6 @@ pub(super) fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
     });
     let command = command(
         case,
-        queue,
         command_id,
         [source_a, source_b, destination_a, destination_b],
     );
@@ -100,26 +98,26 @@ pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::Que
     let commands = [
         (
             first,
-            ExternalCommand::VectorAdd(VectorAddCommand::new(
+            Command::new(
                 CommandId::new(40),
-                first.queue_id(),
-                first.completion_ring_id(),
-                VectorAddRequest::new(
+                pdma_model_contract::semantic::CommandOperation::VectorAdd(VectorAddRequest::new(
                     VectorBufferRange::new(source, 0),
                     VectorBufferRange::new(source_b, 0),
                     VectorBufferRange::new(destination_a, 0),
                     4,
-                ),
-            )),
+                )),
+            ),
         ),
         (
             second,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 CommandId::new(41),
-                second.queue_id(),
-                second.completion_ring_id(),
-                CopyRequest::new(source, destination_b, 4),
-            )),
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                    source,
+                    destination_b,
+                    4,
+                )),
+            ),
         ),
     ];
     for (queue, command) in commands {
@@ -140,59 +138,54 @@ pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::Que
 
 fn command(
     case: OperationCase,
-    queue: pdma_model_contract::semantic::QueueConfigHandle,
     command_id: CommandId,
     buffers: [pdma_model_contract::semantic::BufferId; 4],
-) -> ExternalCommand {
+) -> Command {
     let [source_a, source_b, destination_a, destination_b] = buffers;
     match case {
-        OperationCase::Copy => ExternalCommand::Copy(CopyCommand::new(
+        OperationCase::Copy => Command::new(
             command_id,
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::with_starts(
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::with_starts(
                 DmaRangeStart::new(source_a, 2),
                 DmaRangeStart::new(destination_a, 1),
                 4,
-            ),
-        )),
-        OperationCase::Strided => ExternalCommand::StridedCopy(StridedCopyCommand::new(
+            )),
+        ),
+        OperationCase::Strided => Command::new(
             command_id,
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            StridedCopyRequest::with_starts(
-                DmaRangeStart::new(source_a, 1),
-                DmaRangeStart::new(destination_a, 0),
-                2,
-                2,
-                3,
-                3,
+            pdma_model_contract::semantic::CommandOperation::StridedCopy(
+                StridedCopyRequest::with_starts(
+                    DmaRangeStart::new(source_a, 1),
+                    DmaRangeStart::new(destination_a, 0),
+                    2,
+                    2,
+                    3,
+                    3,
+                ),
             ),
-        )),
-        OperationCase::Broadcast => ExternalCommand::BroadcastCopy(BroadcastCopyCommand::new(
+        ),
+        OperationCase::Broadcast => Command::new(
             command_id,
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            BroadcastCopyRequest::new(
-                source_a,
-                2,
-                3,
-                vec![
-                    BroadcastDestinationRange::new(destination_a, 0),
-                    BroadcastDestinationRange::new(destination_b, 0),
-                ],
+            pdma_model_contract::semantic::CommandOperation::BroadcastCopy(
+                BroadcastCopyRequest::new(
+                    source_a,
+                    2,
+                    3,
+                    vec![
+                        BroadcastDestinationRange::new(destination_a, 0),
+                        BroadcastDestinationRange::new(destination_b, 0),
+                    ],
+                ),
             ),
-        )),
-        OperationCase::Vector => ExternalCommand::VectorAdd(VectorAddCommand::new(
+        ),
+        OperationCase::Vector => Command::new(
             command_id,
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            VectorAddRequest::new(
+            pdma_model_contract::semantic::CommandOperation::VectorAdd(VectorAddRequest::new(
                 VectorBufferRange::new(source_a, 1),
                 VectorBufferRange::new(source_b, 1),
                 VectorBufferRange::new(destination_a, 2),
                 4,
-            ),
-        )),
+            )),
+        ),
     }
 }

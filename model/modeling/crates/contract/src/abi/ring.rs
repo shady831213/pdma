@@ -1,64 +1,170 @@
-//! Fixed-width ABI-v1 ring values.
+//! Fixed-width ABI-v1 ring-entry geometry.
+
+use core::marker::PhantomData;
 
 use super::{
-    AbiControlError, COMPLETION_ALIGNMENT, COMPLETION_SIZE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_SIZE,
-    EVENT_ALIGNMENT, EVENT_SIZE,
+    AbiAddressError, AbiCommand, AbiCompletion, AbiControlError, AbiEvent, COMPLETION_ALIGNMENT,
+    COMPLETION_SIZE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_SIZE, DmaAddress, DmaRegion, EVENT_ALIGNMENT,
+    EVENT_SIZE, MAX_RING_DEPTH,
 };
 
-/// Canonical ABI-v1 record carried by a queue ring.
+mod private {
+    pub trait Sealed {}
+}
+
+/// ABI record type permitted as a DMA ring entry.
+pub trait AbiRingEntry: private::Sealed + Copy + core::fmt::Debug + Eq {
+    /// Fixed encoded entry width in bytes.
+    const ENTRY_SIZE: u16;
+    /// Required DMA ring-base alignment in bytes.
+    const RING_ALIGNMENT: u64;
+}
+
+impl private::Sealed for AbiCommand {}
+impl AbiRingEntry for AbiCommand {
+    const ENTRY_SIZE: u16 = DESCRIPTOR_SIZE;
+    const RING_ALIGNMENT: u64 = DESCRIPTOR_ALIGNMENT;
+}
+
+impl private::Sealed for AbiCompletion {}
+impl AbiRingEntry for AbiCompletion {
+    const ENTRY_SIZE: u16 = COMPLETION_SIZE;
+    const RING_ALIGNMENT: u64 = COMPLETION_ALIGNMENT;
+}
+
+impl private::Sealed for AbiEvent {}
+impl AbiRingEntry for AbiEvent {
+    const ENTRY_SIZE: u16 = EVENT_SIZE;
+    const RING_ALIGNMENT: u64 = EVENT_ALIGNMENT;
+}
+
+/// Exact DMA entry geometry for one typed ABI ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RingRecord {
-    /// Host-produced command descriptor.
-    Submission,
-    /// Device-produced successful completion.
-    Completion,
-    /// Device-produced fault event.
-    Event,
+pub struct RingLayout<R: AbiRingEntry> {
+    region: DmaRegion,
+    depth: u32,
+    entry: PhantomData<fn() -> R>,
 }
 
-impl RingRecord {
-    /// Canonical record width in bytes.
-    pub const fn record_size(self) -> u16 {
-        match self {
-            Self::Submission => DESCRIPTOR_SIZE,
-            Self::Completion => COMPLETION_SIZE,
-            Self::Event => EVENT_SIZE,
+impl<R: AbiRingEntry> RingLayout<R> {
+    /// Validates depth, alignment, and exact DMA extent.
+    pub fn try_new(region: DmaRegion, depth: u64) -> Result<Self, AbiControlError> {
+        let depth = match u32::try_from(depth) {
+            Ok(value) if value != 0 => value,
+            Ok(_) | Err(_) => {
+                return Err(AbiControlError::InvalidRingDepth {
+                    depth,
+                    maximum: MAX_RING_DEPTH,
+                });
+            }
+        };
+        let extent = Self::checked_extent(u64::from(depth))?;
+        if region.base().raw() % R::RING_ALIGNMENT != 0 {
+            return Err(AbiControlError::MisalignedRing {
+                base: region.base().raw(),
+                alignment: R::RING_ALIGNMENT,
+            });
         }
+        if region.length() != extent {
+            return Err(AbiControlError::RingExtentMismatch {
+                expected: extent,
+                actual: region.length(),
+            });
+        }
+        Ok(Self {
+            region,
+            depth,
+            entry: PhantomData,
+        })
     }
 
-    /// Required base-I/O-address alignment.
+    /// Computes the exact byte extent for a depth without wrapping.
+    pub fn checked_extent(depth: u64) -> Result<u64, AbiControlError> {
+        depth.checked_mul(u64::from(R::ENTRY_SIZE)).ok_or({
+            AbiControlError::RingExtentOverflow {
+                depth,
+                record_size: R::ENTRY_SIZE,
+            }
+        })
+    }
+
+    /// Backing DMA entry extent.
+    pub const fn region(self) -> DmaRegion {
+        self.region
+    }
+
+    /// Configured retained entry count.
+    pub const fn depth(self) -> u32 {
+        self.depth
+    }
+
+    /// Derived exact byte extent.
+    pub const fn extent(self) -> u64 {
+        self.region.length()
+    }
+
+    /// Fixed encoded entry width in bytes.
+    pub const fn entry_size(self) -> u16 {
+        R::ENTRY_SIZE
+    }
+
+    /// Required DMA ring-base alignment in bytes.
     pub const fn alignment(self) -> u64 {
-        match self {
-            Self::Submission => DESCRIPTOR_ALIGNMENT,
-            Self::Completion => COMPLETION_ALIGNMENT,
-            Self::Event => EVENT_ALIGNMENT,
-        }
+        R::RING_ALIGNMENT
+    }
+
+    /// Physical entry index selected by a monotonic cursor.
+    pub fn slot(self, cursor: u64) -> u64 {
+        cursor % u64::from(self.depth)
+    }
+
+    /// DMA address of the entry selected by a monotonic cursor.
+    pub fn entry_address(self, cursor: u64) -> Result<DmaAddress, AbiAddressError> {
+        let offset = self
+            .slot(cursor)
+            .checked_mul(u64::from(R::ENTRY_SIZE))
+            .ok_or_else(|| AbiAddressError::RangeOverflow {
+                base: self.region.base().raw(),
+                length: u64::from(R::ENTRY_SIZE),
+            })?;
+        self.region.base().checked_add(offset)
     }
 }
 
-/// One fixed-width monotonic queue cursor shadow.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RingCursor(u64);
+/// Typed entry layouts assigned to the three queue ring roles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QueueRingLayouts {
+    submission: RingLayout<AbiCommand>,
+    completion: RingLayout<AbiCompletion>,
+    event: RingLayout<AbiEvent>,
+}
 
-impl RingCursor {
-    /// Creates a cursor from its complete monotonic shadow.
-    pub const fn new(raw: u64) -> Self {
-        Self(raw)
-    }
-
-    /// Returns the complete monotonic shadow.
-    pub const fn raw(self) -> u64 {
-        self.0
-    }
-
-    /// Advances without wrapping.
-    pub const fn checked_increment(self, increment: u64) -> Result<Self, AbiControlError> {
-        match self.0.checked_add(increment) {
-            Some(next) => Ok(Self(next)),
-            None => Err(AbiControlError::CursorIncrementOverflow {
-                cursor: self.0,
-                increment,
-            }),
+impl QueueRingLayouts {
+    /// Groups submission, completion, and event entry layouts.
+    pub const fn new(
+        submission: RingLayout<AbiCommand>,
+        completion: RingLayout<AbiCompletion>,
+        event: RingLayout<AbiEvent>,
+    ) -> Self {
+        Self {
+            submission,
+            completion,
+            event,
         }
+    }
+
+    /// Submission-ring entry layout.
+    pub const fn submission(self) -> RingLayout<AbiCommand> {
+        self.submission
+    }
+
+    /// Completion-ring entry layout.
+    pub const fn completion(self) -> RingLayout<AbiCompletion> {
+        self.completion
+    }
+
+    /// Event-ring entry layout.
+    pub const fn event(self) -> RingLayout<AbiEvent> {
+        self.event
     }
 }

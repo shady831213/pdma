@@ -3,15 +3,16 @@
 mod access;
 mod error;
 mod prepared;
+mod region;
 mod stage;
 mod validation;
 
 pub use error::PdmaMemoryError;
+pub use region::MappedDmaRegion;
 pub use stage::PdmaMemoryStage;
 
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::ids::BufferId;
 use std::sync::Arc;
 
@@ -22,17 +23,17 @@ pub(crate) const fn runtime_address(address: DmaAddress) -> MemoryAddress {
     MemoryAddress::new(address.raw())
 }
 
-const fn runtime_start(region: PdmaMemoryRegion) -> MemoryAddress {
-    runtime_address(region.abi_base())
+const fn runtime_start(region: MappedDmaRegion) -> MemoryAddress {
+    runtime_address(region.base())
 }
 
-const fn runtime_end(region: PdmaMemoryRegion) -> MemoryAddress {
-    runtime_address(region.abi_exclusive_end())
+const fn runtime_end(region: MappedDmaRegion) -> MemoryAddress {
+    runtime_address(region.exclusive_end())
 }
 
 #[derive(Debug)]
 struct RegionBacking {
-    region: PdmaMemoryRegion,
+    region: MappedDmaRegion,
     storage: Option<MemoryRegion>,
 }
 
@@ -88,7 +89,7 @@ impl PdmaMemoryMappings {
                 .checked_add(index)
                 .ok_or(PdmaMemoryError::AddressExhausted)?;
             let base = align_address(next_address)?;
-            let region = PdmaMemoryRegion::try_new(
+            let region = MappedDmaRegion::try_new(
                 BufferId::new(object_raw),
                 pdma_model_contract::abi::DmaAddress::new(base),
                 length,
@@ -108,7 +109,7 @@ impl PdmaMemoryMappings {
     pub fn commit(
         &mut self,
         stage: PdmaMemoryStage,
-    ) -> Result<Vec<PdmaMemoryRegion>, PdmaMemoryError> {
+    ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
         self.validate_stage(&stage)?;
         let next_generation = self
             .generation
@@ -164,7 +165,7 @@ impl PdmaMemoryMappings {
     }
 
     /// Allocates and commits one region.
-    pub fn allocate(&mut self, length: u64) -> Result<PdmaMemoryRegion, PdmaMemoryError> {
+    pub fn allocate(&mut self, length: u64) -> Result<MappedDmaRegion, PdmaMemoryError> {
         let stage = self.stage(&[length])?;
         let committed = self.commit(stage)?;
         committed
@@ -197,7 +198,7 @@ fn align_address(address: u64) -> Result<u64, PdmaMemoryError> {
         .ok_or(PdmaMemoryError::AddressExhausted)
 }
 
-fn reserved_end(region: PdmaMemoryRegion) -> Result<u64, PdmaMemoryError> {
+fn reserved_end(region: MappedDmaRegion) -> Result<u64, PdmaMemoryError> {
     region
         .base()
         .raw()

@@ -1,7 +1,6 @@
 use pdma_model_contract::semantic::{
-    CommandId, CompletionStatus, ExternalCommand, QueueConfigHandle, ResourceConfig,
-    TraceEventKind,
-    desc::{CopyCommand, CopyRequest, VectorAddCommand, VectorAddRequest, VectorBufferRange},
+    Command, CommandId, CompletionStatus, QueueConfigHandle, ResourceConfig, TraceEventKind,
+    desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
     ids::BufferId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
@@ -64,27 +63,27 @@ fn submit_commands(fixture: &mut Fixture) -> TestResult {
     ] {
         fixture.device.submit_command(
             fixture.copy_queue,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 command_id,
-                fixture.copy_queue.queue_id(),
-                fixture.copy_queue.completion_ring_id(),
-                CopyRequest::new(fixture.source, destination, 4),
-            )),
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                    fixture.source,
+                    destination,
+                    4,
+                )),
+            ),
         )?;
     }
     fixture.device.submit_command(
         fixture.vector_queue,
-        ExternalCommand::VectorAdd(VectorAddCommand::new(
+        Command::new(
             CommandId::new(2),
-            fixture.vector_queue.queue_id(),
-            fixture.vector_queue.completion_ring_id(),
-            VectorAddRequest::new(
+            pdma_model_contract::semantic::CommandOperation::VectorAdd(VectorAddRequest::new(
                 VectorBufferRange::new(fixture.vector_left, 0),
                 VectorBufferRange::new(fixture.vector_right, 0),
                 VectorBufferRange::new(fixture.vector_destination, 0),
                 4,
-            ),
-        )),
+            )),
+        ),
     )?;
     fixture.device.ring_doorbell(fixture.copy_queue)?;
     fixture.device.ring_doorbell(fixture.vector_queue)?;

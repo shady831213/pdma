@@ -1,9 +1,7 @@
 use super::support::{self, TestResult};
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{MmioByteCount, MmioResult};
-use pdma_model_contract::binding::QueueControl;
-use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
+use pdma_model_contract::semantic::{DeviceEpoch, QueueControl, RingCursor, WholeDeviceReset};
 use pdma_model_device::{DmaWrite, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch};
 
 #[tokio::test]

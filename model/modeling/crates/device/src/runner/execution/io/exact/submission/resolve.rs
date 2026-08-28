@@ -1,10 +1,10 @@
+use crate::dma_space::MappedDmaRegion;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
     AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultSite, AbiOperandVisit,
     AbiStrideOffset, DmaAddress,
 };
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::DmaRangeStart;
 
 pub(super) fn direct(
@@ -70,9 +70,9 @@ fn resolve_representable(
     let Some(region) = dma_space.region_containing(start) else {
         return Ok(Err(AbiFault::unmapped(start, length, site(visit))));
     };
-    if end > region.abi_exclusive_end() {
+    if end > region.exclusive_end() {
         return Ok(Err(AbiFault::out_of_bounds(
-            region.abi_exclusive_end(),
+            region.exclusive_end(),
             AbiBounds::new(region.length(), end.raw()),
             site(visit),
         )));
@@ -80,7 +80,7 @@ fn resolve_representable(
     range_start(region, start).map(Ok)
 }
 
-fn range_start(region: PdmaMemoryRegion, start: DmaAddress) -> ModelResult<DmaRangeStart> {
+fn range_start(region: MappedDmaRegion, start: DmaAddress) -> ModelResult<DmaRangeStart> {
     let offset = start
         .raw()
         .checked_sub(region.base().raw())

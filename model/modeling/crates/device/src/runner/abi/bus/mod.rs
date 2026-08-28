@@ -7,10 +7,10 @@ pub(in crate::runner) mod control;
 
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::runner::{AsyncDeviceHandle, publish, wake};
-use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::{AbiControlError, DmaAddress};
-use pdma_model_contract::binding::{QueueActivation, QueueControl};
-use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::{
+    DeviceEpoch, QueueActivation, QueueControl, RingCursor, SemanticError,
+};
 use std::fmt;
 
 /// One byte-opaque DMA write committed by a bus transaction.
@@ -66,8 +66,10 @@ impl SubmissionAcceptance {
 pub enum PdmaControlError {
     /// DMA staging or access validation failed.
     Dma(PdmaMemoryError),
-    /// Typed ABI cursor or layout validation failed.
+    /// Exact ABI layout or numeric control validation failed.
     Abi(AbiControlError),
+    /// Semantic queue state validation failed.
+    Semantic(SemanticError),
     /// The supplied device epoch differs from the current device epoch.
     StaleEpoch {
         /// Current device epoch.
@@ -86,6 +88,7 @@ impl fmt::Display for PdmaControlError {
         match self {
             Self::Dma(error) => write!(formatter, "{error}"),
             Self::Abi(error) => write!(formatter, "{error}"),
+            Self::Semantic(error) => write!(formatter, "{error}"),
             Self::StaleEpoch { expected, actual } => {
                 write!(
                     formatter,
@@ -103,6 +106,7 @@ impl std::error::Error for PdmaControlError {
         match self {
             Self::Dma(error) => Some(error),
             Self::Abi(error) => Some(error),
+            Self::Semantic(error) => Some(error),
             Self::StaleEpoch { .. } | Self::InvalidQueue | Self::InvalidTransaction => None,
         }
     }
@@ -117,6 +121,12 @@ impl From<PdmaMemoryError> for PdmaControlError {
 impl From<AbiControlError> for PdmaControlError {
     fn from(error: AbiControlError) -> Self {
         Self::Abi(error)
+    }
+}
+
+impl From<SemanticError> for PdmaControlError {
+    fn from(error: SemanticError) -> Self {
+        Self::Semantic(error)
     }
 }
 

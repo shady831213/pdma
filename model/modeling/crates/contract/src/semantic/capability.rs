@@ -1,6 +1,6 @@
 //! Epoch-qualified semantic device capabilities.
 
-use crate::semantic::{IrqRoute, IrqSource, QueueId};
+use crate::semantic::{IrqRoute, IrqSource, QueueId, SemanticError, SemanticResult};
 
 /// Device generation attached to resettable capabilities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,6 +20,14 @@ impl DeviceEpoch {
     /// Complete generation value.
     pub const fn raw(self) -> u64 {
         self.0
+    }
+
+    /// Advances a generation without wrapping.
+    pub const fn next(self) -> SemanticResult<Self> {
+        match self.0.checked_add(1) {
+            Some(next) => Ok(Self(next)),
+            None => Err(SemanticError::DeviceEpochOverflow { current: self.0 }),
+        }
     }
 }
 

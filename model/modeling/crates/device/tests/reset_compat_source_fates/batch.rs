@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::RingCursor;
 use pdma_model_device::test_support::{DeviceStateSnapshot, async_state_snapshot};
 use pdma_model_device::{
     AsyncDeviceHandle, DmaWrite, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch,

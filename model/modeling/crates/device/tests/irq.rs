@@ -4,7 +4,7 @@ use pdma_model_device::ModelError;
 
 use pdma_model_contract::semantic::{
     DeviceEpoch, EpochIrqSource, ResourceConfig,
-    desc::{CopyCommand, CopyRequest, ExternalCommand},
+    desc::{Command, CopyRequest},
     ids::{CommandId, CompletionRingId, QueueId},
     irq::IrqSource,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
@@ -50,12 +50,10 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
         .await
         .expect("source write is in bounds");
     for (command_id, dst) in [first_dst, second_dst].into_iter().enumerate() {
-        let command = ExternalCommand::Copy(CopyCommand::new(
+        let command = Command::new(
             CommandId::new(command_id),
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::new(src, dst, 4),
-        ));
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
+        );
         handle
             .submit_command(queue, command)
             .await
@@ -175,12 +173,10 @@ async fn event_irq_latches_only_after_publication_retry_succeeds() {
     let src = handle.allocate_buffer(4).await.expect("allocation");
     let dst = handle.allocate_buffer(4).await.expect("allocation");
     for command_id in 0..2 {
-        let command = ExternalCommand::Copy(CopyCommand::new(
+        let command = Command::new(
             CommandId::new(command_id),
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::new(src, dst, 8),
-        ));
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 8)),
+        );
         handle
             .submit_command(queue, command)
             .await

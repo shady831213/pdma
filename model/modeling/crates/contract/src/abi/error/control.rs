@@ -43,43 +43,6 @@ pub enum AbiControlError {
         /// Supplied byte extent.
         actual: u64,
     },
-    /// Consumer shadow is ahead of producer shadow.
-    CursorRegression {
-        /// Supplied producer shadow.
-        producer: u64,
-        /// Supplied consumer shadow.
-        consumer: u64,
-    },
-    /// A proposed shadow regresses its previously published value.
-    CursorUpdateRegression {
-        /// Current published shadow.
-        current: u64,
-        /// Proposed shadow.
-        proposed: u64,
-    },
-    /// Producer-to-consumer distance exceeds retained capacity.
-    CursorDistanceExceeded {
-        /// Supplied producer shadow.
-        producer: u64,
-        /// Supplied consumer shadow.
-        consumer: u64,
-        /// Retained ring capacity.
-        depth: u32,
-    },
-    /// Advancing a monotonic cursor would wrap.
-    CursorIncrementOverflow {
-        /// Current shadow.
-        cursor: u64,
-        /// Requested increment.
-        increment: u64,
-    },
-    /// A queue activation assigned the wrong role to a ring layout.
-    UnexpectedRingRecord {
-        /// Required record width for the role.
-        expected: u16,
-        /// Actual record width.
-        actual: u16,
-    },
     /// A queue ring depth differs from its semantic configuration.
     QueueDepthMismatch {
         /// Ring role.
@@ -95,11 +58,6 @@ pub enum AbiControlError {
         expected: usize,
         /// Explicit event depth.
         actual: u32,
-    },
-    /// Whole-device generation cannot advance without wrapping.
-    DeviceEpochOverflow {
-        /// Current generation.
-        current: u64,
     },
     /// A typed status response contains an unassigned state value.
     UnknownStatusValue {
@@ -132,29 +90,6 @@ impl fmt::Display for AbiControlError {
             Self::RingExtentMismatch { expected, actual } => {
                 write!(f, "ring extent must be {expected} bytes, not {actual}")
             }
-            Self::CursorRegression { producer, consumer } => {
-                write!(f, "producer {producer} is behind consumer {consumer}")
-            }
-            Self::CursorUpdateRegression { current, proposed } => {
-                write!(f, "cursor update regresses {current} to {proposed}")
-            }
-            Self::CursorDistanceExceeded {
-                producer,
-                consumer,
-                depth,
-            } => write!(
-                f,
-                "cursor distance {producer} - {consumer} exceeds ring depth {depth}"
-            ),
-            Self::CursorIncrementOverflow { cursor, increment } => {
-                write!(f, "cursor {cursor} + {increment} overflows u64")
-            }
-            Self::UnexpectedRingRecord { expected, actual } => {
-                write!(
-                    f,
-                    "ring role requires {expected}-byte records, not {actual}"
-                )
-            }
             Self::QueueDepthMismatch {
                 ring,
                 expected,
@@ -165,9 +100,6 @@ impl fmt::Display for AbiControlError {
             ),
             Self::EventDepthMismatch { expected, actual } => {
                 write!(f, "event ring depth must be {expected}, not {actual}")
-            }
-            Self::DeviceEpochOverflow { current } => {
-                write!(f, "device epoch {current} cannot advance without wrapping")
             }
             Self::UnknownStatusValue { value } => {
                 write!(f, "device status value {value} is not assigned by ABI v1")

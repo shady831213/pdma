@@ -3,7 +3,7 @@ use hardware_interface_runtime::{
     SharedMemory,
 };
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, IrqNotification, IrqRoute,
+    CommandId, CopyRequest, EventRouting, Command, IrqNotification, IrqRoute,
     IrqVector, QueueConfig, ResourceConfig, SoftwareOwnerId,
 };
 use pdma_model_device::{AsyncDevice, DeviceCore};
@@ -85,12 +85,7 @@ pub async fn run(alignment: MemoryAlignment) -> TestResult<RealResult> {
     handle
         .submit_command(
             queue,
-            ExternalCommand::Copy(CopyCommand::new(
-                CommandId::new(0),
-                queue.queue_id(),
-                queue.completion_ring_id(),
-                CopyRequest::new(src, dst, 1),
-            )),
+            Command::new(CommandId::new(0), pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 1))),
         )
         .await?;
     handle.ring_doorbell(queue).await?;

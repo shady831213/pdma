@@ -39,9 +39,9 @@ const fn map_error(error: PdmaControlError) -> MmioResultDetails {
         PdmaControlError::StaleEpoch { expected, actual } => {
             details(MmioResult::StaleEpoch, [expected.raw(), actual.raw(), 0])
         }
-        PdmaControlError::Abi(AbiControlError::DeviceEpochOverflow { current }) => {
-            details(MmioResult::DeviceEpochOverflow, [current, 0, 0])
-        }
+        PdmaControlError::Semantic(
+            pdma_model_contract::semantic::SemanticError::DeviceEpochOverflow { current },
+        ) => details(MmioResult::DeviceEpochOverflow, [current, 0, 0]),
         PdmaControlError::Abi(
             AbiControlError::UnsupportedVersion { .. }
             | AbiControlError::UnknownFeatureBits { .. }
@@ -49,16 +49,12 @@ const fn map_error(error: PdmaControlError) -> MmioResultDetails {
             | AbiControlError::RingExtentOverflow { .. }
             | AbiControlError::MisalignedRing { .. }
             | AbiControlError::RingExtentMismatch { .. }
-            | AbiControlError::CursorRegression { .. }
-            | AbiControlError::CursorUpdateRegression { .. }
-            | AbiControlError::CursorDistanceExceeded { .. }
-            | AbiControlError::CursorIncrementOverflow { .. }
-            | AbiControlError::UnexpectedRingRecord { .. }
             | AbiControlError::QueueDepthMismatch { .. }
             | AbiControlError::EventDepthMismatch { .. }
             | AbiControlError::UnknownStatusValue { .. },
         )
         | PdmaControlError::Dma(_)
+        | PdmaControlError::Semantic(_)
         | PdmaControlError::InvalidQueue
         | PdmaControlError::InvalidTransaction => {
             details(MmioResult::InvalidTransaction, [4, 0, 0])

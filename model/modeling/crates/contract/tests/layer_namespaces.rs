@@ -1,11 +1,10 @@
 //! Compile and value proofs for the additive contract namespaces.
 
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, RingCursor,
-    RingRecord,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, DmaRegion,
+    RingLayout,
 };
-use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
-use pdma_model_contract::semantic::{self, BufferId};
+use pdma_model_contract::semantic::{self, BufferId, RingCursor};
 
 #[test]
 fn semantic_and_abi_are_independent_and_conversion_is_owner_defined() {
@@ -48,13 +47,15 @@ fn semantic_capabilities_and_exact_abi_rings_have_direct_owners() {
     // Given: an epoch-qualified semantic queue and an unrelated exact ABI ring.
     let queue =
         semantic::EpochQueue::new(semantic::DeviceEpoch::initial(), semantic::QueueId::new(7));
-    let region = PdmaMemoryRegion::try_new(BufferId::new(9), DmaAddress::new(0x4000), 64)
-        .expect("exact region must fit");
-    let ring = RingLayout::try_new(region, 1, RingRecord::Submission);
+    let region = DmaRegion::try_new(DmaAddress::new(0x4000), 64).expect("exact region must fit");
+    let ring = RingLayout::<AbiCommand>::try_new(region, 1);
 
     // When/Then: both owner namespaces construct usable values without a translation.
     assert_eq!(queue.queue_id(), semantic::QueueId::new(7));
-    assert_eq!(ring.map(|layout| layout.slot(RingCursor::new(3))), Ok(0));
+    assert_eq!(
+        ring.map(|layout| layout.slot(RingCursor::new(3).raw())),
+        Ok(0)
+    );
     assert_eq!(
         pdma_model_contract::semantic::DeviceEpoch::initial(),
         queue.epoch()

@@ -1,9 +1,10 @@
 use super::{AsyncDeviceHandle, PdmaControlError, SubmissionAcceptance};
+use crate::MappedDmaRegion;
 use crate::runner::abi::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
 use crate::runner::abi::register_endpoint::PreparedWrite;
 use crate::runner::state::publish;
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
-use pdma_model_contract::binding::QueueActivation;
+use pdma_model_contract::semantic::QueueActivation;
 
 mod error;
 pub use error::{DmaBatchContext, PdmaBatchError};
@@ -83,7 +84,7 @@ impl SubmissionBatch {
     /// Creates the fixed optional-indirect, descriptor, publication, response-read grammar.
     pub const fn new(
         queue: pdma_model_contract::semantic::EpochQueue,
-        expected_producer: pdma_model_contract::abi::RingCursor,
+        expected_producer: pdma_model_contract::semantic::RingCursor,
         descriptor: super::DmaWrite,
         indirect: Option<(crate::PdmaMemoryStage, super::DmaWrite)>,
     ) -> Self {
@@ -178,7 +179,7 @@ pub(super) fn validate_submission_shape(
         let [region] = stage.regions() else {
             return Err(PdmaBatchError::InvalidShape);
         };
-        if write.address() != region.abi_base()
+        if write.address() != region.base()
             || u64::try_from(write.bytes().len()) != Ok(region.length())
         {
             return Err(PdmaBatchError::InvalidShape);
@@ -189,20 +190,26 @@ pub(super) fn validate_submission_shape(
 
 pub(super) fn bootstrap_staging(
     activation: QueueActivation,
+    regions: &[MappedDmaRegion],
 ) -> Result<BootstrapBatchStaging, PdmaBatchError> {
-    let rings = activation.rings();
+    let [submission, completion, event] = regions else {
+        return Err(PdmaBatchError::InvalidShape);
+    };
+    let config = activation.config();
     Ok(BootstrapBatchStaging {
         expected_epoch: activation.queue().epoch().raw(),
         id: u64::try_from(activation.queue().queue_id().raw())
             .map_err(|_| PdmaBatchError::InvalidShape)?,
         cfg_software_owner: u64::try_from(activation.config().software_owner().raw())
             .map_err(|_| PdmaBatchError::InvalidShape)?,
-        sq_base: rings.submission().region().base().raw(),
-        sq_depth: rings.submission().depth(),
-        cq_base: rings.completion().region().base().raw(),
-        cq_depth: rings.completion().depth(),
-        eq_base: rings.event().region().base().raw(),
-        eq_depth: rings.event().depth(),
+        sq_base: submission.base().raw(),
+        sq_depth: u32::try_from(config.command_depth())
+            .map_err(|_| PdmaBatchError::InvalidShape)?,
+        cq_base: completion.base().raw(),
+        cq_depth: u32::try_from(config.completion_depth())
+            .map_err(|_| PdmaBatchError::InvalidShape)?,
+        eq_base: event.base().raw(),
+        eq_depth: u32::try_from(config.event_depth()).map_err(|_| PdmaBatchError::InvalidShape)?,
     })
 }
 

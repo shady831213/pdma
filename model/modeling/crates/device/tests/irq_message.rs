@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use pdma_model_contract::semantic::{
-    desc::{CopyCommand, CopyRequest, ExternalCommand},
+    desc::{Command, CopyRequest},
     ids::CommandId,
     irq::{IrqMessageId, IrqNotification, IrqRoute, IrqVector},
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
@@ -52,12 +52,12 @@ async fn message_irq_delivers_each_completion_publication_without_coalescing() {
         handle
             .submit_command(
                 queue,
-                ExternalCommand::Copy(CopyCommand::new(
+                Command::new(
                     CommandId::new(command_id),
-                    queue.queue_id(),
-                    queue.completion_ring_id(),
-                    CopyRequest::new(src, dst, 4),
-                )),
+                    pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                        src, dst, 4,
+                    )),
+                ),
             )
             .await
             .expect("copy submission has ring space");

@@ -1,18 +1,21 @@
 use super::PdmaControlError;
-use pdma_model_contract::abi::RingCursor;
-use pdma_model_contract::binding::{QueueActivation, RingCursors};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent, QueueRingLayouts};
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EpochQueue, QueueActivation, RingCursor, RingCursors,
+};
 
 pub(in crate::runner) mod activation;
+mod ring;
 pub(in crate::runner) mod transactions;
+
+pub(in crate::runner) use ring::{RingState, SubmissionRingState};
 
 #[derive(Debug, Clone, Copy)]
 pub(in crate::runner) struct ActiveQueue {
     pub(in crate::runner) activation: QueueActivation,
-    pub(in crate::runner) submission: RingCursors,
-    pub(in crate::runner) captured_submission_producer: RingCursor,
-    pub(in crate::runner) completion: RingCursors,
-    pub(in crate::runner) event: RingCursors,
+    pub(in crate::runner) submission: SubmissionRingState,
+    pub(in crate::runner) completion: RingState<AbiCompletion>,
+    pub(in crate::runner) event: RingState<AbiEvent>,
 }
 
 /// Complete typed shadow state for one active DMA queue.
@@ -110,25 +113,25 @@ impl BusControlState {
 }
 
 impl ActiveQueue {
-    fn new(activation: QueueActivation) -> Result<Self, PdmaControlError> {
-        let rings = activation.rings();
-        let zero = RingCursor::new(0);
+    fn new(
+        activation: QueueActivation,
+        layouts: QueueRingLayouts,
+    ) -> Result<Self, PdmaControlError> {
         Ok(Self {
             activation,
-            submission: RingCursors::try_new(rings.submission(), zero, zero)?,
-            captured_submission_producer: zero,
-            completion: RingCursors::try_new(rings.completion(), zero, zero)?,
-            event: RingCursors::try_new(rings.event(), zero, zero)?,
+            submission: SubmissionRingState::new(layouts.submission())?,
+            completion: RingState::new(layouts.completion())?,
+            event: RingState::new(layouts.event())?,
         })
     }
 
     pub(super) const fn status(self) -> QueueStatus {
         QueueStatus {
             queue: self.activation.queue(),
-            submission: self.submission,
-            captured_submission_producer: self.captured_submission_producer,
-            completion: self.completion,
-            event: self.event,
+            submission: self.submission.ring().cursors(),
+            captured_submission_producer: self.submission.captured_producer(),
+            completion: self.completion.cursors(),
+            event: self.event.cursors(),
         }
     }
 }

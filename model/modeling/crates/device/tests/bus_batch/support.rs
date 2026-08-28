@@ -1,12 +1,11 @@
 use pdma_model_contract::abi::mmio::{MmioByteCount, QueueResponseBank};
-use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::binding::{
-    PdmaMemoryRegion, QueueActivation, QueueControl, QueueRingRegions, RingLayout,
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EpochQueue, EventRouting, QueueActivation, QueueConfig, QueueControl, QueueId,
+    QueueRingObjects, RingCursor, SoftwareOwnerId,
 };
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
-use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::{
-    AsyncDeviceHandle, DmaWrite, PdmaMemoryStage, QueueBootstrapBatch, SubmissionBatch,
+    AsyncDeviceHandle, DmaWrite, MappedDmaRegion, PdmaMemoryStage, QueueBootstrapBatch,
+    SubmissionBatch,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -156,23 +155,19 @@ pub fn activation(
             },
         );
     };
-    QueueActivation::try_new(
+    Ok(QueueActivation::new(
         epoch,
         QueueId::new(0),
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
-        QueueRingRegions::new(
-            RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 2, RingRecord::Event)?,
-        ),
-    )
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    ))
 }
 
 pub async fn bootstrap(
     handle: &AsyncDeviceHandle,
 ) -> TestResult<(
     EpochQueue,
-    PdmaMemoryRegion,
+    MappedDmaRegion,
     pdma_model_device::QueueResponseBytes,
 )> {
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;

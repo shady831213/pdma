@@ -1,9 +1,12 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiEventKind, DmaAddress, RingCursor};
+use pdma_model_contract::abi::{
+    AbiCompletion, AbiEvent, AbiEventKind, AbiRingEntry, DmaAddress, RingLayout,
+};
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, EventErrorKind, EventRecord, QueueConfigHandle,
+    BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord,
+    QueueConfigHandle, QueueId, RingCursor,
 };
 
 pub(super) async fn completion<A: CanonicalAccess>(
@@ -16,7 +19,7 @@ pub(super) async fn completion<A: CanonicalAccess>(
         return Ok(None);
     }
     let address = slot_address(queue.rings.completion(), cursors.consumer())?;
-    let mut bytes = vec![0; usize::from(queue.rings.completion().record().record_size())];
+    let mut bytes = vec![0; usize::from(queue.rings.completion().entry_size())];
     port.validate_owner()?;
     MemoryAccess::read(
         &port.access,
@@ -26,7 +29,7 @@ pub(super) async fn completion<A: CanonicalAccess>(
     )
     .map_err(crate::register::PdmaRegisterPortError::from)?;
     let decoded = AbiCompletion::decode(&bytes).map_err(|_| PortError::SubmissionState)?;
-    let record = CompletionRecord::try_from(decoded).map_err(|_| PortError::SubmissionState)?;
+    let record = semantic_completion(decoded)?;
     let next = cursors
         .consumer()
         .checked_increment(1)
@@ -42,6 +45,20 @@ pub(super) async fn completion<A: CanonicalAccess>(
     Ok(Some(record))
 }
 
+fn semantic_completion(decoded: AbiCompletion) -> PortResult<CompletionRecord> {
+    let queue_id = usize::try_from(decoded.origin_queue_id)
+        .map(QueueId::new)
+        .map_err(|_| PortError::SubmissionState)?;
+    let command_id = usize::try_from(decoded.command_id)
+        .map(CommandId::new)
+        .map_err(|_| PortError::SubmissionState)?;
+    Ok(CompletionRecord::new(
+        queue_id,
+        command_id,
+        CompletionStatus::Success,
+    ))
+}
+
 pub(super) async fn event<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     handle: QueueConfigHandle,
@@ -52,7 +69,7 @@ pub(super) async fn event<A: CanonicalAccess>(
         return Ok(None);
     }
     let address = slot_address(queue.rings.event(), cursors.consumer())?;
-    let mut bytes = vec![0; usize::from(queue.rings.event().record().record_size())];
+    let mut bytes = vec![0; usize::from(queue.rings.event().entry_size())];
     port.validate_owner()?;
     MemoryAccess::read(
         &port.access,
@@ -110,18 +127,12 @@ async fn commit_consumer<A: CanonicalAccess>(
     })?
 }
 
-fn slot_address(
-    layout: pdma_model_contract::binding::RingLayout,
+fn slot_address<R: AbiRingEntry>(
+    layout: RingLayout<R>,
     cursor: RingCursor,
 ) -> PortResult<DmaAddress> {
-    let offset = layout
-        .slot(cursor)
-        .checked_mul(u64::from(layout.record().record_size()))
-        .ok_or(PortError::SubmissionState)?;
     layout
-        .region()
-        .abi_base()
-        .checked_add(offset)
+        .entry_address(cursor.raw())
         .map_err(|_| PortError::SubmissionState)
 }
 

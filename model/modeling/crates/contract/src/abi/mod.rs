@@ -12,7 +12,7 @@ pub mod mmio;
 pub mod record;
 mod ring;
 
-pub use address::DmaAddress;
+pub use address::{DmaAddress, DmaRegion};
 pub use control::{AbiDiscovery, AbiLimits, DiscoveryRequest};
 pub use descriptor::{
     AbiCommand, AbiCommandHeader, AbiCommandHeaderFlagsRaw, AbiCommandHeaderFlagsValues,
@@ -50,4 +50,4 @@ pub use record::{
     AbiEventFlagsRaw, AbiEventFlagsValues, AbiEventKindRaw, AbiEventRaw, AbiEventReservedRaw,
     AbiEventReservedValues, AbiEventStageRaw, AbiEventView, AbiEventViewMut,
 };
-pub use ring::{RingCursor, RingRecord};
+pub use ring::{AbiRingEntry, QueueRingLayouts, RingLayout};

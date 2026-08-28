@@ -18,12 +18,7 @@ async fn stale_queue_and_result_capabilities_commit_nothing() {
     let stale_queue = QueueConfigHandle::new(stale_epoch, queue.directory_entry());
     let source = device.allocate_buffer(1).expect("allocation");
     let destination = device.allocate_buffer(1).expect("allocation");
-    let command = ExternalCommand::Copy(CopyCommand::new(
-        CommandId::new(0),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        CopyRequest::new(source, destination, 1),
-    ));
+    let command = Command::new(CommandId::new(0), pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(source, destination, 1)));
     device.enable_tracing();
     let before_submit = device.trace_events();
 

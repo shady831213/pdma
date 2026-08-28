@@ -13,14 +13,8 @@ pub(super) fn map_discovery(error: AbiControlError) -> MmioResultDetails {
         | AbiControlError::RingExtentOverflow { .. }
         | AbiControlError::MisalignedRing { .. }
         | AbiControlError::RingExtentMismatch { .. }
-        | AbiControlError::UnexpectedRingRecord { .. }
         | AbiControlError::QueueDepthMismatch { .. }
         | AbiControlError::EventDepthMismatch { .. }
-        | AbiControlError::CursorRegression { .. }
-        | AbiControlError::CursorUpdateRegression { .. }
-        | AbiControlError::CursorDistanceExceeded { .. }
-        | AbiControlError::CursorIncrementOverflow { .. }
-        | AbiControlError::DeviceEpochOverflow { .. }
         | AbiControlError::UnknownStatusValue { .. } => {
             details(MmioResult::InvalidTransaction, [1, 0, 0])
         }

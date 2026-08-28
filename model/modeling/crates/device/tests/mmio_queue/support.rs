@@ -1,6 +1,6 @@
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
 use pdma_model_device::AsyncDeviceHandle;
+use pdma_model_device::MappedDmaRegion;
 
 pub(crate) async fn write_u32(
     handle: &AsyncDeviceHandle,
@@ -40,7 +40,7 @@ pub(crate) async fn activate_raw(
     handle: &AsyncDeviceHandle,
     epoch: DeviceEpoch,
     queue_id: QueueId,
-    regions: &[PdmaMemoryRegion],
+    regions: &[MappedDmaRegion],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let [submission, completion, event] = regions else {
         return Err("three committed queue regions required".into());
@@ -57,14 +57,14 @@ pub(crate) async fn activate_raw(
 pub(crate) struct RawActivation {
     epoch: DeviceEpoch,
     queue_id: QueueId,
-    regions: [PdmaMemoryRegion; 3],
+    regions: [MappedDmaRegion; 3],
 }
 
 impl RawActivation {
     pub(crate) const fn depth_two(
         epoch: DeviceEpoch,
         queue_id: QueueId,
-        regions: [PdmaMemoryRegion; 3],
+        regions: [MappedDmaRegion; 3],
     ) -> Self {
         Self {
             epoch,

@@ -1,7 +1,7 @@
 use super::super::PublicationOutcome;
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::{ActiveQueue, BusControlState};
-use pdma_model_contract::abi::{AbiCompletion, AbiEvent, DmaAddress};
+use crate::runner::abi::bus::control::{BusControlState, RingState};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiRingEntry};
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CompletionRecord, QueueId};
 
@@ -15,14 +15,18 @@ pub(super) fn completion(
     let Ok(active) = control.queue_mut(queue) else {
         return PublicationOutcome::Retry;
     };
-    let Ok(exact) = AbiCompletion::try_from(record) else {
+    let Ok(queue_id) = u64::try_from(record.queue_id().raw()) else {
         return PublicationOutcome::Retry;
     };
+    let Ok(command_id) = u64::try_from(record.command_id().raw()) else {
+        return PublicationOutcome::Retry;
+    };
+    let exact = AbiCompletion::success(queue_id, command_id);
     let mut bytes = [0_u8; AbiCompletion::RECORD_SIZE];
     if exact.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
     }
-    publish(dma_space, active, ResultRing::Completion, &bytes)
+    publish(dma_space, &mut active.completion, &bytes)
 }
 
 pub(super) fn event(
@@ -41,54 +45,29 @@ pub(super) fn event(
     if event.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
     }
-    publish(dma_space, active, ResultRing::Event, &bytes)
+    publish(dma_space, &mut active.event, &bytes)
 }
 
-#[derive(Debug, Clone, Copy)]
-enum ResultRing {
-    Completion,
-    Event,
-}
-
-fn publish(
+fn publish<R: AbiRingEntry>(
     dma_space: &PdmaMemoryMappings,
-    active: &mut ActiveQueue,
-    ring: ResultRing,
+    ring: &mut RingState<R>,
     bytes: &[u8],
 ) -> PublicationOutcome {
-    let cursors = match ring {
-        ResultRing::Completion => active.completion,
-        ResultRing::Event => active.event,
-    };
-    if cursors.is_full() {
+    if ring.is_full() || bytes.len() != usize::from(ring.layout().entry_size()) {
         return PublicationOutcome::Retry;
     }
-    let Ok(next) = cursors.producer().checked_increment(1) else {
+    let Ok(next) = ring.producer().checked_increment(1) else {
         return PublicationOutcome::Retry;
     };
-    let Ok(updated) = cursors.update_producer(next) else {
+    let Ok(updated) = ring.update_producer(next) else {
         return PublicationOutcome::Retry;
     };
-    let layout = active.activation.rings();
-    let layout = match ring {
-        ResultRing::Completion => layout.completion(),
-        ResultRing::Event => layout.event(),
-    };
-    let Some(offset) = layout
-        .slot(cursors.producer())
-        .checked_mul(u64::from(layout.record().record_size()))
-    else {
+    let Ok(address) = ring.entry_address(ring.producer()) else {
         return PublicationOutcome::Retry;
     };
-    let Some(raw) = layout.region().base().raw().checked_add(offset) else {
-        return PublicationOutcome::Retry;
-    };
-    if dma_space.write_memory(DmaAddress::new(raw), bytes).is_err() {
+    if dma_space.write_memory(address, bytes).is_err() {
         return PublicationOutcome::Retry;
     }
-    match ring {
-        ResultRing::Completion => active.completion = updated,
-        ResultRing::Event => active.event = updated,
-    }
+    *ring = updated;
     PublicationOutcome::Published
 }

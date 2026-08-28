@@ -1,8 +1,8 @@
 use crate::ModelResult;
+use crate::dma_space::MappedDmaRegion;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::runner::{AsyncDeviceHandle, publish, wake};
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
 use std::sync::Arc;
 
@@ -16,11 +16,11 @@ impl AsyncDeviceHandle {
     pub async fn allocate_buffer(&self, len: usize) -> ModelResult<BufferId> {
         self.allocate_memory_region(len)
             .await
-            .map(PdmaMemoryRegion::object)
+            .map(MappedDmaRegion::object)
     }
 
     /// Allocates one raw device-visible DMA region.
-    pub async fn allocate_memory_region(&self, len: usize) -> ModelResult<PdmaMemoryRegion> {
+    pub async fn allocate_memory_region(&self, len: usize) -> ModelResult<MappedDmaRegion> {
         let (region, generation) = {
             let mut state = self.shared.state.lock().await;
             let region = u64::try_from(len)
@@ -81,7 +81,7 @@ impl AsyncDeviceHandle {
     pub async fn commit_memory_stage(
         &self,
         proposal: PdmaMemoryStage,
-    ) -> Result<Vec<PdmaMemoryRegion>, PdmaMemoryError> {
+    ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result = state.dma_space.commit(proposal);
@@ -127,7 +127,7 @@ impl AsyncDeviceHandle {
     }
 
     /// Resolves a semantic object to its committed DMA region.
-    pub async fn region_for_object(&self, object: BufferId) -> Option<PdmaMemoryRegion> {
+    pub async fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
         self.shared
             .state
             .lock()

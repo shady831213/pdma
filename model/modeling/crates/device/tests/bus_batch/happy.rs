@@ -1,5 +1,5 @@
 use super::support::{self, TestResult};
-use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::RingCursor;
 use pdma_model_device::{DmaWrite, SubmissionBatch};
 
 #[tokio::test]

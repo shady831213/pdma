@@ -4,15 +4,11 @@
 /// Shared typed queue-control fixtures.
 pub mod support;
 
-use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::binding::{
-    PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
-    RingLayout,
+use pdma_model_contract::semantic::{
+    BufferId, DeviceEpoch, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate, QueueId,
+    QueueRingObjects, RingCursor,
 };
-use pdma_model_contract::semantic::EpochQueue;
-use pdma_model_contract::semantic::{BufferId, DeviceEpoch, QueueId};
-use pdma_model_device::{DmaWrite, PdmaControlError, SubmissionAcceptance};
+use pdma_model_device::{DmaWrite, MappedDmaRegion, PdmaControlError, SubmissionAcceptance};
 use support::{activation, new_handle};
 
 include!("bus_control/happy.rs");

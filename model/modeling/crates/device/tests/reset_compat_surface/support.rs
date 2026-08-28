@@ -3,16 +3,12 @@
 use std::sync::{Arc, Mutex};
 
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver, SharedMemory};
-use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::binding::{
-    PdmaMemoryRegion, QueueActivation, QueueRingRegions, RingLayout,
-};
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, DeviceEpoch, EventRouting, ExternalCommand, QueueConfig,
-    QueueConfigHandle, ResourceConfig, SoftwareOwnerId,
+    Command, CommandId, CopyRequest, DeviceEpoch, EventRouting, QueueActivation, QueueConfig,
+    QueueConfigHandle, QueueRingObjects, ResourceConfig, SoftwareOwnerId,
 };
 use pdma_model_device::compat::SyncDevice;
-use pdma_model_device::{AsyncDeviceHandle, DeviceCore};
+use pdma_model_device::{AsyncDeviceHandle, DeviceCore, MappedDmaRegion};
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -57,7 +53,7 @@ pub(super) const fn queue_config() -> QueueConfig {
 }
 
 pub(super) fn activation(
-    regions: &[PdmaMemoryRegion],
+    regions: &[MappedDmaRegion],
     epoch: DeviceEpoch,
 ) -> Result<QueueActivation, pdma_model_contract::abi::AbiControlError> {
     let [submission, completion, event] = regions else {
@@ -69,16 +65,12 @@ pub(super) fn activation(
             },
         );
     };
-    QueueActivation::try_new(
+    Ok(QueueActivation::new(
         epoch,
         pdma_model_contract::semantic::QueueId::new(0),
         queue_config(),
-        QueueRingRegions::new(
-            RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 1, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 1, RingRecord::Event)?,
-        ),
-    )
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    ))
 }
 
 pub(super) fn submit_copy(
@@ -90,12 +82,14 @@ pub(super) fn submit_copy(
 ) -> TestResult {
     device.submit_command(
         queue,
-        ExternalCommand::Copy(CopyCommand::new(
+        Command::new(
             CommandId::new(command),
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::new(source, destination, 1),
-        )),
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                source,
+                destination,
+                1,
+            )),
+        ),
     )?;
     device.ring_doorbell(queue)?;
     Ok(())

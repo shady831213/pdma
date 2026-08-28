@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
 use pdma_model_contract::semantic::{
-    CommandId, CompletionRingId, CopyCommand, CopyRequest, DeviceEpoch, EpochIrqSource,
-    EventRouting, ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueConfigHandle,
-    QueueDirectoryEntry, QueueId, ResourceConfig, SoftwareOwnerId, WholeDeviceReset,
+    Command, CommandId, CompletionRingId, CopyRequest, DeviceEpoch, EpochIrqSource, EventRouting,
+    IrqRoute, IrqSource, IrqVector, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
+    ResourceConfig, SoftwareOwnerId, WholeDeviceReset,
 };
 use pdma_model_device::test_support::{DeviceStateSnapshot, sync_state_snapshot};
 use pdma_model_device::{ModelError, PdmaRunError, SyncDevice};
@@ -27,12 +27,14 @@ fn model_fate_rows_have_literal_leaf_sources() -> TestResult {
     let queue = device.create_queue(config(1))?;
     let source = device.allocate_buffer(1)?;
     let destination = device.allocate_buffer(1)?;
-    let command = ExternalCommand::Copy(CopyCommand::new(
+    let command = Command::new(
         CommandId::new(0),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        CopyRequest::new(source, destination, 1),
-    ));
+        pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+            source,
+            destination,
+            1,
+        )),
+    );
     device.submit_command(queue, command.clone())?;
     assert_leaf(
         &mut device,

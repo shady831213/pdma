@@ -3,7 +3,7 @@
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CommandId, ResourceConfig, TraceEvent, TraceEventKind,
-    desc::{CopyCommand, CopyRequest, ExternalCommand},
+    desc::{Command, CommandOperation, CopyRequest},
 };
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
@@ -113,14 +113,12 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
                 .allocate_buffer_on(&mut handle, 4)
                 .await
                 .expect("allocation");
-            let command = CopyCommand::new(
+            let command = Command::new(
                 CommandId::new(0),
-                driver.queue_id(),
-                driver.completion_ring_id(),
-                CopyRequest::new(src, dst, 4),
+                CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
             );
             handle
-                .submit_command(driver.queue_config_handle(), ExternalCommand::Copy(command))
+                .submit_command(driver.queue_config_handle(), command)
                 .await
                 .expect("direct submission has ring space");
             raw_handle.enable_tracing().await;

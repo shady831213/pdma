@@ -16,8 +16,8 @@ pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
-    DeviceEpoch, ExternalCommand, QueueConfigHandle,
-    desc::{CopyCommand, CopyRequest},
+    Command, DeviceEpoch, QueueConfigHandle,
+    desc::CopyRequest,
     ids::{CommandId, CompletionRingId},
     irq::IrqSource,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},

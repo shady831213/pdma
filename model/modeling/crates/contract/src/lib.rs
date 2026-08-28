@@ -4,9 +4,8 @@
 //! contracts only. It does not provide memory backing storage or runtime
 //! address-projection behavior.
 //!
-//! Consumers import model vocabulary through [`semantic`], fixed wire and MMIO
-//! vocabulary through [`abi`], and runtime-bound associations through [`binding`].
+//! Consumers import model vocabulary through [`semantic`] and fixed wire and MMIO
+//! vocabulary through [`abi`].
 
 pub mod abi;
-pub mod binding;
 pub mod semantic;

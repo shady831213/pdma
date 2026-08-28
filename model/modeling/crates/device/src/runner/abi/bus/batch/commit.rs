@@ -17,16 +17,17 @@ pub(super) fn commit_bootstrap(
     request: &QueueBootstrapBatch,
 ) -> Result<CommittedBatch, PdmaBatchError> {
     let regions = request.stage.regions();
-    let rings = request.activation.rings();
-    let expected = [
-        rings.submission().region(),
-        rings.completion().region(),
-        rings.event().region(),
-    ];
-    if regions != expected {
+    let objects = request.activation.rings();
+    if regions.len() != 3
+        || regions.iter().map(|region| region.object()).ne([
+            objects.submission(),
+            objects.completion(),
+            objects.event(),
+        ])
+    {
         return Err(PdmaBatchError::InvalidShape);
     }
-    let staging = bootstrap_staging(request.activation)?;
+    let staging = bootstrap_staging(request.activation, regions)?;
     let context = regions
         .first()
         .copied()

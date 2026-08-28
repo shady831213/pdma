@@ -1,6 +1,6 @@
 use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
-    ExternalCommand, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
+    BufferId, Command, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
+    QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 use pdma_model_host::{DriverPort, PortError};
 use std::future::pending;
@@ -61,17 +61,16 @@ impl DriverPort for ProbePort {
 
     async fn submit_command(
         &mut self,
-        _queue: QueueConfigHandle,
-        command: ExternalCommand,
+        queue: QueueConfigHandle,
+        command: Command,
     ) -> Result<(), PortError> {
         if self.submit_blocked {
             pending::<()>().await;
         }
-        let (queue, command) = command_identity(command);
         self.submissions += 1;
         self.pending.push_back(CompletionRecord::new(
-            queue,
-            command,
+            queue.queue_id(),
+            command.command_id(),
             CompletionStatus::Success,
         ));
         Ok(())
@@ -161,14 +160,5 @@ impl DriverPort for ProbePort {
         &mut self,
     ) -> Option<pdma_model_contract::semantic::IrqNotification> {
         None
-    }
-}
-
-fn command_identity(command: ExternalCommand) -> (QueueId, CommandId) {
-    match command {
-        ExternalCommand::Copy(command) => (command.queue_id(), command.command_id()),
-        ExternalCommand::StridedCopy(command) => (command.queue_id(), command.command_id()),
-        ExternalCommand::BroadcastCopy(command) => (command.queue_id(), command.command_id()),
-        ExternalCommand::VectorAdd(command) => (command.queue_id(), command.command_id()),
     }
 }

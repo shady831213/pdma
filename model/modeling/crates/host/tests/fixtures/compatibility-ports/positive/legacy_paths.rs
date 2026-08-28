@@ -1,5 +1,6 @@
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, SoftwareCpu};
-use pdma_model_contract::{abi::DmaAddress, binding::PdmaMemoryRegion, semantic::BufferId};
+use pdma_model_contract::{abi::DmaAddress, semantic::BufferId};
+use pdma_model_device::MappedDmaRegion;
 use pdma_model_host::{
     DriverPort,
     adapters::AsyncDeviceAccess,
@@ -22,5 +23,5 @@ fn main() {
     let _ = SoftwareCpu::new;
     let _ = DmaAddress::new(0);
     let _ = BufferId::new(0);
-    let _ = std::mem::size_of::<PdmaMemoryRegion>();
+    let _ = std::mem::size_of::<MappedDmaRegion>();
 }

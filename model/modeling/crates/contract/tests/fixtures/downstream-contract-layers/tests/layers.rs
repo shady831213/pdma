@@ -1,11 +1,12 @@
 //! Standalone downstream layer-boundary behavior.
 
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, RingCursor,
-    RingRecord,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, DmaRegion,
+    RingLayout,
 };
-use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
-use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
+use pdma_model_contract::semantic::{
+    BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId, RingCursor,
+};
 
 #[test]
 fn independent_values_compose_only_through_owner_conversions() {
@@ -26,14 +27,17 @@ fn independent_values_compose_only_through_owner_conversions() {
     let encoded = exact.encode(&mut bytes);
     let roundtrip = u64::try_from(request.src().raw())
         .map(|id| usize::try_from(id).map(BufferId::new));
-    let region = PdmaMemoryRegion::try_new(BufferId::new(11), DmaAddress::new(0x4000), 64)
+    let region = DmaRegion::try_new(DmaAddress::new(0x4000), 64)
         .expect("exact region must fit");
-    let ring = RingLayout::try_new(region, 1, RingRecord::Submission);
+    let ring = RingLayout::<AbiCommand>::try_new(region, 1);
 
     // Then: both real values and the owning conversions preserve their contracts.
     assert_eq!(encoded, Ok(()));
     assert_eq!(bytes.len(), 64);
     assert_eq!(roundtrip, Ok(Ok(request.src())));
     assert_eq!(queue.queue_id(), QueueId::new(3));
-    assert_eq!(ring.map(|layout| layout.slot(RingCursor::new(3))), Ok(0));
+    assert_eq!(
+        ring.map(|layout| layout.slot(RingCursor::new(3).raw())),
+        Ok(0)
+    );
 }

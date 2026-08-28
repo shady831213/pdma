@@ -5,9 +5,7 @@ use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::abi::bus::PdmaControlError;
 use crate::runner::abi::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandView, AbiEvent, DescriptorDecodeError, RingRecord,
-};
+use pdma_model_contract::abi::{AbiCommand, AbiCommandView, AbiEvent, DescriptorDecodeError};
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 
@@ -27,21 +25,15 @@ pub(super) fn fetch(
     let active = control
         .queue(queue)
         .map_err(|_| ModelError::DmaSubmissionState)?;
-    if active.submission.consumer() >= active.captured_submission_producer {
+    if !active.submission.has_captured_entry() {
         return Ok(None);
     }
-    let layout = active.activation.rings().submission();
-    let offset = layout
-        .slot(active.submission.consumer())
-        .checked_mul(u64::from(RingRecord::Submission.record_size()))
-        .ok_or(ModelError::DmaSubmissionState)?;
-    let slot = layout
-        .region()
-        .abi_base()
-        .checked_add(offset)
+    let ring = active.submission.ring();
+    let slot = ring
+        .entry_address(ring.consumer())
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let bytes = dma_space
-        .read_memory(slot, u64::from(RingRecord::Submission.record_size()))
+        .read_memory(slot, u64::from(ring.layout().entry_size()))
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let (exact_command_id, command_id) = command_id(&bytes)?;
     let exact_queue_id =
@@ -88,7 +80,7 @@ pub(super) fn has_pending(control: &BusControlState, queue_id: QueueId) -> bool 
     let queue = EpochQueue::new(control.epoch(), queue_id);
     control
         .queue(queue)
-        .is_ok_and(|active| active.submission.consumer() < active.captured_submission_producer)
+        .is_ok_and(|active| active.submission.has_captured_entry())
 }
 
 fn command_id(bytes: &[u8]) -> ModelResult<(u64, CommandId)> {

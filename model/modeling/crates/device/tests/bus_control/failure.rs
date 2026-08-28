@@ -12,6 +12,10 @@ async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged
     handle.commit_memory_stage(winner).await?;
     let invalid = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let invalid_activation = activation(&invalid, QueueId::new(1))?;
+    let [invalid_submission, _, _] = invalid.regions() else {
+        return Err("three invalid ring regions required".into());
+    };
+    let invalid_submission = *invalid_submission;
 
     // When: stale and wrong-ID bootstrap transactions are rejected.
     assert_eq!(
@@ -32,10 +36,7 @@ async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged
     let [valid_submission, _, _] = valid.regions() else {
         return Err("three valid ring regions required".into());
     };
-    assert_eq!(
-        *valid_submission,
-        invalid_activation.rings().submission().region()
-    );
+    assert_eq!(*valid_submission, invalid_submission);
     let status = handle
         .activate_queue(valid.clone(), activation(&valid, QueueId::new(0))?)
         .await?;
@@ -105,54 +106,45 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
     let rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
     let valid = activation(&rings, QueueId::new(0))?;
-    let stale = QueueActivation::try_new(
+    let stale = QueueActivation::new(
         DeviceEpoch::new(1),
         QueueId::new(0),
         valid.config(),
         valid.rings(),
-    )?;
+    );
     let wrong_id = activation(&rings, QueueId::new(1))?;
-    let overlapping = QueueActivation::try_new(
+    let overlapping = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         valid.config(),
-        QueueRingRegions::new(
+        QueueRingObjects::new(
             valid.rings().submission(),
             valid.rings().completion(),
-            RingLayout::try_new(
-                valid.rings().submission().region(),
-                2,
-                RingRecord::Event,
-            )?,
+            valid.rings().submission(),
         ),
-    )?;
-    let fake = PdmaMemoryRegion::try_new(BufferId::new(99), DmaAddress::new(0x2_0000), 128)
-        .map_err(|_| "valid fake DMA region required")?;
-    let mismatched = QueueActivation::try_new(
+    );
+    let mismatched = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         valid.config(),
-        QueueRingRegions::new(
-            RingLayout::try_new(fake, 2, RingRecord::Submission)?,
+        QueueRingObjects::new(
+            BufferId::new(99),
             valid.rings().completion(),
             valid.rings().event(),
         ),
-    )?;
-    assert!(
-        QueueActivation::try_new(
-            DeviceEpoch::initial(),
-            QueueId::new(0),
-            pdma_model_contract::semantic::QueueConfig::new(
-                1,
-                2,
-                pdma_model_contract::semantic::EventRouting::QueueLocal,
-                pdma_model_contract::semantic::SoftwareOwnerId::new(7),
-            ),
-            valid.rings(),
-        )
-        .is_err()
     );
-    for invalid in [stale, wrong_id, overlapping, mismatched] {
+    let wrong_depth = QueueActivation::new(
+        DeviceEpoch::initial(),
+        QueueId::new(0),
+        pdma_model_contract::semantic::QueueConfig::new(
+            1,
+            2,
+            pdma_model_contract::semantic::EventRouting::QueueLocal,
+            pdma_model_contract::semantic::SoftwareOwnerId::new(7),
+        ),
+        valid.rings(),
+    );
+    for invalid in [stale, wrong_id, overlapping, mismatched, wrong_depth] {
         assert!(handle.activate_queue(rings.clone(), invalid).await.is_err());
         assert_eq!(handle.memory_generation().await, 0);
     }

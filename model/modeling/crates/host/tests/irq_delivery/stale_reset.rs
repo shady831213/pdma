@@ -9,8 +9,8 @@ use crate::irq_delivery::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler}
 use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
-    IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, Command, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, IrqNotification,
+    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use tokio::sync::{Mutex, mpsc};
 
@@ -48,7 +48,7 @@ impl AsyncDevicePort for ResetPort {
     async fn submit_command(
         &mut self,
         _queue: QueueConfigHandle,
-        _command: ExternalCommand,
+        _command: Command,
     ) -> PortResult<()> {
         std::future::pending().await
     }

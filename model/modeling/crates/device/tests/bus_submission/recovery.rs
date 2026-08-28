@@ -1,14 +1,14 @@
 use super::common::{TestResult, activate_on, allocate, encode, fixture};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues,
-    AbiCommandPayloadVectorAddValues, RingCursor,
+    AbiCommandPayloadVectorAddValues,
 };
-use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
-use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{
-    CommandId, CompletionStatus, EventRouting, ExternalCommand, QueueConfig, ResourceConfig,
-    SoftwareOwnerId,
-    desc::{CopyCommand, CopyRequest},
+    Command, CommandId, CompletionStatus, EventRouting, QueueConfig, ResourceConfig,
+    SoftwareOwnerId, desc::CopyRequest,
+};
+use pdma_model_contract::semantic::{
+    QueueControl, QueueCursorUpdate, RingCursor, WholeDeviceReset,
 };
 use pdma_model_device::{DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
@@ -137,16 +137,14 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
         .handle
         .submit_command(
             semantic,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 CommandId::new(71),
-                semantic.queue_id(),
-                semantic.completion_ring_id(),
-                CopyRequest::new(
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
                     source_a.object(),
                     semantic_destination.object(),
                     usize::try_from(source_a.length())?,
-                ),
-            )),
+                )),
+            ),
         )
         .await?;
     fixture.handle.ring_doorbell(semantic).await?;

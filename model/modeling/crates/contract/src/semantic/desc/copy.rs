@@ -1,9 +1,6 @@
 //! Linear and strided copy descriptor schema.
 
-use crate::semantic::{
-    dma::DmaRangeStart,
-    ids::{BufferId, CommandId, CompletionRingId, QueueId},
-};
+use crate::semantic::{dma::DmaRangeStart, ids::BufferId};
 
 /// SDK/driver-facing linear copy request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,97 +140,5 @@ impl StridedCopyRequest {
     /// Destination byte distance between adjacent row starts.
     pub const fn dst_stride(self) -> usize {
         self.dst_stride
-    }
-}
-
-/// External linear copy command with queue and completion routing metadata.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CopyCommand {
-    command_id: CommandId,
-    queue_id: QueueId,
-    completion_ring_id: CompletionRingId,
-    request: CopyRequest,
-}
-
-impl CopyCommand {
-    /// Creates an external copy command.
-    pub const fn new(
-        command_id: CommandId,
-        queue_id: QueueId,
-        completion_ring_id: CompletionRingId,
-        request: CopyRequest,
-    ) -> Self {
-        Self {
-            command_id,
-            queue_id,
-            completion_ring_id,
-            request,
-        }
-    }
-
-    /// Command identifier assigned by the driver.
-    pub const fn command_id(self) -> CommandId {
-        self.command_id
-    }
-
-    /// Queue that carried this command.
-    pub const fn queue_id(self) -> QueueId {
-        self.queue_id
-    }
-
-    /// Completion ring where the result must be published.
-    pub const fn completion_ring_id(self) -> CompletionRingId {
-        self.completion_ring_id
-    }
-
-    /// Copy request payload.
-    pub const fn request(self) -> CopyRequest {
-        self.request
-    }
-}
-
-/// External strided copy command with queue and completion routing metadata.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StridedCopyCommand {
-    command_id: CommandId,
-    queue_id: QueueId,
-    completion_ring_id: CompletionRingId,
-    request: StridedCopyRequest,
-}
-
-impl StridedCopyCommand {
-    /// Creates an external strided copy command.
-    pub const fn new(
-        command_id: CommandId,
-        queue_id: QueueId,
-        completion_ring_id: CompletionRingId,
-        request: StridedCopyRequest,
-    ) -> Self {
-        Self {
-            command_id,
-            queue_id,
-            completion_ring_id,
-            request,
-        }
-    }
-
-    /// Command identifier assigned by the driver.
-    pub const fn command_id(self) -> CommandId {
-        self.command_id
-    }
-
-    /// Queue that carried this command.
-    pub const fn queue_id(self) -> QueueId {
-        self.queue_id
-    }
-
-    /// Completion ring where the result must be published.
-    pub const fn completion_ring_id(self) -> CompletionRingId {
-        self.completion_ring_id
-    }
-
-    /// Strided copy request payload.
-    pub const fn request(self) -> StridedCopyRequest {
-        self.request
     }
 }

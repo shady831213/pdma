@@ -1,4 +1,4 @@
-use pdma_model_contract::semantic::{BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::{BufferId, CompletionRecord, EpochIrqSource, EventRecord, Command, IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle};
 use pdma_model_host::{DriverPort, PortError};
 
 struct DownstreamPort;
@@ -36,7 +36,7 @@ impl DriverPort for DownstreamPort {
     async fn submit_command(
         &mut self,
         _queue: QueueConfigHandle,
-        _command: ExternalCommand,
+        _command: Command,
     ) -> Result<(), PortError> {
         Ok(())
     }

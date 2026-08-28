@@ -1,9 +1,7 @@
 use super::TestResult;
 use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionStatus, DmaRangeStart, EventErrorKind, ExternalCommand,
-    QueueConfig, QueueConfigHandle, SoftwareOwnerId,
-    desc::{CopyCommand, CopyRequest},
-    queue::EventRouting,
+    BufferId, Command, CommandId, CompletionStatus, DmaRangeStart, EventErrorKind, QueueConfig,
+    QueueConfigHandle, SoftwareOwnerId, desc::CopyRequest, queue::EventRouting,
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, AsyncRunSummary};
 
@@ -151,12 +149,10 @@ impl Fixture {
     }
 
     async fn submit(&self, command_id: CommandId, request: CopyRequest) -> TestResult {
-        let command = ExternalCommand::Copy(CopyCommand::new(
+        let command = Command::new(
             command_id,
-            self.queue.queue_id(),
-            self.queue.completion_ring_id(),
-            request,
-        ));
+            pdma_model_contract::semantic::CommandOperation::Copy(request),
+        );
         self.handle.submit_command(self.queue, command).await?;
         self.handle.ring_doorbell(self.queue).await?;
         Ok(())

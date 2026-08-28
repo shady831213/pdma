@@ -2,8 +2,8 @@ use super::{AsyncDriver, ManualDriver, core::DriverCore};
 use crate::DriverPort;
 use crate::DriverResult;
 use pdma_model_contract::semantic::{
-    BroadcastCopyCommand, BroadcastCopyRequest, CommandId, CopyCommand, CopyRequest,
-    ExternalCommand, StridedCopyCommand, StridedCopyRequest, VectorAddCommand, VectorAddRequest,
+    BroadcastCopyRequest, Command, CommandId, CommandOperation, CopyRequest, StridedCopyRequest,
+    VectorAddRequest,
 };
 
 impl DriverCore {
@@ -13,14 +13,8 @@ impl DriverCore {
         request: CopyRequest,
     ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
-        let command = CopyCommand::new(
-            reservation.command_id(),
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
-        );
-        self.submit_external_command_on(device, reservation, ExternalCommand::Copy(command))
-            .await
+        let command = Command::new(reservation.command_id(), CommandOperation::Copy(request));
+        self.submit_command_on(device, reservation, command).await
     }
 
     async fn submit_strided_copy_on(
@@ -29,14 +23,11 @@ impl DriverCore {
         request: StridedCopyRequest,
     ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
-        let command = StridedCopyCommand::new(
+        let command = Command::new(
             reservation.command_id(),
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
+            CommandOperation::StridedCopy(request),
         );
-        self.submit_external_command_on(device, reservation, ExternalCommand::StridedCopy(command))
-            .await
+        self.submit_command_on(device, reservation, command).await
     }
 
     async fn submit_broadcast_copy_on(
@@ -45,18 +36,11 @@ impl DriverCore {
         request: BroadcastCopyRequest,
     ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
-        let command = BroadcastCopyCommand::new(
+        let command = Command::new(
             reservation.command_id(),
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
+            CommandOperation::BroadcastCopy(request),
         );
-        self.submit_external_command_on(
-            device,
-            reservation,
-            ExternalCommand::BroadcastCopy(command),
-        )
-        .await
+        self.submit_command_on(device, reservation, command).await
     }
 
     async fn submit_vector_add_on(
@@ -65,21 +49,18 @@ impl DriverCore {
         request: VectorAddRequest,
     ) -> DriverResult<CommandId> {
         let reservation = self.accounting.prepare()?;
-        let command = VectorAddCommand::new(
+        let command = Command::new(
             reservation.command_id(),
-            self.queue_config.queue_id(),
-            self.queue_config.completion_ring_id(),
-            request,
+            CommandOperation::VectorAdd(request),
         );
-        self.submit_external_command_on(device, reservation, ExternalCommand::VectorAdd(command))
-            .await
+        self.submit_command_on(device, reservation, command).await
     }
 
-    async fn submit_external_command_on(
+    async fn submit_command_on(
         &self,
         device: &mut impl DriverPort,
         reservation: super::accounting::CommandReservation,
-        command: ExternalCommand,
+        command: Command,
     ) -> DriverResult<CommandId> {
         let command_id = reservation.command_id();
         self.accounting

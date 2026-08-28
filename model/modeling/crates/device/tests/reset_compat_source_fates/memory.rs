@@ -3,15 +3,15 @@ use std::sync::Arc;
 
 use hardware_interface_runtime::{MemoryRegion, SharedMemory};
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
+use pdma_model_device::MappedDmaRegion;
 use pdma_model_device::{PdmaMemoryError, PdmaMemoryMappings};
 
 use super::{TestResult, require_error};
 
 #[derive(Debug, PartialEq, Eq)]
 struct MemoryState {
-    mappings: Vec<PdmaMemoryRegion>,
+    mappings: Vec<MappedDmaRegion>,
     bytes: Vec<Vec<u8>>,
     generation: u64,
     runtime_regions: Vec<MemoryRegion>,
@@ -48,13 +48,13 @@ fn proposal_failures() -> TestResult {
     let first = space.allocate(64)?;
     let stale = space.stage(&[64])?;
     let second = space.allocate(64)?;
-    let overlap = PdmaMemoryRegion::try_new(second.object(), first.base(), second.length())?;
+    let overlap = MappedDmaRegion::try_new(second.object(), first.base(), second.length())?;
     let before_overlap = snapshot(&space, &memory)?;
     let overlapping = require_error(space.validate_region_set(&[first, overlap]))?;
     assert_eq!(overlapping, PdmaMemoryError::OverlappingRegion);
     assert!(overlapping.source().is_none());
     assert_unchanged(&space, &memory, &before_overlap)?;
-    let misaligned = PdmaMemoryRegion::try_new(
+    let misaligned = MappedDmaRegion::try_new(
         second.object(),
         second.base().checked_add(1)?,
         second.length(),

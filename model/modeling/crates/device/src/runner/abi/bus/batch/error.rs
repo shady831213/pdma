@@ -1,8 +1,8 @@
+use crate::dma_space::MappedDmaRegion;
 use crate::dma_space::PdmaMemoryError;
 use hardware_interface_runtime::ObservationGateError;
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
-use pdma_model_contract::binding::PdmaMemoryRegion;
 
 /// Attempted extent used to retain contextual DMA failure details.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -17,7 +17,7 @@ pub enum DmaBatchContext {
         length: u64,
     },
     /// One attempted DMA mapping.
-    Region(PdmaMemoryRegion),
+    Region(MappedDmaRegion),
 }
 
 /// Closed failure surface for the two ordered queue batches.

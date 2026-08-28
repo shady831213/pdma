@@ -1,9 +1,6 @@
 use super::common::{TestResult, activate, allocate, encode};
-use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, RingCursor,
-};
-use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
-use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues};
+use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceConfig, RingCursor};
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {

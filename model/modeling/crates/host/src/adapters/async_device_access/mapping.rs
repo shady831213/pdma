@@ -4,7 +4,7 @@ use crate::register::{
 };
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::binding::PdmaMemoryRegion;
+use pdma_model_device::MappedDmaRegion;
 use pdma_model_device::{
     DeviceError, MmioRegisterError, PdmaBatchError as DevicePdmaBatchError, PdmaMemoryError,
 };
@@ -21,7 +21,7 @@ pub(super) fn validate_alignment(alignment: MemoryAlignment) -> Result<(), PdmaP
 }
 
 pub(super) fn project_region(
-    region: PdmaMemoryRegion,
+    region: MappedDmaRegion,
     alignment: MemoryAlignment,
 ) -> Result<PdmaMappedRegion, PdmaProvisioningError> {
     let base = MemoryAddress::new(region.base().raw());

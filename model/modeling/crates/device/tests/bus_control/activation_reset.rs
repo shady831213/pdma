@@ -12,12 +12,12 @@ async fn mapped_activation_reuses_reset_persistent_mappings_only_at_current_epoc
             DeviceEpoch::initial(),
         ))
         .await?;
-    let fresh = QueueActivation::try_new(
+    let fresh = QueueActivation::new(
         current,
         QueueId::new(0),
         stale_activation.config(),
         stale_activation.rings(),
-    )?;
+    );
 
     // When: stale activation rejects and current-epoch activation consumes the same mappings.
     assert!(

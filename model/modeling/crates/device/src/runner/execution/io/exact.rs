@@ -166,7 +166,7 @@ fn fault_source(memory: &PdmaMemoryMappings, event: AbiEvent) -> ModelError {
             .region_ending_at(DmaAddress::new(locator))
             .and_then(|region| {
                 let len = usize::try_from(detail0).ok()?;
-                let end = detail1.checked_sub(region.abi_base().raw())?;
+                let end = detail1.checked_sub(region.base().raw())?;
                 usize::try_from(end)
                     .ok()
                     .map(|end| ModelError::OutOfBounds {

@@ -1,7 +1,7 @@
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
+use pdma_model_device::MappedDmaRegion;
 use pdma_model_device::{DmaBatchContext, PdmaBatchError, PdmaMemoryError};
 
 #[test]
@@ -11,7 +11,7 @@ fn all_dma_errors_map_exhaustively_with_attempted_context() {
         address: DmaAddress::new(0x1234),
         length: 0x40,
     };
-    let region = PdmaMemoryRegion::try_new(BufferId::new(9), DmaAddress::new(0x2000), 0x80)
+    let region = MappedDmaRegion::try_new(BufferId::new(9), DmaAddress::new(0x2000), 0x80)
         .expect("valid context region");
     let cases = [
         (

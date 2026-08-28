@@ -1,46 +1,75 @@
-//! Shared external command descriptor schema.
+//! Semantic PDMA command requests independent of wire layout.
 
 mod broadcast;
 mod copy;
 mod vector_add;
 
-pub use broadcast::{BroadcastCopyCommand, BroadcastCopyRequest, BroadcastDestinationRange};
-pub use copy::{CopyCommand, CopyRequest, StridedCopyCommand, StridedCopyRequest};
-pub use vector_add::{VectorAddCommand, VectorAddRequest, VectorBufferRange};
+pub use broadcast::{BroadcastCopyRequest, BroadcastDestinationRange};
+pub use copy::{CopyRequest, StridedCopyRequest};
+pub use vector_add::{VectorAddRequest, VectorBufferRange};
 
-/// Hardware-visible command descriptor emitted by the driver.
+use crate::semantic::CommandId;
+
+/// One semantic command with driver-assigned identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExternalCommand {
+pub struct Command {
+    command_id: CommandId,
+    operation: CommandOperation,
+}
+
+impl Command {
+    /// Creates a semantic command.
+    pub const fn new(command_id: CommandId, operation: CommandOperation) -> Self {
+        Self {
+            command_id,
+            operation,
+        }
+    }
+
+    /// Driver-assigned command identity.
+    pub const fn command_id(&self) -> CommandId {
+        self.command_id
+    }
+
+    /// Requested operation.
+    pub const fn operation(&self) -> &CommandOperation {
+        &self.operation
+    }
+
+    /// Consumes the command and returns its requested operation.
+    pub fn into_operation(self) -> CommandOperation {
+        self.operation
+    }
+}
+
+/// Closed semantic operation vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandOperation {
     /// Linear memory-to-memory copy.
-    Copy(CopyCommand),
+    Copy(CopyRequest),
     /// 2D strided memory-to-memory copy.
-    StridedCopy(StridedCopyCommand),
+    StridedCopy(StridedCopyRequest),
     /// One source range copied to multiple destination ranges.
-    BroadcastCopy(BroadcastCopyCommand),
+    BroadcastCopy(BroadcastCopyRequest),
     /// Byte-wise wrapping vector add over two source ranges.
-    VectorAdd(VectorAddCommand),
+    VectorAdd(VectorAddRequest),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CopyCommand, CopyRequest, ExternalCommand};
-    use crate::semantic::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+    use super::{Command, CommandOperation, CopyRequest};
+    use crate::semantic::ids::{BufferId, CommandId};
 
     #[test]
-    fn external_copy_schema_is_owned_by_contract() {
-        // Given: a shared copy request built from contract IDs.
+    fn semantic_command_keeps_identity_and_operation_without_queue_routing() {
+        // Given: a semantic copy request and driver-assigned command identity.
         let request = CopyRequest::new(BufferId::new(1), BufferId::new(2), 64);
-        let command = CopyCommand::new(
-            CommandId::new(3),
-            QueueId::new(4),
-            CompletionRingId::new(5),
-            request,
-        );
 
-        // When: the request is wrapped in the external command schema.
-        let external = ExternalCommand::Copy(command);
+        // When: the request is wrapped in the semantic command union.
+        let command = Command::new(CommandId::new(3), CommandOperation::Copy(request));
 
-        // Then: contract exposes the external schema without device types.
-        assert_eq!(external, ExternalCommand::Copy(command));
+        // Then: only command identity and operation semantics are retained.
+        assert_eq!(command.command_id(), CommandId::new(3));
+        assert_eq!(command.operation(), &CommandOperation::Copy(request));
     }
 }

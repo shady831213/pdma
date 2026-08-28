@@ -1,10 +1,8 @@
 use super::{TestResult, read_u64, write_u32, write_u64};
-use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::binding::{
-    QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EpochQueue, EventRouting, QueueActivation, QueueConfig, QueueControl,
+    QueueCursorUpdate, QueueId, QueueRingObjects, RingCursor, SoftwareOwnerId,
 };
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
-use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
 #[tokio::test(flavor = "current_thread")]
@@ -66,7 +64,7 @@ async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestR
 
 async fn activate_raw(
     handle: &AsyncDeviceHandle,
-    regions: &[pdma_model_contract::binding::PdmaMemoryRegion],
+    regions: &[pdma_model_device::MappedDmaRegion],
 ) -> TestResult {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
@@ -95,22 +93,16 @@ async fn read_response(handle: &AsyncDeviceHandle) -> TestResult<[u64; 9]> {
     Ok(response)
 }
 
-fn activation(
-    regions: &[pdma_model_contract::binding::PdmaMemoryRegion],
-) -> TestResult<QueueActivation> {
+fn activation(regions: &[pdma_model_device::MappedDmaRegion]) -> TestResult<QueueActivation> {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
     };
-    Ok(QueueActivation::try_new(
+    Ok(QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
-        QueueRingRegions::new(
-            RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 2, RingRecord::Event)?,
-        ),
-    )?)
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    ))
 }
 
 const fn cursor_requests(queue: EpochQueue) -> [QueueControl; 7] {

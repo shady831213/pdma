@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess,
 };
-use pdma_model_contract::binding::QueueActivation;
+use pdma_model_contract::semantic::QueueActivation;
 use pdma_model_host::register::{
     PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
     PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError,

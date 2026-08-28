@@ -4,13 +4,12 @@ use crate::runner::abi::bus::control::transactions;
 use crate::runner::state::DeviceCore;
 use crate::runner::{PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::AbiControlError;
-use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseBank, ResponseUpdate,
 };
-use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
-use pdma_model_contract::semantic::QueueId;
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EpochQueue, QueueControl, QueueCursorUpdate, QueueId, RingCursor, SemanticError,
+};
 
 pub(super) type CommandResult = Result<(QueueResponseBank, bool), MmioResultDetails>;
 
@@ -134,6 +133,7 @@ pub(in crate::runner) fn map_bus(
     match error {
         PdmaControlError::Dma(error) => map_dma(error),
         PdmaControlError::Abi(error) => map_abi(error, role),
+        PdmaControlError::Semantic(error) => map_semantic(error, role),
         PdmaControlError::StaleEpoch { expected, actual } => {
             fail(MmioResult::StaleEpoch, [expected.raw(), actual.raw(), 0])
         }
@@ -142,6 +142,36 @@ pub(in crate::runner) fn map_bus(
             MmioResult::InvalidTransaction,
             [(1_u64 << 32) | u64::from(command), 0, 0],
         ),
+    }
+}
+
+fn map_semantic(error: SemanticError, role: u64) -> MmioResultDetails {
+    match error {
+        SemanticError::CursorRegression { producer, consumer } => {
+            fail(MmioResult::CursorRegression, [producer, consumer, role])
+        }
+        SemanticError::CursorUpdateRegression { current, proposed } => fail(
+            MmioResult::CursorUpdateRegression,
+            [current, proposed, role],
+        ),
+        SemanticError::CursorDistanceExceeded {
+            producer,
+            consumer,
+            depth,
+        } => fail(
+            MmioResult::CursorDistanceExceeded,
+            [producer, consumer, u64::from(depth)],
+        ),
+        SemanticError::CursorIncrementOverflow { cursor, increment } => fail(
+            MmioResult::CursorIncrementOverflow,
+            [cursor, increment, role],
+        ),
+        SemanticError::DeviceEpochOverflow { current } => {
+            fail(MmioResult::DeviceEpochOverflow, [current, 0, 0])
+        }
+        SemanticError::ZeroCapacity | SemanticError::RingFull => {
+            fail(MmioResult::InvalidTransaction, [role, 0, 0])
+        }
     }
 }
 
@@ -179,10 +209,6 @@ pub(super) fn map_abi(error: AbiControlError, role: u64) -> MmioResultDetails {
         AbiControlError::RingExtentMismatch { expected, actual } => {
             fail(MmioResult::RingExtentMismatch, [expected, actual, role])
         }
-        AbiControlError::UnexpectedRingRecord { expected, actual } => fail(
-            MmioResult::UnexpectedRingRecord,
-            [u64::from(expected), u64::from(actual), role],
-        ),
         AbiControlError::QueueDepthMismatch {
             expected, actual, ..
         } => fail(
@@ -201,33 +227,11 @@ pub(super) fn map_abi(error: AbiControlError, role: u64) -> MmioResultDetails {
                 2,
             ],
         ),
-        AbiControlError::CursorRegression { producer, consumer } => {
-            fail(MmioResult::CursorRegression, [producer, consumer, role])
-        }
-        AbiControlError::CursorUpdateRegression { current, proposed } => fail(
-            MmioResult::CursorUpdateRegression,
-            [current, proposed, role],
-        ),
-        AbiControlError::CursorDistanceExceeded {
-            producer,
-            consumer,
-            depth,
-        } => fail(
-            MmioResult::CursorDistanceExceeded,
-            [producer, consumer, u64::from(depth)],
-        ),
-        AbiControlError::CursorIncrementOverflow { cursor, increment } => fail(
-            MmioResult::CursorIncrementOverflow,
-            [cursor, increment, role],
-        ),
         AbiControlError::UnsupportedVersion { requested } => {
             fail(MmioResult::UnsupportedVersion, [u64::from(requested), 0, 0])
         }
         AbiControlError::UnknownFeatureBits { bits } => {
             fail(MmioResult::UnknownFeatureBits, [bits, 0, 0])
-        }
-        AbiControlError::DeviceEpochOverflow { current } => {
-            fail(MmioResult::DeviceEpochOverflow, [current, 0, 0])
         }
         AbiControlError::UnknownStatusValue { value } => {
             fail(MmioResult::UnknownStatusValue, [u64::from(value), 0, 0])

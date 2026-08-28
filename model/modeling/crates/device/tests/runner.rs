@@ -2,8 +2,8 @@
 
 use pdma_model_contract::semantic::{
     CompletionStatus, ResourceConfig,
-    desc::{CopyCommand, CopyRequest, ExternalCommand},
-    ids::{CommandId, CompletionRingId, QueueId},
+    desc::{Command, CopyRequest},
+    ids::CommandId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
@@ -69,13 +69,11 @@ async fn async_runner_retires_copy_after_handle_submission() {
         .await
         .expect("source write is in bounds");
 
-    // When: the handle submits one ExternalCommand::Copy or equivalent command path directly to the async device handle, rings the doorbell if needed, waits for one progress step, polls completion, requests shutdown, and joins.
-    let command = ExternalCommand::Copy(CopyCommand::new(
+    // When: the handle submits one semantic copy command, rings the doorbell, and drives retirement.
+    let command = Command::new(
         CommandId::new(0),
-        QueueId::new(99),
-        queue.completion_ring_id(),
-        CopyRequest::new(src, dst, 4),
-    ));
+        pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
+    );
     handle
         .submit_command(queue, command)
         .await
@@ -125,12 +123,10 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
         .await
         .expect("source write is in bounds");
     for (command_id, dst) in [first_dst, second_dst, third_dst].into_iter().enumerate() {
-        let command = ExternalCommand::Copy(CopyCommand::new(
+        let command = Command::new(
             CommandId::new(command_id),
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::new(src, dst, 4),
-        ));
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
+        );
         handle
             .submit_command(queue, command)
             .await
@@ -195,8 +191,8 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_side_effects() {
-    // Given: a direct copy command whose completion ring is not present in the async device.
+async fn async_runner_uses_selected_queue_completion_routing() {
+    // Given: a queue with completion routing and a command containing only identity and operation.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
@@ -219,33 +215,31 @@ async fn async_runner_malformed_direct_command_unknown_completion_ring_has_no_si
         .write_buffer(src, 0, &[8, 6, 4, 2])
         .await
         .expect("source write is in bounds");
-    let malformed = ExternalCommand::Copy(CopyCommand::new(
+    let command = Command::new(
         CommandId::new(7),
-        queue.queue_id(),
-        CompletionRingId::new(99),
-        CopyRequest::new(src, dst, 4),
-    ));
+        pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
+    );
 
-    // When: the malformed command is submitted, doorbelled, and doorbelled again after the error.
+    // When: the command is submitted and retired through the selected queue.
     handle
-        .submit_command(queue, malformed)
+        .submit_command(queue, command)
         .await
-        .expect("malformed command still fits the command ring");
+        .expect("command fits the command ring");
     handle.ring_doorbell(queue).await.expect("doorbell rings");
-    let error_snapshot = runner.wait_for_error_after(0).await;
-    handle
-        .ring_doorbell(queue)
+    let snapshot = runner.wait_for_progress_after(0).await;
+    let completion = handle
+        .poll_completion(queue)
         .await
-        .expect("second doorbell rings after malformed command handling");
-    let final_snapshot = runner.wait_for_change_after(error_snapshot).await;
+        .expect("completion ring exists")
+        .expect("completion was published through the selected queue");
     runner.request_shutdown().await;
     let summary = worker.await.expect("runner joins cleanly");
 
-    // Then: destination memory is untouched, no valid completion is published, and no retry zombie remains.
-    assert_eq!(handle.read_buffer(dst, 0, 4).await, Ok(vec![0, 0, 0, 0]));
-    assert_eq!(handle.poll_completion(queue).await, Ok(None));
-    assert_eq!(error_snapshot.errors, 1);
-    assert_eq!(final_snapshot.errors, 1);
-    assert_eq!(summary.errors, 1);
-    assert_eq!(summary.steps, 0);
+    // Then: the queue publishes the command's completion without command-owned routing state.
+    assert_eq!(handle.read_buffer(dst, 0, 4).await, Ok(vec![8, 6, 4, 2]));
+    assert_eq!(completion.command_id(), CommandId::new(7));
+    assert_eq!(completion.status(), CompletionStatus::Success);
+    assert_eq!(snapshot.steps, 1);
+    assert_eq!(summary.steps, 1);
+    assert_eq!(summary.errors, 0);
 }

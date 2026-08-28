@@ -2,7 +2,7 @@ use super::{
     PdmaClaimResult, PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch,
 };
 use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
-use pdma_model_contract::binding::QueueActivation;
+use pdma_model_contract::semantic::QueueActivation;
 use std::error::Error;
 
 /// Host-owned logical PDMA mapping allocator and mutation-free preparer.

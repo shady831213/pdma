@@ -1,8 +1,8 @@
 use super::{PdmaMemoryError, PdmaMemoryMappings, runtime_address, runtime_end, runtime_start};
+use crate::dma_space::MappedDmaRegion;
 use crate::{ModelError, ModelResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAlignment};
 use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::dma::DmaRangeStart;
 use pdma_model_contract::semantic::event::{EventErrorKind, MemoryFault};
 use pdma_model_contract::semantic::ids::BufferId;
@@ -11,12 +11,12 @@ const BYTE_ALIGNMENT: MemoryAlignment = MemoryAlignment::ONE;
 
 impl PdmaMemoryMappings {
     /// Resolves a semantic buffer identity to logical mapping metadata.
-    pub fn region_for_object(&self, object: BufferId) -> Option<PdmaMemoryRegion> {
+    pub fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
         self.regions.get(object.raw()).map(|backing| backing.region)
     }
 
     /// Resolves an address contained by one non-empty logical mapping.
-    pub fn region_containing(&self, address: DmaAddress) -> Option<PdmaMemoryRegion> {
+    pub fn region_containing(&self, address: DmaAddress) -> Option<MappedDmaRegion> {
         let address = runtime_address(address);
         self.regions
             .iter()
@@ -27,10 +27,10 @@ impl PdmaMemoryMappings {
             .map(|backing| backing.region)
     }
 
-    pub(crate) fn region_ending_at(&self, address: DmaAddress) -> Option<PdmaMemoryRegion> {
+    pub(crate) fn region_ending_at(&self, address: DmaAddress) -> Option<MappedDmaRegion> {
         self.regions
             .iter()
-            .find(|backing| backing.region.abi_exclusive_end() == address)
+            .find(|backing| backing.region.exclusive_end() == address)
             .map(|backing| backing.region)
     }
 

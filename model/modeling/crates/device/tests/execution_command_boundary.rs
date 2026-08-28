@@ -1,7 +1,7 @@
 //! Guards the device-private execution-command boundary.
 
 #[test]
-fn native_execution_core_is_external_command_free() {
+fn native_execution_core_is_semantic_operation_free() {
     // Given: the device files below the semantic and exact frontend boundary.
     let core = [
         include_str!("../src/runner/execution/step.rs"),
@@ -12,13 +12,7 @@ fn native_execution_core_is_external_command_free() {
         include_str!("../src/trace/mod.rs"),
         include_str!("../src/trace/event.rs"),
     ];
-    let public_types = [
-        "ExternalCommand",
-        "CopyCommand",
-        "StridedCopyCommand",
-        "BroadcastCopyCommand",
-        "VectorAddCommand",
-    ];
+    let public_types = ["CommandOperation", "CopyRequest", "StridedCopyRequest"];
 
     // When: the core source is inspected for host-facing command vocabulary.
     let leaked = core
@@ -35,7 +29,7 @@ fn native_execution_core_is_external_command_free() {
 }
 
 #[test]
-fn exact_frontend_builds_private_execution_commands_without_external_reconstruction() {
+fn exact_frontend_builds_private_execution_commands_without_semantic_request_reconstruction() {
     // Given: the exact descriptor fetch and operation-resolution boundary.
     let exact = [
         include_str!("../src/runner/execution/io/exact/submission.rs"),
@@ -45,12 +39,7 @@ fn exact_frontend_builds_private_execution_commands_without_external_reconstruct
         include_str!("../src/runner/execution/io/exact/submission/command/vector.rs"),
     ];
     let public_types = [
-        "semantic::desc",
-        "ExternalCommand",
-        "CopyCommand",
-        "StridedCopyCommand",
-        "BroadcastCopyCommand",
-        "VectorAddCommand",
+        "CommandOperation",
         "CopyRequest",
         "StridedCopyRequest",
         "BroadcastCopyRequest",

@@ -21,9 +21,8 @@ use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use irq::PdmaIrqController;
 use pdma_model_contract::semantic::{
-    CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, ExternalCommand, IrqLine,
-    IrqVector, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId, ResourceConfig,
-    TraceEvent,
+    Command, CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, IrqLine, IrqVector,
+    QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId, ResourceConfig, TraceEvent,
 };
 use std::collections::VecDeque;
 
@@ -71,13 +70,14 @@ impl DeviceExecution {
     pub(super) fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> ModelResult<()> {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
+        let completion_ring = queue.completion_ring_id();
         self.queue_mut(queue_id)?
             .frontend
-            .submit_semantic(queue_id, command)
+            .submit_semantic(queue_id, completion_ring, command)
             .map(|(submitted_command, operation)| {
                 self.trace
                     .command_submitted(queue_id, operation, submitted_command);

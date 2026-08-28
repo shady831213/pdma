@@ -4,7 +4,7 @@ mod real;
 
 use fake::{FakeAccess, activation, message};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
-use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::RingCursor;
 use pdma_model_host::register::{
     PdmaBatchAccess, PdmaDmaWrite, PdmaExactInterruptClaim, PdmaMemoryProvisioning,
     PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch,

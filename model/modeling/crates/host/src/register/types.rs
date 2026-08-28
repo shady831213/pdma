@@ -1,8 +1,7 @@
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, MemoryRegion, RegisterObservation,
 };
-use pdma_model_contract::abi::RingCursor;
-use pdma_model_contract::semantic::{BufferId, EpochQueue, IrqNotification};
+use pdma_model_contract::semantic::{BufferId, EpochQueue, IrqNotification, RingCursor};
 
 /// One logical PDMA mapping request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,11 +1,11 @@
-use pdma_model_contract::binding::PdmaMemoryRegion;
+use crate::dma_space::MappedDmaRegion;
 
 /// Read-only proposal for one atomic DMA allocation batch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PdmaMemoryStage {
     pub(super) generation: u64,
     pub(super) next_address: u64,
-    pub(super) regions: Vec<PdmaMemoryRegion>,
+    pub(super) regions: Vec<MappedDmaRegion>,
 }
 
 impl PdmaMemoryStage {
@@ -15,7 +15,7 @@ impl PdmaMemoryStage {
     }
 
     /// Returns the proposed regions without installing them.
-    pub fn regions(&self) -> &[PdmaMemoryRegion] {
+    pub fn regions(&self) -> &[MappedDmaRegion] {
         &self.regions
     }
 }

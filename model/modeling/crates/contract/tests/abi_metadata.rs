@@ -5,8 +5,8 @@ use pdma_model_contract::abi::{
     ABI_VERSION, AbiAddressError, AbiControlError, AbiDecodeError, AbiV1Features,
     BROADCAST_COPY_OPCODE, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK, COMPLETION_SIZE,
     COPY_OPCODE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DESCRIPTOR_V1_FEATURE, DMA_ADDRESS_64_FEATURE, DmaAddress, EVENT_ACCESSES, EVENT_ALIGNMENT,
-    EVENT_FLAGS_MASK, EVENT_KINDS, EVENT_SIZE, EVENT_STAGES, EVENT_V1_FEATURE,
+    DESCRIPTOR_V1_FEATURE, DMA_ADDRESS_64_FEATURE, DmaAddress, DmaRegion, EVENT_ACCESSES,
+    EVENT_ALIGNMENT, EVENT_FLAGS_MASK, EVENT_KINDS, EVENT_SIZE, EVENT_STAGES, EVENT_V1_FEATURE,
     INDIRECT_BROADCAST_FEATURE, INDIRECT_ENTRY_ALIGNMENT, KNOWN_FEATURE_MASK,
     MAX_INDIRECT_DESTINATIONS, MAX_RING_DEPTH, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
     STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE, SUCCESS_STATUS, VECTOR_ADD_FEATURE,
@@ -14,8 +14,6 @@ use pdma_model_contract::abi::{
 };
 use pdma_model_contract::abi::{AbiCommandView, AbiCommandViewMut};
 use pdma_model_contract::abi::{COMPLETION, DESCRIPTOR, EVENT, FEATURES, OPCODES, OpcodeSpec};
-use pdma_model_contract::binding::PdmaMemoryRegion;
-use pdma_model_contract::semantic::BufferId;
 
 fn assert_field_ranges(record: RecordSpec, expected: &[(usize, usize)]) {
     let resolved = record.resolve();
@@ -207,7 +205,7 @@ fn rejects_unknown_features_and_unrepresentable_ids() {
     let short = [0_u8; 7];
     let mut short_output = [0_u8; 7];
     let address_error = DmaAddress::try_from(oversized_id);
-    let region_error = PdmaMemoryRegion::try_new(BufferId::new(3), DmaAddress::new(u64::MAX), 1);
+    let region_error = DmaRegion::try_new(DmaAddress::new(u64::MAX), 1);
     let version_error = validate_abi_version(2);
 
     // When: each untrusted value crosses its typed ABI boundary.

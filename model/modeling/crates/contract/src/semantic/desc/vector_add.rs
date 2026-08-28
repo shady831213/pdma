@@ -1,6 +1,6 @@
 //! Vector-add descriptor schema.
 
-use crate::semantic::ids::{BufferId, CommandId, CompletionRingId, QueueId};
+use crate::semantic::ids::BufferId;
 
 /// SDK/driver-facing vector-add request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,51 +89,5 @@ impl VectorAddRequest {
     /// Returns true when this vector add moves zero bytes.
     pub const fn is_empty(self) -> bool {
         self.len == 0
-    }
-}
-
-/// External vector-add command with queue and completion routing metadata.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VectorAddCommand {
-    command_id: CommandId,
-    queue_id: QueueId,
-    completion_ring_id: CompletionRingId,
-    request: VectorAddRequest,
-}
-
-impl VectorAddCommand {
-    /// Creates an external vector-add command.
-    pub const fn new(
-        command_id: CommandId,
-        queue_id: QueueId,
-        completion_ring_id: CompletionRingId,
-        request: VectorAddRequest,
-    ) -> Self {
-        Self {
-            command_id,
-            queue_id,
-            completion_ring_id,
-            request,
-        }
-    }
-
-    /// Command identifier assigned by the driver.
-    pub const fn command_id(self) -> CommandId {
-        self.command_id
-    }
-
-    /// Queue that carried this command.
-    pub const fn queue_id(self) -> QueueId {
-        self.queue_id
-    }
-
-    /// Completion ring where the result must be published.
-    pub const fn completion_ring_id(self) -> CompletionRingId {
-        self.completion_ring_id
-    }
-
-    /// Vector-add request payload.
-    pub const fn request(self) -> VectorAddRequest {
-        self.request
     }
 }

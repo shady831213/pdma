@@ -2,11 +2,13 @@ use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::register::{BusQueueStatus, PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest};
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::abi::{DmaAddress, RingRecord};
-use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCompletion, AbiEvent, AbiRingEntry, DmaAddress, DmaRegion, QueueRingLayouts,
+    RingLayout,
+};
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRingId, DeviceEpoch, QueueConfig, QueueConfigHandle, QueueDirectoryEntry,
-    QueueId,
+    BufferId, CompletionRingId, DeviceEpoch, QueueActivation, QueueConfig, QueueConfigHandle,
+    QueueDirectoryEntry, QueueId, QueueRingObjects,
 };
 
 #[derive(Debug, Clone)]
@@ -19,7 +21,7 @@ pub(super) struct PortState {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct QueueState {
     pub(super) handle: QueueConfigHandle,
-    pub(super) rings: QueueRingRegions,
+    pub(super) rings: QueueRingLayouts,
     pub(super) status: BusQueueStatus,
 }
 
@@ -79,13 +81,17 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
         return Err(PortError::SubmissionState.into());
     };
     let proposed = [*submission, *completion, *event];
-    let rings = QueueRingRegions::new(
-        layout(*submission, lengths[0], RingRecord::Submission)?,
-        layout(*completion, lengths[1], RingRecord::Completion)?,
-        layout(*event, lengths[2], RingRecord::Event)?,
+    let rings = QueueRingLayouts::new(
+        layout::<AbiCommand>(*submission, config.command_depth())?,
+        layout::<AbiCompletion>(*completion, config.completion_depth())?,
+        layout::<AbiEvent>(*event, config.event_depth())?,
     );
-    let activation = QueueActivation::try_new(epoch, QueueId::new(0), config, rings)
-        .map_err(|_| PortError::SubmissionState)?;
+    let activation = QueueActivation::new(
+        epoch,
+        QueueId::new(0),
+        config,
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    );
     let bytes = port
         .poll_batch(port.access.bootstrap_queue(proposal, activation))
         .await?;
@@ -188,25 +194,20 @@ fn alignment() -> PortResult<MemoryAlignment> {
 
 fn ring_lengths(config: QueueConfig) -> PortResult<[u64; 3]> {
     Ok([
-        ring_length(config.command_depth(), RingRecord::Submission)?,
-        ring_length(config.completion_depth(), RingRecord::Completion)?,
-        ring_length(config.event_depth(), RingRecord::Event)?,
+        ring_length::<AbiCommand>(config.command_depth())?,
+        ring_length::<AbiCompletion>(config.completion_depth())?,
+        ring_length::<AbiEvent>(config.event_depth())?,
     ])
 }
 
-fn ring_length(depth: usize, record: RingRecord) -> PortResult<u64> {
+fn ring_length<R: AbiRingEntry>(depth: usize) -> PortResult<u64> {
     let depth = u64::try_from(depth).map_err(|_| PortError::AllocationExhausted)?;
-    RingLayout::checked_extent(depth, record.record_size())
-        .map_err(|_| PortError::AllocationExhausted)
+    RingLayout::<R>::checked_extent(depth).map_err(|_| PortError::AllocationExhausted)
 }
 
-fn layout(region: PdmaMappedRegion, length: u64, record: RingRecord) -> PortResult<RingLayout> {
-    let projected = pdma_model_contract::binding::PdmaMemoryRegion::try_new(
-        region.object(),
-        dma_address(region.base()),
-        region.length(),
-    )
-    .map_err(|_| PortError::SubmissionState)?;
-    RingLayout::try_new(projected, length / u64::from(record.record_size()), record)
-        .map_err(|_| PortError::SubmissionState)
+fn layout<R: AbiRingEntry>(region: PdmaMappedRegion, depth: usize) -> PortResult<RingLayout<R>> {
+    let projected = DmaRegion::try_new(dma_address(region.base()), region.length())
+        .map_err(|_| PortError::SubmissionState)?;
+    let depth = u64::try_from(depth).map_err(|_| PortError::SubmissionState)?;
+    RingLayout::try_new(projected, depth).map_err(|_| PortError::SubmissionState)
 }

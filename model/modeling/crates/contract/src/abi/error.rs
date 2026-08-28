@@ -42,16 +42,6 @@ pub enum AbiEncodeError {
         /// Required field width.
         width: usize,
     },
-    /// A model identifier does not fit the ABI's `u64` ID width.
-    UnrepresentableId {
-        /// Supplied identifier value.
-        value: u128,
-    },
-    /// A platform-sized model identifier does not fit the ABI's `u64` ID width.
-    UnrepresentableModelId {
-        /// Supplied model identifier.
-        value: usize,
-    },
     /// A semantic-only event has no DMA address fault locator.
     MissingEventDmaAddress,
     /// An event tuple does not follow the ABI-v1 auxiliary-field rules.
@@ -83,11 +73,6 @@ pub enum AbiDecodeError {
     UnknownFeatureBits {
         /// Unassigned bits after masking known features.
         bits: u64,
-    },
-    /// A wire identifier does not fit the model's platform-sized ID vocabulary.
-    UnrepresentableId {
-        /// Supplied wire identifier.
-        value: u64,
     },
     /// A fixed ABI header field has an unsupported value.
     InvalidRecordField {
@@ -153,15 +138,6 @@ impl fmt::Display for AbiEncodeError {
             Self::InvalidFieldRange { start, end, width } => {
                 write!(f, "encoding range {start}..{end} is not {width} bytes wide")
             }
-            Self::UnrepresentableId { value } => {
-                write!(f, "identifier {value} is not representable as an ABI u64")
-            }
-            Self::UnrepresentableModelId { value } => {
-                write!(
-                    f,
-                    "model identifier {value} is not representable as an ABI u64"
-                )
-            }
             Self::MissingEventDmaAddress => write!(f, "event has no ABI DMA address fault locator"),
             Self::NonCanonicalEventDetails => {
                 write!(f, "event auxiliary fields are not canonical for ABI v1")
@@ -184,12 +160,6 @@ impl fmt::Display for AbiDecodeError {
                 write!(f, "decoding range {start}..{end} is not {width} bytes wide")
             }
             Self::UnknownFeatureBits { bits } => write!(f, "unknown ABI feature bits {bits:#x}"),
-            Self::UnrepresentableId { value } => {
-                write!(
-                    f,
-                    "ABI identifier {value} is not representable by the model"
-                )
-            }
             Self::InvalidRecordField { field, value } => {
                 write!(f, "ABI record field {field} has invalid value {value}")
             }

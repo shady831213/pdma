@@ -29,9 +29,8 @@ impl AsyncDeviceHandle {
 mod tests {
     use super::*;
     use crate::runner::abi::mmio::reset::{self as mmio_reset, ResetOutcome};
-    use pdma_model_contract::abi::AbiControlError;
     use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-    use pdma_model_contract::semantic::ids::BufferId;
+    use pdma_model_contract::semantic::{SemanticError, ids::BufferId};
 
     #[test]
     fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
@@ -99,8 +98,8 @@ mod tests {
         // Then: the typed overflow leaves identity, DMA, counters, and lifecycle unchanged.
         assert_eq!(
             result,
-            Err(PdmaControlError::Abi(
-                AbiControlError::DeviceEpochOverflow { current: u64::MAX }
+            Err(PdmaControlError::Semantic(
+                SemanticError::DeviceEpochOverflow { current: u64::MAX }
             ))
         );
         assert_eq!(state.backend.epoch(), exhausted);
@@ -120,7 +119,9 @@ mod tests {
         assert_eq!(
             raw,
             ResetOutcome::Rejected(
-                PdmaControlError::Abi(AbiControlError::DeviceEpochOverflow { current: u64::MAX }),
+                PdmaControlError::Semantic(SemanticError::DeviceEpochOverflow {
+                    current: u64::MAX,
+                }),
                 pdma_model_contract::abi::mmio::MmioResultDetails {
                     result: pdma_model_contract::abi::mmio::MmioResult::DeviceEpochOverflow,
                     details: [u64::MAX, 0, 0],

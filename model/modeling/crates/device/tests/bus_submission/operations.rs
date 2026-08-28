@@ -2,10 +2,8 @@ use super::common::{TestResult, activate, allocate, encode, fixture, run_descrip
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
     AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
-    RingCursor,
 };
-use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
-use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceConfig, RingCursor};
 use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
 
 /// Operation variants covered by the exact descriptor inventory.
@@ -62,7 +60,7 @@ pub async fn execute_operation(case: OperationCase) -> TestResult {
     ));
     assert_eq!(
         result.consumer,
-        pdma_model_contract::abi::RingCursor::new(1)
+        pdma_model_contract::semantic::RingCursor::new(1)
     );
     assert_eq!(result.destinations, [expected_a, expected_b]);
     assert!(!result.traces.is_empty());
@@ -189,10 +187,10 @@ pub(super) async fn zero_row_strided() -> TestResult {
 pub(super) async fn command(
     case: OperationCase,
     handle: &pdma_model_device::AsyncDeviceHandle,
-    source_a: pdma_model_contract::binding::PdmaMemoryRegion,
-    source_b: pdma_model_contract::binding::PdmaMemoryRegion,
-    destination_a: pdma_model_contract::binding::PdmaMemoryRegion,
-    destination_b: pdma_model_contract::binding::PdmaMemoryRegion,
+    source_a: pdma_model_device::MappedDmaRegion,
+    source_b: pdma_model_device::MappedDmaRegion,
+    destination_a: pdma_model_device::MappedDmaRegion,
+    destination_b: pdma_model_device::MappedDmaRegion,
 ) -> TestResult<(AbiCommand, Vec<u8>, Vec<u8>)> {
     match case {
         OperationCase::Copy => Ok((

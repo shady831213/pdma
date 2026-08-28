@@ -1,8 +1,8 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
-use pdma_model_contract::abi::{AbiCompletion, AbiEvent, RingCursor};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent};
 use pdma_model_contract::semantic::{
-    CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
+    CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, RingCursor, TraceEventKind,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::PendingDmaResult;

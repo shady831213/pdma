@@ -1,5 +1,11 @@
 //! Queue configuration and directory records.
 
+mod activation;
+mod control;
+
+pub use activation::{QueueActivation, QueueRingObjects};
+pub use control::{QueueControl, QueueCursorUpdate, RingCursor, RingCursors};
+
 use crate::semantic::ids::{CompletionRingId, QueueId};
 use crate::semantic::irq::IrqSource;
 use crate::semantic::{DeviceEpoch, EpochIrqSource};

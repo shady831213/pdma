@@ -1,7 +1,7 @@
 async fn assert_mapped_activation_rejected(
     handle: &pdma_model_device::AsyncDeviceHandle,
     request: QueueActivation,
-    committed: &[PdmaMemoryRegion],
+    committed: &[MappedDmaRegion],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let generation = handle.memory_generation().await;
     let run = handle.snapshot().await;
@@ -91,7 +91,7 @@ async fn mapped_activation_rejects_uncommitted_and_partial_mappings_without_muta
     let [completion, event] = partial.regions() else {
         return Err("two proposed result rings required".into());
     };
-    let partial_request = QueueActivation::try_new(
+    let partial_request = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         pdma_model_contract::semantic::QueueConfig::new(
@@ -100,12 +100,12 @@ async fn mapped_activation_rejects_uncommitted_and_partial_mappings_without_muta
             pdma_model_contract::semantic::EventRouting::QueueLocal,
             pdma_model_contract::semantic::SoftwareOwnerId::new(7),
         ),
-        QueueRingRegions::new(
-            RingLayout::try_new(submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 2, RingRecord::Event)?,
+        QueueRingObjects::new(
+            submission.object(),
+            completion.object(),
+            event.object(),
         ),
-    )?;
+    );
 
     // When/Then: both mapping sets are rejected before any queue or allocator mutation.
     assert_mapped_activation_rejected(&uncommitted_handle, uncommitted_request, &[]).await?;
@@ -126,43 +126,38 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
         return Err("three committed ring regions required".into());
     };
     let submission_region = *submission_region;
-    let stale_epoch = QueueActivation::try_new(
+    let stale_epoch = QueueActivation::new(
         DeviceEpoch::new(1),
         QueueId::new(0),
         valid.config(),
         valid.rings(),
-    )?;
-    let wrong_id = QueueActivation::try_new(
+    );
+    let wrong_id = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(1),
         valid.config(),
         valid.rings(),
-    )?;
-    let fake_submission = PdmaMemoryRegion::try_new(
-        BufferId::new(99),
-        valid.rings().submission().region().base(),
-        valid.rings().submission().region().length(),
-    )?;
-    let wrong_mapping = QueueActivation::try_new(
+    );
+    let wrong_mapping = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         valid.config(),
-        QueueRingRegions::new(
-            RingLayout::try_new(fake_submission, 2, RingRecord::Submission)?,
+        QueueRingObjects::new(
+            BufferId::new(99),
             valid.rings().completion(),
             valid.rings().event(),
         ),
-    )?;
-    let overlapping = QueueActivation::try_new(
+    );
+    let overlapping = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         valid.config(),
-        QueueRingRegions::new(
+        QueueRingObjects::new(
             valid.rings().submission(),
             valid.rings().completion(),
-            RingLayout::try_new(submission_region, 2, RingRecord::Event)?,
+            submission_region.object(),
         ),
-    )?;
+    );
 
     // When/Then: semantic mismatches reject repeatedly with no DMA/queue/trace/wake change.
     for request in [
@@ -175,46 +170,19 @@ async fn mapped_activation_rejects_wrong_mapping_epoch_depth_role_and_id_without
         assert_mapped_activation_rejected(&handle, request, &committed).await?;
     }
 
-    // And: wrong depth/role inputs are rejected at their typed construction boundary.
-    assert!(
-        QueueActivation::try_new(
-            DeviceEpoch::initial(),
-            QueueId::new(0),
-            valid.config(),
-            QueueRingRegions::new(
-                RingLayout::try_new(submission_region, 4, RingRecord::Completion)?,
-                valid.rings().completion(),
-                valid.rings().event(),
-            ),
-        )
-        .is_err()
+    // And: configuration/layout disagreement is rejected by the device-owned mapper.
+    let wrong_depth = QueueActivation::new(
+        DeviceEpoch::initial(),
+        QueueId::new(0),
+        pdma_model_contract::semantic::QueueConfig::new(
+            1,
+            2,
+            pdma_model_contract::semantic::EventRouting::QueueLocal,
+            pdma_model_contract::semantic::SoftwareOwnerId::new(7),
+        ),
+        valid.rings(),
     );
-    let misaligned = PdmaMemoryRegion::try_new(
-        submission_region.object(),
-        DmaAddress::new(submission_region.base().raw().saturating_add(1)),
-        submission_region.length(),
-    )?;
-    assert!(RingLayout::try_new(misaligned, 2, RingRecord::Submission).is_err());
-    let wrong_extent = PdmaMemoryRegion::try_new(
-        submission_region.object(),
-        submission_region.base(),
-        submission_region.length().saturating_sub(1),
-    )?;
-    assert!(RingLayout::try_new(wrong_extent, 2, RingRecord::Submission).is_err());
-    assert!(
-        QueueActivation::try_new(
-            DeviceEpoch::initial(),
-            QueueId::new(0),
-            pdma_model_contract::semantic::QueueConfig::new(
-                1,
-                2,
-                pdma_model_contract::semantic::EventRouting::QueueLocal,
-                pdma_model_contract::semantic::SoftwareOwnerId::new(7),
-            ),
-            valid.rings(),
-        )
-        .is_err()
-    );
+    assert_mapped_activation_rejected(&handle, wrong_depth, &committed).await?;
     assert_eq!(handle.memory_generation().await, 1);
     assert!(handle.trace_events().await.is_empty());
     Ok(())

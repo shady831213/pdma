@@ -1,13 +1,12 @@
-use super::{ActiveQueue, PdmaControlError, QueueStatus};
+use super::{ActiveQueue, PdmaControlError, QueueStatus, SubmissionRingState};
 use crate::runner::abi::bus::{DmaWrite, SubmissionAcceptance};
 use crate::runner::state::DeviceCore;
-use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
+use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, RingCursor};
 
 #[derive(Clone, Copy)]
 pub(in crate::runner) struct PreparedSubmissionPublication {
     queue: pdma_model_contract::semantic::EpochQueue,
-    submission: pdma_model_contract::binding::RingCursors,
+    submission: SubmissionRingState,
     status: QueueStatus,
 }
 
@@ -22,7 +21,9 @@ pub(in crate::runner::abi::bus) fn accept_submission(
     request: SubmissionAcceptance,
 ) -> Result<QueueStatus, PdmaControlError> {
     let queue = *state.bus_control.queue(request.queue)?;
-    if queue.submission.producer() != request.expected_producer || queue.submission.is_full() {
+    if queue.submission.ring().producer() != request.expected_producer
+        || queue.submission.ring().is_full()
+    {
         return Err(PdmaControlError::InvalidTransaction);
     }
     let next = request.expected_producer.checked_increment(1)?;
@@ -45,21 +46,9 @@ pub(in crate::runner::abi::bus) fn accept_submission(
 }
 
 fn validate_descriptor(queue: &ActiveQueue, write: &DmaWrite) -> Result<(), PdmaControlError> {
-    let layout = queue.activation.rings().submission();
-    let slot_offset = layout
-        .slot(queue.submission.producer())
-        .checked_mul(u64::from(RingRecord::Submission.record_size()))
-        .ok_or(PdmaControlError::InvalidTransaction)?;
-    let expected = pdma_model_contract::abi::DmaAddress::new(
-        layout
-            .region()
-            .base()
-            .raw()
-            .checked_add(slot_offset)
-            .ok_or(PdmaControlError::InvalidTransaction)?,
-    );
-    if write.address() != expected
-        || write.bytes().len() != usize::from(RingRecord::Submission.record_size())
+    let ring = queue.submission.ring();
+    let expected = ring.entry_address(ring.producer())?;
+    if write.address() != expected || write.bytes().len() != usize::from(ring.layout().entry_size())
     {
         Err(PdmaControlError::InvalidTransaction)
     } else {
@@ -78,7 +67,7 @@ fn validate_indirect(
         return Err(PdmaControlError::InvalidTransaction);
     };
     if proposal.generation() != state.dma_space.generation()
-        || write.address() != region.abi_base()
+        || write.address() != region.base()
         || u64::try_from(write.bytes().len()) != Ok(region.length())
     {
         Err(PdmaControlError::InvalidTransaction)
@@ -92,7 +81,9 @@ pub(in crate::runner) fn prepare_submission_publication(
     request: &SubmissionAcceptance,
 ) -> Result<PreparedSubmissionPublication, PdmaControlError> {
     let queue = *state.bus_control.queue(request.queue)?;
-    if queue.submission.producer() != request.expected_producer || queue.submission.is_full() {
+    if queue.submission.ring().producer() != request.expected_producer
+        || queue.submission.ring().is_full()
+    {
         return Err(PdmaControlError::InvalidTransaction);
     }
     let next = request.expected_producer.checked_increment(1)?;
@@ -146,13 +137,8 @@ pub(in crate::runner) fn control(
                 return (Err(PdmaControlError::InvalidQueue), false);
             }
             let (result, changed) = update_queue(state, update, |queue, cursor| {
-                if cursor < queue.captured_submission_producer
-                    || cursor > queue.submission.producer()
-                {
-                    return Err(PdmaControlError::InvalidTransaction);
-                }
-                let changed = cursor != queue.captured_submission_producer;
-                queue.captured_submission_producer = cursor;
+                let changed = cursor != queue.submission.captured_producer();
+                queue.submission = queue.submission.capture(cursor)?;
                 Ok(changed)
             });
             if result.is_ok() && state.backend.ring_dma_bus_doorbell(update.queue()).is_err() {
@@ -209,11 +195,8 @@ pub(in crate::runner) fn advance_submission_consumer_raw(
 ) -> Result<(), PdmaControlError> {
     let queue = pdma_model_contract::semantic::EpochQueue::new(control.epoch(), queue_id);
     let active = control.queue_mut(queue)?;
-    let next = active.submission.consumer().checked_increment(1)?;
-    if next > active.captured_submission_producer {
-        return Err(PdmaControlError::InvalidTransaction);
-    }
-    active.submission = active.submission.update_consumer(next)?;
+    let next = active.submission.ring().consumer().checked_increment(1)?;
+    active.submission = active.submission.consume_captured(next)?;
     Ok(())
 }
 

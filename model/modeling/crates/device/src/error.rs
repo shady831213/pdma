@@ -57,6 +57,11 @@ impl From<SemanticError> for ModelError {
         match error {
             SemanticError::ZeroCapacity => Self::ZeroCapacity,
             SemanticError::RingFull => Self::RingFull,
+            SemanticError::CursorRegression { .. }
+            | SemanticError::CursorUpdateRegression { .. }
+            | SemanticError::CursorDistanceExceeded { .. }
+            | SemanticError::CursorIncrementOverflow { .. }
+            | SemanticError::DeviceEpochOverflow { .. } => Self::DmaSubmissionState,
         }
     }
 }

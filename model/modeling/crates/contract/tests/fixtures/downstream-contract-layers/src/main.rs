@@ -1,9 +1,10 @@
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress,
-    RingCursor, RingRecord,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, DmaRegion,
+    RingLayout,
 };
-use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
-use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
+use pdma_model_contract::semantic::{
+    BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId, RingCursor,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = BufferId::new(7);
@@ -18,8 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
     let mut record = [0_u8; 64];
     exact.encode(&mut record)?;
-    let region = PdmaMemoryRegion::try_new(BufferId::new(11), DmaAddress::new(0x4000), 64)?;
-    let ring = RingLayout::try_new(region, 1, RingRecord::Submission)?;
+    let region = DmaRegion::try_new(DmaAddress::new(0x4000), 64)?;
+    let ring = RingLayout::<AbiCommand>::try_new(region, 1)?;
     let cursor = RingCursor::new(3);
 
     let encoded = u64::try_from(semantic.src().raw())?;
@@ -28,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "semantic=independent;abi_record={};conversion=owned;roundtrip={roundtrip}",
         record.len()
     );
-    assert_eq!(ring.slot(cursor), 0);
+    assert_eq!(ring.slot(cursor.raw()), 0);
     assert_eq!(semantic_queue.queue_id(), QueueId::new(3));
     Ok(())
 }

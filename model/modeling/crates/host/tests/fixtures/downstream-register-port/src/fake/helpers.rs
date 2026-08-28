@@ -3,13 +3,10 @@ use hardware_interface_runtime::{
     AccessOrigin, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     RegisterObservation,
 };
-use pdma_model_contract::abi::DmaAddress;
-use pdma_model_contract::abi::RingRecord;
 use pdma_model_contract::abi::mmio::{QueueResponseBank, decode_read, decode_write};
-use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification,
-    IrqSource, IrqVector, QueueConfig, QueueId, SoftwareOwnerId,
+    IrqSource, IrqVector, QueueActivation, QueueConfig, QueueId, QueueRingObjects, SoftwareOwnerId,
 };
 use pdma_model_host::register::{
     PdmaBatchError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
@@ -21,12 +18,7 @@ pub fn activation(regions: &[PdmaMappedRegion]) -> TestResult<QueueActivation> {
     let [submission, completion, event] = regions else {
         return Err("three ring regions required".into());
     };
-    let rings = QueueRingRegions::new(
-        RingLayout::try_new(project(*submission)?, 2, RingRecord::Submission)?,
-        RingLayout::try_new(project(*completion)?, 2, RingRecord::Completion)?,
-        RingLayout::try_new(project(*event)?, 2, RingRecord::Event)?,
-    );
-    Ok(QueueActivation::try_new(
+    Ok(QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         QueueConfig::new(
@@ -35,8 +27,12 @@ pub fn activation(regions: &[PdmaMappedRegion]) -> TestResult<QueueActivation> {
             pdma_model_contract::semantic::EventRouting::QueueLocal,
             SoftwareOwnerId::new(0),
         ),
-        rings,
-    )?)
+        QueueRingObjects::new(
+            submission.object(),
+            completion.object(),
+            event.object(),
+        ),
+    ))
 }
 
 pub fn message() -> IrqNotification {
@@ -96,14 +92,6 @@ pub(super) fn response(
     .to_bytes()
     .map(Into::into)
     .map_err(|_| PdmaBatchError::InvalidShape)
-}
-
-fn project(region: PdmaMappedRegion) -> TestResult<pdma_model_contract::binding::PdmaMemoryRegion> {
-    Ok(pdma_model_contract::binding::PdmaMemoryRegion::try_new(
-        region.object(),
-        DmaAddress::new(region.base().raw()),
-        region.length(),
-    )?)
 }
 
 pub(super) fn validate_read(offset: u32, width: usize) -> Result<(), PdmaRegisterAccessError> {

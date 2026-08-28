@@ -1,6 +1,6 @@
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, Command, CompletionRecord, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
+    IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 use pdma_model_device::AsyncDeviceHandle;
 use pdma_model_host::{DriverPort, PortError, PortResult, compat::AsyncDevicePort};
@@ -201,7 +201,7 @@ impl DriverPort for BlockingPort {
     async fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> PortResult<()> {
         self.control.submit.enter().await?;
         self.control.submit.record_inner_call();

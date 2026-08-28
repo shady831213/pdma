@@ -115,7 +115,7 @@ async fn submission_installs_precede_observation_and_wake() -> TestResult {
     handle
         .submit_queue_batch(SubmissionBatch::new(
             activation.queue(),
-            pdma_model_contract::abi::RingCursor::new(0),
+            pdma_model_contract::semantic::RingCursor::new(0),
             DmaWrite::new(descriptor.base(), vec![0x6b; 64]),
             Some((
                 indirect,

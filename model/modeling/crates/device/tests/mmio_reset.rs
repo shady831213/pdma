@@ -7,8 +7,7 @@ pub mod support;
 
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig, QueueId,
-    SoftwareOwnerId,
+    Command, CommandId, CopyRequest, EventRouting, QueueConfig, QueueId, SoftwareOwnerId,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, PdmaControlError};
@@ -42,12 +41,14 @@ async fn typed_reset_clears_resettable_state_and_preserves_persistent_partition(
     handle
         .submit_command(
             queue,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 CommandId::new(0),
-                queue.queue_id(),
-                queue.completion_ring_id(),
-                CopyRequest::new(source, destination, 1),
-            )),
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                    source,
+                    destination,
+                    1,
+                )),
+            ),
         )
         .await?;
     handle.ring_doorbell(queue).await?;

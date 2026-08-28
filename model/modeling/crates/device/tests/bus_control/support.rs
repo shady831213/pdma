@@ -1,6 +1,6 @@
-use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
-use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::semantic::{
+    EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects, SoftwareOwnerId,
+};
 use pdma_model_device::AsyncDeviceHandle;
 
 /// Creates a fresh asynchronous queue-port handle.
@@ -29,13 +29,14 @@ pub fn activation(
             },
         );
     };
-    let submission = RingLayout::try_new(*submission_region, 2, RingRecord::Submission)?;
-    let completion = RingLayout::try_new(*completion_region, 2, RingRecord::Completion)?;
-    let event = RingLayout::try_new(*event_region, 2, RingRecord::Event)?;
-    QueueActivation::try_new(
+    Ok(QueueActivation::new(
         pdma_model_contract::semantic::DeviceEpoch::initial(),
         queue_id,
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
-        QueueRingRegions::new(submission, completion, event),
-    )
+        QueueRingObjects::new(
+            submission_region.object(),
+            completion_region.object(),
+            event_region.object(),
+        ),
+    ))
 }

@@ -1,7 +1,7 @@
 use crate::{DriverPort, PortResult};
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
-    IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle, WholeDeviceReset,
+    BufferId, Command, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, IrqNotification,
+    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle, WholeDeviceReset,
 };
 use pdma_model_device::{PdmaResetError, compat::SyncDevice};
 
@@ -47,7 +47,7 @@ impl DriverPort for SemanticDevicePort<'_> {
     async fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> PortResult<()> {
         self.device
             .submit_command(queue, command)

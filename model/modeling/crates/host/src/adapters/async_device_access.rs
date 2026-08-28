@@ -13,7 +13,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
 };
 use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
-use pdma_model_contract::binding::QueueActivation;
+use pdma_model_contract::semantic::QueueActivation;
 use pdma_model_device::AsyncDeviceHandle;
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};

@@ -5,8 +5,8 @@ use crate::{DriverError, PortError, PortResult};
 use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, ExternalCommand,
-    IrqCause, IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
+    BufferId, Command, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, IrqCause,
+    IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
     IrqVector, QueueConfig, QueueConfigHandle, desc::CopyRequest,
 };
 use pdma_model_device::SyncDevice;
@@ -49,7 +49,7 @@ impl AsyncDevicePort for NotificationPort {
     async fn submit_command(
         &mut self,
         _queue: QueueConfigHandle,
-        _command: ExternalCommand,
+        _command: Command,
     ) -> PortResult<()> {
         std::future::pending().await
     }

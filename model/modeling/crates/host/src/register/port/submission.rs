@@ -5,33 +5,26 @@ use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
     AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
-    BroadcastDestinationEntry, RingRecord, U32WordValues,
+    BroadcastDestinationEntry, U32WordValues,
 };
-use pdma_model_contract::semantic::{BufferId, ExternalCommand, QueueConfigHandle};
+use pdma_model_contract::semantic::{
+    BroadcastCopyRequest, BufferId, Command, CommandId, CommandOperation, QueueConfigHandle,
+};
 
 pub(super) async fn submit<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     handle: QueueConfigHandle,
-    command: ExternalCommand,
+    command: Command,
 ) -> PdmaPortResult<()> {
     let queue = refresh(port, handle).await?;
     let (abi, indirect) = encode_command(port, command).await?;
-    let mut descriptor = vec![0_u8; usize::from(RingRecord::Submission.record_size())];
+    let layout = queue.rings.submission();
+    let mut descriptor = vec![0_u8; usize::from(layout.entry_size())];
     abi.encode(&mut descriptor)
         .map_err(|_| PortError::SubmissionState)?;
     let producer = queue.status.submission().producer();
-    let slot_offset = queue
-        .rings
-        .submission()
-        .slot(producer)
-        .checked_mul(u64::from(RingRecord::Submission.record_size()))
-        .ok_or(PortError::SubmissionState)?;
-    let address = queue
-        .rings
-        .submission()
-        .region()
-        .abi_base()
-        .checked_add(slot_offset)
+    let address = layout
+        .entry_address(producer.raw())
         .map_err(|_| PortError::SubmissionState)?;
     let descriptor = PdmaDmaWrite::new(MemoryAddress::new(address.raw()), descriptor);
     let request = PdmaSubmissionBatch::new(queue.status.queue(), producer, descriptor, indirect);
@@ -86,99 +79,71 @@ pub(super) async fn refresh<A: CanonicalAccess>(
 
 async fn encode_command<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    command: ExternalCommand,
+    command: Command,
 ) -> PdmaPortResult<(AbiCommand, Option<(A::Proposal, PdmaDmaWrite)>)> {
-    match command {
-        ExternalCommand::Copy(command) => {
-            let request = command.request();
-            Ok((
-                AbiCommand::from_payload(
-                    abi_id(command.command_id().raw())?,
-                    AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-                        source_dma_address: operand(
-                            port,
-                            request.src(),
-                            request.src_start().offset(),
-                        )?
+    let command_id = command.command_id();
+    match command.into_operation() {
+        CommandOperation::Copy(request) => Ok((
+            AbiCommand::from_payload(
+                abi_id(command_id.raw())?,
+                AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
+                    source_dma_address: operand(port, request.src(), request.src_start().offset())?
                         .raw(),
-                        destination_dma_address: operand(
-                            port,
-                            request.dst(),
-                            request.dst_start().offset(),
-                        )?
+                    destination_dma_address: operand(
+                        port,
+                        request.dst(),
+                        request.dst_start().offset(),
+                    )?
+                    .raw(),
+                    length: scalar(request.len())?,
+                }),
+            ),
+            None,
+        )),
+        CommandOperation::StridedCopy(request) => Ok((
+            AbiCommand::from_payload(
+                abi_id(command_id.raw())?,
+                AbiCommandPayloadValues::StridedCopy(AbiCommandPayloadStridedCopyValues {
+                    source_dma_address: operand(port, request.src(), request.src_start().offset())?
                         .raw(),
-                        length: scalar(request.len())?,
-                    }),
-                ),
-                None,
-            ))
-        }
-        ExternalCommand::StridedCopy(command) => {
-            let request = command.request();
-            Ok((
-                AbiCommand::from_payload(
-                    abi_id(command.command_id().raw())?,
-                    AbiCommandPayloadValues::StridedCopy(AbiCommandPayloadStridedCopyValues {
-                        source_dma_address: operand(
-                            port,
-                            request.src(),
-                            request.src_start().offset(),
-                        )?
+                    destination_dma_address: operand(
+                        port,
+                        request.dst(),
+                        request.dst_start().offset(),
+                    )?
+                    .raw(),
+                    rows: scalar(request.rows())?,
+                    row_bytes: scalar(request.row_bytes())?,
+                    source_stride: scalar(request.src_stride())?,
+                    destination_stride: scalar(request.dst_stride())?,
+                }),
+            ),
+            None,
+        )),
+        CommandOperation::BroadcastCopy(request) => broadcast(port, command_id, &request).await,
+        CommandOperation::VectorAdd(request) => Ok((
+            AbiCommand::from_payload(
+                abi_id(command_id.raw())?,
+                AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
+                    source_a_dma_address: operand(port, request.src_a(), request.src_a_offset())?
                         .raw(),
-                        destination_dma_address: operand(
-                            port,
-                            request.dst(),
-                            request.dst_start().offset(),
-                        )?
+                    source_b_dma_address: operand(port, request.src_b(), request.src_b_offset())?
                         .raw(),
-                        rows: scalar(request.rows())?,
-                        row_bytes: scalar(request.row_bytes())?,
-                        source_stride: scalar(request.src_stride())?,
-                        destination_stride: scalar(request.dst_stride())?,
-                    }),
-                ),
-                None,
-            ))
-        }
-        ExternalCommand::BroadcastCopy(command) => broadcast(port, command).await,
-        ExternalCommand::VectorAdd(command) => {
-            let request = command.request();
-            Ok((
-                AbiCommand::from_payload(
-                    abi_id(command.command_id().raw())?,
-                    AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
-                        source_a_dma_address: operand(
-                            port,
-                            request.src_a(),
-                            request.src_a_offset(),
-                        )?
+                    destination_dma_address: operand(port, request.dst(), request.dst_offset())?
                         .raw(),
-                        source_b_dma_address: operand(
-                            port,
-                            request.src_b(),
-                            request.src_b_offset(),
-                        )?
-                        .raw(),
-                        destination_dma_address: operand(
-                            port,
-                            request.dst(),
-                            request.dst_offset(),
-                        )?
-                        .raw(),
-                        length: scalar(request.len())?,
-                    }),
-                ),
-                None,
-            ))
-        }
+                    length: scalar(request.len())?,
+                }),
+            ),
+            None,
+        )),
     }
 }
 
 async fn broadcast<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    command: pdma_model_contract::semantic::BroadcastCopyCommand,
+    command_id: CommandId,
+    request: &BroadcastCopyRequest,
 ) -> PdmaPortResult<(AbiCommand, Option<(A::Proposal, PdmaDmaWrite)>)> {
-    let request = command.request();
     let count = scalar(request.destinations().len())?;
     let extent = u64::from(count.value())
         .checked_mul(8)
@@ -206,7 +171,7 @@ async fn broadcast<A: CanonicalAccess>(
         .map_err(|_| PortError::SubmissionState)?;
     }
     let abi = AbiCommand::from_payload(
-        abi_id(command.command_id().raw())?,
+        abi_id(command_id.raw())?,
         AbiCommandPayloadValues::BroadcastCopy(AbiCommandPayloadBroadcastCopyValues {
             source_dma_address: operand(port, request.src(), request.src_offset())?.raw(),
             destination_list_dma_address: super::state::dma_address(region.base()).raw(),

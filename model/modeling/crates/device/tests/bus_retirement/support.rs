@@ -1,14 +1,11 @@
 use super::TestResult;
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, RingCursor,
-    RingRecord,
-};
-use pdma_model_contract::binding::{
-    QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
+    DmaAddress, RingLayout,
 };
 use pdma_model_contract::semantic::{
-    CompletionRingId, EpochIrqSource, EventRouting, IrqSource, QueueConfig, QueueId,
-    SoftwareOwnerId,
+    CompletionRingId, EpochIrqSource, EventRouting, IrqSource, QueueActivation, QueueConfig,
+    QueueControl, QueueCursorUpdate, QueueId, QueueRingObjects, RingCursor, SoftwareOwnerId,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 use pdma_model_device::{
@@ -35,9 +32,9 @@ impl Fixture {
         let command_depth = 4;
         let stage = handle
             .stage_memory_regions(&[
-                command_depth * u64::from(RingRecord::Submission.record_size()),
-                result_depth * u64::from(RingRecord::Completion.record_size()),
-                result_depth * u64::from(RingRecord::Event.record_size()),
+                RingLayout::<AbiCommand>::checked_extent(command_depth)?,
+                RingLayout::<AbiCompletion>::checked_extent(result_depth)?,
+                RingLayout::<AbiEvent>::checked_extent(result_depth)?,
             ])
             .await?;
         let [submission, completion, event] = stage.regions() else {
@@ -50,16 +47,12 @@ impl Fixture {
             EventRouting::QueueLocal,
             SoftwareOwnerId::new(0),
         );
-        let activation = QueueActivation::try_new(
+        let activation = QueueActivation::new(
             epoch,
             QueueId::new(0),
             config,
-            QueueRingRegions::new(
-                RingLayout::try_new(submission, command_depth, RingRecord::Submission)?,
-                RingLayout::try_new(completion, result_depth, RingRecord::Completion)?,
-                RingLayout::try_new(event, result_depth, RingRecord::Event)?,
-            ),
-        )?;
+            QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+        );
         handle.activate_queue(stage, activation).await?;
         Ok(Self {
             handle,
@@ -156,8 +149,8 @@ impl Fixture {
 pub(super) async fn allocate_pair(
     handle: &AsyncDeviceHandle,
 ) -> TestResult<(
-    pdma_model_contract::binding::PdmaMemoryRegion,
-    pdma_model_contract::binding::PdmaMemoryRegion,
+    pdma_model_device::MappedDmaRegion,
+    pdma_model_device::MappedDmaRegion,
 )> {
     let stage = handle.stage_memory_regions(&[4, 4]).await?;
     let [source, destination] = stage.regions() else {

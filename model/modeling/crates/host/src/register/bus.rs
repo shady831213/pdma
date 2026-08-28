@@ -1,8 +1,6 @@
 //! Canonical typed queue-status projection.
 
-use pdma_model_contract::abi::RingCursor;
-use pdma_model_contract::binding::RingCursors;
-use pdma_model_contract::semantic::EpochQueue;
+use pdma_model_contract::semantic::{EpochQueue, RingCursor, RingCursors};
 
 /// Complete typed shadow state returned by canonical queue control.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

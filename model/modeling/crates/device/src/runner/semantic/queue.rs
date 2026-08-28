@@ -3,7 +3,7 @@
 use crate::ModelResult;
 use crate::runner::AsyncDeviceHandle;
 use pdma_model_contract::semantic::{
-    CompletionRecord, EventRecord, ExternalCommand, QueueConfig, QueueConfigHandle,
+    Command, CompletionRecord, EventRecord, QueueConfig, QueueConfigHandle,
 };
 
 impl AsyncDeviceHandle {
@@ -17,7 +17,7 @@ impl AsyncDeviceHandle {
     pub async fn submit_command(
         &self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> ModelResult<()> {
         self.with_backend(|backend| backend.submit_command(queue, command))
             .await

@@ -1,9 +1,9 @@
 use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiEventAccess, AbiEventKind,
-    AbiEventStage, DmaAddress, MAX_INDIRECT_DESTINATIONS, RingCursor,
+    AbiEventStage, DmaAddress, MAX_INDIRECT_DESTINATIONS,
 };
-use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_contract::semantic::{ResourceConfig, RingCursor};
 
 #[derive(Clone, Copy)]
 pub(super) enum BroadcastFaultCase {
@@ -120,7 +120,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
 
 const fn list_fields(
     case: BroadcastFaultCase,
-    list: pdma_model_contract::binding::PdmaMemoryRegion,
+    list: pdma_model_device::MappedDmaRegion,
 ) -> (DmaAddress, u64) {
     match case {
         BroadcastFaultCase::Count => (list.base(), 0),
@@ -134,7 +134,7 @@ const fn list_fields(
 fn expected_tuple(
     case: BroadcastFaultCase,
     base: DmaAddress,
-    list: pdma_model_contract::binding::PdmaMemoryRegion,
+    list: pdma_model_device::MappedDmaRegion,
 ) -> (AbiEventKind, u64, u64, u64, u16, u16, u64) {
     let (kind, locator, detail0, detail1, access) = match case {
         BroadcastFaultCase::Count => (

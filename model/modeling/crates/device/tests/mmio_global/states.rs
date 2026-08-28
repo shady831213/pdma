@@ -1,9 +1,8 @@
 use super::support::{TestResult, response, result, write_u32};
-use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::binding::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
-    CommandId, DeviceEpoch, EpochQueue, ExternalCommand, QueueId, ResourceConfig, WholeDeviceReset,
-    desc::{CopyCommand, CopyRequest},
+    Command, CommandId, DeviceEpoch, EpochQueue, QueueActivation, QueueControl, QueueId,
+    QueueRingObjects, ResourceConfig, WholeDeviceReset,
+    desc::CopyRequest,
     ids::BufferId,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
@@ -60,9 +59,7 @@ async fn assert_current_epoch_is_reported() -> TestResult {
 
 async fn assert_unstarted_state(
     config: ResourceConfig,
-    command: Option<
-        fn(BufferId, BufferId, pdma_model_contract::semantic::QueueConfigHandle) -> ExternalCommand,
-    >,
+    command: Option<fn(BufferId, BufferId) -> Command>,
     expected: u64,
 ) -> TestResult {
     // Given: an unstarted worker with either no work, runnable work, or constrained work.
@@ -75,7 +72,7 @@ async fn assert_unstarted_state(
     let work = if let Some(build) = command {
         let (queue, source, destination) = fixture(&handle).await?;
         handle
-            .submit_command(queue, build(source, destination, queue))
+            .submit_command(queue, build(source, destination))
             .await?;
         handle.ring_doorbell(queue).await?;
         Some((queue, destination))
@@ -122,16 +119,12 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
         return Err(std::io::Error::other("three ring regions required").into());
     };
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
-    let activation = QueueActivation::try_new(
+    let activation = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
-        QueueRingRegions::new(
-            RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 2, RingRecord::Event)?,
-        ),
-    )?;
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    );
     handle.activate_queue(stage, activation).await?;
     let before_snapshot = handle.snapshot().await;
     let before_generation = handle.memory_generation().await;
@@ -160,11 +153,7 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
 
 async fn assert_worker_pressure(
     config: ResourceConfig,
-    build: fn(
-        BufferId,
-        BufferId,
-        pdma_model_contract::semantic::QueueConfigHandle,
-    ) -> ExternalCommand,
+    build: fn(BufferId, BufferId) -> Command,
 ) -> TestResult {
     // Given: a worker that reaches a real publication-pressure stall.
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
@@ -175,7 +164,7 @@ async fn assert_worker_pressure(
     let handle = device.handle();
     let (queue, source, destination) = fixture(&handle).await?;
     handle
-        .submit_command(queue, build(source, destination, queue))
+        .submit_command(queue, build(source, destination))
         .await?;
     handle.ring_doorbell(queue).await?;
     let worker = tokio::spawn(worker.run());
@@ -213,28 +202,24 @@ async fn fixture(
     Ok((queue, source, destination))
 }
 
-const fn valid_command(
-    source: BufferId,
-    destination: BufferId,
-    queue: pdma_model_contract::semantic::QueueConfigHandle,
-) -> ExternalCommand {
-    ExternalCommand::Copy(CopyCommand::new(
+const fn valid_command(source: BufferId, destination: BufferId) -> Command {
+    Command::new(
         CommandId::new(7),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        CopyRequest::new(source, destination, 4),
-    ))
+        pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+            source,
+            destination,
+            4,
+        )),
+    )
 }
 
-const fn faulting_command(
-    _source: BufferId,
-    destination: BufferId,
-    queue: pdma_model_contract::semantic::QueueConfigHandle,
-) -> ExternalCommand {
-    ExternalCommand::Copy(CopyCommand::new(
+const fn faulting_command(_source: BufferId, destination: BufferId) -> Command {
+    Command::new(
         CommandId::new(9),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        CopyRequest::new(BufferId::new(99), destination, 4),
-    ))
+        pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+            BufferId::new(99),
+            destination,
+            4,
+        )),
+    )
 }

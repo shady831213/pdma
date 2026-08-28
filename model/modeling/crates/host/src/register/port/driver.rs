@@ -1,8 +1,8 @@
 use super::{CanonicalAccess, PdmaRegisterPort, irq, retirement, state, submission};
 use crate::{DriverPort, PortError, PortResult};
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, Command, CompletionRecord, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
+    IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 
 impl<A: CanonicalAccess> DriverPort for PdmaRegisterPort<A>
@@ -26,7 +26,7 @@ where
     async fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> PortResult<()> {
         submission::submit(self, queue, command)
             .await

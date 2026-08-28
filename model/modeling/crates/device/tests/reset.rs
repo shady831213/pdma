@@ -2,12 +2,10 @@
 
 use pdma_model_device::ModelError;
 
-use pdma_model_contract::abi::RingRecord;
-use pdma_model_contract::binding::{QueueActivation, QueueControl, QueueRingRegions, RingLayout};
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, DeviceEpoch, EpochIrqSource, EventRouting,
-    ExternalCommand, IrqRoute, IrqSource, IrqVector, QueueConfig, QueueId, ResourceConfig,
-    SoftwareOwnerId,
+    Command, CommandId, CopyRequest, DeviceEpoch, EpochIrqSource, EventRouting, IrqRoute,
+    IrqSource, IrqVector, QueueActivation, QueueConfig, QueueControl, QueueId, QueueRingObjects,
+    ResourceConfig, SoftwareOwnerId,
 };
 use pdma_model_contract::semantic::{EpochQueue, WholeDeviceReset};
 use pdma_model_device::{AsyncStallReason, AsyncStepStatus, SyncDevice};
@@ -34,12 +32,14 @@ async fn whole_device_reset_preserves_dma_and_allows_new_epoch_bootstrap() -> Te
     device.write_buffer(source, 0, &[1, 3, 5, 7])?;
     device.submit_command(
         old_queue,
-        ExternalCommand::Copy(CopyCommand::new(
+        Command::new(
             CommandId::new(0),
-            old_queue.queue_id(),
-            old_queue.completion_ring_id(),
-            CopyRequest::new(source, destination, 4),
-        )),
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                source,
+                destination,
+                4,
+            )),
+        ),
     )?;
     device.ring_doorbell(old_queue)?;
     device.run_until_idle(1)?;
@@ -230,12 +230,14 @@ fn submit_copy(
 ) -> TestResult {
     device.submit_command(
         queue,
-        ExternalCommand::Copy(CopyCommand::new(
+        Command::new(
             CommandId::new(command),
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::new(source, destination, 1),
-        )),
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                source,
+                destination,
+                1,
+            )),
+        ),
     )?;
     device.ring_doorbell(queue)?;
     Ok(())
@@ -254,14 +256,10 @@ fn activation(
             },
         );
     };
-    QueueActivation::try_new(
+    Ok(QueueActivation::new(
         epoch,
         QueueId::new(0),
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
-        QueueRingRegions::new(
-            RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 2, RingRecord::Event)?,
-        ),
-    )
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    ))
 }

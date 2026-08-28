@@ -35,7 +35,7 @@ pub(super) async fn observe(case: OperationCase) -> TestResult<ExactObservation>
     let result = run_descriptor(fixture, encode(command)?, &[destination_a, destination_b]).await?;
     assert_eq!(
         result.consumer,
-        pdma_model_contract::abi::RingCursor::new(1)
+        pdma_model_contract::semantic::RingCursor::new(1)
     );
     let retirements = usize::from(matches!(
         result.pending,

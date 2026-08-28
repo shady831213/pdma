@@ -149,7 +149,7 @@ fn injected_store_is_the_real_memory_access_surface() {
     // When: the injected runtime API writes the region.
     memory
         .write(
-            hardware_interface_runtime::MemoryAddress::new(region.abi_base().raw()),
+            hardware_interface_runtime::MemoryAddress::new(region.base().raw()),
             ALIGNMENT,
             &[4, 3, 2, 1],
         )

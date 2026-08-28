@@ -7,8 +7,8 @@ use crate::runner::execution::retirement::FaultRetirement;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::{
-    CommandId, CompletionRecord, EventRecord, ExternalCommand, QueueDirectoryEntry, QueueId,
-    TraceOperation,
+    Command, CommandId, CompletionRecord, CompletionRingId, EventRecord, QueueDirectoryEntry,
+    QueueId, TraceOperation,
 };
 
 #[derive(Debug)]
@@ -39,10 +39,11 @@ impl QueueFrontend {
     pub(in crate::runner::execution) fn submit_semantic(
         &mut self,
         queue: QueueId,
-        command: ExternalCommand,
+        completion_ring: CompletionRingId,
+        command: Command,
     ) -> ModelResult<(CommandId, TraceOperation)> {
         match self {
-            Self::Semantic(frontend) => frontend.submit(command),
+            Self::Semantic(frontend) => frontend.submit(completion_ring, command),
             Self::Exact(_) => Err(rejected_compat_submission(queue)),
         }
     }

@@ -1,6 +1,6 @@
 use pdma_model_contract::semantic::{
-    CommandId, ExternalCommand,
-    desc::{CopyCommand, CopyRequest},
+    Command, CommandId,
+    desc::CopyRequest,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::ModelError;
@@ -22,12 +22,14 @@ pub(super) fn assert_dma_bus_decoded_command_uses_shared_core() -> TestResult {
     ))?;
     let source = device.allocate_buffer(4)?;
     let destination = device.allocate_buffer(4)?;
-    let command = ExternalCommand::Copy(CopyCommand::new(
+    let command = Command::new(
         CommandId::new(7),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        CopyRequest::new(source, destination, 4),
-    ));
+        pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+            source,
+            destination,
+            4,
+        )),
+    );
 
     let result = device.submit_command(queue, command);
 

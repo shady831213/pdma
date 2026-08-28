@@ -1,9 +1,9 @@
 use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiEventAccess, AbiEventKind,
-    AbiEventStage, DmaAddress, MAX_TRANSFER_BYTES, RingCursor,
+    AbiEventStage, DmaAddress, MAX_TRANSFER_BYTES,
 };
-use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_contract::semantic::{ResourceConfig, RingCursor};
 
 #[derive(Clone, Copy)]
 pub(super) enum HeaderFaultCase {

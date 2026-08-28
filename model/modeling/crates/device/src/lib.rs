@@ -8,7 +8,7 @@ mod runner;
 pub mod test_support;
 pub mod trace;
 
-pub use dma_space::{PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
+pub use dma_space::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use error::{ModelError, ModelError as DeviceError, ModelResult, PdmaResetError, PdmaRunError};
 pub use runner::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,

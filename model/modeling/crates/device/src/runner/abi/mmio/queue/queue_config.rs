@@ -2,13 +2,29 @@ use super::queue_control::{CommandResult, fail, map_abi};
 use super::{QueueStaging, status_response};
 use crate::runner::abi::bus::control;
 use crate::runner::state::DeviceCore;
-use pdma_model_contract::abi::RingRecord;
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::abi::{AbiControlError, DmaAddress};
-use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
-use pdma_model_contract::semantic::{
-    DeviceEpoch, EventRouting, QueueConfig, QueueId, SoftwareOwnerId,
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCompletion, AbiControlError, AbiEvent, AbiRingEntry, DmaAddress, RingLayout,
 };
+use pdma_model_contract::semantic::{
+    BufferId, DeviceEpoch, EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects,
+    SoftwareOwnerId,
+};
+
+#[derive(Clone, Copy)]
+struct StagedRing {
+    base: u64,
+    depth: u32,
+    kind: RingKind,
+    role: u64,
+}
+
+#[derive(Clone, Copy)]
+enum RingKind {
+    Submission,
+    Completion,
+    Event,
+}
 
 pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> CommandResult {
     let queue_id = usize::try_from(staging.id)
@@ -17,27 +33,30 @@ pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> Command
     let owner = usize::try_from(staging.cfg_software_owner)
         .map(SoftwareOwnerId::new)
         .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?;
-    let submission = layout(
-        state,
-        staging.sq_base,
-        staging.sq_depth,
-        RingRecord::Submission,
-        0,
-    )?;
-    let completion = layout(
-        state,
-        staging.cq_base,
-        staging.cq_depth,
-        RingRecord::Completion,
-        1,
-    )?;
-    let event = layout(
-        state,
-        staging.eq_base,
-        staging.eq_depth,
-        RingRecord::Event,
-        2,
-    )?;
+    let rings = [
+        StagedRing {
+            base: staging.sq_base,
+            depth: staging.sq_depth,
+            kind: RingKind::Submission,
+            role: 0,
+        },
+        StagedRing {
+            base: staging.cq_base,
+            depth: staging.cq_depth,
+            kind: RingKind::Completion,
+            role: 1,
+        },
+        StagedRing {
+            base: staging.eq_base,
+            depth: staging.eq_depth,
+            kind: RingKind::Event,
+            role: 2,
+        },
+    ];
+    let [submission_ring, completion_ring, event_ring] = rings;
+    let submission = ring_object::<AbiCommand>(state, submission_ring)?;
+    let completion = ring_object::<AbiCompletion>(state, completion_ring)?;
+    let event = ring_object::<AbiEvent>(state, event_ring)?;
     let config = QueueConfig::new(
         usize::try_from(staging.cfg_sq_depth)
             .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?,
@@ -46,62 +65,87 @@ pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> Command
         EventRouting::QueueLocal,
         owner,
     );
-    let activation = QueueActivation::try_new(
+    validate_config_depths(config, rings)?;
+    let activation = QueueActivation::new(
         DeviceEpoch::new(staging.expected_epoch),
         queue_id,
         config,
-        QueueRingRegions::new(submission, completion, event),
-    )
-    .map_err(|error| map_abi(error, activation_role(error)))?;
+        QueueRingObjects::new(submission, completion, event),
+    );
     let status = control::activation::activate_mapped(state, activation)
         .map_err(|error| super::queue_control::map_bus(error, staging.id, 1, 0))?;
     Ok((status_response(status)?, true))
 }
 
-fn layout(
+fn ring_object<R: AbiRingEntry>(
     state: &DeviceCore,
-    base: u64,
-    depth: u32,
-    record: RingRecord,
-    role: u64,
-) -> Result<RingLayout, pdma_model_contract::abi::mmio::MmioResultDetails> {
-    if depth == 0 {
+    staging: StagedRing,
+) -> Result<BufferId, pdma_model_contract::abi::mmio::MmioResultDetails> {
+    if staging.depth == 0 {
         return Err(map_abi(
             AbiControlError::InvalidRingDepth {
                 depth: 0,
                 maximum: pdma_model_contract::abi::MAX_RING_DEPTH,
             },
-            role,
+            staging.role,
         ));
     }
-    if base % record.alignment() != 0 {
+    if staging.base % R::RING_ALIGNMENT != 0 {
         return Err(map_abi(
             AbiControlError::MisalignedRing {
-                base,
-                alignment: record.alignment(),
+                base: staging.base,
+                alignment: R::RING_ALIGNMENT,
             },
-            role,
+            staging.role,
         ));
     }
-    let extent = RingLayout::checked_extent(u64::from(depth), record.record_size())
-        .map_err(|error| map_abi(error, role))?;
-    let address = DmaAddress::new(base);
+    let extent = RingLayout::<R>::checked_extent(u64::from(staging.depth))
+        .map_err(|error| map_abi(error, staging.role))?;
+    let address = DmaAddress::new(staging.base);
     let region = state
         .dma_space
         .region_containing(address)
-        .ok_or_else(|| fail(MmioResult::DmaUnmapped, [base, extent, 0]))?;
-    if region.abi_base() != address {
-        return Err(fail(MmioResult::DmaInvalidRegion, [base, extent, 0]));
+        .ok_or_else(|| fail(MmioResult::DmaUnmapped, [staging.base, extent, 0]))?;
+    if region.base() != address {
+        return Err(fail(
+            MmioResult::DmaInvalidRegion,
+            [staging.base, extent, 0],
+        ));
     }
-    RingLayout::try_new(region, u64::from(depth), record).map_err(|error| map_abi(error, role))
+    RingLayout::<R>::try_new(region.region(), u64::from(staging.depth))
+        .map_err(|error| map_abi(error, staging.role))?;
+    Ok(region.object())
 }
 
-fn activation_role(error: pdma_model_contract::abi::AbiControlError) -> u64 {
-    match error {
-        pdma_model_contract::abi::AbiControlError::QueueDepthMismatch { ring, .. } => {
-            u64::from(ring != "submission")
+fn validate_config_depths(
+    config: QueueConfig,
+    rings: [StagedRing; 3],
+) -> Result<(), pdma_model_contract::abi::mmio::MmioResultDetails> {
+    let expected = [
+        config.command_depth(),
+        config.completion_depth(),
+        config.event_depth(),
+    ];
+    for (ring, expected) in rings.into_iter().zip(expected) {
+        if usize::try_from(ring.depth) != Ok(expected) {
+            let error = match ring.kind {
+                RingKind::Event => AbiControlError::EventDepthMismatch {
+                    expected,
+                    actual: ring.depth,
+                },
+                RingKind::Submission => AbiControlError::QueueDepthMismatch {
+                    ring: "submission",
+                    expected,
+                    actual: ring.depth,
+                },
+                RingKind::Completion => AbiControlError::QueueDepthMismatch {
+                    ring: "completion",
+                    expected,
+                    actual: ring.depth,
+                },
+            };
+            return Err(map_abi(error, ring.role));
         }
-        pdma_model_contract::abi::AbiControlError::EventDepthMismatch { .. } => 2,
-        _ => 0,
     }
+    Ok(())
 }

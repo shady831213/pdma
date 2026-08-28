@@ -1,6 +1,6 @@
 use super::*;
 use crate::runner::abi::bus::{DmaWrite, SubmissionBatch};
-use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::RingCursor;
 use std::future::{Future, poll_fn};
 
 #[tokio::test]

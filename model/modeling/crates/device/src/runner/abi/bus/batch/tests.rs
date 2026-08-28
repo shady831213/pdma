@@ -1,10 +1,10 @@
 use super::{QueueBootstrapBatch, QueueResponseBytes};
 use crate::runner::AsyncDevice;
-use pdma_model_contract::abi::RingRecord;
 use pdma_model_contract::abi::mmio::MmioByteCount;
-use pdma_model_contract::binding::{QueueActivation, QueueRingRegions, RingLayout};
-use pdma_model_contract::semantic::DeviceEpoch;
-use pdma_model_contract::semantic::{EventRouting, QueueConfig, QueueId, SoftwareOwnerId};
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects,
+    SoftwareOwnerId,
+};
 use std::future::{Future, poll_fn};
 use std::sync::Arc;
 
@@ -79,16 +79,12 @@ fn activation(stage: &crate::PdmaMemoryStage) -> TestResult<QueueActivation> {
     let [submission, completion, event] = stage.regions() else {
         return Err("three staged regions required".into());
     };
-    Ok(QueueActivation::try_new(
+    Ok(QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
-        QueueRingRegions::new(
-            RingLayout::try_new(*submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(*completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(*event, 2, RingRecord::Event)?,
-        ),
-    )?)
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    ))
 }
 
 async fn queue_latches(handle: &crate::runner::AsyncDeviceHandle) -> TestResult<Vec<Vec<u8>>> {

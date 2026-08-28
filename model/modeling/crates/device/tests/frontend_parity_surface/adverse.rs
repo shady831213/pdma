@@ -1,6 +1,6 @@
 use crate::TestResult;
 use crate::support::{Fixture, allocate_pair};
-use pdma_model_contract::abi::RingCursor;
+use pdma_model_contract::semantic::RingCursor;
 use pdma_model_contract::semantic::{CommandId, DeviceEpoch, TraceEventKind};
 
 /// State-derived publication-pressure observation fields.

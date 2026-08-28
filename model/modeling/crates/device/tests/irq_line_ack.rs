@@ -3,9 +3,7 @@
 use pdma_model_device::ModelResult;
 
 use pdma_model_contract::semantic::{
-    CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId,
-    desc::{CopyCommand, ExternalCommand},
-    ids::CommandId,
+    CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId, desc::Command, ids::CommandId,
 };
 use pdma_model_device::SyncDevice;
 
@@ -111,12 +109,10 @@ fn submit_copy(
 ) -> ModelResult<()> {
     device.submit_command(
         queue,
-        ExternalCommand::Copy(CopyCommand::new(
+        Command::new(
             CommandId::new(command_id),
-            queue.queue_id(),
-            queue.completion_ring_id(),
-            CopyRequest::new(src, dst, 4),
-        )),
+            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
+        ),
     )?;
     device.ring_doorbell(queue)
 }

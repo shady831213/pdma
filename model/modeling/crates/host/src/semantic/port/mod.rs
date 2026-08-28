@@ -2,8 +2,8 @@
 
 use crate::semantic::PortResult;
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, EpochIrqSource, EventRecord, ExternalCommand, IrqNotification,
-    IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, Command, CompletionRecord, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
+    IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 
 /// Async device-facing operations required by a host driver turn.
@@ -33,7 +33,7 @@ pub trait DriverPort: Send + Sync {
     fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> impl Future<Output = PortResult<()>> + Send;
     /// Captures a software doorbell for one queue.
     fn ring_doorbell(

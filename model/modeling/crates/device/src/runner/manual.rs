@@ -1,10 +1,10 @@
 use super::DeviceCore;
+use crate::dma_space::MappedDmaRegion;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryStage};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::semantic::completion::CompletionRecord;
-use pdma_model_contract::semantic::desc::ExternalCommand;
+use pdma_model_contract::semantic::desc::Command;
 use pdma_model_contract::semantic::event::EventRecord;
 use pdma_model_contract::semantic::ids::BufferId;
 use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};
@@ -61,11 +61,11 @@ impl SyncDevice {
     /// Allocates a device-visible memory buffer.
     pub fn allocate_buffer(&mut self, len: usize) -> ModelResult<BufferId> {
         self.allocate_memory_region(len)
-            .map(PdmaMemoryRegion::object)
+            .map(MappedDmaRegion::object)
     }
 
     /// Allocates one logical region through the shared core mapping adapter.
-    pub fn allocate_memory_region(&mut self, len: usize) -> ModelResult<PdmaMemoryRegion> {
+    pub fn allocate_memory_region(&mut self, len: usize) -> ModelResult<MappedDmaRegion> {
         let length = u64::try_from(len).map_err(|_| ModelError::DmaAllocationExhausted)?;
         self.dma_space
             .allocate(length)
@@ -94,7 +94,7 @@ impl SyncDevice {
     pub fn commit_memory_stage(
         &mut self,
         stage: PdmaMemoryStage,
-    ) -> Result<Vec<PdmaMemoryRegion>, PdmaMemoryError> {
+    ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
         self.dma_space.commit(stage)
     }
 
@@ -117,7 +117,7 @@ impl SyncDevice {
     }
 
     /// Resolves a semantic object to its committed DMA region.
-    pub fn region_for_object(&self, object: BufferId) -> Option<PdmaMemoryRegion> {
+    pub fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
         self.dma_space.region_for_object(object)
     }
 
@@ -135,7 +135,7 @@ impl SyncDevice {
     pub fn submit_command(
         &mut self,
         queue: QueueConfigHandle,
-        command: ExternalCommand,
+        command: Command,
     ) -> ModelResult<()> {
         self.backend.submit_command(queue, command)
     }

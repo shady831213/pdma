@@ -6,8 +6,9 @@ use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::abi::bus::control::BusControlState;
 use crate::runner::execution::ring::NativeRing;
-use pdma_model_contract::semantic::desc::ExternalCommand;
-use pdma_model_contract::semantic::{CompletionRecord, EventRecord, QueueDirectoryEntry, QueueId};
+use pdma_model_contract::semantic::{
+    Command, CompletionRecord, CompletionRingId, EventRecord, QueueDirectoryEntry, QueueId,
+};
 use std::collections::VecDeque;
 
 #[derive(Debug)]
@@ -30,12 +31,13 @@ impl SemanticFrontend {
 
     pub(super) fn submit(
         &mut self,
-        command: ExternalCommand,
+        completion_ring: CompletionRingId,
+        command: Command,
     ) -> ModelResult<(
         pdma_model_contract::semantic::CommandId,
         pdma_model_contract::semantic::TraceOperation,
     )> {
-        let command = command::normalize(command);
+        let command = command::normalize(completion_ring, command);
         let identity = (command.command_id(), command.trace_operation());
         self.commands.push(command).map(|()| identity)
     }

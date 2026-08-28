@@ -1,15 +1,12 @@
 use pdma_model_contract::abi::{AbiCommand, AbiEvent, DmaAddress};
-use pdma_model_contract::abi::{RingCursor, RingRecord};
-use pdma_model_contract::binding::{
-    PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
-    RingLayout,
-};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, RingCursor};
 use pdma_model_contract::semantic::{
-    EventRouting, QueueConfig, QueueId, ResourceConfig, SoftwareOwnerId,
+    EventRouting, QueueActivation, QueueConfig, QueueControl, QueueCursorUpdate, QueueId,
+    QueueRingObjects, ResourceConfig, SoftwareOwnerId,
 };
 use pdma_model_device::{
-    AsyncDevice, AsyncDeviceHandle, DmaWrite, PendingDmaResult, SubmissionAcceptance,
+    AsyncDevice, AsyncDeviceHandle, DmaWrite, MappedDmaRegion, PendingDmaResult,
+    SubmissionAcceptance,
 };
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
@@ -65,16 +62,12 @@ pub(super) async fn activate_on(
     };
     let (submission, completion, event) = (*submission, *completion, *event);
     let config = QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
-    let activation = QueueActivation::try_new(
+    let activation = QueueActivation::new(
         epoch,
         queue_id,
         config,
-        QueueRingRegions::new(
-            RingLayout::try_new(submission, 2, RingRecord::Submission)?,
-            RingLayout::try_new(completion, 2, RingRecord::Completion)?,
-            RingLayout::try_new(event, 2, RingRecord::Event)?,
-        ),
-    )?;
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    );
     handle.activate_queue(stage, activation).await?;
     Ok((activation.queue(), submission.base()))
 }
@@ -82,7 +75,7 @@ pub(super) async fn activate_on(
 pub(super) async fn allocate(
     handle: &AsyncDeviceHandle,
     length: usize,
-) -> TestResult<PdmaMemoryRegion> {
+) -> TestResult<MappedDmaRegion> {
     let object = handle.allocate_buffer(length).await?;
     handle
         .region_for_object(object)
@@ -93,7 +86,7 @@ pub(super) async fn allocate(
 pub(super) async fn run_descriptor(
     fixture: Fixture,
     bytes: [u8; 64],
-    destinations: &[PdmaMemoryRegion],
+    destinations: &[MappedDmaRegion],
 ) -> TestResult<RunResult> {
     fixture.handle.enable_tracing().await;
     fixture

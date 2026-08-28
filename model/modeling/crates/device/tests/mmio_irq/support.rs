@@ -1,6 +1,5 @@
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig,
-    QueueConfigHandle, SoftwareOwnerId,
+    Command, CommandId, CopyRequest, EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId,
 };
 use pdma_model_device::AsyncDeviceHandle;
 
@@ -85,12 +84,14 @@ pub async fn submit_copy(
     handle
         .submit_command(
             queue,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 CommandId::new(command),
-                queue.queue_id(),
-                queue.completion_ring_id(),
-                CopyRequest::new(source, destination, 1),
-            )),
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                    source,
+                    destination,
+                    1,
+                )),
+            ),
         )
         .await?;
     Ok(())

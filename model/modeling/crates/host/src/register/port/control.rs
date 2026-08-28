@@ -1,13 +1,12 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, registers};
 use crate::PortError;
 use crate::register::BusQueueStatus;
-use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseRegistersView, RegisterId,
     ResponseCodecError,
 };
-use pdma_model_contract::binding::{QueueRingRegions, RingCursors};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId};
+use pdma_model_contract::abi::{AbiRingEntry, QueueRingLayouts, RingLayout};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId, RingCursor, RingCursors};
 
 const QUEUE_RESPONSE: [RegisterId; 9] = [
     RegisterId::QRspEpoch,
@@ -24,7 +23,7 @@ const QUEUE_RESPONSE: [RegisterId; 9] = [
 pub(super) async fn read_status<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     queue: EpochQueue,
-    rings: QueueRingRegions,
+    rings: QueueRingLayouts,
 ) -> PdmaPortResult<BusQueueStatus> {
     let _window = port.queue_window.lock().await;
     stage_queue(port, queue).await?;
@@ -34,7 +33,7 @@ pub(super) async fn read_status<A: CanonicalAccess>(
 pub(super) async fn update_cursor<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     queue: EpochQueue,
-    rings: QueueRingRegions,
+    rings: QueueRingLayouts,
     command: QueueCommand,
     current: RingCursor,
     proposed: RingCursor,
@@ -68,7 +67,7 @@ async fn stage_queue<A: CanonicalAccess>(
 async fn command_status<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     command: QueueCommand,
-    rings: QueueRingRegions,
+    rings: QueueRingLayouts,
     queue: EpochQueue,
 ) -> PdmaPortResult<BusQueueStatus> {
     registers::write(port, RegisterId::QCommand, u64::from(command.code())).await?;
@@ -110,7 +109,7 @@ async fn map_result<A: CanonicalAccess>(
 
 pub(super) fn decode_status(
     bytes: &[u8],
-    rings: QueueRingRegions,
+    rings: QueueRingLayouts,
 ) -> PdmaPortResult<BusQueueStatus> {
     let view = QueueResponseRegistersView::new(bytes).map_err(ResponseCodecError::from)?;
     let epoch = view
@@ -183,36 +182,34 @@ pub(super) fn decode_status(
     ))
 }
 
-fn cursors(
-    layout: pdma_model_contract::binding::RingLayout,
+fn cursors<R: AbiRingEntry>(
+    layout: RingLayout<R>,
     producer: RingCursor,
     consumer: RingCursor,
 ) -> PdmaPortResult<RingCursors> {
-    RingCursors::try_new(layout, producer, consumer).map_err(|_| PortError::SubmissionState.into())
+    RingCursors::try_new(layout.depth(), producer, consumer)
+        .map_err(|_| PortError::SubmissionState.into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::register::PdmaRegisterPortError;
-    use pdma_model_contract::abi::{DmaAddress, RingRecord};
-    use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
-    use pdma_model_contract::semantic::BufferId;
+    use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, DmaAddress, DmaRegion};
     use std::error::Error;
 
     #[test]
     fn malformed_generated_queue_response_preserves_codec_source() {
-        let layout = |id: usize, base: u64, record: RingRecord| {
-            let length = u64::from(record.record_size()) * 2;
-            let region =
-                PdmaMemoryRegion::try_new(BufferId::new(id), DmaAddress::new(base), length)
-                    .expect("test region must be valid");
-            RingLayout::try_new(region, 2, record).expect("test ring must be valid")
-        };
-        let rings = QueueRingRegions::new(
-            layout(0, 0x1000, RingRecord::Submission),
-            layout(1, 0x2000, RingRecord::Completion),
-            layout(2, 0x3000, RingRecord::Event),
+        fn layout<R: AbiRingEntry>(base: u64) -> RingLayout<R> {
+            let length = RingLayout::<R>::checked_extent(2).expect("test extent must fit");
+            let region = DmaRegion::try_new(DmaAddress::new(base), length)
+                .expect("test region must be valid");
+            RingLayout::try_new(region, 2).expect("test ring must be valid")
+        }
+        let rings = QueueRingLayouts::new(
+            layout::<AbiCommand>(0x1000),
+            layout::<AbiCompletion>(0x2000),
+            layout::<AbiEvent>(0x3000),
         );
         let error = decode_status(&[], rings).expect_err("short generated bank must fail");
         assert!(matches!(error, PdmaRegisterPortError::Response(_)));

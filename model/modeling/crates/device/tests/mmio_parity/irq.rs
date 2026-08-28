@@ -1,8 +1,7 @@
 use super::{TestResult, read_u32, read_u64, write_u32, write_u64};
 use pdma_model_contract::abi::mmio::{IrqSourceStatus, MmioResult};
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, QueueConfig,
-    QueueConfigHandle, SoftwareOwnerId,
+    Command, CommandId, CopyRequest, EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId,
     irq::{IrqNotification, IrqRoute, IrqVector},
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
@@ -180,12 +179,14 @@ async fn submit_copy(handle: &AsyncDeviceHandle, queue: QueueConfigHandle) -> Te
     handle
         .submit_command(
             queue,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 CommandId::new(0),
-                queue.queue_id(),
-                queue.completion_ring_id(),
-                CopyRequest::new(source, destination, 1),
-            )),
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                    source,
+                    destination,
+                    1,
+                )),
+            ),
         )
         .await?;
     Ok(())

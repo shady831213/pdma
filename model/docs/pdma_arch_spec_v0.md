@@ -75,9 +75,10 @@ separately. Worker and dispatcher shutdown/join finish before the collector snap
 Schema definitions and resolved layouts belong to `hardware-interface-schema`; shared
 memory, raw registers, CPU-local state, generic interrupt dispatch, and trace storage
 belong to `hardware-interface-runtime`. Contract `semantic` owns conceptual vocabulary,
-while `abi` owns exact bytes/registers and record conversion; `binding` owns runtime-bound
-associations. Device owns runtime projection, mappings, and execution/retirement. Host
-owns adapters: the canonical register port, PDMA interrupt adapter, driver accounting,
+while `abi` independently owns exact bytes, registers, and layouts. Neither contract
+namespace embeds or converts the other. Device owns DMA-object projection, mappings,
+semantic-to-exact publication, and execution/retirement. Host owns exact-to-semantic
+retirement plus the canonical register port, PDMA interrupt adapter, driver accounting,
 and explicit semantic/sync compatibility adapters. Compatibility does not create a
 second executor or canonical E2E.
 
@@ -324,17 +325,17 @@ does not identify whether a platform uses physical, bus, or translated addressin
 
 ## Conceptual Command Boundary
 
-External commands live in `model/modeling/crates/contract/src/desc.rs` and represent the
-conceptual driver-visible descriptor surface. The `ExternalCommand` enum carries `Copy`,
-`StridedCopy`, `BroadcastCopy`, and `VectorAdd` variants, each with queue ID, completion
-ring ID, command ID, and request payload. The semantic frontend lowers that public form
-once into a device-private `ExecutionCommand`; the exact frontend decodes ABI-v1 and
-resolves its DMA addresses directly into the same private representation. The shared
-native core matches only private execution operations and derives operation-specific
-chunks and resource demand internally. The selected queue context supplies execution
-queue identity, while the semantic command or exact queue directory supplies completion
-routing. ABI-v1 encodes equivalent command data through the fixed registry; neither the
-public command type nor the private execution type is wire layout.
+Semantic commands live in `model/modeling/crates/contract/src/semantic/desc/` and
+represent the conceptual driver-visible descriptor surface. `Command` carries one
+`CommandId` and one `CommandOperation`; `CommandOperation` has `Copy`, `StridedCopy`,
+`BroadcastCopy`, and `VectorAdd` variants holding only their semantic request payloads.
+The selected `QueueConfigHandle` supplies queue identity and completion routing. The
+semantic frontend lowers that public form once into a device-private
+`ExecutionCommand`; the exact frontend decodes ABI-v1 and resolves its DMA addresses
+directly into the same private representation. The shared native core matches only
+private execution operations and derives operation-specific chunks and resource demand
+internally. ABI-v1 encodes equivalent command data through the fixed registry; neither
+the public command type nor the private execution type is wire layout.
 
 ## Supported v0 Operations
 
@@ -370,7 +371,7 @@ The native copy and vector-add paths use checked memory reads and writes. Bounds
 
 ### Resource-Credit Semantics
 
-`ResourceConfig` defines capacities for internal descriptors, read slots, write slots, compute slots, completion publication slots, and event publication slots. The default configuration is unbounded. `ResourceDemand` derives execution demand directly from each `ExternalCommand`: an operation with `N` native chunks or destinations demands `N` internal descriptors, `N` read slots, and `N` write slots; a vector add demands one internal descriptor, two read slots, one write slot, and one compute slot. Publication slots gate completion and event ring pushes.
+`ResourceConfig` defines capacities for internal descriptors, read slots, write slots, compute slots, completion publication slots, and event publication slots. The default configuration is unbounded. `ResourceDemand` derives execution demand from the device-private `ExecutionCommand`: an operation with `N` native chunks or destinations demands `N` internal descriptors, `N` read slots, and `N` write slots; a vector add demands one internal descriptor, two read slots, one write slot, and one compute slot. Publication slots gate completion and event ring pushes.
 
 ### Stall Semantics
 

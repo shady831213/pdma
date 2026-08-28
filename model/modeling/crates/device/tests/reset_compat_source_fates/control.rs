@@ -2,10 +2,11 @@ use std::error::Error;
 use std::sync::Arc;
 
 use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
-use pdma_model_contract::abi::RingCursor;
-use pdma_model_contract::abi::{AbiControlError, DmaAddress};
-use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId, ResourceConfig};
+use pdma_model_contract::abi::DmaAddress;
+use pdma_model_contract::semantic::{
+    DeviceEpoch, EpochQueue, QueueControl, QueueCursorUpdate, QueueId, ResourceConfig, RingCursor,
+    SemanticError,
+};
 use pdma_model_device::test_support::{DeviceStateSnapshot, async_state_snapshot};
 use pdma_model_device::{
     AsyncDevice, AsyncDeviceHandle, DmaWrite, PdmaControlError, SubmissionAcceptance,
@@ -56,7 +57,7 @@ async fn assert_remaining_control_fates(
     )?;
     assert_eq!(
         abi,
-        PdmaControlError::Abi(AbiControlError::CursorDistanceExceeded {
+        PdmaControlError::Semantic(SemanticError::CursorDistanceExceeded {
             producer: 3,
             consumer: 0,
             depth: 2,
@@ -64,7 +65,7 @@ async fn assert_remaining_control_fates(
     );
     assert_eq!(
         abi.source().and_then(|source| source.downcast_ref()),
-        Some(&AbiControlError::CursorDistanceExceeded {
+        Some(&SemanticError::CursorDistanceExceeded {
             producer: 3,
             consumer: 0,
             depth: 2,

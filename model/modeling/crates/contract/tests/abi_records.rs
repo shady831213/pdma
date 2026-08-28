@@ -8,7 +8,6 @@ use pdma_model_contract::abi::{
     AbiFaultOrder, AbiFaultSelectionError, AbiFaultSite, AbiOperandFaultStep, AbiOperandVisit,
     AbiStrideOffset, DescriptorViolationKind, DmaAddress, select_canonical_fault,
 };
-use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 
 include!("abi_records/fixtures.rs");
 include!("abi_records/ordering.rs");
@@ -17,17 +16,12 @@ include!("abi_records/ordering_helpers.rs");
 
 #[test]
 fn completion_and_all_event_kinds_match_golden_bytes() {
-    // Given: one semantic success and canonical fixtures for all eleven event kinds.
-    let completion = CompletionRecord::new(
-        QueueId::new(0x1122),
-        CommandId::new(0x3344),
-        CompletionStatus::Success,
-    );
+    // Given: one exact success and canonical fixtures for all eleven event kinds.
+    let completion = AbiCompletion::success(0x1122, 0x3344);
     let events = canonical_events();
 
     // When: the records cross the ABI-v1 byte boundary.
-    let exact_completion = AbiCompletion::try_from(completion).expect("completion must fit ABI");
-    let completion_bytes = completion_bytes(exact_completion).expect("completion must encode");
+    let completion_bytes = completion_bytes(completion).expect("completion must encode");
     let event_bytes = events.map(|event| event_bytes(event).expect("canonical event must encode"));
     let golden_tuples = [
         (1, 0x2000, 0x20, 0, 3, 1, 0),
@@ -59,10 +53,7 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
     completion_golden[16..24].copy_from_slice(&0x3344_u64.to_le_bytes());
     assert_eq!(completion_bytes, completion_golden);
     assert_eq!(
-        CompletionRecord::try_from(
-            AbiCompletion::decode(&completion_bytes).expect("golden completion must decode")
-        )
-        .expect("completion must fit the model"),
+        AbiCompletion::decode(&completion_bytes).expect("golden completion must decode"),
         completion
     );
     for ((encoded, expected), golden) in event_bytes.into_iter().zip(events).zip(golden_tuples) {

@@ -1,9 +1,9 @@
 //! Driver-port probe for composite drain and ACK state.
 
 use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
-    EpochIrqSource, EventErrorKind, EventRecord, ExternalCommand, IrqRoute, IrqSnapshot,
-    QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
+    BufferId, Command, CommandId, CompletionRecord, CompletionRingId, CompletionStatus,
+    DeviceEpoch, EpochIrqSource, EventErrorKind, EventRecord, IrqRoute, IrqSnapshot, QueueConfig,
+    QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 use pdma_model_host::{DriverPort, PortError};
 use std::{
@@ -114,7 +114,7 @@ impl DriverPort for ProbePort {
     async fn submit_command(
         &mut self,
         _queue: QueueConfigHandle,
-        _command: ExternalCommand,
+        _command: Command,
     ) -> Result<(), PortError> {
         Ok(())
     }

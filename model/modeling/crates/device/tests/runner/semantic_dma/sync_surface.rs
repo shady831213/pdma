@@ -1,8 +1,7 @@
 use super::TestResult;
 use pdma_model_contract::semantic::{
-    CommandId, CompletionStatus, DmaRangeStart, ExternalCommand, QueueConfig, SoftwareOwnerId,
-    desc::{StridedCopyCommand, StridedCopyRequest},
-    queue::EventRouting,
+    Command, CommandId, CompletionStatus, DmaRangeStart, QueueConfig, SoftwareOwnerId,
+    desc::StridedCopyRequest, queue::EventRouting,
 };
 use pdma_model_device::SyncDevice;
 
@@ -22,19 +21,19 @@ pub(super) fn exercise() -> TestResult {
     let destination = device.allocate_buffer(12)?;
     device.write_buffer(source, 0, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])?;
     device.write_buffer(destination, 0, &[80; 12])?;
-    let command = ExternalCommand::StridedCopy(StridedCopyCommand::new(
+    let command = Command::new(
         CommandId::new(0),
-        queue.queue_id(),
-        queue.completion_ring_id(),
-        StridedCopyRequest::with_starts(
-            DmaRangeStart::new(source, 1),
-            DmaRangeStart::new(destination, 2),
-            2,
-            2,
-            4,
-            4,
+        pdma_model_contract::semantic::CommandOperation::StridedCopy(
+            StridedCopyRequest::with_starts(
+                DmaRangeStart::new(source, 1),
+                DmaRangeStart::new(destination, 2),
+                2,
+                2,
+                4,
+                4,
+            ),
         ),
-    ));
+    );
 
     device.submit_command(queue, command)?;
     device.ring_doorbell(queue)?;

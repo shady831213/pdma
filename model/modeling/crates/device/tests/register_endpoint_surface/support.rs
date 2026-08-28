@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
 use pdma_model_contract::semantic::{
-    CommandId, CopyCommand, CopyRequest, EventRouting, ExternalCommand, IrqRoute, IrqVector,
-    QueueConfig, SoftwareOwnerId,
+    Command, CommandId, CopyRequest, EventRouting, IrqRoute, IrqVector, QueueConfig,
+    SoftwareOwnerId,
 };
 use pdma_model_device::AsyncDeviceHandle;
 use std::sync::{Arc, Mutex, mpsc};
@@ -62,7 +62,7 @@ pub(super) async fn contend_core(
         .region_for_object(object)
         .await
         .ok_or("allocated object has no region")?
-        .abi_base();
+        .base();
     let (held_tx, held_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
     let memory_holder = thread::spawn(move || -> TestResult {
@@ -133,12 +133,14 @@ pub async fn submit_copy(
     handle
         .submit_command(
             queue,
-            ExternalCommand::Copy(CopyCommand::new(
+            Command::new(
                 CommandId::new(0),
-                queue.queue_id(),
-                queue.completion_ring_id(),
-                CopyRequest::new(source, destination, 1),
-            )),
+                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
+                    source,
+                    destination,
+                    1,
+                )),
+            ),
         )
         .await?;
     Ok(())

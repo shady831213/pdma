@@ -1,11 +1,9 @@
+use super::require_field;
 use crate::abi::{
     ABI_VERSION, AbiCompletion, AbiCompletionFlagsValues, AbiCompletionReservedValues,
     AbiCompletionStatus, AbiCompletionView, AbiDecodeError, AbiEncodeError, COMPLETION_SIZE,
     codec::{decode_schema_error, encode_schema_error},
 };
-use crate::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
-
-use super::require_field;
 
 impl AbiCompletion {
     /// Creates one canonical successful completion.
@@ -60,37 +58,4 @@ impl AbiCompletion {
         require_field("reserved", reserved, 0)?;
         Self::from_bytes(bytes).map_err(decode_schema_error)
     }
-}
-
-impl TryFrom<CompletionRecord> for AbiCompletion {
-    type Error = AbiEncodeError;
-
-    fn try_from(record: CompletionRecord) -> Result<Self, Self::Error> {
-        match record.status() {
-            CompletionStatus::Success => Ok(Self::success(
-                encode_model_id(record.queue_id().raw())?,
-                encode_model_id(record.command_id().raw())?,
-            )),
-        }
-    }
-}
-
-impl TryFrom<AbiCompletion> for CompletionRecord {
-    type Error = AbiDecodeError;
-
-    fn try_from(completion: AbiCompletion) -> Result<Self, Self::Error> {
-        Ok(Self::new(
-            QueueId::new(decode_model_id(completion.origin_queue_id)?),
-            CommandId::new(decode_model_id(completion.command_id)?),
-            CompletionStatus::Success,
-        ))
-    }
-}
-
-fn encode_model_id(value: usize) -> Result<u64, AbiEncodeError> {
-    u64::try_from(value).map_err(|_| AbiEncodeError::UnrepresentableModelId { value })
-}
-
-fn decode_model_id(value: u64) -> Result<usize, AbiDecodeError> {
-    usize::try_from(value).map_err(|_| AbiDecodeError::UnrepresentableId { value })
 }

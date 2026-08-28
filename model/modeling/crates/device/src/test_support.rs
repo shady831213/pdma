@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::dma_space::MappedDmaRegion;
 use hardware_interface_runtime::{RegisterObserver, SharedMemory};
 use pdma_model_contract::abi::mmio::MmioAccessError;
-use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::trace::TraceEvent;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 
@@ -33,7 +33,7 @@ pub struct ResetPartitionSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceStateSnapshot {
     /// All logical DMA mappings in object order.
-    pub mappings: Vec<PdmaMemoryRegion>,
+    pub mappings: Vec<MappedDmaRegion>,
     /// Exact bytes for every logical DMA mapping in object order.
     pub bytes: Vec<Vec<u8>>,
     /// Persistent DMA allocator generation.

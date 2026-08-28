@@ -1,15 +1,12 @@
 //! ABI-v1 completion and event record boundary scenarios.
 
 use hardware_interface_schema::{SchemaCoordinate, SchemaLocation, SchemaMemberIdentity};
-use pdma_model_contract::abi::record::{
-    decode_completion, decode_event, encode_completion, encode_event,
-};
 use pdma_model_contract::abi::{
     AbiBounds, AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode, AbiCommandPayloadCopyValues,
-    AbiCommandPayloadStridedCopyValues, AbiCompletion, AbiDecodeError, AbiEncodeError,
+    AbiCommandPayloadStridedCopyValues, AbiCompletion, AbiDecodeError, AbiEncodeError, AbiEvent,
     AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails,
     AbiFaultOrder, AbiFaultSelectionError, AbiFaultSite, AbiOperandFaultStep, AbiOperandVisit,
-    AbiStrideOffset, DescriptorViolationKind, DmaAddress, ExactAbiEvent, select_canonical_fault,
+    AbiStrideOffset, DescriptorViolationKind, DmaAddress, select_canonical_fault,
 };
 use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 
@@ -30,8 +27,8 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
 
     // When: the records cross the ABI-v1 byte boundary.
     let exact_completion = AbiCompletion::try_from(completion).expect("completion must fit ABI");
-    let completion_bytes = encode_completion(exact_completion).expect("completion must encode");
-    let event_bytes = events.map(|event| encode_event(event).expect("canonical event must encode"));
+    let completion_bytes = completion_bytes(exact_completion).expect("completion must encode");
+    let event_bytes = events.map(|event| event_bytes(event).expect("canonical event must encode"));
     let golden_tuples = [
         (1, 0x2000, 0x20, 0, 3, 1, 0),
         (2, u64::MAX - 7, 16, 0, 4, 2, 0),
@@ -63,7 +60,7 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
     assert_eq!(completion_bytes, completion_golden);
     assert_eq!(
         CompletionRecord::try_from(
-            decode_completion(&completion_bytes).expect("golden completion must decode")
+            AbiCompletion::decode(&completion_bytes).expect("golden completion must decode")
         )
         .expect("completion must fit the model"),
         completion
@@ -71,7 +68,7 @@ fn completion_and_all_event_kinds_match_golden_bytes() {
     for ((encoded, expected), golden) in event_bytes.into_iter().zip(events).zip(golden_tuples) {
         assert_eq!(encoded, event_golden(golden));
         assert_eq!(
-            decode_event(&encoded).expect("golden event must decode"),
+            AbiEvent::decode(&encoded).expect("golden event must decode"),
             expected
         );
         println!("event {:?}: {:02x?}", expected.fault().kind(), encoded);
@@ -103,9 +100,9 @@ fn rejects_unknown_values_and_noncanonical_details() {
     event_access[50..52].copy_from_slice(&99_u16.to_le_bytes());
 
     // When: values that are not canonical ABI-v1 records cross the boundary.
-    let unknown_status = decode_completion(&completion);
-    let unknown_kind = decode_event(&event);
-    let noncanonical = encode_event(ExactAbiEvent::new(
+    let unknown_status = AbiCompletion::decode(&completion);
+    let unknown_kind = AbiEvent::decode(&event);
+    let noncanonical = event_bytes(AbiEvent::new(
         1,
         2,
         AbiFault::from_parts(
@@ -135,23 +132,23 @@ fn rejects_unknown_values_and_noncanonical_details() {
         mixed_operations,
         Err(AbiFaultSelectionError::MixedOperations)
     );
-    let completion_flags_error = decode_completion(&completion_flags);
-    let completion_reserved_error = decode_completion(&completion_reserved);
-    let event_flags_error = decode_event(&event_flags);
-    let event_reserved_error = decode_event(&event_reserved);
-    let short_completion_error = decode_completion(&completion_reserved[..31]);
+    let completion_flags_error = AbiCompletion::decode(&completion_flags);
+    let completion_reserved_error = AbiCompletion::decode(&completion_reserved);
+    let event_flags_error = AbiEvent::decode(&event_flags);
+    let event_reserved_error = AbiEvent::decode(&event_reserved);
+    let short_completion_error = AbiCompletion::decode(&completion_reserved[..31]);
     let short_event = event_golden((1, 0x2000, 0x20, 0, 3, 1, 0));
-    let short_event_error = decode_event(&short_event[..63]);
+    let short_event_error = AbiEvent::decode(&short_event[..63]);
     assert!(completion_flags_error.is_err());
     assert!(completion_reserved_error.is_err());
     assert!(event_flags_error.is_err());
     assert!(event_reserved_error.is_err());
     assert_eq!(
-        decode_event(&event_stage),
+        AbiEvent::decode(&event_stage),
         Err(AbiDecodeError::UnknownEventStage { value: 99 })
     );
     assert_eq!(
-        decode_event(&event_access),
+        AbiEvent::decode(&event_access),
         Err(AbiDecodeError::UnknownEventAccess { value: 99 })
     );
     assert!(short_completion_error.is_err());
@@ -161,7 +158,7 @@ fn rejects_unknown_values_and_noncanonical_details() {
         .chain(noncanonical_descriptor_events())
     {
         assert_eq!(
-            encode_event(malformed),
+            event_bytes(malformed),
             Err(AbiEncodeError::NonCanonicalEventDetails)
         );
     }
@@ -172,6 +169,20 @@ fn rejects_unknown_values_and_noncanonical_details() {
          {event_flags_error:?}; {event_reserved_error:?}; \
          {short_completion_error:?}; {short_event_error:?}"
     );
+}
+
+fn completion_bytes(
+    completion: AbiCompletion,
+) -> Result<[u8; AbiCompletion::RECORD_SIZE], AbiEncodeError> {
+    let mut bytes = [0_u8; AbiCompletion::RECORD_SIZE];
+    completion.encode(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn event_bytes(event: AbiEvent) -> Result<[u8; AbiEvent::RECORD_SIZE], AbiEncodeError> {
+    let mut bytes = [0_u8; AbiEvent::RECORD_SIZE];
+    event.encode(&mut bytes)?;
+    Ok(bytes)
 }
 
 fn mismatched_header_order() -> Result<AbiFaultCandidate, AbiFaultSelectionError> {

@@ -1,5 +1,5 @@
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadValues, AbiCommandView, CompletionSchemaView, EventSchemaView,
+    AbiCommand, AbiCommandPayloadValues, AbiCommandView, AbiCompletionView, AbiEventView,
     IndirectDestinationEntrySchemaView,
 };
 
@@ -23,8 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let descriptor = AbiCommandView::new(&DESCRIPTOR)?;
     let header = descriptor.header()?;
     let values = AbiCommand::from_bytes(&DESCRIPTOR)?;
-    let completion = CompletionSchemaView::new(&COMPLETION)?;
-    let event = EventSchemaView::new(&EVENT)?;
+    let completion = AbiCompletionView::new(&COMPLETION)?;
+    let event = AbiEventView::new(&EVENT)?;
     let indirect = IndirectDestinationEntrySchemaView::new(&INDIRECT)?;
     let AbiCommandPayloadValues::Copy(copy) = values.payload
     else {

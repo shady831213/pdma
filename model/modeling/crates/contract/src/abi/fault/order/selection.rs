@@ -135,7 +135,7 @@ fn scalar_matches(tuple: FaultTuple, location: hardware_interface_schema::Schema
 
 const fn operand_matches(tuple: FaultTuple, visit: AbiOperandVisit) -> bool {
     let (stage, access, index) = operand_context(visit);
-    tuple.stage == stage.value() && tuple.access == access.value() && tuple.index == index
+    tuple.stage == stage.raw() && tuple.access == access.raw() && tuple.index == index
 }
 
 fn step_matches(kind: AbiEventKind, visit: AbiOperandVisit, step: AbiOperandFaultStep) -> bool {

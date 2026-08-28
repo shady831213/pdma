@@ -1,4 +1,4 @@
-use pdma_model_contract::abi::{AbiCommand, DmaAddress, ExactAbiEvent};
+use pdma_model_contract::abi::{AbiCommand, AbiEvent, DmaAddress};
 use pdma_model_contract::abi::{RingCursor, RingRecord};
 use pdma_model_contract::binding::{
     PdmaMemoryRegion, QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions,
@@ -164,7 +164,7 @@ pub(super) fn encode(command: AbiCommand) -> TestResult<[u8; 64]> {
     Ok(bytes)
 }
 
-pub(super) fn pending_event(result: &RunResult) -> TestResult<ExactAbiEvent> {
+pub(super) fn pending_event(result: &RunResult) -> TestResult<AbiEvent> {
     match result.pending {
         Some(PendingDmaResult::Event(event)) => Ok(event),
         Some(PendingDmaResult::Completion(_)) | None => Err("expected pending DMA event".into()),

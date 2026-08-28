@@ -1,8 +1,7 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::abi::record::{decode_completion, decode_event};
-use pdma_model_contract::abi::{AbiEventKind, DmaAddress, ExactAbiEvent, RingCursor};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiEventKind, DmaAddress, RingCursor};
 use pdma_model_contract::semantic::{
     BufferId, CompletionRecord, EventErrorKind, EventRecord, QueueConfigHandle,
 };
@@ -26,7 +25,7 @@ pub(super) async fn completion<A: CanonicalAccess>(
         &mut bytes,
     )
     .map_err(crate::register::PdmaRegisterPortError::from)?;
-    let decoded = decode_completion(&bytes).map_err(|_| PortError::SubmissionState)?;
+    let decoded = AbiCompletion::decode(&bytes).map_err(|_| PortError::SubmissionState)?;
     let record = CompletionRecord::try_from(decoded).map_err(|_| PortError::SubmissionState)?;
     let next = cursors
         .consumer()
@@ -62,7 +61,7 @@ pub(super) async fn event<A: CanonicalAccess>(
         &mut bytes,
     )
     .map_err(crate::register::PdmaRegisterPortError::from)?;
-    let decoded = decode_event(&bytes).map_err(|_| PortError::SubmissionState)?;
+    let decoded = AbiEvent::decode(&bytes).map_err(|_| PortError::SubmissionState)?;
     let record = semantic_event(port, decoded)?;
     let next = cursors
         .consumer()
@@ -128,7 +127,7 @@ fn slot_address(
 
 fn semantic_event<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    event: ExactAbiEvent,
+    event: AbiEvent,
 ) -> PdmaPortResult<EventRecord> {
     let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
     let locator = DmaAddress::new(locator);
@@ -189,10 +188,10 @@ fn semantic_event<A: CanonicalAccess>(
     };
     Ok(EventRecord::new(
         pdma_model_contract::semantic::QueueId::new(
-            usize::try_from(event.queue_id()).map_err(|_| PortError::SubmissionState)?,
+            usize::try_from(event.origin_queue_id).map_err(|_| PortError::SubmissionState)?,
         ),
         pdma_model_contract::semantic::CommandId::new(
-            usize::try_from(event.command_id()).map_err(|_| PortError::SubmissionState)?,
+            usize::try_from(event.command_id).map_err(|_| PortError::SubmissionState)?,
         ),
         error_kind,
         buffer,

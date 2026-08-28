@@ -6,7 +6,7 @@ use crate::runner::abi::bus::PdmaControlError;
 use crate::runner::abi::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandView, DescriptorDecodeError, ExactAbiEvent, RingRecord,
+    AbiCommand, AbiCommandView, AbiEvent, DescriptorDecodeError, RingRecord,
 };
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
@@ -14,7 +14,7 @@ use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
     Command(crate::runner::execution::command::ExecutionCommand),
-    Fault(QueueId, ExactAbiEvent),
+    Fault(QueueId, AbiEvent),
 }
 
 pub(super) fn fetch(
@@ -65,7 +65,7 @@ pub(super) fn fetch(
         }),
         Err(DescriptorDecodeError::Violation(violation)) => Ok(Some(ExactFetch::Fault(
             queue_id,
-            ExactAbiEvent::new(
+            AbiEvent::new(
                 exact_queue_id,
                 exact_command_id,
                 violation.into_abi_fault(slot),

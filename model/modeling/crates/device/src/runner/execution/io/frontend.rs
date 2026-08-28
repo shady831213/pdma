@@ -68,7 +68,7 @@ impl QueueFrontend {
 
     pub(in crate::runner::execution) const fn pending_exact_fault(
         &self,
-    ) -> Option<pdma_model_contract::abi::ExactAbiEvent> {
+    ) -> Option<pdma_model_contract::abi::AbiEvent> {
         match self {
             Self::Semantic(_) => None,
             Self::Exact(frontend) => frontend.pending_fault(),

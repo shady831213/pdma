@@ -241,8 +241,8 @@ impl AbiFault {
             locator: self.locator.raw(),
             observed: detail0,
             expected: detail1,
-            stage: stage.value(),
-            access: access.value(),
+            stage: stage.raw(),
+            access: access.raw(),
             index,
         }
     }
@@ -250,6 +250,14 @@ impl AbiFault {
     /// Returns the assigned event kind.
     pub const fn kind(self) -> AbiEventKind {
         self.kind
+    }
+
+    pub(super) const fn stage(self) -> AbiEventStage {
+        self.details.values().2
+    }
+
+    pub(super) const fn access(self) -> AbiEventAccess {
+        self.details.values().3
     }
 
     pub(super) fn is_canonical(self) -> bool {

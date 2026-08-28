@@ -1,9 +1,9 @@
-fn canonical_events() -> [ExactAbiEvent; 11] {
+fn canonical_events() -> [AbiEvent; 11] {
     let queue = 0x1122;
     let command = 0x3344;
     let descriptor = DmaAddress::new(0x1000);
     [
-        ExactAbiEvent::new(
+        AbiEvent::new(
             queue,
             command,
             AbiFault::unmapped(
@@ -12,7 +12,7 @@ fn canonical_events() -> [ExactAbiEvent; 11] {
                 site(AbiEventStage::Source, AbiEventAccess::Read, 0),
             ),
         ),
-        ExactAbiEvent::new(
+        AbiEvent::new(
             queue,
             command,
             AbiFault::range_overflow_direct(
@@ -21,7 +21,7 @@ fn canonical_events() -> [ExactAbiEvent; 11] {
                 site(AbiEventStage::Destination, AbiEventAccess::Write, 0),
             ),
         ),
-        ExactAbiEvent::new(
+        AbiEvent::new(
             queue,
             command,
             AbiFault::out_of_bounds(
@@ -30,26 +30,26 @@ fn canonical_events() -> [ExactAbiEvent; 11] {
                 site(AbiEventStage::Destination, AbiEventAccess::Write, 0),
             ),
         ),
-        ExactAbiEvent::new(queue, command, AbiFault::invalid_version(descriptor, 2)),
-        ExactAbiEvent::new(queue, command, AbiFault::invalid_size(descriptor, 63)),
-        ExactAbiEvent::new(queue, command, AbiFault::invalid_opcode(descriptor, 9)),
-        ExactAbiEvent::new(queue, command, AbiFault::invalid_flags(descriptor, 1)),
-        ExactAbiEvent::new(
+        AbiEvent::new(queue, command, AbiFault::invalid_version(descriptor, 2)),
+        AbiEvent::new(queue, command, AbiFault::invalid_size(descriptor, 63)),
+        AbiEvent::new(queue, command, AbiFault::invalid_opcode(descriptor, 9)),
+        AbiEvent::new(queue, command, AbiFault::invalid_flags(descriptor, 1)),
+        AbiEvent::new(
             queue,
             command,
             AbiFault::invalid_reserved(descriptor, 40, 1),
         ),
-        ExactAbiEvent::new(
+        AbiEvent::new(
             queue,
             command,
             AbiFault::invalid_indirect_count(DmaAddress::new(0x4000), 0),
         ),
-        ExactAbiEvent::new(
+        AbiEvent::new(
             queue,
             command,
             AbiFault::invalid_indirect_alignment(DmaAddress::new(0x4003)),
         ),
-        ExactAbiEvent::new(
+        AbiEvent::new(
             queue,
             command,
             AbiFault::value_out_of_range(descriptor, 32, u64::from(u32::MAX) + 1),
@@ -73,7 +73,7 @@ fn event_golden(tuple: (u16, u64, u64, u64, u16, u16, u64)) -> [u8; 64] {
     bytes
 }
 
-const fn noncanonical_memory_events() -> [ExactAbiEvent; 3] {
+const fn noncanonical_memory_events() -> [AbiEvent; 3] {
     [
         invalid_event(
             AbiEventKind::UnmappedDmaAddress,
@@ -94,7 +94,7 @@ const fn noncanonical_memory_events() -> [ExactAbiEvent; 3] {
     ]
 }
 
-fn noncanonical_descriptor_events() -> [ExactAbiEvent; 8] {
+fn noncanonical_descriptor_events() -> [AbiEvent; 8] {
     [
         invalid_event(
             AbiEventKind::InvalidVersion,
@@ -139,8 +139,8 @@ fn noncanonical_descriptor_events() -> [ExactAbiEvent; 8] {
     ]
 }
 
-const fn invalid_event(kind: AbiEventKind, details: AbiFaultDetails) -> ExactAbiEvent {
-    ExactAbiEvent::new(
+const fn invalid_event(kind: AbiEventKind, details: AbiFaultDetails) -> AbiEvent {
+    AbiEvent::new(
         1,
         2,
         AbiFault::from_parts(kind, DmaAddress::new(0x1000), details),

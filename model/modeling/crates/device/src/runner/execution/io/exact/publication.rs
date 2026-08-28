@@ -1,8 +1,7 @@
 use super::super::PublicationOutcome;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::abi::bus::control::{ActiveQueue, BusControlState};
-use pdma_model_contract::abi::record::{encode_completion, encode_event};
-use pdma_model_contract::abi::{AbiCompletion, DmaAddress, ExactAbiEvent};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent, DmaAddress};
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CompletionRecord, QueueId};
 
@@ -19,27 +18,29 @@ pub(super) fn completion(
     let Ok(exact) = AbiCompletion::try_from(record) else {
         return PublicationOutcome::Retry;
     };
-    let Ok(bytes) = encode_completion(exact) else {
+    let mut bytes = [0_u8; AbiCompletion::RECORD_SIZE];
+    if exact.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
-    };
+    }
     publish(dma_space, active, ResultRing::Completion, &bytes)
 }
 
 pub(super) fn event(
     dma_space: &PdmaMemoryMappings,
     control: &mut BusControlState,
-    event: ExactAbiEvent,
+    event: AbiEvent,
 ) -> PublicationOutcome {
-    let Ok(queue_id) = usize::try_from(event.queue_id()).map(QueueId::new) else {
+    let Ok(queue_id) = usize::try_from(event.origin_queue_id).map(QueueId::new) else {
         return PublicationOutcome::Retry;
     };
     let queue = EpochQueue::new(control.epoch(), queue_id);
     let Ok(active) = control.queue_mut(queue) else {
         return PublicationOutcome::Retry;
     };
-    let Ok(bytes) = encode_event(event) else {
+    let mut bytes = [0_u8; AbiEvent::RECORD_SIZE];
+    if event.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
-    };
+    }
     publish(dma_space, active, ResultRing::Event, &bytes)
 }
 

@@ -153,8 +153,8 @@ fn indirect_violations_embed_the_list_locator_and_preserve_precedence() {
                 unaligned.raw(),
                 unaligned.raw() % INDIRECT_ENTRY_ALIGNMENT,
                 INDIRECT_ENTRY_ALIGNMENT,
-                AbiEventStage::IndirectList.value(),
-                AbiEventAccess::None.value(),
+                AbiEventStage::IndirectList.raw(),
+                AbiEventAccess::None.raw(),
                 0,
             ),
         },
@@ -184,8 +184,8 @@ fn indirect_count_expected(list: DmaAddress, observed: u64) -> Expected {
             list.raw(),
             observed,
             u64::from(MAX_INDIRECT_DESTINATIONS),
-            AbiEventStage::IndirectList.value(),
-            AbiEventAccess::None.value(),
+            AbiEventStage::IndirectList.raw(),
+            AbiEventAccess::None.raw(),
             0,
         ),
     }
@@ -205,8 +205,8 @@ const fn descriptor_tuple(expected: DescriptorExpected) -> FaultTuple {
         SLOT.raw(),
         expected.observed,
         expected.expected,
-        AbiEventStage::Descriptor.value(),
-        AbiEventAccess::None.value(),
+        AbiEventStage::Descriptor.raw(),
+        AbiEventAccess::None.raw(),
         expected.offset,
     )
 }

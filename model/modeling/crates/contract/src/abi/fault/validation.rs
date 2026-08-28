@@ -91,22 +91,21 @@ const fn descriptor(tuple: FaultTuple, expected: u64, index: u64) -> bool {
 }
 
 const fn descriptor_context(tuple: FaultTuple) -> bool {
-    tuple.stage == AbiEventStage::Descriptor.value() && tuple.access == AbiEventAccess::None.value()
+    tuple.stage == AbiEventStage::Descriptor.raw() && tuple.access == AbiEventAccess::None.raw()
 }
 
 const fn indirect_context(tuple: FaultTuple) -> bool {
-    tuple.stage == AbiEventStage::IndirectList.value()
-        && tuple.access == AbiEventAccess::None.value()
+    tuple.stage == AbiEventStage::IndirectList.raw() && tuple.access == AbiEventAccess::None.raw()
 }
 
 const fn canonical_operand(stage: u16, access: u16) -> bool {
-    stage == AbiEventStage::IndirectList.value() && access == AbiEventAccess::Read.value()
-        || stage == AbiEventStage::Source.value() && access == AbiEventAccess::Read.value()
-        || stage == AbiEventStage::Destination.value() && access == AbiEventAccess::Write.value()
+    stage == AbiEventStage::IndirectList.raw() && access == AbiEventAccess::Read.raw()
+        || stage == AbiEventStage::Source.raw() && access == AbiEventAccess::Read.raw()
+        || stage == AbiEventStage::Destination.raw() && access == AbiEventAccess::Write.raw()
 }
 
 fn range_overflow(tuple: FaultTuple) -> bool {
-    if tuple.stage == AbiEventStage::IndirectList.value() {
+    if tuple.stage == AbiEventStage::IndirectList.raw() {
         return tuple.expected == INDIRECT_ENTRY_ALIGNMENT
             && tuple.index == 0
             && tuple

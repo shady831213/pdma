@@ -2,9 +2,8 @@
 
 use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::abi::{
-    AbiCommandView, AbiCommandViewMut, CompletionSchemaView, CompletionSchemaViewMut,
-    EventSchemaView, EventSchemaViewMut, IndirectDestinationEntrySchemaView,
-    IndirectDestinationEntrySchemaViewMut,
+    AbiCommandView, AbiCommandViewMut, AbiCompletionView, AbiCompletionViewMut, AbiEventView,
+    AbiEventViewMut, IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
 };
 
 #[test]
@@ -16,7 +15,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
     let mut indirect = [0_u8; 8];
 
     write_descriptor(&mut descriptor)?;
-    let mut completion_mut = CompletionSchemaViewMut::new(&mut completion).unwrap();
+    let mut completion_mut = AbiCompletionViewMut::new(&mut completion).unwrap();
     completion_mut.set_version(1).unwrap();
     completion_mut.set_size(32).unwrap();
     completion_mut.set_status(3).unwrap();
@@ -24,7 +23,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
     completion_mut.set_origin_queue_id(5).unwrap();
     completion_mut.set_command_id(6).unwrap();
     completion_mut.set_reserved(7).unwrap();
-    let mut event_mut = EventSchemaViewMut::new(&mut event).unwrap();
+    let mut event_mut = AbiEventViewMut::new(&mut event).unwrap();
     event_mut.set_version(1).unwrap();
     event_mut.set_size(64).unwrap();
     event_mut.set_kind(3).unwrap();
@@ -44,7 +43,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
         .unwrap();
 
     assert_descriptor(&descriptor)?;
-    let completion = CompletionSchemaView::new(&completion).unwrap();
+    let completion = AbiCompletionView::new(&completion).unwrap();
     assert_eq!(
         (
             completion.version().unwrap(),
@@ -57,7 +56,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
         ),
         (1, 32, 3, 4, 5, 6, 7)
     );
-    let event = EventSchemaView::new(&event).unwrap();
+    let event = AbiEventView::new(&event).unwrap();
     assert_eq!(
         (
             event.version().unwrap(),
@@ -139,8 +138,8 @@ fn generated_mutable_views_when_writing_every_record_are_public_and_atomic() {
     let indirect_before = indirect;
 
     assert!(AbiCommandViewMut::new(&mut descriptor[..63]).is_err());
-    assert!(CompletionSchemaViewMut::new(&mut completion[..31]).is_err());
-    assert!(EventSchemaViewMut::new(&mut event[..63]).is_err());
+    assert!(AbiCompletionViewMut::new(&mut completion[..31]).is_err());
+    assert!(AbiEventViewMut::new(&mut event[..63]).is_err());
     assert!(IndirectDestinationEntrySchemaViewMut::new(&mut indirect[..7]).is_err());
 
     assert_eq!(descriptor, descriptor_before);

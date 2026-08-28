@@ -1,7 +1,9 @@
 //! Canonical numeric registry for PDMA ABI version 1.
 
 use super::descriptor::{AbiCommand, AbiCommandHeaderOpcode, IndirectDestinationEntrySchema};
-use super::record::{CompletionSchema, EventSchema};
+use super::record::{
+    AbiCompletion, AbiCompletionStatus, AbiEvent, AbiEventAccess, AbiEventKind, AbiEventStage,
+};
 use super::{AbiControlError, AbiDecodeError};
 
 /// Canonical generated record metadata.
@@ -15,9 +17,9 @@ pub const ABI_VERSION: u16 = 1;
 /// Descriptor record width in bytes.
 pub const DESCRIPTOR_SIZE: u16 = fixed_record_size(AbiCommand::SPEC.size());
 /// Completion record width in bytes.
-pub const COMPLETION_SIZE: u16 = fixed_record_size(CompletionSchema::SPEC.size());
+pub const COMPLETION_SIZE: u16 = fixed_record_size(AbiCompletion::SPEC.size());
 /// Event record width in bytes.
-pub const EVENT_SIZE: u16 = fixed_record_size(EventSchema::SPEC.size());
+pub const EVENT_SIZE: u16 = fixed_record_size(AbiEvent::SPEC.size());
 /// Indirect destination-list entry width in bytes.
 pub const INDIRECT_DESTINATION_ENTRY_SIZE: u16 =
     fixed_record_size(IndirectDestinationEntrySchema::SPEC.size());
@@ -25,9 +27,9 @@ pub const INDIRECT_DESTINATION_ENTRY_SIZE: u16 =
 /// Required descriptor base alignment.
 pub const DESCRIPTOR_ALIGNMENT: u64 = AbiCommand::SPEC.alignment() as u64;
 /// Required completion-ring base alignment.
-pub const COMPLETION_ALIGNMENT: u64 = CompletionSchema::SPEC.alignment() as u64;
+pub const COMPLETION_ALIGNMENT: u64 = AbiCompletion::SPEC.alignment() as u64;
 /// Required event-ring base alignment.
-pub const EVENT_ALIGNMENT: u64 = EventSchema::SPEC.alignment() as u64;
+pub const EVENT_ALIGNMENT: u64 = AbiEvent::SPEC.alignment() as u64;
 /// Required indirect destination-entry alignment.
 pub const INDIRECT_ENTRY_ALIGNMENT: u64 = IndirectDestinationEntrySchema::SPEC.alignment() as u64;
 
@@ -92,7 +94,7 @@ pub const COMPLETION_FLAGS_MASK: u16 = 0;
 /// Event flags accepted by ABI v1.
 pub const EVENT_FLAGS_MASK: u16 = 0;
 /// Successful completion status.
-pub const SUCCESS_STATUS: u16 = 0;
+pub const SUCCESS_STATUS: u16 = AbiCompletionStatus::Success.raw();
 
 /// An assigned numeric value with a stable generator-facing name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,42 +193,51 @@ pub const OPCODES: [OpcodeSpec; 4] = [
 
 /// ABI-v1 event-kind assignments.
 pub const EVENT_KINDS: [NamedValue; 11] = [
-    NamedValue::new("UNMAPPED_DMA_ADDRESS", 1),
-    NamedValue::new("RANGE_OVERFLOW", 2),
-    NamedValue::new("OUT_OF_BOUNDS", 3),
-    NamedValue::new("INVALID_VERSION", 4),
-    NamedValue::new("INVALID_SIZE", 5),
-    NamedValue::new("INVALID_OPCODE", 6),
-    NamedValue::new("INVALID_FLAGS", 7),
-    NamedValue::new("INVALID_RESERVED", 8),
-    NamedValue::new("INVALID_INDIRECT_COUNT", 9),
-    NamedValue::new("INVALID_INDIRECT_ALIGNMENT", 10),
-    NamedValue::new("VALUE_OUT_OF_RANGE", 11),
+    NamedValue::new(
+        "UNMAPPED_DMA_ADDRESS",
+        AbiEventKind::UnmappedDmaAddress.raw(),
+    ),
+    NamedValue::new("RANGE_OVERFLOW", AbiEventKind::RangeOverflow.raw()),
+    NamedValue::new("OUT_OF_BOUNDS", AbiEventKind::OutOfBounds.raw()),
+    NamedValue::new("INVALID_VERSION", AbiEventKind::InvalidVersion.raw()),
+    NamedValue::new("INVALID_SIZE", AbiEventKind::InvalidSize.raw()),
+    NamedValue::new("INVALID_OPCODE", AbiEventKind::InvalidOpcode.raw()),
+    NamedValue::new("INVALID_FLAGS", AbiEventKind::InvalidFlags.raw()),
+    NamedValue::new("INVALID_RESERVED", AbiEventKind::InvalidReserved.raw()),
+    NamedValue::new(
+        "INVALID_INDIRECT_COUNT",
+        AbiEventKind::InvalidIndirectCount.raw(),
+    ),
+    NamedValue::new(
+        "INVALID_INDIRECT_ALIGNMENT",
+        AbiEventKind::InvalidIndirectAlignment.raw(),
+    ),
+    NamedValue::new("VALUE_OUT_OF_RANGE", AbiEventKind::ValueOutOfRange.raw()),
 ];
 
 /// ABI-v1 fault-stage assignments.
 pub const EVENT_STAGES: [NamedValue; 4] = [
-    NamedValue::new("DESCRIPTOR", 1),
-    NamedValue::new("INDIRECT_LIST", 2),
-    NamedValue::new("SOURCE", 3),
-    NamedValue::new("DESTINATION", 4),
+    NamedValue::new("DESCRIPTOR", AbiEventStage::Descriptor.raw()),
+    NamedValue::new("INDIRECT_LIST", AbiEventStage::IndirectList.raw()),
+    NamedValue::new("SOURCE", AbiEventStage::Source.raw()),
+    NamedValue::new("DESTINATION", AbiEventStage::Destination.raw()),
 ];
 
 /// ABI-v1 fault-access assignments.
 pub const EVENT_ACCESSES: [NamedValue; 3] = [
-    NamedValue::new("NONE", 0),
-    NamedValue::new("READ", 1),
-    NamedValue::new("WRITE", 2),
+    NamedValue::new("NONE", AbiEventAccess::None.raw()),
+    NamedValue::new("READ", AbiEventAccess::Read.raw()),
+    NamedValue::new("WRITE", AbiEventAccess::Write.raw()),
 ];
 
 /// Canonical ABI-v1 descriptor record.
 pub const DESCRIPTOR: RecordSpec = AbiCommand::SPEC;
 
 /// Canonical ABI-v1 completion record.
-pub const COMPLETION: RecordSpec = CompletionSchema::SPEC;
+pub const COMPLETION: RecordSpec = AbiCompletion::SPEC;
 
 /// Canonical ABI-v1 event record.
-pub const EVENT: RecordSpec = EventSchema::SPEC;
+pub const EVENT: RecordSpec = AbiEvent::SPEC;
 
 /// Canonical ABI-v1 indirect destination-list entry.
 pub const INDIRECT_DESTINATION_ENTRY: RecordSpec = IndirectDestinationEntrySchema::SPEC;

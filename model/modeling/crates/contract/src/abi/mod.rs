@@ -44,10 +44,10 @@ pub use metadata::{
     VECTOR_ADD_OPCODE, validate_abi_version,
 };
 pub use record::{
-    AbiCompletion, CompletionSchema, CompletionSchemaRaw, CompletionSchemaView,
-    CompletionSchemaViewMut, EventSchema, EventSchemaRaw, EventSchemaView, EventSchemaViewMut,
-    ExactAbiEvent, decode_completion as decode_exact_completion,
-    decode_event as decode_exact_event, encode_completion as encode_exact_completion,
-    encode_event as encode_exact_event,
+    AbiCompletion, AbiCompletionFlagsRaw, AbiCompletionFlagsValues, AbiCompletionRaw,
+    AbiCompletionReservedRaw, AbiCompletionReservedValues, AbiCompletionStatus,
+    AbiCompletionStatusRaw, AbiCompletionView, AbiCompletionViewMut, AbiEvent, AbiEventAccessRaw,
+    AbiEventFlagsRaw, AbiEventFlagsValues, AbiEventKindRaw, AbiEventRaw, AbiEventReservedRaw,
+    AbiEventReservedValues, AbiEventStageRaw, AbiEventView, AbiEventViewMut,
 };
 pub use ring::{RingCursor, RingRecord};

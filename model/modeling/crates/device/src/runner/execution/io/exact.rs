@@ -5,14 +5,14 @@ use super::{FrontendBehavior, NormalizedFault, NormalizedFetch, PublicationOutco
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::abi::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::{AbiEventKind, DmaAddress, ExactAbiEvent};
+use pdma_model_contract::abi::{AbiEvent, AbiEventKind, DmaAddress};
 use pdma_model_contract::semantic::BufferId;
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CompletionRecord, QueueDirectoryEntry, QueueId};
 
 #[derive(Debug)]
 pub(in crate::runner::execution) struct ExactFrontend {
-    pending_fault: Option<ExactAbiEvent>,
+    pending_fault: Option<AbiEvent>,
 }
 
 impl ExactFrontend {
@@ -22,7 +22,7 @@ impl ExactFrontend {
         }
     }
 
-    pub(super) const fn pending_fault(&self) -> Option<ExactAbiEvent> {
+    pub(super) const fn pending_fault(&self) -> Option<AbiEvent> {
         self.pending_fault
     }
 }
@@ -157,7 +157,7 @@ fn normalize(memory: &PdmaMemoryMappings, fetched: submission::ExactFetch) -> No
     }
 }
 
-fn fault_source(memory: &PdmaMemoryMappings, event: ExactAbiEvent) -> ModelError {
+fn fault_source(memory: &PdmaMemoryMappings, event: AbiEvent) -> ModelError {
     let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
     match kind {
         AbiEventKind::UnmappedDmaAddress => ModelError::UnknownBuffer(BufferId::new(usize::MAX)),

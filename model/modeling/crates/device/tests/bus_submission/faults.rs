@@ -55,8 +55,8 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
             slot.raw(),
             1,
             0,
-            AbiEventStage::Descriptor.value(),
-            AbiEventAccess::None.value(),
+            AbiEventStage::Descriptor.raw(),
+            AbiEventAccess::None.raw(),
             40,
         )
     );
@@ -178,8 +178,8 @@ fn expected_tuple(
         locator,
         detail0,
         detail1,
-        AbiEventStage::IndirectList.value(),
-        access.value(),
+        AbiEventStage::IndirectList.raw(),
+        access.raw(),
         0,
     )
 }

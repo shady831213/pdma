@@ -3,8 +3,8 @@
 #[path = "mmio_queue/support.rs"]
 mod support;
 
+use pdma_model_contract::abi::AbiEvent;
 use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::abi::record::decode_event;
 use pdma_model_contract::semantic::WholeDeviceReset;
 use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
 use pdma_model_device::AsyncDevice;
@@ -234,7 +234,7 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     assert_eq!(retired[7], 1);
     println!("{{\"malformed_retirement\":{retired:?}}}");
     let bytes = handle.read_memory(event.base(), 64).await?;
-    assert!(decode_event(&bytes).is_ok());
+    assert!(AbiEvent::decode(&bytes).is_ok());
     handle.request_shutdown().await;
     worker.await?;
     Ok(())

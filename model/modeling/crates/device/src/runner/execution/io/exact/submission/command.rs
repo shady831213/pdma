@@ -5,7 +5,7 @@ mod vector;
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::execution::command::{ExecutionCommand, ExecutionOperation};
-use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, AbiFault, ExactAbiEvent};
+use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, AbiEvent, AbiFault};
 use pdma_model_contract::semantic::{CommandId, CompletionRingId};
 
 #[derive(Clone, Copy)]
@@ -49,7 +49,7 @@ pub(super) fn resolve(
     dma: &PdmaMemoryMappings,
     context: ExactCommandContext,
     command: AbiCommand,
-) -> ModelResult<Result<ExecutionCommand, ExactAbiEvent>> {
+) -> ModelResult<Result<ExecutionCommand, AbiEvent>> {
     let resolution = ResolutionContext {
         dma,
         completion: context.completion,
@@ -61,5 +61,5 @@ pub(super) fn resolve(
         AbiCommandPayloadValues::BroadcastCopy(values) => broadcast::broadcast(resolution, values),
         AbiCommandPayloadValues::VectorAdd(values) => vector::vector(resolution, values),
     }?;
-    Ok(result.map_err(|fault| ExactAbiEvent::new(context.queue, context.exact_command, fault)))
+    Ok(result.map_err(|fault| AbiEvent::new(context.queue, context.exact_command, fault)))
 }

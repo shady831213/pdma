@@ -61,8 +61,8 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
             slot.raw(),
             observed,
             expected,
-            AbiEventStage::Descriptor.value(),
-            AbiEventAccess::None.value(),
+            AbiEventStage::Descriptor.raw(),
+            AbiEventAccess::None.raw(),
             index,
         )
     );
@@ -151,8 +151,8 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
             expected.1,
             expected.2,
             expected.3,
-            AbiEventStage::Source.value(),
-            AbiEventAccess::Read.value(),
+            AbiEventStage::Source.raw(),
+            AbiEventAccess::Read.raw(),
             0,
         )
     );

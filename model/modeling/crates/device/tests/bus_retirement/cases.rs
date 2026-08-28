@@ -1,7 +1,6 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
-use pdma_model_contract::abi::RingCursor;
-use pdma_model_contract::abi::record::{decode_completion, decode_event};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent, RingCursor};
 use pdma_model_contract::semantic::{
     CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
@@ -35,13 +34,13 @@ pub async fn visible_before_irq_and_retry() -> TestResult {
     fixture.handle.wait_for_stall_after(0).await;
     let before_retry = fixture.status().await?;
     let first_bytes = fixture.handle.read_memory(fixture.completion, 32).await?;
-    let first_record = decode_completion(&first_bytes)?;
+    let first_record = AbiCompletion::decode(&first_bytes)?;
     let trace_before_retry = fixture.handle.trace_events().await;
     fixture.consume_completion(1).await?;
     fixture.handle.wait_for_progress_after(1).await;
     let after_retry = fixture.status().await?;
     let second_bytes = fixture.handle.read_memory(fixture.completion, 32).await?;
-    let second_record = decode_completion(&second_bytes)?;
+    let second_record = AbiCompletion::decode(&second_bytes)?;
     let trace_after_retry = fixture.handle.trace_events().await;
 
     // Then: bytes precede producer/trace/IRQ and retry publishes the cached result once.
@@ -87,7 +86,7 @@ pub async fn visible_before_irq_and_retry() -> TestResult {
         .handle
         .read_memory(event_fixture.event, 64)
         .await?;
-    assert!(decode_event(&first_event).is_ok());
+    assert!(AbiEvent::decode(&first_event).is_ok());
     event_fixture.submit_bytes(1, [0; 64]).await?;
     event_fixture.capture(2).await?;
     event_fixture.handle.wait_for_stall_after(0).await;
@@ -203,7 +202,7 @@ pub async fn corrupt_masked_and_stale() -> TestResult {
         .write_memory(fixture.completion, &[0xff])
         .await?;
     let corrupt = fixture.handle.read_memory(fixture.completion, 32).await?;
-    assert!(decode_completion(&corrupt).is_err());
+    assert!(AbiCompletion::decode(&corrupt).is_err());
     assert_eq!(
         fixture.status().await?.completion().consumer(),
         RingCursor::new(0)

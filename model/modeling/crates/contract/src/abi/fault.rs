@@ -14,7 +14,7 @@ pub use value::{
     AbiStrideOffset,
 };
 
-use crate::abi::descriptor::{DescriptorHeaderSchema, location_offset};
+use crate::abi::descriptor::{AbiCommandHeader, location_offset};
 use crate::abi::{
     ABI_VERSION, DESCRIPTOR_SIZE, DmaAddress, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS,
     MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
@@ -62,8 +62,7 @@ impl AbiFault {
                 u64::from(observed),
                 u64::from(ABI_VERSION),
                 descriptor_site(location_offset(
-                    DescriptorHeaderSchema::VERSION_IDENTITY
-                        .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+                    AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
                 )),
             ),
         )
@@ -78,8 +77,7 @@ impl AbiFault {
                 u64::from(observed),
                 u64::from(DESCRIPTOR_SIZE),
                 descriptor_site(location_offset(
-                    DescriptorHeaderSchema::SIZE_IDENTITY
-                        .at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+                    AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET),
                 )),
             ),
         )
@@ -94,8 +92,7 @@ impl AbiFault {
                 u64::from(observed),
                 u64::from(VECTOR_ADD_OPCODE),
                 descriptor_site(location_offset(
-                    DescriptorHeaderSchema::OPCODE_IDENTITY
-                        .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+                    AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET),
                 )),
             ),
         )
@@ -110,8 +107,7 @@ impl AbiFault {
                 u64::from(observed),
                 0,
                 descriptor_site(location_offset(
-                    DescriptorHeaderSchema::FLAGS_IDENTITY
-                        .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+                    AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET),
                 )),
             ),
         )

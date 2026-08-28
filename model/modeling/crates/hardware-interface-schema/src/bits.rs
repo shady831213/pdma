@@ -155,6 +155,8 @@ impl BitsValueError {
 pub trait BitsLayout {
     /// Owned typed value containing every declared bit field.
     type Value: Clone + Copy + Default + Eq + PartialEq;
+    /// Unsigned scalar containing the complete encoded bit layout.
+    type Storage: crate::Scalar;
     /// Stable field identity shared by every embedding.
     type FieldId: Copy + Eq + core::fmt::Debug + 'static;
 

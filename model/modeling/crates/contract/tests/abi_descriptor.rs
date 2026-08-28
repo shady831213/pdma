@@ -17,8 +17,8 @@ pub mod vectors;
 pub mod violations;
 
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiCommand, BroadcastDestinationEntry, DESCRIPTOR_SIZE, DescriptorDecodeError,
-    DescriptorHeaderSchema, DescriptorSchemaPayloadValues, DescriptorViolationKind, DmaAddress,
+    ABI_VERSION, AbiCommand, AbiCommandHeader, AbiCommandPayloadValues, BroadcastDestinationEntry,
+    DESCRIPTOR_SIZE, DescriptorDecodeError, DescriptorViolationKind, DmaAddress,
     INDIRECT_ENTRY_ALIGNMENT,
 };
 use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, StridedCopyRequest};
@@ -27,17 +27,13 @@ use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, Stride
 fn every_v1_descriptor_matches_golden_bytes() {
     // Given: four commands with non-palindromic IDs, nonzero absolute DMA addresses, and literal vectors.
     let commands = support::commands();
-    assert!(commands.is_ok());
-    let Ok(commands) = commands else {
-        return;
-    };
     let expected = [
         vectors::COPY,
         vectors::STRIDED,
         vectors::BROADCAST,
         vectors::VECTOR_ADD,
     ];
-    let entry = BroadcastDestinationEntry::new(DmaAddress::new(0x0123_4567_89ab_cdef));
+    let entry = BroadcastDestinationEntry::from_address(DmaAddress::new(0x0123_4567_89ab_cdef));
     let old_copy = CopyRequest::new(BufferId::new(1), BufferId::new(2), 5);
     let copy = CopyRequest::with_starts(
         DmaRangeStart::new(BufferId::new(1), 7),
@@ -71,12 +67,12 @@ fn every_v1_descriptor_matches_golden_bytes() {
     let [_, _, broadcast, _] = commands;
     assert_eq!(
         match broadcast.payload() {
-            DescriptorSchemaPayloadValues::BroadcastCopy(value) => {
-                u64::from(value.destination_count) * INDIRECT_ENTRY_ALIGNMENT
+            AbiCommandPayloadValues::BroadcastCopy(value) => {
+                u64::from(value.destination_count.value()) * INDIRECT_ENTRY_ALIGNMENT
             }
-            DescriptorSchemaPayloadValues::Copy(_)
-            | DescriptorSchemaPayloadValues::StridedCopy(_)
-            | DescriptorSchemaPayloadValues::VectorAdd(_) => 0,
+            AbiCommandPayloadValues::Copy(_)
+            | AbiCommandPayloadValues::StridedCopy(_)
+            | AbiCommandPayloadValues::VectorAdd(_) => 0,
         },
         24
     );
@@ -126,8 +122,8 @@ fn rejects_wrong_version_size_opcode_flags_reserved_count_and_alignment() {
         first_error,
         Err(DescriptorDecodeError::Violation(violation))
             if violation.kind() == DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::VERSION_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+                AbiCommandHeader::VERSION_IDENTITY
+                    .at_byte(AbiCommandHeader::VERSION_OFFSET)
             )
                 && violation.observed() == 2
     ));
@@ -135,8 +131,8 @@ fn rejects_wrong_version_size_opcode_flags_reserved_count_and_alignment() {
         size_error,
         Err(DescriptorDecodeError::Violation(violation))
             if violation.kind() == DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::SIZE_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::SIZE_OFFSET)
+                AbiCommandHeader::SIZE_IDENTITY
+                    .at_byte(AbiCommandHeader::SIZE_OFFSET)
             )
                 && violation.observed() == 63
     ));
@@ -144,8 +140,8 @@ fn rejects_wrong_version_size_opcode_flags_reserved_count_and_alignment() {
         opcode_error,
         Err(DescriptorDecodeError::Violation(violation))
             if violation.kind() == DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::OPCODE_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET)
+                AbiCommandHeader::OPCODE_IDENTITY
+                    .at_byte(AbiCommandHeader::OPCODE_OFFSET)
             )
                 && violation.observed() == 9
     ));
@@ -153,8 +149,8 @@ fn rejects_wrong_version_size_opcode_flags_reserved_count_and_alignment() {
         flags_error,
         Err(DescriptorDecodeError::Violation(violation))
             if violation.kind() == DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::FLAGS_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET)
+                AbiCommandHeader::FLAGS_IDENTITY
+                    .at_byte(AbiCommandHeader::FLAGS_OFFSET)
             )
                 && violation.observed() == 1
     ));

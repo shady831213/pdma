@@ -144,8 +144,8 @@ impl TraceSink {
 
     pub(crate) fn dma_event_published(&mut self, record: pdma_model_contract::abi::ExactAbiEvent) {
         let (Ok(queue_id), Ok(command_id)) = (
-            record.queue_id().try_into_model().map(QueueId::new),
-            record.command_id().try_into_model().map(CommandId::new),
+            usize::try_from(record.queue_id()).map(QueueId::new),
+            usize::try_from(record.command_id()).map(CommandId::new),
         ) else {
             return;
         };

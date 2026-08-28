@@ -2,9 +2,9 @@
 
 use hardware_interface_schema::{RecordSpec, ResolvedMemberKind, SchemaCodecError};
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError, AbiId,
-    AbiV1Features, BROADCAST_COPY_OPCODE, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK,
-    COMPLETION_SIZE, COPY_OPCODE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
+    ABI_VERSION, AbiAddressError, AbiControlError, AbiDecodeError, AbiV1Features,
+    BROADCAST_COPY_OPCODE, COMPLETION_ALIGNMENT, COMPLETION_FLAGS_MASK, COMPLETION_SIZE,
+    COPY_OPCODE, DESCRIPTOR_ALIGNMENT, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
     DESCRIPTOR_V1_FEATURE, DMA_ADDRESS_64_FEATURE, DmaAddress, EVENT_ACCESSES, EVENT_ALIGNMENT,
     EVENT_FLAGS_MASK, EVENT_KINDS, EVENT_SIZE, EVENT_STAGES, EVENT_V1_FEATURE,
     INDIRECT_BROADCAST_FEATURE, INDIRECT_ENTRY_ALIGNMENT, KNOWN_FEATURE_MASK,
@@ -12,8 +12,8 @@ use pdma_model_contract::abi::{
     STRIDED_COPY_FEATURE, STRIDED_COPY_OPCODE, SUCCESS_STATUS, VECTOR_ADD_FEATURE,
     VECTOR_ADD_OPCODE, validate_abi_version,
 };
+use pdma_model_contract::abi::{AbiCommandView, AbiCommandViewMut};
 use pdma_model_contract::abi::{COMPLETION, DESCRIPTOR, EVENT, FEATURES, OPCODES, OpcodeSpec};
-use pdma_model_contract::abi::{DescriptorSchemaView, DescriptorSchemaViewMut};
 use pdma_model_contract::binding::PdmaMemoryRegion;
 use pdma_model_contract::semantic::BufferId;
 
@@ -115,13 +115,13 @@ fn abi_v1_registry_is_exact() {
     let mut bytes = [0_u8; 64];
 
     // When: callers consume canonical metadata and the checked LE helpers.
-    let mut view = DescriptorSchemaViewMut::new(&mut bytes).expect("descriptor is exact");
+    let mut view = AbiCommandViewMut::new(&mut bytes).expect("descriptor is exact");
     let mut header = view.header_mut().expect("descriptor is exact");
     header.set_version(0x2301).expect("descriptor is exact");
     header
         .set_command_id(sentinel)
         .expect("descriptor is exact");
-    let view = DescriptorSchemaView::new(&bytes).expect("descriptor is exact");
+    let view = AbiCommandView::new(&bytes).expect("descriptor is exact");
     let header = view.header().expect("descriptor is exact");
     let decoded_version = header.version().expect("descriptor is exact");
     let decoded_sentinel = header.command_id().expect("descriptor is exact");
@@ -212,21 +212,16 @@ fn rejects_unknown_features_and_unrepresentable_ids() {
 
     // When: each untrusted value crosses its typed ABI boundary.
     let feature_error = AbiV1Features::try_from(unknown_features);
-    let id_error = AbiId::try_from(oversized_id);
-    let read_error = DescriptorSchemaView::new(&short);
-    let write_error = DescriptorSchemaViewMut::new(&mut short_output);
+    let id_error = u64::try_from(oversized_id);
+    let read_error = AbiCommandView::new(&short);
+    let write_error = AbiCommandViewMut::new(&mut short_output);
 
     // Then: every malformed input is rejected without indexing or truncation.
     assert_eq!(
         feature_error,
         Err(AbiDecodeError::UnknownFeatureBits { bits: 1_u64 << 8 })
     );
-    assert_eq!(
-        id_error,
-        Err(AbiEncodeError::UnrepresentableId {
-            value: oversized_id
-        })
-    );
+    assert!(id_error.is_err());
     assert_eq!(
         read_error,
         Err(SchemaCodecError::BufferTooShort {

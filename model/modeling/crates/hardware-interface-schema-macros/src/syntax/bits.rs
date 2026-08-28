@@ -1,10 +1,13 @@
-use syn::{Ident, Result, Token, Visibility, braced, parse::Parse, parse::ParseStream};
+use syn::{
+    Ident, Result, Token, Visibility, braced, parenthesized, parse::Parse, parse::ParseStream,
+};
 
-use super::{keyword, usize_lit};
+use super::{ScalarType, keyword, usize_lit};
 
 pub(in crate::internal) struct BitsSchemaDecl {
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
+    pub(in crate::internal) storage: ScalarType,
     pub(in crate::internal) fields: Vec<BitFieldDecl>,
 }
 
@@ -30,6 +33,9 @@ impl Parse for BitsSchemaDecl {
         let visibility = input.parse()?;
         keyword(input, "bits")?;
         let name = input.parse()?;
+        let storage_body;
+        parenthesized!(storage_body in input);
+        let storage = ScalarType::parse(&storage_body)?;
         let body;
         braced!(body in input);
         let fields = body
@@ -39,6 +45,7 @@ impl Parse for BitsSchemaDecl {
         Ok(Self {
             visibility,
             name,
+            storage,
             fields,
         })
     }

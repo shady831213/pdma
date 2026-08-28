@@ -6,7 +6,7 @@ use super::types::{
 };
 use super::{operand_context, operation_for, order_key};
 use crate::abi::descriptor::{
-    DescriptorHeaderSchema, DescriptorViolationKind, is_indirect_alignment_location,
+    AbiCommandHeader, DescriptorViolationKind, is_indirect_alignment_location,
     is_indirect_count_location, is_reserved_location, is_scalar_location, location_offset,
 };
 use crate::abi::fault::{AbiEventKind, AbiFault, FaultTuple};
@@ -103,20 +103,15 @@ fn descriptor_matches(tuple: FaultTuple, kind: DescriptorViolationKind) -> bool 
 
 fn header_matches(tuple: FaultTuple, location: hardware_interface_schema::SchemaLocation) -> bool {
     let kind = if location
-        == DescriptorHeaderSchema::VERSION_IDENTITY.at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+        == AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET)
     {
         AbiEventKind::InvalidVersion
-    } else if location
-        == DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET)
-    {
+    } else if location == AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET) {
         AbiEventKind::InvalidSize
-    } else if location
-        == DescriptorHeaderSchema::OPCODE_IDENTITY.at_byte(DescriptorHeaderSchema::OPCODE_OFFSET)
+    } else if location == AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET)
     {
         AbiEventKind::InvalidOpcode
-    } else if location
-        == DescriptorHeaderSchema::FLAGS_IDENTITY.at_byte(DescriptorHeaderSchema::FLAGS_OFFSET)
-    {
+    } else if location == AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET) {
         AbiEventKind::InvalidFlags
     } else {
         return false;

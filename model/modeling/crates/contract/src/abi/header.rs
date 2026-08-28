@@ -8,7 +8,7 @@ use hardware_interface_schema::{
 };
 
 use super::{
-    CompletionSchema, DescriptorSchema, EventSchema, IndirectDestinationEntrySchema,
+    AbiCommand, CompletionSchema, EventSchema, IndirectDestinationEntrySchema,
     mmio::{PdmaMmioMap, PdmaMmioMapRegisterId},
 };
 
@@ -80,7 +80,7 @@ impl PdmaHeaderSchemas {
         };
         Ok(Self {
             records: [
-                resolve_record(DescriptorSchema::SPEC)?,
+                resolve_record(AbiCommand::SPEC)?,
                 resolve_record(CompletionSchema::SPEC)?,
                 resolve_record(EventSchema::SPEC)?,
                 resolve_record(IndirectDestinationEntrySchema::SPEC)?,

@@ -12,21 +12,18 @@ pub mod mmio;
 pub mod record;
 mod ring;
 
-pub use address::{AbiId, DmaAddress};
+pub use address::DmaAddress;
 pub use control::{AbiDiscovery, AbiLimits, DiscoveryRequest};
 pub use descriptor::{
-    AbiCommand, BroadcastDestinationEntry, DescriptorDecodeError, DescriptorHeaderSchema,
-    DescriptorHeaderSchemaFlagsRaw, DescriptorHeaderSchemaFlagsValues,
-    DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaOpcodeRaw, DescriptorHeaderSchemaRaw,
-    DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
-    DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadRaw,
-    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadValues,
-    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaRaw, DescriptorSchemaValues,
-    DescriptorSchemaView, DescriptorSchemaViewMut, DescriptorValueError, DescriptorViolation,
-    DescriptorViolationKind, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaRaw,
-    IndirectDestinationEntrySchemaValues, IndirectDestinationEntrySchemaView,
-    IndirectDestinationEntrySchemaViewMut,
+    AbiCommand, AbiCommandHeader, AbiCommandHeaderFlagsRaw, AbiCommandHeaderFlagsValues,
+    AbiCommandHeaderOpcode, AbiCommandHeaderOpcodeRaw, AbiCommandHeaderRaw, AbiCommandHeaderView,
+    AbiCommandHeaderViewMut, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
+    AbiCommandPayloadRaw, AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues,
+    AbiCommandPayloadVectorAddValues, AbiCommandRaw, AbiCommandView, AbiCommandViewMut,
+    BroadcastDestinationEntry, DescriptorDecodeError, DescriptorViolation, DescriptorViolationKind,
+    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaRaw,
+    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut, U32Word, U32WordRaw,
+    U32WordValues,
 };
 pub use error::{AbiAddressError, AbiControlError, AbiDecodeError, AbiEncodeError};
 pub use fault::{
@@ -47,10 +44,10 @@ pub use metadata::{
     VECTOR_ADD_OPCODE, validate_abi_version,
 };
 pub use record::{
-    AbiCompletion, CompletionSchema, CompletionSchemaRaw, CompletionSchemaValues,
-    CompletionSchemaView, CompletionSchemaViewMut, EventSchema, EventSchemaRaw, EventSchemaValues,
-    EventSchemaView, EventSchemaViewMut, ExactAbiEvent,
-    decode_completion as decode_exact_completion, decode_event as decode_exact_event,
-    encode_completion as encode_exact_completion, encode_event as encode_exact_event,
+    AbiCompletion, CompletionSchema, CompletionSchemaRaw, CompletionSchemaView,
+    CompletionSchemaViewMut, EventSchema, EventSchemaRaw, EventSchemaView, EventSchemaViewMut,
+    ExactAbiEvent, decode_completion as decode_exact_completion,
+    decode_event as decode_exact_event, encode_completion as encode_exact_completion,
+    encode_event as encode_exact_event,
 };
 pub use ring::{RingCursor, RingRecord};

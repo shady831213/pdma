@@ -1,9 +1,9 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::syntax::{ModernRecordDecl, ScalarType, UnionDecl};
+use crate::internal::syntax::{ModernRecordDecl, UnionDecl};
 
-use super::super::scalar;
+use super::super::layout::UnionStorage;
 use super::{case_field, case_type};
 
 pub(super) struct Context<'a> {
@@ -11,9 +11,9 @@ pub(super) struct Context<'a> {
     pub(super) field: &'a syn::Ident,
     pub(super) decl: &'a UnionDecl,
     pub(super) tag_type: &'a TokenStream,
-    pub(super) storage: ScalarType,
+    pub(super) storage: &'a UnionStorage,
     pub(super) slots: usize,
-    pub(super) quantum: usize,
+    pub(super) quantum: &'a TokenStream,
     pub(super) facade: &'a TokenStream,
     pub(super) endian: &'a syn::Ident,
 }
@@ -24,7 +24,7 @@ pub(super) fn decode(context: &Context<'_>) -> Vec<TokenStream> {
         "{}_IDENTITY",
         context.field.to_string().to_ascii_uppercase()
     );
-    let storage_type = scalar::ty(context.storage);
+    let storage_type = &context.storage.ty;
     context
         .decl
         .cases
@@ -33,10 +33,10 @@ pub(super) fn decode(context: &Context<'_>) -> Vec<TokenStream> {
             let case_name = &case.name;
             let case_type = case_type(context.record, context.field, case_name);
             let reserved = (case.fields.len()..context.slots).map(|index| {
-                let relative = index * context.quantum;
+                let quantum = context.quantum;
+                let relative = quote!((#index).saturating_mul(#quantum));
                 let facade = context.facade;
                 let endian = context.endian;
-                let quantum = context.quantum;
                 quote!({
                     let offset = base.checked_add(#relative).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
                     let end = offset.checked_add(#quantum).ok_or(#facade::SchemaCodecError::BufferTooShort { required: usize::MAX, actual: bytes.len() })?;
@@ -52,10 +52,12 @@ pub(super) fn decode(context: &Context<'_>) -> Vec<TokenStream> {
                 })
             });
             let fields = case.fields.iter().enumerate().map(|(index, field)| {
+                let quantum = context.quantum;
+                let relative = quote!((#index).saturating_mul(#quantum));
                 case_field::decode(case_field::Context {
                     owner: &case_type,
                     field,
-                    relative: index * context.quantum,
+                    relative,
                     quantum: context.quantum,
                     facade: context.facade,
                     endian: context.endian,
@@ -80,10 +82,12 @@ pub(super) fn encode(context: &Context<'_>) -> Vec<TokenStream> {
             let case_type = case_type(context.record, context.field, case_name);
             let names = case.fields.iter().map(|field| &field.name);
             let encoded = case.fields.iter().enumerate().map(|(index, field)| {
+                let quantum = context.quantum;
+                let relative = quote!((#index).saturating_mul(#quantum));
                 case_field::encode(case_field::Context {
                     owner: &case_type,
                     field,
-                    relative: index * context.quantum,
+                    relative,
                     quantum: context.quantum,
                     facade: context.facade,
                     endian: context.endian,

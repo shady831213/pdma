@@ -1,7 +1,7 @@
 use super::common::{TestResult, activate_on, allocate, encode, fixture};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadVectorAddValues,
-    RingCursor,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues,
+    AbiCommandPayloadVectorAddValues, RingCursor,
 };
 use pdma_model_contract::binding::{QueueControl, QueueCursorUpdate};
 use pdma_model_contract::semantic::WholeDeviceReset;
@@ -21,13 +21,13 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
         .handle
         .write_memory(source.base(), &[7, 6, 5, 4])
         .await?;
-    let descriptor = encode(AbiCommand::copy(
-        AbiId::new(60),
-        DescriptorSchemaPayloadCopyValues {
+    let descriptor = encode(AbiCommand::from_payload(
+        60,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
             source_dma_address: source.base().raw(),
             destination_dma_address: destination.base().raw(),
-            length: 4,
-        },
+            length: 4.into(),
+        }),
     ))?;
     fixture
         .handle
@@ -108,14 +108,14 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
         .handle
         .write_memory(source_b.base(), &[4, 3, 2, 1])
         .await?;
-    let vector = AbiCommand::vector_add(
-        AbiId::new(70),
-        DescriptorSchemaPayloadVectorAddValues {
+    let vector = AbiCommand::from_payload(
+        70,
+        AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
             source_a_dma_address: source_a.base().raw(),
             source_b_dma_address: source_b.base().raw(),
             destination_dma_address: dma_destination.base().raw(),
-            length: 4,
-        },
+            length: 4.into(),
+        }),
     );
     fixture
         .handle

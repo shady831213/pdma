@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::internal::syntax::{EnumDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, UnionDecl};
+use crate::internal::syntax::{EnumDecl, ModernRecordDecl, ModernTypeDecl, UnionDecl};
 
 pub(in crate::internal) fn check(decl: &ModernRecordDecl) -> syn::Result<()> {
     super::validate_endian(decl.endian.to_string().as_str(), decl.endian.span())?;
@@ -120,7 +120,6 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
         .find(|field| field.name == *root)
         .ok_or_else(|| syn::Error::new(root.span(), "union tag root does not exist"))?;
     let mut names = HashSet::new();
-    let mut storage = None;
     let mut field_count = 0_usize;
     for case in &union.cases {
         if !names.insert(case.name.to_string()) {
@@ -135,19 +134,6 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
                     "duplicate union field name",
                 ));
             }
-            if field.storage.width() < field.scalar.width() {
-                return Err(syn::Error::new(
-                    field.name.span(),
-                    "union field storage is narrower than its value",
-                ));
-            }
-            if storage.is_some_and(|storage: ScalarType| storage.width() != field.storage.width()) {
-                return Err(syn::Error::new(
-                    field.name.span(),
-                    "union fields must use one storage width",
-                ));
-            }
-            storage = Some(field.storage);
         }
     }
     if field_count == 0 {

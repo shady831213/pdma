@@ -5,12 +5,11 @@ use pdma_model_contract::abi::record::{
     decode_completion, decode_event, encode_completion, encode_event,
 };
 use pdma_model_contract::abi::{
-    AbiBounds, AbiCompletion, AbiDecodeError, AbiEncodeError, AbiEventAccess, AbiEventKind,
-    AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails, AbiFaultOrder,
-    AbiFaultSelectionError, AbiFaultSite, AbiId, AbiOperandFaultStep, AbiOperandVisit,
-    AbiStrideOffset, DescriptorHeaderSchema, DescriptorHeaderSchemaOpcode, DescriptorSchema,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
-    DescriptorViolationKind, DmaAddress, ExactAbiEvent, select_canonical_fault,
+    AbiBounds, AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode, AbiCommandPayloadCopyValues,
+    AbiCommandPayloadStridedCopyValues, AbiCompletion, AbiDecodeError, AbiEncodeError,
+    AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultCandidate, AbiFaultDetails,
+    AbiFaultOrder, AbiFaultSelectionError, AbiFaultSite, AbiOperandFaultStep, AbiOperandVisit,
+    AbiStrideOffset, DescriptorViolationKind, DmaAddress, ExactAbiEvent, select_canonical_fault,
 };
 use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 
@@ -107,8 +106,8 @@ fn rejects_unknown_values_and_noncanonical_details() {
     let unknown_status = decode_completion(&completion);
     let unknown_kind = decode_event(&event);
     let noncanonical = encode_event(ExactAbiEvent::new(
-        AbiId::new(1),
-        AbiId::new(2),
+        1,
+        2,
         AbiFault::from_parts(
             AbiEventKind::UnmappedDmaAddress,
             DmaAddress::new(0x4000),
@@ -179,8 +178,7 @@ fn mismatched_header_order() -> Result<AbiFaultCandidate, AbiFaultSelectionError
     AbiFaultCandidate::try_new(
         AbiFault::invalid_size(DmaAddress::new(0x1000), 63),
         AbiFaultOrder::Descriptor(DescriptorViolationKind::Header(
-            DescriptorHeaderSchema::VERSION_IDENTITY
-                .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+            AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
         )),
     )
 }

@@ -7,13 +7,12 @@ use pdma_model_contract::abi::record::{
     decode_completion, decode_event, encode_completion, encode_event,
 };
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCompletion, AbiDecodeError, CompletionSchemaRaw, DescriptorDecodeError,
-    DescriptorHeaderSchema, DescriptorViolationKind, EventSchemaRaw, ExactAbiEvent,
+    AbiCommand, AbiCommandHeader, AbiCompletion, AbiDecodeError, CompletionSchemaRaw,
+    DescriptorDecodeError, DescriptorViolationKind, EventSchemaRaw, ExactAbiEvent,
 };
 use pdma_model_contract::abi::{
-    BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView,
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadCopyValues,
-    DescriptorSchemaPayloadValues, DescriptorSchemaValues, DescriptorSchemaView, EventSchema,
+    AbiCommandHeaderOpcode, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCommandView,
+    BroadcastDestinationEntry, CompletionSchema, CompletionSchemaView, EventSchema,
     EventSchemaView, IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaView,
 };
 use support::{
@@ -25,7 +24,7 @@ use support::{
 fn canonical_schemas_match_every_frozen_record_layout() {
     // Given: literal ABI-v1 layouts spanning every canonical DMA-visible record.
     let schemas = [
-        (DescriptorSchema::SPEC, &DESCRIPTOR_FIELDS[..]),
+        (AbiCommand::SPEC, &DESCRIPTOR_FIELDS[..]),
         (CompletionSchema::SPEC, &COMPLETION_FIELDS[..]),
         (EventSchema::SPEC, &EVENT_FIELDS[..]),
         (IndirectDestinationEntrySchema::SPEC, &INDIRECT_FIELDS[..]),
@@ -39,7 +38,7 @@ fn canonical_schemas_match_every_frozen_record_layout() {
 
     // Then: all generated views expose the same little-endian scalar boundaries.
     assert_eq!(
-        DescriptorSchemaView::new(&COPY)
+        AbiCommandView::new(&COPY)
             .unwrap()
             .header()
             .unwrap()
@@ -68,7 +67,7 @@ fn canonical_schemas_match_every_frozen_record_layout() {
 fn descriptor_owned_values_expose_the_complete_frozen_wire_record() {
     // Given: the independent literal linear-copy descriptor bytes.
     // When: the generated owned record codec decodes them.
-    let values = DescriptorSchemaValues::from_bytes(&COPY);
+    let values = AbiCommand::from_bytes(&COPY);
 
     // Then: header, command identity, payload words, and exact re-encoding are all generated.
     assert!(values.is_ok());
@@ -76,14 +75,14 @@ fn descriptor_owned_values_expose_the_complete_frozen_wire_record() {
         return;
     };
     assert_eq!(values.header.version, 1);
-    assert_eq!(values.header.opcode, DescriptorHeaderSchemaOpcode::Copy);
+    assert_eq!(values.header.opcode, AbiCommandHeaderOpcode::Copy);
     assert_eq!(values.header.command_id, 0x0123_4567_89ab_cdef);
     assert_eq!(
         values.payload,
-        DescriptorSchemaPayloadValues::Copy(DescriptorSchemaPayloadCopyValues {
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
             source_dma_address: 0x1020_3040_5060_7080,
             destination_dma_address: 0x90a0_b0c0_d0e0_f000,
-            length: 0x1122_3344,
+            length: 0x1122_3344.into(),
         })
     );
     assert_eq!(values.to_bytes(), Ok(COPY));
@@ -161,10 +160,7 @@ fn record_raw_conversion_rejects_noncanonical_event_details() {
 fn public_codecs_when_given_canonical_bytes_round_trip_without_drift() {
     // Given: frozen descriptor, completion, event, and indirect-entry bytes.
     let command = AbiCommand::decode(&COPY).unwrap();
-    let completion = AbiCompletion::new(
-        pdma_model_contract::abi::AbiId::new(0x1122),
-        pdma_model_contract::abi::AbiId::new(0x3344),
-    );
+    let completion = AbiCompletion::new(0x1122, 0x3344);
     let event = decode_event(&EVENT_BYTES).unwrap();
     let entry = BroadcastDestinationEntry::decode(&INDIRECT_BYTES).unwrap();
 
@@ -205,8 +201,8 @@ fn public_error_order_when_malformed_input_crosses_old_and_new_boundaries() {
         descriptor_error,
         Err(DescriptorDecodeError::Violation(violation))
             if violation.kind() == DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::VERSION_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+                AbiCommandHeader::VERSION_IDENTITY
+                    .at_byte(AbiCommandHeader::VERSION_OFFSET)
             )
                 && violation.observed() == 2
                 && violation.expected() == 1
@@ -255,7 +251,7 @@ fn public_error_order_when_malformed_input_crosses_old_and_new_boundaries() {
         })
     );
     assert_eq!(
-        DescriptorSchemaView::new(&COPY[..63]),
+        AbiCommandView::new(&COPY[..63]),
         Err(SchemaCodecError::BufferTooShort {
             required: 64,
             actual: 63

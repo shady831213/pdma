@@ -1,6 +1,7 @@
 use super::TestResult;
 use pdma_model_contract::abi::{
-    AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingRecord,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, RingCursor,
+    RingRecord,
 };
 use pdma_model_contract::binding::{
     QueueActivation, QueueControl, QueueCursorUpdate, QueueRingRegions, RingLayout,
@@ -91,13 +92,13 @@ impl Fixture {
         source: DmaAddress,
         destination: DmaAddress,
     ) -> TestResult {
-        let descriptor = AbiCommand::copy(
-            AbiId::new(command),
-            DescriptorSchemaPayloadCopyValues {
+        let descriptor = AbiCommand::from_payload(
+            command,
+            AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
                 source_dma_address: source.raw(),
                 destination_dma_address: destination.raw(),
-                length: 4,
-            },
+                length: 4.into(),
+            }),
         );
         let mut bytes = [0_u8; 64];
         descriptor.encode(&mut bytes)?;

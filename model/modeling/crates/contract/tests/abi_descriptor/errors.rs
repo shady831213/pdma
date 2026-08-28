@@ -1,11 +1,12 @@
 use super::{support, vectors};
+#[path = "errors/construction.rs"]
+mod construction;
 use pdma_model_contract::abi::{
-    AbiCommand, AbiDecodeError, AbiEncodeError, AbiId, BroadcastDestinationEntry,
-    DescriptorDecodeError, DescriptorHeaderSchemaOpcode, DescriptorSchema,
-    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
-    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadVectorAddValues,
-    DescriptorValueError, DescriptorViolationKind, INDIRECT_ENTRY_ALIGNMENT,
-    MAX_INDIRECT_DESTINATIONS, MAX_STRIDE, MAX_STRIDED_ROWS, MAX_TRANSFER_BYTES,
+    AbiCommand, AbiCommandHeaderOpcode, AbiCommandPayloadBroadcastCopyValues,
+    AbiCommandPayloadCopyValues, AbiCommandPayloadStridedCopyValues,
+    AbiCommandPayloadVectorAddValues, AbiDecodeError, AbiEncodeError, BroadcastDestinationEntry,
+    DescriptorDecodeError, DescriptorViolationKind, MAX_STRIDE, MAX_STRIDED_ROWS,
+    MAX_TRANSFER_BYTES,
 };
 
 fn assert_decode_violation(bytes: &[u8], expected: DescriptorViolationKind) {
@@ -32,23 +33,23 @@ fn assert_reserved_errors() {
         (
             vectors::COPY,
             &[
-                (40_usize, DescriptorHeaderSchemaOpcode::Copy),
-                (48, DescriptorHeaderSchemaOpcode::Copy),
-                (56, DescriptorHeaderSchemaOpcode::Copy),
+                (40_usize, AbiCommandHeaderOpcode::Copy),
+                (48, AbiCommandHeaderOpcode::Copy),
+                (56, AbiCommandHeaderOpcode::Copy),
             ][..],
         ),
         (
             vectors::BROADCAST,
             &[
-                (48_usize, DescriptorHeaderSchemaOpcode::BroadcastCopy),
-                (56, DescriptorHeaderSchemaOpcode::BroadcastCopy),
+                (48_usize, AbiCommandHeaderOpcode::BroadcastCopy),
+                (56, AbiCommandHeaderOpcode::BroadcastCopy),
             ][..],
         ),
         (
             vectors::VECTOR_ADD,
             &[
-                (48_usize, DescriptorHeaderSchemaOpcode::VectorAdd),
-                (56, DescriptorHeaderSchemaOpcode::VectorAdd),
+                (48_usize, AbiCommandHeaderOpcode::VectorAdd),
+                (56, AbiCommandHeaderOpcode::VectorAdd),
             ][..],
         ),
     ] {
@@ -63,7 +64,7 @@ fn assert_reserved_errors() {
                 &bytes,
                 DescriptorViolationKind::Reserved {
                     opcode,
-                    location: DescriptorSchema::PAYLOAD_IDENTITY.at_byte(offset),
+                    location: AbiCommand::PAYLOAD_IDENTITY.at_byte(offset),
                 },
             );
         }
@@ -76,50 +77,46 @@ fn assert_scalar_errors() {
             vectors::COPY,
             32,
             MAX_TRANSFER_BYTES,
-            DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY
-                .at_byte(DescriptorSchema::WORD2_OFFSET),
+            AbiCommandPayloadCopyValues::LENGTH_IDENTITY.at_byte(AbiCommand::WORD2_OFFSET),
         ),
         (
             vectors::STRIDED,
             32,
             MAX_STRIDED_ROWS,
-            DescriptorSchemaPayloadStridedCopyValues::ROWS_IDENTITY
-                .at_byte(DescriptorSchema::WORD2_OFFSET),
+            AbiCommandPayloadStridedCopyValues::ROWS_IDENTITY.at_byte(AbiCommand::WORD2_OFFSET),
         ),
         (
             vectors::STRIDED,
             40,
             MAX_TRANSFER_BYTES,
-            DescriptorSchemaPayloadStridedCopyValues::ROW_BYTES_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
+            AbiCommandPayloadStridedCopyValues::ROW_BYTES_IDENTITY
+                .at_byte(AbiCommand::WORD3_OFFSET),
         ),
         (
             vectors::STRIDED,
             48,
             MAX_STRIDE,
-            DescriptorSchemaPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
-                .at_byte(DescriptorSchema::WORD4_OFFSET),
+            AbiCommandPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
+                .at_byte(AbiCommand::WORD4_OFFSET),
         ),
         (
             vectors::STRIDED,
             56,
             MAX_STRIDE,
-            DescriptorSchemaPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
-                .at_byte(DescriptorSchema::WORD5_OFFSET),
+            AbiCommandPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
+                .at_byte(AbiCommand::WORD5_OFFSET),
         ),
         (
             vectors::BROADCAST,
             32,
             MAX_TRANSFER_BYTES,
-            DescriptorSchemaPayloadBroadcastCopyValues::LENGTH_IDENTITY
-                .at_byte(DescriptorSchema::WORD2_OFFSET),
+            AbiCommandPayloadBroadcastCopyValues::LENGTH_IDENTITY.at_byte(AbiCommand::WORD2_OFFSET),
         ),
         (
             vectors::VECTOR_ADD,
             40,
             MAX_TRANSFER_BYTES,
-            DescriptorSchemaPayloadVectorAddValues::LENGTH_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
+            AbiCommandPayloadVectorAddValues::LENGTH_IDENTITY.at_byte(AbiCommand::WORD3_OFFSET),
         ),
     ] {
         let mut bytes = base;
@@ -144,20 +141,20 @@ fn assert_reserved_precedence() {
     assert_decode_violation(
         &reserved_and_scalar,
         DescriptorViolationKind::Reserved {
-            opcode: DescriptorHeaderSchemaOpcode::Copy,
-            location: DescriptorSchema::PAYLOAD_IDENTITY.at_byte(DescriptorSchema::WORD3_OFFSET),
+            opcode: AbiCommandHeaderOpcode::Copy,
+            location: AbiCommand::PAYLOAD_IDENTITY.at_byte(AbiCommand::WORD3_OFFSET),
         },
     );
 }
 
-/// Checks count, alignment, short slices, and host construction failures.
+/// Checks count, alignment, short slices, and unchecked construction boundaries.
 ///
 /// # Panics
 /// Panics when a malformed boundary value is not rejected with its exact typed error.
 pub fn assert_count_alignment_and_slice_errors() {
     assert_decode_count_alignment_errors();
     assert_short_slice_errors();
-    assert_construction_errors();
+    construction::assert_boundary();
 }
 
 fn assert_decode_count_alignment_errors() {
@@ -171,8 +168,8 @@ fn assert_decode_count_alignment_errors() {
     assert_decode_violation(
         &zero_count_and_misaligned,
         DescriptorViolationKind::Scalar(
-            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
+            AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(AbiCommand::WORD3_OFFSET),
         ),
     );
     let mut zero_count = vectors::BROADCAST;
@@ -180,8 +177,8 @@ fn assert_decode_count_alignment_errors() {
     assert_decode_violation(
         &zero_count,
         DescriptorViolationKind::Scalar(
-            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
+            AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(AbiCommand::WORD3_OFFSET),
         ),
     );
     let mut large_count = vectors::BROADCAST;
@@ -193,8 +190,8 @@ fn assert_decode_count_alignment_errors() {
     assert_decode_violation(
         &large_count,
         DescriptorViolationKind::Scalar(
-            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
+            AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(AbiCommand::WORD3_OFFSET),
         ),
     );
     let mut misaligned = vectors::BROADCAST;
@@ -202,8 +199,8 @@ fn assert_decode_count_alignment_errors() {
     assert_decode_violation(
         &misaligned,
         DescriptorViolationKind::Scalar(
-            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
-                .at_byte(DescriptorSchema::WORD1_OFFSET),
+            AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+                .at_byte(AbiCommand::WORD1_OFFSET),
         ),
     );
 }
@@ -228,64 +225,12 @@ fn assert_short_slice_errors() {
         ))
     );
     let mut short_output = [0_u8; 63];
-    let commands = support::commands();
-    assert!(commands.is_ok());
-    let Ok([first, _, _, _]) = commands else {
-        return;
-    };
+    let [first, _, _, _] = support::commands();
     assert_eq!(
         first.encode(&mut short_output),
         Err(AbiEncodeError::BufferTooShort {
             required: 64,
             actual: 63,
-        })
-    );
-}
-
-fn assert_construction_errors() {
-    assert_eq!(
-        AbiCommand::try_broadcast_copy(
-            AbiId::new(1),
-            DescriptorSchemaPayloadBroadcastCopyValues {
-                source_dma_address: 2,
-                destination_list_dma_address: 8,
-                length: 0,
-                destination_count: 0,
-            },
-        ),
-        Err(DescriptorValueError::InvalidIndirectCount {
-            observed: 0,
-            maximum: MAX_INDIRECT_DESTINATIONS,
-        })
-    );
-    assert_eq!(
-        AbiCommand::try_broadcast_copy(
-            AbiId::new(1),
-            DescriptorSchemaPayloadBroadcastCopyValues {
-                source_dma_address: 2,
-                destination_list_dma_address: 11,
-                length: 0,
-                destination_count: 0,
-            },
-        ),
-        Err(DescriptorValueError::InvalidIndirectCount {
-            observed: 0,
-            maximum: MAX_INDIRECT_DESTINATIONS,
-        })
-    );
-    assert_eq!(
-        AbiCommand::try_broadcast_copy(
-            AbiId::new(1),
-            DescriptorSchemaPayloadBroadcastCopyValues {
-                source_dma_address: 2,
-                destination_list_dma_address: 11,
-                length: 0,
-                destination_count: 1,
-            },
-        ),
-        Err(DescriptorValueError::InvalidIndirectAlignment {
-            address: 11,
-            alignment: INDIRECT_ENTRY_ALIGNMENT,
         })
     );
 }

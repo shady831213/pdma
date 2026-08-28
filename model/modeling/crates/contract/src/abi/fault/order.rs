@@ -5,13 +5,13 @@ pub use selection::{AbiFaultCandidate, select_canonical_fault};
 pub use types::{AbiFaultOrder, AbiFaultSelectionError, AbiOperandFaultStep, AbiOperandVisit};
 
 use crate::abi::descriptor::{
-    DescriptorHeaderSchemaOpcode, DescriptorViolationKind, header_rank, location_offset,
-    scalar_opcode, scalar_rank,
+    AbiCommandHeaderOpcode, DescriptorViolationKind, header_rank, location_offset, scalar_opcode,
+    scalar_rank,
 };
 use crate::abi::fault::{AbiEventAccess, AbiEventStage};
 use types::OrderKey;
 
-fn operation_for(order: AbiFaultOrder) -> Option<DescriptorHeaderSchemaOpcode> {
+fn operation_for(order: AbiFaultOrder) -> Option<AbiCommandHeaderOpcode> {
     match order {
         AbiFaultOrder::Descriptor(kind) => descriptor_operation(kind),
         AbiFaultOrder::Operand { visit, .. } => Some(operand_operation(visit)),
@@ -28,7 +28,7 @@ fn order_key(order: AbiFaultOrder) -> OrderKey {
     }
 }
 
-fn descriptor_operation(kind: DescriptorViolationKind) -> Option<DescriptorHeaderSchemaOpcode> {
+fn descriptor_operation(kind: DescriptorViolationKind) -> Option<AbiCommandHeaderOpcode> {
     match kind {
         DescriptorViolationKind::Header(_) => None,
         DescriptorViolationKind::Reserved { opcode, .. } => Some(opcode),
@@ -52,22 +52,20 @@ fn descriptor_key(kind: DescriptorViolationKind) -> OrderKey {
     }
 }
 
-const fn operand_operation(visit: AbiOperandVisit) -> DescriptorHeaderSchemaOpcode {
+const fn operand_operation(visit: AbiOperandVisit) -> AbiCommandHeaderOpcode {
     match visit {
         AbiOperandVisit::CopySource | AbiOperandVisit::CopyDestination => {
-            DescriptorHeaderSchemaOpcode::Copy
+            AbiCommandHeaderOpcode::Copy
         }
         AbiOperandVisit::StridedSource { .. } | AbiOperandVisit::StridedDestination { .. } => {
-            DescriptorHeaderSchemaOpcode::StridedCopy
+            AbiCommandHeaderOpcode::StridedCopy
         }
         AbiOperandVisit::BroadcastSource
         | AbiOperandVisit::BroadcastList
-        | AbiOperandVisit::BroadcastDestination { .. } => {
-            DescriptorHeaderSchemaOpcode::BroadcastCopy
-        }
+        | AbiOperandVisit::BroadcastDestination { .. } => AbiCommandHeaderOpcode::BroadcastCopy,
         AbiOperandVisit::VectorSourceA
         | AbiOperandVisit::VectorSourceB
-        | AbiOperandVisit::VectorDestination => DescriptorHeaderSchemaOpcode::VectorAdd,
+        | AbiOperandVisit::VectorDestination => AbiCommandHeaderOpcode::VectorAdd,
     }
 }
 

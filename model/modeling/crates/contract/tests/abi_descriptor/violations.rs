@@ -1,11 +1,12 @@
 use super::{support, vectors};
+#[path = "violations/scalar.rs"]
+mod scalar;
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiCommand, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFaultCandidate,
-    AbiFaultOrder, DESCRIPTOR_SIZE, DescriptorDecodeError, DescriptorHeaderSchema,
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
-    DescriptorSchemaPayloadVectorAddValues, DescriptorViolationKind, DmaAddress,
-    INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
+    ABI_VERSION, AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode,
+    AbiCommandPayloadBroadcastCopyValues, AbiEventAccess, AbiEventKind, AbiEventStage,
+    AbiFaultCandidate, AbiFaultOrder, DESCRIPTOR_SIZE, DescriptorDecodeError,
+    DescriptorViolationKind, DmaAddress, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS,
+    VECTOR_ADD_OPCODE,
 };
 
 const SLOT: DmaAddress = DmaAddress::new(0x4_000);
@@ -28,29 +29,28 @@ fn header_violations_map_to_canonical_hardware_faults() {
             0,
             ABI_VERSION + 1,
             AbiEventKind::InvalidVersion,
-            DescriptorHeaderSchema::VERSION_IDENTITY
-                .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+            AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
             u64::from(ABI_VERSION),
         ),
         (
             6,
             DESCRIPTOR_SIZE - 1,
             AbiEventKind::InvalidSize,
-            DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+            AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET),
             u64::from(DESCRIPTOR_SIZE),
         ),
         (
             2,
             VECTOR_ADD_OPCODE + 1,
             AbiEventKind::InvalidOpcode,
-            DescriptorHeaderSchema::OPCODE_IDENTITY.at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+            AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET),
             u64::from(VECTOR_ADD_OPCODE),
         ),
         (
             4,
             1,
             AbiEventKind::InvalidFlags,
-            DescriptorHeaderSchema::FLAGS_IDENTITY.at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+            AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET),
             0,
         ),
     ];
@@ -83,36 +83,28 @@ fn header_violations_map_to_canonical_hardware_faults() {
 fn reserved_violations_map_by_typed_operation_field() {
     // Given: every operation-specific required-zero descriptor word.
     let inputs = [
-        (vectors::COPY, 40, DescriptorHeaderSchemaOpcode::Copy),
-        (vectors::COPY, 48, DescriptorHeaderSchemaOpcode::Copy),
-        (vectors::COPY, 56, DescriptorHeaderSchemaOpcode::Copy),
+        (vectors::COPY, 40, AbiCommandHeaderOpcode::Copy),
+        (vectors::COPY, 48, AbiCommandHeaderOpcode::Copy),
+        (vectors::COPY, 56, AbiCommandHeaderOpcode::Copy),
         (
             vectors::BROADCAST,
             48,
-            DescriptorHeaderSchemaOpcode::BroadcastCopy,
+            AbiCommandHeaderOpcode::BroadcastCopy,
         ),
         (
             vectors::BROADCAST,
             56,
-            DescriptorHeaderSchemaOpcode::BroadcastCopy,
+            AbiCommandHeaderOpcode::BroadcastCopy,
         ),
-        (
-            vectors::VECTOR_ADD,
-            48,
-            DescriptorHeaderSchemaOpcode::VectorAdd,
-        ),
-        (
-            vectors::VECTOR_ADD,
-            56,
-            DescriptorHeaderSchemaOpcode::VectorAdd,
-        ),
+        (vectors::VECTOR_ADD, 48, AbiCommandHeaderOpcode::VectorAdd),
+        (vectors::VECTOR_ADD, 56, AbiCommandHeaderOpcode::VectorAdd),
     ];
 
     // When/Then: equal offsets in different operations retain distinct typed identities.
     for (template, offset, opcode) in inputs {
         let mut bytes = template;
         assert!(support::replace_u64(&mut bytes, offset, 1));
-        let location = DescriptorSchema::PAYLOAD_IDENTITY.at_byte(offset);
+        let location = AbiCommand::PAYLOAD_IDENTITY.at_byte(offset);
         let offset = u64::try_from(offset);
         assert!(offset.is_ok());
         let Ok(offset) = offset else {
@@ -126,78 +118,6 @@ fn reserved_violations_map_by_typed_operation_field() {
                     kind: AbiEventKind::InvalidReserved,
                     observed: 1,
                     expected: 0,
-                    offset,
-                }),
-            },
-        );
-    }
-}
-
-#[test]
-fn scalar_violations_map_by_generated_leaf_identity() {
-    // Given: every ordinary fixed-width payload scalar stored above its semantic width.
-    let inputs = [
-        (
-            vectors::COPY,
-            32,
-            DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY
-                .at_byte(DescriptorSchema::WORD2_OFFSET),
-        ),
-        (
-            vectors::STRIDED,
-            32,
-            DescriptorSchemaPayloadStridedCopyValues::ROWS_IDENTITY
-                .at_byte(DescriptorSchema::WORD2_OFFSET),
-        ),
-        (
-            vectors::STRIDED,
-            40,
-            DescriptorSchemaPayloadStridedCopyValues::ROW_BYTES_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
-        ),
-        (
-            vectors::STRIDED,
-            48,
-            DescriptorSchemaPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
-                .at_byte(DescriptorSchema::WORD4_OFFSET),
-        ),
-        (
-            vectors::STRIDED,
-            56,
-            DescriptorSchemaPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
-                .at_byte(DescriptorSchema::WORD5_OFFSET),
-        ),
-        (
-            vectors::BROADCAST,
-            32,
-            DescriptorSchemaPayloadBroadcastCopyValues::LENGTH_IDENTITY
-                .at_byte(DescriptorSchema::WORD2_OFFSET),
-        ),
-        (
-            vectors::VECTOR_ADD,
-            40,
-            DescriptorSchemaPayloadVectorAddValues::LENGTH_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
-        ),
-    ];
-
-    // When/Then: decoding maps the generated leaf to the exact scalar fault.
-    for (template, offset, location) in inputs {
-        let mut bytes = template;
-        assert!(support::replace_u64(&mut bytes, offset, TOO_WIDE));
-        let offset = u64::try_from(offset);
-        assert!(offset.is_ok());
-        let Ok(offset) = offset else {
-            return;
-        };
-        assert_violation(
-            &bytes,
-            Expected {
-                kind: DescriptorViolationKind::Scalar(location),
-                tuple: descriptor_tuple(DescriptorExpected {
-                    kind: AbiEventKind::ValueOutOfRange,
-                    observed: TOO_WIDE,
-                    expected: u64::from(MAX_TRANSFER_BYTES),
                     offset,
                 }),
             },
@@ -225,8 +145,8 @@ fn indirect_violations_embed_the_list_locator_and_preserve_precedence() {
         &alignment,
         Expected {
             kind: DescriptorViolationKind::Scalar(
-                DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
-                    .at_byte(DescriptorSchema::WORD1_OFFSET),
+                AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+                    .at_byte(AbiCommand::WORD1_OFFSET),
             ),
             tuple: (
                 AbiEventKind::InvalidIndirectAlignment,
@@ -256,8 +176,8 @@ fn assert_violation(bytes: &[u8], expected: Expected) {
 fn indirect_count_expected(list: DmaAddress, observed: u64) -> Expected {
     Expected {
         kind: DescriptorViolationKind::Scalar(
-            DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-                .at_byte(DescriptorSchema::WORD3_OFFSET),
+            AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                .at_byte(AbiCommand::WORD3_OFFSET),
         ),
         tuple: (
             AbiEventKind::InvalidIndirectCount,

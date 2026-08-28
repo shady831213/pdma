@@ -6,9 +6,15 @@ use hardware_interface_schema::{
 };
 
 bits_schema! {
-    pub bits SharedFlags {
+    pub bits SharedFlags(u16) {
         ready: 0..1,
         mode: 8..12,
+    }
+}
+
+bits_schema! {
+    pub bits U32Word(u64) {
+        value: 0..32,
     }
 }
 
@@ -69,7 +75,7 @@ fn named_bits_when_embedded_in_record_and_register_reuse_one_value_type()
     };
 
     // When: the same value is encoded by a record and two different registers.
-    let record = SharedFlagsRecordValues { flags }.to_bytes()?;
+    let record = SharedFlagsRecord { flags }.to_bytes()?;
     let mut register = [0xf0, 0xa0, 0x5a, 0xc3];
     SharedFlagsRegisterViewMut::new(&mut register)?.set_fields(flags)?;
     let mut big_register = [0xa0, 0xf0];
@@ -79,7 +85,7 @@ fn named_bits_when_embedded_in_record_and_register_reuse_one_value_type()
     assert_eq!(record, [0x05, 0x01]);
     assert_eq!(register, [0xf1, 0xa5, 0x5a, 0xc3]);
     assert_eq!(big_register, [0xa5, 0xf1]);
-    assert_eq!(SharedFlagsRecordValues::from_bytes(&record)?.flags, flags);
+    assert_eq!(SharedFlagsRecord::from_bytes(&record)?.flags, flags);
     assert_eq!(SharedFlagsRegisterView::new(&register)?.fields()?, flags);
     assert_eq!(
         SharedFlagsRegisterBigView::new(&big_register)?.fields()?,
@@ -115,6 +121,29 @@ fn named_bits_raw_when_converted_remains_endian_neutral() -> Result<(), SchemaCo
     assert_eq!(encoded.value(), 0x0501);
     assert_eq!(converted_raw.value(), 0x0501);
     Ok(())
+}
+
+#[test]
+fn named_bits_when_container_is_wider_than_fields_preserves_reserved_extent() {
+    // Given: one named 64-bit container whose only declared value occupies bits 0..32.
+    let canonical = U32WordRaw::new(0x1122_3344);
+    let reserved = U32WordRaw::new(0x0000_0001_1122_3344);
+
+    // When: both raw words cross the generated named-bits boundary.
+    let decoded = canonical.decode();
+    let rejected = reserved.decode();
+
+    // Then: the value remains u32, the container remains u64, and high bits are reserved.
+    assert_eq!(decoded, Ok(U32WordValues { value: 0x1122_3344 }));
+    assert_eq!(
+        rejected,
+        Err(SchemaCodecError::NonZeroReserved {
+            location: U32Word::RESERVED_IDENTITY.at_bit(32),
+            observed: 0x0000_0001_0000_0000,
+        })
+    );
+    assert_eq!(U32Word::BIT_WIDTH, 32);
+    assert_eq!(U32Word::EXTENT, 8);
 }
 
 #[test]
@@ -157,13 +186,13 @@ fn named_bits_when_record_reserved_bits_are_nonzero_report_the_leaf_bit() {
     let bytes = [0x85, 0x01];
 
     // When: the record is decoded through its generated value type.
-    let result = SharedFlagsRecordValues::from_bytes(&bytes);
+    let result = SharedFlagsRecord::from_bytes(&bytes);
 
     // Then: the shared bits decoder reports the field's record-relative offset.
     assert_eq!(
         result,
         Err(SchemaCodecError::NonZeroReserved {
-            location: SharedFlags::RESERVED_IDENTITY.at_bit(15),
+            location: SharedFlagsRecord::FLAGS_IDENTITY.at_bit(15),
             observed: 0x8000,
         })
     );
@@ -174,7 +203,7 @@ fn bits_members_when_embedded_rebase_leaf_bits_and_preserve_atomic_writes() {
     // Given: nonzero parent offsets and invalid reserved or semantic bit values.
     let shared_reserved = [0, 0, 0x80, 0, 0, 0];
     let inline_reserved = [0, 0, 0, 0, 0x04, 0];
-    let invalid = OffsetBitsRecordValues {
+    let invalid = OffsetBitsRecord {
         prefix: 0,
         shared: SharedFlagsValues::ZERO,
         inline: OffsetBitsRecordInlineValues {
@@ -186,15 +215,15 @@ fn bits_members_when_embedded_rebase_leaf_bits_and_preserve_atomic_writes() {
     let before = output;
 
     // When: each malformed input or value crosses the generated record codec.
-    let shared_result = OffsetBitsRecordValues::from_bytes(&shared_reserved);
-    let inline_result = OffsetBitsRecordValues::from_bytes(&inline_reserved);
+    let shared_result = OffsetBitsRecord::from_bytes(&shared_reserved);
+    let inline_result = OffsetBitsRecord::from_bytes(&inline_reserved);
     let encode_result = invalid.encode_into(&mut output);
 
     // Then: locations are root-relative bits and the failed write leaves bytes unchanged.
     assert_eq!(
         shared_result,
         Err(SchemaCodecError::NonZeroReserved {
-            location: SharedFlags::RESERVED_IDENTITY.at_bit(23),
+            location: OffsetBitsRecord::SHARED_IDENTITY.at_bit(23),
             observed: 0x80,
         })
     );

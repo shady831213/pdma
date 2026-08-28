@@ -36,20 +36,20 @@ fn conflict_cases() -> Vec<ConflictCase> {
             "version before size opcode flags",
             &[
                 header_location(
-                    DescriptorHeaderSchema::FLAGS_IDENTITY,
-                    DescriptorHeaderSchema::FLAGS_OFFSET,
+                    AbiCommandHeader::FLAGS_IDENTITY,
+                    AbiCommandHeader::FLAGS_OFFSET,
                 ),
                 header_location(
-                    DescriptorHeaderSchema::OPCODE_IDENTITY,
-                    DescriptorHeaderSchema::OPCODE_OFFSET,
+                    AbiCommandHeader::OPCODE_IDENTITY,
+                    AbiCommandHeader::OPCODE_OFFSET,
                 ),
                 header_location(
-                    DescriptorHeaderSchema::SIZE_IDENTITY,
-                    DescriptorHeaderSchema::SIZE_OFFSET,
+                    AbiCommandHeader::SIZE_IDENTITY,
+                    AbiCommandHeader::SIZE_OFFSET,
                 ),
                 header_location(
-                    DescriptorHeaderSchema::VERSION_IDENTITY,
-                    DescriptorHeaderSchema::VERSION_OFFSET,
+                    AbiCommandHeader::VERSION_IDENTITY,
+                    AbiCommandHeader::VERSION_OFFSET,
                 ),
             ],
             (AbiEventKind::InvalidVersion, 0x1000, 9, 1, 1, 0, 0),
@@ -58,16 +58,16 @@ fn conflict_cases() -> Vec<ConflictCase> {
             "size before opcode flags",
             &[
                 header_location(
-                    DescriptorHeaderSchema::FLAGS_IDENTITY,
-                    DescriptorHeaderSchema::FLAGS_OFFSET,
+                    AbiCommandHeader::FLAGS_IDENTITY,
+                    AbiCommandHeader::FLAGS_OFFSET,
                 ),
                 header_location(
-                    DescriptorHeaderSchema::OPCODE_IDENTITY,
-                    DescriptorHeaderSchema::OPCODE_OFFSET,
+                    AbiCommandHeader::OPCODE_IDENTITY,
+                    AbiCommandHeader::OPCODE_OFFSET,
                 ),
                 header_location(
-                    DescriptorHeaderSchema::SIZE_IDENTITY,
-                    DescriptorHeaderSchema::SIZE_OFFSET,
+                    AbiCommandHeader::SIZE_IDENTITY,
+                    AbiCommandHeader::SIZE_OFFSET,
                 ),
             ],
             (AbiEventKind::InvalidSize, 0x1000, 63, 64, 1, 0, 6),
@@ -76,12 +76,12 @@ fn conflict_cases() -> Vec<ConflictCase> {
             "opcode before flags",
             &[
                 header_location(
-                    DescriptorHeaderSchema::FLAGS_IDENTITY,
-                    DescriptorHeaderSchema::FLAGS_OFFSET,
+                    AbiCommandHeader::FLAGS_IDENTITY,
+                    AbiCommandHeader::FLAGS_OFFSET,
                 ),
                 header_location(
-                    DescriptorHeaderSchema::OPCODE_IDENTITY,
-                    DescriptorHeaderSchema::OPCODE_OFFSET,
+                    AbiCommandHeader::OPCODE_IDENTITY,
+                    AbiCommandHeader::OPCODE_OFFSET,
                 ),
             ],
             (AbiEventKind::InvalidOpcode, 0x1000, 9, 4, 1, 0, 2),
@@ -107,13 +107,13 @@ fn class_case() -> ConflictCase {
         vec![
             copy_source_unmapped(),
             scalar(
-                DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY
-                    .at_byte(DescriptorSchema::WORD2_OFFSET),
+                AbiCommandPayloadCopyValues::LENGTH_IDENTITY
+                    .at_byte(AbiCommand::WORD2_OFFSET),
             ),
-            reserved(DescriptorHeaderSchemaOpcode::Copy, DescriptorSchema::WORD3_OFFSET),
+            reserved(AbiCommandHeaderOpcode::Copy, AbiCommand::WORD3_OFFSET),
             header(header_location(
-                DescriptorHeaderSchema::FLAGS_IDENTITY,
-                DescriptorHeaderSchema::FLAGS_OFFSET,
+                AbiCommandHeader::FLAGS_IDENTITY,
+                AbiCommandHeader::FLAGS_OFFSET,
             )),
         ],
         (AbiEventKind::InvalidFlags, 0x1000, 1, 0, 1, 0, 4),
@@ -136,9 +136,9 @@ fn reserved_case() -> ConflictCase {
     case(
         "reserved ascending offset",
         vec![
-            reserved(DescriptorHeaderSchemaOpcode::Copy, DescriptorSchema::WORD5_OFFSET),
-            reserved(DescriptorHeaderSchemaOpcode::Copy, DescriptorSchema::WORD4_OFFSET),
-            reserved(DescriptorHeaderSchemaOpcode::Copy, DescriptorSchema::WORD3_OFFSET),
+            reserved(AbiCommandHeaderOpcode::Copy, AbiCommand::WORD5_OFFSET),
+            reserved(AbiCommandHeaderOpcode::Copy, AbiCommand::WORD4_OFFSET),
+            reserved(AbiCommandHeaderOpcode::Copy, AbiCommand::WORD3_OFFSET),
         ],
         (AbiEventKind::InvalidReserved, 0x1000, 7, 0, 1, 0, 40),
     )
@@ -149,20 +149,20 @@ fn scalar_case() -> ConflictCase {
         "scalar ascending payload offset",
         vec![
             scalar(
-                DescriptorSchemaPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
-                    .at_byte(DescriptorSchema::WORD5_OFFSET),
+                AbiCommandPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
+                    .at_byte(AbiCommand::WORD5_OFFSET),
             ),
             scalar(
-                DescriptorSchemaPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
-                    .at_byte(DescriptorSchema::WORD4_OFFSET),
+                AbiCommandPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
+                    .at_byte(AbiCommand::WORD4_OFFSET),
             ),
             scalar(
-                DescriptorSchemaPayloadStridedCopyValues::ROW_BYTES_IDENTITY
-                    .at_byte(DescriptorSchema::WORD3_OFFSET),
+                AbiCommandPayloadStridedCopyValues::ROW_BYTES_IDENTITY
+                    .at_byte(AbiCommand::WORD3_OFFSET),
             ),
             scalar(
-                DescriptorSchemaPayloadStridedCopyValues::ROWS_IDENTITY
-                    .at_byte(DescriptorSchema::WORD2_OFFSET),
+                AbiCommandPayloadStridedCopyValues::ROWS_IDENTITY
+                    .at_byte(AbiCommand::WORD2_OFFSET),
             ),
         ],
         (
@@ -197,29 +197,29 @@ fn header(location: SchemaLocation) -> AbiFaultCandidate {
     let descriptor = DmaAddress::new(0x1000);
     let fault = if location
         == header_location(
-            DescriptorHeaderSchema::VERSION_IDENTITY,
-            DescriptorHeaderSchema::VERSION_OFFSET,
+            AbiCommandHeader::VERSION_IDENTITY,
+            AbiCommandHeader::VERSION_OFFSET,
         )
     {
         AbiFault::invalid_version(descriptor, 9)
     } else if location
         == header_location(
-            DescriptorHeaderSchema::SIZE_IDENTITY,
-            DescriptorHeaderSchema::SIZE_OFFSET,
+            AbiCommandHeader::SIZE_IDENTITY,
+            AbiCommandHeader::SIZE_OFFSET,
         )
     {
         AbiFault::invalid_size(descriptor, 63)
     } else if location
         == header_location(
-            DescriptorHeaderSchema::OPCODE_IDENTITY,
-            DescriptorHeaderSchema::OPCODE_OFFSET,
+            AbiCommandHeader::OPCODE_IDENTITY,
+            AbiCommandHeader::OPCODE_OFFSET,
         )
     {
         AbiFault::invalid_opcode(descriptor, 9)
     } else if location
         == header_location(
-            DescriptorHeaderSchema::FLAGS_IDENTITY,
-            DescriptorHeaderSchema::FLAGS_OFFSET,
+            AbiCommandHeader::FLAGS_IDENTITY,
+            AbiCommandHeader::FLAGS_OFFSET,
         )
     {
         AbiFault::invalid_flags(descriptor, 1)
@@ -232,8 +232,8 @@ fn header(location: SchemaLocation) -> AbiFaultCandidate {
     )
 }
 
-fn reserved(opcode: DescriptorHeaderSchemaOpcode, offset: usize) -> AbiFaultCandidate {
-    let location = DescriptorSchema::PAYLOAD_IDENTITY.at_byte(offset);
+fn reserved(opcode: AbiCommandHeaderOpcode, offset: usize) -> AbiFaultCandidate {
+    let location = AbiCommand::PAYLOAD_IDENTITY.at_byte(offset);
     candidate(
         AbiFault::invalid_reserved(DmaAddress::new(0x1000), location_index(location), 7),
         AbiFaultOrder::Descriptor(DescriptorViolationKind::Reserved { opcode, location }),

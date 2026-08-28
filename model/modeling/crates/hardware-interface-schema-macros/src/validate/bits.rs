@@ -29,7 +29,10 @@ pub(in crate::internal) fn check(fields: &[BitFieldDecl], storage_bits: usize) -
     Ok(())
 }
 
-pub(in crate::internal) fn check_schema(fields: &[BitFieldDecl]) -> syn::Result<()> {
+pub(in crate::internal) fn check_schema(
+    fields: &[BitFieldDecl],
+    storage_bits: usize,
+) -> syn::Result<()> {
     if fields.is_empty() {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -42,20 +45,11 @@ pub(in crate::internal) fn check_schema(fields: &[BitFieldDecl]) -> syn::Result<
             "bits schema has too many fields",
         ));
     }
-    check(fields, 64)
+    check(fields, storage_bits)
 }
 
 pub(in crate::internal) fn bit_width(fields: &[BitFieldDecl]) -> usize {
     fields.iter().map(|field| field.end.0).max().unwrap_or(0)
-}
-
-pub(in crate::internal) fn extent(fields: &[BitFieldDecl]) -> usize {
-    match bit_width(fields) {
-        0..=8 => 1,
-        9..=16 => 2,
-        17..=32 => 4,
-        _ => 8,
-    }
 }
 
 pub(in crate::internal) fn declared_mask(fields: &[BitFieldDecl]) -> u64 {

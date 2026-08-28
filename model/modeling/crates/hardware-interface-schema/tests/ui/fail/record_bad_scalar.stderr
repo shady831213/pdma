@@ -1,3 +1,65 @@
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+3 | |     value: i32,
+4 | | } } }
+  | |_____^ the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+  = note: required for `Bad` to implement `Clone`
+note: required by a bound in `TrivialClone`
+ --> $RUST/core/src/clone.rs
+  |
+  | pub const unsafe trait TrivialClone: [const] Clone {}
+  |                                      ^^^^^^^^^^^^^ required by this bound in `TrivialClone`
+  = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `Clone`
+ --> $RUST/core/src/clone.rs
+  |
+  | pub const trait Clone: Sized {
+  |                        ^^^^^ required by this bound in `Clone`
+  = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
 error[E0599]: no associated function or constant named `RECORD_ALIGNMENT` found for type `i32` in the current scope
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
@@ -28,97 +90,23 @@ help: you are looking for the module in `std`, not the primitive type
 2 | std::record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | +++++
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ the trait `RecordLayout` is not implemented for `i32`
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
-  |
-help: the trait `RecordLayout` is implemented for `Bad`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
-  = note: required for `BadValues` to implement `Clone`
-note: required by a bound in `TrivialClone`
- --> $RUST/core/src/clone.rs
-  |
-  | pub const unsafe trait TrivialClone: [const] Clone {}
-  |                                      ^^^^^^^^^^^^^ required by this bound in `TrivialClone`
-  = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
-  |
-help: the trait `RecordLayout` is implemented for `Bad`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
-note: required by a bound in `Clone`
- --> $RUST/core/src/clone.rs
-  |
-  | pub const trait Clone: Sized {
-  |                        ^^^^^ required by this bound in `Clone`
-  = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
-
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
-  |
-help: the trait `RecordLayout` is implemented for `Bad`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
-  |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
-  = note: required for `BadValues` to implement `Clone`
+  |                             ^^^
+  = note: required for `Bad` to implement `Clone`
 note: required by a bound in `Copy`
  --> $RUST/core/src/marker.rs
   |
@@ -126,26 +114,22 @@ note: required by a bound in `Copy`
   |                 ^^^^^ required by this bound in `Copy`
   = note: this error originates in the derive macro `Copy` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by a bound in `StructuralPartialEq`
  --> $RUST/core/src/marker.rs
   |
@@ -155,26 +139,22 @@ note: required by a bound in `StructuralPartialEq`
   | |_^ required by this bound in `StructuralPartialEq`
   = note: this error originates in the derive macro `PartialEq` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by a bound in `Default`
  --> $RUST/core/src/default.rs
   |
@@ -182,26 +162,22 @@ note: required by a bound in `Default`
   |                          ^^^^^ required by this bound in `Default`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by a bound in `hardware_interface_schema::Decode::Decoded`
  --> src/codec.rs
   |
@@ -209,26 +185,24 @@ note: required by a bound in `hardware_interface_schema::Decode::Decoded`
   |     ^^^^^^^^^^^^^ required by this bound in `Decode::Decoded`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by an implicit `Sized` bound in `Result`
  --> $RUST/core/src/result.rs
   |
@@ -236,26 +210,24 @@ note: required by an implicit `Sized` bound in `Result`
   |                 ^ required by the implicit `Sized` requirement on this type parameter in `Result`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by a bound in `Encode`
  --> src/codec.rs
   |
@@ -263,26 +235,45 @@ note: required by a bound in `Encode`
   |                   ^^^^^ required by this bound in `Encode`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `Encode`
+ --> src/codec.rs
+  |
+  | pub trait Encode: Sized {
+  |                   ^^^^^ required by this bound in `Encode`
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by a bound in `TryFrom`
  --> $RUST/core/src/convert/mod.rs
   |
@@ -290,26 +281,24 @@ note: required by a bound in `TryFrom`
   |                             ^^^^^ required by this bound in `TryFrom`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by an implicit `Sized` bound in `TryFrom`
  --> $RUST/core/src/convert/mod.rs
   |
@@ -317,26 +306,22 @@ note: required by an implicit `Sized` bound in `TryFrom`
   |                         ^ required by the implicit `Sized` requirement on this type parameter in `TryFrom`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
   = note: required for `<Bad as RecordLayout>::Value` to implement `Copy`
 note: required by a bound in `hardware_interface_schema::RecordLayout::Value`
  --> src/layout.rs
@@ -345,73 +330,152 @@ note: required by a bound in `hardware_interface_schema::RecordLayout::Value`
   |                         ^^^^ required by this bound in `RecordLayout::Value`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `RecordLayout`
+ --> src/layout.rs
+  |
+  | / pub trait RecordLayout {
+  | |     /// Owned decoded value for this layout.
+  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
+  | |     /// Checked immutable view for this layout.
+... |
+  | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+  | | }
+  | |_^ required by this bound in `RecordLayout`
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `RecordLayout`
+ --> src/layout.rs
+  |
+  | / pub trait RecordLayout {
+  | |     /// Owned decoded value for this layout.
+  | |     type Value: Clone + Copy + Default + Eq + PartialEq;
+  | |     /// Checked immutable view for this layout.
+... |
+  | |     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+  | | }
+  | |_^ required by this bound in `RecordLayout`
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
   = note: the return type of a function must have a statically known size
   = note: this error originates in the derive macro `Clone` which comes from the expansion of the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
   = note: statics and constants must have a statically known size
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+  = note: the return type of a function must have a statically known size
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^
-  = note: the return type of a function must have a statically known size
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+note: required by a bound in `TryFrom`
+ --> $RUST/core/src/convert/mod.rs
+  |
+  | pub const trait TryFrom<T>: Sized {
+  |                             ^^^^^ required by this bound in `TryFrom`
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0599]: no associated function or constant named `SPEC` found for type `i32` in the current scope
@@ -480,7 +544,7 @@ error[E0277]: `?` couldn't convert the error: `i32: RecordLayout` is not satisfi
 4 | | } } }
   | |     ^
   | |     |
-  | |_____within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |       this can't be annotated with `?` because it has type `Result<_, SchemaCodecError>`
   |
   = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
@@ -489,13 +553,11 @@ help: the trait `RecordLayout` is implemented for `Bad`
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `i32: RecordLayout` is not satisfied
@@ -511,26 +573,24 @@ help: the trait `RecordLayout` is implemented for `Bad`
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
 note: required by a bound in `Ok`
  --> $RUST/core/src/result.rs
   |
@@ -541,51 +601,90 @@ note: required by a bound in `Ok`
   |     -- required by a bound in this tuple variant
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
- --> tests/ui/fail/record_bad_scalar.rs:2:1
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
   |
-2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
-3 | |     value: i32,
-4 | | } } }
-  | |_____^
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: function arguments must have a statically known size, borrowed types always have a known size
   |
 2 | &record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | +
 
-error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `BadValues`
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^ within `BadValues`, the trait `RecordLayout` is not implemented for `i32`
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
   |
 help: the trait `RecordLayout` is implemented for `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `BadValues`
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+  = note: all local variables must have a statically known size
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: function arguments must have a statically known size, borrowed types always have a known size
+  |
+2 | record_schema! { pub record &Bad { alignment: 1, endian: Little, fields: {
+  |                             +
+
+error[E0277]: the trait bound `i32: RecordLayout` is not satisfied in `Bad`
  --> tests/ui/fail/record_bad_scalar.rs:2:1
   |
 2 | / record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
 3 | |     value: i32,
 4 | | } } }
-  | |_____^
-  = note: all local variables must have a statically known size
+  | |_____^ within `Bad`, the trait `RecordLayout` is not implemented for `i32`
+  |
+help: the trait `RecordLayout` is implemented for `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:1
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: required because it appears within the type `Bad`
+ --> tests/ui/fail/record_bad_scalar.rs:2:29
+  |
+2 | record_schema! { pub record Bad { alignment: 1, endian: Little, fields: {
+  |                             ^^^
+  = note: all function arguments must have a statically known size
   = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

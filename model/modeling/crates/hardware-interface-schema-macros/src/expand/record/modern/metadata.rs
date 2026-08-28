@@ -36,14 +36,15 @@ pub(super) fn expand(
     let fillers = metadata.fillers;
     let placements = metadata.placements;
     let word_offsets = plan.fields.iter().flat_map(|field| {
-        let Some(geometry) = union_geometry_for(field) else {
+        let Some(geometry) = union_geometry_for(field, facade) else {
             return Vec::new();
         };
         let base = &field.offset_name;
+        let width = &geometry.storage.width;
         (0..geometry.slots)
             .map(|index| {
                 let name = format_ident!("WORD{index}_OFFSET");
-                let relative = index * geometry.storage.width();
+                let relative = quote!((#index).saturating_mul(#width));
                 quote!(#[doc = "Generated raw union-storage slot offset."] pub const #name: usize = Self::#base.saturating_add(#relative);)
             })
             .collect::<Vec<_>>()
@@ -121,7 +122,7 @@ fn metadata_parts(
         ));
         next_id += match &field.decl.ty {
             ModernTypeDecl::Union(union) => {
-                union_geometry(union).map_or(0, |geometry| geometry.slots)
+                union_geometry(union, facade).map_or(0, |geometry| geometry.slots)
             }
             _ => 1,
         };
@@ -188,18 +189,18 @@ fn fill_field(
         }),
         ModernTypeDecl::Record(_) => TokenStream::new(),
         ModernTypeDecl::Union(union) => {
-            let Some(geometry) = union_geometry(union) else {
+            let Some(geometry) = union_geometry(union, facade) else {
                 return TokenStream::new();
             };
-            let kind = scalar::kind(geometry.storage);
-            let width = geometry.storage.width();
+            let kind = &geometry.storage.kind;
+            let width = &geometry.storage.width;
             let slots = (0..geometry.slots).map(|index| {
                 let slot_id = id_index + index;
                 let slot_name = format!("word{index}");
-                let relative = index * width;
+                let relative = quote!((#index).saturating_mul(#width));
                 quote!({
                     let id = match #facade::inferred_field_id(#slot_id) { Some(id) => id, None => 0 };
-                    fields[output_index] = #facade::FieldSpec::new(id, #slot_name, #marker::#offset.saturating_add(#relative), #facade::ScalarKind::#kind)
+                    fields[output_index] = #facade::FieldSpec::new(id, #slot_name, #marker::#offset.saturating_add(#relative), #kind)
                         .with_endian(#facade::Endian::#endian)
                         .with_declaration_index(#declaration_index);
                     output_index += 1;
@@ -245,9 +246,10 @@ fn fill_scalar(input: ScalarFill<'_>) -> TokenStream {
 
 fn union_geometry_for(
     field: &super::layout::PlacedField<'_>,
+    facade: &TokenStream,
 ) -> Option<super::layout::UnionGeometry> {
     let ModernTypeDecl::Union(union) = &field.decl.ty else {
         return None;
     };
-    union_geometry(union)
+    union_geometry(union, facade)
 }

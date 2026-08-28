@@ -1,30 +1,31 @@
 //! Standalone downstream layer-boundary behavior.
 
-use pdma_model_contract::abi::{{
-        AbiCommand, AbiId, DescriptorSchemaPayloadCopyValues, DmaAddress, RingCursor, RingRecord,
-    }};
-use pdma_model_contract::binding::{{PdmaMemoryRegion, RingLayout}};
-use pdma_model_contract::semantic::{{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId}};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, RingCursor,
+    RingRecord,
+};
+use pdma_model_contract::binding::{PdmaMemoryRegion, RingLayout};
+use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
 
 #[test]
 fn independent_values_compose_only_through_owner_conversions() {
     // Given: unrelated semantic and exact ABI values.
     let request = CopyRequest::new(BufferId::new(7), BufferId::new(9), 16);
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(3));
-    let exact = AbiCommand::copy(
-        AbiId::new(41),
-        DescriptorSchemaPayloadCopyValues {{
+    let exact = AbiCommand::from_payload(
+        41,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
             source_dma_address: 0x1000,
             destination_dma_address: 0x2000,
-            length: 16,
-        }},
+            length: 16.into(),
+        }),
     );
 
     // When: the record is encoded and the semantic ID uses its owning conversions.
     let mut bytes = [0_u8; 64];
     let encoded = exact.encode(&mut bytes);
-    let roundtrip = AbiId::try_from(request.src().raw())
-        .map(|id| id.try_into_model().map(BufferId::new));
+    let roundtrip = u64::try_from(request.src().raw())
+        .map(|id| usize::try_from(id).map(BufferId::new));
     let region = PdmaMemoryRegion::try_new(BufferId::new(11), DmaAddress::new(0x4000), 64)
         .expect("exact region must fit");
     let ring = RingLayout::try_new(region, 1, RingRecord::Submission);

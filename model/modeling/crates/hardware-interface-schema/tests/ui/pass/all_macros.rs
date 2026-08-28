@@ -1,6 +1,6 @@
 use hardware_interface_schema::{bits_schema, record_schema, register_map, register_schema};
 
-bits_schema! { pub bits PassBits { enable: 0..1, } }
+bits_schema! { pub bits PassBits(u8) { enable: 0..1, } }
 
 record_schema! { pub record PassItems { endian: Big, fields: {
     item0: u16,
@@ -46,6 +46,6 @@ fn main() {
     let flags = PassBitsValues { enable: true };
     let mut control = [0_u8; 1];
     PassControlViewMut::new(&mut control).unwrap().set_fields(flags).unwrap();
-    assert_eq!(PassInferredRecordValues { flags }.to_bytes().unwrap(), [1]);
+    assert_eq!(PassInferredRecord { flags }.to_bytes().unwrap(), [1]);
     assert!(matches!(PassMap::locate(16), Some(hardware_interface_schema::register_map::RegisterLocation::Repeated { instance: 1, .. })));
 }

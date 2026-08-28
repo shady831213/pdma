@@ -1,13 +1,13 @@
 use crate::abi::{
     ABI_VERSION, AbiDecodeError, AbiEncodeError, AbiEventAccess, AbiEventKind, AbiEventStage,
-    AbiFault, AbiFaultDetails, AbiFaultSite, AbiId, COMPLETION_SIZE, DmaAddress, EVENT_SIZE,
+    AbiFault, AbiFaultDetails, AbiFaultSite, COMPLETION_SIZE, DmaAddress, EVENT_SIZE,
     SUCCESS_STATUS,
     codec::{decode_schema_error, encode_schema_error},
 };
 use crate::semantic::{CommandId, CompletionRecord, CompletionStatus, QueueId};
 
 use super::{
-    AbiCompletion, CompletionSchemaRaw, CompletionSchemaValues, EventSchemaRaw, EventSchemaValues,
+    AbiCompletion, CompletionSchema, CompletionSchemaRaw, EventSchema, EventSchemaRaw,
     ExactAbiEvent,
 };
 
@@ -15,7 +15,7 @@ impl TryFrom<CompletionSchemaRaw> for AbiCompletion {
     type Error = AbiDecodeError;
 
     fn try_from(raw: CompletionSchemaRaw) -> Result<Self, Self::Error> {
-        let values = CompletionSchemaValues::try_from(raw).map_err(decode_schema_error)?;
+        let values = CompletionSchema::try_from(raw).map_err(decode_schema_error)?;
         require_field("version", u64::from(values.version), u64::from(ABI_VERSION))?;
         require_field("size", u64::from(values.size), u64::from(COMPLETION_SIZE))?;
         if values.status != SUCCESS_STATUS {
@@ -24,10 +24,7 @@ impl TryFrom<CompletionSchemaRaw> for AbiCompletion {
             });
         }
         require_field("flags", u64::from(values.flags), 0)?;
-        let completion = Self::new(
-            AbiId::new(values.origin_queue_id),
-            AbiId::new(values.command_id),
-        );
+        let completion = Self::new(values.origin_queue_id, values.command_id);
         require_field("reserved", values.reserved, 0)?;
         Ok(completion)
     }
@@ -37,13 +34,13 @@ impl TryFrom<AbiCompletion> for CompletionSchemaRaw {
     type Error = AbiEncodeError;
 
     fn try_from(completion: AbiCompletion) -> Result<Self, Self::Error> {
-        Self::try_from(CompletionSchemaValues {
+        Self::try_from(CompletionSchema {
             version: ABI_VERSION,
             size: COMPLETION_SIZE,
             status: SUCCESS_STATUS,
             flags: 0,
-            origin_queue_id: completion.queue_id().raw(),
-            command_id: completion.command_id().raw(),
+            origin_queue_id: completion.queue_id(),
+            command_id: completion.command_id(),
             reserved: 0,
         })
         .map_err(encode_schema_error)
@@ -56,8 +53,8 @@ impl TryFrom<CompletionRecord> for AbiCompletion {
     fn try_from(record: CompletionRecord) -> Result<Self, Self::Error> {
         match record.status() {
             CompletionStatus::Success => Ok(Self::new(
-                AbiId::try_from(record.queue_id().raw())?,
-                AbiId::try_from(record.command_id().raw())?,
+                encode_model_id(record.queue_id().raw())?,
+                encode_model_id(record.command_id().raw())?,
             )),
         }
     }
@@ -68,8 +65,8 @@ impl TryFrom<AbiCompletion> for CompletionRecord {
 
     fn try_from(completion: AbiCompletion) -> Result<Self, Self::Error> {
         Ok(Self::new(
-            QueueId::new(completion.queue_id().try_into_model()?),
-            CommandId::new(completion.command_id().try_into_model()?),
+            QueueId::new(decode_model_id(completion.queue_id())?),
+            CommandId::new(decode_model_id(completion.command_id())?),
             CompletionStatus::Success,
         ))
     }
@@ -79,7 +76,7 @@ impl TryFrom<EventSchemaRaw> for ExactAbiEvent {
     type Error = AbiDecodeError;
 
     fn try_from(raw: EventSchemaRaw) -> Result<Self, Self::Error> {
-        let values = EventSchemaValues::try_from(raw).map_err(decode_schema_error)?;
+        let values = EventSchema::try_from(raw).map_err(decode_schema_error)?;
         require_field("version", u64::from(values.version), u64::from(ABI_VERSION))?;
         require_field("size", u64::from(values.size), u64::from(EVENT_SIZE))?;
         let kind = AbiEventKind::parse(values.kind)?;
@@ -99,11 +96,7 @@ impl TryFrom<EventSchemaRaw> for ExactAbiEvent {
         if !fault.is_canonical() {
             return Err(AbiDecodeError::NonCanonicalEventDetails);
         }
-        Ok(Self::new(
-            AbiId::new(values.origin_queue_id),
-            AbiId::new(values.command_id),
-            fault,
-        ))
+        Ok(Self::new(values.origin_queue_id, values.command_id, fault))
     }
 }
 
@@ -115,13 +108,13 @@ impl TryFrom<ExactAbiEvent> for EventSchemaRaw {
             return Err(AbiEncodeError::NonCanonicalEventDetails);
         }
         let tuple = event.fault().tuple();
-        Self::try_from(EventSchemaValues {
+        Self::try_from(EventSchema {
             version: ABI_VERSION,
             size: EVENT_SIZE,
             kind: tuple.0.value(),
             flags: 0,
-            origin_queue_id: event.queue_id().raw(),
-            command_id: event.command_id().raw(),
+            origin_queue_id: event.queue_id(),
+            command_id: event.command_id(),
             fault_locator: tuple.1,
             detail0: tuple.2,
             detail1: tuple.3,
@@ -144,4 +137,12 @@ const fn require_field(
     } else {
         Err(AbiDecodeError::InvalidRecordField { field, value })
     }
+}
+
+fn encode_model_id(value: usize) -> Result<u64, AbiEncodeError> {
+    u64::try_from(value).map_err(|_| AbiEncodeError::UnrepresentableModelId { value })
+}
+
+fn decode_model_id(value: u64) -> Result<usize, AbiDecodeError> {
+    usize::try_from(value).map_err(|_| AbiDecodeError::UnrepresentableId { value })
 }

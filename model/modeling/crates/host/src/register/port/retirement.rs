@@ -189,16 +189,10 @@ fn semantic_event<A: CanonicalAccess>(
     };
     Ok(EventRecord::new(
         pdma_model_contract::semantic::QueueId::new(
-            event
-                .queue_id()
-                .try_into_model()
-                .map_err(|_| PortError::SubmissionState)?,
+            usize::try_from(event.queue_id()).map_err(|_| PortError::SubmissionState)?,
         ),
         pdma_model_contract::semantic::CommandId::new(
-            event
-                .command_id()
-                .try_into_model()
-                .map_err(|_| PortError::SubmissionState)?,
+            usize::try_from(event.command_id()).map_err(|_| PortError::SubmissionState)?,
         ),
         error_kind,
         buffer,

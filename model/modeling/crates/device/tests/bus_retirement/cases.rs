@@ -1,7 +1,7 @@
 use super::TestResult;
 use super::support::{Fixture, allocate_pair};
+use pdma_model_contract::abi::RingCursor;
 use pdma_model_contract::abi::record::{decode_completion, decode_event};
-use pdma_model_contract::abi::{AbiId, RingCursor};
 use pdma_model_contract::semantic::{
     CommandId, IrqMessageId, IrqNotification, IrqRoute, IrqVector, TraceEventKind,
 };
@@ -47,9 +47,9 @@ pub async fn visible_before_irq_and_retry() -> TestResult {
     // Then: bytes precede producer/trace/IRQ and retry publishes the cached result once.
     assert_eq!(before_retry.completion().producer(), RingCursor::new(1));
     assert_eq!(before_retry.submission().consumer(), RingCursor::new(2));
-    assert_eq!(first_record.command_id(), AbiId::new(10));
+    assert_eq!(first_record.command_id(), 10);
     assert_eq!(after_retry.completion().producer(), RingCursor::new(2));
-    assert_eq!(second_record.command_id(), AbiId::new(11));
+    assert_eq!(second_record.command_id(), 11);
     assert_eq!(
         trace_after_retry
             .iter()

@@ -2,7 +2,7 @@
 
 use hardware_interface_schema::{bits_schema, record_schema, register_map, register_schema};
 
-bits_schema! { pub bits SurfaceBits { enable: 0..1, } }
+bits_schema! { pub bits SurfaceBits(u8) { enable: 0..1, } }
 
 record_schema! {
     pub record SurfaceRecord {

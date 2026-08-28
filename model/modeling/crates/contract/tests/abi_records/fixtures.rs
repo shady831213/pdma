@@ -1,6 +1,6 @@
 fn canonical_events() -> [ExactAbiEvent; 11] {
-    let queue = AbiId::new(0x1122);
-    let command = AbiId::new(0x3344);
+    let queue = 0x1122;
+    let command = 0x3344;
     let descriptor = DmaAddress::new(0x1000);
     [
         ExactAbiEvent::new(
@@ -141,8 +141,8 @@ fn noncanonical_descriptor_events() -> [ExactAbiEvent; 8] {
 
 const fn invalid_event(kind: AbiEventKind, details: AbiFaultDetails) -> ExactAbiEvent {
     ExactAbiEvent::new(
-        AbiId::new(1),
-        AbiId::new(2),
+        1,
+        2,
         AbiFault::from_parts(kind, DmaAddress::new(0x1000), details),
     )
 }

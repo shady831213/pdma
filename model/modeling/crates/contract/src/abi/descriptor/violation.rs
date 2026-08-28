@@ -3,10 +3,9 @@ mod display;
 use hardware_interface_schema::SchemaLocation;
 
 use crate::abi::{
-    ABI_VERSION, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE, DescriptorHeaderSchema,
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
-    DmaAddress, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES,
-    VECTOR_ADD_OPCODE,
+    ABI_VERSION, AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode,
+    AbiCommandPayloadBroadcastCopyValues, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE, DmaAddress,
+    INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES, VECTOR_ADD_OPCODE,
 };
 
 use super::error::DescriptorPayloadViolation;
@@ -20,7 +19,7 @@ pub enum DescriptorViolationKind {
     /// One operation-specific required-zero storage location.
     Reserved {
         /// Generated descriptor operation.
-        opcode: DescriptorHeaderSchemaOpcode,
+        opcode: AbiCommandHeaderOpcode,
         /// Generated schema location of the nonzero storage.
         location: SchemaLocation,
     },
@@ -50,7 +49,7 @@ pub(in crate::abi) enum DescriptorViolationValue {
         observed: u16,
     },
     Reserved {
-        opcode: DescriptorHeaderSchemaOpcode,
+        opcode: AbiCommandHeaderOpcode,
         location: SchemaLocation,
         observed: u64,
     },
@@ -89,7 +88,7 @@ impl DescriptorViolation {
     }
 
     pub(super) const fn reserved(
-        opcode: DescriptorHeaderSchemaOpcode,
+        opcode: AbiCommandHeaderOpcode,
         location: SchemaLocation,
         observed: u64,
     ) -> Self {
@@ -116,19 +115,16 @@ impl DescriptorViolation {
     pub const fn kind(self) -> DescriptorViolationKind {
         match self.0 {
             DescriptorViolationValue::InvalidVersion { .. } => DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::VERSION_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+                AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
             ),
             DescriptorViolationValue::InvalidSize { .. } => DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+                AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET),
             ),
             DescriptorViolationValue::InvalidOpcode { .. } => DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::OPCODE_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+                AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET),
             ),
             DescriptorViolationValue::InvalidFlags { .. } => DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::FLAGS_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+                AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET),
             ),
             DescriptorViolationValue::Reserved {
                 opcode, location, ..
@@ -137,12 +133,12 @@ impl DescriptorViolation {
                 DescriptorViolationKind::Scalar(location)
             }
             DescriptorViolationValue::IndirectCount { .. } => DescriptorViolationKind::Scalar(
-                DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-                    .at_byte(DescriptorSchema::WORD3_OFFSET),
+                AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+                    .at_byte(AbiCommand::WORD3_OFFSET),
             ),
             DescriptorViolationValue::IndirectAlignment { .. } => DescriptorViolationKind::Scalar(
-                DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
-                    .at_byte(DescriptorSchema::WORD1_OFFSET),
+                AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+                    .at_byte(AbiCommand::WORD1_OFFSET),
             ),
         }
     }
@@ -179,19 +175,16 @@ impl DescriptorViolation {
     pub const fn descriptor_offset(self) -> Option<u64> {
         match self.0 {
             DescriptorViolationValue::InvalidVersion { .. } => Some(location_offset(
-                DescriptorHeaderSchema::VERSION_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+                AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
             )),
             DescriptorViolationValue::InvalidSize { .. } => Some(location_offset(
-                DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+                AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET),
             )),
             DescriptorViolationValue::InvalidOpcode { .. } => Some(location_offset(
-                DescriptorHeaderSchema::OPCODE_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+                AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET),
             )),
             DescriptorViolationValue::InvalidFlags { .. } => Some(location_offset(
-                DescriptorHeaderSchema::FLAGS_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+                AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET),
             )),
             DescriptorViolationValue::Reserved { location, .. }
             | DescriptorViolationValue::Scalar { location, .. } => Some(location_offset(location)),

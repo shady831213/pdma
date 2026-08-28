@@ -1,44 +1,31 @@
 mod classify;
 
 use crate::abi::{
-    ABI_VERSION, AbiEncodeError, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE,
-    DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaView, DescriptorSchemaRaw,
-    DescriptorSchemaValues, DescriptorSchemaView, DmaAddress, VECTOR_ADD_OPCODE,
-    codec::decode_schema_error,
+    ABI_VERSION, AbiCommand, AbiCommandHeaderOpcode, AbiCommandHeaderView, AbiCommandRaw,
+    AbiCommandView, COPY_OPCODE, DESCRIPTOR_FLAGS_MASK, DESCRIPTOR_SIZE, DmaAddress,
+    VECTOR_ADD_OPCODE, codec::decode_schema_error,
 };
 
 use self::classify::{DescriptorContext, descriptor_schema_error};
-use super::{AbiCommand, DescriptorDecodeError, DescriptorViolation, validate_payload};
+use super::{DescriptorDecodeError, DescriptorViolation, validate_payload};
 
-impl TryFrom<DescriptorSchemaRaw> for AbiCommand {
-    type Error = DescriptorDecodeError;
-
-    fn try_from(raw: DescriptorSchemaRaw) -> Result<Self, Self::Error> {
-        let view = DescriptorSchemaView::new(raw.as_bytes()).map_err(decode_schema_error)?;
-        let header = view.header().map_err(decode_schema_error)?;
-        let opcode = validate_header(header)?;
-        let list = DmaAddress::new(view.word1().map_err(decode_schema_error)?);
-        let context = DescriptorContext::new(opcode, list);
-        let values = DescriptorSchemaValues::try_from(raw)
-            .map_err(|error| descriptor_schema_error(context, error))?;
-        validate_payload(values.payload)
-            .map_err(DescriptorViolation::from)
-            .map_err(DescriptorDecodeError::Violation)?;
-        Ok(Self::from_validated_values(values))
-    }
-}
-
-impl TryFrom<AbiCommand> for DescriptorSchemaRaw {
-    type Error = AbiEncodeError;
-
-    fn try_from(command: AbiCommand) -> Result<Self, Self::Error> {
-        Self::try_from(command.values()).map_err(crate::abi::codec::encode_schema_error)
-    }
+pub(super) fn decode_validated(raw: AbiCommandRaw) -> Result<AbiCommand, DescriptorDecodeError> {
+    let view = AbiCommandView::new(raw.as_bytes()).map_err(decode_schema_error)?;
+    let header = view.header().map_err(decode_schema_error)?;
+    let opcode = validate_header(header)?;
+    let list = DmaAddress::new(view.word1().map_err(decode_schema_error)?);
+    let context = DescriptorContext::new(opcode, list);
+    let values =
+        AbiCommand::try_from(raw).map_err(|error| descriptor_schema_error(context, error))?;
+    validate_payload(values.payload)
+        .map_err(DescriptorViolation::from)
+        .map_err(DescriptorDecodeError::Violation)?;
+    Ok(values)
 }
 
 fn validate_header(
-    header: DescriptorHeaderSchemaView<'_>,
-) -> Result<DescriptorHeaderSchemaOpcode, DescriptorDecodeError> {
+    header: AbiCommandHeaderView<'_>,
+) -> Result<AbiCommandHeaderOpcode, DescriptorDecodeError> {
     let version = header.version().map_err(decode_schema_error)?;
     if version != ABI_VERSION {
         return Err(DescriptorDecodeError::Violation(
@@ -63,6 +50,5 @@ fn validate_header(
             DescriptorViolation::flags(flags),
         ));
     }
-    DescriptorHeaderSchemaOpcode::from_raw(opcode)
-        .map_err(|_| DescriptorDecodeError::MetadataMismatch)
+    AbiCommandHeaderOpcode::from_raw(opcode).map_err(|_| DescriptorDecodeError::MetadataMismatch)
 }

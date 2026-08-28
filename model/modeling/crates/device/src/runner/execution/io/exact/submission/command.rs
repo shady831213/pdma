@@ -5,24 +5,22 @@ mod vector;
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::execution::command::{ExecutionCommand, ExecutionOperation};
-use pdma_model_contract::abi::{
-    AbiCommand, AbiFault, AbiId, DescriptorSchemaPayloadValues, ExactAbiEvent,
-};
+use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, AbiFault, ExactAbiEvent};
 use pdma_model_contract::semantic::{CommandId, CompletionRingId};
 
 #[derive(Clone, Copy)]
 pub(super) struct ExactCommandContext {
-    queue: AbiId,
+    queue: u64,
     completion: CompletionRingId,
-    exact_command: AbiId,
+    exact_command: u64,
     command: CommandId,
 }
 
 impl ExactCommandContext {
     pub(super) const fn new(
-        queue: AbiId,
+        queue: u64,
         completion: CompletionRingId,
-        exact_command: AbiId,
+        exact_command: u64,
         command: CommandId,
     ) -> Self {
         Self {
@@ -58,12 +56,10 @@ pub(super) fn resolve(
         command: context.command,
     };
     let result: Result<ExecutionCommand, AbiFault> = match command.payload() {
-        DescriptorSchemaPayloadValues::Copy(values) => copy::copy(resolution, values),
-        DescriptorSchemaPayloadValues::StridedCopy(values) => copy::strided(resolution, values),
-        DescriptorSchemaPayloadValues::BroadcastCopy(values) => {
-            broadcast::broadcast(resolution, values)
-        }
-        DescriptorSchemaPayloadValues::VectorAdd(values) => vector::vector(resolution, values),
+        AbiCommandPayloadValues::Copy(values) => copy::copy(resolution, values),
+        AbiCommandPayloadValues::StridedCopy(values) => copy::strided(resolution, values),
+        AbiCommandPayloadValues::BroadcastCopy(values) => broadcast::broadcast(resolution, values),
+        AbiCommandPayloadValues::VectorAdd(values) => vector::vector(resolution, values),
     }?;
     Ok(result.map_err(|fault| ExactAbiEvent::new(context.queue, context.exact_command, fault)))
 }

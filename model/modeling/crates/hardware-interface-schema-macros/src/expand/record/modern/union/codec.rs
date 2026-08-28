@@ -8,7 +8,7 @@ pub(super) struct Context<'a> {
     pub(super) raw: &'a syn::Ident,
     pub(super) tag: &'a TokenStream,
     pub(super) first_case: &'a syn::Ident,
-    pub(super) extent: usize,
+    pub(super) extent: &'a TokenStream,
     pub(super) facade: &'a TokenStream,
 }
 

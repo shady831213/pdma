@@ -4,12 +4,13 @@ mod location;
 mod schema;
 mod violation;
 
-use super::{ABI_VERSION, AbiEncodeError, AbiId, DmaAddress, INDIRECT_ENTRY_ALIGNMENT};
+use super::{ABI_VERSION, AbiEncodeError, DmaAddress, INDIRECT_ENTRY_ALIGNMENT};
 
-pub use error::{DescriptorDecodeError, DescriptorValueError};
+pub use error::DescriptorDecodeError;
 pub(in crate::abi) use location::{
-    header_rank, is_indirect_alignment_location, is_indirect_count_location, is_narrowing_location,
-    is_reserved_location, is_scalar_location, location_offset, scalar_opcode, scalar_rank,
+    canonical_value_location, header_rank, is_indirect_alignment_location,
+    is_indirect_count_location, is_narrowing_location, is_reserved_location, is_scalar_location,
+    location_offset, scalar_opcode, scalar_rank,
 };
 pub(in crate::abi) use violation::DescriptorViolationValue;
 pub use violation::{DescriptorViolation, DescriptorViolationKind};
@@ -17,79 +18,33 @@ pub use violation::{DescriptorViolation, DescriptorViolationKind};
 use error::DescriptorPayloadViolation;
 
 pub use schema::{
-    DescriptorHeaderSchema, DescriptorHeaderSchemaFlagsRaw, DescriptorHeaderSchemaFlagsValues,
-    DescriptorHeaderSchemaOpcode, DescriptorHeaderSchemaOpcodeRaw, DescriptorHeaderSchemaRaw,
-    DescriptorHeaderSchemaValues, DescriptorHeaderSchemaView, DescriptorHeaderSchemaViewMut,
-    DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadRaw,
-    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadValues,
-    DescriptorSchemaPayloadVectorAddValues, DescriptorSchemaRaw, DescriptorSchemaValues,
-    DescriptorSchemaView, DescriptorSchemaViewMut, IndirectDestinationEntrySchema,
-    IndirectDestinationEntrySchemaRaw, IndirectDestinationEntrySchemaValues,
-    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut,
+    AbiCommand, AbiCommandHeader, AbiCommandHeaderFlagsRaw, AbiCommandHeaderFlagsValues,
+    AbiCommandHeaderOpcode, AbiCommandHeaderOpcodeRaw, AbiCommandHeaderRaw, AbiCommandHeaderView,
+    AbiCommandHeaderViewMut, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
+    AbiCommandPayloadRaw, AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues,
+    AbiCommandPayloadVectorAddValues, AbiCommandRaw, AbiCommandView, AbiCommandViewMut,
+    IndirectDestinationEntrySchema, IndirectDestinationEntrySchemaRaw,
+    IndirectDestinationEntrySchemaView, IndirectDestinationEntrySchemaViewMut, U32Word, U32WordRaw,
+    U32WordValues,
 };
 
-/// One validated ABI-v1 command backed by the generated descriptor value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AbiCommand(DescriptorSchemaValues);
-
 /// Canonical generated value representation of one indirect destination entry.
-pub type BroadcastDestinationEntry = IndirectDestinationEntrySchemaValues;
+pub type BroadcastDestinationEntry = IndirectDestinationEntrySchema;
 
 const DESTINATION_ENTRY_SIZE: usize = IndirectDestinationEntrySchema::SPEC.size();
 
 impl AbiCommand {
-    /// Creates a canonical linear-copy descriptor.
-    pub const fn copy(command_id: AbiId, values: DescriptorSchemaPayloadCopyValues) -> Self {
-        Self::from_payload(command_id, DescriptorSchemaPayloadValues::Copy(values))
-    }
-
-    /// Creates a canonical strided-copy descriptor.
-    pub const fn strided_copy(
-        command_id: AbiId,
-        values: DescriptorSchemaPayloadStridedCopyValues,
-    ) -> Self {
-        Self::from_payload(
-            command_id,
-            DescriptorSchemaPayloadValues::StridedCopy(values),
-        )
-    }
-
-    /// Creates a canonical indirect-broadcast descriptor.
-    ///
-    /// # Errors
-    /// Returns a typed error when the destination list is empty or unaligned.
-    pub fn try_broadcast_copy(
-        command_id: AbiId,
-        values: DescriptorSchemaPayloadBroadcastCopyValues,
-    ) -> Result<Self, DescriptorValueError> {
-        let payload = DescriptorSchemaPayloadValues::BroadcastCopy(values);
-        validate_payload(payload).map_err(DescriptorValueError::from)?;
-        Ok(Self::from_payload(command_id, payload))
-    }
-
-    /// Creates a canonical vector-add descriptor.
-    pub const fn vector_add(
-        command_id: AbiId,
-        values: DescriptorSchemaPayloadVectorAddValues,
-    ) -> Self {
-        Self::from_payload(command_id, DescriptorSchemaPayloadValues::VectorAdd(values))
-    }
-
-    const fn from_payload(command_id: AbiId, payload: DescriptorSchemaPayloadValues) -> Self {
-        Self(DescriptorSchemaValues {
-            header: DescriptorHeaderSchemaValues {
-                version: ABI_VERSION,
-                opcode: payload.tag(),
-                flags: DescriptorHeaderSchemaFlagsValues::ZERO,
-                command_id: command_id.raw(),
-            },
+    /// Creates a command from its identifier and generated payload case.
+    pub const fn from_payload(command_id: u64, payload: AbiCommandPayloadValues) -> Self {
+        Self::new(
+            AbiCommandHeader::new(
+                ABI_VERSION,
+                payload.tag(),
+                AbiCommandHeaderFlagsValues::ZERO,
+                command_id,
+            ),
             payload,
-        })
-    }
-
-    const fn from_validated_values(values: DescriptorSchemaValues) -> Self {
-        Self(values)
+        )
     }
 
     /// Encodes one command into a complete 64-byte descriptor.
@@ -98,13 +53,14 @@ impl AbiCommand {
     /// Returns a typed error when `bytes` is shorter than one descriptor.
     pub fn encode(self, bytes: &mut [u8]) -> Result<(), AbiEncodeError> {
         let actual = bytes.len();
-        let destination = bytes.get_mut(..DescriptorSchema::RECORD_SIZE).ok_or(
-            AbiEncodeError::BufferTooShort {
-                required: DescriptorSchema::RECORD_SIZE,
-                actual,
-            },
-        )?;
-        let raw = DescriptorSchemaRaw::try_from(self)?;
+        let destination =
+            bytes
+                .get_mut(..Self::RECORD_SIZE)
+                .ok_or(AbiEncodeError::BufferTooShort {
+                    required: Self::RECORD_SIZE,
+                    actual,
+                })?;
+        let raw = AbiCommandRaw::try_from(self).map_err(super::codec::encode_schema_error)?;
         destination.copy_from_slice(raw.as_bytes());
         Ok(())
     }
@@ -115,36 +71,26 @@ impl AbiCommand {
     /// Returns the first canonical validation failure.
     pub fn decode(bytes: &[u8]) -> Result<Self, DescriptorDecodeError> {
         let actual = bytes.len();
-        let source = bytes.get(..DescriptorSchema::RECORD_SIZE).ok_or_else(|| {
+        let source = bytes.get(..Self::RECORD_SIZE).ok_or_else(|| {
             DescriptorDecodeError::Codec(super::codec::decode_schema_error(
                 hardware_interface_schema::SchemaCodecError::BufferTooShort {
-                    required: DescriptorSchema::RECORD_SIZE,
+                    required: Self::RECORD_SIZE,
                     actual,
                 },
             ))
         })?;
-        let mut raw = [0_u8; DescriptorSchema::RECORD_SIZE];
+        let mut raw = [0_u8; Self::RECORD_SIZE];
         raw.copy_from_slice(source);
-        Self::try_from(DescriptorSchemaRaw::from(raw))
+        conversion::decode_validated(AbiCommandRaw::from(raw))
     }
 
     /// Fixed-width command identifier.
-    pub const fn command_id(self) -> AbiId {
-        AbiId::new(self.0.header.command_id)
-    }
-
-    /// Generated payload selected by the descriptor opcode.
-    pub const fn payload(self) -> DescriptorSchemaPayloadValues {
-        self.0.payload
-    }
-
-    /// Complete generated descriptor value.
-    pub const fn values(self) -> DescriptorSchemaValues {
-        self.0
+    pub const fn command_id(self) -> u64 {
+        self.header.command_id
     }
 }
 
-impl IndirectDestinationEntrySchemaValues {
+impl IndirectDestinationEntrySchema {
     /// Encodes one destination DMA address into an eight-byte list entry.
     ///
     /// # Errors
@@ -186,7 +132,7 @@ impl IndirectDestinationEntrySchemaValues {
     }
 
     /// Creates one entry from an absolute DMA address.
-    pub const fn new(address: DmaAddress) -> Self {
+    pub const fn from_address(address: DmaAddress) -> Self {
         Self {
             destination_dma_address: address.raw(),
         }
@@ -199,17 +145,17 @@ impl IndirectDestinationEntrySchemaValues {
 }
 
 const fn validate_payload(
-    payload: DescriptorSchemaPayloadValues,
+    payload: AbiCommandPayloadValues,
 ) -> Result<(), DescriptorPayloadViolation> {
     match payload {
-        DescriptorSchemaPayloadValues::Copy(_)
-        | DescriptorSchemaPayloadValues::StridedCopy(_)
-        | DescriptorSchemaPayloadValues::VectorAdd(_) => Ok(()),
-        DescriptorSchemaPayloadValues::BroadcastCopy(values) => {
-            if values.destination_count == 0 {
+        AbiCommandPayloadValues::Copy(_)
+        | AbiCommandPayloadValues::StridedCopy(_)
+        | AbiCommandPayloadValues::VectorAdd(_) => Ok(()),
+        AbiCommandPayloadValues::BroadcastCopy(values) => {
+            if values.destination_count.value == 0 {
                 return Err(DescriptorPayloadViolation::InvalidIndirectCount {
                     list: values.destination_list_dma_address,
-                    observed: values.destination_count,
+                    observed: values.destination_count.value,
                 });
             }
             if values.destination_list_dma_address % INDIRECT_ENTRY_ALIGNMENT != 0 {

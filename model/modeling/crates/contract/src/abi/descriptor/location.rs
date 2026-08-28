@@ -1,9 +1,9 @@
 use hardware_interface_schema::{SchemaCoordinate, SchemaLocation, SchemaMemberIdentity};
 
 use super::{
-    DescriptorHeaderSchema, DescriptorHeaderSchemaOpcode, DescriptorSchema,
-    DescriptorSchemaPayloadBroadcastCopyValues, DescriptorSchemaPayloadCopyValues,
-    DescriptorSchemaPayloadStridedCopyValues, DescriptorSchemaPayloadVectorAddValues,
+    AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode, AbiCommandPayloadBroadcastCopyValues,
+    AbiCommandPayloadCopyValues, AbiCommandPayloadStridedCopyValues,
+    AbiCommandPayloadVectorAddValues,
 };
 
 pub(in crate::abi) const fn location_offset(location: SchemaLocation) -> u64 {
@@ -16,21 +16,14 @@ pub(in crate::abi) const fn location_offset(location: SchemaLocation) -> u64 {
 }
 
 pub(in crate::abi) fn header_rank(location: SchemaLocation) -> Option<u64> {
-    if location
-        == DescriptorHeaderSchema::VERSION_IDENTITY.at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
-    {
+    if location == AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET) {
         Some(0)
-    } else if location
-        == DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET)
-    {
+    } else if location == AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET) {
         Some(1)
-    } else if location
-        == DescriptorHeaderSchema::OPCODE_IDENTITY.at_byte(DescriptorHeaderSchema::OPCODE_OFFSET)
+    } else if location == AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET)
     {
         Some(2)
-    } else if location
-        == DescriptorHeaderSchema::FLAGS_IDENTITY.at_byte(DescriptorHeaderSchema::FLAGS_OFFSET)
-    {
+    } else if location == AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET) {
         Some(3)
     } else {
         None
@@ -38,24 +31,24 @@ pub(in crate::abi) fn header_rank(location: SchemaLocation) -> Option<u64> {
 }
 
 pub(in crate::abi) fn is_reserved_location(
-    opcode: DescriptorHeaderSchemaOpcode,
+    opcode: AbiCommandHeaderOpcode,
     location: SchemaLocation,
 ) -> bool {
-    if location.identity() != DescriptorSchema::PAYLOAD_IDENTITY {
+    if location.identity() != AbiCommand::PAYLOAD_IDENTITY {
         return false;
     }
     let SchemaCoordinate::Byte(offset) = location.coordinate() else {
         return false;
     };
     match opcode {
-        DescriptorHeaderSchemaOpcode::Copy => {
-            offset == DescriptorSchema::WORD3_OFFSET
-                || offset == DescriptorSchema::WORD4_OFFSET
-                || offset == DescriptorSchema::WORD5_OFFSET
+        AbiCommandHeaderOpcode::Copy => {
+            offset == AbiCommand::WORD3_OFFSET
+                || offset == AbiCommand::WORD4_OFFSET
+                || offset == AbiCommand::WORD5_OFFSET
         }
-        DescriptorHeaderSchemaOpcode::StridedCopy => false,
-        DescriptorHeaderSchemaOpcode::BroadcastCopy | DescriptorHeaderSchemaOpcode::VectorAdd => {
-            offset == DescriptorSchema::WORD4_OFFSET || offset == DescriptorSchema::WORD5_OFFSET
+        AbiCommandHeaderOpcode::StridedCopy => false,
+        AbiCommandHeaderOpcode::BroadcastCopy | AbiCommandHeaderOpcode::VectorAdd => {
+            offset == AbiCommand::WORD4_OFFSET || offset == AbiCommand::WORD5_OFFSET
         }
     }
 }
@@ -63,33 +56,54 @@ pub(in crate::abi) fn is_reserved_location(
 pub(in crate::abi) fn is_narrowing_location(location: SchemaLocation) -> bool {
     is_at(
         location,
-        DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY,
-        DescriptorSchema::WORD2_OFFSET,
+        AbiCommandPayloadCopyValues::LENGTH_IDENTITY,
+        AbiCommand::WORD2_OFFSET,
     ) || is_at(
         location,
-        DescriptorSchemaPayloadStridedCopyValues::ROWS_IDENTITY,
-        DescriptorSchema::WORD2_OFFSET,
+        AbiCommandPayloadStridedCopyValues::ROWS_IDENTITY,
+        AbiCommand::WORD2_OFFSET,
     ) || is_at(
         location,
-        DescriptorSchemaPayloadStridedCopyValues::ROW_BYTES_IDENTITY,
-        DescriptorSchema::WORD3_OFFSET,
+        AbiCommandPayloadStridedCopyValues::ROW_BYTES_IDENTITY,
+        AbiCommand::WORD3_OFFSET,
     ) || is_at(
         location,
-        DescriptorSchemaPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY,
-        DescriptorSchema::WORD4_OFFSET,
+        AbiCommandPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY,
+        AbiCommand::WORD4_OFFSET,
     ) || is_at(
         location,
-        DescriptorSchemaPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY,
-        DescriptorSchema::WORD5_OFFSET,
+        AbiCommandPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY,
+        AbiCommand::WORD5_OFFSET,
     ) || is_at(
         location,
-        DescriptorSchemaPayloadBroadcastCopyValues::LENGTH_IDENTITY,
-        DescriptorSchema::WORD2_OFFSET,
+        AbiCommandPayloadBroadcastCopyValues::LENGTH_IDENTITY,
+        AbiCommand::WORD2_OFFSET,
     ) || is_at(
         location,
-        DescriptorSchemaPayloadVectorAddValues::LENGTH_IDENTITY,
-        DescriptorSchema::WORD3_OFFSET,
+        AbiCommandPayloadVectorAddValues::LENGTH_IDENTITY,
+        AbiCommand::WORD3_OFFSET,
     )
+}
+
+pub(in crate::abi) fn canonical_value_location(location: SchemaLocation) -> Option<SchemaLocation> {
+    let identity = location.identity();
+    if identity == AbiCommandPayloadCopyValues::LENGTH_IDENTITY
+        || identity == AbiCommandPayloadStridedCopyValues::ROWS_IDENTITY
+        || identity == AbiCommandPayloadBroadcastCopyValues::LENGTH_IDENTITY
+    {
+        Some(identity.at_byte(AbiCommand::WORD2_OFFSET))
+    } else if identity == AbiCommandPayloadStridedCopyValues::ROW_BYTES_IDENTITY
+        || identity == AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+        || identity == AbiCommandPayloadVectorAddValues::LENGTH_IDENTITY
+    {
+        Some(identity.at_byte(AbiCommand::WORD3_OFFSET))
+    } else if identity == AbiCommandPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY {
+        Some(identity.at_byte(AbiCommand::WORD4_OFFSET))
+    } else if identity == AbiCommandPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY {
+        Some(identity.at_byte(AbiCommand::WORD5_OFFSET))
+    } else {
+        None
+    }
 }
 
 pub(in crate::abi) fn is_scalar_location(location: SchemaLocation) -> bool {
@@ -101,39 +115,36 @@ pub(in crate::abi) fn is_scalar_location(location: SchemaLocation) -> bool {
 pub(in crate::abi) fn is_indirect_count_location(location: SchemaLocation) -> bool {
     is_at(
         location,
-        DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY,
-        DescriptorSchema::WORD3_OFFSET,
+        AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY,
+        AbiCommand::WORD3_OFFSET,
     )
 }
 
 pub(in crate::abi) fn is_indirect_alignment_location(location: SchemaLocation) -> bool {
     is_at(
         location,
-        DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY,
-        DescriptorSchema::WORD1_OFFSET,
+        AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY,
+        AbiCommand::WORD1_OFFSET,
     )
 }
 
-pub(in crate::abi) fn scalar_opcode(
-    location: SchemaLocation,
-) -> Option<DescriptorHeaderSchemaOpcode> {
+pub(in crate::abi) fn scalar_opcode(location: SchemaLocation) -> Option<AbiCommandHeaderOpcode> {
     let identity = location.identity();
-    if identity == DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY {
-        Some(DescriptorHeaderSchemaOpcode::Copy)
-    } else if identity == DescriptorSchemaPayloadStridedCopyValues::ROWS_IDENTITY
-        || identity == DescriptorSchemaPayloadStridedCopyValues::ROW_BYTES_IDENTITY
-        || identity == DescriptorSchemaPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
-        || identity == DescriptorSchemaPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
+    if identity == AbiCommandPayloadCopyValues::LENGTH_IDENTITY {
+        Some(AbiCommandHeaderOpcode::Copy)
+    } else if identity == AbiCommandPayloadStridedCopyValues::ROWS_IDENTITY
+        || identity == AbiCommandPayloadStridedCopyValues::ROW_BYTES_IDENTITY
+        || identity == AbiCommandPayloadStridedCopyValues::SOURCE_STRIDE_IDENTITY
+        || identity == AbiCommandPayloadStridedCopyValues::DESTINATION_STRIDE_IDENTITY
     {
-        Some(DescriptorHeaderSchemaOpcode::StridedCopy)
-    } else if identity == DescriptorSchemaPayloadBroadcastCopyValues::LENGTH_IDENTITY
-        || identity == DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-        || identity
-            == DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+        Some(AbiCommandHeaderOpcode::StridedCopy)
+    } else if identity == AbiCommandPayloadBroadcastCopyValues::LENGTH_IDENTITY
+        || identity == AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+        || identity == AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
     {
-        Some(DescriptorHeaderSchemaOpcode::BroadcastCopy)
-    } else if identity == DescriptorSchemaPayloadVectorAddValues::LENGTH_IDENTITY {
-        Some(DescriptorHeaderSchemaOpcode::VectorAdd)
+        Some(AbiCommandHeaderOpcode::BroadcastCopy)
+    } else if identity == AbiCommandPayloadVectorAddValues::LENGTH_IDENTITY {
+        Some(AbiCommandHeaderOpcode::VectorAdd)
     } else {
         None
     }
@@ -144,10 +155,10 @@ pub(in crate::abi) fn scalar_rank(location: SchemaLocation) -> Option<u64> {
         return None;
     }
     if location.identity()
-        == DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+        == AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
     {
         Some(location_offset(
-            DescriptorSchema::PAYLOAD_IDENTITY.at_byte(DescriptorSchema::WORD4_OFFSET),
+            AbiCommand::PAYLOAD_IDENTITY.at_byte(AbiCommand::WORD4_OFFSET),
         ))
     } else {
         Some(location_offset(location))

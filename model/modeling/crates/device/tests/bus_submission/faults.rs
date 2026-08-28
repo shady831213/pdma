@@ -1,7 +1,7 @@
 use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId,
-    DescriptorSchemaPayloadCopyValues, DmaAddress, MAX_INDIRECT_DESTINATIONS, RingCursor,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiEventAccess, AbiEventKind,
+    AbiEventStage, DmaAddress, MAX_INDIRECT_DESTINATIONS, RingCursor,
 };
 use pdma_model_contract::semantic::ResourceConfig;
 
@@ -32,13 +32,13 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
         .handle
         .write_memory(source.base(), &[1, 2, 3, 4])
         .await?;
-    let mut bytes = encode(AbiCommand::copy(
-        AbiId::new(20),
-        DescriptorSchemaPayloadCopyValues {
+    let mut bytes = encode(AbiCommand::from_payload(
+        20,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
             source_dma_address: source.base().raw(),
             destination_dma_address: destination.base().raw(),
-            length: 4,
-        },
+            length: 4.into(),
+        }),
     ))?;
     bytes[40] = 1;
     let slot = malformed.submission;
@@ -70,13 +70,13 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
         .await?;
     let result = run_descriptor(
         starved,
-        encode(AbiCommand::copy(
-            AbiId::new(21),
-            DescriptorSchemaPayloadCopyValues {
+        encode(AbiCommand::from_payload(
+            21,
+            AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
                 source_dma_address: source.base().raw(),
                 destination_dma_address: destination.base().raw(),
-                length: 4,
-            },
+                length: 4.into(),
+            }),
         ))?,
         &[destination],
     )
@@ -99,13 +99,13 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
         .await?;
     let list = allocate(&fixture.handle, 8).await?;
     let (list_base, count) = list_fields(case, list);
-    let mut bytes = encode(AbiCommand::copy(
-        AbiId::new(30),
-        DescriptorSchemaPayloadCopyValues {
+    let mut bytes = encode(AbiCommand::from_payload(
+        30,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
             source_dma_address: source.base().raw(),
             destination_dma_address: source.base().raw(),
-            length: 4,
-        },
+            length: 4.into(),
+        }),
     ))?;
     bytes[2..4].copy_from_slice(&3_u16.to_le_bytes());
     bytes[24..32].copy_from_slice(&list_base.raw().to_le_bytes());

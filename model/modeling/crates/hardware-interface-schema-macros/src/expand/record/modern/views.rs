@@ -15,7 +15,7 @@ pub(super) fn expand(
 ) -> TokenStream {
     let marker = &decl.name;
     let visibility = &decl.visibility;
-    let values = format_ident!("{marker}Values");
+    let values = marker;
     let view = format_ident!("{marker}View");
     let view_mut = format_ident!("{marker}ViewMut");
     let immutable_getters = plan
@@ -119,15 +119,19 @@ fn getters(
                 <#path as #facade::RecordLayout>::view(bytes)
             }
         }],
-        ModernTypeDecl::Union(union) => union_geometry(union).map_or_else(Vec::new, |geometry| {
-            (0..geometry.slots)
-                .map(|index| {
-                    let method = format_ident!("word{index}");
-                    let relative = index * geometry.storage.width();
-                    raw_scalar::getter(scalar_context, &method, (relative, geometry.storage))
-                })
-                .collect()
-        }),
+        ModernTypeDecl::Union(union) => {
+            union_geometry(union, facade).map_or_else(Vec::new, |geometry| {
+                let width = &geometry.storage.width;
+                let ty = &geometry.storage.ty;
+                (0..geometry.slots)
+                    .map(|index| {
+                        let method = format_ident!("word{index}");
+                        let relative = quote!((#index).saturating_mul(#width));
+                        raw_scalar::dynamic_getter(scalar_context, &method, &relative, ty, width)
+                    })
+                    .collect()
+            })
+        }
     }
 }
 
@@ -177,14 +181,18 @@ fn setters(
                 }
             }]
         }
-        ModernTypeDecl::Union(union) => union_geometry(union).map_or_else(Vec::new, |geometry| {
-            (0..geometry.slots)
-                .map(|index| {
-                    let method = format_ident!("word{index}");
-                    let relative = index * geometry.storage.width();
-                    raw_scalar::setter(scalar_context, &method, (relative, geometry.storage))
-                })
-                .collect()
-        }),
+        ModernTypeDecl::Union(union) => {
+            union_geometry(union, facade).map_or_else(Vec::new, |geometry| {
+                let width = &geometry.storage.width;
+                let ty = &geometry.storage.ty;
+                (0..geometry.slots)
+                    .map(|index| {
+                        let method = format_ident!("word{index}");
+                        let relative = quote!((#index).saturating_mul(#width));
+                        raw_scalar::dynamic_setter(scalar_context, &method, &relative, ty, width)
+                    })
+                    .collect()
+            })
+        }
     }
 }

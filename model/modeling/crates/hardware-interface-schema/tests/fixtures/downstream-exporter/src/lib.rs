@@ -10,7 +10,7 @@ use his::{
     register_schema,
 };
 
-bits_schema! { pub bits DownControlBits { enable: 0..1, mode: 1..3, } }
+bits_schema! { pub bits DownControlBits(u8) { enable: 0..1, mode: 1..3, } }
 record_schema! { pub record DownControlRecord { endian: Little, fields: {
     flags: bits(DownControlBits),
 } } }
@@ -247,7 +247,7 @@ pub fn composable_output_line() -> Option<String> {
     map.lane_mut().ok()?.status_mut().ok()?.set_value(0x1234).ok()?;
     let map = DownMapView::new(&registers).ok()?;
     let control = map.control().ok()?.fields().ok()?;
-    let bits = DownControlRecordValues { flags }.to_bytes().ok()?;
+    let bits = DownControlRecord { flags }.to_bytes().ok()?;
     let status = map.lane().ok()?.status().ok()?.value().ok()?;
     Some(format!(
         "nested={nested:02x?};le={:02x?};be={:02x?};bits={bits:02x?};left={left:#010x};enable={};mode={};status={status:#06x}",

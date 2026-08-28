@@ -1,8 +1,6 @@
 //! Canonical numeric registry for PDMA ABI version 1.
 
-use super::descriptor::{
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, IndirectDestinationEntrySchema,
-};
+use super::descriptor::{AbiCommand, AbiCommandHeaderOpcode, IndirectDestinationEntrySchema};
 use super::record::{CompletionSchema, EventSchema};
 use super::{AbiControlError, AbiDecodeError};
 
@@ -15,7 +13,7 @@ pub type FieldSpec = hardware_interface_schema::FieldSpec;
 pub const ABI_VERSION: u16 = 1;
 
 /// Descriptor record width in bytes.
-pub const DESCRIPTOR_SIZE: u16 = fixed_record_size(DescriptorSchema::SPEC.size());
+pub const DESCRIPTOR_SIZE: u16 = fixed_record_size(AbiCommand::SPEC.size());
 /// Completion record width in bytes.
 pub const COMPLETION_SIZE: u16 = fixed_record_size(CompletionSchema::SPEC.size());
 /// Event record width in bytes.
@@ -25,7 +23,7 @@ pub const INDIRECT_DESTINATION_ENTRY_SIZE: u16 =
     fixed_record_size(IndirectDestinationEntrySchema::SPEC.size());
 
 /// Required descriptor base alignment.
-pub const DESCRIPTOR_ALIGNMENT: u64 = DescriptorSchema::SPEC.alignment() as u64;
+pub const DESCRIPTOR_ALIGNMENT: u64 = AbiCommand::SPEC.alignment() as u64;
 /// Required completion-ring base alignment.
 pub const COMPLETION_ALIGNMENT: u64 = CompletionSchema::SPEC.alignment() as u64;
 /// Required event-ring base alignment.
@@ -79,13 +77,13 @@ pub const fn validate_abi_version(version: u16) -> Result<(), AbiControlError> {
 }
 
 /// Copy descriptor opcode.
-pub const COPY_OPCODE: u16 = DescriptorHeaderSchemaOpcode::Copy.raw();
+pub const COPY_OPCODE: u16 = AbiCommandHeaderOpcode::Copy.raw();
 /// Strided-copy descriptor opcode.
-pub const STRIDED_COPY_OPCODE: u16 = DescriptorHeaderSchemaOpcode::StridedCopy.raw();
+pub const STRIDED_COPY_OPCODE: u16 = AbiCommandHeaderOpcode::StridedCopy.raw();
 /// Broadcast-copy descriptor opcode.
-pub const BROADCAST_COPY_OPCODE: u16 = DescriptorHeaderSchemaOpcode::BroadcastCopy.raw();
+pub const BROADCAST_COPY_OPCODE: u16 = AbiCommandHeaderOpcode::BroadcastCopy.raw();
 /// Vector-add descriptor opcode.
-pub const VECTOR_ADD_OPCODE: u16 = DescriptorHeaderSchemaOpcode::VectorAdd.raw();
+pub const VECTOR_ADD_OPCODE: u16 = AbiCommandHeaderOpcode::VectorAdd.raw();
 
 /// Descriptor flags accepted by ABI v1.
 pub const DESCRIPTOR_FLAGS_MASK: u16 = 0;
@@ -222,7 +220,7 @@ pub const EVENT_ACCESSES: [NamedValue; 3] = [
 ];
 
 /// Canonical ABI-v1 descriptor record.
-pub const DESCRIPTOR: RecordSpec = DescriptorSchema::SPEC;
+pub const DESCRIPTOR: RecordSpec = AbiCommand::SPEC;
 
 /// Canonical ABI-v1 completion record.
 pub const COMPLETION: RecordSpec = CompletionSchema::SPEC;

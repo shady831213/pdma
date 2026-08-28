@@ -17,7 +17,7 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
     let facade = crate_path::facade()?;
     let marker = &decl.name;
     let visibility = &decl.visibility;
-    let values_name = format_ident!("{marker}Values");
+    let values_name = marker;
     let view_name = format_ident!("{marker}View");
     let view_mut_name = format_ident!("{marker}ViewMut");
     let plan = layout::RecordPlan::new(decl, &facade);
@@ -51,9 +51,6 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
     let marker_name = marker.to_string();
     Ok(quote! {
         #(#type_items)*
-        #[doc = "Marker and metadata namespace for the generated inferred record."]
-        #[derive(Clone, Copy, Debug)]
-        #visibility struct #marker;
         #metadata
         #values
         #views

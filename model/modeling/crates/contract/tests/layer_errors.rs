@@ -1,7 +1,7 @@
 //! Contract error boundary tests.
 
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiCommand, AbiDecodeError, DescriptorDecodeError, DescriptorHeaderSchema,
+    ABI_VERSION, AbiCommand, AbiCommandHeader, AbiDecodeError, DescriptorDecodeError,
     DescriptorViolationKind,
 };
 use pdma_model_contract::semantic::SemanticError;
@@ -32,8 +32,8 @@ fn descriptor_version_precedes_opcode_for_literal_malformed_bytes() {
         error,
         DescriptorDecodeError::Violation(violation)
             if violation.kind() == DescriptorViolationKind::Header(
-                DescriptorHeaderSchema::VERSION_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET)
+                AbiCommandHeader::VERSION_IDENTITY
+                    .at_byte(AbiCommandHeader::VERSION_OFFSET)
             )
                 && violation.observed() == u64::from(ABI_VERSION + 1)
                 && violation.expected() == u64::from(ABI_VERSION)

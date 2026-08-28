@@ -12,7 +12,9 @@ mod union;
 
 pub(in crate::internal) use bits::{BitsDecl, BitsTypeDecl};
 pub(in crate::internal) use enumeration::EnumDecl;
-pub(in crate::internal) use union::{ScopedPath, UnionCaseDecl, UnionDecl, UnionFieldDecl};
+pub(in crate::internal) use union::{
+    ScopedPath, UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,
+};
 
 pub(in crate::internal) struct ModernRecordDecl {
     pub(in crate::internal) visibility: Visibility,

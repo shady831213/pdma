@@ -6,7 +6,7 @@ use crate::runner::abi::bus::PdmaControlError;
 use crate::runner::abi::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiId, DescriptorDecodeError, DescriptorSchemaView, ExactAbiEvent, RingRecord,
+    AbiCommand, AbiCommandView, DescriptorDecodeError, ExactAbiEvent, RingRecord,
 };
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
@@ -45,7 +45,7 @@ pub(super) fn fetch(
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let (exact_command_id, command_id) = command_id(&bytes)?;
     let exact_queue_id =
-        AbiId::try_from(queue_id.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
+        u64::try_from(queue_id.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
     match AbiCommand::decode(&bytes) {
         Ok(command) => command::resolve(
             dma_space,
@@ -91,13 +91,13 @@ pub(super) fn has_pending(control: &BusControlState, queue_id: QueueId) -> bool 
         .is_ok_and(|active| active.submission.consumer() < active.captured_submission_producer)
 }
 
-fn command_id(bytes: &[u8]) -> ModelResult<(AbiId, CommandId)> {
-    let view = DescriptorSchemaView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
+fn command_id(bytes: &[u8]) -> ModelResult<(u64, CommandId)> {
+    let view = AbiCommandView::new(bytes).map_err(|_| ModelError::DmaSubmissionState)?;
     let raw = view
         .header()
         .and_then(|header| header.command_id())
         .map_err(|_| ModelError::DmaSubmissionState)?;
     usize::try_from(raw)
-        .map(|model| (AbiId::new(raw), CommandId::new(model)))
+        .map(|model| (raw, CommandId::new(model)))
         .map_err(|_| ModelError::DmaSubmissionState)
 }

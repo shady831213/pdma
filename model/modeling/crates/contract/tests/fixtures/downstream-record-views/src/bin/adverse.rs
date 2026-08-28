@@ -1,7 +1,7 @@
 use pdma_model_contract::abi::{
-    ABI_VERSION, AbiCommand, DESCRIPTOR_SIZE, DescriptorDecodeError, DescriptorHeaderSchema,
-    DescriptorHeaderSchemaOpcode, DescriptorSchema, DescriptorSchemaPayloadBroadcastCopyValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaViewMut, DescriptorViolationKind,
+    ABI_VERSION, AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode,
+    AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues, AbiCommandViewMut,
+    DESCRIPTOR_SIZE, DescriptorDecodeError, DescriptorViolationKind,
 };
 
 const COPY: [u8; 64] = [
@@ -52,32 +52,32 @@ fn main() {
     set_u64(&mut alignment, 24, 0x2003);
     set_u64(&mut alignment, 40, 1);
     let version_kind = DescriptorViolationKind::Header(
-        DescriptorHeaderSchema::VERSION_IDENTITY.at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+        AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
     );
     let size_kind = DescriptorViolationKind::Header(
-        DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
+        AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET),
     );
     let opcode_kind = DescriptorViolationKind::Header(
-        DescriptorHeaderSchema::OPCODE_IDENTITY.at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+        AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET),
     );
     let flags_kind = DescriptorViolationKind::Header(
-        DescriptorHeaderSchema::FLAGS_IDENTITY.at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+        AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET),
     );
     let reserved_kind = DescriptorViolationKind::Reserved {
-        opcode: DescriptorHeaderSchemaOpcode::Copy,
-        location: DescriptorSchema::PAYLOAD_IDENTITY.at_byte(DescriptorSchema::WORD3_OFFSET),
+        opcode: AbiCommandHeaderOpcode::Copy,
+        location: AbiCommand::PAYLOAD_IDENTITY.at_byte(AbiCommand::WORD3_OFFSET),
     };
     let scalar_kind = DescriptorViolationKind::Scalar(
-        DescriptorSchemaPayloadCopyValues::LENGTH_IDENTITY
-            .at_byte(DescriptorSchema::WORD2_OFFSET),
+        AbiCommandPayloadCopyValues::LENGTH_IDENTITY
+            .at_byte(AbiCommand::WORD2_OFFSET),
     );
     let count_kind = DescriptorViolationKind::Scalar(
-        DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
-            .at_byte(DescriptorSchema::WORD3_OFFSET),
+        AbiCommandPayloadBroadcastCopyValues::DESTINATION_COUNT_IDENTITY
+            .at_byte(AbiCommand::WORD3_OFFSET),
     );
     let alignment_kind = DescriptorViolationKind::Scalar(
-        DescriptorSchemaPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
-            .at_byte(DescriptorSchema::WORD1_OFFSET),
+        AbiCommandPayloadBroadcastCopyValues::DESTINATION_LIST_DMA_ADDRESS_IDENTITY
+            .at_byte(AbiCommand::WORD1_OFFSET),
     );
     let observed = [
         matches!(AbiCommand::decode(&COPY[..63]), Err(DescriptorDecodeError::Codec(_))),
@@ -93,7 +93,7 @@ fn main() {
     assert!(observed.into_iter().all(|value| value));
     let mut destination = [0x5a_u8; 63];
     let before = destination;
-    let write = DescriptorSchemaViewMut::new(&mut destination).and_then(|mut view| {
+    let write = AbiCommandViewMut::new(&mut destination).and_then(|mut view| {
         let mut header = view.header_mut()?;
         header.set_version(ABI_VERSION)
     });

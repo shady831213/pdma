@@ -1,7 +1,13 @@
-use hardware_interface_schema::record_schema;
+use hardware_interface_schema::{bits_schema, record_schema};
+
+bits_schema! {
+    pub bits U32Word(u64) {
+        value: 0..32,
+    }
+}
 
 record_schema! {
-    pub record DescriptorHeaderSchema {
+    pub record AbiCommandHeader {
         endian: Little,
         fields: {
             version: u16,
@@ -16,45 +22,45 @@ record_schema! {
             flags: bits(u16) {
                 fields: {},
             },
-            size: u16 { const: DescriptorSchema::record_size },
+            size: u16 { const: AbiCommand::record_size },
             command_id: u64,
         },
     }
 }
 
 record_schema! {
-    pub record DescriptorSchema {
+    pub record AbiCommand {
         alignment: 64,
         endian: Little,
         fields: {
-            header: DescriptorHeaderSchema,
+            header: AbiCommandHeader,
             payload: union {
                 tag: self.header.opcode,
                 cases: {
                     Copy {
                         source_dma_address: u64,
                         destination_dma_address: u64,
-                        length: u32 { storage: u64 },
+                        length: U32Word,
                     },
                     StridedCopy {
                         source_dma_address: u64,
                         destination_dma_address: u64,
-                        rows: u32 { storage: u64 },
-                        row_bytes: u32 { storage: u64 },
-                        source_stride: u32 { storage: u64 },
-                        destination_stride: u32 { storage: u64 },
+                        rows: U32Word,
+                        row_bytes: U32Word,
+                        source_stride: U32Word,
+                        destination_stride: U32Word,
                     },
                     BroadcastCopy {
                         source_dma_address: u64,
                         destination_list_dma_address: u64,
-                        length: u32 { storage: u64 },
-                        destination_count: u32 { storage: u64 },
+                        length: U32Word,
+                        destination_count: U32Word,
                     },
                     VectorAdd {
                         source_a_dma_address: u64,
                         source_b_dma_address: u64,
                         destination_dma_address: u64,
-                        length: u32 { storage: u64 },
+                        length: U32Word,
                     },
                 },
             },

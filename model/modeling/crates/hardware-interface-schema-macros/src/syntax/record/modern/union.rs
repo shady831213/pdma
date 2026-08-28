@@ -1,4 +1,4 @@
-use syn::{Ident, Result, Token, braced, parse::Parse, parse::ParseStream};
+use syn::{Ident, Path, Result, Token, braced, parse::Parse, parse::ParseStream};
 
 use super::ScalarType;
 use crate::internal::syntax::key;
@@ -20,8 +20,12 @@ pub(in crate::internal) struct UnionCaseDecl {
 
 pub(in crate::internal) struct UnionFieldDecl {
     pub(in crate::internal) name: Ident,
-    pub(in crate::internal) scalar: ScalarType,
-    pub(in crate::internal) storage: ScalarType,
+    pub(in crate::internal) ty: UnionFieldType,
+}
+
+pub(in crate::internal) enum UnionFieldType {
+    Scalar(ScalarType),
+    Bits(Path),
 }
 
 impl Parse for UnionDecl {
@@ -79,19 +83,13 @@ impl Parse for UnionFieldDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let name = input.parse()?;
         input.parse::<Token![:]>()?;
-        let scalar = ScalarType::parse(input)?;
-        let storage = if input.peek(syn::token::Brace) {
-            let props;
-            braced!(props in input);
-            key(&props, "storage")?;
-            ScalarType::parse(&props)?
+        let probe = input.fork();
+        let ty = if let Ok(scalar) = ScalarType::parse(&probe) {
+            let _ = ScalarType::parse(input)?;
+            UnionFieldType::Scalar(scalar)
         } else {
-            scalar
+            UnionFieldType::Bits(input.parse()?)
         };
-        Ok(Self {
-            name,
-            scalar,
-            storage,
-        })
+        Ok(Self { name, ty })
     }
 }

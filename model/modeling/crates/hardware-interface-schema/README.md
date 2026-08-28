@@ -89,7 +89,7 @@ use hardware_interface_schema::{bits_schema, record_schema, register_schema};
 # };
 
 bits_schema! {
-    pub bits CommonFlags {
+    pub bits CommonFlags(u16) {
         ready: 0..1,
         mode: 8..12,
     }
@@ -115,7 +115,7 @@ register_schema! {
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 let flags = CommonFlagsValues { ready: true, mode: 5 };
-assert_eq!(FlagRecordValues { flags }.to_bytes()?, [0x05, 0x01]);
+assert_eq!(FlagRecord { flags }.to_bytes()?, [0x05, 0x01]);
 let mut register = [0xf0, 0xa0, 0x5a, 0xc3];
 FlagRegisterViewMut::new(&mut register)?.set_fields(flags)?;
 assert_eq!(register, [0xf1, 0xa5, 0x5a, 0xc3]);
@@ -183,10 +183,10 @@ hardware_interface_schema::register_map! {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let packet = PacketValues { sequence: 0x1122_3344, code: 0x5566 };
+    let packet = Packet { sequence: 0x1122_3344, code: 0x5566 };
     let packet_bytes = packet.to_bytes()?;
     assert_eq!(packet_bytes, [0x44, 0x33, 0x22, 0x11, 0x66, 0x55, 0, 0]);
-    assert_eq!(PacketValues::from_bytes(&packet_bytes)?, packet);
+    assert_eq!(Packet::from_bytes(&packet_bytes)?, packet);
     assert_eq!(Packet::SPEC.validate(), Ok(()));
     let values = DeviceMapValues {
         status: StatusValues::new(7),
@@ -202,7 +202,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Generated record marker types expose `SPEC`, offset constants, immutable/mutable
+Generated record value types expose `SPEC`, offset constants, immutable/mutable
 checked views, a composable `RecordLayout`, and a generated `*Values` owned codec.
 Explicit fixed records additionally expose stable field-ID types. Ordered maps expose
 typed placement metadata, checked nested views, and the same owned-codec surface.

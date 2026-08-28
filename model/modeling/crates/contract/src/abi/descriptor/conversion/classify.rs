@@ -1,20 +1,20 @@
 use hardware_interface_schema::SchemaCodecError;
 
-use crate::abi::{DescriptorHeaderSchemaOpcode, DmaAddress, codec::decode_schema_error};
+use crate::abi::{AbiCommandHeaderOpcode, DmaAddress, codec::decode_schema_error};
 
 use super::super::{
-    DescriptorDecodeError, DescriptorViolation, is_indirect_count_location, is_narrowing_location,
-    is_reserved_location,
+    DescriptorDecodeError, DescriptorViolation, canonical_value_location,
+    is_indirect_count_location, is_narrowing_location, is_reserved_location,
 };
 
 #[derive(Clone, Copy)]
 pub(super) struct DescriptorContext {
-    opcode: DescriptorHeaderSchemaOpcode,
+    opcode: AbiCommandHeaderOpcode,
     list: DmaAddress,
 }
 
 impl DescriptorContext {
-    pub(super) const fn new(opcode: DescriptorHeaderSchemaOpcode, list: DmaAddress) -> Self {
+    pub(super) const fn new(opcode: AbiCommandHeaderOpcode, list: DmaAddress) -> Self {
         Self { opcode, list }
     }
 }
@@ -28,15 +28,31 @@ pub(super) fn descriptor_schema_error(
             DescriptorDecodeError::Codec(decode_schema_error(error))
         }
         SchemaCodecError::NonZeroReserved { location, observed } => {
-            if is_reserved_location(context.opcode, location) {
-                DescriptorDecodeError::Violation(DescriptorViolation::reserved(
-                    context.opcode,
-                    location,
-                    observed,
-                ))
-            } else {
-                DescriptorDecodeError::MetadataMismatch
-            }
+            canonical_value_location(location).map_or_else(
+                || {
+                    if is_reserved_location(context.opcode, location) {
+                        DescriptorDecodeError::Violation(DescriptorViolation::reserved(
+                            context.opcode,
+                            location,
+                            observed,
+                        ))
+                    } else {
+                        DescriptorDecodeError::MetadataMismatch
+                    }
+                },
+                |location| {
+                    if is_indirect_count_location(location) {
+                        DescriptorDecodeError::Violation(DescriptorViolation::indirect_count(
+                            context.list,
+                            observed,
+                        ))
+                    } else {
+                        DescriptorDecodeError::Violation(DescriptorViolation::scalar(
+                            location, observed,
+                        ))
+                    }
+                },
+            )
         }
         SchemaCodecError::NarrowingOverflow {
             location,

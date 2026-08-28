@@ -68,20 +68,37 @@ pub(super) fn expand(
 ) -> syn::Result<TokenStream> {
     let name = scalar::type_name(&record.name, field, "Values");
     let raw_name = scalar::type_name(&record.name, field, "Raw");
-    let Some(geometry) = union_geometry(decl) else {
+    let Some(geometry) = union_geometry(decl, facade) else {
         return Err(syn::Error::new(field.span(), "union has no storage"));
     };
-    let storage = geometry.storage;
-    let quantum = storage.width();
+    let storage = &geometry.storage;
+    let quantum = &storage.width;
     let slots = geometry.slots;
-    let extent = quantum * slots;
+    let extent = &geometry.extent;
     let root = quote!(value);
+    let storage_assertions = decl.cases.iter().flat_map(|case| {
+        case.fields.iter().map(|field| {
+            let width = match &field.ty {
+                crate::internal::syntax::UnionFieldType::Scalar(scalar_type) => {
+                    let width = scalar_type.width();
+                    quote!(#width)
+                }
+                crate::internal::syntax::UnionFieldType::Bits(path) => {
+                    quote!(<#path as #facade::BitsLayout>::EXTENT)
+                }
+            };
+            quote!(
+                const _: () =
+                    assert!(#width == #quantum, "union fields must use one container width");
+            )
+        })
+    });
     let tag = tag_info(record, &decl.tag, &root)?;
     let tag_type = &tag.ty;
     let case_declarations = decl
         .cases
         .iter()
-        .map(|case| case_declaration(record, field, case, visibility));
+        .map(|case| case_declaration(record, field, case, visibility, facade));
     let case_identities = decl.cases.iter().map(|case| {
         let case_type = case_type(record, field, &case.name);
         identity::expand(&case_type, &case.fields, facade)
@@ -123,6 +140,7 @@ pub(super) fn expand(
         facade,
     });
     Ok(quote! {
+        #(#storage_assertions)*
         #(#case_declarations)*
         #(#case_identities)*
         #[doc = "Generated semantic tagged-union value."]
@@ -155,24 +173,69 @@ fn case_declaration(
     field: &syn::Ident,
     case: &UnionCaseDecl,
     visibility: &syn::Visibility,
+    facade: &TokenStream,
 ) -> TokenStream {
     let case_type = case_type(record, field, &case.name);
     let fields = case.fields.iter().map(|field| {
         let name = &field.name;
-        let ty = scalar::ty(field.scalar);
-        quote!(#[doc = "Generated semantic union-case field."] #visibility #name: #ty)
+        let ty = match &field.ty {
+            crate::internal::syntax::UnionFieldType::Scalar(scalar_type) => {
+                scalar::ty(*scalar_type)
+            }
+            crate::internal::syntax::UnionFieldType::Bits(path) => {
+                quote!(<#path as #facade::BitsLayout>::Value)
+            }
+        };
+        quote!(#[doc = "Generated semantic union-case field."] pub #name: #ty)
+    });
+    let constructor_parameters = case.fields.iter().map(|field| {
+        let name = &field.name;
+        let ty = match &field.ty {
+            crate::internal::syntax::UnionFieldType::Scalar(scalar_type) => {
+                scalar::ty(*scalar_type)
+            }
+            crate::internal::syntax::UnionFieldType::Bits(path) => {
+                quote!(<#path as #facade::BitsLayout>::Value)
+            }
+        };
+        quote!(#name: #ty)
+    });
+    let constructor_fields = case.fields.iter().map(|field| &field.name);
+    let accessors = case.fields.iter().map(|field| {
+        let name = &field.name;
+        let ty = match &field.ty {
+            crate::internal::syntax::UnionFieldType::Scalar(scalar_type) => {
+                scalar::ty(*scalar_type)
+            }
+            crate::internal::syntax::UnionFieldType::Bits(path) => {
+                quote!(<#path as #facade::BitsLayout>::Value)
+            }
+        };
+        quote! {
+            #[doc = "Returns one generated union-case field."]
+            pub const fn #name(self) -> #ty { self.#name }
+        }
     });
     let zero_fields = case.fields.iter().map(|field| {
         let name = &field.name;
-        quote!(#name: 0)
+        let value = match &field.ty {
+            crate::internal::syntax::UnionFieldType::Scalar(_) => quote!(0),
+            crate::internal::syntax::UnionFieldType::Bits(path) => {
+                quote!(<#path as #facade::BitsLayout>::ZERO)
+            }
+        };
+        quote!(#name: #value)
     });
     quote! {
         #[doc = "Generated semantic tagged-union case value."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #case_type { #(#fields,)* }
         impl #case_type {
+            #[doc = "Creates one semantic union-case value."]
+            pub const fn new(#(#constructor_parameters),*) -> Self { Self { #(#constructor_fields,)* } }
             #[doc = "All-zero semantic case value."]
             pub const ZERO: Self = Self { #(#zero_fields,)* };
+            #(#accessors)*
         }
         impl ::core::default::Default for #case_type {
             fn default() -> Self { Self::ZERO }

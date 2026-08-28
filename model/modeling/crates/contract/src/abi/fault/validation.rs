@@ -1,5 +1,5 @@
 use super::{AbiFault, FaultTuple};
-use crate::abi::descriptor::{DescriptorHeaderSchema, DescriptorSchema, location_offset};
+use crate::abi::descriptor::{AbiCommand, AbiCommandHeader, location_offset};
 use crate::abi::fault::{AbiEventAccess, AbiEventKind, AbiEventStage};
 use crate::abi::{
     DESCRIPTOR_SIZE, INDIRECT_ENTRY_ALIGNMENT, MAX_INDIRECT_DESTINATIONS, MAX_TRANSFER_BYTES,
@@ -17,16 +17,13 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
             tuple,
             1,
             location_offset(
-                DescriptorHeaderSchema::VERSION_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::VERSION_OFFSET),
+                AbiCommandHeader::VERSION_IDENTITY.at_byte(AbiCommandHeader::VERSION_OFFSET),
             ),
         ),
         AbiEventKind::InvalidSize => descriptor(
             tuple,
             u64::from(DESCRIPTOR_SIZE),
-            location_offset(
-                DescriptorHeaderSchema::SIZE_IDENTITY.at_byte(DescriptorHeaderSchema::SIZE_OFFSET),
-            ),
+            location_offset(AbiCommandHeader::SIZE_IDENTITY.at_byte(AbiCommandHeader::SIZE_OFFSET)),
         ),
         AbiEventKind::InvalidOpcode => {
             (tuple.observed == 0 || tuple.observed > u64::from(VECTOR_ADD_OPCODE))
@@ -34,8 +31,7 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
                     tuple,
                     u64::from(VECTOR_ADD_OPCODE),
                     location_offset(
-                        DescriptorHeaderSchema::OPCODE_IDENTITY
-                            .at_byte(DescriptorHeaderSchema::OPCODE_OFFSET),
+                        AbiCommandHeader::OPCODE_IDENTITY.at_byte(AbiCommandHeader::OPCODE_OFFSET),
                     ),
                 )
         }
@@ -43,8 +39,7 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
             tuple,
             0,
             location_offset(
-                DescriptorHeaderSchema::FLAGS_IDENTITY
-                    .at_byte(DescriptorHeaderSchema::FLAGS_OFFSET),
+                AbiCommandHeader::FLAGS_IDENTITY.at_byte(AbiCommandHeader::FLAGS_OFFSET),
             ),
         ),
         AbiEventKind::InvalidReserved => {
@@ -78,13 +73,13 @@ pub(super) fn is_canonical(fault: AbiFault) -> bool {
 fn matches_descriptor_word(index: u64, first: usize) -> bool {
     (first..=5).any(|word| {
         let offset = match word {
-            2 => DescriptorSchema::WORD2_OFFSET,
-            3 => DescriptorSchema::WORD3_OFFSET,
-            4 => DescriptorSchema::WORD4_OFFSET,
-            5 => DescriptorSchema::WORD5_OFFSET,
+            2 => AbiCommand::WORD2_OFFSET,
+            3 => AbiCommand::WORD3_OFFSET,
+            4 => AbiCommand::WORD4_OFFSET,
+            5 => AbiCommand::WORD5_OFFSET,
             _ => return false,
         };
-        index == location_offset(DescriptorSchema::PAYLOAD_IDENTITY.at_byte(offset))
+        index == location_offset(AbiCommand::PAYLOAD_IDENTITY.at_byte(offset))
     })
 }
 

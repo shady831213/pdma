@@ -1,7 +1,7 @@
 use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiEventAccess, AbiEventKind, AbiEventStage, AbiId,
-    DescriptorSchemaPayloadCopyValues, DmaAddress, MAX_TRANSFER_BYTES, RingCursor,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiEventAccess, AbiEventKind,
+    AbiEventStage, DmaAddress, MAX_TRANSFER_BYTES, RingCursor,
 };
 use pdma_model_contract::semantic::ResourceConfig;
 
@@ -41,13 +41,13 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
     let source = allocate(&fixture.handle, 4).await?;
     let destination = allocate(&fixture.handle, 4).await?;
-    let mut bytes = encode(AbiCommand::copy(
-        AbiId::new(31),
-        DescriptorSchemaPayloadCopyValues {
+    let mut bytes = encode(AbiCommand::from_payload(
+        31,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
             source_dma_address: source.base().raw(),
             destination_dma_address: destination.base().raw(),
-            length: 4,
-        },
+            length: 4.into(),
+        }),
     ))?;
     let (kind, index, observed, expected) = mutate_header(case, &mut bytes);
     let slot = fixture.submission;
@@ -123,13 +123,13 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
     };
     let result = run_descriptor(
         fixture,
-        encode(AbiCommand::copy(
-            AbiId::new(32),
-            DescriptorSchemaPayloadCopyValues {
+        encode(AbiCommand::from_payload(
+            32,
+            AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
                 source_dma_address: source.raw(),
                 destination_dma_address: u64::MAX,
-                length: 4,
-            },
+                length: 4.into(),
+            }),
         ))?,
         &[destination],
     )

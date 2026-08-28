@@ -2,7 +2,7 @@
 
 use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::abi::{
-    CompletionSchemaView, CompletionSchemaViewMut, DescriptorSchemaView, DescriptorSchemaViewMut,
+    AbiCommandView, AbiCommandViewMut, CompletionSchemaView, CompletionSchemaViewMut,
     EventSchemaView, EventSchemaViewMut, IndirectDestinationEntrySchemaView,
     IndirectDestinationEntrySchemaViewMut,
 };
@@ -86,7 +86,7 @@ fn generated_views_when_every_field_is_written_preserve_exact_values()
 }
 
 fn write_descriptor(bytes: &mut [u8; 64]) -> Result<(), SchemaCodecError> {
-    let mut descriptor = DescriptorSchemaViewMut::new(bytes)?;
+    let mut descriptor = AbiCommandViewMut::new(bytes)?;
     {
         let mut header = descriptor.header_mut()?;
         header.set_version(1)?;
@@ -105,7 +105,7 @@ fn write_descriptor(bytes: &mut [u8; 64]) -> Result<(), SchemaCodecError> {
 }
 
 fn assert_descriptor(bytes: &[u8; 64]) -> Result<(), SchemaCodecError> {
-    let descriptor = DescriptorSchemaView::new(bytes)?;
+    let descriptor = AbiCommandView::new(bytes)?;
     let header = descriptor.header()?;
     assert_eq!(
         (
@@ -138,7 +138,7 @@ fn generated_mutable_views_when_writing_every_record_are_public_and_atomic() {
     let event_before = event;
     let indirect_before = indirect;
 
-    assert!(DescriptorSchemaViewMut::new(&mut descriptor[..63]).is_err());
+    assert!(AbiCommandViewMut::new(&mut descriptor[..63]).is_err());
     assert!(CompletionSchemaViewMut::new(&mut completion[..31]).is_err());
     assert!(EventSchemaViewMut::new(&mut event[..63]).is_err());
     assert!(IndirectDestinationEntrySchemaViewMut::new(&mut indirect[..7]).is_err());

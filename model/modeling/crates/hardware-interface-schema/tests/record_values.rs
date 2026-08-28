@@ -75,16 +75,16 @@ record_schema! {
 fn owned_values_round_trip_scalars_arrays_references_and_nested_records()
 -> Result<(), SchemaCodecError> {
     // Given: owned values spanning every record placement shape and nonzero padding.
-    let flat = FlatRecordValues {
+    let flat = FlatRecord {
         tag: 0x1122,
         lane0: 0x3344_5566,
         lane1: 0x7788_99aa,
     };
-    let nested = NestedRecordValues {
+    let nested = NestedRecord {
         kind: 0xa1b2,
         padding: 0,
-        header: HeaderRecordValues {
-            sequence: LittleSequenceValues { value: 0x0102_0304 },
+        header: HeaderRecord {
+            sequence: LittleSequence { value: 0x0102_0304 },
             flags: 0x0506,
         },
     };
@@ -106,9 +106,9 @@ fn owned_values_round_trip_scalars_arrays_references_and_nested_records()
             0xb2, 0xa1, 0, 0, 0, 0, 0, 0, 0x04, 0x03, 0x02, 0x01, 0x05, 0x06, 0, 0,
         ]
     );
-    assert_eq!(FlatRecordValues::from_bytes(&flat_bytes)?, flat);
-    assert_eq!(NestedRecordValues::from_bytes(&nested_bytes)?, nested);
-    assert_eq!(FlatRecordValues::ZERO, FlatRecordValues::default());
+    assert_eq!(FlatRecord::from_bytes(&flat_bytes)?, flat);
+    assert_eq!(NestedRecord::from_bytes(&nested_bytes)?, nested);
+    assert_eq!(FlatRecord::ZERO, FlatRecord::default());
     Ok(())
 }
 
@@ -119,7 +119,7 @@ fn owned_values_reject_short_output_before_mutation() {
     let before = bytes;
 
     // When: a generated owned value attempts a complete encoding.
-    let result = FlatRecordValues::ZERO.encode_into(&mut bytes);
+    let result = FlatRecord::ZERO.encode_into(&mut bytes);
 
     // Then: extent validation fails before padding or fields are written.
     assert_eq!(
@@ -136,11 +136,11 @@ fn owned_values_reject_short_output_before_mutation() {
 fn composable_record_when_nested_modern_child_is_malformed_rebases_the_child_location()
 -> Result<(), SchemaCodecError> {
     // Given: a composable parent with a modern enum child at nonzero byte offset four.
-    let mut bytes = ComposableErrorParentValues::ZERO.to_bytes()?;
+    let mut bytes = ComposableErrorParent::ZERO.to_bytes()?;
     bytes[4] = 9;
 
     // When: the parent decodes the malformed nested child.
-    let result = ComposableErrorParentValues::from_bytes(&bytes);
+    let result = ComposableErrorParent::from_bytes(&bytes);
 
     // Then: the child identity remains intact at the parent-root byte coordinate.
     assert_eq!(

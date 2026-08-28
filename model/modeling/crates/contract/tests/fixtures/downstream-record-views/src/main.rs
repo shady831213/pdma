@@ -1,6 +1,6 @@
 use pdma_model_contract::abi::{
-    AbiCommand, CompletionSchemaView, DescriptorSchemaPayloadValues, DescriptorSchemaValues,
-    DescriptorSchemaView, EventSchemaView, IndirectDestinationEntrySchemaView,
+    AbiCommand, AbiCommandPayloadValues, AbiCommandView, CompletionSchemaView, EventSchemaView,
+    IndirectDestinationEntrySchemaView,
 };
 
 const DESCRIPTOR: [u8; 64] = [
@@ -20,13 +20,13 @@ const EVENT: [u8; 64] = [
 const INDIRECT: [u8; 8] = [0, 32, 0, 0, 0, 0, 0, 0];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let descriptor = DescriptorSchemaView::new(&DESCRIPTOR)?;
+    let descriptor = AbiCommandView::new(&DESCRIPTOR)?;
     let header = descriptor.header()?;
-    let values = DescriptorSchemaValues::from_bytes(&DESCRIPTOR)?;
+    let values = AbiCommand::from_bytes(&DESCRIPTOR)?;
     let completion = CompletionSchemaView::new(&COMPLETION)?;
     let event = EventSchemaView::new(&EVENT)?;
     let indirect = IndirectDestinationEntrySchemaView::new(&INDIRECT)?;
-    let DescriptorSchemaPayloadValues::Copy(copy) = values.payload
+    let AbiCommandPayloadValues::Copy(copy) = values.payload
     else {
         return Err(std::io::Error::other("copy fixture decoded as another variant").into());
     };

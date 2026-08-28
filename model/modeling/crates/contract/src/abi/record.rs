@@ -4,25 +4,24 @@ mod conversion;
 mod schema;
 
 pub use schema::{
-    CompletionSchema, CompletionSchemaRaw, CompletionSchemaValues, CompletionSchemaView,
-    CompletionSchemaViewMut, EventSchema, EventSchemaRaw, EventSchemaValues, EventSchemaView,
-    EventSchemaViewMut,
+    CompletionSchema, CompletionSchemaRaw, CompletionSchemaView, CompletionSchemaViewMut,
+    EventSchema, EventSchemaRaw, EventSchemaView, EventSchemaViewMut,
 };
 
 const _: () = assert!(EventSchema::RECORD_SIZE == 64);
 
-use super::{AbiDecodeError, AbiEncodeError, AbiId, fault::AbiFault};
+use super::{AbiDecodeError, AbiEncodeError, fault::AbiFault};
 
 /// Exact ABI-v1 successful completion value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AbiCompletion {
-    queue_id: AbiId,
-    command_id: AbiId,
+    queue_id: u64,
+    command_id: u64,
 }
 
 impl AbiCompletion {
     /// Creates an exact completion value.
-    pub const fn new(queue_id: AbiId, command_id: AbiId) -> Self {
+    pub const fn new(queue_id: u64, command_id: u64) -> Self {
         Self {
             queue_id,
             command_id,
@@ -30,12 +29,12 @@ impl AbiCompletion {
     }
 
     /// Returns the fixed-width queue identifier.
-    pub const fn queue_id(self) -> AbiId {
+    pub const fn queue_id(self) -> u64 {
         self.queue_id
     }
 
     /// Returns the fixed-width command identifier.
-    pub const fn command_id(self) -> AbiId {
+    pub const fn command_id(self) -> u64 {
         self.command_id
     }
 }
@@ -43,14 +42,14 @@ impl AbiCompletion {
 /// Address-aware event value used by the DMA ABI path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExactAbiEvent {
-    queue_id: AbiId,
-    command_id: AbiId,
+    queue_id: u64,
+    command_id: u64,
     fault: AbiFault,
 }
 
 impl ExactAbiEvent {
     /// Creates one event after runtime first-match classification.
-    pub const fn new(queue_id: AbiId, command_id: AbiId, fault: AbiFault) -> Self {
+    pub const fn new(queue_id: u64, command_id: u64, fault: AbiFault) -> Self {
         Self {
             queue_id,
             command_id,
@@ -59,12 +58,12 @@ impl ExactAbiEvent {
     }
 
     /// Returns the submission-ring queue identity.
-    pub const fn queue_id(self) -> AbiId {
+    pub const fn queue_id(self) -> u64 {
         self.queue_id
     }
 
     /// Returns the consumed descriptor command identity.
-    pub const fn command_id(self) -> AbiId {
+    pub const fn command_id(self) -> u64 {
         self.command_id
     }
 

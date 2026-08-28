@@ -30,7 +30,7 @@ pub(super) fn event(
     control: &mut BusControlState,
     event: ExactAbiEvent,
 ) -> PublicationOutcome {
-    let Ok(queue_id) = event.queue_id().try_into_model().map(QueueId::new) else {
+    let Ok(queue_id) = usize::try_from(event.queue_id()).map(QueueId::new) else {
         return PublicationOutcome::Retry;
     };
     let queue = EpochQueue::new(control.epoch(), queue_id);

@@ -1,7 +1,7 @@
 use hardware_interface_schema::{bits_schema, register_schema};
 
 bits_schema! {
-    pub bits WideBits {
+    pub bits WideBits(u16) {
         high: 8..9,
     }
 }

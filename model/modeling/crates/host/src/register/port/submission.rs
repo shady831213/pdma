@@ -3,9 +3,9 @@ use crate::register::{PdmaDmaWrite, PdmaPreparedProposal, PdmaRegionRequest, Pdm
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiId, BroadcastDestinationEntry, DescriptorSchemaPayloadBroadcastCopyValues,
-    DescriptorSchemaPayloadCopyValues, DescriptorSchemaPayloadStridedCopyValues,
-    DescriptorSchemaPayloadVectorAddValues, RingRecord,
+    AbiCommand, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
+    AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
+    BroadcastDestinationEntry, RingRecord, U32WordValues,
 };
 use pdma_model_contract::semantic::{BufferId, ExternalCommand, QueueConfigHandle};
 
@@ -92,9 +92,9 @@ async fn encode_command<A: CanonicalAccess>(
         ExternalCommand::Copy(command) => {
             let request = command.request();
             Ok((
-                AbiCommand::copy(
+                AbiCommand::from_payload(
                     abi_id(command.command_id().raw())?,
-                    DescriptorSchemaPayloadCopyValues {
+                    AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
                         source_dma_address: operand(
                             port,
                             request.src(),
@@ -108,7 +108,7 @@ async fn encode_command<A: CanonicalAccess>(
                         )?
                         .raw(),
                         length: scalar(request.len())?,
-                    },
+                    }),
                 ),
                 None,
             ))
@@ -116,9 +116,9 @@ async fn encode_command<A: CanonicalAccess>(
         ExternalCommand::StridedCopy(command) => {
             let request = command.request();
             Ok((
-                AbiCommand::strided_copy(
+                AbiCommand::from_payload(
                     abi_id(command.command_id().raw())?,
-                    DescriptorSchemaPayloadStridedCopyValues {
+                    AbiCommandPayloadValues::StridedCopy(AbiCommandPayloadStridedCopyValues {
                         source_dma_address: operand(
                             port,
                             request.src(),
@@ -135,7 +135,7 @@ async fn encode_command<A: CanonicalAccess>(
                         row_bytes: scalar(request.row_bytes())?,
                         source_stride: scalar(request.src_stride())?,
                         destination_stride: scalar(request.dst_stride())?,
-                    },
+                    }),
                 ),
                 None,
             ))
@@ -144,9 +144,9 @@ async fn encode_command<A: CanonicalAccess>(
         ExternalCommand::VectorAdd(command) => {
             let request = command.request();
             Ok((
-                AbiCommand::vector_add(
+                AbiCommand::from_payload(
                     abi_id(command.command_id().raw())?,
-                    DescriptorSchemaPayloadVectorAddValues {
+                    AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
                         source_a_dma_address: operand(
                             port,
                             request.src_a(),
@@ -166,7 +166,7 @@ async fn encode_command<A: CanonicalAccess>(
                         )?
                         .raw(),
                         length: scalar(request.len())?,
-                    },
+                    }),
                 ),
                 None,
             ))
@@ -180,7 +180,7 @@ async fn broadcast<A: CanonicalAccess>(
 ) -> PdmaPortResult<(AbiCommand, Option<(A::Proposal, PdmaDmaWrite)>)> {
     let request = command.request();
     let count = scalar(request.destinations().len())?;
-    let extent = u64::from(count)
+    let extent = u64::from(count.value())
         .checked_mul(8)
         .ok_or(PortError::AllocationExhausted)?;
     let alignment = MemoryAlignment::try_new(64).map_err(|_| PortError::AllocationExhausted)?;
@@ -197,20 +197,23 @@ async fn broadcast<A: CanonicalAccess>(
     let mut bytes =
         vec![0_u8; usize::try_from(extent).map_err(|_| PortError::AllocationExhausted)?];
     for (destination, slot) in request.destinations().iter().zip(bytes.chunks_exact_mut(8)) {
-        BroadcastDestinationEntry::new(operand(port, destination.dst(), destination.dst_offset())?)
-            .encode(slot)
-            .map_err(|_| PortError::SubmissionState)?;
+        BroadcastDestinationEntry::from_address(operand(
+            port,
+            destination.dst(),
+            destination.dst_offset(),
+        )?)
+        .encode(slot)
+        .map_err(|_| PortError::SubmissionState)?;
     }
-    let abi = AbiCommand::try_broadcast_copy(
+    let abi = AbiCommand::from_payload(
         abi_id(command.command_id().raw())?,
-        DescriptorSchemaPayloadBroadcastCopyValues {
+        AbiCommandPayloadValues::BroadcastCopy(AbiCommandPayloadBroadcastCopyValues {
             source_dma_address: operand(port, request.src(), request.src_offset())?.raw(),
             destination_list_dma_address: super::state::dma_address(region.base()).raw(),
             length: scalar(request.len())?,
             destination_count: count,
-        },
-    )
-    .map_err(|_| PortError::SubmissionState)?;
+        }),
+    );
     let write = PdmaDmaWrite::new(region.base(), bytes);
     Ok((abi, Some((proposal, write))))
 }
@@ -224,10 +227,12 @@ fn operand<A: CanonicalAccess>(
     Ok(super::state::dma_address(address))
 }
 
-fn scalar(value: usize) -> PortResult<u32> {
-    u32::try_from(value).map_err(|_| PortError::SubmissionState)
+fn scalar(value: usize) -> PortResult<U32WordValues> {
+    u32::try_from(value)
+        .map(U32WordValues::new)
+        .map_err(|_| PortError::SubmissionState)
 }
 
-fn abi_id(value: usize) -> PortResult<AbiId> {
-    AbiId::try_from(value).map_err(|_| PortError::SubmissionState)
+fn abi_id(value: usize) -> PortResult<u64> {
+    u64::try_from(value).map_err(|_| PortError::SubmissionState)
 }

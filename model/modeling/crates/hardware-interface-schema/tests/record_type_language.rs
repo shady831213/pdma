@@ -1,9 +1,38 @@
 //! Modern record type-language behavior.
 
-use hardware_interface_schema::{Decode, Encode, SchemaCodecError, record_schema};
+use hardware_interface_schema::{Decode, Encode, SchemaCodecError, bits_schema, record_schema};
 
 #[path = "record_type_language/location.rs"]
 mod location;
+#[path = "record_type_language/nested.rs"]
+mod nested;
+
+bits_schema! {
+    pub bits U8Word(u16) {
+        value: 0..8,
+    }
+}
+
+record_schema! {
+    pub record NamedWordPacket {
+        endian: Little,
+        fields: {
+            opcode: enum(u16) {
+                variants: {
+                    Only = 1,
+                },
+            },
+            payload: union {
+                tag: self.opcode,
+                cases: {
+                    Only {
+                        count: U8Word,
+                    },
+                },
+            },
+        },
+    }
+}
 
 record_schema! {
     pub record ModernHeader {
@@ -39,7 +68,7 @@ record_schema! {
                 cases: {
                     Compact {
                         value: u16,
-                        count: u8 { storage: u16 },
+                        count: U8Word,
                     },
                     Wide {
                         first: u16,
@@ -63,113 +92,10 @@ record_schema! {
 }
 
 #[test]
-fn nested_record_when_child_enum_is_malformed_reports_the_root_byte_coordinate()
--> Result<(), SchemaCodecError> {
-    // Given: a child record at a nonzero parent offset with an invalid enum discriminant.
-    let mut bytes = ModernEnvelopeValues::ZERO.to_bytes()?;
-    bytes[6] = 9;
-
-    // When: the parent-owned codec decodes the malformed nested child.
-    let result = ModernEnvelopeValues::from_bytes(&bytes);
-
-    // Then: the child leaf identity is preserved and its coordinate is parent-relative.
-    assert_eq!(
-        result,
-        Err(SchemaCodecError::UnknownTag {
-            location: ModernHeader::OPCODE_IDENTITY.at_byte(6),
-            observed: 9,
-        })
-    );
-    Ok(())
-}
-
-#[test]
-fn nested_record_when_child_reserved_bits_are_malformed_reports_the_root_bit_coordinate()
--> Result<(), SchemaCodecError> {
-    // Given: a child packed-bits field at byte seven with its local reserved bit set.
-    let mut bytes = ModernEnvelopeValues::ZERO.to_bytes()?;
-    bytes[7] = 0x80;
-
-    // When: the parent-owned codec decodes the malformed nested child.
-    let result = ModernEnvelopeValues::from_bytes(&bytes);
-
-    // Then: the child bits leaf is retained at root-relative bit 63.
-    assert_eq!(
-        result,
-        Err(SchemaCodecError::NonZeroReserved {
-            location: ModernHeaderFlagsValues::RESERVED_IDENTITY.at_bit(63),
-            observed: 0x80,
-        })
-    );
-    Ok(())
-}
-
-#[test]
-fn nested_record_when_union_leaf_is_malformed_is_rebased_exactly_once()
--> Result<(), SchemaCodecError> {
-    // Given: a nested compact union whose second word overflows its u8 semantic range.
-    let mut bytes = ModernEnvelopeValues::ZERO.to_bytes()?;
-    bytes[14..16].copy_from_slice(&0x0100_u16.to_le_bytes());
-
-    // When: the outer record decodes the nested union member.
-    let result = ModernEnvelopeValues::from_bytes(&bytes);
-
-    // Then: the union leaf stays intact and moves from local byte 10 to root byte 14.
-    assert_eq!(
-        result,
-        Err(SchemaCodecError::NarrowingOverflow {
-            location: ModernPacketPayloadCompactValues::COUNT_IDENTITY.at_byte(14),
-            observed: 0x0100,
-            maximum: 0xff,
-        })
-    );
-    Ok(())
-}
-
-#[test]
-fn nested_record_when_child_bits_cannot_encode_keeps_destination_unchanged() {
-    // Given: an overflowing nested packed-bits value and caller-owned sentinel bytes.
-    let values = ModernEnvelopeValues {
-        prefix: 0,
-        packet: ModernPacketValues {
-            header: ModernHeaderValues {
-                version: 0,
-                opcode: ModernHeaderOpcode::Compact,
-                flags: ModernHeaderFlagsValues {
-                    flag: false,
-                    mode: 4,
-                },
-                command_id: 0,
-            },
-            payload: ModernPacketPayloadValues::Compact(ModernPacketPayloadCompactValues {
-                value: 0,
-                count: 0,
-            }),
-        },
-    };
-    let mut destination = [0xa5; ModernEnvelope::RECORD_SIZE];
-    let before = destination;
-
-    // When: the outer record attempts to encode the invalid nested value.
-    let result = values.encode_into(&mut destination);
-
-    // Then: the bits leaf is rebased once and no caller-owned byte commits.
-    assert_eq!(
-        result,
-        Err(SchemaCodecError::NarrowingOverflow {
-            location: ModernHeaderFlagsValues::MODE_IDENTITY.at_bit(57),
-            observed: 4,
-            maximum: 3,
-        })
-    );
-    assert_eq!(destination, before);
-}
-
-#[test]
 fn composed_types_when_encoded_derive_layout_tag_and_constant() -> Result<(), SchemaCodecError> {
     // Given: a semantic payload whose stale header tag disagrees with its union case.
-    let values = ModernPacketValues {
-        header: ModernHeaderValues {
+    let values = ModernPacket {
+        header: ModernHeader {
             version: 7,
             opcode: ModernHeaderOpcode::Wide,
             flags: ModernHeaderFlagsValues {
@@ -180,13 +106,13 @@ fn composed_types_when_encoded_derive_layout_tag_and_constant() -> Result<(), Sc
         },
         payload: ModernPacketPayloadValues::Compact(ModernPacketPayloadCompactValues {
             value: 0x1122,
-            count: 7,
+            count: U8WordValues { value: 7 },
         }),
     };
 
     // When: the generated owned codec encodes and decodes the composed record.
     let bytes = values.to_bytes()?;
-    let decoded = ModernPacketValues::from_bytes(&bytes)?;
+    let decoded = ModernPacket::from_bytes(&bytes)?;
 
     // Then: layout, derived fields, packed bits, narrowing, and exact bytes agree.
     assert_eq!(ModernHeader::RECORD_SIZE, 8);
@@ -198,8 +124,8 @@ fn composed_types_when_encoded_derive_layout_tag_and_constant() -> Result<(), Sc
     assert_eq!(decoded.header.opcode, ModernHeaderOpcode::Compact);
     assert_eq!(
         decoded,
-        ModernPacketValues {
-            header: ModernHeaderValues {
+        ModernPacket {
+            header: ModernHeader {
                 opcode: ModernHeaderOpcode::Compact,
                 ..values.header
             },
@@ -217,7 +143,7 @@ fn typed_raw_when_converted_uses_the_recursive_record_codec() -> Result<(), Sche
 
     // When: the raw owner and semantic value cross both generated codec surfaces.
     let decoded = raw.decode()?;
-    let converted = ModernPacketValues::try_from(raw)?;
+    let converted = ModernPacket::try_from(raw)?;
     let encoded = decoded.encode()?;
     let converted_raw = ModernPacketRaw::try_from(converted)?;
 
@@ -243,10 +169,10 @@ fn typed_boundaries_when_wire_values_are_invalid_report_exact_errors() {
 
     // When: each malformed value crosses the generated owned-codec boundary.
     let errors = [
-        ModernPacketValues::from_bytes(&unknown),
-        ModernPacketValues::from_bytes(&reserved),
-        ModernPacketValues::from_bytes(&constant),
-        ModernPacketValues::from_bytes(&narrowed),
+        ModernPacket::from_bytes(&unknown),
+        ModernPacket::from_bytes(&reserved),
+        ModernPacket::from_bytes(&constant),
+        ModernPacket::from_bytes(&narrowed),
     ];
 
     // Then: every structural failure retains its exact byte-level observation.
@@ -274,10 +200,9 @@ fn typed_boundaries_when_wire_values_are_invalid_report_exact_errors() {
     );
     assert_eq!(
         errors[3],
-        Err(SchemaCodecError::NarrowingOverflow {
-            location: ModernPacketPayloadCompactValues::COUNT_IDENTITY.at(10),
+        Err(SchemaCodecError::NonZeroReserved {
+            location: ModernPacketPayloadCompactValues::COUNT_IDENTITY.at_bit(88),
             observed: 0x0100,
-            maximum: 0xff
         })
     );
 }

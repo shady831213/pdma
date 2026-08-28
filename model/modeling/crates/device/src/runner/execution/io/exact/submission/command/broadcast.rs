@@ -5,19 +5,20 @@ use crate::runner::execution::command::{
 };
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
-    AbiFault, AbiOperandVisit, BroadcastDestinationEntry,
-    DescriptorSchemaPayloadBroadcastCopyValues, DmaAddress,
+    AbiCommandPayloadBroadcastCopyValues, AbiFault, AbiOperandVisit, BroadcastDestinationEntry,
+    DmaAddress,
 };
 
 pub(super) fn broadcast(
     context: ResolutionContext<'_>,
-    command: DescriptorSchemaPayloadBroadcastCopyValues,
+    command: AbiCommandPayloadBroadcastCopyValues,
 ) -> ModelResult<Result<ExecutionCommand, AbiFault>> {
-    let length = usize::try_from(command.length).map_err(|_| ModelError::DmaSubmissionState)?;
+    let length =
+        usize::try_from(command.length.value()).map_err(|_| ModelError::DmaSubmissionState)?;
     let source = resolve::direct(
         context.dma,
         DmaAddress::new(command.source_dma_address),
-        u64::from(command.length),
+        u64::from(command.length.value()),
         AbiOperandVisit::BroadcastSource,
     )?;
     let source = match source {
@@ -27,7 +28,7 @@ pub(super) fn broadcast(
     let container = resolve::indirect_container(
         context.dma,
         DmaAddress::new(command.destination_list_dma_address),
-        u64::from(command.destination_count),
+        u64::from(command.destination_count.value()),
     )?;
     let (_, extent) = match container {
         Ok(container) => container,
@@ -43,7 +44,7 @@ pub(super) fn broadcast(
     let mut destinations = Vec::new();
     destinations
         .try_reserve_exact(
-            usize::try_from(command.destination_count)
+            usize::try_from(command.destination_count.value())
                 .map_err(|_| ModelError::DmaSubmissionState)?,
         )
         .map_err(|_| ModelError::DmaSubmissionState)?;
@@ -55,7 +56,7 @@ pub(super) fn broadcast(
         let destination = resolve::direct(
             context.dma,
             address,
-            u64::from(command.length),
+            u64::from(command.length.value()),
             AbiOperandVisit::BroadcastDestination { index },
         )?;
         match destination {

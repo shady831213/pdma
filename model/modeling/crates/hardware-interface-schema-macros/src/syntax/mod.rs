@@ -6,7 +6,7 @@ mod register;
 pub(in crate::internal) use map_ordered::{OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{
     BitsDecl, EnumDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, ScopedPath,
-    UnionCaseDecl, UnionDecl, UnionFieldDecl,
+    UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,
 };
 pub(in crate::internal) use register::{AccessValue, RegisterDefinitionDecl, RegisterFieldsDecl};
 

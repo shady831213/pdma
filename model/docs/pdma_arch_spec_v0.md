@@ -147,7 +147,7 @@ publication, and PDMA-local IRQ behavior rather than a second executor.
 
 `WholeDeviceReset` succeeds only when its expected epoch matches both device and bus
 control epochs, then checked-advances both together. Success preserves committed
-`DmaSpace` regions, bytes, and allocator generation, trace history, resource
+`PdmaMemoryMappings` regions, bytes, and allocator generation, trace history, resource
 configuration, and lifecycle accounting. It clears device queues, completion/event
 records, runnable work, pending retirement, bus-control queue/cursor state, and
 PDMA-local IRQ routes, causes, and queued notifications. A fresh bootstrap may reuse
@@ -160,7 +160,7 @@ publish discarded stalled or pending-retirement work later.
 
 ## Queue Directory, Queue Configuration, Command Ring, Completion Ring, and Event Ring Ownership
 
-Queue directory entries (`QueueDirectoryEntry` in `model/modeling/crates/contract/src/queue.rs`) bind together:
+Queue directory entries (`QueueDirectoryEntry` in `model/modeling/crates/contract/src/semantic/queue.rs`) bind together:
 
 - A `QueueId` assigned by the device.
 - A bound `CompletionRingId`.
@@ -379,7 +379,7 @@ The native copy and vector-add paths use checked memory reads and writes. Bounds
 
 ## Trace Sink Behavior and Chrome/Perfetto-Compatible Export
 
-The trace sink (`model/modeling/crates/device/src/trace.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
+The trace sink (`model/modeling/crates/device/src/trace/mod.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
 
 Hook points cover command submission, doorbell/runnable transitions, scheduling, execution success, execution faults, completion/event publication and polling, IRQ source latch, line assertion/deassertion, message emission, device ack, handler start/completion, stalls, and idle steps. Public trace types include `TraceEvent`, `TraceEventKind`, `TraceOperation`, and `TraceSink`.
 

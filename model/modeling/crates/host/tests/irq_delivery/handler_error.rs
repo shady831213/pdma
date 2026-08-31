@@ -1,5 +1,5 @@
-use crate::interrupt::InterruptError;
-use crate::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::runtime::interrupt::InterruptError;
+use crate::runtime::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
 use crate::{AsyncDriver, DriverError, DriverPort as _, compat::AsyncDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{

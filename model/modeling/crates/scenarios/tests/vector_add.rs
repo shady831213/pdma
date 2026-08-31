@@ -6,7 +6,9 @@ use pdma_model_contract::semantic::{
     desc::{VectorAddRequest, VectorBufferRange},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, adapters::AsyncDeviceAccess, register::PdmaRegisterPort};
+use pdma_model_host::{
+    AsyncDriver, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() {

@@ -4,8 +4,8 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::QueueActivation;
 use pdma_model_host::{
-    adapters::{AsyncDeviceAccess, AsyncDevicePreparedRegions},
-    register::{
+    adapter::abi::{AsyncDeviceAccess, AsyncDevicePreparedRegions},
+    adapter::abi::{
         PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
         PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest,
         PdmaRegisterAccessError, PdmaSubmissionBatch,

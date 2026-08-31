@@ -39,11 +39,33 @@ fn assert_layer_excludes(root: &Path, forbidden: &[&str]) -> io::Result<()> {
     Ok(())
 }
 
+fn assert_directory_contract(source: &Path) {
+    for required in ["semantic", "adapter/abi", "runtime", "compat"] {
+        assert!(
+            source.join(required).is_dir(),
+            "missing host architecture directory: {required}"
+        );
+    }
+    for retired in [
+        "adapters",
+        "register",
+        "interrupt",
+        "context",
+        "irq_delivery",
+    ] {
+        assert!(
+            !source.join(retired).exists(),
+            "retired host architecture directory remains: {retired}"
+        );
+    }
+}
+
 #[test]
 fn host_semantic_directory_has_no_exact_transport_dependencies() -> io::Result<()> {
-    // Given: the host-owned semantic driver source tree.
-    let semantic = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/semantic");
+    // Given: the host-owned architecture source tree.
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
 
-    // When/Then: the semantic API does not name ABI or register transport types.
-    assert_layer_excludes(&semantic, &["abi::", "crate::register"])
+    // When/Then: structure is explicit and the semantic API is transport-independent.
+    assert_directory_contract(&source);
+    assert_layer_excludes(&source.join("semantic"), &["abi::", "crate::adapter"])
 }

@@ -19,7 +19,7 @@ async fn direct_adapter_claim_parity_holds_for_twenty_five_real_schedules() -> T
 #[tokio::test(flavor = "current_thread")]
 async fn canonical_adapter_preserves_every_mmio_fate_and_full_state() -> TestResult<()> {
     use pdma_model_contract::abi::mmio::MmioAccessError;
-    use pdma_model_host::register::PdmaRegisterAccessError;
+    use pdma_model_host::adapter::abi::PdmaRegisterAccessError;
 
     let observer = Arc::new(Observer::default());
     let (device, worker) = AsyncDevice::from_core(DeviceCore::new(

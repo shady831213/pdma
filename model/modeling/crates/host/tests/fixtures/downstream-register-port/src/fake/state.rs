@@ -1,7 +1,7 @@
 use super::helpers::{align, lock};
 use hardware_interface_runtime::{MemoryAddress, MemoryRegion};
 use pdma_model_contract::semantic::{BufferId, IrqNotification};
-use pdma_model_host::register::{
+use pdma_model_host::adapter::abi::{
     PdmaBatchError, PdmaClaimError, PdmaMappedRegion, PdmaPreparedProposal, PdmaProvisioningCause,
     PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
 };

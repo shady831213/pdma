@@ -1,14 +1,8 @@
 //! Async PDMA host model.
 
-#[cfg(test)]
-mod context;
-#[cfg(test)]
-mod irq_delivery;
-
-pub mod adapters;
+pub mod adapter;
 pub mod compat;
-pub mod interrupt;
-pub mod register;
+pub mod runtime;
 pub mod semantic;
 
 pub use semantic::{

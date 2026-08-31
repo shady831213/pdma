@@ -9,7 +9,7 @@ use pdma_model_contract::abi::mmio::MmioAccessError;
 use pdma_model_contract::semantic::{
     EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqVector, QueueConfigHandle,
 };
-use pdma_model_host::register::{PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim};
+use pdma_model_host::adapter::abi::{PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},

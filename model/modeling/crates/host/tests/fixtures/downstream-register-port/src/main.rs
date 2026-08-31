@@ -5,7 +5,7 @@ mod real;
 use fake::{FakeAccess, activation, message};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
 use pdma_model_contract::semantic::RingCursor;
-use pdma_model_host::register::{
+use pdma_model_host::adapter::abi::{
     PdmaBatchAccess, PdmaDmaWrite, PdmaExactInterruptClaim, PdmaMemoryProvisioning,
     PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch,
 };
@@ -94,9 +94,9 @@ async fn main() -> TestResult {
     let after_stale = fake.snapshot();
     let stale_proposal = matches!(
         stale_error,
-        pdma_model_host::register::PdmaBatchError::Provisioning(
-            pdma_model_host::register::PdmaProvisioningError::Provisioning(
-                pdma_model_host::register::PdmaProvisioningCause::StaleProposal { .. }
+        pdma_model_host::adapter::abi::PdmaBatchError::Provisioning(
+            pdma_model_host::adapter::abi::PdmaProvisioningError::Provisioning(
+                pdma_model_host::adapter::abi::PdmaProvisioningCause::StaleProposal { .. }
             )
         )
     ) && Error::source(&stale_error)
@@ -112,8 +112,8 @@ async fn main() -> TestResult {
     let after_failure = fake.snapshot();
     let allocation_failure = matches!(
         allocation_error,
-        pdma_model_host::register::PdmaProvisioningError::Provisioning(
-            pdma_model_host::register::PdmaProvisioningCause::StorageExhausted
+        pdma_model_host::adapter::abi::PdmaProvisioningError::Provisioning(
+            pdma_model_host::adapter::abi::PdmaProvisioningCause::StorageExhausted
         )
     ) && Error::source(&allocation_error).is_some()
         && after_failure == before_failure;
@@ -126,7 +126,7 @@ async fn main() -> TestResult {
     let after_offset = fake.snapshot();
     let malformed_offset = matches!(
         offset_error,
-        pdma_model_host::register::PdmaRegisterAccessError::Access(
+        pdma_model_host::adapter::abi::PdmaRegisterAccessError::Access(
             pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset { offset: 0x1000 }
         )
     ) && Error::source(&offset_error).is_some()
@@ -139,7 +139,7 @@ async fn main() -> TestResult {
     let after_width = fake.snapshot();
     let malformed_width = matches!(
         width_error,
-        pdma_model_host::register::PdmaRegisterAccessError::Access(
+        pdma_model_host::adapter::abi::PdmaRegisterAccessError::Access(
             pdma_model_contract::abi::mmio::MmioAccessError::WrongWidth { actual: 3, .. }
         )
     ) && Error::source(&width_error).is_some()

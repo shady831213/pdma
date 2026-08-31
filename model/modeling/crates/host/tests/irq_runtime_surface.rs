@@ -6,7 +6,7 @@ pub mod support;
 use hardware_interface_runtime::{HandlerRegistry, InterruptLifecycleObserver, SoftwareCpu};
 use pdma_model_contract::semantic::{IrqVector, TraceEventKind};
 use pdma_model_host::AsyncDriver;
-use pdma_model_host::interrupt::{
+use pdma_model_host::runtime::interrupt::{
     PdmaInterruptSource, PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqService,
 };
 use std::sync::Arc;

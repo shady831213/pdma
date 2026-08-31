@@ -86,14 +86,17 @@ fn every_v1_descriptor_matches_golden_bytes() {
     );
     assert_eq!(
         (
-            old_strided.src_start().offset(),
-            old_strided.dst_start().offset()
+            old_strided.src_start().map(DmaRangeStart::offset),
+            old_strided.dst_start().map(DmaRangeStart::offset)
         ),
-        (0, 0)
+        (Some(0), Some(0))
     );
     assert_eq!(
-        (strided.src_start().offset(), strided.dst_start().offset()),
-        (13, 17)
+        (
+            strided.src_start().map(DmaRangeStart::offset),
+            strided.dst_start().map(DmaRangeStart::offset)
+        ),
+        (Some(13), Some(17))
     );
     let [copy_bytes, _, broadcast_bytes, _] = expected;
     println!("copy={copy_bytes:02x?} broadcast={broadcast_bytes:02x?} entry={entry_bytes:02x?}");

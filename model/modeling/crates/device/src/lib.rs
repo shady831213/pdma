@@ -1,19 +1,22 @@
 //! Async PDMA device model runner.
 
+pub mod abi;
+pub mod adapter;
 pub mod compat;
-pub mod dma_space;
-mod error;
-mod runner;
+/// Internal execution model shared by semantic and exact-ABI frontends.
+pub mod engine;
+pub mod runtime;
 /// Explicit snapshot and construction support for device integration tests.
 pub mod test_support;
-pub mod trace;
 
-pub use dma_space::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
-pub use error::{ModelError, ModelError as DeviceError, ModelResult, PdmaResetError, PdmaRunError};
-pub use runner::{
-    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
-    AsyncStallReason, AsyncStepStatus, DeviceCore, DmaBatchContext, DmaWrite, MmioRegisterEndpoint,
-    MmioRegisterError, PdmaBatchError, PdmaControlError, PendingDmaResult, QueueBootstrapBatch,
-    QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch, SyncDevice,
+pub use abi::dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
+pub use abi::{
+    DmaBatchContext, DmaWrite, MmioRegisterEndpoint, MmioRegisterError, PdmaBatchError,
+    PdmaControlError, PendingDmaResult, QueueBootstrapBatch, QueueResponseBytes, QueueStatus,
+    SubmissionAcceptance, SubmissionBatch,
 };
-pub use trace::TraceSink;
+pub use runtime::{
+    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
+    AsyncStallReason, AsyncStepStatus, DeviceCore, DeviceError, ModelError, ModelResult,
+    PdmaResetError, PdmaRunError, SyncDevice,
+};

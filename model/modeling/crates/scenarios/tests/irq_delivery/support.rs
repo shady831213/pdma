@@ -7,7 +7,7 @@ use hardware_interface_runtime::{CpuLocal, HandlerRegistry, InterruptLifecycleOb
 use pdma_model_contract::semantic::{IrqNotification, IrqSource};
 use pdma_model_host::{
     DriverError, DriverIrqRecord, PortError,
-    interrupt::{
+    runtime::interrupt::{
         PdmaInterruptSource, PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
     },
 };

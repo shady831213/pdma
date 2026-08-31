@@ -5,7 +5,7 @@ use super::{
 use pdma_model_contract::semantic::{
     CompletionRecord, CompletionStatus, IrqNotification, TraceEventKind,
 };
-use pdma_model_host::{DriverIrqRecord, register::BusQueueStatus};
+use pdma_model_host::{DriverIrqRecord, adapter::abi::RegisterQueueStatus};
 
 /// # Panics
 ///
@@ -46,7 +46,7 @@ pub fn assert_outcome(result: &ScenarioResult) {
     emit_manual_qa(result, &lifecycle);
 }
 
-fn assert_queue_cursors(status: BusQueueStatus) {
+fn assert_queue_cursors(status: RegisterQueueStatus) {
     assert_eq!(status.submission().producer().raw(), 1);
     assert_eq!(status.captured_submission_producer().raw(), 1);
     assert_eq!(status.submission().consumer().raw(), 1);

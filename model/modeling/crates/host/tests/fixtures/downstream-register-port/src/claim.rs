@@ -1,5 +1,5 @@
 use hardware_interface_runtime::{AccessKind, AccessOrigin, RegisterObservation};
-use pdma_model_host::register::PdmaClaimResult;
+use pdma_model_host::adapter::abi::PdmaClaimResult;
 use std::error::Error;
 
 type TestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;

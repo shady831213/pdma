@@ -1,6 +1,6 @@
 use super::*;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_host::register::{PdmaPreparedProposal, PdmaRegisterPort, PdmaRegisterPortError};
+use pdma_model_host::adapter::abi::{PdmaPreparedProposal, PdmaRegisterPort, PdmaRegisterPortError};
 use pdma_model_host::{DriverPort, PortError};
 use std::future::Future;
 use std::pin::Pin;

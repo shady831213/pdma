@@ -1,62 +1,64 @@
-//! Guards the device-private execution-command boundary.
+//! Guards the two-model command boundary.
 
-#[test]
-fn native_execution_core_is_semantic_operation_free() {
-    // Given: the device files below the semantic and exact frontend boundary.
-    let core = [
-        include_str!("../src/runner/execution/step.rs"),
-        include_str!("../src/runner/execution/resources.rs"),
-        include_str!("../src/runner/execution/copy.rs"),
-        include_str!("../src/runner/execution/broadcast.rs"),
-        include_str!("../src/runner/execution/vector_add.rs"),
-        include_str!("../src/trace/mod.rs"),
-        include_str!("../src/trace/event.rs"),
-    ];
-    let public_types = ["CommandOperation", "CopyRequest", "StridedCopyRequest"];
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
-    // When: the core source is inspected for host-facing command vocabulary.
-    let leaked = core
-        .iter()
-        .flat_map(|source| public_types.iter().filter(|name| source.contains(*name)))
-        .copied()
-        .collect::<Vec<_>>();
-
-    // Then: only private execution vocabulary crosses into scheduling and execution.
-    assert!(
-        leaked.is_empty(),
-        "host-facing types in device core: {leaked:?}"
-    );
+fn rust_sources(root: &Path) -> io::Result<Vec<String>> {
+    let mut pending = vec![PathBuf::from(root)];
+    let mut sources = Vec::new();
+    while let Some(path) = pending.pop() {
+        for entry in fs::read_dir(path)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                sources.push(fs::read_to_string(path)?);
+            }
+        }
+    }
+    Ok(sources)
 }
 
 #[test]
-fn exact_frontend_builds_private_execution_commands_without_semantic_request_reconstruction() {
-    // Given: the exact descriptor fetch and operation-resolution boundary.
-    let exact = [
-        include_str!("../src/runner/execution/io/exact/submission.rs"),
-        include_str!("../src/runner/execution/io/exact/submission/command.rs"),
-        include_str!("../src/runner/execution/io/exact/submission/command/copy.rs"),
-        include_str!("../src/runner/execution/io/exact/submission/command/broadcast.rs"),
-        include_str!("../src/runner/execution/io/exact/submission/command/vector.rs"),
-    ];
-    let public_types = [
+fn engine_executes_semantic_commands_without_a_third_command_model() -> io::Result<()> {
+    // Given: every source file in the device execution engine.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/engine");
+    let sources = rust_sources(&root)?;
+
+    // When: the engine's command vocabulary is inspected.
+    let combined = sources.join("\n");
+
+    // Then: semantic operations are executed directly and no duplicate command union exists.
+    assert!(combined.contains("CommandOperation"));
+    assert!(!combined.contains("ExecutionCommand"));
+    assert!(!combined.contains("ExecutionOperation"));
+    Ok(())
+}
+
+#[test]
+fn abi_command_conversion_produces_the_semantic_command_union() -> io::Result<()> {
+    // Given: the stateless ABI-to-semantic command adapter.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/adapter/command.rs");
+    let modules = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/adapter/command");
+
+    // When: its typed input and output vocabulary is inspected.
+    let mut source = fs::read_to_string(path)?;
+    source.push_str(&rust_sources(&modules)?.join("\n"));
+
+    // Then: it maps ABI commands to semantic requests without inventing another union.
+    for required in [
+        "AbiCommand",
         "CommandOperation",
         "CopyRequest",
-        "StridedCopyRequest",
-        "BroadcastCopyRequest",
         "VectorAddRequest",
-        "BufferId::new(0)",
-    ];
-
-    // When: exact resolution source is inspected for semantic reconstruction.
-    let leaked = exact
-        .iter()
-        .flat_map(|source| public_types.iter().filter(|name| source.contains(*name)))
-        .copied()
-        .collect::<Vec<_>>();
-
-    // Then: exact decode produces the private execution representation directly.
-    assert!(
-        leaked.is_empty(),
-        "semantic types in exact resolver: {leaked:?}"
-    );
+    ] {
+        assert!(
+            source.contains(required),
+            "missing adapter type: {required}"
+        );
+    }
+    assert!(!source.contains("ExecutionCommand"));
+    assert!(!source.contains("ExecutionOperation"));
+    Ok(())
 }

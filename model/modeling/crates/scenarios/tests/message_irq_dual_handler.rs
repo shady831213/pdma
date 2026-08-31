@@ -13,7 +13,8 @@ use pdma_model_contract::semantic::{
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, DriverError, DriverIrqRecord, DriverPort, DriverResult, PortError,
-    adapters::AsyncDeviceAccess, interrupt::PdmaIrqHandler, register::PdmaRegisterPort,
+    adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
+    runtime::interrupt::PdmaIrqHandler,
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;

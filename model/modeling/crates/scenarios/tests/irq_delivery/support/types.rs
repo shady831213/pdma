@@ -1,8 +1,8 @@
 use hardware_interface_runtime::{CpuLocal, InterruptShutdown, InterruptSummary, SoftwareCpu};
 use pdma_model_contract::semantic::{IrqSource, IrqVector};
 use pdma_model_host::{
-    AsyncDriver, adapters::AsyncDeviceAccess, compat::AsyncDevicePort,
-    interrupt::PdmaInterruptTrace,
+    AsyncDriver, adapter::abi::AsyncDeviceAccess, compat::AsyncDevicePort,
+    runtime::interrupt::PdmaInterruptTrace,
 };
 use std::sync::Arc;
 use tokio::{

@@ -2,10 +2,10 @@ use super::ProbeAccess;
 use crate::support::{ProbePort, lock};
 use hardware_interface_runtime::{InterruptHandler, InterruptSource, SoftwareCpu};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochIrqSource, IrqNotification, IrqVector};
-use pdma_model_host::interrupt::{
+use pdma_model_host::adapter::abi::PdmaClaimResult;
+use pdma_model_host::runtime::interrupt::{
     PdmaInterruptSource, PdmaIrqHandler, PdmaIrqService, PdmaIrqServiceError,
 };
-use pdma_model_host::register::PdmaClaimResult;
 use pdma_model_host::{AsyncDriver, DriverIrqRecord};
 use std::{error::Error, fmt, sync::Arc};
 

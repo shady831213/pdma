@@ -8,7 +8,7 @@ pub use broadcast::{BroadcastCopyRequest, BroadcastDestinationRange};
 pub use copy::{CopyRequest, StridedCopyRequest};
 pub use vector_add::{VectorAddRequest, VectorBufferRange};
 
-use crate::semantic::CommandId;
+use crate::semantic::{CommandId, TraceOperation};
 
 /// One semantic command with driver-assigned identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +53,18 @@ pub enum CommandOperation {
     BroadcastCopy(BroadcastCopyRequest),
     /// Byte-wise wrapping vector add over two source ranges.
     VectorAdd(VectorAddRequest),
+}
+
+impl CommandOperation {
+    /// Returns the stable trace category for this semantic operation.
+    pub const fn trace_operation(&self) -> TraceOperation {
+        match self {
+            Self::Copy(_) => TraceOperation::Copy,
+            Self::StridedCopy(_) => TraceOperation::StridedCopy,
+            Self::BroadcastCopy(_) => TraceOperation::BroadcastCopy,
+            Self::VectorAdd(_) => TraceOperation::VectorAdd,
+        }
+    }
 }
 
 #[cfg(test)]

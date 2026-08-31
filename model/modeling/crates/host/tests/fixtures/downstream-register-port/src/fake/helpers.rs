@@ -8,7 +8,7 @@ use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification,
     IrqSource, IrqVector, QueueActivation, QueueConfig, QueueId, QueueRingObjects, SoftwareOwnerId,
 };
-use pdma_model_host::register::{
+use pdma_model_host::adapter::abi::{
     PdmaBatchError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
     PdmaRegisterAccessError,
 };

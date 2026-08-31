@@ -26,7 +26,7 @@ mod compiler_proof {
 
 use pdma_model_contract::semantic::IrqNotification;
 use pdma_model_host::DriverIrqRecord;
-use pdma_model_host::interrupt::PdmaIrqHandler;
+use pdma_model_host::runtime::interrupt::PdmaIrqHandler;
 use std::{
     convert::Infallible,
     sync::{Arc, Mutex, MutexGuard},

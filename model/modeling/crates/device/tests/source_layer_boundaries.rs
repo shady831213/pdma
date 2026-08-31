@@ -1,4 +1,4 @@
-//! Prevents dependencies between the device's pure model directories.
+//! Prevents ownership drift between device behavior, ABI state, conversion, and runtime code.
 
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -42,17 +42,44 @@ fn assert_layer_excludes(root: &Path, forbidden: &[&str]) -> io::Result<()> {
     Ok(())
 }
 
-#[test]
-fn device_model_directories_have_no_cross_dependencies() -> io::Result<()> {
-    // Given: the device's pure ABI and semantic source trees.
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let runner = source.join("runner");
+fn assert_directory_contract(source: &Path) {
+    for required in ["engine", "abi", "adapter", "runtime", "compat"] {
+        assert!(
+            source.join(required).is_dir(),
+            "missing device architecture directory: {required}"
+        );
+    }
+    for retired in ["semantic", "adapter/abi", "runner", "dma_space", "trace"] {
+        assert!(
+            !source.join(retired).exists(),
+            "retired device architecture directory remains: {retired}"
+        );
+    }
+}
 
-    // When/Then: cross-model knowledge is reserved for an explicit adapter boundary.
-    assert_layer_excludes(&source.join("abi"), &["semantic::"])?;
-    assert_layer_excludes(&runner.join("abi"), &["semantic::"])?;
+#[test]
+fn device_layers_preserve_two_model_ownership() -> io::Result<()> {
+    // Given: the device's explicit architecture directories.
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+
+    // When/Then: structure is explicit and wire ABI types stay outside the execution engine.
+    assert_directory_contract(&source);
     assert_layer_excludes(
-        &runner.join("semantic"),
-        &["abi::", "crate::runner::adapter"],
+        &source.join("engine"),
+        &[
+            "pdma_model_contract::abi",
+            "crate::adapter",
+            "ExecutionCommand",
+            "ExecutionOperation",
+        ],
+    )?;
+    assert_layer_excludes(
+        &source.join("adapter"),
+        &[
+            "struct RegisterBanks",
+            "struct QueueControlState",
+            "struct PdmaMemoryMappings",
+            "struct MmioRegisterEndpoint",
+        ],
     )
 }

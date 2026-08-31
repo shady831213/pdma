@@ -6,7 +6,8 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{EventErrorKind, desc::CopyRequest};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDriver, adapters::AsyncDeviceAccess, compat::AsyncDevicePort, register::PdmaRegisterPort,
+    AsyncDriver, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
+    compat::AsyncDevicePort,
 };
 
 #[path = "error_event/recovery.rs"]

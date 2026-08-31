@@ -8,7 +8,7 @@ use hardware_interface_runtime::{CpuContextError, SoftwareCpu};
 use pdma_model_contract::semantic::{CommandId, CompletionRecord, CopyRequest};
 use pdma_model_host::{
     DriverPort,
-    interrupt::InterruptError,
+    runtime::interrupt::InterruptError,
     semantic::{AsyncDriver, DriverError, ManualDriver, PortError},
 };
 use std::{collections::VecDeque, error::Error, future::poll_fn, task::Poll};

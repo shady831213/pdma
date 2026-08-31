@@ -4,7 +4,9 @@ use pdma_model_contract::semantic::{
     desc::{CopyRequest, StridedCopyRequest},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, adapters::AsyncDeviceAccess, register::PdmaRegisterPort};
+use pdma_model_host::{
+    AsyncDriver, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_many_memory_fault_events_without_masking_original_error() {

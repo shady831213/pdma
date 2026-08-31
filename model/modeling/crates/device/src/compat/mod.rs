@@ -2,5 +2,5 @@
 
 mod reset;
 
-pub use crate::error::{ModelError, ModelResult};
-pub use crate::runner::SyncDevice;
+pub use crate::runtime::SyncDevice;
+pub use crate::runtime::{ModelError, ModelResult};

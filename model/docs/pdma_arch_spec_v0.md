@@ -124,7 +124,12 @@ sequence of manually scheduled turns.
 
 ## Device Responsibility Boundary
 
-The device model, implemented under `model/modeling/crates/device/src/runner/`, owns the following responsibilities:
+The device keeps only the contract's two data models: layout-independent values from
+`contract::semantic` and layout-exact values from `contract::abi`. Device behavior lives in
+`crates/device/src/engine/`, exact DMA/ring/MMIO state in `crates/device/src/abi/`, stateless
+ABI-to-semantic conversion in `crates/device/src/adapter/`, and actor orchestration in
+`crates/device/src/runtime/`. The engine is behavior, not a third command model.
+Together these layers own the following responsibilities:
 
 - Maintain device memory, the queue directory, command rings, completion rings, queue-tagged events, the runnable queue list, resource configuration, IRQ state, and the trace sink.
 - Accept submissions through `submit_command`, emit a trace event, and queue the command on the correct command ring.
@@ -330,12 +335,11 @@ represent the conceptual driver-visible descriptor surface. `Command` carries on
 `CommandId` and one `CommandOperation`; `CommandOperation` has `Copy`, `StridedCopy`,
 `BroadcastCopy`, and `VectorAdd` variants holding only their semantic request payloads.
 The selected `QueueConfigHandle` supplies queue identity and completion routing. The
-semantic frontend lowers that public form once into a device-private
-`ExecutionCommand`; the exact frontend decodes ABI-v1 and resolves its DMA addresses
-directly into the same private representation. The shared native core matches only
-private execution operations and derives operation-specific chunks and resource demand
-internally. ABI-v1 encodes equivalent command data through the fixed registry; neither
-the public command type nor the private execution type is wire layout.
+semantic frontend submits this form directly. The exact frontend decodes ABI-v1 and the
+stateless device adapter resolves its DMA addresses into the same semantic `Command`.
+The shared engine matches `CommandOperation` directly and derives operation-specific
+chunks and resource demand internally. ABI-v1 encodes equivalent command data through
+the fixed registry; no device-private command union exists.
 
 ## Supported v0 Operations
 
@@ -371,7 +375,7 @@ The native copy and vector-add paths use checked memory reads and writes. Bounds
 
 ### Resource-Credit Semantics
 
-`ResourceConfig` defines capacities for internal descriptors, read slots, write slots, compute slots, completion publication slots, and event publication slots. The default configuration is unbounded. `ResourceDemand` derives execution demand from the device-private `ExecutionCommand`: an operation with `N` native chunks or destinations demands `N` internal descriptors, `N` read slots, and `N` write slots; a vector add demands one internal descriptor, two read slots, one write slot, and one compute slot. Publication slots gate completion and event ring pushes.
+`ResourceConfig` defines capacities for internal descriptors, read slots, write slots, compute slots, completion publication slots, and event publication slots. The default configuration is unbounded. `ResourceDemand` derives execution demand directly from `CommandOperation`: an operation with `N` native chunks or destinations demands `N` internal descriptors, `N` read slots, and `N` write slots; a vector add demands one internal descriptor, two read slots, one write slot, and one compute slot. Publication slots gate completion and event ring pushes.
 
 ### Stall Semantics
 
@@ -379,7 +383,7 @@ The native copy and vector-add paths use checked memory reads and writes. Bounds
 
 ## Trace Sink Behavior and Chrome/Perfetto-Compatible Export
 
-The trace sink (`model/modeling/crates/device/src/trace/mod.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
+The trace sink (`model/modeling/crates/device/src/engine/trace/mod.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
 
 Hook points cover command submission, doorbell/runnable transitions, scheduling, execution success, execution faults, completion/event publication and polling, IRQ source latch, line assertion/deassertion, message emission, device ack, handler start/completion, stalls, and idle steps. Public trace types include `TraceEvent`, `TraceEventKind`, `TraceOperation`, and `TraceSink`.
 

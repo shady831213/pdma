@@ -7,8 +7,8 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_host::{
-    AsyncDriver, DriverPort, adapters::AsyncDeviceAccess, interrupt::InterruptError,
-    register::PdmaRegisterPort,
+    AsyncDriver, DriverPort, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
+    runtime::interrupt::InterruptError,
 };
 use std::sync::Arc;
 use support::{

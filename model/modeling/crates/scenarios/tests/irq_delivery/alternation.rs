@@ -6,7 +6,7 @@ use super::{
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{IrqVector, TraceEventKind};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{DriverResult, adapters::AsyncDeviceAccess, compat::AsyncDevicePort};
+use pdma_model_host::{DriverResult, adapter::abi::AsyncDeviceAccess, compat::AsyncDevicePort};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 

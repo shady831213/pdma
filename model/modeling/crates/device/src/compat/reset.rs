@@ -1,5 +1,5 @@
 use crate::PdmaResetError;
-use crate::runner::SyncDevice;
+use crate::runtime::SyncDevice;
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 impl SyncDevice {

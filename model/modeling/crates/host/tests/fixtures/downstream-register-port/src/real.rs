@@ -7,8 +7,8 @@ use pdma_model_contract::semantic::{
     IrqVector, QueueConfig, ResourceConfig, SoftwareOwnerId,
 };
 use pdma_model_device::{AsyncDevice, DeviceCore};
-use pdma_model_host::adapters::AsyncDeviceAccess;
-use pdma_model_host::register::{
+use pdma_model_host::adapter::abi::AsyncDeviceAccess;
+use pdma_model_host::adapter::abi::{
     PdmaExactInterruptClaim, PdmaMemoryProvisioning, PdmaRegionRequest,
 };
 use std::error::Error;
@@ -99,7 +99,7 @@ pub async fn run(alignment: MemoryAlignment) -> TestResult<RealResult> {
         zero_storage: zero.storage().is_some(),
         notification_is_message: matches!(
             notification,
-            pdma_model_host::register::PdmaClaimResult::Notification {
+            pdma_model_host::adapter::abi::PdmaClaimResult::Notification {
                 notification: IrqNotification::Message(_),
                 ..
             }

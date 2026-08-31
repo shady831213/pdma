@@ -1,6 +1,6 @@
 use super::{NotificationPort, message};
-use crate::interrupt::{InterruptError, InterruptResult};
-use crate::irq_delivery::{IrqDelivery, irq_handler};
+use crate::runtime::interrupt::{InterruptError, InterruptResult};
+use crate::runtime::irq_delivery::{IrqDelivery, irq_handler};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CompletionRingId, IrqSource, IrqVector, QueueId};
 use tokio::sync::mpsc;

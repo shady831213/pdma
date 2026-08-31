@@ -1,11 +1,11 @@
-use crate::interrupt::InterruptError;
+use crate::runtime::interrupt::InterruptError;
 use crate::{DriverError, DriverResult, PortError, PortResult};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 
-use crate::irq_delivery::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
+use crate::runtime::irq_delivery::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
 use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{

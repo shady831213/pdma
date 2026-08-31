@@ -16,9 +16,9 @@ use pdma_model_contract::semantic::{
 use pdma_model_device::{AsyncDevice, AsyncDeviceWorker, DeviceCore};
 use pdma_model_host::{
     AsyncDriver, DriverIrqRecord,
-    interrupt::{PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
-    register::BusQueueStatus,
-    register::PdmaRegisterPort,
+    adapter::abi::PdmaRegisterPort,
+    adapter::abi::RegisterQueueStatus,
+    runtime::interrupt::{PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
 };
 use std::sync::Arc;
 use tokio::{sync::oneshot, task::JoinHandle};
@@ -137,14 +137,14 @@ pub struct MainOutcome {
     pub report: HandlerReport,
     pub copied: Vec<u8>,
     pub phase: SoftwarePhase,
-    pub queue_status: BusQueueStatus,
+    pub queue_status: RegisterQueueStatus,
 }
 
 #[derive(Debug)]
 pub struct ScenarioResult {
     pub vector: IrqVector,
     pub outcome: MainOutcome,
-    pub queue_status: BusQueueStatus,
+    pub queue_status: RegisterQueueStatus,
     pub deliveries: usize,
     pub device_steps: usize,
     pub device_trace: Vec<TraceEvent>,

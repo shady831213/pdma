@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-Generated: 2026-07-16
+Generated: 2026-08-31
 Baseline commit: pre-v0.8 checkpoint `0c044bd`; v0.8-v0.9 implementation follows
 Branch: master
 Scope: v0.9 is COMPLETE, including its historical data ABI and exact 4 KiB numeric MMIO
@@ -42,10 +42,15 @@ Ignore generated `model/modeling/target/` content.
 
 | Area | Location | Role |
 | --- | --- | --- |
-| Contract API | `crates/contract/src/` | Shared soft/hard Rust contract and DMA-visible object vocabulary. |
-| Device API | `crates/device/src/runner.rs` | `AsyncDevice`, `AsyncDeviceWorker`, `AsyncDeviceHandle`, and `SyncDevice` public surfaces. |
-| Device blocks | `crates/device/src/runner/native*.rs` | Queue-port hardware-behavior internals. |
-| Host API | `crates/host/src/` | Driver, port, and IRQ delivery modules. |
+| Contract ABI | `crates/contract/src/abi/` | Layout-exact records, registers, MMIO, rings, codecs, and errors. |
+| Contract semantic | `crates/contract/src/semantic/` | Layout-independent commands, identities, queue controls, results, IRQ, resources, and trace vocabulary. |
+| Device engine | `crates/device/src/engine/` | Deterministic behavior that directly executes contract semantic commands; it is behavior, not another data model. |
+| Device ABI state | `crates/device/src/abi/` | Exact DMA addressing, ring state and publication, MMIO behavior, and register endpoint. |
+| Device adapter | `crates/device/src/adapter/` | Stateless typed conversion from ABI descriptors into contract semantic commands. |
+| Device runtime | `crates/device/src/runtime/` | Actor facade, shared orchestration state, reset, worker, and wait mechanics. |
+| Host semantic | `crates/host/src/semantic/` | Driver, accounting, semantic port, and transport-independent errors. |
+| Host ABI adapter | `crates/host/src/adapter/abi/` | Register port, device access, exact capabilities, and semantic-to-ABI projection. |
+| Host runtime | `crates/host/src/runtime/` | CPU-local and interrupt delivery integration. |
 | Scenarios | `crates/scenarios/tests/` | System-level behavioral validation. |
 
 ## CURRENT STATE
@@ -62,7 +67,8 @@ history, resource configuration, and lifecycle accounting; it clears resettable
 queues/results/work/IRQ and advances `DeviceEpoch`, so stale queue, IRQ, and notification
 capabilities fail before mutation and require explicit new-epoch bootstrap. The
 checked-in `model/modeling/include/pdma_model_abi.h` is generated from Rust metadata;
-regenerate with `pdma-abi-header -- --write` and gate with `--check`, never manual edits.
+regenerate with `pdma-abi-header -- --write include/pdma_model_abi.h` and gate with
+`--check include/pdma_model_abi.h`, never manual edits.
 v0.8 remains mandatory: `AsyncDriver` is CPU-bound and exclusively services IRQs;
 `ManualDriver` is CPU-unbound observability only; one private core shares cancel-safe
 accounting; the device never stores or invokes handlers. The old sync stack remains
@@ -128,6 +134,7 @@ cargo fmt --all -- --check
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo doc --workspace --no-deps --document-private-items
+cargo run -p pdma-model-contract --bin pdma-abi-header -- --check include/pdma_model_abi.h
 ```
 
 Use `GIT_MASTER=1` before every git command.

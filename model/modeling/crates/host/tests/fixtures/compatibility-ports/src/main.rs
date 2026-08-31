@@ -1,9 +1,9 @@
 use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, ResourceConfig, WholeDeviceReset};
 use pdma_model_device::{AsyncDevice, DeviceCore};
-use pdma_model_host::adapters::AsyncDeviceAccess;
+use pdma_model_host::adapter::abi::AsyncDeviceAccess;
 use pdma_model_host::compat::{AsyncDevicePort, SemanticDevicePort};
-use pdma_model_host::register::PdmaRegisterPort;
+use pdma_model_host::adapter::abi::PdmaRegisterPort;
 use pdma_model_host::{AsyncDriver, DriverError, DriverPort, ManualDriver, PortError};
 use std::{path::Path, sync::Arc};
 
@@ -140,7 +140,7 @@ async fn main() {
     );
     let successor_paths_compile = compiler::accepts(Path::new(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/positive/legacy_paths.rs"
+        "/positive/canonical_paths.rs"
     )));
     let final_error_names_compile = compiler::accepts(Path::new(concat!(
         env!("CARGO_MANIFEST_DIR"),

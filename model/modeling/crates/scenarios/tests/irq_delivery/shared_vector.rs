@@ -9,7 +9,7 @@ use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDriver, DriverError, DriverPort, DriverResult, adapters::AsyncDeviceAccess,
+    AsyncDriver, DriverError, DriverPort, DriverResult, adapter::abi::AsyncDeviceAccess,
     compat::AsyncDevicePort,
 };
 use std::sync::Arc;

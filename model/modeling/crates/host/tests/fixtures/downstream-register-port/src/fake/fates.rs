@@ -2,7 +2,7 @@ use super::*;
 use hardware_interface_runtime::{GateFault, MemoryRegion, ObservationGateError};
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};
 use pdma_model_contract::semantic::BufferId;
-use pdma_model_host::register::PdmaPreparedProposal;
+use pdma_model_host::adapter::abi::PdmaPreparedProposal;
 
 pub(crate) async fn verify_fates(alignment: MemoryAlignment) -> TestResult<bool> {
     verify_provisioning(alignment).await?;

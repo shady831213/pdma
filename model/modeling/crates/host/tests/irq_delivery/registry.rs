@@ -1,6 +1,6 @@
 use super::{NotificationPort, line, message};
-use crate::interrupt::{InterruptError, InterruptResult};
-use crate::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
+use crate::runtime::interrupt::{InterruptError, InterruptResult};
+use crate::runtime::irq_delivery::{IrqDelivery, IrqHandler, IrqHandlerFuture};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CompletionRingId, IrqNotification, IrqSource, IrqVector, QueueId, TraceEventKind,

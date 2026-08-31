@@ -1,4 +1,4 @@
-use super::PdmaInterruptNotification;
+use super::PdmaNotificationEnvelope;
 use hardware_interface_runtime::{InterruptLifecycleEvent, InterruptLifecycleObserver};
 use pdma_model_contract::semantic::{TraceEvent, TraceEventKind};
 use std::sync::Mutex;
@@ -19,8 +19,8 @@ impl PdmaInterruptTrace {
     }
 }
 
-impl InterruptLifecycleObserver<PdmaInterruptNotification> for PdmaInterruptTrace {
-    fn observe(&self, event: InterruptLifecycleEvent<'_, PdmaInterruptNotification>) {
+impl<N: PdmaNotificationEnvelope> InterruptLifecycleObserver<N> for PdmaInterruptTrace {
+    fn observe(&self, event: InterruptLifecycleEvent<'_, N>) {
         let (kind, detail) = match event {
             InterruptLifecycleEvent::Started { notification, .. } => (
                 TraceEventKind::IrqHandlerStarted,

@@ -5,8 +5,9 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use pdma_model_host::DriverIrqRecord;
+use pdma_model_host::adapter::abi::PdmaInterruptSource;
 use pdma_model_host::runtime::interrupt::{
-    PdmaInterruptSource, PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
+    PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
 };
 use std::sync::{Arc, Mutex};
 

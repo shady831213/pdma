@@ -4,8 +4,7 @@ mod pdma;
 mod trace;
 
 pub use pdma::{
-    PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSource, PdmaInterruptSourceError,
-    PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService, PdmaIrqServiceError,
+    PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService, PdmaIrqServiceError, PdmaNotificationEnvelope,
 };
 pub use trace::PdmaInterruptTrace;
 

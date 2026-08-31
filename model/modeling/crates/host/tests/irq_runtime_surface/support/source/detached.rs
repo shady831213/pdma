@@ -3,10 +3,10 @@ use crate::support::{ProbeAccess, ProbePort};
 use hardware_interface_runtime::{HandlerRegistry, NoopInterruptObserver, SoftwareCpu};
 use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use pdma_model_host::DriverIrqRecord;
-use pdma_model_host::adapter::abi::{PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim};
-use pdma_model_host::runtime::interrupt::{
-    PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
+use pdma_model_host::adapter::abi::{
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaInterruptSource,
 };
+use pdma_model_host::runtime::interrupt::{PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 

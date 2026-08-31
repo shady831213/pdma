@@ -16,9 +16,8 @@ use pdma_model_contract::semantic::{
 use pdma_model_device::{AsyncDevice, AsyncDeviceWorker, DeviceCore};
 use pdma_model_host::{
     AsyncDriver, DriverIrqRecord,
-    adapter::abi::PdmaRegisterPort,
-    adapter::abi::RegisterQueueStatus,
-    runtime::interrupt::{PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
+    adapter::abi::{PdmaInterruptSource, PdmaRegisterPort, RegisterQueueStatus},
+    runtime::interrupt::{PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
 };
 use std::sync::Arc;
 use tokio::{sync::oneshot, task::JoinHandle};

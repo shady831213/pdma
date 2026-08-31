@@ -4,8 +4,8 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::IrqVector;
 use pdma_model_host::{
-    adapter::abi::AsyncDeviceAccess,
-    runtime::interrupt::{PdmaInterruptSource, PdmaIrqDelivery, PdmaIrqService},
+    adapter::abi::{AsyncDeviceAccess, PdmaInterruptSource},
+    runtime::interrupt::{PdmaIrqDelivery, PdmaIrqService},
 };
 use std::sync::Arc;
 use tokio::{

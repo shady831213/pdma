@@ -69,3 +69,37 @@ fn host_semantic_directory_has_no_exact_transport_dependencies() -> io::Result<(
     assert_directory_contract(&source);
     assert_layer_excludes(&source.join("semantic"), &["abi::", "crate::adapter"])
 }
+
+#[test]
+fn host_exact_interrupt_and_descriptor_planning_have_single_owners() -> io::Result<()> {
+    // Given: the runtime interrupt service and register submission transaction sources.
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let runtime = fs::read_to_string(source.join("runtime/interrupt/pdma.rs"))?;
+    let submission = fs::read_to_string(source.join("adapter/abi/register/port/submission.rs"))?;
+    let interrupt = fs::read_to_string(source.join("adapter/abi/interrupt.rs"))?;
+    let descriptor = fs::read_to_string(source.join("adapter/abi/register/port/descriptor.rs"))?;
+
+    // When/Then: exact source ownership stays in the ABI adapter and encoding stays out of commit code.
+    for forbidden in [
+        "PdmaExactInterruptClaim",
+        "PdmaClaimResult",
+        "RegisterObservation",
+    ] {
+        assert!(!runtime.contains(forbidden), "runtime owns {forbidden}");
+        assert!(
+            interrupt.contains(forbidden),
+            "ABI adapter lacks {forbidden}"
+        );
+    }
+    for forbidden in ["AbiCommandPayload", "fn encode_command"] {
+        assert!(
+            !submission.contains(forbidden),
+            "submission owns descriptor planning: {forbidden}"
+        );
+        assert!(
+            descriptor.contains(forbidden),
+            "descriptor planner lacks {forbidden}"
+        );
+    }
+    Ok(())
+}

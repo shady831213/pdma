@@ -1,5 +1,6 @@
 mod api;
 mod control;
+mod descriptor;
 mod driver;
 mod irq;
 mod registers;

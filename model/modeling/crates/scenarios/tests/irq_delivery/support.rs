@@ -7,9 +7,8 @@ use hardware_interface_runtime::{CpuLocal, HandlerRegistry, InterruptLifecycleOb
 use pdma_model_contract::semantic::{IrqNotification, IrqSource};
 use pdma_model_host::{
     DriverError, DriverIrqRecord, PortError,
-    runtime::interrupt::{
-        PdmaInterruptSource, PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
-    },
+    adapter::abi::PdmaInterruptSource,
+    runtime::interrupt::{PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
 };
 use std::sync::Arc;
 use tokio::sync::oneshot;

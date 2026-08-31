@@ -22,7 +22,7 @@ pub(in crate::abi::ring) fn accept_submission(
     state: &mut DeviceCore,
     request: SubmissionAcceptance,
 ) -> Result<QueueStatus, PdmaControlError> {
-    let queue = *state.queue_control.queue(request.queue)?;
+    let queue = *state.device.queue_control.queue(request.queue)?;
     let expected_producer = exact_cursor(request.expected_producer);
     if queue.submission.ring().producer() != expected_producer || queue.submission.ring().is_full()
     {
@@ -34,15 +34,17 @@ pub(in crate::abi::ring) fn accept_submission(
     validate_indirect(state, request.indirect.as_ref())?;
 
     if let Some((stage, write)) = request.indirect {
-        state.dma_space.commit(stage)?;
+        state.device.dma.commit(stage)?;
         state
-            .dma_space
+            .device
+            .dma
             .write_memory(write.address(), write.bytes())?;
     }
     state
-        .dma_space
+        .device
+        .dma
         .write_memory(request.descriptor.address(), request.descriptor.bytes())?;
-    let active = state.queue_control.queue_mut(request.queue)?;
+    let active = state.device.queue_control.queue_mut(request.queue)?;
     active.submission = submission;
     active.status()
 }
@@ -70,7 +72,7 @@ fn validate_indirect(
     let [region] = proposal.regions() else {
         return Err(PdmaControlError::InvalidTransaction);
     };
-    if proposal.generation() != state.dma_space.generation()
+    if proposal.generation() != state.device.dma.generation()
         || write.address() != region.base()
         || u64::try_from(write.bytes().len()) != Ok(region.length())
     {
@@ -84,7 +86,7 @@ pub(crate) fn prepare_submission_publication(
     state: &DeviceCore,
     request: &SubmissionAcceptance,
 ) -> Result<PreparedSubmissionPublication, PdmaControlError> {
-    let queue = *state.queue_control.queue(request.queue)?;
+    let queue = *state.device.queue_control.queue(request.queue)?;
     let expected_producer = exact_cursor(request.expected_producer);
     if queue.submission.ring().producer() != expected_producer || queue.submission.ring().is_full()
     {
@@ -107,7 +109,7 @@ pub(crate) fn install_submission_publication(
     state: &mut DeviceCore,
     prepared: &PreparedSubmissionPublication,
 ) -> QueueStatus {
-    for (index, queue) in state.queue_control.queues.iter_mut().enumerate() {
+    for (index, queue) in state.device.queue_control.queues.iter_mut().enumerate() {
         if index == prepared.queue.queue_id().raw() {
             queue.submission = prepared.submission;
             break;
@@ -122,7 +124,11 @@ pub(crate) fn control(
 ) -> (Result<QueueStatus, PdmaControlError>, bool) {
     match request {
         QueueControl::ReadStatus(queue) => (
-            state.queue_control.queue(queue).and_then(|q| q.status()),
+            state
+                .device
+                .queue_control
+                .queue(queue)
+                .and_then(|q| q.status()),
             false,
         ),
         QueueControl::PublishSubmissionProducer(update) => {
@@ -135,7 +141,8 @@ pub(crate) fn control(
         }
         QueueControl::CaptureSubmissionProducer(update) => {
             if state
-                .backend
+                .device
+                .execution
                 .validate_dma_bus_queue(update.queue())
                 .is_err()
             {
@@ -146,7 +153,13 @@ pub(crate) fn control(
                 queue.submission = queue.submission.capture(cursor)?;
                 Ok(changed)
             });
-            if result.is_ok() && state.backend.ring_dma_bus_doorbell(update.queue()).is_err() {
+            if result.is_ok()
+                && state
+                    .device
+                    .execution
+                    .ring_dma_bus_doorbell(update.queue())
+                    .is_err()
+            {
                 return (Err(PdmaControlError::InvalidQueue), false);
             }
             (result, changed)
@@ -214,6 +227,7 @@ fn update_queue(
     ) -> Result<bool, PdmaControlError>,
 ) -> (Result<QueueStatus, PdmaControlError>, bool) {
     let result = state
+        .device
         .queue_control
         .queue_mut(update.queue())
         .and_then(|queue| {

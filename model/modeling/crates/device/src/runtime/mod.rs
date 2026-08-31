@@ -16,7 +16,7 @@ mod wait;
 mod worker;
 
 pub(crate) use crate::abi::MmioRegisterEndpoint;
-use crate::abi::dma::{PdmaMemoryError, PdmaMemoryMappings};
+use crate::abi::dma::PdmaMemoryError;
 pub(crate) use crate::abi::ring::{PdmaControlError, PendingDmaResult, QueueStatus};
 pub use actor::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker};
 pub use core::DeviceCore;

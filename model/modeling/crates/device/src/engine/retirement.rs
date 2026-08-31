@@ -3,36 +3,20 @@ use super::io::PublicationOutcome;
 use crate::abi::dma::PdmaMemoryMappings;
 use crate::abi::ring::control::QueueControlState;
 use crate::engine::step::ModelStepStatus;
+use crate::hardware::retirement::PendingRetirement;
+pub(super) use crate::hardware::retirement::SuccessRetirement;
 use crate::runtime::AsyncStallReason;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::completion::{CompletionRecord, CompletionStatus};
 use pdma_model_contract::semantic::event::MemoryFault;
 use pdma_model_contract::semantic::ids::{CommandId, CompletionRingId, QueueId};
 use pdma_model_contract::semantic::irq::IrqSource;
-use pdma_model_contract::semantic::trace::TraceOperation;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct FaultRetirement {
     pub(super) queue_id: QueueId,
     pub(super) command_id: CommandId,
     pub(super) fault: MemoryFault,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct SuccessRetirement {
-    pub(super) queue: QueueId,
-    pub(super) command: CommandId,
-    pub(super) completion_ring: CompletionRingId,
-    pub(super) operation: TraceOperation,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) enum PendingRetirement {
-    Completion(SuccessRetirement),
-    Fault {
-        queue: QueueId,
-        source: Option<ModelError>,
-    },
 }
 
 pub(super) fn publish_completion(
@@ -48,7 +32,9 @@ pub(super) fn publish_completion(
         .execution_succeeded(success.queue, success.operation, success.command);
     if state::completion_publication_is_full(device, queue_control, success)? {
         state::consume_command(device, queue_control, success.queue)?;
-        device.pending_retirement = Some(PendingRetirement::Completion(success));
+        device
+            .retirement
+            .hold(PendingRetirement::Completion(success));
         device
             .trace
             .stall(Some(success.queue), "CompletionPublicationPressure");
@@ -56,13 +42,17 @@ pub(super) fn publish_completion(
             AsyncStallReason::CompletionPublicationPressure,
         ));
     }
-    let publication = device
-        .queue_mut(success.queue)?
-        .frontend
-        .publish_completion(dma_space, queue_control, success.queue, completion);
+    let publication = device.queue_mut(success.queue)?.io.publish_completion(
+        dma_space,
+        queue_control,
+        success.queue,
+        completion,
+    );
     if publication == PublicationOutcome::Retry {
         state::consume_command(device, queue_control, success.queue)?;
-        device.pending_retirement = Some(PendingRetirement::Completion(success));
+        device
+            .retirement
+            .hold(PendingRetirement::Completion(success));
         device
             .trace
             .stall(Some(success.queue), "CompletionPublicationPressure");
@@ -95,7 +85,7 @@ pub(super) fn retry_pending_retirement(
     dma_space: &PdmaMemoryMappings,
     queue_control: &mut QueueControlState,
 ) -> ModelResult<ModelStepStatus> {
-    let Some(pending) = device.pending_retirement else {
+    let Some(pending) = device.retirement.pending() else {
         return Ok(ModelStepStatus::Idle);
     };
     match pending {
@@ -124,10 +114,12 @@ fn retry_pending_completion(
             AsyncStallReason::CompletionPublicationPressure,
         ));
     }
-    let publication = device
-        .queue_mut(pending.queue)?
-        .frontend
-        .publish_completion(dma_space, queue_control, pending.queue, completion);
+    let publication = device.queue_mut(pending.queue)?.io.publish_completion(
+        dma_space,
+        queue_control,
+        pending.queue,
+        completion,
+    );
     if publication == PublicationOutcome::Retry {
         device
             .trace
@@ -138,7 +130,7 @@ fn retry_pending_completion(
     }
     device.trace.completion_published(completion);
     device.latch_irq_source(IrqSource::Completion(pending.completion_ring));
-    device.pending_retirement = None;
+    device.retirement.complete();
     device.requeue_if_command_pending(dma_space, queue_control, pending.queue)?;
     Ok(ModelStepStatus::Progressed)
 }
@@ -165,7 +157,7 @@ fn retry_pending_fault(
         ));
     }
     device.latch_irq_source(IrqSource::Event(queue_id));
-    device.pending_retirement = None;
+    device.retirement.complete();
     device.requeue_if_command_pending(dma_space, queue_control, queue_id)?;
     source.map_or(Ok(ModelStepStatus::Progressed), Err)
 }
@@ -184,11 +176,11 @@ pub(super) fn publish_fault(
     device.trace.execution_faulted(event);
     let source = device
         .queue_mut(fault.queue_id)?
-        .frontend
+        .io
         .stage_execution_fault(event)?;
     if state::fault_publication_is_full(device, queue_control, fault.queue_id)? {
         state::consume_command(device, queue_control, fault.queue_id)?;
-        device.pending_retirement = Some(PendingRetirement::Fault {
+        device.retirement.hold(PendingRetirement::Fault {
             queue: fault.queue_id,
             source: Some(source),
         });
@@ -202,7 +194,7 @@ pub(super) fn publish_fault(
     let publication = device.publish_frontend_fault(fault.queue_id, dma_space, queue_control)?;
     if publication == PublicationOutcome::Retry {
         state::consume_command(device, queue_control, fault.queue_id)?;
-        device.pending_retirement = Some(PendingRetirement::Fault {
+        device.retirement.hold(PendingRetirement::Fault {
             queue: fault.queue_id,
             source: Some(source),
         });
@@ -224,7 +216,7 @@ pub(super) fn cache_frontend_fault(
     fault: super::io::NormalizedFault,
 ) -> ModelResult<ModelStepStatus> {
     state::consume_command(device, queue_control, fault.queue)?;
-    device.pending_retirement = Some(PendingRetirement::Fault {
+    device.retirement.hold(PendingRetirement::Fault {
         queue: fault.queue,
         source: Some(fault.source),
     });

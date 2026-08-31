@@ -12,13 +12,7 @@ async fn run_one(shared: &RunnerShared) -> bool {
         if state.shutdown_requested {
             return publish_and_continue(shared, state.generation, false);
         }
-        let DeviceCore {
-            backend,
-            dma_space,
-            queue_control,
-            ..
-        } = &mut *state;
-        match backend.step(dma_space, queue_control) {
+        match state.device.step() {
             Ok(ModelStepStatus::Progressed) => {
                 state.steps = state.steps.saturating_add(1);
                 state.last_status = AsyncStepStatus::Progressed;

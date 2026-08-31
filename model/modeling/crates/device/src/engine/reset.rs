@@ -12,11 +12,11 @@ impl DeviceExecution {
             .iter()
             .filter(|queue| {
                 queue
-                    .frontend
+                    .io
                     .records_pending(control, queue.entry.queue_id(), true)
                     .unwrap_or(false)
                     || queue
-                        .frontend
+                        .io
                         .records_pending(control, queue.entry.queue_id(), false)
                         .unwrap_or(false)
             })
@@ -24,8 +24,8 @@ impl DeviceExecution {
         (
             self.queues.len(),
             result_queues,
-            self.runnable.len(),
-            usize::from(self.pending_retirement.is_some()),
+            self.scheduler.len(),
+            usize::from(self.retirement.is_pending()),
             self.irq.source_count(),
         )
     }
@@ -33,8 +33,8 @@ impl DeviceExecution {
     pub(crate) fn reset(&mut self, epoch: DeviceEpoch) {
         self.epoch = epoch;
         self.queues.clear();
-        self.runnable.clear();
-        self.pending_retirement = None;
+        self.scheduler.reset();
+        self.retirement.reset();
         self.irq = PdmaIrqController::new(epoch, IrqLine::new(IrqVector::new(0)));
     }
 }

@@ -9,10 +9,10 @@ pub(super) fn completion_publication_is_full(
     control: &QueueControlState,
     success: SuccessRetirement,
 ) -> ModelResult<bool> {
-    Ok(device.queue(success.queue)?.frontend.completion_blocked(
+    Ok(device.queue(success.queue)?.io.completion_blocked(
         control,
         success.queue,
-        device.resource_config.completion_publication_slots(),
+        device.execution.resources().completion_publication_slots(),
     ))
 }
 
@@ -21,10 +21,10 @@ pub(super) fn fault_publication_is_full(
     control: &QueueControlState,
     queue: QueueId,
 ) -> ModelResult<bool> {
-    Ok(device.queue(queue)?.frontend.fault_blocked(
+    Ok(device.queue(queue)?.io.fault_blocked(
         control,
         queue,
-        device.resource_config.event_publication_slots(),
+        device.execution.resources().event_publication_slots(),
     ))
 }
 
@@ -33,7 +33,7 @@ pub(super) fn consume_command(
     control: &mut QueueControlState,
     queue: QueueId,
 ) -> ModelResult<()> {
-    device.queue_mut(queue)?.frontend.consume(control, queue)
+    device.queue_mut(queue)?.io.consume(control, queue)
 }
 
 pub(super) fn retire_command(

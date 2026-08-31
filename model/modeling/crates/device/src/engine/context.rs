@@ -1,13 +1,7 @@
-use super::{DeviceExecution, io};
+use super::DeviceExecution;
 use crate::abi::dma::PdmaMemoryMappings;
 use crate::abi::ring::control::QueueControlState;
-use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueDirectoryEntry, QueueId};
-
-#[derive(Debug)]
-pub(super) struct QueueContext {
-    pub(super) entry: QueueDirectoryEntry,
-    pub(super) frontend: io::QueueFrontend,
-}
+use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 
 pub(super) struct NativeExecution<'a> {
     pub(super) device: &'a mut DeviceExecution,

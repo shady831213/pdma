@@ -83,3 +83,47 @@ fn device_layers_preserve_two_model_ownership() -> io::Result<()> {
         ],
     )
 }
+
+#[test]
+fn runtime_wraps_one_synchronous_hardware_device() -> io::Result<()> {
+    // Given: the device source tree and its async runtime wrapper.
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let hardware = source.join("hardware");
+    let core = fs::read_to_string(source.join("runtime/core.rs"))?;
+
+    // When/Then: one hardware top owns synchronous device state behind the runtime shell.
+    assert!(
+        hardware.is_dir(),
+        "missing hardware-object device directory"
+    );
+    let top = fs::read_to_string(hardware.join("mod.rs"))?;
+    assert!(top.contains("struct PdmaDevice"));
+    assert!(core.contains("device: PdmaDevice"));
+    assert_layer_excludes(&hardware, &["tokio::", "async fn", "Mutex<"])
+}
+
+#[test]
+fn hardware_queue_owns_one_closed_io_mode() -> io::Result<()> {
+    // Given: the hardware queue object and the complete device source tree.
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let queue = fs::read_to_string(source.join("hardware/queue.rs"))?;
+
+    // When/Then: one queue owns a closed semantic-or-exact I/O mode without dynamic dispatch.
+    assert!(queue.contains("struct PdmaQueue"));
+    assert!(queue.contains("enum QueueIo"));
+    assert_layer_excludes(&source, &["dyn FrontendBehavior"])
+}
+
+#[test]
+fn hardware_scheduler_owns_runnable_state() -> io::Result<()> {
+    // Given: the hardware-object source tree.
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let scheduler = fs::read_to_string(source.join("hardware/scheduler.rs"))?;
+
+    // When/Then: runnable FIFO state and transitions belong to one synchronous object.
+    assert!(scheduler.contains("struct Scheduler"));
+    assert!(scheduler.contains("runnable: VecDeque<QueueId>"));
+    assert!(scheduler.contains("fn enqueue("));
+    assert!(scheduler.contains("fn next("));
+    assert_layer_excludes(&source.join("engine"), &["runnable: VecDeque<QueueId>"])
+}

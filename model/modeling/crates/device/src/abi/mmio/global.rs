@@ -51,7 +51,7 @@ impl GlobalBank {
 }
 
 pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioScalar {
-    let bank = &state.mmio.global;
+    let bank = &state.device.registers.global;
     let response = bank.command.response;
     let result = bank.command.result;
     let [detail0, detail1, detail2] = result.details;
@@ -81,7 +81,7 @@ pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioSc
 }
 
 pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64) {
-    let bank = &mut state.mmio.global;
+    let bank = &mut state.device.registers.global;
     match register {
         GlobalRegister::ReqAbiVersion => bank.req_abi_version = narrow_u32(value),
         GlobalRegister::ReqFeatures => bank.req_features = value,
@@ -124,7 +124,7 @@ fn execute(state: &mut DeviceCore, raw: u32) {
 }
 
 fn reset(state: &mut DeviceCore) {
-    let expected_epoch = state.mmio.global.reset_expected_epoch;
+    let expected_epoch = state.device.registers.global.reset_expected_epoch;
     match super::reset::execute(state, expected_epoch) {
         super::reset::ResetOutcome::Success(epoch) => {
             complete_success(
@@ -142,7 +142,7 @@ fn reset(state: &mut DeviceCore) {
 
 fn discover(state: &mut DeviceCore) {
     let request = {
-        let bank = &state.mmio.global;
+        let bank = &state.device.registers.global;
         DiscoveryRequest::try_new(low_u16(bank.req_abi_version), bank.req_features)
     };
     match request {
@@ -178,8 +178,9 @@ fn read_limits(state: &mut DeviceCore) {
 
 fn read_status(state: &mut DeviceCore) {
     let run_state = state
-        .backend
-        .run_state(&state.dma_space, &state.queue_control);
+        .device
+        .execution
+        .run_state(&state.device.dma, &state.device.queue_control);
     let encoded = match run_state {
         DeviceRunState::Idle => 0,
         DeviceRunState::Running => 1,
@@ -189,14 +190,14 @@ fn read_status(state: &mut DeviceCore) {
         state,
         GlobalResponseBank {
             run_state: encoded.into(),
-            epoch: state.backend.epoch().raw().into(),
+            epoch: state.device.execution.epoch().raw().into(),
             ..GlobalResponseBank::default()
         },
     );
 }
 
 fn complete_success(state: &mut DeviceCore, response: GlobalResponseBank) {
-    state.mmio.global.command.complete(
+    state.device.registers.global.command.complete(
         details(MmioResult::Ok, [0; 3]),
         ResponseUpdate::Replace(response),
     );
@@ -204,7 +205,8 @@ fn complete_success(state: &mut DeviceCore, response: GlobalResponseBank) {
 
 fn complete_failure(state: &mut DeviceCore, result: MmioResultDetails) {
     state
-        .mmio
+        .device
+        .registers
         .global
         .command
         .complete(result, ResponseUpdate::Preserve);

@@ -5,10 +5,8 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 
-use super::{AsyncStepStatus, PdmaMemoryMappings};
-use crate::abi::mmio::RegisterBanks;
-use crate::abi::ring::control::QueueControlState;
-use crate::engine::DeviceExecution;
+use super::AsyncStepStatus;
+use crate::hardware::PdmaDevice;
 
 /// Sole device-owned state consumed by one asynchronous or synchronous facade.
 ///
@@ -30,10 +28,7 @@ use crate::engine::DeviceExecution;
 /// ```
 #[derive(Debug)]
 pub struct DeviceCore {
-    pub(crate) backend: DeviceExecution,
-    pub(crate) dma_space: PdmaMemoryMappings,
-    pub(crate) queue_control: QueueControlState,
-    pub(crate) mmio: RegisterBanks,
+    pub(crate) device: PdmaDevice,
     pub(crate) steps: usize,
     pub(crate) errors: usize,
     pub(crate) stalls: usize,
@@ -56,10 +51,7 @@ impl DeviceCore {
     ) -> Self {
         let observer = SharedRegisterObserver::new(observer);
         Self {
-            backend: DeviceExecution::with_resource_config(config),
-            dma_space: PdmaMemoryMappings::new(memory),
-            queue_control: QueueControlState::new(),
-            mmio: RegisterBanks::new(),
+            device: PdmaDevice::new(memory, config),
             steps: 0,
             errors: 0,
             stalls: 0,
@@ -79,8 +71,8 @@ impl DeviceCore {
         &mut self,
         request: WholeDeviceReset,
     ) -> Result<DeviceEpoch, crate::abi::ring::PdmaControlError> {
-        let backend_epoch = self.backend.epoch();
-        let control_epoch = self.queue_control.epoch();
+        let backend_epoch = self.device.execution.epoch();
+        let control_epoch = self.device.queue_control.epoch();
         if request.expected_epoch() != backend_epoch || control_epoch != backend_epoch {
             return Err(crate::abi::ring::PdmaControlError::StaleEpoch {
                 expected: backend_epoch,
@@ -92,8 +84,8 @@ impl DeviceCore {
         if next_backend != next_control {
             return Err(crate::abi::ring::PdmaControlError::InvalidTransaction);
         }
-        self.backend.reset(next_backend);
-        self.queue_control.reset(next_control);
+        self.device.execution.reset(next_backend);
+        self.device.queue_control.reset(next_control);
         crate::abi::mmio::reset::register_banks(self);
         self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
         Ok(next_backend)

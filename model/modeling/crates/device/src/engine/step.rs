@@ -41,22 +41,21 @@ pub(super) fn step(execution: NativeExecution<'_>) -> ModelResult<ModelStepStatu
             return Ok(ModelStepStatus::Stalled(reason));
         }
     };
-    if device.pending_retirement.is_some() {
+    if device.retirement.is_pending() {
         return retirement::retry_pending_retirement(device, dma_space, queue_control);
     }
-    let Some(queue_id) = device.runnable.pop_front() else {
+    let Some(queue_id) = device.scheduler.next() else {
         return Ok(ModelStepStatus::Idle);
     };
     let entry = device.queue(queue_id)?.entry;
-    let Some(fetched) =
-        device
-            .queue_mut(queue_id)?
-            .frontend
-            .fetch(dma_space, queue_control, entry)?
+    let Some(fetched) = device
+        .queue_mut(queue_id)?
+        .io
+        .fetch(dma_space, queue_control, entry)?
     else {
         return Ok(ModelStepStatus::Progressed);
     };
-    device.native_steps += 1;
+    device.execution.record_fetch();
     let command = match fetched {
         NormalizedFetch::Command {
             command,

@@ -25,8 +25,9 @@ pub(crate) fn observe_irq_source(
     source: EpochIrqSource,
 ) -> ModelResult<IrqSourceView> {
     let (observed, records_pending) = state
-        .backend
-        .observe_irq_source(&state.queue_control, source)?;
+        .device
+        .execution
+        .observe_irq_source(&state.device.queue_control, source)?;
     let mut bits = IrqStateBit::Present.mask();
     for (set, bit) in [
         (observed.enabled(), IrqStateBit::Enabled),
@@ -51,7 +52,7 @@ pub(crate) fn observe_irq_source(
 }
 
 pub(crate) fn irq_notification_ready(state: &DeviceCore) -> bool {
-    state.backend.irq_notification_ready()
+    state.device.execution.irq_notification_ready()
 }
 
 pub(crate) fn decode_source(epoch: u64, kind: u32, id: u64) -> Option<EpochIrqSource> {
@@ -190,7 +191,10 @@ impl AsyncDeviceHandle {
             let mut state = self.shared.state.lock().await;
             let result = {
                 let state = &mut *state;
-                state.backend.ack_irq_source(&state.queue_control, source)
+                state
+                    .device
+                    .execution
+                    .ack_irq_source(&state.device.queue_control, source)
             };
             super::wake(&mut state);
             (result, state.generation)
@@ -201,7 +205,13 @@ impl AsyncDeviceHandle {
 
     /// Returns the current pending IRQ snapshot, if any.
     pub async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        self.shared.state.lock().await.backend.irq_snapshot()
+        self.shared
+            .state
+            .lock()
+            .await
+            .device
+            .execution
+            .irq_snapshot()
     }
 
     /// Waits until the device has an asserted IRQ snapshot.
@@ -211,7 +221,8 @@ impl AsyncDeviceHandle {
             let current = {
                 let state = self.shared.state.lock().await;
                 if let Some(snapshot) = state
-                    .backend
+                    .device
+                    .execution
                     .irq_snapshot()
                     .filter(|snapshot| snapshot.asserted())
                 {
@@ -240,7 +251,7 @@ impl AsyncDeviceHandle {
         loop {
             let current = {
                 let mut state = self.shared.state.lock().await;
-                if let Some(notification) = state.backend.take_irq_notification() {
+                if let Some(notification) = state.device.execution.take_irq_notification() {
                     return Some(notification);
                 }
                 if state.shutdown_requested {
@@ -257,7 +268,8 @@ impl AsyncDeviceHandle {
                     .state
                     .lock()
                     .await
-                    .backend
+                    .device
+                    .execution
                     .take_irq_notification();
             }
         }

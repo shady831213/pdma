@@ -69,5 +69,5 @@ const fn map_error(error: PdmaControlError) -> MmioResultDetails {
 }
 
 pub(crate) fn register_banks(state: &mut DeviceCore) {
-    state.mmio = RegisterBanks::new();
+    state.device.registers = RegisterBanks::new();
 }

@@ -1,4 +1,4 @@
-use super::{FrontendBehavior, NormalizedFetch, PublicationOutcome};
+use super::{NormalizedFetch, PublicationOutcome};
 use crate::ModelResult;
 use crate::abi::dma::PdmaMemoryMappings;
 use crate::abi::ring::control::QueueControlState;
@@ -9,7 +9,7 @@ use pdma_model_contract::semantic::{
 use std::collections::VecDeque;
 
 #[derive(Debug)]
-pub(in crate::engine) struct SemanticFrontend {
+pub(crate) struct SemanticFrontend {
     commands: NativeRing<Command>,
     completions: NativeRing<CompletionRecord>,
     events: VecDeque<EventRecord>,
@@ -17,7 +17,7 @@ pub(in crate::engine) struct SemanticFrontend {
 }
 
 impl SemanticFrontend {
-    pub(super) fn new(command_depth: usize, completion_depth: usize) -> ModelResult<Self> {
+    pub(crate) fn new(command_depth: usize, completion_depth: usize) -> ModelResult<Self> {
         Ok(Self {
             commands: NativeRing::with_capacity(command_depth)?,
             completions: NativeRing::with_capacity(completion_depth)?,
@@ -26,7 +26,7 @@ impl SemanticFrontend {
         })
     }
 
-    pub(super) fn submit(
+    pub(crate) fn submit(
         &mut self,
         command: Command,
     ) -> ModelResult<(
@@ -37,62 +37,56 @@ impl SemanticFrontend {
         self.commands.push(command).map(|()| identity)
     }
 
-    pub(super) fn poll_completion(&mut self) -> Option<CompletionRecord> {
+    pub(crate) fn poll_completion(&mut self) -> Option<CompletionRecord> {
         self.completions.pop()
     }
 
-    pub(super) fn poll_event(&mut self, queue: QueueId) -> Option<EventRecord> {
+    pub(crate) fn poll_event(&mut self, queue: QueueId) -> Option<EventRecord> {
         let index = self
             .events
             .iter()
             .position(|event| event.queue_id() == queue)?;
         self.events.remove(index)
     }
-}
-
-impl FrontendBehavior for SemanticFrontend {
-    fn fetch(
-        &mut self,
-        _memory: &PdmaMemoryMappings,
-        _control: &QueueControlState,
-        entry: QueueDirectoryEntry,
-    ) -> ModelResult<Option<NormalizedFetch>> {
-        Ok(self
-            .commands
-            .front()
-            .cloned()
-            .map(|command| NormalizedFetch::Command {
-                command,
-                completion_ring: entry.completion_ring_id(),
-            }))
-    }
-
-    fn probe(
+    pub(crate) fn fetch(
         &self,
         _memory: &PdmaMemoryMappings,
         _control: &QueueControlState,
         entry: QueueDirectoryEntry,
-    ) -> ModelResult<Option<NormalizedFetch>> {
-        Ok(self
-            .commands
+    ) -> Option<NormalizedFetch> {
+        self.commands
             .front()
             .cloned()
             .map(|command| NormalizedFetch::Command {
                 command,
                 completion_ring: entry.completion_ring_id(),
-            }))
+            })
     }
 
-    fn consume(&mut self, _control: &mut QueueControlState, _queue: QueueId) -> ModelResult<()> {
+    pub(crate) fn probe(
+        &self,
+        _memory: &PdmaMemoryMappings,
+        _control: &QueueControlState,
+        entry: QueueDirectoryEntry,
+    ) -> Option<NormalizedFetch> {
+        self.commands
+            .front()
+            .cloned()
+            .map(|command| NormalizedFetch::Command {
+                command,
+                completion_ring: entry.completion_ring_id(),
+            })
+    }
+
+    pub(crate) fn consume(&mut self, _control: &mut QueueControlState, _queue: QueueId) {
         let _consumed = self.commands.pop();
-        Ok(())
     }
 
-    fn has_pending(&self, _control: &QueueControlState, _queue: QueueId) -> bool {
+    pub(crate) const fn has_pending(&self, _control: &QueueControlState, _queue: QueueId) -> bool {
         !self.commands.is_empty()
     }
 
-    fn publish_completion(
+    pub(crate) fn publish_completion(
         &mut self,
         _memory: &PdmaMemoryMappings,
         _control: &mut QueueControlState,
@@ -106,13 +100,13 @@ impl FrontendBehavior for SemanticFrontend {
         }
     }
 
-    fn stage_execution_fault(&mut self, event: EventRecord) -> ModelResult<crate::ModelError> {
+    pub(crate) const fn stage_execution_fault(&mut self, event: EventRecord) -> crate::ModelError {
         let source = crate::ModelError::from_memory_fault(event.buffer(), event.error_kind());
         self.pending_fault = Some((event, source));
-        Ok(source)
+        source
     }
 
-    fn publish_fault(
+    pub(crate) fn publish_fault(
         &mut self,
         _memory: &PdmaMemoryMappings,
         _control: &mut QueueControlState,
@@ -126,7 +120,7 @@ impl FrontendBehavior for SemanticFrontend {
         PublicationOutcome::Published
     }
 
-    fn completion_blocked(
+    pub(crate) fn completion_blocked(
         &self,
         _control: &QueueControlState,
         _queue: QueueId,
@@ -135,7 +129,7 @@ impl FrontendBehavior for SemanticFrontend {
         self.completions.is_full() || self.completions.len() >= publication_slots
     }
 
-    fn fault_blocked(
+    pub(crate) fn fault_blocked(
         &self,
         _control: &QueueControlState,
         _queue: QueueId,
@@ -144,16 +138,16 @@ impl FrontendBehavior for SemanticFrontend {
         self.events.len() >= compat_publication_slots
     }
 
-    fn records_pending(
+    pub(crate) fn records_pending(
         &self,
         _control: &QueueControlState,
         _queue: QueueId,
         completion: bool,
-    ) -> ModelResult<bool> {
+    ) -> bool {
         if completion {
-            Ok(!self.completions.is_empty())
+            !self.completions.is_empty()
         } else {
-            Ok(!self.events.is_empty())
+            !self.events.is_empty()
         }
     }
 }

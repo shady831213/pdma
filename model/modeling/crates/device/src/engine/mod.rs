@@ -20,26 +20,28 @@ use crate::abi::dma::PdmaMemoryMappings;
 use crate::abi::ring::control::QueueControlState;
 use crate::engine::step::ModelStepStatus;
 use crate::engine::trace::TraceSink;
+use crate::hardware::execution::ExecutionUnit;
+use crate::hardware::queue::PdmaQueue;
+use crate::hardware::retirement::RetirementUnit;
+use crate::hardware::scheduler::Scheduler;
 use crate::{ModelError, ModelResult};
 use irq::PdmaIrqController;
 use pdma_model_contract::semantic::{
     Command, CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, IrqLine, IrqVector,
-    QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId, ResourceConfig,
+    QueueConfig, QueueConfigHandle, QueueId, ResourceConfig,
 };
-use std::collections::VecDeque;
 
-use context::{NativeExecution, QueueContext};
+use context::NativeExecution;
 
 #[derive(Debug)]
 pub(crate) struct DeviceExecution {
     epoch: DeviceEpoch,
-    queues: Vec<QueueContext>,
-    runnable: VecDeque<QueueId>,
-    pending_retirement: Option<retirement::PendingRetirement>,
+    queues: Vec<PdmaQueue>,
+    scheduler: Scheduler,
+    retirement: RetirementUnit,
     irq: PdmaIrqController,
-    resource_config: ResourceConfig,
+    execution: ExecutionUnit,
     trace: TraceSink,
-    native_steps: usize,
 }
 
 impl DeviceExecution {
@@ -47,25 +49,24 @@ impl DeviceExecution {
         Self {
             epoch: DeviceEpoch::initial(),
             queues: Vec::new(),
-            runnable: VecDeque::new(),
-            pending_retirement: None,
+            scheduler: Scheduler::default(),
+            retirement: RetirementUnit::default(),
             irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
-            resource_config,
+            execution: ExecutionUnit::new(resource_config),
             trace: TraceSink::default(),
-            native_steps: 0,
         }
     }
 
     pub(super) const fn resource_config(&self) -> ResourceConfig {
-        self.resource_config
+        self.execution.resources()
     }
 
     pub(super) fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        let frontend = io::semantic(config.command_depth(), config.completion_depth())?;
         let queue_id = QueueId::new(self.queues.len());
         let completion_id = CompletionRingId::new(self.queues.len());
-        let entry = QueueDirectoryEntry::new(queue_id, completion_id, config);
-        self.queues.push(QueueContext { entry, frontend });
+        let queue = PdmaQueue::semantic(queue_id, completion_id, config)?;
+        let entry = queue.entry;
+        self.queues.push(queue);
         Ok(QueueConfigHandle::new(self.epoch, entry))
     }
 
@@ -77,7 +78,7 @@ impl DeviceExecution {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
         self.queue_mut(queue_id)?
-            .frontend
+            .io
             .submit_semantic(queue_id, command)
             .map(|(submitted_command, operation)| {
                 self.trace
@@ -89,9 +90,7 @@ impl DeviceExecution {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
         self.queue(queue_id)?;
-        if !self.runnable.contains(&queue_id) {
-            self.runnable.push_back(queue_id);
-        }
+        self.scheduler.enqueue(queue_id);
         self.trace.doorbell_runnable(queue_id);
         Ok(())
     }
@@ -104,7 +103,7 @@ impl DeviceExecution {
         let completion_ring_id = queue.completion_ring_id();
         let completion = self
             .queue_by_completion_mut(completion_ring_id)?
-            .frontend
+            .io
             .poll_semantic_completion();
         if let Some(record) = completion {
             self.trace.completion_polled(record);
@@ -118,10 +117,7 @@ impl DeviceExecution {
     ) -> ModelResult<Option<EventRecord>> {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
-        let event = self
-            .queue_mut(queue_id)?
-            .frontend
-            .poll_semantic_event(queue_id);
+        let event = self.queue_mut(queue_id)?.io.poll_semantic_event(queue_id);
         if event.is_none() {
             self.trace.event_poll(queue_id, None);
             return Ok(None);
@@ -147,13 +143,12 @@ impl DeviceExecution {
         _dma_space: &PdmaMemoryMappings,
         queue_control: &QueueControlState,
     ) -> bool {
-        self.pending_retirement.is_some()
-            || !self.runnable.is_empty()
-            || self.queues.iter().any(|queue| {
-                queue
-                    .frontend
-                    .has_pending(queue_control, queue.entry.queue_id())
-            })
+        self.retirement.is_pending()
+            || !self.scheduler.is_idle()
+            || self
+                .queues
+                .iter()
+                .any(|queue| queue.io.has_pending(queue_control, queue.entry.queue_id()))
     }
 
     pub(super) const fn epoch(&self) -> DeviceEpoch {
@@ -175,28 +170,28 @@ impl DeviceExecution {
         }
     }
 
-    fn queue(&self, id: QueueId) -> ModelResult<&QueueContext> {
+    fn queue(&self, id: QueueId) -> ModelResult<&PdmaQueue> {
         self.queues
             .iter()
             .find(|queue| queue.entry.queue_id() == id)
             .ok_or(ModelError::UnknownQueue(id))
     }
 
-    fn queue_mut(&mut self, id: QueueId) -> ModelResult<&mut QueueContext> {
+    fn queue_mut(&mut self, id: QueueId) -> ModelResult<&mut PdmaQueue> {
         self.queues
             .iter_mut()
             .find(|queue| queue.entry.queue_id() == id)
             .ok_or(ModelError::UnknownQueue(id))
     }
 
-    fn queue_by_completion(&self, id: CompletionRingId) -> ModelResult<&QueueContext> {
+    fn queue_by_completion(&self, id: CompletionRingId) -> ModelResult<&PdmaQueue> {
         self.queues
             .iter()
             .find(|queue| queue.entry.completion_ring_id() == id)
             .ok_or(ModelError::UnknownCompletionRing(id))
     }
 
-    fn queue_by_completion_mut(&mut self, id: CompletionRingId) -> ModelResult<&mut QueueContext> {
+    fn queue_by_completion_mut(&mut self, id: CompletionRingId) -> ModelResult<&mut PdmaQueue> {
         self.queues
             .iter_mut()
             .find(|queue| queue.entry.completion_ring_id() == id)
@@ -214,9 +209,7 @@ impl DeviceExecution {
             .iter_mut()
             .find(|context| context.entry.queue_id() == queue)
             .ok_or(ModelError::UnknownQueue(queue))?;
-        Ok(context
-            .frontend
-            .publish_fault(memory, control, &mut self.trace))
+        Ok(context.io.publish_fault(memory, control, &mut self.trace))
     }
 
     fn requeue_if_command_pending(
@@ -227,11 +220,10 @@ impl DeviceExecution {
     ) -> ModelResult<()> {
         if self
             .queue(queue_id)?
-            .frontend
+            .io
             .has_pending(queue_control, queue_id)
-            && !self.runnable.contains(&queue_id)
         {
-            self.runnable.push_back(queue_id);
+            self.scheduler.enqueue(queue_id);
         }
         Ok(())
     }

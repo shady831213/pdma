@@ -59,7 +59,7 @@ impl IrqBank {
 }
 
 pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScalar {
-    let bank = &state.mmio.irq;
+    let bank = &state.device.registers.irq;
     let response = bank.command.response;
     let result = bank.command.result;
     let [detail0, detail1, detail2] = result.details;
@@ -87,7 +87,7 @@ pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScala
 }
 
 pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
-    let bank = &mut state.mmio.irq;
+    let bank = &mut state.device.registers.irq;
     match register {
         IrqRegister::ExpectedEpoch => bank.expected_epoch = value,
         IrqRegister::SourceId => bank.source_id = value,
@@ -114,7 +114,7 @@ pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
 }
 
 fn execute(state: &mut DeviceCore, raw_command: u32) {
-    let bank = &state.mmio.irq;
+    let bank = &state.device.registers.irq;
     let staged = (
         bank.expected_epoch,
         bank.source_kind,
@@ -144,7 +144,7 @@ fn execute(state: &mut DeviceCore, raw_command: u32) {
         ),
         Err(result) => (result, ResponseUpdate::Preserve, false),
     };
-    state.mmio.irq.command.complete(result, update);
+    state.device.registers.irq.command.complete(result, update);
     if changed {
         crate::runtime::state::wake(state);
     }
@@ -174,7 +174,7 @@ fn execute_command(
         )
     })?;
     let before = observe_irq_source(state, source).ok();
-    let device = &mut state.backend;
+    let device = &mut state.device.execution;
     let result = match command {
         IrqCommand::ConfigureRoute => decode_route(route_kind, route_vector)
             .ok_or(ModelError::DmaSubmissionState)
@@ -183,7 +183,7 @@ fn execute_command(
         IrqCommand::Disable => device.disable_irq_source(source),
         IrqCommand::Mask => device.mask_irq_source(source),
         IrqCommand::Unmask => device.unmask_irq_source(source),
-        IrqCommand::Acknowledge => device.ack_irq_source(&state.queue_control, source),
+        IrqCommand::Acknowledge => device.ack_irq_source(&state.device.queue_control, source),
         IrqCommand::ObserveSource => Ok(()),
         IrqCommand::SnapshotLine | IrqCommand::ClaimNotification => {
             Err(ModelError::DmaSubmissionState)

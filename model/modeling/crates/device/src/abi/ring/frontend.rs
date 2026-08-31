@@ -3,7 +3,7 @@ mod submission;
 
 use crate::abi::dma::PdmaMemoryMappings;
 use crate::abi::ring::control::QueueControlState;
-use crate::engine::io::{FrontendBehavior, NormalizedFault, NormalizedFetch, PublicationOutcome};
+use crate::engine::io::{NormalizedFault, NormalizedFetch, PublicationOutcome};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{AbiEvent, AbiEventKind, DmaAddress};
 use pdma_model_contract::semantic::BufferId;
@@ -28,11 +28,7 @@ impl ExactFrontend {
             None => None,
         }
     }
-}
-
-impl FrontendBehavior for ExactFrontend {
-    fn probe(
-        &self,
+    pub(crate) fn probe(
         memory: &PdmaMemoryMappings,
         control: &QueueControlState,
         entry: QueueDirectoryEntry,
@@ -42,7 +38,7 @@ impl FrontendBehavior for ExactFrontend {
         })
     }
 
-    fn fetch(
+    pub(crate) fn fetch(
         &mut self,
         memory: &PdmaMemoryMappings,
         control: &QueueControlState,
@@ -64,16 +60,15 @@ impl FrontendBehavior for ExactFrontend {
         }))
     }
 
-    fn consume(&mut self, control: &mut QueueControlState, queue: QueueId) -> ModelResult<()> {
+    pub(crate) fn consume(control: &mut QueueControlState, queue: QueueId) -> ModelResult<()> {
         submission::consume(control, queue).map_err(|_| ModelError::DmaSubmissionState)
     }
 
-    fn has_pending(&self, control: &QueueControlState, queue: QueueId) -> bool {
+    pub(crate) fn has_pending(control: &QueueControlState, queue: QueueId) -> bool {
         submission::has_pending(control, queue)
     }
 
-    fn publish_completion(
-        &mut self,
+    pub(crate) fn publish_completion(
         memory: &PdmaMemoryMappings,
         control: &mut QueueControlState,
         queue: QueueId,
@@ -82,8 +77,7 @@ impl FrontendBehavior for ExactFrontend {
         publication::completion(memory, control, queue, record)
     }
 
-    fn stage_execution_fault(
-        &mut self,
+    pub(crate) const fn stage_execution_fault(
         event: pdma_model_contract::semantic::EventRecord,
     ) -> ModelResult<ModelError> {
         Err(ModelError::from_memory_fault(
@@ -92,7 +86,7 @@ impl FrontendBehavior for ExactFrontend {
         ))
     }
 
-    fn publish_fault(
+    pub(crate) fn publish_fault(
         &mut self,
         memory: &PdmaMemoryMappings,
         control: &mut QueueControlState,
@@ -115,8 +109,7 @@ impl FrontendBehavior for ExactFrontend {
         outcome
     }
 
-    fn completion_blocked(
-        &self,
+    pub(crate) fn completion_blocked(
         control: &QueueControlState,
         queue: QueueId,
         _publication_slots: usize,
@@ -124,8 +117,7 @@ impl FrontendBehavior for ExactFrontend {
         ring_is_full(control, queue, true)
     }
 
-    fn fault_blocked(
-        &self,
+    pub(crate) fn fault_blocked(
         control: &QueueControlState,
         queue: QueueId,
         _compat_publication_slots: usize,
@@ -133,8 +125,7 @@ impl FrontendBehavior for ExactFrontend {
         ring_is_full(control, queue, false)
     }
 
-    fn records_pending(
-        &self,
+    pub(crate) fn records_pending(
         control: &QueueControlState,
         queue: QueueId,
         completion: bool,

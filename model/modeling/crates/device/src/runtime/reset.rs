@@ -46,8 +46,8 @@ mod tests {
 
         // Then: it advances both identities and returns the new epoch.
         assert_eq!(success, ResetOutcome::Success(DeviceEpoch::new(1)));
-        assert_eq!(state.backend.epoch(), DeviceEpoch::new(1));
-        assert_eq!(state.queue_control.epoch(), DeviceEpoch::new(1));
+        assert_eq!(state.device.execution.epoch(), DeviceEpoch::new(1));
+        assert_eq!(state.device.queue_control.epoch(), DeviceEpoch::new(1));
 
         // When: the same raw epoch is submitted again.
         let stale_outcome = mmio_reset::execute(&mut state, 0);
@@ -66,8 +66,8 @@ mod tests {
                 }
             )
         );
-        assert_eq!(state.backend.epoch(), DeviceEpoch::new(1));
-        assert_eq!(state.queue_control.epoch(), DeviceEpoch::new(1));
+        assert_eq!(state.device.execution.epoch(), DeviceEpoch::new(1));
+        assert_eq!(state.device.queue_control.epoch(), DeviceEpoch::new(1));
     }
 
     #[test]
@@ -79,11 +79,12 @@ mod tests {
             pdma_model_contract::semantic::ResourceConfig::default(),
             std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         );
-        state.backend.reset(exhausted);
-        state.queue_control.reset(exhausted);
-        let region = state.dma_space.allocate(1).expect("DMA allocation");
+        state.device.execution.reset(exhausted);
+        state.device.queue_control.reset(exhausted);
+        let region = state.device.dma.allocate(1).expect("DMA allocation");
         state
-            .dma_space
+            .device
+            .dma
             .write_object(region.object(), 0, &[0x6d])
             .expect("DMA write");
         state.steps = 7;
@@ -102,10 +103,10 @@ mod tests {
                 SemanticError::DeviceEpochOverflow { current: u64::MAX }
             ))
         );
-        assert_eq!(state.backend.epoch(), exhausted);
-        assert_eq!(state.queue_control.epoch(), exhausted);
+        assert_eq!(state.device.execution.epoch(), exhausted);
+        assert_eq!(state.device.queue_control.epoch(), exhausted);
         assert_eq!(
-            state.dma_space.read_object(BufferId::new(0), 0, 1),
+            state.device.dma.read_object(BufferId::new(0), 0, 1),
             Ok(vec![0x6d])
         );
         assert_eq!((state.steps, state.errors, state.stalls), (7, 3, 2));
@@ -128,8 +129,8 @@ mod tests {
                 }
             )
         );
-        assert_eq!(state.backend.epoch(), exhausted);
-        assert_eq!(state.queue_control.epoch(), exhausted);
+        assert_eq!(state.device.execution.epoch(), exhausted);
+        assert_eq!(state.device.queue_control.epoch(), exhausted);
         assert_eq!(state.generation, generation);
     }
 }

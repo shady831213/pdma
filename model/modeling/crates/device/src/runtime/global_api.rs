@@ -9,9 +9,10 @@ pub(super) const fn discover(_request: DiscoveryRequest) -> AbiDiscovery {
 
 pub(super) fn status(state: &DeviceCore) -> DeviceStatus {
     let run_state = state
-        .backend
-        .run_state(&state.dma_space, &state.queue_control);
-    DeviceStatus::new(state.backend.epoch(), run_state)
+        .device
+        .execution
+        .run_state(&state.device.dma, &state.device.queue_control);
+    DeviceStatus::new(state.device.execution.epoch(), run_state)
 }
 
 impl AsyncDeviceHandle {

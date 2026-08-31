@@ -117,7 +117,7 @@ impl QueueBank {
 }
 
 pub(super) const fn read(state: &DeviceCore, register: QueueRegister) -> MmioScalar {
-    let bank = &state.mmio.queue;
+    let bank = &state.device.registers.queue;
     let response = bank.command.response;
     let result = bank.command.result;
     let [detail0, detail1, detail2] = result.details;
@@ -177,12 +177,12 @@ pub(crate) fn status_response(
 
 pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64) {
     match register {
-        QueueRegister::ExpectedEpoch => state.mmio.queue.expected_epoch = value,
-        QueueRegister::Id => state.mmio.queue.id = value,
-        QueueRegister::ExpectedCursor => state.mmio.queue.expected_cursor = value,
-        QueueRegister::NewCursor => state.mmio.queue.new_cursor = value,
-        QueueRegister::CfgSqDepth => state.mmio.queue.cfg_sq_depth = narrow_u32(value),
-        QueueRegister::CfgCqDepth => state.mmio.queue.cfg_cq_depth = narrow_u32(value),
+        QueueRegister::ExpectedEpoch => state.device.registers.queue.expected_epoch = value,
+        QueueRegister::Id => state.device.registers.queue.id = value,
+        QueueRegister::ExpectedCursor => state.device.registers.queue.expected_cursor = value,
+        QueueRegister::NewCursor => state.device.registers.queue.new_cursor = value,
+        QueueRegister::CfgSqDepth => state.device.registers.queue.cfg_sq_depth = narrow_u32(value),
+        QueueRegister::CfgCqDepth => state.device.registers.queue.cfg_cq_depth = narrow_u32(value),
         QueueRegister::CfgEventPolicy
         | QueueRegister::Result
         | QueueRegister::Detail0
@@ -197,17 +197,22 @@ pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64)
         | QueueRegister::RspCqConsumer
         | QueueRegister::RspEqProducer
         | QueueRegister::RspEqConsumer => {}
-        QueueRegister::CfgSoftwareOwner => state.mmio.queue.cfg_software_owner = value,
-        QueueRegister::SqBase => state.mmio.queue.sq_base = value,
-        QueueRegister::SqDepth => state.mmio.queue.sq_depth = narrow_u32(value),
-        QueueRegister::CqBase => state.mmio.queue.cq_base = value,
-        QueueRegister::CqDepth => state.mmio.queue.cq_depth = narrow_u32(value),
-        QueueRegister::EqBase => state.mmio.queue.eq_base = value,
-        QueueRegister::EqDepth => state.mmio.queue.eq_depth = narrow_u32(value),
+        QueueRegister::CfgSoftwareOwner => state.device.registers.queue.cfg_software_owner = value,
+        QueueRegister::SqBase => state.device.registers.queue.sq_base = value,
+        QueueRegister::SqDepth => state.device.registers.queue.sq_depth = narrow_u32(value),
+        QueueRegister::CqBase => state.device.registers.queue.cq_base = value,
+        QueueRegister::CqDepth => state.device.registers.queue.cq_depth = narrow_u32(value),
+        QueueRegister::EqBase => state.device.registers.queue.eq_base = value,
+        QueueRegister::EqDepth => state.device.registers.queue.eq_depth = narrow_u32(value),
         QueueRegister::Command => {
-            let staging = state.mmio.queue.staging();
+            let staging = state.device.registers.queue.staging();
             let (result, response, changed) = queue_control::execute(state, staging, value);
-            state.mmio.queue.command.complete(result, response);
+            state
+                .device
+                .registers
+                .queue
+                .command
+                .complete(result, response);
             if changed {
                 crate::runtime::state::wake(state);
             }

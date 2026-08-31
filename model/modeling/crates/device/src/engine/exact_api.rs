@@ -1,14 +1,14 @@
 //! Exact-ABI queue installation methods on the shared execution engine.
 
-use super::{DeviceExecution, QueueContext, io};
+use super::DeviceExecution;
+use crate::hardware::queue::PdmaQueue;
+use crate::hardware::retirement::PendingRetirement;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::EpochQueue;
-use pdma_model_contract::semantic::{
-    CompletionRingId, QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
-};
+use pdma_model_contract::semantic::{CompletionRingId, QueueConfig, QueueConfigHandle, QueueId};
 
 pub(crate) struct PreparedExactQueue {
-    context: QueueContext,
+    context: PdmaQueue,
 }
 
 impl PreparedExactQueue {
@@ -36,10 +36,7 @@ impl DeviceExecution {
         let queue_id = QueueId::new(self.queues.len());
         let completion_id = CompletionRingId::new(self.queues.len());
         Ok(PreparedExactQueue {
-            context: QueueContext {
-                entry: QueueDirectoryEntry::new(queue_id, completion_id, config),
-                frontend: io::exact(),
-            },
+            context: PdmaQueue::exact(queue_id, completion_id, config),
         })
     }
 
@@ -56,12 +53,10 @@ impl DeviceExecution {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
         let context = self.queue(queue_id)?;
-        if !context.frontend.is_exact() {
+        if !context.io.is_exact() {
             return Err(ModelError::UnknownQueue(queue_id));
         }
-        if !self.runnable.contains(&queue_id) {
-            self.runnable.push_back(queue_id);
-        }
+        self.scheduler.enqueue(queue_id);
         Ok(())
     }
 
@@ -69,7 +64,7 @@ impl DeviceExecution {
         self.validate_epoch(queue.epoch())?;
         let queue_id = queue.queue_id();
         let context = self.queue(queue_id)?;
-        if context.frontend.is_exact() {
+        if context.io.is_exact() {
             Ok(())
         } else {
             Err(ModelError::UnknownQueue(queue_id))
@@ -77,8 +72,8 @@ impl DeviceExecution {
     }
 
     pub(crate) fn pending_dma_result(&self) -> Option<crate::abi::ring::PendingDmaResult> {
-        match self.pending_retirement {
-            Some(super::retirement::PendingRetirement::Completion(success)) => {
+        match self.retirement.pending() {
+            Some(PendingRetirement::Completion(success)) => {
                 Some(crate::abi::ring::PendingDmaResult::Completion(
                     pdma_model_contract::semantic::CompletionRecord::new(
                         success.queue,
@@ -87,10 +82,10 @@ impl DeviceExecution {
                     ),
                 ))
             }
-            Some(super::retirement::PendingRetirement::Fault { queue, .. }) => self
+            Some(PendingRetirement::Fault { queue, .. }) => self
                 .queue(queue)
                 .ok()
-                .and_then(|context| context.frontend.pending_exact_fault()),
+                .and_then(|context| context.io.pending_exact_fault()),
             None => None,
         }
     }

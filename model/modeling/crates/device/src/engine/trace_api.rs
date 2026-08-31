@@ -23,6 +23,6 @@ impl DeviceExecution {
     }
 
     pub(crate) const fn native_steps(&self) -> usize {
-        self.native_steps
+        self.execution.native_steps()
     }
 }

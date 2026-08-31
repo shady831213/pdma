@@ -183,12 +183,12 @@ impl DeviceExecution {
                     .find(|queue| queue.entry.completion_ring_id() == id)
                     .ok_or(ModelError::UnknownIrqSource(source))?;
                 queue
-                    .frontend
+                    .io
                     .records_pending(queue_control, queue.entry.queue_id(), true)
             }
             IrqSource::Event(id) => {
                 let queue = self.queue(id)?;
-                queue.frontend.records_pending(queue_control, id, false)
+                queue.io.records_pending(queue_control, id, false)
             }
         }
     }

@@ -39,11 +39,11 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
         let indirect_region = *indirect_region;
         let state = handle.shared.state.lock().await;
         let before_memory = memory_image(&memory)?;
-        let before_mapping_generation = state.dma_space.generation();
+        let before_mapping_generation = state.device.dma.generation();
         let before_runner_generation = state.generation;
         let before_wake_generation = state.wake_generation;
         let before_latches = queue_latch_values(&state);
-        let before_trace = state.backend.trace_events().clone();
+        let before_trace = state.device.execution.trace_events().clone();
         let before_observations = observer
             .observations
             .lock()
@@ -69,11 +69,11 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
 
         // Then: both cancelled futures preserve every commit surface exactly.
         assert_eq!(memory_image(&memory)?, before_memory);
-        assert_eq!(state.dma_space.generation(), before_mapping_generation);
+        assert_eq!(state.device.dma.generation(), before_mapping_generation);
         assert_eq!(state.generation, before_runner_generation);
         assert_eq!(state.wake_generation, before_wake_generation);
         assert_eq!(queue_latch_values(&state), before_latches);
-        assert_eq!(state.backend.trace_events(), before_trace);
+        assert_eq!(state.device.execution.trace_events(), before_trace);
         assert_eq!(
             *observer
                 .observations

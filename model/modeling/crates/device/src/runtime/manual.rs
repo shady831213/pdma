@@ -41,7 +41,7 @@ impl SyncDevice {
 
     /// Returns the persistent resource configuration owned by the core.
     pub const fn resource_config(&self) -> pdma_model_contract::semantic::ResourceConfig {
-        self.core.backend.resource_config()
+        self.core.device.execution.resource_config()
     }
 
     /// Returns persistent lifecycle step accounting owned by the core.
@@ -51,12 +51,12 @@ impl SyncDevice {
 
     /// Provisions one command queue and one bound completion ring.
     pub fn create_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        self.backend.create_queue(config)
+        self.device.execution.create_queue(config)
     }
 
     /// Provisions a model-only queue using the decoded DMA-bus frontend seam.
     pub fn create_dma_bus_queue(&mut self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        self.backend.create_dma_bus_queue(config)
+        self.device.execution.create_dma_bus_queue(config)
     }
 
     /// Allocates a device-visible memory buffer.
@@ -68,19 +68,20 @@ impl SyncDevice {
     /// Allocates one logical region through the shared core mapping adapter.
     pub fn allocate_memory_region(&mut self, len: usize) -> ModelResult<MappedDmaRegion> {
         let length = u64::try_from(len).map_err(|_| ModelError::DmaAllocationExhausted)?;
-        self.dma_space
+        self.device
+            .dma
             .allocate(length)
             .map_err(|_| ModelError::DmaAllocationExhausted)
     }
 
     /// Writes bytes into a checked device buffer range.
     pub fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
-        self.dma_space.write_object(id, offset, data)
+        self.device.dma.write_object(id, offset, data)
     }
 
     /// Reads bytes from a checked device buffer range.
     pub fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> ModelResult<Vec<u8>> {
-        self.dma_space.read_object(id, offset, len)
+        self.device.dma.read_object(id, offset, len)
     }
 
     /// Proposes DMA regions without changing mappings, bytes, or allocator generation.
@@ -88,7 +89,7 @@ impl SyncDevice {
         &self,
         lengths: &[u64],
     ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
-        self.dma_space.stage(lengths)
+        self.device.dma.stage(lengths)
     }
 
     /// Atomically commits every region in a stage.
@@ -96,7 +97,7 @@ impl SyncDevice {
         &mut self,
         stage: PdmaMemoryStage,
     ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
-        self.dma_space.commit(stage)
+        self.device.dma.commit(stage)
     }
 
     /// Reads one checked mapped-memory extent.
@@ -105,7 +106,7 @@ impl SyncDevice {
         address: pdma_model_contract::abi::DmaAddress,
         length: u64,
     ) -> Result<Vec<u8>, PdmaMemoryError> {
-        self.dma_space.read_memory(address, length)
+        self.device.dma.read_memory(address, length)
     }
 
     /// Writes one checked mapped-memory extent.
@@ -114,22 +115,22 @@ impl SyncDevice {
         address: pdma_model_contract::abi::DmaAddress,
         data: &[u8],
     ) -> Result<(), PdmaMemoryError> {
-        self.dma_space.write_memory(address, data)
+        self.device.dma.write_memory(address, data)
     }
 
     /// Resolves a semantic object to its committed DMA region.
     pub fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
-        self.dma_space.region_for_object(object)
+        self.device.dma.region_for_object(object)
     }
 
     /// Returns the committed DMA allocator generation.
     pub const fn memory_generation(&self) -> u64 {
-        self.core.dma_space.generation()
+        self.core.device.dma.generation()
     }
 
     /// Returns the number of logical PDMA mappings.
     pub fn mapped_region_count(&self) -> usize {
-        self.core.dma_space.mapped_region_count()
+        self.core.device.dma.mapped_region_count()
     }
 
     /// Pushes one command into a queue's command ring.
@@ -138,12 +139,12 @@ impl SyncDevice {
         queue: QueueConfigHandle,
         command: Command,
     ) -> ModelResult<()> {
-        self.backend.submit_command(queue, command)
+        self.device.execution.submit_command(queue, command)
     }
 
     /// Captures a software doorbell for one queue.
     pub fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> ModelResult<()> {
-        self.backend.ring_doorbell(queue)
+        self.device.execution.ring_doorbell(queue)
     }
 
     /// Pops one completion from a completion ring.
@@ -151,7 +152,7 @@ impl SyncDevice {
         &mut self,
         queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
-        self.backend.poll_completion(queue)
+        self.device.execution.poll_completion(queue)
     }
 
     /// Pops one event for a queue-local event path.
@@ -159,12 +160,12 @@ impl SyncDevice {
         &mut self,
         queue: QueueConfigHandle,
     ) -> ModelResult<Option<EventRecord>> {
-        self.backend.poll_queue_event(queue)
+        self.device.execution.poll_queue_event(queue)
     }
 
     /// Enables a PDMA-local IRQ source.
     pub fn enable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.backend.enable_irq_source(source)
+        self.device.execution.enable_irq_source(source)
     }
 
     /// Configures the delivery route of an inactive PDMA-local IRQ source.
@@ -173,34 +174,35 @@ impl SyncDevice {
         source: EpochIrqSource,
         route: IrqRoute,
     ) -> ModelResult<()> {
-        self.backend.configure_irq_route(source, route)
+        self.device.execution.configure_irq_route(source, route)
     }
 
     /// Disables a PDMA-local IRQ source.
     pub fn disable_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.backend.disable_irq_source(source)
+        self.device.execution.disable_irq_source(source)
     }
 
     /// Masks a PDMA-local IRQ source without clearing pending state.
     pub fn mask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.backend.mask_irq_source(source)
+        self.device.execution.mask_irq_source(source)
     }
 
     /// Unmasks a PDMA-local IRQ source.
     pub fn unmask_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
-        self.backend.unmask_irq_source(source)
+        self.device.execution.unmask_irq_source(source)
     }
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
     pub fn ack_irq_source(&mut self, source: EpochIrqSource) -> ModelResult<()> {
         self.core
-            .backend
-            .ack_irq_source(&self.core.queue_control, source)
+            .device
+            .execution
+            .ack_irq_source(&self.core.device.queue_control, source)
     }
 
     /// Returns the current pending IRQ snapshot, if any.
     pub fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        self.backend.irq_snapshot()
+        self.device.execution.irq_snapshot()
     }
 
     /// Returns the currently asserted IRQ snapshot, if any.
@@ -210,37 +212,37 @@ impl SyncDevice {
 
     /// Returns and consumes one deliverable line or message IRQ notification.
     pub fn wait_irq_notification(&mut self) -> Option<IrqNotification> {
-        self.backend.take_irq_notification()
+        self.device.execution.take_irq_notification()
     }
 
     /// Enables deterministic trace capture.
     pub const fn enable_tracing(&mut self) {
-        self.core.backend.enable_tracing();
+        self.core.device.execution.enable_tracing();
     }
 
     /// Disables trace capture without clearing existing events.
     pub const fn disable_tracing(&mut self) {
-        self.core.backend.disable_tracing();
+        self.core.device.execution.disable_tracing();
     }
 
     /// Clears captured trace events and sequence ordinals.
     pub fn clear_trace(&mut self) {
-        self.backend.clear_trace();
+        self.device.execution.clear_trace();
     }
 
     /// Returns captured trace events in deterministic sequence order.
     pub fn trace_events(&self) -> Vec<TraceEvent> {
-        self.backend.trace_events()
+        self.device.execution.trace_events()
     }
 
     /// Returns normalized frontend fetches that entered the native step core.
     pub fn native_steps(&self) -> usize {
-        self.backend.native_steps()
+        self.device.execution.native_steps()
     }
 
     /// Exports captured trace events as Chrome/Perfetto JSON.
     pub fn trace_json(&self) -> String {
-        self.backend.trace_json()
+        self.device.execution.trace_json()
     }
 }
 

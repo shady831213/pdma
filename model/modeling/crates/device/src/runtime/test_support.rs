@@ -18,8 +18,8 @@ impl CoreTestSupport for DeviceCore {
         epoch: DeviceEpoch,
     ) -> Self {
         let mut core = Self::new(memory, config, observer);
-        core.backend.reset(epoch);
-        core.queue_control.reset(epoch);
+        core.device.execution.reset(epoch);
+        core.device.queue_control.reset(epoch);
         core
     }
 
@@ -38,8 +38,10 @@ impl CoreTestSupport for DeviceCore {
     }
 
     fn reset_partition_snapshot(&self) -> ResetPartitionSnapshot {
-        let (queues, results, work, retirement, irq_sources) =
-            self.backend.reset_partition_counts(&self.queue_control);
+        let (queues, results, work, retirement, irq_sources) = self
+            .device
+            .execution
+            .reset_partition_counts(&self.device.queue_control);
         let registers = PdmaMmioMapRegisterId::ALL
             .into_iter()
             .filter_map(PdmaMmioMap::register)
@@ -52,33 +54,34 @@ impl CoreTestSupport for DeviceCore {
             retirement,
             irq_sources,
             registers,
-            backend_epoch: self.backend.epoch(),
-            control_epoch: self.queue_control.epoch(),
+            backend_epoch: self.device.execution.epoch(),
+            control_epoch: self.device.queue_control.epoch(),
         }
     }
 
     fn state_snapshot(&self) -> Result<DeviceStateSnapshot, PdmaMemoryError> {
-        let mappings = (0..self.dma_space.mapped_region_count())
+        let mappings = (0..self.device.dma.mapped_region_count())
             .map(|raw| {
-                self.dma_space
+                self.device
+                    .dma
                     .region_for_object(BufferId::new(raw))
                     .ok_or(PdmaMemoryError::InvalidRegion)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let bytes = mappings
             .iter()
-            .map(|region| self.dma_space.read_memory(region.base(), region.length()))
+            .map(|region| self.device.dma.read_memory(region.base(), region.length()))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(DeviceStateSnapshot {
             mappings,
             bytes,
-            memory_generation: self.dma_space.generation(),
-            resources: self.backend.resource_config(),
-            trace: self.backend.trace_events(),
+            memory_generation: self.device.dma.generation(),
+            resources: self.device.execution.resource_config(),
+            trace: self.device.execution.trace_events(),
             runner: super::state::snapshot(self),
             runner_generation: self.generation,
             partitions: self.reset_partition_snapshot(),
-            irq: self.backend.irq_snapshot(),
+            irq: self.device.execution.irq_snapshot(),
             reset_runner_calls: self.reset_runner_calls(),
         })
     }

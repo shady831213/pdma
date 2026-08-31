@@ -35,10 +35,11 @@ pub(super) fn commit_bootstrap(
     #[cfg(test)]
     super::reject_injected(state, super::BatchPreparationFault::Overlap, context)?;
     let prepared_mapping = state
-        .dma_space
+        .device
+        .dma
         .prepare_stage(&request.stage)
         .map_err(|error| PdmaBatchError::from_dma(error, context))?;
-    let memory = state.dma_space.backing_memory();
+    let memory = state.device.dma.backing_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
             PdmaBatchError::from_dma(PdmaMemoryError::from_runtime_memory(&error), context)
@@ -69,7 +70,7 @@ pub(super) fn commit_bootstrap(
             prepare_bootstrap_batch_write(staging, response).map_err(PdmaBatchError::Access)?;
         let reservation = state.register_gate.reserve(1)?;
         transaction.install_draft(draft);
-        state.dma_space.install_mapping(prepared_mapping);
+        state.device.dma.install_mapping(prepared_mapping);
         activation::install(state, prepared_queue);
         let command = command.commit(state);
         wake(state);
@@ -89,7 +90,7 @@ pub(super) fn commit_submission(
     validate_submission_shape(state, request)?;
     let prepared_mapping = prepare_submission_mapping(state, request)?;
     let staging = submission_staging(request);
-    let memory = state.dma_space.backing_memory();
+    let memory = state.device.dma.backing_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
             PdmaBatchError::from_dma(
@@ -167,7 +168,7 @@ pub(super) fn commit_submission(
         let reservation = state.register_gate.reserve(1)?;
         transaction.install_draft(draft);
         if let Some(prepared) = prepared_mapping {
-            state.dma_space.install_mapping(prepared);
+            state.device.dma.install_mapping(prepared);
         }
         transactions::install_submission_publication(state, &prepared_cursor);
         let command = command.commit(state);
@@ -204,7 +205,8 @@ fn prepare_submission_mapping(
         DmaBatchContext::Region(*region),
     )?;
     state
-        .dma_space
+        .device
+        .dma
         .prepare_stage(proposal)
         .map(Some)
         .map_err(|error| PdmaBatchError::from_dma(error, DmaBatchContext::Region(*region)))

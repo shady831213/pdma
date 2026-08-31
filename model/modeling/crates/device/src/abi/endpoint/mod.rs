@@ -199,11 +199,16 @@ impl PreparedBatchWrite {
     pub(super) fn commit(self, state: &mut DeviceCore) -> PreparedWrite {
         match self.mutation {
             PreparedBatchRegisterMutation::Bootstrap(staging, response) => {
-                state.mmio.queue.complete_bootstrap_batch(staging, response);
+                state
+                    .device
+                    .registers
+                    .queue
+                    .complete_bootstrap_batch(staging, response);
             }
             PreparedBatchRegisterMutation::Submission(staging, response) => {
                 state
-                    .mmio
+                    .device
+                    .registers
                     .queue
                     .complete_submission_batch(staging, response);
             }

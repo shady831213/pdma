@@ -31,7 +31,7 @@ pub struct AsyncDeviceWorker {
 impl AsyncDevice {
     /// Consumes one device core into the asynchronous facade and worker.
     pub fn from_core(core: DeviceCore) -> (Self, AsyncDeviceWorker) {
-        let memory = core.dma_space.shared_memory();
+        let memory = core.device.dma.shared_memory();
         let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
             state: tokio::sync::Mutex::new(core),
@@ -92,7 +92,13 @@ impl AsyncDeviceHandle {
 
     /// Returns the one cached DMA completion or event before bus publication.
     pub async fn pending_dma_result(&self) -> Option<PendingDmaResult> {
-        self.shared.state.lock().await.backend.pending_dma_result()
+        self.shared
+            .state
+            .lock()
+            .await
+            .device
+            .execution
+            .pending_dma_result()
     }
 
     /// Enables deterministic trace capture.
@@ -114,17 +120,29 @@ impl AsyncDeviceHandle {
 
     /// Returns captured trace events in deterministic sequence order.
     pub async fn trace_events(&self) -> Vec<TraceEvent> {
-        self.shared.state.lock().await.backend.trace_events()
+        self.shared
+            .state
+            .lock()
+            .await
+            .device
+            .execution
+            .trace_events()
     }
 
     /// Returns normalized frontend fetches that entered the native step core.
     pub async fn native_steps(&self) -> usize {
-        self.shared.state.lock().await.backend.native_steps()
+        self.shared
+            .state
+            .lock()
+            .await
+            .device
+            .execution
+            .native_steps()
     }
 
     /// Exports captured trace events as Chrome/Perfetto JSON.
     pub async fn trace_json(&self) -> String {
-        self.shared.state.lock().await.backend.trace_json()
+        self.shared.state.lock().await.device.execution.trace_json()
     }
 
     pub(crate) async fn with_backend<T>(
@@ -133,7 +151,7 @@ impl AsyncDeviceHandle {
     ) -> ModelResult<T> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = f(&mut state.backend);
+            let result = f(&mut state.device.execution);
             wake(&mut state);
             (result, state.generation)
         };
@@ -144,7 +162,7 @@ impl AsyncDeviceHandle {
     async fn with_backend_unit(&self, f: impl FnOnce(&mut DeviceExecution)) {
         let generation = {
             let mut state = self.shared.state.lock().await;
-            f(&mut state.backend);
+            f(&mut state.device.execution);
             wake(&mut state);
             state.generation
         };

@@ -32,7 +32,7 @@ pub(crate) fn activate_staged(
     activation: QueueActivation,
 ) -> Result<QueueStatus, PdmaControlError> {
     let prepared = prepare_staged(runner, &stage, activation)?;
-    runner.dma_space.commit(stage)?;
+    runner.device.dma.commit(stage)?;
     Ok(install(runner, prepared))
 }
 
@@ -50,10 +50,10 @@ pub(crate) fn prepare_staged(
     activation: QueueActivation,
 ) -> Result<PreparedQueueActivation, PdmaControlError> {
     validate_identity(runner, activation)?;
-    if stage.generation() != runner.dma_space.generation() {
+    if stage.generation() != runner.device.dma.generation() {
         return Err(PdmaControlError::InvalidTransaction);
     }
-    runner.dma_space.validate_stage(stage)?;
+    runner.device.dma.validate_stage(stage)?;
     let regions = staged_regions(stage, activation)?;
     let validated = validate_layouts(activation, regions)?;
     prepare(runner, &validated)
@@ -65,7 +65,7 @@ pub(crate) fn prepare_mapped(
 ) -> Result<PreparedQueueActivation, PdmaControlError> {
     validate_identity(runner, activation)?;
     let regions = mapped_regions(runner, activation)?;
-    runner.dma_space.validate_region_set(&regions)?;
+    runner.device.dma.validate_region_set(&regions)?;
     let validated = validate_layouts(activation, regions)?;
     prepare(runner, &validated)
 }
@@ -74,15 +74,15 @@ fn validate_identity(
     runner: &DeviceCore,
     activation: QueueActivation,
 ) -> Result<(), PdmaControlError> {
-    if activation.queue().epoch() != runner.queue_control.epoch {
+    if activation.queue().epoch() != runner.device.queue_control.epoch {
         return Err(PdmaControlError::StaleEpoch {
-            expected: runner.queue_control.epoch,
+            expected: runner.device.queue_control.epoch,
             actual: activation.queue().epoch(),
         });
     }
     let queue_id = activation.queue().queue_id();
-    if queue_id != QueueId::new(runner.queue_control.queues.len())
-        || queue_id != runner.backend.next_queue_id()
+    if queue_id != QueueId::new(runner.device.queue_control.queues.len())
+        || queue_id != runner.device.execution.next_queue_id()
     {
         return Err(PdmaControlError::InvalidQueue);
     }
@@ -113,7 +113,8 @@ fn mapped_regions(
     let objects = activation.rings();
     let resolve = |object| {
         runner
-            .dma_space
+            .device
+            .dma
             .region_for_object(object)
             .ok_or(PdmaControlError::Dma(PdmaMemoryError::InvalidRegion))
     };
@@ -165,7 +166,8 @@ fn prepare(
     let shadow = ActiveQueue::new(validated.request, validated.layouts);
     let status = shadow.status()?;
     let native = runner
-        .backend
+        .device
+        .execution
         .prepare_dma_bus_queue(validated.request.config())
         .map_err(|_| PdmaControlError::InvalidTransaction)?;
     if native.queue_id() != validated.request.queue().queue_id() {
@@ -179,8 +181,11 @@ fn prepare(
 }
 
 pub(crate) fn install(runner: &mut DeviceCore, prepared: PreparedQueueActivation) -> QueueStatus {
-    runner.backend.install_dma_bus_queue(prepared.native);
-    runner.queue_control.queues.push(prepared.shadow);
+    runner
+        .device
+        .execution
+        .install_dma_bus_queue(prepared.native);
+    runner.device.queue_control.queues.push(prepared.shadow);
     prepared.status
 }
 

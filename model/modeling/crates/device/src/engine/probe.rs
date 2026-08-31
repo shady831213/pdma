@@ -1,9 +1,9 @@
 use super::DeviceExecution;
 use super::io::NormalizedFetch;
 use super::resources::ResourceDemand;
-use super::retirement::PendingRetirement;
 use crate::abi::dma::PdmaMemoryMappings;
 use crate::abi::ring::control::QueueControlState;
+use crate::hardware::retirement::PendingRetirement;
 use crate::runtime::AsyncStallReason;
 use pdma_model_contract::semantic::DeviceRunState;
 use pdma_model_contract::semantic::QueueId;
@@ -23,10 +23,10 @@ pub(super) fn probe_run_state(
     dma_space: &PdmaMemoryMappings,
     queue_control: &QueueControlState,
 ) -> RunStateProbe {
-    if let Some(pending) = device.pending_retirement {
+    if let Some(pending) = device.retirement.pending() {
         return pending_probe(device, queue_control, pending);
     }
-    let Some(&queue) = device.runnable.front() else {
+    let Some(queue) = device.scheduler.current() else {
         return if device.has_work(dma_space, queue_control) {
             RunStateProbe::Running
         } else {
@@ -36,12 +36,10 @@ pub(super) fn probe_run_state(
     let Ok(context) = device.queue(queue) else {
         return RunStateProbe::Running;
     };
-    let fetched = context
-        .frontend
-        .probe(dma_space, queue_control, context.entry);
+    let fetched = context.io.probe(dma_space, queue_control, context.entry);
     match fetched {
         Ok(Some(NormalizedFetch::Command { command, .. }))
-            if !ResourceDemand::for_command(&command).fits(device.resource_config) =>
+            if !ResourceDemand::for_command(&command).fits(device.execution.resources()) =>
         {
             RunStateProbe::Blocked {
                 queue,
@@ -83,10 +81,10 @@ fn pending_probe(
             queue,
             AsyncStallReason::FaultRetirementPendingRetry,
             device.queue(queue).map_or(true, |context| {
-                context.frontend.fault_blocked(
+                context.io.fault_blocked(
                     queue_control,
                     queue,
-                    device.resource_config.event_publication_slots(),
+                    device.execution.resources().event_publication_slots(),
                 )
             }),
         ),
@@ -104,10 +102,10 @@ fn completion_is_blocked(
     queue: QueueId,
 ) -> bool {
     device.queue(queue).is_ok_and(|context| {
-        context.frontend.completion_blocked(
+        context.io.completion_blocked(
             queue_control,
             queue,
-            device.resource_config.completion_publication_slots(),
+            device.execution.resources().completion_publication_slots(),
         )
     })
 }

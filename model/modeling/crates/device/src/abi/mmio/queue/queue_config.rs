@@ -103,7 +103,8 @@ fn ring_object<R: AbiRingEntry>(
         .map_err(|error| map_abi(error, staging.role))?;
     let address = DmaAddress::new(staging.base);
     let region = state
-        .dma_space
+        .device
+        .dma
         .region_containing(address)
         .ok_or_else(|| fail(MmioResult::DmaUnmapped, [staging.base, extent, 0]))?;
     if region.base() != address {

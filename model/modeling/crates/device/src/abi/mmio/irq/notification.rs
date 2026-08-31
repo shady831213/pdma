@@ -5,7 +5,7 @@ use pdma_model_contract::abi::mmio::{IrqCommand, MmioResultDetails};
 use pdma_model_contract::semantic::IrqNotification;
 
 pub(super) fn snapshot_line(state: &DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
-    let Some(snapshot) = state.backend.irq_snapshot() else {
+    let Some(snapshot) = state.device.execution.irq_snapshot() else {
         return Ok(CommandOutcome {
             response: None,
             changed: false,
@@ -21,7 +21,7 @@ pub(super) fn snapshot_line(state: &DeviceCore) -> Result<CommandOutcome, MmioRe
 }
 
 pub(super) fn claim(state: &mut DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
-    let Some(notification) = state.backend.take_irq_notification() else {
+    let Some(notification) = state.device.execution.take_irq_notification() else {
         return Ok(CommandOutcome {
             response: None,
             changed: false,

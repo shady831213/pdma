@@ -9,6 +9,7 @@ mod ring;
 pub(in crate::runner) mod transactions;
 
 pub(in crate::runner) use ring::{RingState, SubmissionRingState};
+use ring::{exact_cursor, semantic_cursors};
 
 #[derive(Debug, Clone, Copy)]
 pub(in crate::runner) struct ActiveQueue {
@@ -113,26 +114,25 @@ impl BusControlState {
 }
 
 impl ActiveQueue {
-    fn new(
-        activation: QueueActivation,
-        layouts: QueueRingLayouts,
-    ) -> Result<Self, PdmaControlError> {
-        Ok(Self {
+    const fn new(activation: QueueActivation, layouts: QueueRingLayouts) -> Self {
+        Self {
             activation,
-            submission: SubmissionRingState::new(layouts.submission())?,
-            completion: RingState::new(layouts.completion())?,
-            event: RingState::new(layouts.event())?,
-        })
+            submission: SubmissionRingState::new(layouts.submission()),
+            completion: RingState::empty(layouts.completion()),
+            event: RingState::empty(layouts.event()),
+        }
     }
 
-    pub(super) const fn status(self) -> QueueStatus {
-        QueueStatus {
+    pub(super) fn status(self) -> Result<QueueStatus, PdmaControlError> {
+        Ok(QueueStatus {
             queue: self.activation.queue(),
-            submission: self.submission.ring().cursors(),
-            captured_submission_producer: self.submission.captured_producer(),
-            completion: self.completion.cursors(),
-            event: self.event.cursors(),
-        }
+            submission: semantic_cursors(self.submission.ring())?,
+            captured_submission_producer: pdma_model_contract::semantic::RingCursor::new(
+                self.submission.captured_producer().raw(),
+            ),
+            completion: semantic_cursors(self.completion)?,
+            event: semantic_cursors(self.event)?,
+        })
     }
 }
 

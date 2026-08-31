@@ -1,5 +1,5 @@
 use super::{DeviceExecution, PdmaIrqController};
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector};
 
 impl DeviceExecution {

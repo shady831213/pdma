@@ -1,5 +1,5 @@
 use super::{DeviceExecution, irq::IrqSourceObservation};
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::{
     EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,

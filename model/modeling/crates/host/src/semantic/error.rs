@@ -1,15 +1,12 @@
 //! Canonical host driver core surface.
 
-use crate::register::{
-    PdmaBatchError, PdmaClaimError, PdmaProvisioningError, PdmaRegisterAccessError,
-    PdmaRegisterPortError,
-};
-use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
-use pdma_model_contract::{
-    abi::mmio::ResponseCodecError,
-    semantic::{BufferId, CompletionRingId, DeviceEpoch, IrqSource, QueueId},
-};
+mod backend;
+
+use hardware_interface_runtime::CpuContextError;
+use pdma_model_contract::semantic::{BufferId, CompletionRingId, DeviceEpoch, IrqSource, QueueId};
 use std::{error::Error, fmt};
+
+pub use backend::{PortBackendError, PortBackendKind};
 
 /// Result returned by a semantic host port.
 pub type PortResult<T> = Result<T, PortError>;
@@ -63,18 +60,8 @@ pub enum PortError {
     },
     /// The canonical port was polled outside its owning CPU.
     Cpu(CpuContextError),
-    /// Host-owned memory provisioning failed.
-    Provisioning(PdmaProvisioningError),
-    /// One generated register access failed.
-    Register(PdmaRegisterAccessError),
-    /// A closed queue batch failed.
-    Batch(PdmaBatchError),
-    /// Interrupt readiness or claim failed.
-    Claim(PdmaClaimError),
-    /// Checked DMA memory access failed.
-    Memory(MemoryAccessError),
-    /// A generated response rejected bytes or a value.
-    Response(ResponseCodecError),
+    /// The selected backend rejected the operation.
+    Backend(PortBackendError),
 }
 
 impl PartialEq for PortError {
@@ -114,19 +101,7 @@ impl PartialEq for PortError {
                 Self::StepBudgetExhausted { max_steps: right },
             ) => left == right,
             (Self::Cpu(left), Self::Cpu(right)) => left == right,
-            (Self::Provisioning(left), Self::Provisioning(right)) => left == right,
-            (Self::Register(left), Self::Register(right)) => left == right,
-            (Self::Batch(left), Self::Batch(right)) => left == right,
-            (Self::Claim(left), Self::Claim(right)) => left == right,
-            (Self::Memory(left), Self::Memory(right)) => left == right,
-            (
-                Self::Response(ResponseCodecError::Map(left)),
-                Self::Response(ResponseCodecError::Map(right)),
-            ) => left == right,
-            (
-                Self::Response(ResponseCodecError::Register(left)),
-                Self::Response(ResponseCodecError::Register(right)),
-            ) => left == right,
+            (Self::Backend(left), Self::Backend(right)) => left == right,
             (Self::ZeroCapacity, Self::ZeroCapacity)
             | (Self::RingFull, Self::RingFull)
             | (Self::RangeOverflow, Self::RangeOverflow)
@@ -139,21 +114,6 @@ impl PartialEq for PortError {
 
 impl Eq for PortError {}
 
-impl From<PdmaRegisterPortError> for PortError {
-    fn from(source: PdmaRegisterPortError) -> Self {
-        match source {
-            PdmaRegisterPortError::Cpu(source) => Self::Cpu(source),
-            PdmaRegisterPortError::Semantic(source) => source,
-            PdmaRegisterPortError::Provisioning(source) => Self::Provisioning(source),
-            PdmaRegisterPortError::Register(source) => Self::Register(source),
-            PdmaRegisterPortError::Batch(source) => Self::Batch(source),
-            PdmaRegisterPortError::Claim(source) => Self::Claim(source),
-            PdmaRegisterPortError::Memory(source) => Self::Memory(source),
-            PdmaRegisterPortError::Response(source) => Self::Response(source),
-        }
-    }
-}
-
 impl fmt::Display for PortError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "host port rejected operation: {self:?}")
@@ -164,12 +124,7 @@ impl Error for PortError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Cpu(source) => Some(source),
-            Self::Provisioning(source) => Some(source),
-            Self::Register(source) => Some(source),
-            Self::Batch(source) => Some(source),
-            Self::Claim(source) => Some(source),
-            Self::Memory(source) => Some(source),
-            Self::Response(source) => Some(source),
+            Self::Backend(source) => Some(source),
             Self::StaleEpoch { .. }
             | Self::ZeroCapacity
             | Self::RingFull

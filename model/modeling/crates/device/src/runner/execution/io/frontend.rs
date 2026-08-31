@@ -2,7 +2,7 @@ use super::exact::ExactFrontend;
 use super::semantic::SemanticFrontend;
 use super::{FrontendBehavior, NormalizedFetch, PublicationOutcome, rejected_compat_submission};
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use crate::runner::execution::retirement::FaultRetirement;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};

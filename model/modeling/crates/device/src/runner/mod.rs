@@ -1,6 +1,6 @@
 //! Tokio-backed asynchronous hardware runner.
 
-mod abi;
+mod adapter;
 mod core;
 mod execution;
 mod global_api;
@@ -16,11 +16,11 @@ mod worker;
 
 use crate::ModelResult;
 use crate::dma_space::{PdmaMemoryError, PdmaMemoryMappings};
-pub use abi::bus::{
+pub use adapter::bus::{
     DmaBatchContext, DmaWrite, PdmaBatchError, PdmaControlError, QueueBootstrapBatch,
     QueueResponseBytes, QueueStatus, SubmissionAcceptance, SubmissionBatch,
 };
-pub use abi::{MmioRegisterEndpoint, MmioRegisterError};
+pub use adapter::{MmioRegisterEndpoint, MmioRegisterError};
 pub use core::DeviceCore;
 use execution::DeviceExecution;
 pub use manual::SyncDevice;

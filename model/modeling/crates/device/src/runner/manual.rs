@@ -29,7 +29,8 @@ impl SyncDevice {
     pub(crate) fn reset_core(
         &mut self,
         request: pdma_model_contract::semantic::WholeDeviceReset,
-    ) -> Result<pdma_model_contract::semantic::DeviceEpoch, super::abi::bus::PdmaControlError> {
+    ) -> Result<pdma_model_contract::semantic::DeviceEpoch, super::adapter::bus::PdmaControlError>
+    {
         self.core.reset_runner(request)
     }
 

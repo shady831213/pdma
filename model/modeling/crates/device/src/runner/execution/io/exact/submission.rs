@@ -2,8 +2,8 @@ mod command;
 mod resolve;
 
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::PdmaControlError;
-use crate::runner::abi::bus::control::{BusControlState, transactions};
+use crate::runner::adapter::bus::PdmaControlError;
+use crate::runner::adapter::bus::control::{BusControlState, transactions};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{AbiCommand, AbiCommandView, AbiEvent, DescriptorDecodeError};
 use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};

@@ -50,4 +50,4 @@ pub use record::{
     AbiEventFlagsRaw, AbiEventFlagsValues, AbiEventKindRaw, AbiEventRaw, AbiEventReservedRaw,
     AbiEventReservedValues, AbiEventStageRaw, AbiEventView, AbiEventViewMut,
 };
-pub use ring::{AbiRingEntry, QueueRingLayouts, RingLayout};
+pub use ring::{AbiRingEntry, QueueRingLayouts, RingCursor, RingLayout, RingState};

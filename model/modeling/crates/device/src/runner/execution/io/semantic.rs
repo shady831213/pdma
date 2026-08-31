@@ -4,7 +4,7 @@ use super::super::command::ExecutionCommand;
 use super::{FrontendBehavior, NormalizedFetch, PublicationOutcome};
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use crate::runner::execution::ring::NativeRing;
 use pdma_model_contract::semantic::{
     Command, CompletionRecord, CompletionRingId, EventRecord, QueueDirectoryEntry, QueueId,

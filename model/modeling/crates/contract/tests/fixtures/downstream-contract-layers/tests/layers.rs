@@ -2,11 +2,9 @@
 
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, DmaRegion,
-    RingLayout,
+    RingCursor as AbiRingCursor, RingLayout,
 };
-use pdma_model_contract::semantic::{
-    BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId, RingCursor,
-};
+use pdma_model_contract::semantic::{BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId};
 
 #[test]
 fn independent_values_compose_only_through_owner_conversions() {
@@ -37,7 +35,7 @@ fn independent_values_compose_only_through_owner_conversions() {
     assert_eq!(roundtrip, Ok(Ok(request.src())));
     assert_eq!(queue.queue_id(), QueueId::new(3));
     assert_eq!(
-        ring.map(|layout| layout.slot(RingCursor::new(3).raw())),
+        ring.map(|layout| layout.slot(AbiRingCursor::new(3))),
         Ok(0)
     );
 }

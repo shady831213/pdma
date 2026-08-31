@@ -2,7 +2,7 @@ use super::DeviceExecution;
 use super::io::PublicationOutcome;
 use crate::dma_space::PdmaMemoryMappings;
 use crate::runner::AsyncStallReason;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use crate::runner::types::ModelStepStatus;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::completion::{CompletionRecord, CompletionStatus};

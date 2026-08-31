@@ -2,9 +2,9 @@
 
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, DmaRegion,
-    RingLayout,
+    RingCursor as AbiRingCursor, RingLayout,
 };
-use pdma_model_contract::semantic::{self, BufferId, RingCursor};
+use pdma_model_contract::semantic::{self, BufferId};
 
 #[test]
 fn semantic_and_abi_are_independent_and_conversion_is_owner_defined() {
@@ -52,10 +52,7 @@ fn semantic_capabilities_and_exact_abi_rings_have_direct_owners() {
 
     // When/Then: both owner namespaces construct usable values without a translation.
     assert_eq!(queue.queue_id(), semantic::QueueId::new(7));
-    assert_eq!(
-        ring.map(|layout| layout.slot(RingCursor::new(3).raw())),
-        Ok(0)
-    );
+    assert_eq!(ring.map(|layout| layout.slot(AbiRingCursor::new(3))), Ok(0));
     assert_eq!(
         pdma_model_contract::semantic::DeviceEpoch::initial(),
         queue.epoch()

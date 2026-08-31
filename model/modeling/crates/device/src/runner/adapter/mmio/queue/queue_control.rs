@@ -1,6 +1,6 @@
 use super::{QueueStaging, status_response};
 use crate::dma_space::PdmaMemoryError;
-use crate::runner::abi::bus::control::transactions;
+use crate::runner::adapter::bus::control::transactions;
 use crate::runner::state::DeviceCore;
 use crate::runner::{PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::AbiControlError;
@@ -209,6 +209,25 @@ pub(super) fn map_abi(error: AbiControlError, role: u64) -> MmioResultDetails {
         AbiControlError::RingExtentMismatch { expected, actual } => {
             fail(MmioResult::RingExtentMismatch, [expected, actual, role])
         }
+        AbiControlError::CursorRegression { producer, consumer } => {
+            fail(MmioResult::CursorRegression, [producer, consumer, role])
+        }
+        AbiControlError::CursorDistanceExceeded {
+            producer,
+            consumer,
+            depth,
+        } => fail(
+            MmioResult::CursorDistanceExceeded,
+            [producer, consumer, u64::from(depth)],
+        ),
+        AbiControlError::CursorUpdateRegression { current, proposed } => fail(
+            MmioResult::CursorUpdateRegression,
+            [current, proposed, role],
+        ),
+        AbiControlError::CursorIncrementOverflow { cursor, increment } => fail(
+            MmioResult::CursorIncrementOverflow,
+            [cursor, increment, role],
+        ),
         AbiControlError::QueueDepthMismatch {
             expected, actual, ..
         } => fail(

@@ -3,7 +3,7 @@ mod submission;
 
 use super::{FrontendBehavior, NormalizedFault, NormalizedFetch, PublicationOutcome};
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{AbiEvent, AbiEventKind, DmaAddress};
 use pdma_model_contract::semantic::BufferId;

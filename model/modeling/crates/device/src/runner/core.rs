@@ -5,8 +5,8 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
 
-use super::abi::bus::control::BusControlState;
-use super::abi::mmio::RegisterBanks;
+use super::adapter::bus::control::BusControlState;
+use super::adapter::mmio::RegisterBanks;
 use super::execution::DeviceExecution;
 use super::{AsyncStepStatus, PdmaMemoryMappings};
 
@@ -44,7 +44,7 @@ pub struct DeviceCore {
     pub(super) register_gate: ObservationGate,
     reset_runner_calls: usize,
     #[cfg(test)]
-    pub(super) batch_fault: std::cell::Cell<Option<super::abi::bus::BatchPreparationFault>>,
+    pub(super) batch_fault: std::cell::Cell<Option<super::adapter::bus::BatchPreparationFault>>,
 }
 
 impl DeviceCore {
@@ -78,11 +78,11 @@ impl DeviceCore {
     pub(crate) fn reset_runner(
         &mut self,
         request: WholeDeviceReset,
-    ) -> Result<DeviceEpoch, super::abi::bus::PdmaControlError> {
+    ) -> Result<DeviceEpoch, super::adapter::bus::PdmaControlError> {
         let backend_epoch = self.backend.epoch();
         let control_epoch = self.bus_control.epoch();
         if request.expected_epoch() != backend_epoch || control_epoch != backend_epoch {
-            return Err(super::abi::bus::PdmaControlError::StaleEpoch {
+            return Err(super::adapter::bus::PdmaControlError::StaleEpoch {
                 expected: backend_epoch,
                 actual: request.expected_epoch(),
             });
@@ -90,11 +90,11 @@ impl DeviceCore {
         let next_backend = backend_epoch.next()?;
         let next_control = control_epoch.next()?;
         if next_backend != next_control {
-            return Err(super::abi::bus::PdmaControlError::InvalidTransaction);
+            return Err(super::adapter::bus::PdmaControlError::InvalidTransaction);
         }
         self.backend.reset(next_backend);
         self.bus_control.reset(next_control);
-        super::abi::mmio::reset::register_banks(self);
+        super::adapter::mmio::reset::register_banks(self);
         self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
         Ok(next_backend)
     }

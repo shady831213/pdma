@@ -1,6 +1,6 @@
 use super::queue_control::{CommandResult, fail, map_abi};
 use super::{QueueStaging, status_response};
-use crate::runner::abi::bus::control;
+use crate::runner::adapter::bus::control;
 use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::abi::{

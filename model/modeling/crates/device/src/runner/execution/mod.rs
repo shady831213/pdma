@@ -15,7 +15,7 @@ mod step;
 mod vector_add;
 
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use crate::runner::types::ModelStepStatus;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};

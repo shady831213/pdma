@@ -32,3 +32,7 @@ path = "tests/host_core_surface.rs"
 [[test]]
 name = "irq_runtime_surface"
 path = "tests/irq_runtime_surface.rs"
+
+[[test]]
+name = "source_layer_boundaries"
+path = "tests/source_layer_boundaries.rs"

@@ -12,6 +12,10 @@ mod private {
     pub trait Sealed {}
 }
 
+mod state;
+
+pub use state::{RingCursor, RingState};
+
 /// ABI record type permitted as a DMA ring entry.
 pub trait AbiRingEntry: private::Sealed + Copy + core::fmt::Debug + Eq {
     /// Fixed encoded entry width in bytes.
@@ -114,12 +118,12 @@ impl<R: AbiRingEntry> RingLayout<R> {
     }
 
     /// Physical entry index selected by a monotonic cursor.
-    pub fn slot(self, cursor: u64) -> u64 {
-        cursor % u64::from(self.depth)
+    pub fn slot(self, cursor: RingCursor) -> u64 {
+        cursor.raw() % u64::from(self.depth)
     }
 
     /// DMA address of the entry selected by a monotonic cursor.
-    pub fn entry_address(self, cursor: u64) -> Result<DmaAddress, AbiAddressError> {
+    pub fn entry_address(self, cursor: RingCursor) -> Result<DmaAddress, AbiAddressError> {
         let offset = self
             .slot(cursor)
             .checked_mul(u64::from(R::ENTRY_SIZE))

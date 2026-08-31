@@ -1,6 +1,6 @@
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress, DmaRegion,
-    RingLayout,
+    RingCursor as AbiRingCursor, RingLayout,
 };
 use pdma_model_contract::semantic::{
     BufferId, CopyRequest, DeviceEpoch, EpochQueue, QueueId, RingCursor,
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "semantic=independent;abi_record={};conversion=owned;roundtrip={roundtrip}",
         record.len()
     );
-    assert_eq!(ring.slot(cursor.raw()), 0);
+    assert_eq!(ring.slot(AbiRingCursor::new(cursor.raw())), 0);
     assert_eq!(semantic_queue.queue_id(), QueueId::new(3));
     Ok(())
 }

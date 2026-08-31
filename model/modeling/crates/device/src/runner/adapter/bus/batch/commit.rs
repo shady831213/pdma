@@ -3,10 +3,10 @@ use super::{
     command_error, map_access_error, submission_staging, validate_submission_shape,
 };
 use crate::dma_space::{PdmaMemoryError, PreparedPdmaMapping};
-use crate::runner::abi::bus::SubmissionAcceptance;
-use crate::runner::abi::bus::control::{activation, transactions};
-use crate::runner::abi::mmio::queue::status_response;
-use crate::runner::abi::register_endpoint::{
+use crate::runner::adapter::bus::SubmissionAcceptance;
+use crate::runner::adapter::bus::control::{activation, transactions};
+use crate::runner::adapter::mmio::queue::status_response;
+use crate::runner::adapter::register_endpoint::{
     prepare_bootstrap_batch_write, prepare_submission_batch_write,
 };
 use crate::runner::state::{DeviceCore, wake};

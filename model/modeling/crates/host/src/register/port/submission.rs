@@ -5,7 +5,7 @@ use hardware_interface_runtime::{MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
     AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
-    BroadcastDestinationEntry, U32WordValues,
+    BroadcastDestinationEntry, RingCursor as AbiRingCursor, U32WordValues,
 };
 use pdma_model_contract::semantic::{
     BroadcastCopyRequest, BufferId, Command, CommandId, CommandOperation, QueueConfigHandle,
@@ -24,7 +24,7 @@ pub(super) async fn submit<A: CanonicalAccess>(
         .map_err(|_| PortError::SubmissionState)?;
     let producer = queue.status.submission().producer();
     let address = layout
-        .entry_address(producer.raw())
+        .entry_address(AbiRingCursor::new(producer.raw()))
         .map_err(|_| PortError::SubmissionState)?;
     let descriptor = PdmaDmaWrite::new(MemoryAddress::new(address.raw()), descriptor);
     let request = PdmaSubmissionBatch::new(queue.status.queue(), producer, descriptor, indirect);

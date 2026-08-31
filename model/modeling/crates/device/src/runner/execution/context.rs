@@ -1,6 +1,6 @@
 use super::{DeviceExecution, io};
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use pdma_model_contract::semantic::QueueDirectoryEntry;
 
 #[derive(Debug)]

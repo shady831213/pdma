@@ -1,7 +1,7 @@
 use super::{DeviceExecution, SuccessRetirement};
 use crate::ModelResult;
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::BusControlState;
+use crate::runner::adapter::bus::control::BusControlState;
 use pdma_model_contract::semantic::QueueId;
 
 pub(super) fn completion_publication_is_full(

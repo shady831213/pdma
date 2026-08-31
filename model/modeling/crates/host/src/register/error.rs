@@ -218,3 +218,32 @@ impl From<ResponseCodecError> for PdmaRegisterPortError {
         Self::Response(source)
     }
 }
+
+impl From<PdmaRegisterPortError> for crate::semantic::PortError {
+    fn from(source: PdmaRegisterPortError) -> Self {
+        use crate::semantic::{PortBackendError, PortBackendKind};
+
+        match source {
+            PdmaRegisterPortError::Cpu(source) => Self::Cpu(source),
+            PdmaRegisterPortError::Semantic(source) => source,
+            PdmaRegisterPortError::Provisioning(source) => {
+                Self::Backend(PortBackendError::new(PortBackendKind::Provisioning, source))
+            }
+            PdmaRegisterPortError::Register(source) => {
+                Self::Backend(PortBackendError::new(PortBackendKind::Register, source))
+            }
+            PdmaRegisterPortError::Batch(source) => {
+                Self::Backend(PortBackendError::new(PortBackendKind::Batch, source))
+            }
+            PdmaRegisterPortError::Claim(source) => {
+                Self::Backend(PortBackendError::new(PortBackendKind::Claim, source))
+            }
+            PdmaRegisterPortError::Memory(source) => {
+                Self::Backend(PortBackendError::new(PortBackendKind::Memory, source))
+            }
+            PdmaRegisterPortError::Response(source) => {
+                Self::Backend(PortBackendError::new(PortBackendKind::Response, source))
+            }
+        }
+    }
+}

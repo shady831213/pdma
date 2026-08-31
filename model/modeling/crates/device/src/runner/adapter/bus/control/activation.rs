@@ -15,11 +15,12 @@ struct ValidatedQueueActivation {
 pub(in crate::runner) struct PreparedQueueActivation {
     shadow: ActiveQueue,
     native: PreparedExactQueue,
+    status: QueueStatus,
 }
 
 impl PreparedQueueActivation {
     pub(in crate::runner) const fn status(&self) -> QueueStatus {
-        self.shadow.status()
+        self.status
     }
 }
 
@@ -159,7 +160,8 @@ fn prepare(
     runner: &mut DeviceCore,
     validated: &ValidatedQueueActivation,
 ) -> Result<PreparedQueueActivation, PdmaControlError> {
-    let shadow = ActiveQueue::new(validated.request, validated.layouts)?;
+    let shadow = ActiveQueue::new(validated.request, validated.layouts);
+    let status = shadow.status()?;
     let native = runner
         .backend
         .prepare_dma_bus_queue(validated.request.config())
@@ -167,7 +169,11 @@ fn prepare(
     if native.queue_id() != validated.request.queue().queue_id() {
         return Err(PdmaControlError::InvalidTransaction);
     }
-    Ok(PreparedQueueActivation { shadow, native })
+    Ok(PreparedQueueActivation {
+        shadow,
+        native,
+        status,
+    })
 }
 
 pub(in crate::runner) fn install(
@@ -176,7 +182,7 @@ pub(in crate::runner) fn install(
 ) -> QueueStatus {
     runner.backend.install_dma_bus_queue(prepared.native);
     runner.bus_control.queues.push(prepared.shadow);
-    prepared.shadow.status()
+    prepared.status
 }
 
 const fn regions_overlap(left: MappedDmaRegion, right: MappedDmaRegion) -> bool {

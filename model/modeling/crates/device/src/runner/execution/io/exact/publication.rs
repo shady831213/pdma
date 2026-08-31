@@ -1,6 +1,6 @@
 use super::super::PublicationOutcome;
 use crate::dma_space::PdmaMemoryMappings;
-use crate::runner::abi::bus::control::{BusControlState, RingState};
+use crate::runner::adapter::bus::control::{BusControlState, RingState};
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiRingEntry};
 use pdma_model_contract::semantic::EpochQueue;
 use pdma_model_contract::semantic::{CompletionRecord, QueueId};

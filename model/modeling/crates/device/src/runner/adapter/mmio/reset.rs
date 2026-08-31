@@ -1,5 +1,5 @@
 use super::RegisterBanks;
-use crate::runner::abi::bus::PdmaControlError;
+use crate::runner::adapter::bus::PdmaControlError;
 use crate::runner::state::DeviceCore;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
@@ -49,6 +49,10 @@ const fn map_error(error: PdmaControlError) -> MmioResultDetails {
             | AbiControlError::RingExtentOverflow { .. }
             | AbiControlError::MisalignedRing { .. }
             | AbiControlError::RingExtentMismatch { .. }
+            | AbiControlError::CursorRegression { .. }
+            | AbiControlError::CursorDistanceExceeded { .. }
+            | AbiControlError::CursorUpdateRegression { .. }
+            | AbiControlError::CursorIncrementOverflow { .. }
             | AbiControlError::QueueDepthMismatch { .. }
             | AbiControlError::EventDepthMismatch { .. }
             | AbiControlError::UnknownStatusValue { .. },

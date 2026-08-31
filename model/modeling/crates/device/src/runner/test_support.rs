@@ -33,7 +33,7 @@ impl CoreTestSupport for DeviceCore {
     ) -> Result<Self, MmioAccessError> {
         let mut core = Self::at_epoch(memory, config, observer, epoch);
         let (register, value) = pdma_model_contract::abi::mmio::decode_write(offset, request)?;
-        super::abi::register_endpoint::prepare_write(register, value, offset, request)
+        super::adapter::register_endpoint::prepare_write(register, value, offset, request)
             .commit(&mut core);
         Ok(core)
     }
@@ -44,7 +44,7 @@ impl CoreTestSupport for DeviceCore {
         let registers = PdmaMmioMapRegisterId::ALL
             .into_iter()
             .filter_map(PdmaMmioMap::register)
-            .map(|register| super::abi::mmio::dispatch::read(self, register.id()).encode())
+            .map(|register| super::adapter::mmio::dispatch::read(self, register.id()).encode())
             .collect();
         ResetPartitionSnapshot {
             queues,

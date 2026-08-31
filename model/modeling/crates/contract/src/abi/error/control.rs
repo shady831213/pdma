@@ -43,7 +43,37 @@ pub enum AbiControlError {
         /// Supplied byte extent.
         actual: u64,
     },
-    /// A queue ring depth differs from its semantic configuration.
+    /// A consumer cursor is ahead of its producer cursor.
+    CursorRegression {
+        /// Supplied producer cursor.
+        producer: u64,
+        /// Supplied consumer cursor.
+        consumer: u64,
+    },
+    /// A producer-to-consumer distance exceeds the ring depth.
+    CursorDistanceExceeded {
+        /// Supplied producer cursor.
+        producer: u64,
+        /// Supplied consumer cursor.
+        consumer: u64,
+        /// Configured ring depth.
+        depth: u32,
+    },
+    /// A cursor publication moves backward.
+    CursorUpdateRegression {
+        /// Current cursor.
+        current: u64,
+        /// Proposed cursor.
+        proposed: u64,
+    },
+    /// Advancing a cursor exceeds its fixed-width representation.
+    CursorIncrementOverflow {
+        /// Current cursor.
+        cursor: u64,
+        /// Requested increment.
+        increment: u64,
+    },
+    /// A queue ring depth differs from its queue configuration.
     QueueDepthMismatch {
         /// Ring role.
         ring: &'static str,
@@ -89,6 +119,23 @@ impl fmt::Display for AbiControlError {
             }
             Self::RingExtentMismatch { expected, actual } => {
                 write!(f, "ring extent must be {expected} bytes, not {actual}")
+            }
+            Self::CursorRegression { producer, consumer } => {
+                write!(f, "producer {producer} is behind consumer {consumer}")
+            }
+            Self::CursorDistanceExceeded {
+                producer,
+                consumer,
+                depth,
+            } => write!(
+                f,
+                "cursor distance {producer} - {consumer} exceeds ring depth {depth}"
+            ),
+            Self::CursorUpdateRegression { current, proposed } => {
+                write!(f, "cursor update regressed from {current} to {proposed}")
+            }
+            Self::CursorIncrementOverflow { cursor, increment } => {
+                write!(f, "cursor {cursor} cannot advance by {increment}")
             }
             Self::QueueDepthMismatch {
                 ring,

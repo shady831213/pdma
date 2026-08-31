@@ -1,7 +1,7 @@
 use super::{AsyncDeviceHandle, PdmaControlError, SubmissionAcceptance};
 use crate::MappedDmaRegion;
-use crate::runner::abi::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
-use crate::runner::abi::register_endpoint::PreparedWrite;
+use crate::runner::adapter::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
+use crate::runner::adapter::register_endpoint::PreparedWrite;
 use crate::runner::state::publish;
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::semantic::QueueActivation;
@@ -150,7 +150,7 @@ pub(super) fn command_error(
     command: u32,
 ) -> PdmaBatchError {
     let numeric_id = u64::try_from(queue_id).unwrap_or(u64::MAX);
-    PdmaBatchError::Command(crate::runner::abi::mmio::queue::map_bus_error(
+    PdmaBatchError::Command(crate::runner::adapter::mmio::queue::map_bus_error(
         error, numeric_id, command, 0,
     ))
 }

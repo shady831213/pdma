@@ -1,5 +1,5 @@
 use super::*;
-use crate::runner::abi::bus::{DmaWrite, SubmissionBatch};
+use crate::runner::adapter::bus::{DmaWrite, SubmissionBatch};
 use pdma_model_contract::semantic::RingCursor;
 use std::future::{Future, poll_fn};
 
@@ -97,7 +97,8 @@ fn queue_latch_values(state: &crate::runner::state::DeviceCore) -> Vec<Vec<u8>> 
             let register = pdma_model_contract::abi::mmio::decode_read(offset, 8)
                 .or_else(|_| pdma_model_contract::abi::mmio::decode_read(offset, 4))
                 .expect("known queue latch decodes");
-            crate::runner::abi::register_endpoint::prepare_read(state, register, offset).response
+            crate::runner::adapter::register_endpoint::prepare_read(state, register, offset)
+                .response
         })
         .collect()
 }

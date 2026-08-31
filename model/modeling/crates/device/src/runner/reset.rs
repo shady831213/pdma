@@ -1,5 +1,5 @@
 use super::AsyncDeviceHandle;
-use super::abi::bus::PdmaControlError;
+use super::adapter::bus::PdmaControlError;
 #[cfg(test)]
 use super::state::DeviceCore;
 use super::state::{publish, wake};
@@ -11,7 +11,7 @@ impl AsyncDeviceHandle {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result =
-                super::abi::mmio::reset::execute(&mut state, request.expected_epoch().raw())
+                super::adapter::mmio::reset::execute(&mut state, request.expected_epoch().raw())
                     .typed_result();
             if result.is_ok() {
                 wake(&mut state);
@@ -28,7 +28,7 @@ impl AsyncDeviceHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runner::abi::mmio::reset::{self as mmio_reset, ResetOutcome};
+    use crate::runner::adapter::mmio::reset::{self as mmio_reset, ResetOutcome};
     use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
     use pdma_model_contract::semantic::{SemanticError, ids::BufferId};
 

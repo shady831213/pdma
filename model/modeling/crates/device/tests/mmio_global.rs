@@ -22,7 +22,7 @@ async fn status_distinguishes_all_current_work_and_pressure_classes_without_muta
 #[test]
 fn worker_and_status_query_use_the_same_current_state_probe() {
     let step = include_str!("../src/runner/execution/step.rs");
-    let global = include_str!("../src/runner/abi/mmio/global.rs");
+    let global = include_str!("../src/runner/adapter/mmio/global.rs");
     assert!(step.contains("probe_run_state("));
     assert!(global.contains("probe_run_state("));
     assert!(!global.contains("last_status"));

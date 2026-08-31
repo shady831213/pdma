@@ -2,7 +2,8 @@ use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::abi::{
-    AbiCompletion, AbiEvent, AbiEventKind, AbiRingEntry, DmaAddress, RingLayout,
+    AbiCompletion, AbiEvent, AbiEventKind, AbiRingEntry, DmaAddress, RingCursor as AbiRingCursor,
+    RingLayout,
 };
 use pdma_model_contract::semantic::{
     BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord,
@@ -132,7 +133,7 @@ fn slot_address<R: AbiRingEntry>(
     cursor: RingCursor,
 ) -> PortResult<DmaAddress> {
     layout
-        .entry_address(cursor.raw())
+        .entry_address(AbiRingCursor::new(cursor.raw()))
         .map_err(|_| PortError::SubmissionState)
 }
 

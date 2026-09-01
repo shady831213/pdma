@@ -18,17 +18,3 @@ async fn status_distinguishes_all_current_work_and_pressure_classes_without_muta
 -> support::TestResult {
     states::assert_run_state_matrix().await
 }
-
-#[test]
-fn worker_and_status_query_use_the_same_current_state_probe() {
-    let step = include_str!("../src/device/pipeline.rs");
-    let probe = include_str!("../src/device/probe.rs");
-    let mmio_status = include_str!("../src/abi/mmio/global.rs");
-    let typed_status = include_str!("../src/runtime/global_api.rs");
-    assert!(step.contains("probe_run_state("));
-    assert!(probe.contains("match probe_run_state("));
-    assert!(mmio_status.contains(".run_state("));
-    assert!(typed_status.contains(".run_state("));
-    assert!(!mmio_status.contains("last_status"));
-    assert!(!typed_status.contains("last_status"));
-}

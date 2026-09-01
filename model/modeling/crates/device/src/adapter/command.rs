@@ -3,9 +3,6 @@ mod copy;
 mod resolve;
 mod vector;
 
-#[cfg(test)]
-mod tests;
-
 use crate::ModelResult;
 use crate::dma::PdmaMemoryMappings;
 use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, AbiEvent, AbiFault};

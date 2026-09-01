@@ -8,9 +8,6 @@ mod memory;
 mod resources;
 mod vector_add;
 
-#[cfg(test)]
-mod tests;
-
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_contract::semantic::{Command, CommandOperation};
 

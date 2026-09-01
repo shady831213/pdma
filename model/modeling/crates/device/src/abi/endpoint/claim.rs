@@ -1,6 +1,6 @@
 use super::{MmioRegisterError, PreparedRead, PreparedWrite, prepare_read, prepare_write};
-use crate::runtime::irq::{decode_source, irq_notification_ready};
-use crate::runtime::state::DeviceCore;
+use crate::abi::mmio::irq::support::{decode_source, irq_notification_ready};
+use crate::device::DeviceCore;
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation, RegisterObservation};
 use pdma_model_contract::abi::mmio::{
     IrqCommand, MmioAccessError, MmioResult, PdmaMmioMap, RegisterId, decode_u32, decode_u64,
@@ -22,7 +22,7 @@ const RESPONSE_IDS: [RegisterId; 9] = [
     RegisterId::IRspPendingMessages,
 ];
 
-pub(super) struct CommittedClaim {
+pub(crate) struct CommittedClaim {
     reservation: ObservationReservation,
     observations: Vec<RegisterObservation>,
     notification: Option<IrqNotification>,
@@ -30,16 +30,16 @@ pub(super) struct CommittedClaim {
 }
 
 impl CommittedClaim {
-    pub(super) const fn generation(&self) -> Option<usize> {
+    pub(crate) const fn generation(&self) -> Option<usize> {
         self.generation
     }
 
-    pub(super) fn emit(self) -> Result<Option<IrqNotification>, MmioRegisterError> {
+    pub(crate) fn emit(self) -> Result<Option<IrqNotification>, MmioRegisterError> {
         self.reservation.emit(self.observations)?;
         Ok(self.notification)
     }
 
-    pub(super) fn emit_observed(
+    pub(crate) fn emit_observed(
         self,
     ) -> Result<(Option<IrqNotification>, Vec<RegisterObservation>), MmioRegisterError> {
         let observations = self.observations.clone();
@@ -57,7 +57,7 @@ impl DeviceCore {
     }
 }
 
-pub(super) fn prepare_claim(state: &mut DeviceCore) -> Result<CommittedClaim, MmioRegisterError> {
+pub(crate) fn prepare_claim(state: &mut DeviceCore) -> Result<CommittedClaim, MmioRegisterError> {
     let response_count = if irq_notification_ready(state) {
         RESPONSE_IDS.len()
     } else {

@@ -9,8 +9,7 @@ use pdma_model_contract::semantic::{
 impl AsyncDeviceHandle {
     /// Provisions one command queue and one bound completion ring.
     pub async fn create_queue(&self, config: QueueConfig) -> ModelResult<QueueConfigHandle> {
-        self.with_backend(|backend| backend.create_queue(config))
-            .await
+        self.with_device(|device| device.create_queue(config)).await
     }
 
     /// Pushes one command through an epoch-qualified queue capability.
@@ -19,14 +18,13 @@ impl AsyncDeviceHandle {
         queue: QueueConfigHandle,
         command: Command,
     ) -> ModelResult<()> {
-        self.with_backend(|backend| backend.submit_command(queue, command))
+        self.with_device(|device| device.submit_command(queue, command))
             .await
     }
 
     /// Captures a software doorbell through an epoch-qualified queue capability.
     pub async fn ring_doorbell(&self, queue: QueueConfigHandle) -> ModelResult<()> {
-        self.with_backend(|backend| backend.ring_doorbell(queue))
-            .await
+        self.with_device(|device| device.ring_doorbell(queue)).await
     }
 
     /// Pops one completion through its epoch-qualified queue capability.
@@ -34,7 +32,7 @@ impl AsyncDeviceHandle {
         &self,
         queue: QueueConfigHandle,
     ) -> ModelResult<Option<CompletionRecord>> {
-        self.with_backend(|backend| backend.poll_completion(queue))
+        self.with_device(|device| device.poll_completion(queue))
             .await
     }
 
@@ -43,7 +41,7 @@ impl AsyncDeviceHandle {
         &self,
         queue: QueueConfigHandle,
     ) -> ModelResult<Option<EventRecord>> {
-        self.with_backend(|backend| backend.poll_queue_event(queue))
+        self.with_device(|device| device.poll_queue_event(queue))
             .await
     }
 }

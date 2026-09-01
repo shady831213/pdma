@@ -1,5 +1,5 @@
 use super::SyncDevice;
-use crate::engine::step::ModelStepStatus;
+use crate::device::ModelStepStatus;
 use crate::runtime::{AsyncRunSummary, AsyncStepStatus};
 use crate::{ModelError, ModelResult};
 
@@ -80,7 +80,7 @@ impl SyncDevice {
     }
 
     fn step_once(&mut self) -> ModelResult<ModelStepStatus> {
-        self.core.device.step()
+        self.core.step()
     }
 
     fn idle_or_budget_exhausted(
@@ -96,9 +96,7 @@ impl SyncDevice {
     }
 
     fn has_work(&self) -> bool {
-        self.device
-            .execution
-            .has_work(&self.device.dma, &self.device.queue_control)
+        self.core.has_work()
     }
 
     const fn summary(&self, start_steps: usize, stalls: usize) -> AsyncRunSummary {

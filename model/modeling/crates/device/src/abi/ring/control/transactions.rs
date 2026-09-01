@@ -1,8 +1,9 @@
 //! Exact-ABI queue cursor transaction preparation and commit.
 
-use super::{ActiveQueue, PdmaControlError, QueueStatus, SubmissionRingState, exact_cursor};
+use super::{PdmaControlError, QueueStatus};
 use crate::abi::ring::{DmaWrite, SubmissionAcceptance};
-use crate::runtime::state::DeviceCore;
+use crate::device::DeviceCore;
+use crate::queue::exact::{ActiveQueue, SubmissionRingState, exact_cursor};
 use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate};
 
 #[derive(Clone, Copy)]
@@ -18,11 +19,11 @@ impl PreparedSubmissionPublication {
     }
 }
 
-pub(in crate::abi::ring) fn accept_submission(
+pub(crate) fn accept_submission(
     state: &mut DeviceCore,
     request: SubmissionAcceptance,
 ) -> Result<QueueStatus, PdmaControlError> {
-    let queue = *state.device.queue_control.queue(request.queue)?;
+    let queue = *state.exact_ring(request.queue)?;
     let expected_producer = exact_cursor(request.expected_producer);
     if queue.submission.ring().producer() != expected_producer || queue.submission.ring().is_full()
     {
@@ -34,17 +35,13 @@ pub(in crate::abi::ring) fn accept_submission(
     validate_indirect(state, request.indirect.as_ref())?;
 
     if let Some((stage, write)) = request.indirect {
-        state.device.dma.commit(stage)?;
-        state
-            .device
-            .dma
-            .write_memory(write.address(), write.bytes())?;
+        state.dma.commit(stage)?;
+        state.dma.write_memory(write.address(), write.bytes())?;
     }
     state
-        .device
         .dma
         .write_memory(request.descriptor.address(), request.descriptor.bytes())?;
-    let active = state.device.queue_control.queue_mut(request.queue)?;
+    let active = state.exact_ring_mut(request.queue)?;
     active.submission = submission;
     active.status()
 }
@@ -64,7 +61,7 @@ fn validate_descriptor(queue: &ActiveQueue, write: &DmaWrite) -> Result<(), Pdma
 
 fn validate_indirect(
     state: &DeviceCore,
-    indirect: Option<&(crate::abi::dma::PdmaMemoryStage, DmaWrite)>,
+    indirect: Option<&(crate::dma::PdmaMemoryStage, DmaWrite)>,
 ) -> Result<(), PdmaControlError> {
     let Some((proposal, write)) = indirect else {
         return Ok(());
@@ -72,7 +69,7 @@ fn validate_indirect(
     let [region] = proposal.regions() else {
         return Err(PdmaControlError::InvalidTransaction);
     };
-    if proposal.generation() != state.device.dma.generation()
+    if proposal.generation() != state.dma.generation()
         || write.address() != region.base()
         || u64::try_from(write.bytes().len()) != Ok(region.length())
     {
@@ -86,7 +83,7 @@ pub(crate) fn prepare_submission_publication(
     state: &DeviceCore,
     request: &SubmissionAcceptance,
 ) -> Result<PreparedSubmissionPublication, PdmaControlError> {
-    let queue = *state.device.queue_control.queue(request.queue)?;
+    let queue = *state.exact_ring(request.queue)?;
     let expected_producer = exact_cursor(request.expected_producer);
     if queue.submission.ring().producer() != expected_producer || queue.submission.ring().is_full()
     {
@@ -109,11 +106,8 @@ pub(crate) fn install_submission_publication(
     state: &mut DeviceCore,
     prepared: &PreparedSubmissionPublication,
 ) -> QueueStatus {
-    for (index, queue) in state.device.queue_control.queues.iter_mut().enumerate() {
-        if index == prepared.queue.queue_id().raw() {
-            queue.submission = prepared.submission;
-            break;
-        }
+    if let Ok(queue) = state.exact_ring_mut(prepared.queue) {
+        queue.submission = prepared.submission;
     }
     prepared.status
 }
@@ -124,11 +118,7 @@ pub(crate) fn control(
 ) -> (Result<QueueStatus, PdmaControlError>, bool) {
     match request {
         QueueControl::ReadStatus(queue) => (
-            state
-                .device
-                .queue_control
-                .queue(queue)
-                .and_then(|q| q.status()),
+            state.exact_ring(queue).and_then(|active| active.status()),
             false,
         ),
         QueueControl::PublishSubmissionProducer(update) => {
@@ -140,12 +130,7 @@ pub(crate) fn control(
             })
         }
         QueueControl::CaptureSubmissionProducer(update) => {
-            if state
-                .device
-                .execution
-                .validate_dma_bus_queue(update.queue())
-                .is_err()
-            {
+            if state.validate_dma_bus_queue(update.queue()).is_err() {
                 return (Err(PdmaControlError::InvalidQueue), false);
             }
             let (result, changed) = update_queue(state, update, |queue, cursor| {
@@ -153,13 +138,7 @@ pub(crate) fn control(
                 queue.submission = queue.submission.capture(cursor)?;
                 Ok(changed)
             });
-            if result.is_ok()
-                && state
-                    .device
-                    .execution
-                    .ring_dma_bus_doorbell(update.queue())
-                    .is_err()
-            {
+            if result.is_ok() && state.ring_dma_bus_doorbell(update.queue()).is_err() {
                 return (Err(PdmaControlError::InvalidQueue), false);
             }
             (result, changed)
@@ -208,11 +187,8 @@ pub(crate) fn control(
 }
 
 pub(crate) fn advance_submission_consumer_raw(
-    control: &mut super::QueueControlState,
-    queue_id: pdma_model_contract::semantic::QueueId,
+    active: &mut ActiveQueue,
 ) -> Result<(), PdmaControlError> {
-    let queue = pdma_model_contract::semantic::EpochQueue::new(control.epoch(), queue_id);
-    let active = control.queue_mut(queue)?;
     let next = active.submission.ring().consumer().checked_increment(1)?;
     active.submission = active.submission.consume_captured(next)?;
     Ok(())
@@ -226,14 +202,10 @@ fn update_queue(
         pdma_model_contract::abi::RingCursor,
     ) -> Result<bool, PdmaControlError>,
 ) -> (Result<QueueStatus, PdmaControlError>, bool) {
-    let result = state
-        .device
-        .queue_control
-        .queue_mut(update.queue())
-        .and_then(|queue| {
-            apply(queue, exact_cursor(update.cursor()))
-                .and_then(|changed| queue.status().map(|status| (status, changed)))
-        });
+    let result = state.exact_ring_mut(update.queue()).and_then(|queue| {
+        apply(queue, exact_cursor(update.cursor()))
+            .and_then(|changed| queue.status().map(|status| (status, changed)))
+    });
     match result {
         Ok((status, changed)) => (Ok(status), changed),
         Err(error) => (Err(error), false),

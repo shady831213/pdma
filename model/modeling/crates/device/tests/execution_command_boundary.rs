@@ -21,9 +21,9 @@ fn rust_sources(root: &Path) -> io::Result<Vec<String>> {
 }
 
 #[test]
-fn engine_executes_semantic_commands_without_a_third_command_model() -> io::Result<()> {
+fn execution_object_uses_semantic_commands_without_a_third_command_model() -> io::Result<()> {
     // Given: every source file in the device execution engine.
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/engine");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/execution");
     let sources = rust_sources(&root)?;
 
     // When: the engine's command vocabulary is inspected.
@@ -51,6 +51,7 @@ fn abi_command_conversion_produces_the_semantic_command_union() -> io::Result<()
         "AbiCommand",
         "CommandOperation",
         "CopyRequest",
+        "impl ExactCommandContext",
         "VectorAddRequest",
     ] {
         assert!(

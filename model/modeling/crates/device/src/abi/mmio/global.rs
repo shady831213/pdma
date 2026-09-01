@@ -1,5 +1,5 @@
-use super::bank::{CommandBank, MmioScalar, narrow_u32};
-use crate::runtime::state::DeviceCore;
+use crate::device::DeviceCore;
+use crate::register_file::{MmioScalar, narrow_u32};
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, GlobalResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
 };
@@ -31,27 +31,8 @@ pub(super) enum GlobalRegister {
     MaxStride,
 }
 
-#[derive(Debug)]
-pub(super) struct GlobalBank {
-    req_abi_version: u32,
-    req_features: u64,
-    reset_expected_epoch: u64,
-    command: CommandBank<GlobalResponseBank>,
-}
-
-impl GlobalBank {
-    pub(super) fn new() -> Self {
-        Self {
-            req_abi_version: 0,
-            req_features: 0,
-            reset_expected_epoch: 0,
-            command: CommandBank::new(),
-        }
-    }
-}
-
 pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioScalar {
-    let bank = &state.device.registers.global;
+    let bank = &state.registers.global;
     let response = bank.command.response;
     let result = bank.command.result;
     let [detail0, detail1, detail2] = result.details;
@@ -81,7 +62,7 @@ pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioSc
 }
 
 pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64) {
-    let bank = &mut state.device.registers.global;
+    let bank = &mut state.registers.global;
     match register {
         GlobalRegister::ReqAbiVersion => bank.req_abi_version = narrow_u32(value),
         GlobalRegister::ReqFeatures => bank.req_features = value,
@@ -124,7 +105,7 @@ fn execute(state: &mut DeviceCore, raw: u32) {
 }
 
 fn reset(state: &mut DeviceCore) {
-    let expected_epoch = state.device.registers.global.reset_expected_epoch;
+    let expected_epoch = state.registers.global.reset_expected_epoch;
     match super::reset::execute(state, expected_epoch) {
         super::reset::ResetOutcome::Success(epoch) => {
             complete_success(
@@ -134,7 +115,7 @@ fn reset(state: &mut DeviceCore) {
                     ..GlobalResponseBank::default()
                 },
             );
-            crate::runtime::state::wake(state);
+            state.mark_changed();
         }
         super::reset::ResetOutcome::Rejected(_, result) => complete_failure(state, result),
     }
@@ -142,7 +123,7 @@ fn reset(state: &mut DeviceCore) {
 
 fn discover(state: &mut DeviceCore) {
     let request = {
-        let bank = &state.device.registers.global;
+        let bank = &state.registers.global;
         DiscoveryRequest::try_new(low_u16(bank.req_abi_version), bank.req_features)
     };
     match request {
@@ -177,10 +158,7 @@ fn read_limits(state: &mut DeviceCore) {
 }
 
 fn read_status(state: &mut DeviceCore) {
-    let run_state = state
-        .device
-        .execution
-        .run_state(&state.device.dma, &state.device.queue_control);
+    let run_state = state.run_state();
     let encoded = match run_state {
         DeviceRunState::Idle => 0,
         DeviceRunState::Running => 1,
@@ -190,14 +168,14 @@ fn read_status(state: &mut DeviceCore) {
         state,
         GlobalResponseBank {
             run_state: encoded.into(),
-            epoch: state.device.execution.epoch().raw().into(),
+            epoch: state.epoch().raw().into(),
             ..GlobalResponseBank::default()
         },
     );
 }
 
 fn complete_success(state: &mut DeviceCore, response: GlobalResponseBank) {
-    state.device.registers.global.command.complete(
+    state.registers.global.command.complete(
         details(MmioResult::Ok, [0; 3]),
         ResponseUpdate::Replace(response),
     );
@@ -205,7 +183,6 @@ fn complete_success(state: &mut DeviceCore, response: GlobalResponseBank) {
 
 fn complete_failure(state: &mut DeviceCore, result: MmioResultDetails) {
     state
-        .device
         .registers
         .global
         .command

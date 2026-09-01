@@ -1,9 +1,9 @@
 #[test]
 fn device_source_has_one_contract_decoder_and_no_competing_codec_or_table() {
     // Given: the complete device-owned MMIO source framework.
-    let root = include_str!("../../src/abi/mmio/mod.rs");
+    let root = include_str!("../../src/runtime/mmio.rs");
     let sources = [
-        include_str!("../../src/abi/mmio/bank.rs"),
+        include_str!("../../src/register_file/bank.rs"),
         include_str!("../../src/abi/mmio/dispatch.rs"),
         include_str!("../../src/abi/mmio/global.rs"),
         include_str!("../../src/abi/mmio/queue.rs"),

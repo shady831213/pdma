@@ -1,6 +1,6 @@
 use super::AsyncStepStatus;
 use super::state::{DeviceCore, RunnerShared, publish};
-use crate::engine::step::ModelStepStatus;
+use crate::device::ModelStepStatus;
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
     while run_one(shared).await {}
@@ -12,7 +12,7 @@ async fn run_one(shared: &RunnerShared) -> bool {
         if state.shutdown_requested {
             return publish_and_continue(shared, state.generation, false);
         }
-        match state.device.step() {
+        match state.step() {
             Ok(ModelStepStatus::Progressed) => {
                 state.steps = state.steps.saturating_add(1);
                 state.last_status = AsyncStepStatus::Progressed;

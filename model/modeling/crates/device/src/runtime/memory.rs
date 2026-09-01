@@ -11,12 +11,11 @@ impl AsyncDeviceHandle {
                 .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                 .and_then(|length| {
                     state
-                        .device
                         .dma
                         .allocate(length)
                         .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                 })
-                .map(crate::abi::dma::MappedDmaRegion::object);
+                .map(crate::dma::MappedDmaRegion::object);
             if buffer.is_ok() {
                 wake(&mut state);
             }
@@ -32,7 +31,7 @@ impl AsyncDeviceHandle {
     pub async fn write_buffer(&self, id: BufferId, offset: usize, data: &[u8]) -> ModelResult<()> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = state.device.dma.write_object(id, offset, data);
+            let result = state.dma.write_object(id, offset, data);
             wake(&mut state);
             (result, state.generation)
         };
@@ -51,7 +50,6 @@ impl AsyncDeviceHandle {
             .state
             .lock()
             .await
-            .device
             .dma
             .read_object(id, offset, len)
     }

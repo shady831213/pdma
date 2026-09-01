@@ -2,15 +2,15 @@ use super::{
     CommittedBatch, DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, bootstrap_staging,
     command_error, map_access_error, submission_staging, validate_submission_shape,
 };
-use crate::abi::dma::{PdmaMemoryError, PreparedPdmaMapping};
 use crate::abi::endpoint::{prepare_bootstrap_batch_write, prepare_submission_batch_write};
 use crate::abi::mmio::queue::status_response;
 use crate::abi::ring::SubmissionAcceptance;
 use crate::abi::ring::control::{activation, transactions};
-use crate::runtime::state::{DeviceCore, wake};
+use crate::device::DeviceCore;
+use crate::dma::{PdmaMemoryError, PreparedPdmaMapping};
 use hardware_interface_runtime::MemoryAlignment;
 
-pub(super) fn commit_bootstrap(
+pub(crate) fn commit_bootstrap(
     state: &mut DeviceCore,
     request: &QueueBootstrapBatch,
 ) -> Result<CommittedBatch, PdmaBatchError> {
@@ -35,11 +35,10 @@ pub(super) fn commit_bootstrap(
     #[cfg(test)]
     super::reject_injected(state, super::BatchPreparationFault::Overlap, context)?;
     let prepared_mapping = state
-        .device
         .dma
         .prepare_stage(&request.stage)
         .map_err(|error| PdmaBatchError::from_dma(error, context))?;
-    let memory = state.device.dma.backing_memory();
+    let memory = state.dma.backing_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
             PdmaBatchError::from_dma(PdmaMemoryError::from_runtime_memory(&error), context)
@@ -70,10 +69,10 @@ pub(super) fn commit_bootstrap(
             prepare_bootstrap_batch_write(staging, response).map_err(PdmaBatchError::Access)?;
         let reservation = state.register_gate.reserve(1)?;
         transaction.install_draft(draft);
-        state.device.dma.install_mapping(prepared_mapping);
+        state.dma.install_mapping(prepared_mapping);
         activation::install(state, prepared_queue);
         let command = command.commit(state);
-        wake(state);
+        state.mark_changed();
         Ok(CommittedBatch {
             response: response_bytes,
             command,
@@ -83,14 +82,14 @@ pub(super) fn commit_bootstrap(
     })
 }
 
-pub(super) fn commit_submission(
+pub(crate) fn commit_submission(
     state: &mut DeviceCore,
     request: &SubmissionAcceptance,
 ) -> Result<CommittedBatch, PdmaBatchError> {
     validate_submission_shape(state, request)?;
     let prepared_mapping = prepare_submission_mapping(state, request)?;
     let staging = submission_staging(request);
-    let memory = state.device.dma.backing_memory();
+    let memory = state.dma.backing_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
             PdmaBatchError::from_dma(
@@ -111,7 +110,7 @@ pub(super) fn commit_submission(
         if let Some((_, write)) = &request.indirect {
             draft
                 .write(
-                    crate::abi::dma::runtime_address(write.address()),
+                    crate::dma::runtime_address(write.address()),
                     MemoryAlignment::ONE,
                     write.bytes(),
                 )
@@ -121,7 +120,7 @@ pub(super) fn commit_submission(
         }
         draft
             .write(
-                crate::abi::dma::runtime_address(request.descriptor.address()),
+                crate::dma::runtime_address(request.descriptor.address()),
                 MemoryAlignment::ONE,
                 request.descriptor.bytes(),
             )
@@ -168,11 +167,11 @@ pub(super) fn commit_submission(
         let reservation = state.register_gate.reserve(1)?;
         transaction.install_draft(draft);
         if let Some(prepared) = prepared_mapping {
-            state.device.dma.install_mapping(prepared);
+            state.dma.install_mapping(prepared);
         }
         transactions::install_submission_publication(state, &prepared_cursor);
         let command = command.commit(state);
-        wake(state);
+        state.mark_changed();
         Ok(CommittedBatch {
             response: response_bytes,
             command,
@@ -205,7 +204,6 @@ fn prepare_submission_mapping(
         DmaBatchContext::Region(*region),
     )?;
     state
-        .device
         .dma
         .prepare_stage(proposal)
         .map(Some)

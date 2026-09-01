@@ -1,10 +1,10 @@
 //! Register-ID dispatch for exact MMIO reads and writes.
 
-use super::bank::MmioScalar;
 use super::global::{self, GlobalRegister as G};
 use super::irq::{self, IrqRegister as I};
 use super::queue::{self, QueueRegister as Q};
-use crate::runtime::state::DeviceCore;
+use crate::device::DeviceCore;
+use crate::register_file::MmioScalar;
 use pdma_model_contract::abi::mmio::RegisterId;
 
 pub(crate) const fn read(state: &DeviceCore, register: RegisterId) -> MmioScalar {

@@ -4,15 +4,10 @@ pub mod batch;
 #[cfg(test)]
 pub(crate) use batch::BatchPreparationFault;
 pub mod control;
-#[doc(hidden)]
-pub mod frontend;
 
-use crate::abi::dma::{PdmaMemoryError, PdmaMemoryStage};
-use crate::runtime::{AsyncDeviceHandle, publish, wake};
+use crate::dma::{PdmaMemoryError, PdmaMemoryStage};
 use pdma_model_contract::abi::{AbiControlError, DmaAddress};
-use pdma_model_contract::semantic::{
-    DeviceEpoch, QueueActivation, QueueControl, RingCursor, SemanticError,
-};
+use pdma_model_contract::semantic::{DeviceEpoch, RingCursor, SemanticError};
 use std::fmt;
 
 /// One byte-opaque DMA write committed by a bus transaction.
@@ -144,83 +139,4 @@ pub enum PendingDmaResult {
     Completion(pdma_model_contract::semantic::CompletionRecord),
     /// Canonical submission fault waiting for event-ring publication.
     Event(pdma_model_contract::abi::AbiEvent),
-}
-
-impl AsyncDeviceHandle {
-    /// Atomically commits three staged ring mappings and one queue activation.
-    pub async fn activate_queue(
-        &self,
-        proposal: PdmaMemoryStage,
-        activation: QueueActivation,
-    ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, generation) = {
-            let mut runner = self.shared.state.lock().await;
-            let result = control::activate_staged(&mut runner, proposal, activation);
-            if result.is_ok() {
-                wake(&mut runner);
-            }
-            (result, runner.generation)
-        };
-        if result.is_ok() {
-            publish(&self.shared, generation);
-        }
-        result
-    }
-
-    /// Activates one queue over three exact mappings already committed in DMA space.
-    pub async fn activate_mapped_queue(
-        &self,
-        activation: QueueActivation,
-    ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, generation) = {
-            let mut runner = self.shared.state.lock().await;
-            let result = control::activate_mapped(&mut runner, activation);
-            if result.is_ok() {
-                wake(&mut runner);
-            }
-            (result, runner.generation)
-        };
-        if result.is_ok() {
-            publish(&self.shared, generation);
-        }
-        result
-    }
-
-    /// Atomically commits optional indirect DMA, opaque writes, and producer advance.
-    pub async fn accept_submission(
-        &self,
-        request: SubmissionAcceptance,
-    ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = control::transactions::accept_submission(&mut state, request);
-            if result.is_ok() {
-                wake(&mut state);
-            }
-            (result, state.generation)
-        };
-        if result.is_ok() {
-            publish(&self.shared, generation);
-        }
-        result
-    }
-
-    /// Executes one typed queue status or cursor transaction.
-    pub async fn control_queue(
-        &self,
-        request: QueueControl,
-    ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, changed, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let (result, changed) = control::transactions::control(&mut state, request);
-            if changed {
-                wake(&mut state);
-            }
-            (result, changed, state.generation)
-        };
-        if changed {
-            publish(&self.shared, generation);
-        }
-        result
-    }
 }

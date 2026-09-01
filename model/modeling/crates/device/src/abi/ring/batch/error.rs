@@ -1,5 +1,5 @@
-use crate::abi::dma::MappedDmaRegion;
-use crate::abi::dma::PdmaMemoryError;
+use crate::dma::MappedDmaRegion;
+use crate::dma::PdmaMemoryError;
 use hardware_interface_runtime::ObservationGateError;
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult, MmioResultDetails};

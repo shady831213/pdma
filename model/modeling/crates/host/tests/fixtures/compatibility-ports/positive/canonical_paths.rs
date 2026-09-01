@@ -1,6 +1,6 @@
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, SoftwareCpu};
 use pdma_model_contract::{abi::DmaAddress, semantic::BufferId};
-use pdma_model_device::abi::dma::MappedDmaRegion;
+use pdma_model_device::dma::MappedDmaRegion;
 use pdma_model_host::{
     DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},

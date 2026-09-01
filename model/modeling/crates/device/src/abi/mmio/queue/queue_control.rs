@@ -1,10 +1,10 @@
 //! Queue-control MMIO command translation.
 
 use super::{QueueStaging, status_response};
-use crate::abi::dma::PdmaMemoryError;
 use crate::abi::ring::control::transactions;
-use crate::runtime::state::DeviceCore;
-use crate::runtime::{PdmaControlError, QueueStatus};
+use crate::abi::ring::{PdmaControlError, QueueStatus};
+use crate::device::DeviceCore;
+use crate::dma::PdmaMemoryError;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseBank, ResponseUpdate,
@@ -20,7 +20,7 @@ pub(super) fn execute(
     staging: QueueStaging,
     raw_command: u64,
 ) -> (MmioResultDetails, ResponseUpdate<QueueResponseBank>, bool) {
-    let raw = super::super::bank::narrow_u32(raw_command);
+    let raw = crate::register_file::narrow_u32(raw_command);
     let Ok(command) = QueueCommand::try_from(raw) else {
         return (
             fail(MmioResult::UnknownCommand, [u64::from(raw), 0, 0]),

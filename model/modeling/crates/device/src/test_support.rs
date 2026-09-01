@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::abi::dma::MappedDmaRegion;
+use crate::dma::MappedDmaRegion;
 use hardware_interface_runtime::{RegisterObserver, SharedMemory};
 use pdma_model_contract::abi::mmio::MmioAccessError;
 use pdma_model_contract::semantic::trace::TraceEvent;

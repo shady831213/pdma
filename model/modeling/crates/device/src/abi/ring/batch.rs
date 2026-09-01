@@ -1,17 +1,17 @@
 //! Atomic exact-ABI queue batches and their typed failures.
 
-use super::{AsyncDeviceHandle, PdmaControlError, SubmissionAcceptance};
+use super::{PdmaControlError, SubmissionAcceptance};
 use crate::MappedDmaRegion;
 use crate::abi::endpoint::PreparedWrite;
 use crate::abi::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
-use crate::runtime::state::publish;
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::semantic::QueueActivation;
 
 mod error;
 pub use error::{DmaBatchContext, PdmaBatchError};
-mod commit;
-use commit::{commit_bootstrap, commit_submission};
+#[doc(hidden)]
+pub mod commit;
+pub(crate) use commit::{commit_bootstrap, commit_submission};
 
 #[cfg(test)]
 mod tests;
@@ -29,7 +29,7 @@ pub(crate) enum BatchPreparationFault {
 
 #[cfg(test)]
 pub(super) fn reject_injected(
-    state: &crate::runtime::state::DeviceCore,
+    state: &crate::device::DeviceCore,
     expected: BatchPreparationFault,
     context: DmaBatchContext,
 ) -> Result<(), PdmaBatchError> {
@@ -97,35 +97,13 @@ impl SubmissionBatch {
             indirect,
         ))
     }
-}
 
-impl AsyncDeviceHandle {
-    /// Applies one closed bootstrap batch under one lock after complete projection.
-    pub async fn bootstrap_queue_batch(
-        &self,
-        request: QueueBootstrapBatch,
-    ) -> Result<QueueResponseBytes, PdmaBatchError> {
-        let committed = {
-            let mut state = self.shared.state.lock().await;
-            commit_bootstrap(&mut state, &request)?
-        };
-        committed.emit(&self.shared)
-    }
-
-    /// Applies one closed submission batch under one lock after complete projection.
-    pub async fn submit_queue_batch(
-        &self,
-        request: SubmissionBatch,
-    ) -> Result<QueueResponseBytes, PdmaBatchError> {
-        let committed = {
-            let mut state = self.shared.state.lock().await;
-            commit_submission(&mut state, &request.0)?
-        };
-        committed.emit(&self.shared)
+    pub(crate) const fn request(&self) -> &SubmissionAcceptance {
+        &self.0
     }
 }
 
-pub(super) struct CommittedBatch {
+pub(crate) struct CommittedBatch {
     response: QueueResponseBytes,
     command: PreparedWrite,
     reservation: ObservationReservation,
@@ -133,16 +111,12 @@ pub(super) struct CommittedBatch {
 }
 
 impl CommittedBatch {
-    fn emit(
-        self,
-        shared: &crate::runtime::state::RunnerShared,
-    ) -> Result<QueueResponseBytes, PdmaBatchError> {
+    pub(crate) fn emit(self) -> Result<(QueueResponseBytes, usize), PdmaBatchError> {
         let observation = self
             .command
             .observation(self.reservation.start_sequence(), AccessOrigin::Batch);
         self.reservation.emit(vec![observation])?;
-        publish(shared, self.generation);
-        Ok(self.response)
+        Ok((self.response, self.generation))
     }
 }
 
@@ -171,7 +145,7 @@ pub(super) fn map_access_error(
 }
 
 pub(super) fn validate_submission_shape(
-    _state: &crate::runtime::state::DeviceCore,
+    _state: &crate::device::DeviceCore,
     request: &SubmissionAcceptance,
 ) -> Result<(), PdmaBatchError> {
     if request.descriptor.bytes().len() != 64 {

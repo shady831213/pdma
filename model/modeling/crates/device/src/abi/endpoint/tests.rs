@@ -1,5 +1,7 @@
 use super::*;
-use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory};
+use crate::device::DeviceCore;
+use crate::runtime::MmioRegisterEndpoint;
+use hardware_interface_runtime::{NoopRegisterObserver, RegisterAccess, SharedMemory};
 use pdma_model_contract::semantic::ResourceConfig;
 use std::future::Future;
 use std::pin::pin;

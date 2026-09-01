@@ -1,8 +1,8 @@
 //! Exact MMIO reset command execution.
 
-use super::RegisterBanks;
 use crate::abi::ring::PdmaControlError;
-use crate::runtime::state::DeviceCore;
+use crate::device::DeviceCore;
+use crate::register_file::RegisterFile;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
@@ -69,5 +69,5 @@ const fn map_error(error: PdmaControlError) -> MmioResultDetails {
 }
 
 pub(crate) fn register_banks(state: &mut DeviceCore) {
-    state.device.registers = RegisterBanks::new();
+    state.registers = RegisterFile::new();
 }

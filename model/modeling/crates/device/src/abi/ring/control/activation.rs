@@ -1,13 +1,13 @@
 //! Exact-ABI queue activation preparation and commit.
 
-use super::{ActiveQueue, PdmaControlError, QueueStatus};
-use crate::abi::dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryStage};
-use crate::engine::exact_api::PreparedExactQueue;
-use crate::runtime::state::DeviceCore;
+use super::{PdmaControlError, QueueStatus};
+use crate::device::DeviceCore;
+use crate::dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryStage};
+use crate::queue::exact::PreparedExactQueue;
 use pdma_model_contract::abi::{
     AbiCommand, AbiCompletion, AbiEvent, AbiRingEntry, QueueRingLayouts, RingLayout,
 };
-use pdma_model_contract::semantic::{QueueActivation, QueueId};
+use pdma_model_contract::semantic::QueueActivation;
 
 struct ValidatedQueueActivation {
     request: QueueActivation,
@@ -15,7 +15,6 @@ struct ValidatedQueueActivation {
 }
 
 pub(crate) struct PreparedQueueActivation {
-    shadow: ActiveQueue,
     native: PreparedExactQueue,
     status: QueueStatus,
 }
@@ -32,7 +31,7 @@ pub(crate) fn activate_staged(
     activation: QueueActivation,
 ) -> Result<QueueStatus, PdmaControlError> {
     let prepared = prepare_staged(runner, &stage, activation)?;
-    runner.device.dma.commit(stage)?;
+    runner.dma.commit(stage)?;
     Ok(install(runner, prepared))
 }
 
@@ -50,10 +49,10 @@ pub(crate) fn prepare_staged(
     activation: QueueActivation,
 ) -> Result<PreparedQueueActivation, PdmaControlError> {
     validate_identity(runner, activation)?;
-    if stage.generation() != runner.device.dma.generation() {
+    if stage.generation() != runner.dma.generation() {
         return Err(PdmaControlError::InvalidTransaction);
     }
-    runner.device.dma.validate_stage(stage)?;
+    runner.dma.validate_stage(stage)?;
     let regions = staged_regions(stage, activation)?;
     let validated = validate_layouts(activation, regions)?;
     prepare(runner, &validated)
@@ -65,7 +64,7 @@ pub(crate) fn prepare_mapped(
 ) -> Result<PreparedQueueActivation, PdmaControlError> {
     validate_identity(runner, activation)?;
     let regions = mapped_regions(runner, activation)?;
-    runner.device.dma.validate_region_set(&regions)?;
+    runner.dma.validate_region_set(&regions)?;
     let validated = validate_layouts(activation, regions)?;
     prepare(runner, &validated)
 }
@@ -74,16 +73,14 @@ fn validate_identity(
     runner: &DeviceCore,
     activation: QueueActivation,
 ) -> Result<(), PdmaControlError> {
-    if activation.queue().epoch() != runner.device.queue_control.epoch {
+    if activation.queue().epoch() != runner.epoch() {
         return Err(PdmaControlError::StaleEpoch {
-            expected: runner.device.queue_control.epoch,
+            expected: runner.epoch(),
             actual: activation.queue().epoch(),
         });
     }
     let queue_id = activation.queue().queue_id();
-    if queue_id != QueueId::new(runner.device.queue_control.queues.len())
-        || queue_id != runner.device.execution.next_queue_id()
-    {
+    if queue_id != runner.next_queue_id() {
         return Err(PdmaControlError::InvalidQueue);
     }
     Ok(())
@@ -113,7 +110,6 @@ fn mapped_regions(
     let objects = activation.rings();
     let resolve = |object| {
         runner
-            .device
             .dma
             .region_for_object(object)
             .ok_or(PdmaControlError::Dma(PdmaMemoryError::InvalidRegion))
@@ -163,29 +159,21 @@ fn prepare(
     runner: &mut DeviceCore,
     validated: &ValidatedQueueActivation,
 ) -> Result<PreparedQueueActivation, PdmaControlError> {
-    let shadow = ActiveQueue::new(validated.request, validated.layouts);
-    let status = shadow.status()?;
     let native = runner
-        .device
-        .execution
-        .prepare_dma_bus_queue(validated.request.config())
+        .prepare_dma_bus_queue(PreparedExactQueue::new(
+            validated.request,
+            validated.layouts,
+        ))
         .map_err(|_| PdmaControlError::InvalidTransaction)?;
     if native.queue_id() != validated.request.queue().queue_id() {
         return Err(PdmaControlError::InvalidTransaction);
     }
-    Ok(PreparedQueueActivation {
-        shadow,
-        native,
-        status,
-    })
+    let status = native.status()?;
+    Ok(PreparedQueueActivation { native, status })
 }
 
 pub(crate) fn install(runner: &mut DeviceCore, prepared: PreparedQueueActivation) -> QueueStatus {
-    runner
-        .device
-        .execution
-        .install_dma_bus_queue(prepared.native);
-    runner.device.queue_control.queues.push(prepared.shadow);
+    runner.install_dma_bus_queue(prepared.native);
     prepared.status
 }
 

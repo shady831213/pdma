@@ -1,7 +1,7 @@
 use super::queue_control::{CommandResult, fail, map_abi};
 use super::{QueueStaging, status_response};
 use crate::abi::ring::control;
-use crate::runtime::state::DeviceCore;
+use crate::device::DeviceCore;
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::abi::{
     AbiCommand, AbiCompletion, AbiControlError, AbiEvent, AbiRingEntry, DmaAddress, RingLayout,
@@ -103,7 +103,6 @@ fn ring_object<R: AbiRingEntry>(
         .map_err(|error| map_abi(error, staging.role))?;
     let address = DmaAddress::new(staging.base);
     let region = state
-        .device
         .dma
         .region_containing(address)
         .ok_or_else(|| fail(MmioResult::DmaUnmapped, [staging.base, extent, 0]))?;

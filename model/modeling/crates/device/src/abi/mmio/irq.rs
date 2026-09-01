@@ -1,16 +1,18 @@
-use super::bank::{CommandBank, MmioScalar, narrow_u32};
 use super::reset::details;
 use crate::ModelError;
-use crate::runtime::irq::{
-    IrqSourceView, decode_route, decode_source, encode_route, encode_source, map_mmio_error,
-    observe_irq_source, usize_to_u64,
-};
-use crate::runtime::state::DeviceCore;
+use crate::device::DeviceCore;
+use crate::register_file::{MmioScalar, narrow_u32};
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
 };
+use support::{
+    IrqSourceView, decode_route, decode_source, encode_route, encode_source, map_mmio_error,
+    observe_irq_source, usize_to_u64,
+};
 
 mod notification;
+#[doc(hidden)]
+pub mod support;
 
 #[derive(Clone, Copy)]
 pub(super) enum IrqRegister {
@@ -35,31 +37,8 @@ pub(super) enum IrqRegister {
     RspPendingMessages,
 }
 
-#[derive(Debug)]
-pub(super) struct IrqBank {
-    expected_epoch: u64,
-    source_id: u64,
-    source_kind: u32,
-    route_kind: u32,
-    route_vector: u64,
-    command: CommandBank<IrqResponseBank>,
-}
-
-impl IrqBank {
-    pub(super) fn new() -> Self {
-        Self {
-            expected_epoch: 0,
-            source_id: 0,
-            source_kind: 0,
-            route_kind: 0,
-            route_vector: 0,
-            command: CommandBank::new(),
-        }
-    }
-}
-
 pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScalar {
-    let bank = &state.device.registers.irq;
+    let bank = &state.registers.irq;
     let response = bank.command.response;
     let result = bank.command.result;
     let [detail0, detail1, detail2] = result.details;
@@ -87,7 +66,7 @@ pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScala
 }
 
 pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
-    let bank = &mut state.device.registers.irq;
+    let bank = &mut state.registers.irq;
     match register {
         IrqRegister::ExpectedEpoch => bank.expected_epoch = value,
         IrqRegister::SourceId => bank.source_id = value,
@@ -114,7 +93,7 @@ pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
 }
 
 fn execute(state: &mut DeviceCore, raw_command: u32) {
-    let bank = &state.device.registers.irq;
+    let bank = &state.registers.irq;
     let staged = (
         bank.expected_epoch,
         bank.source_kind,
@@ -144,9 +123,9 @@ fn execute(state: &mut DeviceCore, raw_command: u32) {
         ),
         Err(result) => (result, ResponseUpdate::Preserve, false),
     };
-    state.device.registers.irq.command.complete(result, update);
+    state.registers.irq.command.complete(result, update);
     if changed {
-        crate::runtime::state::wake(state);
+        state.mark_changed();
     }
 }
 
@@ -174,16 +153,15 @@ fn execute_command(
         )
     })?;
     let before = observe_irq_source(state, source).ok();
-    let device = &mut state.device.execution;
     let result = match command {
         IrqCommand::ConfigureRoute => decode_route(route_kind, route_vector)
             .ok_or(ModelError::DmaSubmissionState)
-            .and_then(|route| device.configure_irq_route(source, route)),
-        IrqCommand::Enable => device.enable_irq_source(source),
-        IrqCommand::Disable => device.disable_irq_source(source),
-        IrqCommand::Mask => device.mask_irq_source(source),
-        IrqCommand::Unmask => device.unmask_irq_source(source),
-        IrqCommand::Acknowledge => device.ack_irq_source(&state.device.queue_control, source),
+            .and_then(|route| state.configure_irq_route(source, route)),
+        IrqCommand::Enable => state.enable_irq_source(source),
+        IrqCommand::Disable => state.disable_irq_source(source),
+        IrqCommand::Mask => state.mask_irq_source(source),
+        IrqCommand::Unmask => state.unmask_irq_source(source),
+        IrqCommand::Acknowledge => state.ack_irq_source(source),
         IrqCommand::ObserveSource => Ok(()),
         IrqCommand::SnapshotLine | IrqCommand::ClaimNotification => {
             Err(ModelError::DmaSubmissionState)

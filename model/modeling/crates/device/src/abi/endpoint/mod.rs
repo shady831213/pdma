@@ -2,17 +2,15 @@
 
 use super::mmio::dispatch;
 use super::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
-use crate::runtime::state::{RunnerShared, publish};
-use crate::runtime::{AsyncDevice, DeviceCore};
-use hardware_interface_runtime::{
-    AccessOrigin, ObservationGateError, RegisterAccess, RegisterObservation,
-};
+use crate::device::DeviceCore;
+use hardware_interface_runtime::{AccessOrigin, ObservationGateError, RegisterObservation};
 use pdma_model_contract::abi::mmio::QueueResponseBank;
-use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_read, decode_write};
+use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_write};
 use std::fmt::{self, Display, Formatter};
-use std::sync::Arc;
 
-mod claim;
+#[doc(hidden)]
+pub mod claim;
+pub(crate) use claim::prepare_claim;
 
 /// Failure from an exact generated-view register operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,108 +44,13 @@ impl From<ObservationGateError> for MmioRegisterError {
     }
 }
 
-/// Cloneable exact register endpoint over one device core.
-#[derive(Clone, Debug)]
-pub struct MmioRegisterEndpoint {
-    shared: Arc<RunnerShared>,
-}
-
-impl MmioRegisterEndpoint {
-    /// Consumes a core into a standalone exact register endpoint.
-    pub fn from_core(core: DeviceCore) -> Self {
-        let (device, _worker) = AsyncDevice::from_core(core);
-        device.handle().register_endpoint()
-    }
-
-    pub(crate) const fn new(shared: Arc<RunnerShared>) -> Self {
-        Self { shared }
-    }
-
-    /// Claims one exact IRQ notification and emits its complete direct transcript atomically.
-    pub async fn claim_notification_exact(
-        &self,
-    ) -> Result<Option<pdma_model_contract::semantic::IrqNotification>, MmioRegisterError> {
-        let committed = {
-            let mut state = self.shared.state.lock().await;
-            claim::prepare_claim(&mut state)?
-        };
-        let generation = committed.generation();
-        let notification = committed.emit()?;
-        if let Some(generation) = generation {
-            publish(&self.shared, generation);
-        }
-        Ok(notification)
-    }
-
-    /// Claims one IRQ notification and returns the exact emitted direct transcript.
-    pub async fn claim_notification_exact_observed(
-        &self,
-    ) -> Result<
-        (
-            Option<pdma_model_contract::semantic::IrqNotification>,
-            Vec<RegisterObservation>,
-        ),
-        MmioRegisterError,
-    > {
-        let committed = {
-            let mut state = self.shared.state.lock().await;
-            claim::prepare_claim(&mut state)?
-        };
-        let generation = committed.generation();
-        let result = committed.emit_observed()?;
-        if let Some(generation) = generation {
-            publish(&self.shared, generation);
-        }
-        Ok(result)
-    }
-}
-
-impl RegisterAccess for MmioRegisterEndpoint {
-    type Error = MmioRegisterError;
-
-    async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
-        let register = decode_read(offset, response.len() as u128)?;
-        let (prepared, reservation) = {
-            let state = self.shared.state.lock().await;
-            let prepared = prepare_read(&state, register, offset);
-            let reservation = state.register_gate.reserve(1)?;
-            drop(state);
-            (prepared, reservation)
-        };
-        let observed = prepared.observation(reservation.start_sequence());
-        response.copy_from_slice(&prepared.response);
-        reservation.emit(vec![observed])?;
-        Ok(())
-    }
-
-    async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
-        let (register, value) = decode_write(offset, request)?;
-        let (prepared, reservation, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let prepared = prepare_write(register, value, offset, request);
-            let reservation = state.register_gate.reserve(1)?;
-            let previous = state.generation;
-            prepared.commit(&mut state);
-            let generation = (state.generation != previous).then_some(state.generation);
-            drop(state);
-            (prepared, reservation, generation)
-        };
-        let observed = prepared.observation(reservation.start_sequence(), AccessOrigin::Direct);
-        reservation.emit(vec![observed])?;
-        if let Some(generation) = generation {
-            publish(&self.shared, generation);
-        }
-        Ok(())
-    }
-}
-
-pub(super) struct PreparedRead {
-    pub(super) response: Vec<u8>,
+pub(crate) struct PreparedRead {
+    pub(crate) response: Vec<u8>,
     offset: u32,
 }
 
 impl PreparedRead {
-    fn observation(&self, sequence: u64) -> RegisterObservation {
+    pub(crate) fn observation(&self, sequence: u64) -> RegisterObservation {
         RegisterObservation::read(sequence, AccessOrigin::Direct, self.offset, &self.response)
     }
 }
@@ -165,7 +68,7 @@ impl PreparedWrite {
         dispatch::write(state, self.register, self.value);
     }
 
-    pub(super) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {
+    pub(crate) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {
         RegisterObservation::write(sequence, origin, self.offset, &self.request)
     }
 }
@@ -200,14 +103,12 @@ impl PreparedBatchWrite {
         match self.mutation {
             PreparedBatchRegisterMutation::Bootstrap(staging, response) => {
                 state
-                    .device
                     .registers
                     .queue
                     .complete_bootstrap_batch(staging, response);
             }
             PreparedBatchRegisterMutation::Submission(staging, response) => {
                 state
-                    .device
                     .registers
                     .queue
                     .complete_submission_batch(staging, response);
@@ -249,7 +150,7 @@ pub(super) fn prepare_submission_batch_write(
     )
 }
 
-pub(super) fn prepare_read(state: &DeviceCore, register: RegisterId, offset: u32) -> PreparedRead {
+pub(crate) fn prepare_read(state: &DeviceCore, register: RegisterId, offset: u32) -> PreparedRead {
     PreparedRead {
         response: dispatch::read(state, register).encode(),
         offset,

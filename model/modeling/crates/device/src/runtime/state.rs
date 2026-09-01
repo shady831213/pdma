@@ -1,7 +1,8 @@
 //! Shared asynchronous device state and wake publication.
 
-pub(crate) use super::core::DeviceCore;
-use super::{AsyncRunSnapshot, AsyncRunSummary, AsyncStepStatus};
+use super::{AsyncRunSnapshot, AsyncRunSummary};
+use crate::AsyncStepStatus;
+pub(crate) use crate::device::DeviceCore;
 use tokio::sync::{Mutex, watch};
 
 #[derive(Debug)]
@@ -41,8 +42,7 @@ pub(crate) const fn summary(state: &DeviceCore) -> AsyncRunSummary {
 }
 
 pub(crate) const fn wake(state: &mut DeviceCore) {
-    state.wake_generation = state.wake_generation.saturating_add(1);
-    state.generation = state.generation.saturating_add(1);
+    state.mark_changed();
 }
 
 pub(crate) fn publish(shared: &RunnerShared, generation: usize) {

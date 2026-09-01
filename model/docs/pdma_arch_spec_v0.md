@@ -125,11 +125,54 @@ sequence of manually scheduled turns.
 ## Device Responsibility Boundary
 
 The device keeps only the contract's two data models: layout-independent values from
-`contract::semantic` and layout-exact values from `contract::abi`. Device behavior lives in
-`crates/device/src/engine/`, exact DMA/ring/MMIO state in `crates/device/src/abi/`, stateless
-ABI-to-semantic conversion in `crates/device/src/adapter/`, and actor orchestration in
-`crates/device/src/runtime/`. The engine is behavior, not a third command model.
-Together these layers own the following responsibilities:
+`contract::semantic` and layout-exact values from `contract::abi`. One synchronous
+`DeviceCore` composition root in `crates/device/src/device/mod.rs` directly owns the device
+epoch, DMA mappings, register banks, queues, scheduler, execution unit, retirement unit,
+PDMA-local IRQ controller, and trace sink. The source tree exposes those hardware roles
+directly:
+
+```text
+crates/device/src/
+├── device/            # DeviceCore composition, pipeline, probes, and object wiring
+├── queue/             # QueueBlock plus semantic or exact ring state
+├── dma/               # PdmaMemoryMappings and checked memory access
+├── register_file/     # RegisterFile and its global/queue/IRQ banks
+├── scheduler/         # Scheduler and deterministic runnable-queue arbitration
+├── execution/         # ExecutionUnit and native semantic operations
+├── retirement/        # RetirementUnit, typed ports, publication, and retry state
+├── irq/               # PdmaIrqController route, mask, latch, and notification state
+├── trace/             # TraceSink state and format export
+├── abi/               # synchronous wire decoding, MMIO effects, and exact controls
+├── adapter/           # stateless ABI-command to semantic-command conversion
+├── runtime/           # all async handles, endpoints, locks, waits, and worker mechanics
+└── compat/            # explicit compatibility surfaces
+```
+
+Every `PdmaQueue` owns its directory entry and one closed `QueueIo` variant.
+`SemanticQueueIo` owns semantic rings; `ExactQueueIo` owns the active exact SQ/CQ/EQ
+layouts, cursors, and pending frontend fault state. Exact and semantic queue variants
+normalize fetches into the same semantic command path and share the same scheduler,
+execution unit, retirement unit, IRQ controller, and trace sink. Execution consumes
+contract semantic commands directly and defines no third command model.
+
+The hardware objects do not receive `&mut DeviceCore`. `DeviceCore::step` is the sole
+synchronous composition point: `QueueBlock` returns a typed `NormalizedFetch`, exact
+descriptor conversion returns a semantic `Command`, `ExecutionUnit` returns an
+`ExecutionOutcome`, and `RetirementUnit` consumes the resulting
+`RetirableExecution` through an explicit `RetirementPorts` bundle and returns a
+`RetirementStatus`. Queue, execution, retirement, and IRQ state transitions therefore
+remain methods of their owning objects while the composition root controls dependency
+direction and ordering.
+
+`crates/device/src/runtime/` is only the async actor shell. `AsyncDevice` wraps one
+`DeviceCore` behind the single Tokio mutex required to serialize host calls and worker
+steps. `AsyncDeviceHandle`, `RunnerShared`, the register endpoint, closed-batch async
+facades, waits, and every lock acquisition live only in `runtime`; `abi` contains only
+synchronous transaction preparation and commit behavior. No lock or async primitive
+exists inside the hardware objects or execution units, and no guard crosses a device
+await boundary. The synchronous `SyncDevice` compatibility facade drives that same
+`DeviceCore`; it does not create another executor. Together these layers own the following
+responsibilities:
 
 - Maintain device memory, the queue directory, command rings, completion rings, queue-tagged events, the runnable queue list, resource configuration, IRQ state, and the trace sink.
 - Accept submissions through `submit_command`, emit a trace event, and queue the command on the correct command ring.
@@ -144,17 +187,17 @@ Together these layers own the following responsibilities:
   and preserve every discrete Message trigger.
 
 The device never stores or invokes software handlers. It does not expose wall-clock or
-cycle timing. Its semantic and ABI queue frontends converge on one execution and
-retirement core: both use the same deterministic scheduling, resource, operation, result
-publication, and PDMA-local IRQ behavior rather than a second executor.
+cycle timing. Its public semantic and exact-ABI surfaces are adapters around synchronous
+hardware-object methods, not peer pipelines with separate ownership.
 
 ### Whole-Device Reset and Epoch Semantics
 
-`WholeDeviceReset` succeeds only when its expected epoch matches both device and bus
-control epochs, then checked-advances both together. Success preserves committed
+`WholeDeviceReset` succeeds only when its expected epoch matches the one canonical
+device epoch, then checked-advances it. The bus-control snapshot projects that same
+epoch rather than owning a shadow epoch. Success preserves committed
 `PdmaMemoryMappings` regions, bytes, and allocator generation, trace history, resource
 configuration, and lifecycle accounting. It clears device queues, completion/event
-records, runnable work, pending retirement, bus-control queue/cursor state, and
+records, runnable work, pending retirement, exact queue/cursor state, and
 PDMA-local IRQ routes, causes, and queued notifications. A fresh bootstrap may reuse
 numeric queue and source IDs, but only with the new `DeviceEpoch`.
 
@@ -337,7 +380,7 @@ represent the conceptual driver-visible descriptor surface. `Command` carries on
 The selected `QueueConfigHandle` supplies queue identity and completion routing. The
 semantic frontend submits this form directly. The exact frontend decodes ABI-v1 and the
 stateless device adapter resolves its DMA addresses into the same semantic `Command`.
-The shared engine matches `CommandOperation` directly and derives operation-specific
+The shared execution unit matches `CommandOperation` directly and derives operation-specific
 chunks and resource demand internally. ABI-v1 encodes equivalent command data through
 the fixed registry; no device-private command union exists.
 
@@ -383,7 +426,7 @@ The native copy and vector-add paths use checked memory reads and writes. Bounds
 
 ## Trace Sink Behavior and Chrome/Perfetto-Compatible Export
 
-The trace sink (`model/modeling/crates/device/src/engine/trace/mod.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
+The trace sink (`model/modeling/crates/device/src/execution/trace/mod.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
 
 Hook points cover command submission, doorbell/runnable transitions, scheduling, execution success, execution faults, completion/event publication and polling, IRQ source latch, line assertion/deassertion, message emission, device ack, handler start/completion, stalls, and idle steps. Public trace types include `TraceEvent`, `TraceEventKind`, `TraceOperation`, and `TraceSink`.
 

@@ -21,8 +21,8 @@ async fn status_distinguishes_all_current_work_and_pressure_classes_without_muta
 
 #[test]
 fn worker_and_status_query_use_the_same_current_state_probe() {
-    let step = include_str!("../src/engine/step.rs");
-    let probe = include_str!("../src/engine/probe.rs");
+    let step = include_str!("../src/device/pipeline.rs");
+    let probe = include_str!("../src/device/probe.rs");
     let mmio_status = include_str!("../src/abi/mmio/global.rs");
     let typed_status = include_str!("../src/runtime/global_api.rs");
     assert!(step.contains("probe_run_state("));

@@ -1,10 +1,4 @@
-//! Internal exact-ABI queue state and cursor transitions.
-
-use super::PdmaControlError;
 use pdma_model_contract::semantic::{EpochQueue, RingCursor, RingCursors};
-
-pub mod activation;
-pub mod transactions;
 
 /// Complete typed shadow state for one active DMA queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,4 +53,11 @@ impl QueueStatus {
     }
 }
 
-pub(crate) use activation::{activate_mapped, activate_staged};
+/// One decoded DMA result cached before result-ring publication is available.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingDmaResult {
+    /// Successful execution waiting for completion-ring publication.
+    Completion(pdma_model_contract::semantic::CompletionRecord),
+    /// Canonical submission fault waiting for event-ring publication.
+    Event(pdma_model_contract::abi::AbiEvent),
+}

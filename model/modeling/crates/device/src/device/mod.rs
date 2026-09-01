@@ -9,6 +9,7 @@ use crate::dma::PdmaMemoryMappings;
 use crate::execution::ExecutionUnit;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
+use crate::queue::exact::PdmaControlError;
 use crate::register_file::RegisterFile;
 use crate::retirement::RetirementUnit;
 use crate::scheduler::Scheduler;
@@ -77,17 +78,17 @@ impl DeviceCore {
     pub(crate) fn reset_runner(
         &mut self,
         request: WholeDeviceReset,
-    ) -> Result<DeviceEpoch, crate::abi::ring::PdmaControlError> {
+    ) -> Result<DeviceEpoch, PdmaControlError> {
         let epoch = self.epoch();
         if request.expected_epoch() != epoch {
-            return Err(crate::abi::ring::PdmaControlError::StaleEpoch {
+            return Err(PdmaControlError::StaleEpoch {
                 expected: epoch,
                 actual: request.expected_epoch(),
             });
         }
         let next = epoch.next()?;
         self.reset(next);
-        crate::abi::mmio::reset::register_banks(self);
+        self.registers = RegisterFile::new();
         self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
         Ok(next)
     }

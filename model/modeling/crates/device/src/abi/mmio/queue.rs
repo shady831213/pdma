@@ -79,7 +79,7 @@ pub(super) const fn read(state: &DeviceCore, register: QueueRegister) -> MmioSca
 }
 
 pub(crate) fn status_response(
-    status: crate::abi::ring::QueueStatus,
+    status: crate::queue::exact::QueueStatus,
 ) -> Result<QueueResponseBank, pdma_model_contract::abi::mmio::MmioResultDetails> {
     Ok(QueueResponseBank {
         epoch: status.queue().epoch().raw().into(),

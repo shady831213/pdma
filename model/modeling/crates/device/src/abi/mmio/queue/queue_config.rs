@@ -1,6 +1,5 @@
 use super::queue_control::{CommandResult, fail, map_abi};
 use super::{QueueStaging, status_response};
-use crate::abi::ring::control;
 use crate::device::DeviceCore;
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::abi::{
@@ -72,7 +71,8 @@ pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> Command
         config,
         QueueRingObjects::new(submission, completion, event),
     );
-    let status = control::activation::activate_mapped(state, activation)
+    let status = state
+        .activate_mapped_exact_queue(activation)
         .map_err(|error| super::queue_control::map_bus(error, staging.id, 1, 0))?;
     Ok((status_response(status)?, true))
 }

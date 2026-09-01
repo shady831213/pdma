@@ -1,10 +1,9 @@
 //! Queue-control MMIO command translation.
 
 use super::{QueueStaging, status_response};
-use crate::abi::ring::control::transactions;
-use crate::abi::ring::{PdmaControlError, QueueStatus};
 use crate::device::DeviceCore;
 use crate::dma::PdmaMemoryError;
+use crate::queue::exact::{PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueCommand, QueueResponseBank, ResponseUpdate,
@@ -47,7 +46,7 @@ fn run(state: &mut DeviceCore, staging: QueueStaging, command: QueueCommand) -> 
         .map_err(|_| invalid_transaction(command))?;
     let queue = EpochQueue::new(DeviceEpoch::new(staging.expected_epoch), queue_id);
     if command == QueueCommand::ReadStatus {
-        let (result, _) = transactions::control(state, QueueControl::ReadStatus(queue));
+        let (result, _) = state.control_exact_queue(QueueControl::ReadStatus(queue));
         return result
             .map_err(|error| map_bus(error, staging.id, command.code(), 0))
             .and_then(|status| status_response(status).map(|response| (response, false)));
@@ -59,7 +58,7 @@ fn run(state: &mut DeviceCore, staging: QueueStaging, command: QueueCommand) -> 
     }
     let update = QueueCursorUpdate::new(queue, RingCursor::new(staging.new_cursor));
     let request = cursor_request(command, update)?;
-    let (result, changed) = transactions::control(state, request);
+    let (result, changed) = state.control_exact_queue(request);
     let status = result.map_err(|error| map_bus(error, staging.id, command.code(), role))?;
     Ok((status_response(status)?, changed))
 }
@@ -70,7 +69,7 @@ fn current_status(
     queue_id: u64,
     command: QueueCommand,
 ) -> Result<QueueStatus, MmioResultDetails> {
-    let (result, _) = transactions::control(state, QueueControl::ReadStatus(queue));
+    let (result, _) = state.control_exact_queue(QueueControl::ReadStatus(queue));
     result.map_err(|error| map_bus(error, queue_id, command.code(), cursor_role(command)))
 }
 

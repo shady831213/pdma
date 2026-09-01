@@ -25,11 +25,13 @@ pub mod trace;
 pub mod device;
 
 pub use abi::{
-    DmaBatchContext, DmaWrite, MmioRegisterError, PdmaBatchError, PdmaControlError,
-    PendingDmaResult, QueueBootstrapBatch, QueueResponseBytes, QueueStatus, SubmissionAcceptance,
+    DmaBatchContext, MmioRegisterError, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes,
     SubmissionBatch,
 };
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
+pub use queue::exact::{
+    DmaWrite, PdmaControlError, PendingDmaResult, QueueStatus, SubmissionAcceptance,
+};
 pub use runtime::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
     DeviceCore, DeviceError, MmioRegisterEndpoint, ModelError, ModelResult,

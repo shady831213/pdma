@@ -1,7 +1,6 @@
 use super::DeviceCore;
 use crate::ModelResult;
-use crate::abi::ring::{PdmaControlError, PendingDmaResult};
-use crate::queue::exact::{ActiveQueue, PreparedExactQueue};
+use crate::queue::exact::{ActiveQueue, PdmaControlError, PendingDmaResult, PreparedExactQueue};
 use pdma_model_contract::semantic::{
     Command, CompletionRecord, EpochQueue, EventRecord, QueueConfig, QueueConfigHandle, QueueId,
 };

@@ -106,7 +106,7 @@ impl QueueIo {
         }
     }
 
-    pub(crate) const fn pending_exact_fault(&self) -> Option<crate::abi::ring::PendingDmaResult> {
+    pub(crate) const fn pending_exact_fault(&self) -> Option<exact::PendingDmaResult> {
         match self {
             Self::Semantic(_) => None,
             Self::Exact(io) => io.pending_result(),

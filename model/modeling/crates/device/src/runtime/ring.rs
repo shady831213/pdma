@@ -1,6 +1,6 @@
 use super::{AsyncDeviceHandle, publish, wake};
-use crate::abi::ring::{PdmaControlError, QueueStatus, SubmissionAcceptance, control};
 use crate::dma::PdmaMemoryStage;
+use crate::queue::exact::{PdmaControlError, QueueStatus, SubmissionAcceptance};
 use pdma_model_contract::semantic::{QueueActivation, QueueControl};
 
 impl AsyncDeviceHandle {
@@ -12,7 +12,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = control::activate_staged(&mut state.core, proposal, activation);
+            let result = state.core.activate_staged_exact_queue(proposal, activation);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -31,7 +31,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = control::activate_mapped(&mut state.core, activation);
+            let result = state.core.activate_mapped_exact_queue(activation);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -50,7 +50,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = control::transactions::accept_submission(&mut state.core, request);
+            let result = state.core.accept_exact_submission(request);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -69,7 +69,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, changed, generation) = {
             let mut state = self.shared.state.lock().await;
-            let (result, changed) = control::transactions::control(&mut state.core, request);
+            let (result, changed) = state.core.control_exact_queue(request);
             if changed {
                 wake(&mut state);
             }

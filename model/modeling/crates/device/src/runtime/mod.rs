@@ -19,8 +19,8 @@ mod wait;
 mod worker;
 
 use crate::AsyncStepStatus;
-pub(crate) use crate::abi::ring::PendingDmaResult;
 pub use crate::device::DeviceCore;
+pub(crate) use crate::queue::exact::PendingDmaResult;
 pub use actor::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker};
 pub use endpoint::MmioRegisterEndpoint;
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};

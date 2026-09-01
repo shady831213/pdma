@@ -1,23 +1,27 @@
 #[doc(hidden)]
 pub mod block;
+pub mod control;
+mod error;
 mod publication;
+mod request;
 #[doc(hidden)]
 pub mod ring_state;
 #[doc(hidden)]
 pub mod state;
+mod status;
 mod submission;
 
 pub(crate) use block::PreparedExactQueue;
+pub use error::PdmaControlError;
+pub use request::{DmaWrite, SubmissionAcceptance};
 pub(crate) use ring_state::{RingState, SubmissionRingState, exact_cursor};
 pub(crate) use state::ActiveQueue;
+pub use status::{PendingDmaResult, QueueStatus};
 
-use crate::abi::ring::PdmaControlError;
-use crate::abi::ring::QueueStatus;
 use crate::dma::PdmaMemoryMappings;
 use crate::queue::io::{NormalizedFault, NormalizedFetch, PublicationOutcome};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::{AbiEvent, AbiEventKind, DmaAddress, QueueRingLayouts};
-use pdma_model_contract::semantic::BufferId;
+use pdma_model_contract::abi::{AbiEvent, QueueRingLayouts};
 use pdma_model_contract::semantic::{
     CompletionRecord, QueueActivation, QueueDirectoryEntry, QueueId,
 };
@@ -62,9 +66,9 @@ impl ExactQueueIo {
         self.ring_state().and_then(|active| active.status())
     }
 
-    pub(crate) const fn pending_result(&self) -> Option<crate::abi::ring::PendingDmaResult> {
+    pub(crate) const fn pending_result(&self) -> Option<PendingDmaResult> {
         match self.pending_fault {
-            Some(event) => Some(crate::abi::ring::PendingDmaResult::Event(event)),
+            Some(event) => Some(PendingDmaResult::Event(event)),
             None => None,
         }
     }
@@ -77,7 +81,8 @@ impl ExactQueueIo {
             .ring_state()
             .map_err(|_| ModelError::DmaSubmissionState)?;
         submission::fetch(memory, active, entry.queue_id()).map(|fetched| {
-            fetched.map(|fetched| normalize(memory, entry.completion_ring_id(), fetched))
+            fetched
+                .map(|fetched| submission::normalize(memory, entry.completion_ring_id(), fetched))
         })
     }
 
@@ -99,7 +104,7 @@ impl ExactQueueIo {
                 self.pending_fault = Some(event);
                 NormalizedFetch::Fault(NormalizedFault {
                     queue,
-                    source: fault_source(memory, event),
+                    source: submission::fault_source(memory, event),
                 })
             }
         }))
@@ -183,53 +188,6 @@ impl ExactQueueIo {
         } else {
             Ok(active.event.producer() != active.event.consumer())
         }
-    }
-}
-
-fn normalize(
-    memory: &PdmaMemoryMappings,
-    completion_ring: pdma_model_contract::semantic::CompletionRingId,
-    fetched: submission::ExactFetch,
-) -> NormalizedFetch {
-    match fetched {
-        submission::ExactFetch::Command(command) => NormalizedFetch::Command {
-            command,
-            completion_ring,
-        },
-        submission::ExactFetch::Fault(queue, event) => NormalizedFetch::Fault(NormalizedFault {
-            queue,
-            source: fault_source(memory, event),
-        }),
-    }
-}
-
-fn fault_source(memory: &PdmaMemoryMappings, event: AbiEvent) -> ModelError {
-    let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
-    match kind {
-        AbiEventKind::UnmappedDmaAddress => ModelError::UnknownBuffer(BufferId::new(usize::MAX)),
-        AbiEventKind::RangeOverflow => ModelError::RangeOverflow,
-        AbiEventKind::OutOfBounds => memory
-            .region_ending_at(DmaAddress::new(locator))
-            .and_then(|region| {
-                let len = usize::try_from(detail0).ok()?;
-                let end = detail1.checked_sub(region.base().raw())?;
-                usize::try_from(end)
-                    .ok()
-                    .map(|end| ModelError::OutOfBounds {
-                        buffer: region.object(),
-                        len,
-                        end,
-                    })
-            })
-            .unwrap_or(ModelError::DmaSubmissionState),
-        AbiEventKind::InvalidVersion
-        | AbiEventKind::InvalidSize
-        | AbiEventKind::InvalidOpcode
-        | AbiEventKind::InvalidFlags
-        | AbiEventKind::InvalidReserved
-        | AbiEventKind::InvalidIndirectCount
-        | AbiEventKind::InvalidIndirectAlignment
-        | AbiEventKind::ValueOutOfRange => ModelError::DmaSubmissionState,
     }
 }
 

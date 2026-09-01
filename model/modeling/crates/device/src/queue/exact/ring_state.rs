@@ -1,6 +1,6 @@
 //! Internal exact-ABI ring cursor state.
 
-use crate::abi::ring::PdmaControlError;
+use super::PdmaControlError;
 use pdma_model_contract::abi::{
     AbiCommand, RingCursor as AbiRingCursor, RingLayout, RingState as AbiRingState,
 };

@@ -4,10 +4,9 @@ use super::{
 };
 use crate::abi::endpoint::{prepare_bootstrap_batch_write, prepare_submission_batch_write};
 use crate::abi::mmio::queue::status_response;
-use crate::abi::ring::SubmissionAcceptance;
-use crate::abi::ring::control::{activation, transactions};
 use crate::device::DeviceCore;
 use crate::dma::{PdmaMemoryError, PreparedPdmaMapping};
+use crate::queue::exact::SubmissionAcceptance;
 use hardware_interface_runtime::{MemoryAlignment, ObservationGate};
 
 pub(crate) fn commit_bootstrap(
@@ -49,7 +48,8 @@ pub(crate) fn commit_bootstrap(
             .map_err(|error| {
                 PdmaBatchError::from_dma(PdmaMemoryError::from_runtime_memory(&error), context)
             })?;
-        let prepared_queue = activation::prepare_staged(state, &request.stage, request.activation)
+        let prepared_queue = state
+            .prepare_staged_exact_queue(&request.stage, request.activation)
             .map_err(|error| {
                 command_error(error, request.activation.queue().queue_id().raw(), 1)
             })?;
@@ -71,7 +71,7 @@ pub(crate) fn commit_bootstrap(
         let reservation = register_gate.reserve(1)?;
         transaction.install_draft(draft);
         state.dma.install_mapping(prepared_mapping);
-        activation::install(state, prepared_queue);
+        state.install_exact_queue_activation(prepared_queue);
         let command = command.commit(state);
         Ok(CommittedBatch {
             response: response_bytes,
@@ -130,7 +130,8 @@ pub(crate) fn commit_submission(
                     &request.descriptor,
                 )
             })?;
-        let prepared_cursor = transactions::prepare_submission_publication(state, request)
+        let prepared_cursor = state
+            .prepare_submission_publication(request)
             .map_err(|error| command_error(error, request.queue.queue_id().raw(), 3))?;
         let response =
             status_response(prepared_cursor.status()).map_err(PdmaBatchError::Command)?;
@@ -169,7 +170,7 @@ pub(crate) fn commit_submission(
         if let Some(prepared) = prepared_mapping {
             state.dma.install_mapping(prepared);
         }
-        transactions::install_submission_publication(state, &prepared_cursor);
+        state.install_submission_publication(&prepared_cursor);
         let command = command.commit(state);
         Ok(CommittedBatch {
             response: response_bytes,

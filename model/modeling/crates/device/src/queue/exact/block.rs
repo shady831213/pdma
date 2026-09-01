@@ -1,6 +1,5 @@
 use super::{ActiveQueue, ExactQueueIo};
-use crate::abi::ring::PdmaControlError;
-use crate::abi::ring::control::QueueStatus;
+use super::{PdmaControlError, QueueStatus};
 use crate::queue::{PdmaQueue, QueueBlock};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::QueueRingLayouts;

@@ -1,11 +1,13 @@
 use super::ActiveQueue;
-use crate::abi::ring::PdmaControlError;
-use crate::abi::ring::control::transactions;
+use super::PdmaControlError;
 use crate::adapter::command::ExactCommandContext;
 use crate::dma::PdmaMemoryMappings;
+use crate::queue::io::{NormalizedFault, NormalizedFetch};
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::{AbiCommand, AbiCommandView, AbiEvent, DescriptorDecodeError};
-use pdma_model_contract::semantic::{Command, CommandId, QueueId};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCommandView, AbiEvent, AbiEventKind, DescriptorDecodeError, DmaAddress,
+};
+use pdma_model_contract::semantic::{BufferId, Command, CommandId, CompletionRingId, QueueId};
 
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
@@ -55,11 +57,58 @@ pub(super) fn fetch(
 }
 
 pub(super) fn consume(active: &mut ActiveQueue) -> Result<(), PdmaControlError> {
-    transactions::advance_submission_consumer_raw(active)
+    active.advance_submission_consumer()
 }
 
 pub(super) fn has_pending(active: &ActiveQueue) -> bool {
     active.submission.has_captured_entry()
+}
+
+pub(super) fn normalize(
+    memory: &PdmaMemoryMappings,
+    completion_ring: CompletionRingId,
+    fetched: ExactFetch,
+) -> NormalizedFetch {
+    match fetched {
+        ExactFetch::Command(command) => NormalizedFetch::Command {
+            command,
+            completion_ring,
+        },
+        ExactFetch::Fault(queue, event) => NormalizedFetch::Fault(NormalizedFault {
+            queue,
+            source: fault_source(memory, event),
+        }),
+    }
+}
+
+pub(super) fn fault_source(memory: &PdmaMemoryMappings, event: AbiEvent) -> ModelError {
+    let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
+    match kind {
+        AbiEventKind::UnmappedDmaAddress => ModelError::UnknownBuffer(BufferId::new(usize::MAX)),
+        AbiEventKind::RangeOverflow => ModelError::RangeOverflow,
+        AbiEventKind::OutOfBounds => memory
+            .region_ending_at(DmaAddress::new(locator))
+            .and_then(|region| {
+                let len = usize::try_from(detail0).ok()?;
+                let end = detail1.checked_sub(region.base().raw())?;
+                usize::try_from(end)
+                    .ok()
+                    .map(|end| ModelError::OutOfBounds {
+                        buffer: region.object(),
+                        len,
+                        end,
+                    })
+            })
+            .unwrap_or(ModelError::DmaSubmissionState),
+        AbiEventKind::InvalidVersion
+        | AbiEventKind::InvalidSize
+        | AbiEventKind::InvalidOpcode
+        | AbiEventKind::InvalidFlags
+        | AbiEventKind::InvalidReserved
+        | AbiEventKind::InvalidIndirectCount
+        | AbiEventKind::InvalidIndirectAlignment
+        | AbiEventKind::ValueOutOfRange => ModelError::DmaSubmissionState,
+    }
 }
 
 fn command_id(bytes: &[u8]) -> ModelResult<(u64, CommandId)> {

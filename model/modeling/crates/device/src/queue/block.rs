@@ -157,7 +157,7 @@ impl QueueBlock {
     pub(crate) fn pending_exact_fault(
         &self,
         queue: QueueId,
-    ) -> Option<crate::abi::ring::PendingDmaResult> {
+    ) -> Option<super::exact::PendingDmaResult> {
         self.get(queue)
             .ok()
             .and_then(|context| context.io.pending_exact_fault())

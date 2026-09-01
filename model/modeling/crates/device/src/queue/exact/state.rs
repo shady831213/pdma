@@ -1,5 +1,5 @@
 use super::ring_state::{RingState, SubmissionRingState, semantic_cursors};
-use crate::abi::ring::{PdmaControlError, QueueStatus};
+use super::{DmaWrite, PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, QueueRingLayouts};
 use pdma_model_contract::semantic::QueueActivation;
 
@@ -31,5 +31,101 @@ impl ActiveQueue {
             semantic_cursors(self.completion)?,
             semantic_cursors(self.event)?,
         ))
+    }
+
+    pub(crate) fn prepare_submission(
+        self,
+        expected_producer: pdma_model_contract::abi::RingCursor,
+        descriptor: &DmaWrite,
+    ) -> Result<SubmissionRingState, PdmaControlError> {
+        let ring = self.submission.ring();
+        if ring.producer() != expected_producer || ring.is_full() {
+            return Err(PdmaControlError::InvalidTransaction);
+        }
+        let expected_address = ring
+            .entry_address(ring.producer())
+            .map_err(|_| PdmaControlError::InvalidTransaction)?;
+        if descriptor.address() != expected_address
+            || descriptor.bytes().len() != usize::from(ring.layout().entry_size())
+        {
+            return Err(PdmaControlError::InvalidTransaction);
+        }
+        self.submission
+            .update_producer(expected_producer.checked_increment(1)?)
+    }
+
+    pub(crate) fn publish_submission_producer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let updated = self.submission.update_producer(cursor)?;
+        let changed = updated != self.submission;
+        self.submission = updated;
+        Ok(changed)
+    }
+
+    pub(crate) fn capture_submission_producer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let changed = cursor != self.submission.captured_producer();
+        self.submission = self.submission.capture(cursor)?;
+        Ok(changed)
+    }
+
+    pub(crate) fn publish_submission_consumer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let updated = self.submission.update_consumer(cursor)?;
+        let changed = updated != self.submission;
+        self.submission = updated;
+        Ok(changed)
+    }
+
+    pub(crate) fn publish_completion_producer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let updated = self.completion.update_producer(cursor)?;
+        let changed = updated != self.completion;
+        self.completion = updated;
+        Ok(changed)
+    }
+
+    pub(crate) fn publish_completion_consumer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let updated = self.completion.update_consumer(cursor)?;
+        let changed = updated != self.completion;
+        self.completion = updated;
+        Ok(changed)
+    }
+
+    pub(crate) fn publish_event_producer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let updated = self.event.update_producer(cursor)?;
+        let changed = updated != self.event;
+        self.event = updated;
+        Ok(changed)
+    }
+
+    pub(crate) fn publish_event_consumer(
+        &mut self,
+        cursor: pdma_model_contract::abi::RingCursor,
+    ) -> Result<bool, PdmaControlError> {
+        let updated = self.event.update_consumer(cursor)?;
+        let changed = updated != self.event;
+        self.event = updated;
+        Ok(changed)
+    }
+
+    pub(crate) fn advance_submission_consumer(&mut self) -> Result<(), PdmaControlError> {
+        let next = self.submission.ring().consumer().checked_increment(1)?;
+        self.submission = self.submission.consume_captured(next)?;
+        Ok(())
     }
 }

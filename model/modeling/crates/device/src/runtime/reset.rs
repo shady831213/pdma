@@ -2,7 +2,7 @@ use super::AsyncDeviceHandle;
 #[cfg(test)]
 use super::state::{DeviceCore, RunnerState};
 use super::state::{publish, wake};
-use crate::abi::ring::PdmaControlError;
+use crate::queue::exact::PdmaControlError;
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 impl AsyncDeviceHandle {

@@ -11,11 +11,13 @@ async fn bootstrap_injectors_reject_before_any_prepared_install() -> TestResult 
     for fault in faults() {
         let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
         let observer = Arc::new(CommitOrderObserver::default());
-        let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
-            Arc::clone(&memory),
-            pdma_model_contract::semantic::ResourceConfig::default(),
+        let (device, _worker) = AsyncDevice::from_core_observed(
+            crate::DeviceCore::new(
+                Arc::clone(&memory),
+                pdma_model_contract::semantic::ResourceConfig::default(),
+            ),
             observer.clone(),
-        ));
+        );
         let handle = device.handle();
         let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
         let activation = activation(&stage)?;
@@ -28,6 +30,7 @@ async fn bootstrap_injectors_reject_before_any_prepared_install() -> TestResult 
             .state
             .lock()
             .await
+            .core
             .batch_fault
             .set(Some(fault));
 
@@ -64,11 +67,13 @@ async fn submission_injectors_reject_before_any_prepared_install() -> TestResult
             memory: Some(Arc::clone(&memory)),
             ..CommitOrderObserver::default()
         });
-        let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
-            Arc::clone(&memory),
-            pdma_model_contract::semantic::ResourceConfig::default(),
+        let (device, _worker) = AsyncDevice::from_core_observed(
+            crate::DeviceCore::new(
+                Arc::clone(&memory),
+                pdma_model_contract::semantic::ResourceConfig::default(),
+            ),
             observer.clone(),
-        ));
+        );
         let handle = device.handle();
         *observer.wake.lock().expect("wake probe lock available") =
             Some(handle.shared.changed.subscribe());
@@ -100,7 +105,7 @@ async fn submission_injectors_reject_before_any_prepared_install() -> TestResult
             .len();
         {
             let core = handle.shared.state.lock().await;
-            core.batch_fault.set(Some(fault));
+            core.core.batch_fault.set(Some(fault));
         }
 
         // When: the real submission reaches the selected private preparation boundary.

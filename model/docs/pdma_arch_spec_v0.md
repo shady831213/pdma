@@ -67,7 +67,8 @@ later command, preserving bytes-before-producer-before-runnable ordering.
 
 `PdmaRegisterPort` owns clone-shared selector state. Notification readiness is
 non-consuming; `PdmaInterruptSource` performs one compound exact claim after wake.
-The canonical scenario injects one system-owned register observer through `DeviceCore`.
+The canonical scenario injects one system-owned register observer through
+`AsyncDevice::from_core_observed`; the synchronous `DeviceCore` owns no observation gate.
 It proves 156 committed observations: 154 Direct entries and the two real Batch-origin
 queue-command writes, while a scenario-local memory decorator records bulk access
 separately. Worker and dispatcher shutdown/join finish before the collector snapshot.
@@ -79,7 +80,7 @@ while `abi` independently owns exact bytes, registers, and layouts. Neither cont
 namespace embeds or converts the other. Device owns DMA-object projection, mappings,
 semantic-to-exact publication, and execution/retirement. Host owns exact-to-semantic
 retirement plus the canonical register port, PDMA interrupt adapter, driver accounting,
-and explicit semantic/sync compatibility adapters. Compatibility does not create a
+and the explicit async semantic compatibility adapter. Compatibility does not create a
 second executor or canonical E2E.
 
 ## Software/Driver Responsibility Boundary
@@ -88,17 +89,15 @@ The driver model, implemented in `model/modeling/crates/host/src/semantic/driver
 
 - Allocate device-visible buffers through the active `DriverPort` implementation and
   fill source data through `write_buffer_on`. The canonical path is
-  `PdmaRegisterPort<AsyncDeviceAccess>`; `compat::AsyncDevicePort` and
-  `compat::SemanticDevicePort` are explicit compatibility boundaries only.
+  `PdmaRegisterPort<AsyncDeviceAccess>`; `compat::AsyncDevicePort` is an explicit
+  semantic compatibility boundary only.
 - Configure a CPU-bound queue with `AsyncDriver::setup_on` or
   `AsyncDriver::setup_with_config_on`, receiving a `QueueConfigHandle`. The active
   software CPU is captured before device queue creation and revalidated before every
   nested create poll. `AsyncDriver` exclusively services IRQs.
-- Use CPU-unbound `ManualDriver` only as the explicit observability facade, constructed
-  with `ManualDriver::setup_on` or `ManualDriver::setup_with_config_on`; it has no IRQ
-  service. Among system scenarios, only the five named no-software observability tests
-  use it. A focused host integration test also exercises manual-mode parity without
-  representing a software-bearing scenario.
+- Use CPU-unbound `ManualDriver` only as the explicit host observability facade,
+  constructed with `ManualDriver::setup_on` or `ManualDriver::setup_with_config_on`; it
+  has no IRQ service and does not require a synchronous device facade.
 - Assign monotonic per-queue command IDs and track free local command slots in one
   private shared core with one accounting allocation shared by all clones of either
   driver facade.
@@ -144,9 +143,16 @@ crates/device/src/
 ├── trace/             # TraceSink state and format export
 ├── abi/               # synchronous wire decoding, MMIO effects, and exact controls
 ├── adapter/           # stateless ABI-command to semantic-command conversion
-├── runtime/           # all async handles, endpoints, locks, waits, and worker mechanics
-└── compat/            # explicit compatibility surfaces
+└── runtime/           # all async handles, endpoints, observation, locks, waits, and worker mechanics
 ```
+
+Internal component and composition invariants live beside their owners under
+`src/**/tests`; they drive `DeviceCore::step` and private object methods directly without
+a public synchronous facade. `crates/device/tests` is reserved for public async, exact
+DMA/ring, batch, register-endpoint, MMIO, reset, and IRQ observations. Full host/device,
+CPU, and interrupt stories remain in `crates/scenarios/tests`. `DeviceCore` remains a
+public construction value so callers can inject shared memory and resource configuration,
+but its stepping and hardware-state mutation methods are crate-private.
 
 Every `PdmaQueue` owns its directory entry and one closed `QueueIo` variant.
 `SemanticQueueIo` owns semantic rings; `ExactQueueIo` owns the active exact SQ/CQ/EQ
@@ -166,13 +172,13 @@ direction and ordering.
 
 `crates/device/src/runtime/` is only the async actor shell. `AsyncDevice` wraps one
 `DeviceCore` behind the single Tokio mutex required to serialize host calls and worker
-steps. `AsyncDeviceHandle`, `RunnerShared`, the register endpoint, closed-batch async
-facades, waits, and every lock acquisition live only in `runtime`; `abi` contains only
-synchronous transaction preparation and commit behavior. No lock or async primitive
-exists inside the hardware objects or execution units, and no guard crosses a device
-await boundary. The synchronous `SyncDevice` compatibility facade drives that same
-`DeviceCore`; it does not create another executor. Together these layers own the following
-responsibilities:
+steps. `AsyncDeviceHandle`, `RunnerShared`, the register endpoint, observation gate,
+closed-batch async facades, waits, publication generations, and every lock acquisition
+live only in `runtime`; `abi` contains only synchronous transaction preparation and
+commit behavior. No lock, observer, or async primitive exists inside the hardware
+objects or execution units, and no guard crosses a device await boundary. There is no
+synchronous public device facade or second executor. Together these layers own the
+following responsibilities:
 
 - Maintain device memory, the queue directory, command rings, completion rings, queue-tagged events, the runnable queue list, resource configuration, IRQ state, and the trace sink.
 - Accept submissions through `submit_command`, emit a trace event, and queue the command on the correct command ring.
@@ -330,7 +336,7 @@ Shutdown has deterministic priority over a simultaneously ready notification. De
 progress is synchronized by handler-owned channels when a scenario needs it, while the
 actor's final `IrqDeliverySummary` reports only successfully completed handler turns; no
 separate delivery-progress watch API exists. Evidence:
-`crates/device/tests/irq_line_ack.rs`, `crates/host/tests/irq_runtime_surface.rs`, and
+`crates/device/src/device/tests/irq.rs`, `crates/host/tests/irq_runtime_surface.rs`, and
 `crates/scenarios/tests/irq_delivery.rs`.
 
 IRQ scenarios bootstrap without transferring driver ownership away from main. Main
@@ -358,8 +364,8 @@ same behavior through `PdmaRegisterPort<AsyncDeviceAccess>` over runtime
 `PdmaBatchAccess`, and `PdmaExactInterruptClaim`. The port validates its captured
 `SoftwareCpu` before every nested CPU-bound poll and never retains a host-state guard
 across an await. `PdmaMappedRegion` carries the host object-to-`MemoryAddress` handoff;
-committed regions remain mapped for the device lifetime. Explicit compatibility ports
-exercise the same core and do not create a second E2E path.
+committed regions remain mapped for the device lifetime. The explicit async semantic
+compatibility port exercises the same core and does not create a second E2E path.
 
 The ABI is fixed-width little-endian data, never Rust layout: v1 descriptors are 64
 bytes, completions 32 bytes, and events 64 bytes. `include/pdma_model_abi.h` is a
@@ -422,11 +428,16 @@ The native copy and vector-add paths use checked memory reads and writes. Bounds
 
 ### Stall Semantics
 
-`AsyncStepStatus` reports `Progressed`, `Idle`, or `Stalled(AsyncStallReason)`. `AsyncStallReason` distinguishes execution resource pressure, completion publication pressure, event publication pressure, and a fault retirement that is still blocked on retry. Manual `SyncDevice::run_until_idle` returns `StepBudgetExhausted` when work remains after the supplied budget. Evidence: `tests/resource_credits.rs` and `tests/stall_annotations.rs`.
+`AsyncStepStatus` reports `Progressed`, `Idle`, or `Stalled(AsyncStallReason)`.
+`AsyncStallReason` distinguishes execution resource pressure, completion publication
+pressure, event publication pressure, and a fault retirement that is still blocked on
+retry. Evidence: `tests/resource_credits.rs` and `tests/stall_annotations.rs`.
 
 ## Trace Sink Behavior and Chrome/Perfetto-Compatible Export
 
-The trace sink (`model/modeling/crates/device/src/execution/trace/mod.rs` and submodules) captures deterministic in-memory events when enabled. `AsyncDeviceHandle` and `SyncDevice` expose `enable_tracing`, `disable_tracing`, `clear_trace`, `trace_events`, and `trace_json`.
+The trace sink captures deterministic in-memory events when enabled.
+`AsyncDeviceHandle` exposes `enable_tracing`, `disable_tracing`, `clear_trace`,
+`trace_events`, and `trace_json`.
 
 Hook points cover command submission, doorbell/runnable transitions, scheduling, execution success, execution faults, completion/event publication and polling, IRQ source latch, line assertion/deassertion, message emission, device ack, handler start/completion, stalls, and idle steps. Public trace types include `TraceEvent`, `TraceEventKind`, `TraceOperation`, and `TraceSink`.
 
@@ -485,7 +496,11 @@ interleaving exception is
 inside its one main future so the test can order an untraced submission before a traced
 doorbell without inventing a second software entry.
 
-Each device-worker turn advances at most one native command or retirement retry. The manual `SyncDevice` facade exposes bounded `run_until_idle(max_steps)` and `run_until_blocked(max_steps)` helpers for explicit deterministic driving. Because the same inputs always produce the same runnable ordering, resource decisions, completions, events, IRQ notifications, and trace ordinals, the model is deterministic and suitable for regression testing.
+Each device-worker turn advances at most one native command or retirement retry. The
+worker sleeps after idle or stalled observations until a runtime-owned wake generation
+changes. Because the same inputs always produce the same runnable ordering, resource
+decisions, completions, events, IRQ notifications, and trace ordinals, the model is
+deterministic and suitable for regression testing.
 
 ## Deferred Items
 

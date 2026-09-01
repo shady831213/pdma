@@ -9,11 +9,10 @@ async fn endpoint_clones_share_order_and_observe_before_return() -> TestResult {
     // Given: two endpoint clones over one core-owned observer and ordered gate.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, _worker) = AsyncDevice::from_core(DeviceCore::new(
-        memory.clone(),
-        ResourceConfig::default(),
+    let (device, _worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(memory.clone(), ResourceConfig::default()),
         observer.clone(),
-    ));
+    );
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
 
@@ -59,11 +58,13 @@ fn spawn_read(
 async fn endpoint_reset_preserves_history_and_advances_sequence() -> TestResult {
     // Given: one observed endpoint access before whole-device reset.
     let observer = Arc::new(RecordingObserver::default());
-    let (device, _worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        ResourceConfig::default(),
+    let (device, _worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(
+            Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            ResourceConfig::default(),
+        ),
         observer.clone(),
-    ));
+    );
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
     let mut before = [0_u8; 4];

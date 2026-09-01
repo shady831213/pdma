@@ -36,11 +36,10 @@ async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResul
     // Given: one pending message and an observer with a stable pre-claim transcript.
     let observer = Arc::new(support::RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        memory,
-        ResourceConfig::default(),
+    let (device, worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(memory, ResourceConfig::default()),
         observer.clone(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();

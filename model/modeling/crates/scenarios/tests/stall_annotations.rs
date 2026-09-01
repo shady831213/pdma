@@ -1,5 +1,8 @@
 #![allow(missing_docs)]
 
+#[path = "stall_annotations/manual.rs"]
+mod manual;
+
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CompletionStatus, ResourceConfig, desc::CopyRequest, ids::CommandId,
@@ -7,15 +10,12 @@ use pdma_model_contract::semantic::{
 use pdma_model_device::{AsyncDevice, AsyncStallReason, AsyncStepStatus};
 use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
 
-include!("stall_annotations/manual.rs");
-
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
     // Given: a queue-port async runner with no queued work.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
 
@@ -35,7 +35,6 @@ async fn async_runner_successful_copy_reports_progressed_status() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let snapshot = SoftwareCpu::new()
@@ -79,7 +78,6 @@ async fn async_runner_resource_stall_reports_execution_reason() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_read_slots(0),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion) = SoftwareCpu::new()
@@ -129,7 +127,6 @@ async fn async_runner_completion_publication_stall_reports_reason() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_completion_publication_slots(1),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, first_completion) = SoftwareCpu::new()
@@ -201,7 +198,6 @@ async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_event_publication_slots(0),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (first_snapshot, second_snapshot, event) = SoftwareCpu::new()

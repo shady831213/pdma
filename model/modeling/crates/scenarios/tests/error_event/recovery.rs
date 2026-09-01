@@ -14,7 +14,6 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, error_kinds, no_event) = SoftwareCpu::new()
@@ -73,7 +72,6 @@ async fn async_runner_publishes_one_event_and_later_command_still_completes_afte
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (

@@ -53,11 +53,6 @@ pub enum PortError {
     AllocationExhausted,
     /// Submission state was inconsistent.
     SubmissionState,
-    /// A finite compatibility step budget expired.
-    StepBudgetExhausted {
-        /// Supplied finite step budget.
-        max_steps: usize,
-    },
     /// The canonical port was polled outside its owning CPU.
     Cpu(CpuContextError),
     /// The selected backend rejected the operation.
@@ -96,10 +91,6 @@ impl PartialEq for PortError {
                     end: right_end,
                 },
             ) => left_buffer == right_buffer && left_len == right_len && left_end == right_end,
-            (
-                Self::StepBudgetExhausted { max_steps: left },
-                Self::StepBudgetExhausted { max_steps: right },
-            ) => left == right,
             (Self::Cpu(left), Self::Cpu(right)) => left == right,
             (Self::Backend(left), Self::Backend(right)) => left == right,
             (Self::ZeroCapacity, Self::ZeroCapacity)
@@ -136,8 +127,7 @@ impl Error for PortError {
             | Self::RangeOverflow
             | Self::OutOfBounds { .. }
             | Self::AllocationExhausted
-            | Self::SubmissionState
-            | Self::StepBudgetExhausted { .. } => None,
+            | Self::SubmissionState => None,
         }
     }
 }

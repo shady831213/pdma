@@ -23,7 +23,6 @@ async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors()
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
@@ -48,7 +47,6 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
     let (wrong_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let wrong = wrong_device.handle();
     let wrong_stage = wrong.stage_memory_regions(&[128, 64, 128]).await?;
@@ -131,7 +129,6 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
@@ -198,7 +195,6 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;

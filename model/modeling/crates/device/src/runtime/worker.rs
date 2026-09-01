@@ -1,5 +1,5 @@
 use super::AsyncStepStatus;
-use super::state::{DeviceCore, RunnerShared, publish};
+use super::state::{RunnerShared, RunnerState, publish};
 use crate::device::ModelStepStatus;
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
@@ -12,7 +12,7 @@ async fn run_one(shared: &RunnerShared) -> bool {
         if state.shutdown_requested {
             return publish_and_continue(shared, state.generation, false);
         }
-        match state.step() {
+        match state.core.step() {
             Ok(ModelStepStatus::Progressed) => {
                 state.steps = state.steps.saturating_add(1);
                 state.last_status = AsyncStepStatus::Progressed;
@@ -62,7 +62,7 @@ struct WaitState {
     wake_generation: usize,
 }
 
-fn wait_for_wake(shared: &RunnerShared, state: &mut DeviceCore) -> WaitState {
+fn wait_for_wake(shared: &RunnerShared, state: &mut RunnerState) -> WaitState {
     let wake_generation = state.wake_generation;
     state.generation = state.generation.saturating_add(1);
     publish(shared, state.generation);

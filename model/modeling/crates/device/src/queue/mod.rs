@@ -9,6 +9,9 @@ pub mod ring;
 #[doc(hidden)]
 pub mod semantic;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Default)]
 pub(crate) struct QueueBlock {
     pub(crate) contexts: Vec<PdmaQueue>,
@@ -43,17 +46,6 @@ impl PdmaQueue {
                 config.completion_depth(),
             )?),
         })
-    }
-
-    pub(crate) const fn exact_unconfigured(
-        queue: QueueId,
-        completion: CompletionRingId,
-        config: QueueConfig,
-    ) -> Self {
-        Self {
-            entry: QueueDirectoryEntry::new(queue, completion, config),
-            io: QueueIo::Exact(ExactQueueIo::unconfigured()),
-        }
     }
 
     pub(crate) const fn exact(entry: QueueDirectoryEntry, io: ExactQueueIo) -> Self {

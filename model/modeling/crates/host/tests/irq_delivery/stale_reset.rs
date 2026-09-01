@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 use crate::runtime::irq_delivery::{IrqDelivery, StatefulIrqHandler, stateful_irq_handler};
-use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
+use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::AsyncDevicePort as DevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     BufferId, Command, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, IrqNotification,
@@ -137,13 +137,13 @@ impl StatefulIrqHandler for ResetHandler {
 /// Panics when stale service reaches acknowledgement or returns the wrong typed error.
 pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Given: an old driver and host-owned notification facing a reset epoch service port.
-    let mut device = pdma_model_device::SyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
-    ));
+    let (device, _worker) =
+        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::semantic::ResourceConfig::default(),
+        ));
     let cpu = SoftwareCpu::new();
-    let mut device_port = SemanticDevicePort::new(&mut device);
+    let mut device_port = DevicePort::new(device.handle());
     let driver = cpu
         .run_main(AsyncDriver::setup_on(&mut device_port, 1, 1))
         .await?;

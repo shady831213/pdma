@@ -6,7 +6,6 @@ pub(super) async fn run_vector_add_one_read_slot_scenario() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_read_slots(1),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()

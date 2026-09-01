@@ -134,10 +134,6 @@ impl PdmaIrqController {
         self.sources.values().any(PdmaIrqSourceState::asserts_line)
     }
 
-    pub(crate) fn source_count(&self) -> usize {
-        self.sources.len()
-    }
-
     fn source_state_mut(&mut self, source: IrqSource) -> &mut PdmaIrqSourceState {
         let line = self.line;
         self.sources

@@ -12,7 +12,6 @@ async fn readiness_preserves_one_message_until_one_raw_claim() -> TestResult {
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
@@ -74,12 +73,10 @@ async fn typed_irq_observation_and_notification_match_raw_mmio() -> TestResult {
     let (typed_device, typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let (raw_device, raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let typed_worker = tokio::spawn(typed_worker.run());
     let raw_worker = tokio::spawn(raw_worker.run());
@@ -212,7 +209,6 @@ async fn readiness_wait_returns_shutdown_without_notification() -> TestResult {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
     let cancelled = tokio::spawn({

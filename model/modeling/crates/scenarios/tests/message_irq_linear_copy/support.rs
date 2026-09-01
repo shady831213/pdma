@@ -80,11 +80,13 @@ pub struct DeliveryActor {
 }
 
 pub fn fresh_device(observer: Arc<RecordingRegisterObserver>) -> (AsyncDevice, AsyncDeviceWorker) {
-    AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
+    AsyncDevice::from_core_observed(
+        DeviceCore::new(
+            Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            pdma_model_contract::semantic::ResourceConfig::default(),
+        ),
         observer,
-    ))
+    )
 }
 
 pub fn spawn_delivery(config: DeliveryConfig) -> DeliveryActor {

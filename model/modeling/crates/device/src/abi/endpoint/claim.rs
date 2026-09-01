@@ -1,7 +1,9 @@
 use super::{MmioRegisterError, PreparedRead, PreparedWrite, prepare_read, prepare_write};
 use crate::abi::mmio::irq::support::{decode_source, irq_notification_ready};
 use crate::device::DeviceCore;
-use hardware_interface_runtime::{AccessOrigin, ObservationReservation, RegisterObservation};
+use hardware_interface_runtime::{
+    AccessOrigin, ObservationGate, ObservationReservation, RegisterObservation,
+};
 use pdma_model_contract::abi::mmio::{
     IrqCommand, MmioAccessError, MmioResult, PdmaMmioMap, RegisterId, decode_u32, decode_u64,
     decode_write,
@@ -26,12 +28,12 @@ pub(crate) struct CommittedClaim {
     reservation: ObservationReservation,
     observations: Vec<RegisterObservation>,
     notification: Option<IrqNotification>,
-    generation: Option<usize>,
+    changed: bool,
 }
 
 impl CommittedClaim {
-    pub(crate) const fn generation(&self) -> Option<usize> {
-        self.generation
+    pub(crate) const fn changed(&self) -> bool {
+        self.changed
     }
 
     pub(crate) fn emit(self) -> Result<Option<IrqNotification>, MmioRegisterError> {
@@ -48,29 +50,22 @@ impl CommittedClaim {
     }
 }
 
-impl DeviceCore {
-    /// Claims one notification and synchronously emits the exact direct register transcript.
-    pub fn claim_notification_exact(
-        &mut self,
-    ) -> Result<Option<IrqNotification>, MmioRegisterError> {
-        prepare_claim(self)?.emit()
-    }
-}
-
-pub(crate) fn prepare_claim(state: &mut DeviceCore) -> Result<CommittedClaim, MmioRegisterError> {
+pub(crate) fn prepare_claim(
+    state: &mut DeviceCore,
+    register_gate: &ObservationGate,
+) -> Result<CommittedClaim, MmioRegisterError> {
     let response_count = if irq_notification_ready(state) {
         RESPONSE_IDS.len()
     } else {
         0
     };
-    let reservation = state.register_gate.reserve(2 + response_count)?;
+    let reservation = register_gate.reserve(2 + response_count)?;
     let sequence = reservation.start_sequence();
-    let previous_generation = state.generation;
     let command = prepare_for_id(
         RegisterId::ICommand,
         &IrqCommand::ClaimNotification.code().to_le_bytes(),
     )?;
-    command.commit(state);
+    let changed = command.commit(state);
     let result = read_for_id(state, RegisterId::IResult);
     let result_code = decode_prepared_u32(&result)?;
     let mut observations = Vec::with_capacity(2 + response_count);
@@ -89,7 +84,7 @@ pub(crate) fn prepare_claim(state: &mut DeviceCore) -> Result<CommittedClaim, Mm
         reservation,
         observations,
         notification,
-        generation: (state.generation != previous_generation).then_some(state.generation),
+        changed,
     })
 }
 

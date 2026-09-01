@@ -6,3 +6,6 @@ pub(crate) mod global;
 pub mod irq;
 pub mod queue;
 pub mod reset;
+
+#[cfg(test)]
+mod tests;

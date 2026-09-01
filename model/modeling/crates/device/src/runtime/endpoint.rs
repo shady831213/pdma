@@ -1,4 +1,4 @@
-use super::{AsyncDevice, DeviceCore, RunnerShared, publish};
+use super::{AsyncDevice, DeviceCore, RunnerShared, publish, wake};
 use crate::abi::endpoint::{MmioRegisterError, prepare_claim, prepare_read, prepare_write};
 use hardware_interface_runtime::{AccessOrigin, RegisterAccess, RegisterObservation};
 use pdma_model_contract::abi::mmio::{decode_read, decode_write};
@@ -25,11 +25,17 @@ impl MmioRegisterEndpoint {
     pub async fn claim_notification_exact(
         &self,
     ) -> Result<Option<pdma_model_contract::semantic::IrqNotification>, MmioRegisterError> {
-        let committed = {
+        let (committed, generation) = {
             let mut state = self.shared.state.lock().await;
-            prepare_claim(&mut state)?
+            let committed = prepare_claim(&mut state.core, &self.shared.register_gate)?;
+            let generation = if committed.changed() {
+                wake(&mut state);
+                Some(state.generation)
+            } else {
+                None
+            };
+            (committed, generation)
         };
-        let generation = committed.generation();
         let notification = committed.emit()?;
         if let Some(generation) = generation {
             publish(&self.shared, generation);
@@ -47,11 +53,17 @@ impl MmioRegisterEndpoint {
         ),
         MmioRegisterError,
     > {
-        let committed = {
+        let (committed, generation) = {
             let mut state = self.shared.state.lock().await;
-            prepare_claim(&mut state)?
+            let committed = prepare_claim(&mut state.core, &self.shared.register_gate)?;
+            let generation = if committed.changed() {
+                wake(&mut state);
+                Some(state.generation)
+            } else {
+                None
+            };
+            (committed, generation)
         };
-        let generation = committed.generation();
         let result = committed.emit_observed()?;
         if let Some(generation) = generation {
             publish(&self.shared, generation);
@@ -67,8 +79,8 @@ impl RegisterAccess for MmioRegisterEndpoint {
         let register = decode_read(offset, response.len() as u128)?;
         let (prepared, reservation) = {
             let state = self.shared.state.lock().await;
-            let prepared = prepare_read(&state, register, offset);
-            let reservation = state.register_gate.reserve(1)?;
+            let prepared = prepare_read(&state.core, register, offset);
+            let reservation = self.shared.register_gate.reserve(1)?;
             drop(state);
             (prepared, reservation)
         };
@@ -83,10 +95,12 @@ impl RegisterAccess for MmioRegisterEndpoint {
         let (prepared, reservation, generation) = {
             let mut state = self.shared.state.lock().await;
             let prepared = prepare_write(register, value, offset, request);
-            let reservation = state.register_gate.reserve(1)?;
-            let previous = state.generation;
-            prepared.commit(&mut state);
-            let generation = (state.generation != previous).then_some(state.generation);
+            let reservation = self.shared.register_gate.reserve(1)?;
+            let changed = prepared.commit(&mut state.core);
+            if changed {
+                wake(&mut state);
+            }
+            let generation = changed.then_some(state.generation);
             drop(state);
             (prepared, reservation, generation)
         };

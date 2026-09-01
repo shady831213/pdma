@@ -19,6 +19,7 @@ impl AsyncDeviceHandle {
                 .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                 .and_then(|length| {
                     state
+                        .core
                         .dma
                         .allocate(length)
                         .map_err(|_| crate::ModelError::DmaAllocationExhausted)
@@ -39,7 +40,7 @@ impl AsyncDeviceHandle {
         &self,
         lengths: &[u64],
     ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
-        self.shared.state.lock().await.dma.stage(lengths)
+        self.shared.state.lock().await.core.dma.stage(lengths)
     }
 
     /// Atomically commits every region in a stage.
@@ -49,7 +50,7 @@ impl AsyncDeviceHandle {
     ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = state.dma.commit(proposal);
+            let result = state.core.dma.commit(proposal);
             wake(&mut state);
             (result, state.generation)
         };
@@ -67,6 +68,7 @@ impl AsyncDeviceHandle {
             .state
             .lock()
             .await
+            .core
             .dma
             .read_memory(address, length)
     }
@@ -79,7 +81,7 @@ impl AsyncDeviceHandle {
     ) -> Result<(), PdmaMemoryError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = state.dma.write_memory(address, data);
+            let result = state.core.dma.write_memory(address, data);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -93,11 +95,17 @@ impl AsyncDeviceHandle {
 
     /// Resolves a semantic object to its committed DMA region.
     pub async fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
-        self.shared.state.lock().await.dma.region_for_object(object)
+        self.shared
+            .state
+            .lock()
+            .await
+            .core
+            .dma
+            .region_for_object(object)
     }
 
     /// Returns the committed DMA allocator generation.
     pub async fn memory_generation(&self) -> u64 {
-        self.shared.state.lock().await.dma.generation()
+        self.shared.state.lock().await.core.dma.generation()
     }
 }

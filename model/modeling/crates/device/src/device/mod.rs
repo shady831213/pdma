@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use hardware_interface_runtime::{
-    ObservationGate, RegisterObserver, SharedMemory, SharedRegisterObserver,
-};
+use hardware_interface_runtime::SharedMemory;
 use pdma_model_contract::semantic::{
     DeviceEpoch, IrqLine, IrqVector, ResourceConfig, WholeDeviceReset,
 };
 
-use crate::AsyncStepStatus;
 use crate::dma::PdmaMemoryMappings;
 use crate::execution::ExecutionUnit;
 use crate::irq::PdmaIrqController;
@@ -19,6 +16,7 @@ use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 
 #[derive(Debug)]
+/// Synchronous ownership root for PDMA hardware state consumed by the async runtime.
 pub struct DeviceCore {
     epoch: DeviceEpoch,
     pub(crate) dma: PdmaMemoryMappings,
@@ -29,14 +27,6 @@ pub struct DeviceCore {
     retirement: RetirementUnit,
     irq: PdmaIrqController,
     trace: TraceSink,
-    pub(crate) steps: usize,
-    pub(crate) errors: usize,
-    pub(crate) stalls: usize,
-    pub(crate) last_status: AsyncStepStatus,
-    pub(crate) generation: usize,
-    pub(crate) wake_generation: usize,
-    pub(crate) shutdown_requested: bool,
-    pub(crate) register_gate: ObservationGate,
     reset_runner_calls: usize,
     #[cfg(test)]
     pub(crate) batch_fault: std::cell::Cell<Option<crate::abi::ring::BatchPreparationFault>>,
@@ -44,12 +34,7 @@ pub struct DeviceCore {
 
 impl DeviceCore {
     /// Creates one synchronous device core over system-owned integration capabilities.
-    pub fn new(
-        memory: Arc<SharedMemory>,
-        config: ResourceConfig,
-        observer: Arc<dyn RegisterObserver>,
-    ) -> Self {
-        let observer = SharedRegisterObserver::new(observer);
+    pub fn new(memory: Arc<SharedMemory>, config: ResourceConfig) -> Self {
         Self {
             epoch: DeviceEpoch::initial(),
             dma: PdmaMemoryMappings::new(memory),
@@ -60,14 +45,6 @@ impl DeviceCore {
             retirement: RetirementUnit::default(),
             irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
             trace: TraceSink::default(),
-            steps: 0,
-            errors: 0,
-            stalls: 0,
-            last_status: AsyncStepStatus::Idle,
-            generation: 0,
-            wake_generation: 0,
-            shutdown_requested: false,
-            register_gate: ObservationGate::new(observer),
             reset_runner_calls: 0,
             #[cfg(test)]
             batch_fault: std::cell::Cell::new(None),
@@ -87,22 +64,6 @@ impl DeviceCore {
                 actual,
             })
         }
-    }
-
-    pub(crate) const fn mark_changed(&mut self) {
-        self.wake_generation = self.wake_generation.saturating_add(1);
-        self.generation = self.generation.saturating_add(1);
-    }
-
-    pub(crate) fn reset_partition_counts(&self) -> (usize, usize, usize, usize, usize) {
-        let result_queues = self.queues.result_queue_count();
-        (
-            self.queues.len(),
-            result_queues,
-            self.scheduler.len(),
-            usize::from(self.retirement.is_pending()),
-            self.irq.source_count(),
-        )
     }
 
     pub(crate) fn reset(&mut self, epoch: DeviceEpoch) {
@@ -144,3 +105,6 @@ mod queue;
 mod trace;
 
 pub(crate) use pipeline::ModelStepStatus;
+
+#[cfg(test)]
+mod tests;

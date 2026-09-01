@@ -15,10 +15,6 @@ pub(crate) enum ModelStepStatus {
 }
 
 impl DeviceCore {
-    pub(crate) const fn resource_config(&self) -> pdma_model_contract::semantic::ResourceConfig {
-        self.execution.resources()
-    }
-
     pub(crate) fn step(&mut self) -> ModelResult<ModelStepStatus> {
         match probe_run_state(
             &self.queues,
@@ -89,10 +85,6 @@ impl DeviceCore {
         };
         let status = self.retire(retirement)?;
         Ok(map_retirement_status(status))
-    }
-
-    pub(crate) fn has_work(&self) -> bool {
-        self.retirement.is_pending() || !self.scheduler.is_idle() || self.queues.has_any_pending()
     }
 
     fn retire(

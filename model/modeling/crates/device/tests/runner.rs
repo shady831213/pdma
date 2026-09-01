@@ -8,34 +8,12 @@ use pdma_model_contract::semantic::{
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
-#[path = "runner/dma_io.rs"]
-pub mod dma_io;
 #[path = "runner/semantic_dma.rs"]
 pub mod semantic_dma;
-#[path = "runner/shared_io.rs"]
-pub mod shared_io;
-
-#[test]
-fn dma_bus_queue_selection_routes_decoded_command_through_shared_memory_resolver()
--> Result<(), Box<dyn std::error::Error>> {
-    // Given: one live DMA-bus queue and one already-decoded command.
-    // When: the command enters the shared execution core before DMA publication exists.
-    // Then: the helper proves one execution through queue-selected memory and no semantic result.
-    dma_io::assert_dma_bus_decoded_command_uses_shared_core()
-}
-
-#[test]
-fn semantic_frontend_resource_and_publication_stalls_do_not_consume_or_reexecute()
--> Result<(), Box<dyn std::error::Error>> {
-    // Given: two semantic queues sharing constrained execution and publication resources.
-    // When: one command resource-stalls while another waits in global pending retirement.
-    // Then: the helper proves the first remains queued and the second executes exactly once.
-    shared_io::assert_semantic_stall_commit_points()
-}
 
 #[tokio::test(flavor = "current_thread")]
 async fn semantic_nonzero_start_unknown_object_and_range_overflow_publish_no_success() {
-    // Given: real async and sync semantic queue-port frontends with mapped DMA objects.
+    // Given: the async semantic queue-port frontend with mapped DMA objects.
     // When: explicit-start copy/strided commands and mapped, unknown, and overflowing faults run.
     // Then: the helper asserts exact bytes, typed address correlation, and no false success.
     semantic_dma::exercise_semantic_dma_ranges_and_faults()
@@ -49,7 +27,6 @@ async fn async_runner_retires_copy_after_handle_submission() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let handle: AsyncDeviceHandle = runner.handle();
@@ -101,7 +78,6 @@ async fn async_runner_pending_completion_retry_after_doorbell_has_no_fake_progre
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_completion_publication_slots(1),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
@@ -196,7 +172,6 @@ async fn async_runner_uses_selected_queue_completion_routing() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let handle: AsyncDeviceHandle = runner.handle();

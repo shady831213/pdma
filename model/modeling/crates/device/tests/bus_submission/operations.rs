@@ -76,7 +76,6 @@ pub(super) async fn multi_queue_arbitration()
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         resources,
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = runner.handle();
     handle.enable_tracing().await;

@@ -24,7 +24,6 @@ async fn shutdown_wins_over_a_ready_notification() -> Result<(), Box<dyn std::er
     let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let mut device_port = AsyncDevicePort::new(device.handle());

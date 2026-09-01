@@ -90,3 +90,6 @@ impl RetirementUnit {
         self.pending = None;
     }
 }
+
+#[cfg(test)]
+mod tests;

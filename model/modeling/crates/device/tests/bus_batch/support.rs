@@ -93,7 +93,6 @@ pub fn new_handle() -> AsyncDeviceHandle {
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
             pdma_model_contract::semantic::ResourceConfig::default(),
-            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
     device.handle()
 }
@@ -117,12 +116,13 @@ pub fn observed_handle_for_memory(
     memory: &Arc<hardware_interface_runtime::SharedMemory>,
 ) -> (AsyncDeviceHandle, Arc<RecordingObserver>) {
     let observer = Arc::new(RecordingObserver::default());
-    let (device, _worker) =
-        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+    let (device, _worker) = pdma_model_device::AsyncDevice::from_core_observed(
+        pdma_model_device::DeviceCore::new(
             Arc::clone(memory),
             pdma_model_contract::semantic::ResourceConfig::default(),
-            observer.clone(),
-        ));
+        ),
+        observer.clone(),
+    );
     (device.handle(), observer)
 }
 
@@ -133,12 +133,13 @@ pub fn gated_handle() -> (
 ) {
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
     let observer = Arc::new(GatedObserver::new(Arc::clone(&memory)));
-    let (device, _worker) =
-        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
+    let (device, _worker) = pdma_model_device::AsyncDevice::from_core_observed(
+        pdma_model_device::DeviceCore::new(
             Arc::clone(&memory),
             pdma_model_contract::semantic::ResourceConfig::default(),
-            observer.clone(),
-        ));
+        ),
+        observer.clone(),
+    );
     (device.handle(), observer, memory)
 }
 

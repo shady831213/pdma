@@ -6,8 +6,6 @@ use pdma_model_device::AsyncDevice;
 
 #[path = "mmio_dispatch/malformed.rs"]
 mod malformed;
-#[path = "mmio_dispatch/source.rs"]
-mod source;
 #[path = "mmio_dispatch/support.rs"]
 /// Shared observability helpers for malformed-access cases.
 pub mod support;
@@ -18,7 +16,6 @@ async fn register_families_route_when_access_is_valid() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
 
@@ -57,7 +54,6 @@ async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
 
@@ -113,7 +109,6 @@ async fn whole_device_reset_restores_register_banks() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
     handle

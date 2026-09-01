@@ -12,11 +12,13 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
         expected_region_count: std::sync::atomic::AtomicUsize::new(3),
         ..CommitOrderObserver::default()
     });
-    let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
-        Arc::clone(&memory),
-        pdma_model_contract::semantic::ResourceConfig::default(),
+    let (device, _worker) = AsyncDevice::from_core_observed(
+        crate::DeviceCore::new(
+            Arc::clone(&memory),
+            pdma_model_contract::semantic::ResourceConfig::default(),
+        ),
         observer.clone(),
-    ));
+    );
     let handle = device.handle();
     let active_stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [descriptor, _, _] = active_stage.regions() else {
@@ -39,11 +41,11 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
         let indirect_region = *indirect_region;
         let state = handle.shared.state.lock().await;
         let before_memory = memory_image(&memory)?;
-        let before_mapping_generation = state.dma.generation();
+        let before_mapping_generation = state.core.dma.generation();
         let before_runner_generation = state.generation;
         let before_wake_generation = state.wake_generation;
-        let before_latches = queue_latch_values(&state);
-        let before_trace = state.trace_events().clone();
+        let before_latches = queue_latch_values(&state.core);
+        let before_trace = state.core.trace_events().clone();
         let before_observations = observer
             .observations
             .lock()
@@ -69,11 +71,11 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
 
         // Then: both cancelled futures preserve every commit surface exactly.
         assert_eq!(memory_image(&memory)?, before_memory);
-        assert_eq!(state.dma.generation(), before_mapping_generation);
+        assert_eq!(state.core.dma.generation(), before_mapping_generation);
         assert_eq!(state.generation, before_runner_generation);
         assert_eq!(state.wake_generation, before_wake_generation);
-        assert_eq!(queue_latch_values(&state), before_latches);
-        assert_eq!(state.trace_events(), before_trace);
+        assert_eq!(queue_latch_values(&state.core), before_latches);
+        assert_eq!(state.core.trace_events(), before_trace);
         assert_eq!(
             *observer
                 .observations
@@ -90,7 +92,7 @@ async fn poll_once_pending<F: Future>(future: &mut std::pin::Pin<Box<F>>) -> boo
     poll_fn(|context| std::task::Poll::Ready(future.as_mut().poll(context).is_pending())).await
 }
 
-fn queue_latch_values(state: &crate::runtime::state::DeviceCore) -> Vec<Vec<u8>> {
+fn queue_latch_values(state: &crate::DeviceCore) -> Vec<Vec<u8>> {
     queue_latch_offsets()
         .into_iter()
         .map(|(offset, _)| {

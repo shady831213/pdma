@@ -7,7 +7,6 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = runner.handle();
     let (queue, submission) =

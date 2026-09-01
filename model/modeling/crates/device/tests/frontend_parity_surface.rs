@@ -37,7 +37,7 @@ async fn task17_frontend_parity_surface() -> TestResult {
     let mut exact_retirements = 0;
     let mut native_step_observations = Vec::new();
     for operation in operations::OperationCase::ALL {
-        let semantic = semantic::observe(operation)?;
+        let semantic = semantic::observe(operation).await?;
         let exact = exact::observe(operation).await?;
         semantic_retirements += semantic.retirements;
         exact_retirements += exact.retirements;
@@ -48,7 +48,7 @@ async fn task17_frontend_parity_surface() -> TestResult {
         exact_traces.push(exact.traces);
     }
     let exact_arbitration = operations::multi_queue_arbitration().await?;
-    let semantic_arbitration = semantic::arbitration()?;
+    let semantic_arbitration = semantic::arbitration().await?;
     let bytes_equal = semantic_results == exact_results;
     let traces_equal = semantic_traces == exact_traces;
     let arbitration_equal = exact_arbitration == semantic_arbitration;

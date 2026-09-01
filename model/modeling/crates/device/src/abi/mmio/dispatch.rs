@@ -78,7 +78,7 @@ pub(crate) const fn read(state: &DeviceCore, register: RegisterId) -> MmioScalar
     }
 }
 
-pub(crate) fn write(state: &mut DeviceCore, register: RegisterId, value: u64) {
+pub(crate) fn write(state: &mut DeviceCore, register: RegisterId, value: u64) -> bool {
     match register {
         RegisterId::GMagic => global::write(state, G::Magic, value),
         RegisterId::GMmioAbiVersion => global::write(state, G::MmioAbiVersion, value),
@@ -96,7 +96,7 @@ pub(crate) fn write(state: &mut DeviceCore, register: RegisterId, value: u64) {
         RegisterId::GRspEpoch => global::write(state, G::RspEpoch, value),
         RegisterId::GMaxRingDepth => global::write(state, G::MaxRingDepth, value),
         RegisterId::GMaxIndirectDestinations => {
-            global::write(state, G::MaxIndirectDestinations, value);
+            global::write(state, G::MaxIndirectDestinations, value)
         }
         RegisterId::GMaxTransferBytes => global::write(state, G::MaxTransferBytes, value),
         RegisterId::GMaxStridedRows => global::write(state, G::MaxStridedRows, value),

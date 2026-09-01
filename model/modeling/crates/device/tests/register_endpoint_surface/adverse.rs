@@ -14,11 +14,10 @@ pub async fn run() -> TestResult {
     // Given: one live endpoint with snapshots and a real pending message available to claim.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        memory.clone(),
-        ResourceConfig::default(),
+    let (device, worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(memory.clone(), ResourceConfig::default()),
         observer.clone(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();

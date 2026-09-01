@@ -1,14 +1,9 @@
 #![allow(missing_docs)]
 
-use pdma_model_device::ModelError;
-
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CompletionStatus, desc::CopyRequest};
-use pdma_model_device::{AsyncDevice, SyncDevice};
-use pdma_model_host::{
-    AsyncDriver, ManualDriver,
-    compat::{AsyncDevicePort, SemanticDevicePort},
-};
+use pdma_model_device::{AsyncDevice, AsyncStepStatus};
+use pdma_model_host::{AsyncDriver, ManualDriver, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
@@ -16,7 +11,6 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let cpu = SoftwareCpu::new();
@@ -67,37 +61,37 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn reports_step_budget_exhaustion_when_work_remains() {
-    // Given: one pending copy command.
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+    // Given: one pending copy submitted through the CPU-unbound observability driver.
+    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
-    {
-        let mut port = SemanticDevicePort::new(&mut device);
-        let mut driver = ManualDriver::setup_on(&mut port, 4, 4)
-            .await
-            .expect("queue setup is valid");
-        let src = driver
-            .allocate_buffer_on(&mut port, 1)
-            .await
-            .expect("allocation");
-        let dst = driver
-            .allocate_buffer_on(&mut port, 1)
-            .await
-            .expect("allocation");
-        driver
-            .submit_copy_on(&mut port, CopyRequest::new(src, dst, 1))
-            .await
-            .expect("copy submission has ring space");
-    }
+    let mut port = AsyncDevicePort::new(runner.handle());
+    let mut driver = ManualDriver::setup_on(&mut port, 4, 4)
+        .await
+        .expect("queue setup is valid");
+    let src = driver
+        .allocate_buffer_on(&mut port, 1)
+        .await
+        .expect("allocation");
+    let dst = driver
+        .allocate_buffer_on(&mut port, 1)
+        .await
+        .expect("allocation");
+    driver
+        .submit_copy_on(&mut port, CopyRequest::new(src, dst, 1))
+        .await
+        .expect("copy submission has ring space");
 
-    // When: the device is given no steps.
-    let result = device.run_until_idle(0);
+    // When: the worker receives a zero-poll budget and is shut down before its first step.
+    let snapshot = runner.snapshot().await;
+    let completion = driver.poll_completion_on(&mut port).await;
+    runner.request_shutdown().await;
+    let summary = worker.run().await;
 
-    // Then: the pending command is reported as budget exhaustion.
-    assert_eq!(
-        result,
-        Err(ModelError::StepBudgetExhausted { max_steps: 0 })
-    );
+    // Then: work remains unretired and the runner reports zero executed steps.
+    assert_eq!(snapshot.steps, 0);
+    assert_eq!(snapshot.last_status, AsyncStepStatus::Idle);
+    assert_eq!(completion, Ok(None));
+    assert_eq!(summary.steps, 0);
 }

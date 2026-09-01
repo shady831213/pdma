@@ -101,7 +101,7 @@ pub(crate) fn status_response(
     })
 }
 
-pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64) {
+pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64) -> bool {
     match register {
         QueueRegister::ExpectedEpoch => state.registers.queue.expected_epoch = value,
         QueueRegister::Id => state.registers.queue.id = value,
@@ -122,7 +122,7 @@ pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64)
         | QueueRegister::RspCqProducer
         | QueueRegister::RspCqConsumer
         | QueueRegister::RspEqProducer
-        | QueueRegister::RspEqConsumer => {}
+        | QueueRegister::RspEqConsumer => return false,
         QueueRegister::CfgSoftwareOwner => state.registers.queue.cfg_software_owner = value,
         QueueRegister::SqBase => state.registers.queue.sq_base = value,
         QueueRegister::SqDepth => state.registers.queue.sq_depth = narrow_u32(value),
@@ -134,9 +134,8 @@ pub(super) fn write(state: &mut DeviceCore, register: QueueRegister, value: u64)
             let staging = state.registers.queue.staging();
             let (result, response, changed) = queue_control::execute(state, staging, value);
             state.registers.queue.command.complete(result, response);
-            if changed {
-                state.mark_changed();
-            }
+            return changed;
         }
     }
+    false
 }

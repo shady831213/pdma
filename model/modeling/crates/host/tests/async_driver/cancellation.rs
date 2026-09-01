@@ -20,7 +20,6 @@ async fn submit_failure_restores_slot_but_consumes_command_id() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut port = BlockingPort::new(device.handle());
     port.fail_next_submit();
@@ -50,7 +49,6 @@ async fn inner_select_cancellation_restores_slot_but_consumes_command_id() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut port = BlockingPort::new(device.handle());
     let control = port.clone();
@@ -96,7 +94,6 @@ async fn aborted_run_main_restores_slot_for_retained_clone() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut main_port = BlockingPort::new(device.handle());
     main_port.block_submit();
@@ -139,7 +136,6 @@ async fn doorbell_failure_keeps_accepted_command_slot_consumed() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut port = BlockingPort::new(device.handle());
     port.fail_next_doorbell();
@@ -169,7 +165,6 @@ async fn cancelled_doorbell_keeps_accepted_command_slot_consumed() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut port = BlockingPort::new(device.handle());
     let observer = port.clone();

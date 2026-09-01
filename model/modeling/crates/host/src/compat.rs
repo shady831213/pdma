@@ -1,10 +1,8 @@
 //! Explicit host compatibility ports for the supported device access surfaces.
 
 mod async_device;
-mod semantic_device;
 
 pub use async_device::AsyncDevicePort;
-pub use semantic_device::SemanticDevicePort;
 
 use crate::PortError;
 use pdma_model_device::DeviceError;
@@ -27,8 +25,5 @@ const fn port_error(source: DeviceError) -> PortError {
         }
         DeviceError::DmaAllocationExhausted => PortError::AllocationExhausted,
         DeviceError::DmaSubmissionState => PortError::SubmissionState,
-        DeviceError::StepBudgetExhausted { max_steps } => {
-            PortError::StepBudgetExhausted { max_steps }
-        }
     }
 }

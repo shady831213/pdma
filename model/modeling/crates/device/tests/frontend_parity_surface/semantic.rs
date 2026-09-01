@@ -7,7 +7,7 @@ use pdma_model_contract::semantic::{
     CommandId, DmaRangeStart, EventRouting, QueueConfig, ResourceConfig, SoftwareOwnerId,
     TraceEventKind, TraceOperation,
 };
-use pdma_model_device::SyncDevice;
+use pdma_model_device::AsyncDevice;
 
 type TestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
@@ -18,25 +18,32 @@ pub(super) struct SemanticObservation {
     pub(super) retirements: usize,
 }
 
-pub(super) fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+pub(super) async fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
-    device.enable_tracing();
-    let queue = device.create_queue(QueueConfig::new(
-        2,
-        2,
-        EventRouting::QueueLocal,
-        SoftwareOwnerId::new(0),
-    ))?;
-    let source_a = device.allocate_buffer(8)?;
-    let source_b = device.allocate_buffer(8)?;
-    let destination_a = device.allocate_buffer(8)?;
-    let destination_b = device.allocate_buffer(8)?;
-    device.write_buffer(source_a, 0, &[1, 2, 3, 4, 5, 6, 7, 8])?;
-    device.write_buffer(source_b, 0, &[8, 7, 6, 5, 4, 3, 2, 1])?;
+    let worker = tokio::spawn(worker.run());
+    let handle = device.handle();
+    handle.enable_tracing().await;
+    let queue = handle
+        .create_queue(QueueConfig::new(
+            2,
+            2,
+            EventRouting::QueueLocal,
+            SoftwareOwnerId::new(0),
+        ))
+        .await?;
+    let source_a = handle.allocate_buffer(8).await?;
+    let source_b = handle.allocate_buffer(8).await?;
+    let destination_a = handle.allocate_buffer(8).await?;
+    let destination_b = handle.allocate_buffer(8).await?;
+    handle
+        .write_buffer(source_a, 0, &[1, 2, 3, 4, 5, 6, 7, 8])
+        .await?;
+    handle
+        .write_buffer(source_b, 0, &[8, 7, 6, 5, 4, 3, 2, 1])
+        .await?;
     let command_id = CommandId::new(match case {
         OperationCase::Copy => 10,
         OperationCase::Strided => 11,
@@ -48,19 +55,21 @@ pub(super) fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
         command_id,
         [source_a, source_b, destination_a, destination_b],
     );
-    device.submit_command(queue, command)?;
-    device.ring_doorbell(queue)?;
-    let summary = device.run_until_blocked(4)?;
-    assert_eq!(summary.steps, 1);
-    let retirement = device.poll_completion(queue)?;
+    handle.submit_command(queue, command).await?;
+    handle.ring_doorbell(queue).await?;
+    let snapshot = device.wait_for_progress_after(0).await;
+    assert_eq!(snapshot.steps, 1);
+    let retirement = handle.poll_completion(queue).await?;
     let retirements = usize::from(retirement.is_some());
     assert_eq!(retirements, 1);
     let destinations = vec![
-        device.read_buffer(destination_a, 0, 8)?,
-        device.read_buffer(destination_b, 0, 8)?,
+        handle.read_buffer(destination_a, 0, 8).await?,
+        handle.read_buffer(destination_b, 0, 8).await?,
     ];
-    let executions = device.native_steps();
-    let trace_events = device.trace_events();
+    let executions = handle.native_steps().await;
+    let trace_events = handle.trace_events().await;
+    device.request_shutdown().await;
+    worker.await?;
     let traces = trace_events
         .into_iter()
         .filter(|event| {
@@ -79,22 +88,23 @@ pub(super) fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
     })
 }
 
-pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+pub(super) async fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
+    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default().with_compute_slots(0),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
-    device.enable_tracing();
+    let worker = tokio::spawn(worker.run());
+    let handle = device.handle();
+    handle.enable_tracing().await;
     let config = QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
-    let first = device.create_queue(config)?;
-    let second = device.create_queue(config)?;
-    let source = device.allocate_buffer(4)?;
-    let source_b = device.allocate_buffer(4)?;
-    let destination_a = device.allocate_buffer(4)?;
-    let destination_b = device.allocate_buffer(4)?;
-    device.write_buffer(source, 0, &[1, 2, 3, 4])?;
-    device.write_buffer(source_b, 0, &[4, 3, 2, 1])?;
+    let first = handle.create_queue(config).await?;
+    let second = handle.create_queue(config).await?;
+    let source = handle.allocate_buffer(4).await?;
+    let source_b = handle.allocate_buffer(4).await?;
+    let destination_a = handle.allocate_buffer(4).await?;
+    let destination_b = handle.allocate_buffer(4).await?;
+    handle.write_buffer(source, 0, &[1, 2, 3, 4]).await?;
+    handle.write_buffer(source_b, 0, &[4, 3, 2, 1]).await?;
     let commands = [
         (
             first,
@@ -121,19 +131,24 @@ pub(super) fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::Que
         ),
     ];
     for (queue, command) in commands {
-        device.submit_command(queue, command)?;
-        device.ring_doorbell(queue)?;
+        handle.submit_command(queue, command).await?;
+        handle.ring_doorbell(queue).await?;
     }
-    let blocked = device.run_until_blocked(8)?;
+    let blocked = device.wait_for_stall_after(0).await;
     assert_eq!(blocked.stalls, 1);
-    let progressed = device.run_until_blocked(8)?;
+    handle.ring_doorbell(second).await?;
+    let progressed = device.wait_for_progress_after(0).await;
     assert_eq!(progressed.steps, 1);
-    Ok(device
+    let queues = handle
         .trace_events()
+        .await
         .into_iter()
         .filter(|event| event.kind() == TraceEventKind::Scheduled)
         .filter_map(|event| event.queue_id())
-        .collect())
+        .collect();
+    device.request_shutdown().await;
+    worker.await?;
+    Ok(queues)
 }
 
 fn command(

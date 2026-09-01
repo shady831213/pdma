@@ -2,9 +2,7 @@
 
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::semantic::ids::BufferId;
-use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
-use pdma_model_device::MappedDmaRegion;
-use pdma_model_device::{PdmaMemoryError, PdmaMemoryMappings, SyncDevice};
+use pdma_model_device::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings};
 
 #[test]
 fn staged_batch_returns_regions_and_commits_all_or_none() {
@@ -95,52 +93,6 @@ fn allocation_exhaustion_preserves_allocator_state() {
         space.read_memory(first.base(), 4).expect("sentinel bytes"),
         space.read_memory(next.base(), 4).expect("next bytes"),
         space.generation(),
-    );
-}
-
-#[test]
-fn allocations_and_checked_dma_address_access_survive_backend_reset() {
-    // Given a staged region committed beside a synchronous backend.
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
-    ));
-    let stage = device.stage_memory_regions(&[8]).expect("valid stage");
-    let region = device
-        .commit_memory_stage(stage)
-        .expect("atomic commit")
-        .first()
-        .copied()
-        .expect("one committed region");
-    device
-        .write_memory(region.base().checked_add(2).expect("offset"), &[7, 8, 9])
-        .expect("checked write");
-
-    // When the whole device resets.
-    device
-        .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
-        .expect("reset advances epoch");
-
-    // Then the mapping generation and backing bytes remain unchanged.
-    assert_eq!(device.memory_generation(), 1);
-    assert_eq!(
-        device.region_for_object(region.object()),
-        Some(MappedDmaRegion::try_new(region.object(), region.base(), 8).expect("valid region"))
-    );
-    assert_eq!(
-        device.read_memory(region.base().checked_add(2).expect("offset"), 3),
-        Ok(vec![7, 8, 9])
-    );
-    eprintln!(
-        "object={} base={:#x} length={} generation={} bytes={:?}",
-        region.object().raw(),
-        region.base().raw(),
-        region.length(),
-        device.memory_generation(),
-        device
-            .read_memory(region.base().checked_add(2).expect("offset"), 3)
-            .expect("persisted bytes")
     );
 }
 

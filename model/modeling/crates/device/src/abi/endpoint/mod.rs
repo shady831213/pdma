@@ -64,8 +64,8 @@ pub(crate) struct PreparedWrite {
 }
 
 impl PreparedWrite {
-    pub(crate) fn commit(&self, state: &mut DeviceCore) {
-        dispatch::write(state, self.register, self.value);
+    pub(crate) fn commit(&self, state: &mut DeviceCore) -> bool {
+        dispatch::write(state, self.register, self.value)
     }
 
     pub(crate) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {

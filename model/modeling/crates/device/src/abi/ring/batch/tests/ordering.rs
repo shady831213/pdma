@@ -50,11 +50,13 @@ async fn bootstrap_installs_precede_observation_and_wake() -> TestResult {
         expected_region_count: std::sync::atomic::AtomicUsize::new(3),
         ..CommitOrderObserver::default()
     });
-    let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
-        memory,
-        pdma_model_contract::semantic::ResourceConfig::default(),
+    let (device, _worker) = AsyncDevice::from_core_observed(
+        crate::DeviceCore::new(
+            memory,
+            pdma_model_contract::semantic::ResourceConfig::default(),
+        ),
         observer.clone(),
-    ));
+    );
     let handle = device.handle();
     *observer.wake.lock().expect("wake probe lock available") =
         Some(handle.shared.changed.subscribe());
@@ -80,11 +82,13 @@ async fn submission_installs_precede_observation_and_wake() -> TestResult {
         expected_region_count: std::sync::atomic::AtomicUsize::new(3),
         ..CommitOrderObserver::default()
     });
-    let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
-        memory,
-        pdma_model_contract::semantic::ResourceConfig::default(),
+    let (device, _worker) = AsyncDevice::from_core_observed(
+        crate::DeviceCore::new(
+            memory,
+            pdma_model_contract::semantic::ResourceConfig::default(),
+        ),
         observer.clone(),
-    ));
+    );
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [descriptor, _, _] = stage.regions() else {

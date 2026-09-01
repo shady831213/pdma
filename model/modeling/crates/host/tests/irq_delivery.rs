@@ -2,14 +2,13 @@
 
 use crate::{DriverError, PortError, PortResult};
 
-use crate::{AsyncDriver, DriverPort as AsyncDevicePort, compat::SemanticDevicePort};
+use crate::{AsyncDriver, DriverPort as AsyncDevicePort};
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     BufferId, Command, CompletionRecord, DeviceEpoch, EpochIrqSource, EventRecord, IrqCause,
     IrqLine, IrqMessage, IrqMessageId, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
-    IrqVector, QueueConfig, QueueConfigHandle, desc::CopyRequest,
+    IrqVector, QueueConfig, QueueConfigHandle,
 };
-use pdma_model_device::SyncDevice;
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -129,127 +128,6 @@ const fn message(id: usize, vector: IrqVector, source: IrqSource) -> IrqNotifica
         vector,
         EpochIrqSource::new(DeviceEpoch::initial(), source),
     ))
-}
-
-const fn at_epoch(notification: IrqNotification, epoch: DeviceEpoch) -> IrqNotification {
-    let source = EpochIrqSource::new(epoch, notification.source());
-    match notification {
-        IrqNotification::Line(snapshot) => IrqNotification::Line(IrqSnapshot::new(
-            IrqCause::new(snapshot.cause().line(), source),
-            snapshot.asserted(),
-        )),
-        IrqNotification::Message(message) => {
-            IrqNotification::Message(IrqMessage::new(message.id(), message.vector(), source))
-        }
-    }
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn stale_notification_fails_before_drain_or_ack() {
-    // Given: one pending real completion and a same-source notification from a later epoch.
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
-    ));
-    let cpu = SoftwareCpu::new();
-    let mut driver = {
-        let mut port = SemanticDevicePort::new(&mut device);
-        cpu.run_main(AsyncDriver::setup_on(&mut port, 1, 1))
-            .await
-            .expect("active setup succeeds")
-    };
-    let current = driver.queue_config_handle().completion_irq_source();
-    device
-        .enable_irq_source(current)
-        .expect("current completion source enables");
-    device
-        .unmask_irq_source(current)
-        .expect("current completion source unmasks");
-    let (source, destination) = cpu
-        .run_main(async {
-            let mut port = SemanticDevicePort::new(&mut device);
-            let source = driver
-                .allocate_buffer_on(&mut port, 1)
-                .await
-                .expect("allocation");
-            let destination = driver
-                .allocate_buffer_on(&mut port, 1)
-                .await
-                .expect("allocation");
-            driver.write_buffer_on(&mut port, source, &[9]).await?;
-            driver
-                .submit_copy_on(&mut port, CopyRequest::new(source, destination, 1))
-                .await?;
-            Ok::<_, DriverError>((source, destination))
-        })
-        .await
-        .expect("current capability submits");
-    device.run_until_idle(1).expect("completion publishes");
-    let current_notification = device
-        .wait_irq_notification()
-        .expect("current completion produces a notification");
-    let stale_epoch = DeviceEpoch::new(1);
-    let stale_notification = at_epoch(current_notification, stale_epoch);
-    device.enable_tracing();
-    let before = device.trace_events();
-
-    // When: a wrong CPU and then the owning CPU service the stale host-owned notification.
-    let wrong_cpu = {
-        let mut port = SemanticDevicePort::new(&mut device);
-        SoftwareCpu::new()
-            .run_main(driver.service_irq_on(&mut port, stale_notification))
-            .await
-    };
-    let result = {
-        let mut port = SemanticDevicePort::new(&mut device);
-        cpu.run_main(driver.service_irq_on(&mut port, stale_notification))
-            .await
-    };
-
-    // Then: CPU precedence and stale epoch rejection preserve the record and accounting.
-    assert_eq!(
-        wrong_cpu,
-        Err(DriverError::WrongCpu(
-            hardware_interface_runtime::CpuContextError::Mismatch,
-        ))
-    );
-    assert_eq!(
-        result,
-        Err(DriverError::Port(PortError::StaleEpoch {
-            expected: DeviceEpoch::initial(),
-            actual: stale_epoch,
-        }))
-    );
-    assert_eq!(device.trace_events(), before);
-    let blocked_submit = {
-        let mut port = SemanticDevicePort::new(&mut device);
-        cpu.run_main(driver.submit_copy_on(&mut port, CopyRequest::new(source, destination, 1)))
-            .await
-    };
-    assert_eq!(blocked_submit, Err(DriverError::QueueFull));
-    let records = {
-        let mut port = SemanticDevicePort::new(&mut device);
-        cpu.run_main(driver.service_irq_on(&mut port, current_notification))
-            .await
-            .expect("current notification drains and acknowledges")
-    };
-    assert_eq!(records.len(), 1);
-    assert!(device.irq_snapshot().is_none());
-    let resumed_submit = {
-        let mut port = SemanticDevicePort::new(&mut device);
-        cpu.run_main(driver.submit_copy_on(&mut port, CopyRequest::new(source, destination, 1)))
-            .await
-    };
-    assert!(resumed_submit.is_ok());
-    println!(
-        "delivery epochs current={} stale={} wrong_cpu={wrong_cpu:?} stale={result:?} \
-         trace_unchanged=true record_retained=true accounting_retained=true drained={} \
-         ack_cleared=true resumed_submit={resumed_submit:?}",
-        current.epoch().raw(),
-        stale_epoch.raw(),
-        records.len(),
-    );
 }
 
 #[path = "irq_delivery/atomicity.rs"]

@@ -1,7 +1,7 @@
 use super::*;
 use crate::device::DeviceCore;
 use crate::runtime::MmioRegisterEndpoint;
-use hardware_interface_runtime::{NoopRegisterObserver, RegisterAccess, SharedMemory};
+use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::semantic::ResourceConfig;
 use std::future::Future;
 use std::pin::pin;
@@ -14,7 +14,6 @@ async fn pending_lock_acquisition_is_cancel_safe_before_commit() {
     let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
         Arc::new(SharedMemory::new()),
         ResourceConfig::default(),
-        Arc::new(NoopRegisterObserver),
     ));
     let held = endpoint.shared.state.lock().await;
     {
@@ -27,7 +26,7 @@ async fn pending_lock_acquisition_is_cancel_safe_before_commit() {
             Poll::Pending
         ));
     }
-    assert_eq!(held.register_gate.next_sequence(), Ok(0));
+    assert_eq!(endpoint.shared.register_gate.next_sequence(), Ok(0));
     drop(held);
 }
 
@@ -37,18 +36,20 @@ async fn prepared_read_and_write_are_side_effect_free_until_commit() {
     let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
         Arc::new(SharedMemory::new()),
         ResourceConfig::default(),
-        Arc::new(NoopRegisterObserver),
     ));
     let mut state = endpoint.shared.state.lock().await;
-    let before = dispatch::read(&state, RegisterId::QId).encode();
-    let read = prepare_read(&state, RegisterId::QId, 0x108);
+    let before = dispatch::read(&state.core, RegisterId::QId).encode();
+    let read = prepare_read(&state.core, RegisterId::QId, 0x108);
     let write = prepare_write(RegisterId::QId, 7, 0x108, &7_u64.to_le_bytes());
     assert_eq!(read.response, before);
-    assert_eq!(dispatch::read(&state, RegisterId::QId).encode(), before);
-    assert_eq!(state.register_gate.next_sequence(), Ok(0));
-    write.commit(&mut state);
     assert_eq!(
-        dispatch::read(&state, RegisterId::QId).encode(),
+        dispatch::read(&state.core, RegisterId::QId).encode(),
+        before
+    );
+    assert_eq!(endpoint.shared.register_gate.next_sequence(), Ok(0));
+    write.commit(&mut state.core);
+    assert_eq!(
+        dispatch::read(&state.core, RegisterId::QId).encode(),
         7_u64.to_le_bytes()
     );
     drop(state);
@@ -60,7 +61,6 @@ async fn prepared_batch_write_is_typed_consumed_and_has_no_arbitrary_install_hoo
     let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
         Arc::new(SharedMemory::new()),
         ResourceConfig::default(),
-        Arc::new(NoopRegisterObserver),
     ));
     let mut state = endpoint.shared.state.lock().await;
     let bootstrap = BootstrapBatchStaging {
@@ -82,16 +82,16 @@ async fn prepared_batch_write_is_typed_consumed_and_has_no_arbitrary_install_hoo
     };
     let activate = prepare_bootstrap_batch_write(bootstrap, QueueResponseBank::default())
         .expect("fixed activate write decodes")
-        .commit(&mut state);
+        .commit(&mut state.core);
     let submission = prepare_submission_batch_write(submission, QueueResponseBank::default())
         .expect("fixed submission write decodes")
-        .commit(&mut state);
+        .commit(&mut state.core);
     assert_eq!(activate.request, 1_u32.to_le_bytes());
     assert_eq!(submission.request, 3_u32.to_le_bytes());
-    assert_register(&state, RegisterId::QExpectedEpoch, 10);
-    assert_register(&state, RegisterId::QId, 11);
-    assert_register(&state, RegisterId::QExpectedCursor, 12);
-    assert_register(&state, RegisterId::QNewCursor, 13);
+    assert_register(&state.core, RegisterId::QExpectedEpoch, 10);
+    assert_register(&state.core, RegisterId::QId, 11);
+    assert_register(&state.core, RegisterId::QExpectedCursor, 12);
+    assert_register(&state.core, RegisterId::QNewCursor, 13);
     drop(state);
 }
 

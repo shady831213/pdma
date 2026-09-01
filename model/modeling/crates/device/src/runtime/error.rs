@@ -45,11 +45,6 @@ pub enum ModelError {
     DmaAllocationExhausted,
     /// DMA submission state was inconsistent.
     DmaSubmissionState,
-    /// Runnable work remains after a finite manual-run budget.
-    StepBudgetExhausted {
-        /// Supplied step budget.
-        max_steps: usize,
-    },
 }
 
 impl From<SemanticError> for ModelError {
@@ -104,69 +99,8 @@ impl fmt::Display for ModelError {
             ),
             Self::DmaAllocationExhausted => formatter.write_str("DMA allocation is exhausted"),
             Self::DmaSubmissionState => formatter.write_str("DMA submission state is inconsistent"),
-            Self::StepBudgetExhausted { max_steps } => {
-                write!(formatter, "device still has work after {max_steps} steps")
-            }
         }
     }
 }
 
 impl std::error::Error for ModelError {}
-
-/// Device execution failure independent of control, batch, and reset protocols.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PdmaRunError {
-    /// The semantic compatibility executor returned a typed cause.
-    Semantic(ModelError),
-}
-
-impl fmt::Display for PdmaRunError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Semantic(error) => write!(formatter, "PDMA execution failed: {error}"),
-        }
-    }
-}
-
-impl std::error::Error for PdmaRunError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Semantic(error) => Some(error),
-        }
-    }
-}
-
-impl From<ModelError> for PdmaRunError {
-    fn from(error: ModelError) -> Self {
-        Self::Semantic(error)
-    }
-}
-
-/// Whole-device reset failure preserving its typed control cause.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PdmaResetError {
-    /// Reset was rejected by the canonical device-control layer.
-    Control(crate::runtime::PdmaControlError),
-}
-
-impl fmt::Display for PdmaResetError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Control(error) => write!(formatter, "PDMA reset failed: {error}"),
-        }
-    }
-}
-
-impl std::error::Error for PdmaResetError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Control(error) => Some(error),
-        }
-    }
-}
-
-impl From<crate::runtime::PdmaControlError> for PdmaResetError {
-    fn from(error: crate::runtime::PdmaControlError) -> Self {
-        Self::Control(error)
-    }
-}

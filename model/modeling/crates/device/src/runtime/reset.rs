@@ -1,6 +1,6 @@
 use super::AsyncDeviceHandle;
 #[cfg(test)]
-use super::state::DeviceCore;
+use super::state::{DeviceCore, RunnerState};
 use super::state::{publish, wake};
 use crate::abi::ring::PdmaControlError;
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
@@ -11,7 +11,7 @@ impl AsyncDeviceHandle {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
             let result =
-                crate::abi::mmio::reset::execute(&mut state, request.expected_epoch().raw())
+                crate::abi::mmio::reset::execute(&mut state.core, request.expected_epoch().raw())
                     .typed_result();
             if result.is_ok() {
                 wake(&mut state);
@@ -38,7 +38,6 @@ mod tests {
         let mut state = DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
             pdma_model_contract::semantic::ResourceConfig::default(),
-            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         );
 
         // When: the raw reset seam receives the current epoch.
@@ -72,14 +71,15 @@ mod tests {
     fn epoch_overflow_preserves_complete_runner_state() {
         // Given: matching exhausted epochs beside persistent DMA and lifecycle accounting.
         let exhausted = DeviceEpoch::new(u64::MAX);
-        let mut state = DeviceCore::new(
+        let core = DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
             pdma_model_contract::semantic::ResourceConfig::default(),
-            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         );
-        state.reset(exhausted);
-        let region = state.dma.allocate(1).expect("DMA allocation");
+        let mut state = RunnerState::new(core);
+        state.core.reset(exhausted);
+        let region = state.core.dma.allocate(1).expect("DMA allocation");
         state
+            .core
             .dma
             .write_object(region.object(), 0, &[0x6d])
             .expect("DMA write");
@@ -90,7 +90,7 @@ mod tests {
         let generation = state.generation;
 
         // When: reset cannot checked-advance the current epoch.
-        let result = state.reset_runner(WholeDeviceReset::new(exhausted));
+        let result = state.core.reset_runner(WholeDeviceReset::new(exhausted));
 
         // Then: the typed overflow leaves identity, DMA, counters, and lifecycle unchanged.
         assert_eq!(
@@ -99,9 +99,9 @@ mod tests {
                 SemanticError::DeviceEpochOverflow { current: u64::MAX }
             ))
         );
-        assert_eq!(state.epoch(), exhausted);
+        assert_eq!(state.core.epoch(), exhausted);
         assert_eq!(
-            state.dma.read_object(BufferId::new(0), 0, 1),
+            state.core.dma.read_object(BufferId::new(0), 0, 1),
             Ok(vec![0x6d])
         );
         assert_eq!((state.steps, state.errors, state.stalls), (7, 3, 2));
@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(state.generation, generation);
 
         // When: the raw reset seam receives the same exhausted expected epoch.
-        let raw = mmio_reset::execute(&mut state, u64::MAX);
+        let raw = mmio_reset::execute(&mut state.core, u64::MAX);
 
         // Then: it reports exact overflow details and still commits no mutation.
         assert_eq!(
@@ -124,7 +124,7 @@ mod tests {
                 }
             )
         );
-        assert_eq!(state.epoch(), exhausted);
+        assert_eq!(state.core.epoch(), exhausted);
         assert_eq!(state.generation, generation);
     }
 }

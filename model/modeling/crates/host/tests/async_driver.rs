@@ -2,7 +2,8 @@
 
 use pdma_model_host::{DriverError, PortError};
 
-include!("async_driver/allocation.rs");
+#[path = "async_driver/allocation.rs"]
+mod allocation;
 #[path = "async_driver/cancellation.rs"]
 mod cancellation;
 #[path = "async_driver/poll_preflight.rs"]
@@ -11,22 +12,21 @@ mod poll_preflight;
 mod repoll_guard;
 #[path = "async_driver/semantics.rs"]
 mod semantics;
+#[path = "async_driver/stale_capability.rs"]
+mod stale_capability;
 #[path = "async_driver/support.rs"]
 pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
-    Command, DeviceEpoch, QueueConfigHandle,
+    DeviceEpoch,
     desc::CopyRequest,
     ids::{CommandId, CompletionRingId},
     irq::IrqSource,
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
-use pdma_model_device::{AsyncDevice, SyncDevice};
-use pdma_model_host::{
-    AsyncDriver, DriverPort,
-    compat::{AsyncDevicePort, SemanticDevicePort},
-};
+use pdma_model_device::AsyncDevice;
+use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
 
 #[tokio::test(flavor = "current_thread")]
 async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
@@ -34,7 +34,6 @@ async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
     let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let mut port = support::BlockingPort::new(device.handle());
 
@@ -64,12 +63,11 @@ async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
 async fn cloned_drivers_share_depth_one_command_credit() {
     // Given: two driver capabilities for one depth-one queue.
     let cpu = SoftwareCpu::new();
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
-    let mut port = SemanticDevicePort::new(&mut device);
+    let mut port = AsyncDevicePort::new(device.handle());
 
     // When: one capability consumes the only slot and the other submits.
     let (first, second) = cpu
@@ -106,7 +104,6 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let mut handle = AsyncDevicePort::new(runner.handle());
@@ -144,18 +141,19 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
 #[tokio::test(flavor = "current_thread")]
 async fn irq_controls_are_available_through_async_device_port() {
     // Given: a manual device used through the host port trait.
-    let mut device = SyncDevice::from_core(pdma_model_device::DeviceCore::new(
+    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let queue = device
+        .handle()
         .create_queue(QueueConfig::new(
             4,
             4,
             EventRouting::QueueLocal,
             SoftwareOwnerId::new(0),
         ))
+        .await
         .expect("queue setup is valid");
     let valid_source = queue.completion_irq_source();
     let unknown_source = IrqSource::Completion(CompletionRingId::new(99));
@@ -163,20 +161,16 @@ async fn irq_controls_are_available_through_async_device_port() {
         pdma_model_contract::semantic::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
 
     // When: host code controls IRQ state through the AsyncDevicePort abstraction.
-    let mut port = SemanticDevicePort::new(&mut device);
+    let mut port = AsyncDevicePort::new(device.handle());
     let enable_result = DriverPort::enable_irq_source(&mut port, valid_source).await;
     let unmask_result = DriverPort::unmask_irq_source(&mut port, valid_source).await;
     let invalid_result = DriverPort::enable_irq_source(&mut port, unknown_capability).await;
-    let wait_result = DriverPort::wait_irq(&port).await;
 
-    // Then: valid controls succeed, unknown controls fail, and wait-line access is callable.
+    // Then: valid controls succeed and unknown controls fail without creating state.
     assert_eq!(enable_result, Ok(()));
     assert_eq!(unmask_result, Ok(()));
     assert_eq!(
         invalid_result,
         Err(PortError::UnknownIrqSource(unknown_source))
     );
-    assert_eq!(wait_result, None);
 }
-
-include!("async_driver/stale_capability.rs");

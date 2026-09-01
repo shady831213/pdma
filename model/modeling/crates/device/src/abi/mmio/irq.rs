@@ -65,7 +65,7 @@ pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScala
     }
 }
 
-pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
+pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) -> bool {
     let bank = &mut state.registers.irq;
     match register {
         IrqRegister::ExpectedEpoch => bank.expected_epoch = value,
@@ -73,9 +73,7 @@ pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
         IrqRegister::SourceKind => bank.source_kind = narrow_u32(value),
         IrqRegister::RouteKind => bank.route_kind = narrow_u32(value),
         IrqRegister::RouteVector => bank.route_vector = value,
-        IrqRegister::Command => {
-            execute(state, narrow_u32(value));
-        }
+        IrqRegister::Command => return execute(state, narrow_u32(value)),
         IrqRegister::Result
         | IrqRegister::Detail0
         | IrqRegister::Detail1
@@ -90,9 +88,10 @@ pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) {
         | IrqRegister::RspMessageId
         | IrqRegister::RspPendingMessages => {}
     }
+    false
 }
 
-fn execute(state: &mut DeviceCore, raw_command: u32) {
+fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
     let bank = &state.registers.irq;
     let staged = (
         bank.expected_epoch,
@@ -124,9 +123,7 @@ fn execute(state: &mut DeviceCore, raw_command: u32) {
         Err(result) => (result, ResponseUpdate::Preserve, false),
     };
     state.registers.irq.command.complete(result, update);
-    if changed {
-        state.mark_changed();
-    }
+    changed
 }
 
 struct CommandOutcome {

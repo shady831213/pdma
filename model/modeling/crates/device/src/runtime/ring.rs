@@ -12,7 +12,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = control::activate_staged(&mut state, proposal, activation);
+            let result = control::activate_staged(&mut state.core, proposal, activation);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -31,7 +31,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = control::activate_mapped(&mut state, activation);
+            let result = control::activate_mapped(&mut state.core, activation);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -50,7 +50,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = control::transactions::accept_submission(&mut state, request);
+            let result = control::transactions::accept_submission(&mut state.core, request);
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -69,7 +69,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueStatus, PdmaControlError> {
         let (result, changed, generation) = {
             let mut state = self.shared.state.lock().await;
-            let (result, changed) = control::transactions::control(&mut state, request);
+            let (result, changed) = control::transactions::control(&mut state.core, request);
             if changed {
                 wake(&mut state);
             }

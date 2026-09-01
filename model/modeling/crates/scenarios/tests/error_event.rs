@@ -19,7 +19,6 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, queue_id, command_id, src, no_completion, no_event) = SoftwareCpu::new()
@@ -86,7 +85,6 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (second_before, snapshot, event, queue_id, submit_after_ok) = SoftwareCpu::new()
@@ -144,7 +142,6 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, wrong_event, owner_event, owner_queue_id, first_submit_ok, second_submit) =

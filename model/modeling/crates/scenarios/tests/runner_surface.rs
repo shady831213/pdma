@@ -11,7 +11,6 @@ async fn async_runner_surface_interleaves_software_and_hardware_turns() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, completion, snapshot, copied) = SoftwareCpu::new()
@@ -65,7 +64,6 @@ async fn async_runner_surface_poll_before_progress_observes_no_completion() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, early_completion, completion, snapshot, copied) = SoftwareCpu::new()
@@ -124,7 +122,6 @@ async fn async_runner_surface_records_errors_without_stopping_the_loop() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (bad_command, good_command, error_snapshot, fault, progress_snapshot, completion, copied) =
@@ -208,7 +205,6 @@ async fn async_runner_surface_reports_a_shutdown_and_join_summary() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, completion, snapshot, copied) = SoftwareCpu::new()

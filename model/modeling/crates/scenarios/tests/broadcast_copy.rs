@@ -15,7 +15,6 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, no_completion, left_bytes, right_bytes) =
@@ -96,7 +95,6 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, command_id, bad_dst, no_completion) = SoftwareCpu::new()
@@ -169,7 +167,6 @@ async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, src_bytes, dst_bytes) = SoftwareCpu::new()

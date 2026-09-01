@@ -6,7 +6,6 @@ pub(super) async fn run_strided_completion_retry_scenario() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (stalled_snapshot, second_snapshot, second_completion, second_command, second_dst_bytes) =

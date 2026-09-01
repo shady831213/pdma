@@ -21,7 +21,6 @@ async fn pending_real_lock_drop_repeats_without_mutation_then_recovers() -> Test
     let (device, _worker) = AsyncDevice::from_core(crate::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = device.handle();
     let sentinel = handle.allocate_memory_region(64).await?;
@@ -46,11 +45,11 @@ async fn pending_real_lock_drop_repeats_without_mutation_then_recovers() -> Test
                 .await;
         assert!(pending);
         drop(batch);
-        assert_eq!(state.dma.generation(), 1);
-        assert_eq!(state.dma.region_for_object(proposed_object), None);
+        assert_eq!(state.core.dma.generation(), 1);
+        assert_eq!(state.core.dma.region_for_object(proposed_object), None);
         assert_eq!(state.generation, before.generation());
         assert_eq!(state.wake_generation, wake_before);
-        assert!(state.exact_ring(activation.queue()).is_err());
+        assert!(state.core.exact_ring(activation.queue()).is_err());
         drop(state);
         assert_eq!(
             handle.read_memory(sentinel.base(), 64).await?,

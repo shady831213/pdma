@@ -29,7 +29,8 @@ pub(crate) struct ExactQueueIo {
 }
 
 impl ExactQueueIo {
-    pub(crate) const fn unconfigured() -> Self {
+    #[cfg(test)]
+    pub(crate) const fn inactive_for_test() -> Self {
         Self {
             active: None,
             pending_fault: None,

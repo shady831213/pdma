@@ -32,7 +32,6 @@ pub(super) async fn fixture(resources: ResourceConfig) -> TestResult<Fixture> {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         resources,
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let handle = runner.handle();
     let (queue, submission) = activate(&handle, QueueId::new(0)).await?;

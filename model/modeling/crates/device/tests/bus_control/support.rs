@@ -9,7 +9,6 @@ pub fn new_handle() -> AsyncDeviceHandle {
         pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
             std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
             pdma_model_contract::semantic::ResourceConfig::default(),
-            std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
         ));
     device.handle()
 }

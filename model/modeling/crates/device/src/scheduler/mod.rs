@@ -22,15 +22,10 @@ impl Scheduler {
         self.runnable.front().copied()
     }
 
-    pub(crate) fn is_idle(&self) -> bool {
-        self.runnable.is_empty()
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.runnable.len()
-    }
-
     pub(crate) fn reset(&mut self) {
         self.runnable.clear();
     }
 }
+
+#[cfg(test)]
+mod tests;

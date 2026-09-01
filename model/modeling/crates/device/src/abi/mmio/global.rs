@@ -61,15 +61,22 @@ pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioSc
     }
 }
 
-pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64) {
+pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64) -> bool {
     let bank = &mut state.registers.global;
     match register {
-        GlobalRegister::ReqAbiVersion => bank.req_abi_version = narrow_u32(value),
-        GlobalRegister::ReqFeatures => bank.req_features = value,
-        GlobalRegister::ResetExpectedEpoch => bank.reset_expected_epoch = value,
-        GlobalRegister::Command => {
-            execute(state, narrow_u32(value));
+        GlobalRegister::ReqAbiVersion => {
+            bank.req_abi_version = narrow_u32(value);
+            false
         }
+        GlobalRegister::ReqFeatures => {
+            bank.req_features = value;
+            false
+        }
+        GlobalRegister::ResetExpectedEpoch => {
+            bank.reset_expected_epoch = value;
+            false
+        }
+        GlobalRegister::Command => execute(state, narrow_u32(value)),
         GlobalRegister::Magic
         | GlobalRegister::MmioAbiVersion
         | GlobalRegister::Result
@@ -84,27 +91,36 @@ pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64
         | GlobalRegister::MaxIndirectDestinations
         | GlobalRegister::MaxTransferBytes
         | GlobalRegister::MaxStridedRows
-        | GlobalRegister::MaxStride => {}
+        | GlobalRegister::MaxStride => false,
     }
 }
 
-fn execute(state: &mut DeviceCore, raw: u32) {
+fn execute(state: &mut DeviceCore, raw: u32) -> bool {
     let Ok(command) = GlobalCommand::try_from(raw) else {
         complete_failure(
             state,
             details(MmioResult::UnknownCommand, [u64::from(raw), 0, 0]),
         );
-        return;
+        return false;
     };
     match command {
-        GlobalCommand::Discover => discover(state),
-        GlobalCommand::ReadLimits => read_limits(state),
-        GlobalCommand::ReadStatus => read_status(state),
+        GlobalCommand::Discover => {
+            discover(state);
+            false
+        }
+        GlobalCommand::ReadLimits => {
+            read_limits(state);
+            false
+        }
+        GlobalCommand::ReadStatus => {
+            read_status(state);
+            false
+        }
         GlobalCommand::Reset => reset(state),
     }
 }
 
-fn reset(state: &mut DeviceCore) {
+fn reset(state: &mut DeviceCore) -> bool {
     let expected_epoch = state.registers.global.reset_expected_epoch;
     match super::reset::execute(state, expected_epoch) {
         super::reset::ResetOutcome::Success(epoch) => {
@@ -115,9 +131,12 @@ fn reset(state: &mut DeviceCore) {
                     ..GlobalResponseBank::default()
                 },
             );
-            state.mark_changed();
+            true
         }
-        super::reset::ResetOutcome::Rejected(_, result) => complete_failure(state, result),
+        super::reset::ResetOutcome::Rejected(_, result) => {
+            complete_failure(state, result);
+            false
+        }
     }
 }
 

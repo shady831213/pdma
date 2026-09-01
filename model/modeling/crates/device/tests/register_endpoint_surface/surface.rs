@@ -15,11 +15,13 @@ use std::task::{Context, Poll, Waker};
 pub async fn run() -> TestResult {
     // Given: one live core, its clone-shared endpoint, and every generated register placement.
     let observer = Arc::new(RecordingObserver::default());
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        ResourceConfig::default(),
+    let (device, worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(
+            Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            ResourceConfig::default(),
+        ),
         observer.clone(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();

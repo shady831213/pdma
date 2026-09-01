@@ -107,16 +107,15 @@ pub(crate) struct CommittedBatch {
     response: QueueResponseBytes,
     command: PreparedWrite,
     reservation: ObservationReservation,
-    generation: usize,
 }
 
 impl CommittedBatch {
-    pub(crate) fn emit(self) -> Result<(QueueResponseBytes, usize), PdmaBatchError> {
+    pub(crate) fn emit(self) -> Result<QueueResponseBytes, PdmaBatchError> {
         let observation = self
             .command
             .observation(self.reservation.start_sequence(), AccessOrigin::Batch);
         self.reservation.emit(vec![observation])?;
-        Ok((self.response, self.generation))
+        Ok(self.response)
     }
 }
 

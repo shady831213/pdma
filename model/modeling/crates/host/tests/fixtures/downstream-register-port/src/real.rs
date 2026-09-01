@@ -35,11 +35,10 @@ impl RegisterObserver for Observer {
 
 pub async fn run(alignment: MemoryAlignment) -> TestResult<RealResult> {
     let observer = Arc::new(Observer::default());
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
-        ResourceConfig::default(),
+    let (device, worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default()),
         observer.clone(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let access = AsyncDeviceAccess::new(handle.clone());

@@ -11,7 +11,7 @@ impl AsyncDeviceHandle {
     /// Reports notification readiness without consuming a line assertion or message.
     pub async fn irq_notification_ready(&self) -> bool {
         let state = self.shared.state.lock().await;
-        irq_notification_ready(&state)
+        irq_notification_ready(&state.core)
     }
 
     /// Waits for notification readiness without consuming it, or returns false on shutdown.
@@ -23,7 +23,7 @@ impl AsyncDeviceHandle {
                 if state.shutdown_requested {
                     return false;
                 }
-                if irq_notification_ready(&state) {
+                if irq_notification_ready(&state.core) {
                     return true;
                 }
                 state.generation
@@ -40,7 +40,7 @@ impl AsyncDeviceHandle {
     /// Returns the complete non-consuming state bits for one IRQ source.
     pub async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
         let state = self.shared.state.lock().await;
-        observe_irq_source(&state, source).map(|view| view.status)
+        observe_irq_source(&state.core, source).map(|view| view.status)
     }
     /// Configures the delivery route of an inactive PDMA-local IRQ source.
     pub async fn configure_irq_route(
@@ -82,7 +82,7 @@ impl AsyncDeviceHandle {
             let mut state = self.shared.state.lock().await;
             let result = {
                 let state = &mut *state;
-                state.ack_irq_source(source)
+                state.core.ack_irq_source(source)
             };
             super::wake(&mut state);
             (result, state.generation)
@@ -93,7 +93,7 @@ impl AsyncDeviceHandle {
 
     /// Returns the current pending IRQ snapshot, if any.
     pub async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        self.shared.state.lock().await.irq_snapshot()
+        self.shared.state.lock().await.core.irq_snapshot()
     }
 
     /// Waits until the device has an asserted IRQ snapshot.
@@ -102,7 +102,10 @@ impl AsyncDeviceHandle {
         loop {
             let current = {
                 let state = self.shared.state.lock().await;
-                if let Some(snapshot) = state.irq_snapshot().filter(|snapshot| snapshot.asserted())
+                if let Some(snapshot) = state
+                    .core
+                    .irq_snapshot()
+                    .filter(|snapshot| snapshot.asserted())
                 {
                     return Some(snapshot);
                 }
@@ -129,7 +132,7 @@ impl AsyncDeviceHandle {
         loop {
             let current = {
                 let mut state = self.shared.state.lock().await;
-                if let Some(notification) = state.take_irq_notification() {
+                if let Some(notification) = state.core.take_irq_notification() {
                     return Some(notification);
                 }
                 if state.shutdown_requested {
@@ -141,7 +144,7 @@ impl AsyncDeviceHandle {
                 continue;
             }
             if changes.changed().await.is_err() {
-                return self.shared.state.lock().await.take_irq_notification();
+                return self.shared.state.lock().await.core.take_irq_notification();
             }
         }
     }

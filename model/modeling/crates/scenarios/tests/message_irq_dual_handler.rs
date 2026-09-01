@@ -196,7 +196,6 @@ fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
     AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ))
 }
 

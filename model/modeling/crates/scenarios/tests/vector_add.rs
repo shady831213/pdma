@@ -16,7 +16,6 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, no_completion, dst_bytes) = SoftwareCpu::new()
@@ -110,7 +109,6 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, event, src_b, no_completion) = SoftwareCpu::new()
@@ -178,7 +176,6 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_destinat
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, event, dst, no_completion) = SoftwareCpu::new()

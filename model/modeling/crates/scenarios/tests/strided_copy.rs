@@ -19,7 +19,6 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, queue_id, dst_bytes, no_completion) = SoftwareCpu::new()
@@ -98,7 +97,6 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (snapshot, no_completion) = SoftwareCpu::new()
@@ -142,7 +140,6 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         pdma_model_contract::semantic::ResourceConfig::default(),
-        std::sync::Arc::new(hardware_interface_runtime::NoopRegisterObserver),
     ));
     let worker = tokio::spawn(worker.run());
     let (error_snapshot, progress_snapshot, completion, good_command, good_dst_bytes) =

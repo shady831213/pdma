@@ -163,20 +163,6 @@ impl QueueBlock {
             .and_then(|context| context.io.pending_exact_fault())
     }
 
-    pub(crate) fn result_queue_count(&self) -> usize {
-        self.contexts
-            .iter()
-            .filter(|queue| {
-                queue.io.records_pending(true).unwrap_or(false)
-                    || queue.io.records_pending(false).unwrap_or(false)
-            })
-            .count()
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.contexts.len()
-    }
-
     pub(crate) fn clear(&mut self) {
         self.contexts.clear();
     }

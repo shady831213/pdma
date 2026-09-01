@@ -1,9 +1,12 @@
 //! Tokio actor facade over one shared device core.
 
-use super::state::summary;
+use super::state::{RunnerState, summary};
 use super::{
     AsyncRunSummary, DeviceCore, MmioRegisterEndpoint, ModelResult, PendingDmaResult, RunnerShared,
     publish, run_worker, wake,
+};
+use hardware_interface_runtime::{
+    NoopRegisterObserver, ObservationGate, RegisterObserver, SharedRegisterObserver,
 };
 use pdma_model_contract::semantic::trace::TraceEvent;
 use std::sync::Arc;
@@ -30,11 +33,20 @@ pub struct AsyncDeviceWorker {
 impl AsyncDevice {
     /// Consumes one device core into the asynchronous facade and worker.
     pub fn from_core(core: DeviceCore) -> (Self, AsyncDeviceWorker) {
+        Self::from_core_observed(core, Arc::new(NoopRegisterObserver))
+    }
+
+    /// Consumes one device core with an ordered register observer.
+    pub fn from_core_observed(
+        core: DeviceCore,
+        observer: Arc<dyn RegisterObserver>,
+    ) -> (Self, AsyncDeviceWorker) {
         let memory = core.dma.shared_memory();
         let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
-            state: tokio::sync::Mutex::new(core),
+            state: tokio::sync::Mutex::new(RunnerState::new(core)),
             changed,
+            register_gate: ObservationGate::new(SharedRegisterObserver::new(observer)),
         });
         let worker = AsyncDeviceWorker {
             shared: Arc::clone(&shared),
@@ -75,7 +87,7 @@ impl AsyncDeviceHandle {
 
     /// Returns committed invocations of the sole reset runner.
     pub async fn reset_runner_calls(&self) -> usize {
-        self.shared.state.lock().await.reset_runner_calls()
+        self.shared.state.lock().await.core.reset_runner_calls()
     }
 
     /// Requests worker shutdown.
@@ -91,7 +103,7 @@ impl AsyncDeviceHandle {
 
     /// Returns the one cached DMA completion or event before bus publication.
     pub async fn pending_dma_result(&self) -> Option<PendingDmaResult> {
-        self.shared.state.lock().await.pending_dma_result()
+        self.shared.state.lock().await.core.pending_dma_result()
     }
 
     /// Enables deterministic trace capture.
@@ -111,17 +123,17 @@ impl AsyncDeviceHandle {
 
     /// Returns captured trace events in deterministic sequence order.
     pub async fn trace_events(&self) -> Vec<TraceEvent> {
-        self.shared.state.lock().await.trace_events()
+        self.shared.state.lock().await.core.trace_events()
     }
 
     /// Returns normalized frontend fetches that entered the native step core.
     pub async fn native_steps(&self) -> usize {
-        self.shared.state.lock().await.native_steps()
+        self.shared.state.lock().await.core.native_steps()
     }
 
     /// Exports captured trace events as Chrome/Perfetto JSON.
     pub async fn trace_json(&self) -> String {
-        self.shared.state.lock().await.trace_json()
+        self.shared.state.lock().await.core.trace_json()
     }
 
     pub(crate) async fn with_device<T>(
@@ -130,7 +142,7 @@ impl AsyncDeviceHandle {
     ) -> ModelResult<T> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result = f(&mut state);
+            let result = f(&mut state.core);
             wake(&mut state);
             (result, state.generation)
         };
@@ -141,7 +153,7 @@ impl AsyncDeviceHandle {
     async fn with_device_unit(&self, f: impl FnOnce(&mut DeviceCore)) {
         let generation = {
             let mut state = self.shared.state.lock().await;
-            f(&mut state);
+            f(&mut state.core);
             wake(&mut state);
             state.generation
         };

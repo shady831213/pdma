@@ -22,11 +22,10 @@ async fn canonical_adapter_preserves_every_mmio_fate_and_full_state() -> TestRes
     use pdma_model_host::adapter::abi::PdmaRegisterAccessError;
 
     let observer = Arc::new(Observer::default());
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
-        ResourceConfig::default(),
+    let (device, worker) = AsyncDevice::from_core_observed(
+        DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default()),
         observer.clone(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let access = AsyncDeviceAccess::new(handle.clone());

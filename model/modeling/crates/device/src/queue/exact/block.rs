@@ -5,8 +5,7 @@ use crate::queue::{PdmaQueue, QueueBlock};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::QueueRingLayouts;
 use pdma_model_contract::semantic::{
-    CompletionRingId, DeviceEpoch, QueueActivation, QueueConfig, QueueConfigHandle,
-    QueueDirectoryEntry, QueueId,
+    CompletionRingId, DeviceEpoch, QueueActivation, QueueConfigHandle, QueueDirectoryEntry, QueueId,
 };
 
 pub(crate) struct PreparedExactQueue {
@@ -44,22 +43,6 @@ impl PreparedExactQueue {
 }
 
 impl QueueBlock {
-    pub(crate) fn create_exact(
-        &mut self,
-        epoch: DeviceEpoch,
-        config: QueueConfig,
-    ) -> ModelResult<QueueConfigHandle> {
-        self.contexts
-            .try_reserve_exact(1)
-            .map_err(|_| ModelError::DmaAllocationExhausted)?;
-        let queue = QueueId::new(self.contexts.len());
-        let completion = CompletionRingId::new(self.contexts.len());
-        let context = PdmaQueue::exact_unconfigured(queue, completion, config);
-        let entry = context.entry;
-        self.contexts.push(context);
-        Ok(QueueConfigHandle::new(epoch, entry))
-    }
-
     pub(crate) fn prepare_exact(
         &mut self,
         prepared: PreparedExactQueue,

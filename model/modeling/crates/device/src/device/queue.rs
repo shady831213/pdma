@@ -57,13 +57,6 @@ impl DeviceCore {
         Ok(event)
     }
 
-    pub(crate) fn create_dma_bus_queue(
-        &mut self,
-        config: QueueConfig,
-    ) -> ModelResult<QueueConfigHandle> {
-        self.queues.create_exact(self.epoch, config)
-    }
-
     pub(crate) fn prepare_dma_bus_queue(
         &mut self,
         prepared: PreparedExactQueue,

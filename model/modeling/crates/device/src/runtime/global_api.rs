@@ -21,6 +21,6 @@ impl AsyncDeviceHandle {
     /// Returns the current typed device status snapshot.
     pub async fn current_status(&self) -> DeviceStatus {
         let state = self.shared.state.lock().await;
-        status(&state)
+        status(&state.core)
     }
 }

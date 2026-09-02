@@ -1,3 +1,4 @@
+mod access;
 mod error;
 mod layout;
 mod ordered;
@@ -6,6 +7,7 @@ mod resolved;
 mod validation;
 
 pub use crate::register::RegisterSpec;
+pub use access::{RegisterAccessGroup, RegisterAccessLeaf, RegisterAccessPath};
 pub use error::{RegisterMapError, RegisterMapValidationError};
 pub use ordered::{
     OrderedRegisterMapSpec, RegisterCollection, RegisterLayoutGeometry, RegisterMapPlacement,

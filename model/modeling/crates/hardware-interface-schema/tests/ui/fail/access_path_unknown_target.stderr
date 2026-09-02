@@ -1,0 +1,5 @@
+error: access path target is not a declared root placement
+ --> tests/ui/fail/access_path_unknown_target.rs:5:20
+  |
+5 |     global.word => absent,
+  |                    ^^^^^^

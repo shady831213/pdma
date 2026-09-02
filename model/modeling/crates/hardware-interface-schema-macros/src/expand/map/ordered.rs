@@ -9,6 +9,7 @@ mod values;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
+use crate::internal::expand::register::variant;
 use crate::internal::{crate_path, syntax::OrderedMapDecl};
 
 use self::{
@@ -84,6 +85,20 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     let accessor_items = accessors::expand(decl, &context, &geometry);
     let root_collectors = leaf_collectors(decl, marker, &id_name, &facade, &geometry, true);
     let nested_collectors = leaf_collectors(decl, marker, &id_name, &facade, &geometry, false);
+    let access_paths = decl
+        .access
+        .iter()
+        .flatten()
+        .map(|entry| {
+            let group_names = entry.groups.iter().map(syn::Ident::to_string);
+            let leaf_name = entry.leaf.to_string();
+            let target = variant(&entry.target.to_string());
+            quote!(#facade::RegisterAccessPath::new(
+                &[#(#facade::RegisterAccessGroup::new(#group_names)),*],
+                #facade::RegisterAccessLeaf::new(#leaf_name, #id_name::#target),
+            ))
+        })
+        .collect();
 
     Ok(emit(Emission {
         visibility,
@@ -103,5 +118,6 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
         assertions,
         value_items,
         accessor_items,
+        access_paths,
     }))
 }

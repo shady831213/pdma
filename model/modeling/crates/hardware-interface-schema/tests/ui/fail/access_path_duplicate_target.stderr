@@ -1,0 +1,5 @@
+error: register map placement has more than one access path
+ --> tests/ui/fail/access_path_duplicate_target.rs:6:19
+  |
+6 |     alias.word => word,
+  |                   ^^^^

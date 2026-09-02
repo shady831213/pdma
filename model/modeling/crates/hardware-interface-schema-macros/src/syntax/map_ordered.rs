@@ -12,6 +12,13 @@ pub(in crate::internal) struct OrderedMapDecl {
     pub(in crate::internal) alignment: (usize, proc_macro2::Span),
     pub(in crate::internal) extent: Option<(usize, proc_macro2::Span)>,
     pub(in crate::internal) placements: Vec<OrderedPlacementDecl>,
+    pub(in crate::internal) access: Option<Vec<AccessPathDecl>>,
+}
+
+pub(in crate::internal) struct AccessPathDecl {
+    pub(in crate::internal) groups: Vec<Ident>,
+    pub(in crate::internal) leaf: Ident,
+    pub(in crate::internal) target: Ident,
 }
 
 pub(in crate::internal) struct OrderedPlacementDecl {
@@ -48,13 +55,49 @@ impl Parse for OrderedMapDecl {
             .parse_terminated(OrderedPlacementDecl::parse, Token![,])?
             .into_iter()
             .collect();
-        let _ = body.parse::<Token![,]>();
+        if body.peek(Token![,]) {
+            body.parse::<Token![,]>()?;
+        }
+        let access = if body.is_empty() {
+            None
+        } else {
+            key(&body, "access")?;
+            let access_body;
+            bracketed!(access_body in body);
+            let entries = access_body
+                .parse_terminated(AccessPathDecl::parse, Token![,])?
+                .into_iter()
+                .collect();
+            let _ = body.parse::<Token![,]>();
+            Some(entries)
+        };
         Ok(Self {
             visibility,
             name,
             alignment,
             extent,
             placements,
+            access,
+        })
+    }
+}
+
+impl Parse for AccessPathDecl {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let first = input.parse()?;
+        let mut segments = vec![first];
+        while input.peek(Token![.]) {
+            input.parse::<Token![.]>()?;
+            segments.push(input.parse()?);
+        }
+        input.parse::<Token![=>]>()?;
+        let leaf = segments
+            .pop()
+            .ok_or_else(|| input.error("access path must contain a leaf name"))?;
+        Ok(Self {
+            groups: segments,
+            leaf,
+            target: input.parse()?,
         })
     }
 }

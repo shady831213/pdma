@@ -19,6 +19,7 @@ pub(super) struct Emission<'a> {
     pub(super) assertions: Vec<TokenStream>,
     pub(super) value_items: TokenStream,
     pub(super) accessor_items: TokenStream,
+    pub(super) access_paths: Vec<TokenStream>,
 }
 
 pub(super) fn emit(input: Emission<'_>) -> TokenStream {
@@ -40,6 +41,7 @@ pub(super) fn emit(input: Emission<'_>) -> TokenStream {
         assertions,
         value_items,
         accessor_items,
+        access_paths,
     } = input;
     quote! {
         #[doc = "Stable identities for ordered map placements."]
@@ -58,6 +60,7 @@ pub(super) fn emit(input: Emission<'_>) -> TokenStream {
             #[doc = "Exact encoded byte extent for this map."] pub const EXTENT: usize = #extent;
             const __PLACEMENTS: &'static [#facade::RegisterMapPlacement<#id_name>] = &[#(#placements),*];
             #[doc = "Ordered child-layout metadata."] pub const SPEC: #facade::OrderedRegisterMapSpec<#id_name> = #facade::OrderedRegisterMapSpec::new(#marker_name, #alignment, #extent, Self::__PLACEMENTS);
+            #[doc = "Explicit access-only paths in declaration order."] pub const ACCESS_PATHS: &'static [#facade::RegisterAccessPath<#id_name>] = &[#(#access_paths),*];
             #[doc = "Resolves every recursively placed leaf register."]
             pub fn resolve() -> ::core::result::Result<#facade::ResolvedRegisterMap<#id_name>, #facade::RegisterMapError<#id_name>> {
                 Self::__resolved().clone()

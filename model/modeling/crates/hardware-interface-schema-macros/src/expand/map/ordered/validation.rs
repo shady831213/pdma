@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use crate::internal::syntax::OrderedMapDecl;
 
 pub(super) fn validate(decl: &OrderedMapDecl) -> syn::Result<()> {
+    crate::internal::validate::map_access::validate(decl)?;
     if decl.alignment.0 == 0 || !decl.alignment.0.is_power_of_two() {
         return Err(syn::Error::new(
             decl.alignment.1,

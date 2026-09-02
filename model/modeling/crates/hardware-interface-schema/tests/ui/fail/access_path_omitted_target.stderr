@@ -1,0 +1,5 @@
+error: register map placement is missing an access path
+ --> tests/ui/fail/access_path_omitted_target.rs:4:71
+  |
+4 | register_map! { pub map Bad { alignment: 4, placements: [first: Word, omitted: Word], access: [
+  |                                                                       ^^^^^^^

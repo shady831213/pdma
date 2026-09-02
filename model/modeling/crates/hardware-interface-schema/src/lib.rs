@@ -44,10 +44,11 @@ pub use register::{
     RegisterValueView, RegisterValueViewMut, ResetKind,
 };
 pub use register_map::{
-    OrderedRegisterMapSpec, RegisterCollection, RegisterLayoutGeometry, RegisterLocation,
-    RegisterMapError, RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError,
-    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
-    append_register_leaf, finish_ordered_register_map,
+    OrderedRegisterMapSpec, RegisterAccessGroup, RegisterAccessLeaf, RegisterAccessPath,
+    RegisterCollection, RegisterLayoutGeometry, RegisterLocation, RegisterMapError,
+    RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError, RepeatedRegisterBank,
+    ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap, append_register_leaf,
+    finish_ordered_register_map,
 };
 pub use scalar::{Scalar, ScalarKind};
 

@@ -3,7 +3,7 @@ mod map_ordered;
 mod record;
 mod register;
 
-pub(in crate::internal) use map_ordered::{OrderedMapDecl, OrderedPlacementDecl};
+pub(in crate::internal) use map_ordered::{AccessPathDecl, OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{
     BitsDecl, EnumDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, ScopedPath,
     UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,

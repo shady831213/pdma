@@ -1,0 +1,5 @@
+error: expected identifier
+ --> tests/ui/fail/access_path_empty.rs:5:5
+  |
+5 |     => word,
+  |     ^

@@ -1,0 +1,5 @@
+error: access path name cannot be both a leaf and a group
+ --> tests/ui/fail/access_path_leaf_group_collision.rs:6:5
+  |
+6 |     same.child => second,
+  |     ^^^^

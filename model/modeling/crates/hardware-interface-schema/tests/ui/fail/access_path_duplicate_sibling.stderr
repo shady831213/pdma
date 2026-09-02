@@ -1,0 +1,5 @@
+error: duplicate access path sibling name
+ --> tests/ui/fail/access_path_duplicate_sibling.rs:6:11
+  |
+6 |     group.same => second,
+  |           ^^^^

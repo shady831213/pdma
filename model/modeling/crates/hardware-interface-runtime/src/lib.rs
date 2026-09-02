@@ -8,6 +8,7 @@ mod error;
 mod interrupt;
 mod region;
 mod register;
+mod storage;
 mod store;
 mod trace;
 
@@ -28,6 +29,7 @@ pub use register::{
     ObservationGateError, ObservationReservation, RegisterAccess, RegisterObservation,
     RegisterObserver, SharedRegisterObserver,
 };
+pub use storage::{LocalStorage, MutexStorage, StorageBackend, StorageError};
 pub use store::{
     MemoryTransaction, MemoryTransactionDraft, PreparedRegions, SharedMemory,
     TransactionPreparedRegions,

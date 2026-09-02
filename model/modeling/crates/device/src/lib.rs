@@ -6,6 +6,8 @@ pub mod adapter;
 pub mod dma;
 #[doc(hidden)]
 pub mod execution;
+#[allow(clippy::redundant_pub_crate)]
+mod interface;
 #[doc(hidden)]
 pub mod irq;
 #[doc(hidden)]
@@ -24,11 +26,11 @@ pub mod trace;
 #[doc(hidden)]
 pub mod device;
 
-pub use abi::{
-    DmaBatchContext, MmioRegisterError, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes,
-    SubmissionBatch,
-};
+pub use abi::MmioRegisterError;
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
+pub use interface::batch::{
+    DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
+};
 pub use queue::exact::{
     DmaWrite, PdmaControlError, PendingDmaResult, QueueStatus, SubmissionAcceptance,
 };

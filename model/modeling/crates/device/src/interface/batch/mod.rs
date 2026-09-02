@@ -1,16 +1,15 @@
 //! Atomic exact-ABI queue batches and their typed failures.
 
-use super::{PdmaControlError, SubmissionAcceptance};
 use crate::MappedDmaRegion;
 use crate::abi::endpoint::PreparedWrite;
 use crate::abi::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
+use crate::queue::exact::{DmaWrite, PdmaControlError, SubmissionAcceptance};
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::semantic::QueueActivation;
 
 mod error;
 pub use error::{DmaBatchContext, PdmaBatchError};
-#[doc(hidden)]
-pub mod commit;
+mod commit;
 pub(crate) use commit::{commit_bootstrap, commit_submission};
 
 #[cfg(test)]
@@ -87,8 +86,8 @@ impl SubmissionBatch {
     pub const fn new(
         queue: pdma_model_contract::semantic::EpochQueue,
         expected_producer: pdma_model_contract::semantic::RingCursor,
-        descriptor: super::DmaWrite,
-        indirect: Option<(crate::PdmaMemoryStage, super::DmaWrite)>,
+        descriptor: DmaWrite,
+        indirect: Option<(crate::PdmaMemoryStage, DmaWrite)>,
     ) -> Self {
         Self(SubmissionAcceptance::new(
             queue,
@@ -130,10 +129,7 @@ pub(super) fn command_error(
     ))
 }
 
-pub(super) fn map_access_error(
-    error: crate::PdmaMemoryError,
-    write: &super::DmaWrite,
-) -> PdmaBatchError {
+pub(super) fn map_access_error(error: crate::PdmaMemoryError, write: &DmaWrite) -> PdmaBatchError {
     PdmaBatchError::from_dma(
         error,
         DmaBatchContext::Access {

@@ -30,7 +30,7 @@ pub struct DeviceCore {
     trace: TraceSink,
     reset_runner_calls: usize,
     #[cfg(test)]
-    pub(crate) batch_fault: std::cell::Cell<Option<crate::abi::ring::BatchPreparationFault>>,
+    pub(crate) batch_fault: std::cell::Cell<Option<crate::interface::batch::BatchPreparationFault>>,
 }
 
 impl DeviceCore {

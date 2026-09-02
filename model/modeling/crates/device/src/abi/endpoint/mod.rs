@@ -73,7 +73,7 @@ impl PreparedWrite {
     }
 }
 
-pub(super) struct PreparedBatchWrite {
+pub(crate) struct PreparedBatchWrite {
     write: PreparedWrite,
     mutation: PreparedBatchRegisterMutation,
 }
@@ -99,7 +99,7 @@ impl BatchQueueCommand {
 }
 
 impl PreparedBatchWrite {
-    pub(super) fn commit(self, state: &mut DeviceCore) -> PreparedWrite {
+    pub(crate) fn commit(self, state: &mut DeviceCore) -> PreparedWrite {
         match self.mutation {
             PreparedBatchRegisterMutation::Bootstrap(staging, response) => {
                 state
@@ -130,7 +130,7 @@ fn prepare_batch_write(
     })
 }
 
-pub(super) fn prepare_bootstrap_batch_write(
+pub(crate) fn prepare_bootstrap_batch_write(
     staging: BootstrapBatchStaging,
     response: QueueResponseBank,
 ) -> Result<PreparedBatchWrite, MmioAccessError> {
@@ -140,7 +140,7 @@ pub(super) fn prepare_bootstrap_batch_write(
     )
 }
 
-pub(super) fn prepare_submission_batch_write(
+pub(crate) fn prepare_submission_batch_write(
     staging: SubmissionBatchStaging,
     response: QueueResponseBank,
 ) -> Result<PreparedBatchWrite, MmioAccessError> {

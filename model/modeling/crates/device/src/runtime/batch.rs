@@ -1,5 +1,8 @@
 use super::{AsyncDeviceHandle, publish, wake};
-use crate::abi::ring::{PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch};
+use crate::interface::batch::{
+    PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch, commit_bootstrap,
+    commit_submission,
+};
 
 impl AsyncDeviceHandle {
     /// Applies one closed bootstrap batch under one lock after complete projection.
@@ -9,11 +12,8 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueResponseBytes, PdmaBatchError> {
         let (committed, generation) = {
             let mut state = self.shared.state.lock().await;
-            let committed = crate::abi::ring::batch::commit_bootstrap(
-                &mut state.core,
-                &request,
-                &self.shared.register_gate,
-            )?;
+            let committed =
+                commit_bootstrap(&mut state.core, &request, &self.shared.register_gate)?;
             wake(&mut state);
             (committed, state.generation)
         };
@@ -29,7 +29,7 @@ impl AsyncDeviceHandle {
     ) -> Result<QueueResponseBytes, PdmaBatchError> {
         let (committed, generation) = {
             let mut state = self.shared.state.lock().await;
-            let committed = crate::abi::ring::batch::commit_submission(
+            let committed = commit_submission(
                 &mut state.core,
                 request.request(),
                 &self.shared.register_gate,

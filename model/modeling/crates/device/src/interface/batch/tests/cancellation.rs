@@ -1,5 +1,5 @@
 use super::*;
-use crate::abi::ring::{DmaWrite, SubmissionBatch};
+use crate::{DmaWrite, SubmissionBatch};
 use pdma_model_contract::semantic::RingCursor;
 use std::future::{Future, poll_fn};
 

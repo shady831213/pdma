@@ -100,7 +100,7 @@ impl DeviceCore {
 }
 mod irq;
 #[doc(hidden)]
-pub mod pipeline;
+pub(crate) mod pipeline;
 mod probe;
 mod queue;
 mod trace;

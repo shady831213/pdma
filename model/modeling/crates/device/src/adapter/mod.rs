@@ -2,4 +2,4 @@
 
 #[doc(hidden)]
 #[doc(hidden)]
-pub mod command;
+pub(crate) mod command;

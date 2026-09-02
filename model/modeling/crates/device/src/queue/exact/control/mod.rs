@@ -1,6 +1,4 @@
 //! Exact queue activation and cursor control.
 
-pub mod activation;
-pub mod transactions;
-
-pub use super::QueueStatus;
+pub(crate) mod activation;
+pub(crate) mod transactions;

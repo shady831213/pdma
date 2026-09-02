@@ -2,7 +2,7 @@
 
 #[doc(hidden)]
 #[doc(hidden)]
-pub mod controller;
+pub(crate) mod controller;
 
 pub(crate) use controller::PdmaIrqController;
 

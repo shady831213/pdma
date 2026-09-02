@@ -2,7 +2,7 @@
 
 mod broadcast;
 #[doc(hidden)]
-pub mod context;
+pub(crate) mod context;
 mod copy;
 mod memory;
 mod resources;

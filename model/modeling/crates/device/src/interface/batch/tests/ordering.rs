@@ -1,5 +1,5 @@
 use super::*;
-use crate::abi::ring::{DmaWrite, SubmissionBatch};
+use crate::{DmaWrite, SubmissionBatch};
 use std::sync::{Arc, Mutex};
 
 pub(super) struct CommitOrderObserver {

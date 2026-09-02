@@ -1,5 +1,5 @@
 use super::*;
-use crate::abi::ring::DmaWrite;
+use crate::DmaWrite;
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResult};
 use pdma_model_contract::semantic::RingCursor;

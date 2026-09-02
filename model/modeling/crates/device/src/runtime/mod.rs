@@ -13,7 +13,7 @@ mod queue;
 mod reset;
 mod ring;
 #[doc(hidden)]
-pub mod state;
+pub(crate) mod state;
 mod types;
 mod wait;
 mod worker;

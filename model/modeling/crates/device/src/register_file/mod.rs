@@ -1,13 +1,13 @@
 //! Device register-file storage behind the exact MMIO decoder.
 
 #[doc(hidden)]
-pub mod bank;
+pub(crate) mod bank;
 #[doc(hidden)]
-pub mod global;
+pub(crate) mod global;
 #[doc(hidden)]
-pub mod irq;
+pub(crate) mod irq;
 #[doc(hidden)]
-pub mod queue;
+pub(crate) mod queue;
 
 pub(crate) use bank::{CommandBank, MmioScalar, narrow_u32};
 pub(crate) use global::GlobalBank;

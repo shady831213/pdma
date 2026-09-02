@@ -1,30 +1,30 @@
 //! Async PDMA device model runner.
 
-pub mod abi;
-#[doc(hidden)]
-pub mod adapter;
+#[allow(clippy::redundant_pub_crate)]
+mod adapter;
 pub mod dma;
-#[doc(hidden)]
-pub mod execution;
+#[allow(clippy::redundant_pub_crate)]
+mod execution;
 #[allow(clippy::redundant_pub_crate)]
 mod interface;
-#[doc(hidden)]
-pub mod irq;
-#[doc(hidden)]
-pub mod queue;
-#[doc(hidden)]
-pub mod register_file;
-#[doc(hidden)]
-pub mod retirement;
-pub mod runtime;
-#[doc(hidden)]
-pub mod scheduler;
+#[allow(clippy::redundant_pub_crate)]
+mod irq;
+#[allow(clippy::redundant_pub_crate)]
+mod queue;
+#[allow(clippy::redundant_pub_crate)]
+mod register_file;
+#[allow(clippy::redundant_pub_crate)]
+mod retirement;
+#[allow(clippy::redundant_pub_crate)]
+mod runtime;
+#[allow(clippy::redundant_pub_crate)]
+mod scheduler;
 mod status;
-#[doc(hidden)]
-pub mod trace;
+#[allow(clippy::redundant_pub_crate)]
+mod trace;
 
-#[doc(hidden)]
-pub mod device;
+#[allow(clippy::redundant_pub_crate)]
+mod device;
 
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use interface::batch::{

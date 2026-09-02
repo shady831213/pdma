@@ -1,7 +1,7 @@
 mod completion;
 mod fault;
 #[doc(hidden)]
-pub mod ports;
+pub(crate) mod ports;
 
 pub(crate) use ports::RetirementPorts;
 

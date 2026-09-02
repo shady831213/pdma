@@ -1,13 +1,13 @@
 #[doc(hidden)]
-pub mod block;
-pub mod control;
+pub(crate) mod block;
+pub(crate) mod control;
 mod error;
 mod publication;
 mod request;
 #[doc(hidden)]
-pub mod ring_state;
+pub(crate) mod ring_state;
 #[doc(hidden)]
-pub mod state;
+pub(crate) mod state;
 mod status;
 mod submission;
 

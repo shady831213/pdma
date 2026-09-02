@@ -1,13 +1,13 @@
 #[doc(hidden)]
-pub mod block;
+pub(crate) mod block;
 #[doc(hidden)]
-pub mod exact;
+pub(crate) mod exact;
 #[doc(hidden)]
-pub mod io;
+pub(crate) mod io;
 #[doc(hidden)]
-pub mod ring;
+pub(crate) mod ring;
 #[doc(hidden)]
-pub mod semantic;
+pub(crate) mod semantic;
 
 #[cfg(test)]
 mod tests;

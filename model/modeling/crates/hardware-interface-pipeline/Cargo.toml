@@ -1,0 +1,12 @@
+[package]
+name = "hardware-interface-pipeline"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Runtime-neutral staged hardware-interface contracts"
+
+[lints]
+workspace = true

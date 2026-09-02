@@ -1,5 +1,3 @@
-//! Exact MMIO reset command execution.
-
 use crate::device::DeviceCore;
 use crate::queue::exact::PdmaControlError;
 use pdma_model_contract::abi::AbiControlError;

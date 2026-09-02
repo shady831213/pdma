@@ -1,7 +1,6 @@
 use super::reset::details;
 use crate::ModelError;
 use crate::device::DeviceCore;
-use crate::register_file::{MmioScalar, narrow_u32};
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
 };
@@ -12,86 +11,9 @@ use support::{
 
 mod notification;
 #[doc(hidden)]
-pub mod support;
+pub(crate) mod support;
 
-#[derive(Clone, Copy)]
-pub(super) enum IrqRegister {
-    ExpectedEpoch,
-    SourceId,
-    SourceKind,
-    RouteKind,
-    RouteVector,
-    Command,
-    Result,
-    Detail0,
-    Detail1,
-    Detail2,
-    RspEpoch,
-    RspSourceId,
-    RspSourceKind,
-    RspState,
-    RspRouteKind,
-    RspNotificationKind,
-    RspVector,
-    RspMessageId,
-    RspPendingMessages,
-}
-
-pub(super) const fn read(state: &DeviceCore, register: IrqRegister) -> MmioScalar {
-    let bank = &state.registers.irq;
-    let response = bank.command.response;
-    let result = bank.command.result;
-    let [detail0, detail1, detail2] = result.details;
-    match register {
-        IrqRegister::ExpectedEpoch => MmioScalar::U64(bank.expected_epoch),
-        IrqRegister::SourceId => MmioScalar::U64(bank.source_id),
-        IrqRegister::SourceKind => MmioScalar::U32(bank.source_kind),
-        IrqRegister::RouteKind => MmioScalar::U32(bank.route_kind),
-        IrqRegister::RouteVector => MmioScalar::U64(bank.route_vector),
-        IrqRegister::Command => MmioScalar::U32(0),
-        IrqRegister::Result => MmioScalar::U32(result.result.code()),
-        IrqRegister::Detail0 => MmioScalar::U64(detail0),
-        IrqRegister::Detail1 => MmioScalar::U64(detail1),
-        IrqRegister::Detail2 => MmioScalar::U64(detail2),
-        IrqRegister::RspEpoch => MmioScalar::U64(response.epoch.raw()),
-        IrqRegister::RspSourceId => MmioScalar::U64(response.source_id.raw()),
-        IrqRegister::RspSourceKind => MmioScalar::U32(response.source_kind.raw()),
-        IrqRegister::RspState => MmioScalar::U32(response.state.raw()),
-        IrqRegister::RspRouteKind => MmioScalar::U32(response.route_kind.raw()),
-        IrqRegister::RspNotificationKind => MmioScalar::U32(response.notification_kind.raw()),
-        IrqRegister::RspVector => MmioScalar::U64(response.vector.raw()),
-        IrqRegister::RspMessageId => MmioScalar::U64(response.message_id.raw()),
-        IrqRegister::RspPendingMessages => MmioScalar::U64(response.pending_messages.raw()),
-    }
-}
-
-pub(super) fn write(state: &mut DeviceCore, register: IrqRegister, value: u64) -> bool {
-    let bank = &mut state.registers.irq;
-    match register {
-        IrqRegister::ExpectedEpoch => bank.expected_epoch = value,
-        IrqRegister::SourceId => bank.source_id = value,
-        IrqRegister::SourceKind => bank.source_kind = narrow_u32(value),
-        IrqRegister::RouteKind => bank.route_kind = narrow_u32(value),
-        IrqRegister::RouteVector => bank.route_vector = value,
-        IrqRegister::Command => return execute(state, narrow_u32(value)),
-        IrqRegister::Result
-        | IrqRegister::Detail0
-        | IrqRegister::Detail1
-        | IrqRegister::Detail2
-        | IrqRegister::RspEpoch
-        | IrqRegister::RspSourceId
-        | IrqRegister::RspSourceKind
-        | IrqRegister::RspState
-        | IrqRegister::RspRouteKind
-        | IrqRegister::RspNotificationKind
-        | IrqRegister::RspVector
-        | IrqRegister::RspMessageId
-        | IrqRegister::RspPendingMessages => {}
-    }
-    false
-}
-
-fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
+pub(super) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
     let bank = &state.registers.irq;
     let staged = (
         bank.expected_epoch,

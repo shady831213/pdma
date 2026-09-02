@@ -1,16 +1,10 @@
-//! Exact register endpoint and transaction preparation.
-
-use super::mmio::dispatch;
-use super::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
+use super::dispatch;
+use super::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
 use crate::device::DeviceCore;
 use hardware_interface_runtime::{AccessOrigin, ObservationGateError, RegisterObservation};
 use pdma_model_contract::abi::mmio::QueueResponseBank;
 use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_write};
 use std::fmt::{self, Display, Formatter};
-
-#[doc(hidden)]
-pub mod claim;
-pub(crate) use claim::prepare_claim;
 
 /// Failure from an exact generated-view register operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,7 +40,7 @@ impl From<ObservationGateError> for MmioRegisterError {
 
 pub(crate) struct PreparedRead {
     pub(crate) response: Vec<u8>,
-    offset: u32,
+    pub(super) offset: u32,
 }
 
 impl PreparedRead {
@@ -59,8 +53,8 @@ impl PreparedRead {
 pub(crate) struct PreparedWrite {
     register: RegisterId,
     value: u64,
-    offset: u32,
-    request: Vec<u8>,
+    pub(super) offset: u32,
+    pub(super) request: Vec<u8>,
 }
 
 impl PreparedWrite {
@@ -123,9 +117,10 @@ fn prepare_batch_write(
     mutation: PreparedBatchRegisterMutation,
 ) -> Result<PreparedBatchWrite, MmioAccessError> {
     let bytes = command.code().to_le_bytes();
-    let (register, value) = decode_write(0x168, &bytes)?;
+    let offset = super::q_command_offset();
+    let (register, value) = decode_write(offset, &bytes)?;
     Ok(PreparedBatchWrite {
-        write: prepare_write(register, value, 0x168, &bytes),
+        write: prepare_write(register, value, offset, &bytes),
         mutation,
     })
 }
@@ -170,6 +165,3 @@ pub(crate) fn prepare_write(
         request: request.to_vec(),
     }
 }
-
-#[cfg(test)]
-mod tests;

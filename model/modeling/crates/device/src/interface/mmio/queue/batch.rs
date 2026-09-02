@@ -1,5 +1,3 @@
-//! Atomic queue MMIO batch staging.
-
 use crate::register_file::QueueBank;
 use pdma_model_contract::abi::mmio::{
     MmioResult, MmioResultDetails, QueueResponseBank, ResponseUpdate,

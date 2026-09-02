@@ -1,9 +1,7 @@
+use super::irq::support::{decode_source, irq_notification_ready};
 use super::{MmioRegisterError, PreparedRead, PreparedWrite, prepare_read, prepare_write};
-use crate::abi::mmio::irq::support::{decode_source, irq_notification_ready};
 use crate::device::DeviceCore;
-use hardware_interface_runtime::{
-    AccessOrigin, ObservationGate, ObservationReservation, RegisterObservation,
-};
+use hardware_interface_runtime::{AccessOrigin, RegisterObservation};
 use pdma_model_contract::abi::mmio::{
     IrqCommand, MmioAccessError, MmioResult, PdmaMmioMap, RegisterId, decode_u32, decode_u64,
     decode_write,
@@ -25,7 +23,6 @@ const RESPONSE_IDS: [RegisterId; 9] = [
 ];
 
 pub(crate) struct CommittedClaim {
-    reservation: ObservationReservation,
     observations: Vec<RegisterObservation>,
     notification: Option<IrqNotification>,
     changed: bool,
@@ -36,31 +33,28 @@ impl CommittedClaim {
         self.changed
     }
 
-    pub(crate) fn emit(self) -> Result<Option<IrqNotification>, MmioRegisterError> {
-        self.reservation.emit(self.observations)?;
-        Ok(self.notification)
+    pub(crate) fn into_parts(self) -> (Option<IrqNotification>, Vec<RegisterObservation>) {
+        (self.notification, self.observations)
     }
+}
 
-    pub(crate) fn emit_observed(
-        self,
-    ) -> Result<(Option<IrqNotification>, Vec<RegisterObservation>), MmioRegisterError> {
-        let observations = self.observations.clone();
-        self.reservation.emit(self.observations)?;
-        Ok((self.notification, observations))
+pub(crate) fn claim_observation_count(state: &DeviceCore) -> usize {
+    2 + if irq_notification_ready(state) {
+        RESPONSE_IDS.len()
+    } else {
+        0
     }
 }
 
 pub(crate) fn prepare_claim(
     state: &mut DeviceCore,
-    register_gate: &ObservationGate,
+    sequence: u64,
 ) -> Result<CommittedClaim, MmioRegisterError> {
     let response_count = if irq_notification_ready(state) {
         RESPONSE_IDS.len()
     } else {
         0
     };
-    let reservation = register_gate.reserve(2 + response_count)?;
-    let sequence = reservation.start_sequence();
     let command = prepare_for_id(
         RegisterId::ICommand,
         &IrqCommand::ClaimNotification.code().to_le_bytes(),
@@ -81,7 +75,6 @@ pub(crate) fn prepare_claim(
         decode_notification(&response)?
     };
     Ok(CommittedClaim {
-        reservation,
         observations,
         notification,
         changed,

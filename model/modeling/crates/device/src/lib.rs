@@ -26,11 +26,11 @@ pub mod trace;
 #[doc(hidden)]
 pub mod device;
 
-pub use abi::MmioRegisterError;
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
 };
+pub use interface::mmio::MmioRegisterError;
 pub use queue::exact::{
     DmaWrite, PdmaControlError, PendingDmaResult, QueueStatus, SubmissionAcceptance,
 };

@@ -99,7 +99,7 @@ fn queue_latch_values(state: &crate::DeviceCore) -> Vec<Vec<u8>> {
             let register = pdma_model_contract::abi::mmio::decode_read(offset, 8)
                 .or_else(|_| pdma_model_contract::abi::mmio::decode_read(offset, 4))
                 .expect("known queue latch decodes");
-            crate::abi::endpoint::prepare_read(state, register, offset).response
+            crate::interface::mmio::prepare_read(state, register, offset).response
         })
         .collect()
 }

@@ -10,9 +10,11 @@ impl AsyncDeviceHandle {
     pub async fn reset(&self, request: WholeDeviceReset) -> Result<DeviceEpoch, PdmaControlError> {
         let (result, generation) = {
             let mut state = self.shared.state.lock().await;
-            let result =
-                crate::abi::mmio::reset::execute(&mut state.core, request.expected_epoch().raw())
-                    .typed_result();
+            let result = crate::interface::mmio::reset::execute(
+                &mut state.core,
+                request.expected_epoch().raw(),
+            )
+            .typed_result();
             if result.is_ok() {
                 wake(&mut state);
             }
@@ -28,7 +30,7 @@ impl AsyncDeviceHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::mmio::reset::{self as mmio_reset, ResetOutcome};
+    use crate::interface::mmio::reset::{self as mmio_reset, ResetOutcome};
     use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
     use pdma_model_contract::semantic::{SemanticError, ids::BufferId};
 

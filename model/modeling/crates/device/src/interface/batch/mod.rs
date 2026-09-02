@@ -1,8 +1,7 @@
 //! Atomic exact-ABI queue batches and their typed failures.
 
 use crate::MappedDmaRegion;
-use crate::abi::endpoint::PreparedWrite;
-use crate::abi::mmio::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
+use crate::interface::mmio::{BootstrapBatchStaging, PreparedWrite, SubmissionBatchStaging};
 use crate::queue::exact::{DmaWrite, PdmaControlError, SubmissionAcceptance};
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::semantic::QueueActivation;
@@ -36,6 +35,7 @@ pub(super) fn reject_injected(
         return Ok(());
     }
     state.batch_fault.set(None);
+    let q_command_offset = crate::interface::mmio::q_command_offset();
     let error = match expected {
         BatchPreparationFault::Capacity => {
             PdmaBatchError::from_dma(crate::PdmaMemoryError::StorageExhausted, context)
@@ -44,14 +44,18 @@ pub(super) fn reject_injected(
             PdmaBatchError::from_dma(crate::PdmaMemoryError::OverlappingRegion, context)
         }
         BatchPreparationFault::Decode => PdmaBatchError::Access(
-            pdma_model_contract::abi::mmio::MmioAccessError::ReservedOffset { offset: 0x168 },
+            pdma_model_contract::abi::mmio::MmioAccessError::ReservedOffset {
+                offset: q_command_offset,
+            },
         ),
         BatchPreparationFault::Access => PdmaBatchError::Access(
-            pdma_model_contract::abi::mmio::MmioAccessError::WriteToReadOnly { offset: 0x168 },
+            pdma_model_contract::abi::mmio::MmioAccessError::WriteToReadOnly {
+                offset: q_command_offset,
+            },
         ),
         BatchPreparationFault::Mask => PdmaBatchError::Access(
             pdma_model_contract::abi::mmio::MmioAccessError::ReservedBits {
-                offset: 0x168,
+                offset: q_command_offset,
                 bits: 4,
             },
         ),
@@ -124,7 +128,7 @@ pub(super) fn command_error(
     command: u32,
 ) -> PdmaBatchError {
     let numeric_id = u64::try_from(queue_id).unwrap_or(u64::MAX);
-    PdmaBatchError::Command(crate::abi::mmio::queue::map_bus_error(
+    PdmaBatchError::Command(crate::interface::mmio::queue::map_bus_error(
         error, numeric_id, command, 0,
     ))
 }

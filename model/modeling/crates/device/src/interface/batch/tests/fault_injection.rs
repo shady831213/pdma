@@ -176,7 +176,9 @@ fn assert_injected_error(
             ),
         ) => assert_eq!(
             error.source().and_then(|source| source.downcast_ref()),
-            Some(&MmioAccessError::ReservedOffset { offset: 0x168 })
+            Some(&MmioAccessError::ReservedOffset {
+                offset: crate::interface::mmio::q_command_offset(),
+            })
         ),
         (
             F::Access,
@@ -187,7 +189,9 @@ fn assert_injected_error(
             ),
         ) => assert_eq!(
             error.source().and_then(|source| source.downcast_ref()),
-            Some(&MmioAccessError::WriteToReadOnly { offset: 0x168 })
+            Some(&MmioAccessError::WriteToReadOnly {
+                offset: crate::interface::mmio::q_command_offset(),
+            })
         ),
         (
             F::Mask,
@@ -199,7 +203,7 @@ fn assert_injected_error(
         ) => assert_eq!(
             error.source().and_then(|source| source.downcast_ref()),
             Some(&MmioAccessError::ReservedBits {
-                offset: 0x168,
+                offset: crate::interface::mmio::q_command_offset(),
                 bits: 4,
             })
         ),

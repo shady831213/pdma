@@ -2,10 +2,10 @@ use super::{
     CommittedBatch, DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, bootstrap_staging,
     command_error, map_access_error, submission_staging, validate_submission_shape,
 };
-use crate::abi::endpoint::{prepare_bootstrap_batch_write, prepare_submission_batch_write};
-use crate::abi::mmio::queue::status_response;
 use crate::device::DeviceCore;
 use crate::dma::{PdmaMemoryError, PreparedPdmaMapping};
+use crate::interface::mmio::queue::status_response;
+use crate::interface::mmio::{prepare_bootstrap_batch_write, prepare_submission_batch_write};
 use crate::queue::exact::SubmissionAcceptance;
 use hardware_interface_runtime::{MemoryAlignment, ObservationGate};
 

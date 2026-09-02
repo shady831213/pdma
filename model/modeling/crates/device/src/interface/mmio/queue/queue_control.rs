@@ -1,5 +1,3 @@
-//! Queue-control MMIO command translation.
-
 use super::{QueueStaging, status_response};
 use crate::device::DeviceCore;
 use crate::dma::PdmaMemoryError;

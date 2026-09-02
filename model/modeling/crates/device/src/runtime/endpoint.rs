@@ -1,5 +1,7 @@
 use super::{AsyncDevice, DeviceCore, RunnerShared, publish, wake};
-use crate::abi::endpoint::{MmioRegisterError, prepare_claim, prepare_read, prepare_write};
+use crate::interface::mmio::{
+    MmioRegisterError, claim_observation_count, prepare_claim, prepare_read, prepare_write,
+};
 use hardware_interface_runtime::{AccessOrigin, RegisterAccess, RegisterObservation};
 use pdma_model_contract::abi::mmio::{decode_read, decode_write};
 use std::sync::Arc;
@@ -25,18 +27,23 @@ impl MmioRegisterEndpoint {
     pub async fn claim_notification_exact(
         &self,
     ) -> Result<Option<pdma_model_contract::semantic::IrqNotification>, MmioRegisterError> {
-        let (committed, generation) = {
+        let (committed, reservation, generation) = {
             let mut state = self.shared.state.lock().await;
-            let committed = prepare_claim(&mut state.core, &self.shared.register_gate)?;
+            let reservation = self
+                .shared
+                .register_gate
+                .reserve(claim_observation_count(&state.core))?;
+            let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
             let generation = if committed.changed() {
                 wake(&mut state);
                 Some(state.generation)
             } else {
                 None
             };
-            (committed, generation)
+            (committed, reservation, generation)
         };
-        let notification = committed.emit()?;
+        let (notification, observations) = committed.into_parts();
+        reservation.emit(observations)?;
         if let Some(generation) = generation {
             publish(&self.shared, generation);
         }
@@ -53,22 +60,27 @@ impl MmioRegisterEndpoint {
         ),
         MmioRegisterError,
     > {
-        let (committed, generation) = {
+        let (committed, reservation, generation) = {
             let mut state = self.shared.state.lock().await;
-            let committed = prepare_claim(&mut state.core, &self.shared.register_gate)?;
+            let reservation = self
+                .shared
+                .register_gate
+                .reserve(claim_observation_count(&state.core))?;
+            let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
             let generation = if committed.changed() {
                 wake(&mut state);
                 Some(state.generation)
             } else {
                 None
             };
-            (committed, generation)
+            (committed, reservation, generation)
         };
-        let result = committed.emit_observed()?;
+        let (notification, observations) = committed.into_parts();
+        reservation.emit(observations.clone())?;
         if let Some(generation) = generation {
             publish(&self.shared, generation);
         }
-        Ok(result)
+        Ok((notification, observations))
     }
 }
 

@@ -1,5 +1,4 @@
 use crate::device::DeviceCore;
-use crate::register_file::{MmioScalar, narrow_u32};
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, GlobalResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
 };
@@ -8,94 +7,7 @@ use pdma_model_contract::semantic::DeviceRunState;
 
 mod error;
 
-#[derive(Clone, Copy)]
-pub(super) enum GlobalRegister {
-    Magic,
-    MmioAbiVersion,
-    ReqAbiVersion,
-    ReqFeatures,
-    ResetExpectedEpoch,
-    Command,
-    Result,
-    Detail0,
-    Detail1,
-    Detail2,
-    RspAbiVersion,
-    RspRunState,
-    RspFeatures,
-    RspEpoch,
-    MaxRingDepth,
-    MaxIndirectDestinations,
-    MaxTransferBytes,
-    MaxStridedRows,
-    MaxStride,
-}
-
-pub(super) const fn read(state: &DeviceCore, register: GlobalRegister) -> MmioScalar {
-    let bank = &state.registers.global;
-    let response = bank.command.response;
-    let result = bank.command.result;
-    let [detail0, detail1, detail2] = result.details;
-    match register {
-        GlobalRegister::Magic => MmioScalar::U32(0x414d_4450),
-        GlobalRegister::MmioAbiVersion => MmioScalar::U32(1),
-        GlobalRegister::ReqAbiVersion => MmioScalar::U32(bank.req_abi_version),
-        GlobalRegister::ReqFeatures => MmioScalar::U64(bank.req_features),
-        GlobalRegister::ResetExpectedEpoch => MmioScalar::U64(bank.reset_expected_epoch),
-        GlobalRegister::Command => MmioScalar::U32(0),
-        GlobalRegister::Result => MmioScalar::U32(result.result.code()),
-        GlobalRegister::Detail0 => MmioScalar::U64(detail0),
-        GlobalRegister::Detail1 => MmioScalar::U64(detail1),
-        GlobalRegister::Detail2 => MmioScalar::U64(detail2),
-        GlobalRegister::RspAbiVersion => MmioScalar::U32(response.abi_version.raw()),
-        GlobalRegister::RspRunState => MmioScalar::U32(response.run_state.raw()),
-        GlobalRegister::RspFeatures => MmioScalar::U64(response.features.raw()),
-        GlobalRegister::RspEpoch => MmioScalar::U64(response.epoch.raw()),
-        GlobalRegister::MaxRingDepth => MmioScalar::U32(response.max_ring_depth.raw()),
-        GlobalRegister::MaxIndirectDestinations => {
-            MmioScalar::U32(response.max_indirect_destinations.raw())
-        }
-        GlobalRegister::MaxTransferBytes => MmioScalar::U32(response.max_transfer_bytes.raw()),
-        GlobalRegister::MaxStridedRows => MmioScalar::U32(response.max_strided_rows.raw()),
-        GlobalRegister::MaxStride => MmioScalar::U32(response.max_stride.raw()),
-    }
-}
-
-pub(super) fn write(state: &mut DeviceCore, register: GlobalRegister, value: u64) -> bool {
-    let bank = &mut state.registers.global;
-    match register {
-        GlobalRegister::ReqAbiVersion => {
-            bank.req_abi_version = narrow_u32(value);
-            false
-        }
-        GlobalRegister::ReqFeatures => {
-            bank.req_features = value;
-            false
-        }
-        GlobalRegister::ResetExpectedEpoch => {
-            bank.reset_expected_epoch = value;
-            false
-        }
-        GlobalRegister::Command => execute(state, narrow_u32(value)),
-        GlobalRegister::Magic
-        | GlobalRegister::MmioAbiVersion
-        | GlobalRegister::Result
-        | GlobalRegister::Detail0
-        | GlobalRegister::Detail1
-        | GlobalRegister::Detail2
-        | GlobalRegister::RspAbiVersion
-        | GlobalRegister::RspRunState
-        | GlobalRegister::RspFeatures
-        | GlobalRegister::RspEpoch
-        | GlobalRegister::MaxRingDepth
-        | GlobalRegister::MaxIndirectDestinations
-        | GlobalRegister::MaxTransferBytes
-        | GlobalRegister::MaxStridedRows
-        | GlobalRegister::MaxStride => false,
-    }
-}
-
-fn execute(state: &mut DeviceCore, raw: u32) -> bool {
+pub(super) fn execute(state: &mut DeviceCore, raw: u32) -> bool {
     let Ok(command) = GlobalCommand::try_from(raw) else {
         complete_failure(
             state,

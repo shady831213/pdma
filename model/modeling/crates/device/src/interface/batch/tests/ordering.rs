@@ -144,7 +144,10 @@ fn assert_one_observation_then_wake(
     let [observation] = observations.as_slice() else {
         return Err("one batch observation required".into());
     };
-    assert_eq!(observation.offset, 0x168);
+    assert_eq!(
+        observation.offset,
+        crate::interface::mmio::q_command_offset()
+    );
     assert_eq!(observation.request_bytes, request);
     drop(observations);
     assert!(matches!(

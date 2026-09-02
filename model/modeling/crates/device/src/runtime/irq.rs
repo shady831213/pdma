@@ -2,7 +2,7 @@
 
 use super::AsyncDeviceHandle;
 use crate::ModelResult;
-use crate::abi::mmio::irq::support::{irq_notification_ready, observe_irq_source};
+use crate::interface::mmio::irq::support::{irq_notification_ready, observe_irq_source};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};

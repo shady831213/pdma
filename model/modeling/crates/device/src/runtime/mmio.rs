@@ -10,7 +10,7 @@ impl AsyncDeviceHandle {
     ) -> Result<Vec<u8>, MmioAccessError> {
         let register = decode_read(offset, width)?;
         let state = self.shared.state.lock().await;
-        Ok(crate::abi::endpoint::prepare_read(&state.core, register, offset).response)
+        Ok(crate::interface::mmio::prepare_read(&state.core, register, offset).response)
     }
 
     /// Applies one exact byte-bearing MMIO transaction.
@@ -18,7 +18,7 @@ impl AsyncDeviceHandle {
         let (register, value) = decode_write(offset, bytes)?;
         let generation = {
             let mut state = self.shared.state.lock().await;
-            let changed = crate::abi::endpoint::prepare_write(register, value, offset, bytes)
+            let changed = crate::interface::mmio::prepare_write(register, value, offset, bytes)
                 .commit(&mut state.core);
             if changed {
                 wake(&mut state);

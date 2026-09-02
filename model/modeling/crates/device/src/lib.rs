@@ -1,29 +1,62 @@
 //! Async PDMA device model runner.
 
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod adapter;
 pub mod dma;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod execution;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod interface;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod irq;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod queue;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod register_file;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod retirement;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod runtime;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod scheduler;
 mod status;
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod trace;
 
-#[allow(clippy::redundant_pub_crate)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
+)]
 mod device;
 
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};

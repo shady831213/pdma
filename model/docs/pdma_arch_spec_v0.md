@@ -123,12 +123,14 @@ sequence of manually scheduled turns.
 
 ## Device Responsibility Boundary
 
-The device keeps only the contract's two data models: layout-independent values from
-`contract::semantic` and layout-exact values from `contract::abi`. One synchronous
-`DeviceCore` composition root in `crates/device/src/device/mod.rs` directly owns the device
-epoch, DMA mappings, register banks, queues, scheduler, execution unit, retirement unit,
-PDMA-local IRQ controller, and trace sink. The source tree exposes those hardware roles
-directly:
+The device consumes the contract's two data models: layout-independent values from
+`contract::semantic` and layout-exact vocabulary, layouts, and codecs from
+`contract::abi`. Contract remains the owner of that ABI vocabulary and layout definition;
+the device does not define a second ABI namespace. One synchronous `DeviceCore`
+composition root in `crates/device/src/device/mod.rs` directly owns the device epoch, DMA
+mappings, register banks, queues, scheduler, execution unit, retirement unit, PDMA-local
+IRQ controller, and trace sink. The active source tree exposes the hardware roles and its
+private interface helpers directly:
 
 ```text
 crates/device/src/
@@ -141,18 +143,43 @@ crates/device/src/
 ├── retirement/        # RetirementUnit, typed ports, publication, and retry state
 ├── irq/               # PdmaIrqController route, mask, latch, and notification state
 ├── trace/             # TraceSink state and format export
-├── abi/               # synchronous wire decoding, MMIO effects, and exact controls
 ├── adapter/           # stateless ABI-command to semantic-command conversion
-└── runtime/           # all async handles, endpoints, observation, locks, waits, and worker mechanics
+├── interface/         # private exact-MMIO and closed-batch preparation/effects
+│   ├── mmio/          # one RegisterId read/write dispatch plus ephemeral prepared effects
+│   └── batch/         # ephemeral closed atomic preparation and commit
+└── runtime/           # private async facade, endpoint/handle/worker, one lock, wake/publication
 ```
 
-Internal component and composition invariants live beside their owners under
-`src/**/tests`; they drive `DeviceCore::step` and private object methods directly without
-a public synchronous facade. `crates/device/tests` is reserved for public async, exact
-DMA/ring, batch, register-endpoint, MMIO, reset, and IRQ observations. Full host/device,
-CPU, and interrupt stories remain in `crates/scenarios/tests`. `DeviceCore` remains a
-public construction value so callers can inject shared memory and resource configuration,
-but its stepping and hardware-state mutation methods are crate-private.
+`interface::mmio` owns only synchronous, ephemeral preparation and effects: its sole
+`RegisterId` dispatch pair reads or writes the register file through `DeviceCore`. It has
+no persistent device state, async lock, observation gate, or observer. `interface::batch`
+owns only the two closed atomic preparation/commit grammars (bootstrap and submission),
+including their temporary staged DMA/register work; it likewise owns no persistent state,
+lock, or observer. The persistent state they act on remains directly owned by
+`DeviceCore` and its hardware objects.
+
+`queue::exact` owns exact queue requests, status, errors, controls, and ring-local
+transitions. It is the device-side owner of exact SQ/CQ/EQ mechanics, while the contract
+continues to own the fixed ABI layouts and codecs. `DeviceCore` directly composes the one
+whole-device reset: after checked epoch advancement it clears resettable queues,
+scheduler, retirement, IRQ, and register state while retaining the specified persistent
+DMA mappings/bytes/generation, trace history, resource configuration, and lifecycle
+accounting.
+
+`runtime` is the private asynchronous facade over the core. It owns the single Tokio lock
+that serializes host calls and worker steps, wake/publication generations, the register
+endpoint and observation gate, and the public async device, handle, and worker facade.
+The public device API is intentionally only crate-root reexports plus `pub mod dma`; there
+is no public device `abi` or `runtime` namespace, no public synchronous device facade,
+and no second executor.
+
+Internal component and composition invariants live beside their owners under `src/**/tests`.
+The four `crates/device/tests` binaries are behavioral public-surface tests, not source
+structure probes: `actor` has 9 tests, `queue` 19, `transactions` 19, and `mmio` 31, for
+78 external tests. The device library has 34 tests. Full host/device, CPU, and interrupt
+stories remain in `crates/scenarios/tests`, whose live inventory is 56 tests. `DeviceCore`
+remains a public construction value so callers can inject shared memory and resource
+configuration, but its stepping and hardware-state mutation methods are crate-private.
 
 Every `PdmaQueue` owns its directory entry and one closed `QueueIo` variant.
 `SemanticQueueIo` owns semantic rings; `ExactQueueIo` owns the active exact SQ/CQ/EQ
@@ -170,14 +197,14 @@ descriptor conversion returns a semantic `Command`, `ExecutionUnit` returns an
 remain methods of their owning objects while the composition root controls dependency
 direction and ordering.
 
-`crates/device/src/runtime/` is only the async actor shell. `AsyncDevice` wraps one
-`DeviceCore` behind the single Tokio mutex required to serialize host calls and worker
-steps. `AsyncDeviceHandle`, `RunnerShared`, the register endpoint, observation gate,
-closed-batch async facades, waits, publication generations, and every lock acquisition
-live only in `runtime`; `abi` contains only synchronous transaction preparation and
-commit behavior. No lock, observer, or async primitive exists inside the hardware
-objects or execution units, and no guard crosses a device await boundary. There is no
-synchronous public device facade or second executor. Together these layers own the
+`runtime` is only the async actor shell. `AsyncDevice` wraps one `DeviceCore` behind the
+single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,
+`RunnerShared`, the register endpoint, observation gate, closed-batch async facades,
+waits, publication generations, and every lock acquisition live only in `runtime`;
+`interface::{mmio,batch}` contains only the synchronous preparation/effect and ordered
+commit seams described above. No lock, observer, or async primitive exists inside the
+hardware objects or execution units, and no guard crosses a device await boundary. There
+is no synchronous public device facade or second executor. Together these layers own the
 following responsibilities:
 
 - Maintain device memory, the queue directory, command rings, completion rings, queue-tagged events, the runnable queue list, resource configuration, IRQ state, and the trace sink.
@@ -193,8 +220,8 @@ following responsibilities:
   and preserve every discrete Message trigger.
 
 The device never stores or invokes software handlers. It does not expose wall-clock or
-cycle timing. Its public semantic and exact-ABI surfaces are adapters around synchronous
-hardware-object methods, not peer pipelines with separate ownership.
+cycle timing. Its crate-root public semantic and exact-ABI surfaces are adapters around
+synchronous hardware-object methods, not peer pipelines with separate ownership.
 
 ### Whole-Device Reset and Epoch Semantics
 

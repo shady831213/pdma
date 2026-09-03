@@ -85,6 +85,12 @@ pub(super) fn expand(
                 #marker::__append_registers(collection.id, collection.path, collection.offset, collection.declaration_index, collection.repeated, collection.output);
             }
         }
+        impl #facade::RegisterMapLayout for #marker {
+            fn register_definition(offset: usize) -> ::core::option::Option<#facade::RegisterDefinition<u16>> {
+                let resolved = #marker::__resolved().as_ref().ok()?;
+                resolved.locate(offset).map(|register| register.definition())
+            }
+        }
         #codec
     }
 }

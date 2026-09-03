@@ -53,6 +53,12 @@ impl<T> MutexStorage<T> {
     }
 }
 
+impl<T> From<T> for MutexStorage<T> {
+    fn from(value: T) -> Self {
+        Self::new(value)
+    }
+}
+
 impl<T> Clone for MutexStorage<T> {
     fn clone(&self) -> Self {
         Self {

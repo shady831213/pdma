@@ -37,6 +37,12 @@ impl<T> LocalStorage<T> {
     }
 }
 
+impl<T> From<T> for LocalStorage<T> {
+    fn from(value: T) -> Self {
+        Self::new(value)
+    }
+}
+
 impl<T> Clone for LocalStorage<T> {
     fn clone(&self) -> Self {
         Self {

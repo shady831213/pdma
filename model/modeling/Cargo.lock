@@ -25,6 +25,7 @@ dependencies = [
 name = "hardware-interface-runtime"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-schema",
  "tokio",
 ]
 

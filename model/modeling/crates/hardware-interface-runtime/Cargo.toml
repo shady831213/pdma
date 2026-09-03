@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Runtime-neutral shared hardware-interface mechanics"
 
 [dependencies]
+hardware-interface-schema = { path = "../hardware-interface-schema" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [dev-dependencies]

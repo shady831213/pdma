@@ -30,7 +30,8 @@ pub use register::{
     LocalObservationReservation, NoopRegisterObserver, ObservationBackend,
     ObservationEmissionReceipt, ObservationGate, ObservationGateError, ObservationOrder,
     ObservationOrderError, ObservationReservation, ObservationReservationReceipt, RegisterAccess,
-    RegisterBusAddress, RegisterBusBase, RegisterBusError, RegisterBusOffset, RegisterBusWidth,
+    RegisterBus, RegisterBusAddress, RegisterBusBase, RegisterBusError, RegisterBusOffset,
+    RegisterBusWidth, RegisterEndpointError, RegisterImage, RegisterImageError,
     RegisterObservation, RegisterObserver, SharedRegisterObserver,
 };
 pub use storage::{LocalStorage, MutexStorage, StorageBackend, StorageError};

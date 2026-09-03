@@ -1,4 +1,4 @@
-use crate::{RegisterCollection, SchemaCodecError, SchemaCoordinate};
+use crate::{RegisterCollection, RegisterDefinition, SchemaCodecError, SchemaCoordinate};
 
 /// Shared byte-layout contract implemented by generated records.
 pub trait RecordLayout {
@@ -83,6 +83,12 @@ pub trait RegisterLayout {
     /// Appends every leaf register below one placement to a resolved map.
     #[doc(hidden)]
     fn append_registers<I: Copy + 'static>(_collection: RegisterCollection<'_, I>) {}
+}
+
+/// Runtime-neutral exact-start metadata for a generated register map.
+pub trait RegisterMapLayout: RegisterLayout {
+    /// Returns the leaf definition only when `offset` is its exact start.
+    fn register_definition(offset: usize) -> Option<RegisterDefinition<u16>>;
 }
 
 /// Computes the next aligned offset without wrapping.

@@ -7,21 +7,43 @@ use super::support::{Case, Fixture, PipelineRunOutcome, Prepared, prepare, read,
 use crate::device::ModelStepStatus;
 use crate::{ModelError, ModelResult};
 
+mod report;
+
+type CursorState = Result<((usize, usize), (usize, usize)), ModelError>;
+
 #[derive(Debug, PartialEq, Eq)]
 struct Observation {
     terminal: Result<ModelStepStatus, ModelError>,
     destinations: [Vec<u8>; 2],
     completion: Option<CompletionRecord>,
     event: Option<EventRecord>,
-    irq: bool,
+    cursors_before_poll: CursorState,
+    cursors_after_poll: CursorState,
+    irq_before_poll: bool,
+    irq_after_poll: bool,
     trace: Vec<TraceEvent>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+struct Driven {
+    observation: Observation,
+    fetches: usize,
+    executions: usize,
+    pending: usize,
+    post_terminal: PostTerminal,
+}
+
+#[derive(Clone, Copy, Debug)]
 enum Drive {
     Legacy,
     Stepped,
     Immediate,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PostTerminal {
+    LiveCore,
+    Exhausted,
 }
 
 pub(super) fn drive_policy_parity() {
@@ -33,54 +55,114 @@ pub(super) fn drive_policy_parity() {
         let immediate = observe(prepare(case), Drive::Immediate);
 
         // Then: literal bytes, records, IRQ state, trace order, and outcomes agree exactly.
-        assert_eq!(stepped, legacy, "stepped {case:?}");
-        assert_eq!(immediate, legacy, "immediate {case:?}");
-        assert_literal(case, &legacy);
+        assert_eq!(stepped.observation, legacy.observation, "stepped {case:?}");
+        assert_eq!(
+            immediate.observation, legacy.observation,
+            "immediate {case:?}"
+        );
+        assert_metrics(&legacy, PostTerminal::LiveCore);
+        assert_metrics(&stepped, PostTerminal::Exhausted);
+        assert_metrics(&immediate, PostTerminal::Exhausted);
+        assert_literal(case, &legacy.observation);
+        report::print(case, Drive::Legacy, &legacy);
+        report::print(case, Drive::Stepped, &stepped);
+        report::print(case, Drive::Immediate, &immediate);
     }
-    println!(
-        "drive_policy_parity cases=7 copy=1 strided=1 broadcast=1 vector=1 faults=3 bytes=literal records=literal irq=literal trace_order=literal executors=step,immediate legacy=equal"
-    );
 }
 
-fn observe(mut prepared: Prepared, drive: Drive) -> Observation {
-    let terminal = match drive {
-        Drive::Legacy => prepared.fixture.core.step(),
+fn observe(mut prepared: Prepared, drive: Drive) -> Driven {
+    let (terminal, pending) = match drive {
+        Drive::Legacy => (prepared.fixture.core.step(), 0),
         Drive::Stepped => drive_stepped(&mut prepared.fixture),
         Drive::Immediate => match prepared.fixture.immediate() {
-            PipelineRunOutcome::Complete(result) => result,
+            PipelineRunOutcome::Complete(result) => (result, 0),
             other => panic!("unexpected immediate outcome {other:?}"),
         },
     };
     let trace = prepared.fixture.core.trace_events();
-    Observation {
-        terminal,
-        destinations: [
-            read(&prepared.fixture.core, prepared.destinations[0]).expect("destination A"),
-            read(&prepared.fixture.core, prepared.destinations[1]).expect("destination B"),
-        ],
-        completion: prepared
-            .fixture
-            .core
-            .poll_completion(prepared.queue)
-            .expect("completion"),
-        event: prepared
-            .fixture
-            .core
-            .poll_queue_event(prepared.queue)
-            .expect("event"),
-        irq: prepared.fixture.core.irq_snapshot().is_some(),
-        trace,
+    let fetches = prepared.fixture.fetch_count();
+    let executions = trace
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.kind(),
+                TraceEventKind::ExecutionSucceeded | TraceEventKind::ExecutionFaulted
+            )
+        })
+        .count();
+    let cursors_before_poll = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let irq_before_poll = prepared.fixture.core.irq_snapshot().is_some();
+    let destinations = [
+        read(&prepared.fixture.core, prepared.destinations[0]).expect("destination A"),
+        read(&prepared.fixture.core, prepared.destinations[1]).expect("destination B"),
+    ];
+    let completion = prepared
+        .fixture
+        .core
+        .poll_completion(prepared.queue)
+        .expect("completion");
+    let event = prepared
+        .fixture
+        .core
+        .poll_queue_event(prepared.queue)
+        .expect("event");
+    let cursors_after_poll = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let irq_after_poll = prepared.fixture.core.irq_snapshot().is_some();
+    let post_terminal = match drive {
+        Drive::Legacy => PostTerminal::LiveCore,
+        Drive::Stepped => {
+            assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
+            PostTerminal::Exhausted
+        }
+        Drive::Immediate => {
+            assert_eq!(prepared.fixture.immediate(), PipelineRunOutcome::Exhausted);
+            PostTerminal::Exhausted
+        }
+    };
+    Driven {
+        observation: Observation {
+            terminal,
+            destinations,
+            completion,
+            event,
+            cursors_before_poll,
+            cursors_after_poll,
+            irq_before_poll,
+            irq_after_poll,
+            trace,
+        },
+        fetches,
+        executions,
+        pending,
+        post_terminal,
     }
 }
 
-fn drive_stepped(fixture: &mut Fixture) -> ModelResult<ModelStepStatus> {
+fn drive_stepped(fixture: &mut Fixture) -> (ModelResult<ModelStepStatus>, usize) {
+    let mut pending = 0;
     loop {
         match fixture.step() {
             PipelineRunOutcome::Progressed => {}
-            PipelineRunOutcome::Complete(result) => return result,
+            PipelineRunOutcome::Pending(_) => pending += 1,
+            PipelineRunOutcome::Complete(result) => return (result, pending),
             other => panic!("unexpected stepped outcome {other:?}"),
         }
     }
+}
+
+fn assert_metrics(driven: &Driven, post_terminal: PostTerminal) {
+    assert_eq!(driven.fetches, 1);
+    assert_eq!(driven.executions, 1);
+    assert_eq!(driven.pending, 0);
+    assert_eq!(driven.post_terminal, post_terminal);
 }
 
 fn assert_literal(case: Case, observation: &Observation) {
@@ -102,7 +184,8 @@ fn assert_literal(case: Case, observation: &Observation) {
                 ))
             );
             assert_eq!(observation.event, None);
-            assert!(observation.irq);
+            assert!(observation.irq_before_poll);
+            assert!(observation.irq_after_poll);
             assert_eq!(
                 trace_kinds(&observation.trace),
                 [
@@ -129,7 +212,8 @@ fn assert_literal(case: Case, observation: &Observation) {
                     fault,
                 ))
             );
-            assert!(!observation.irq);
+            assert!(!observation.irq_before_poll);
+            assert!(!observation.irq_after_poll);
             assert_eq!(
                 trace_kinds(&observation.trace),
                 [

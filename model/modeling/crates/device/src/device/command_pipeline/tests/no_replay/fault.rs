@@ -6,6 +6,7 @@ use super::super::support::{
     Case, PipelineRunOutcome, Prepared, drive_to_complete, drive_to_pending,
     prepare_with_resources, trace_kinds,
 };
+use super::report::irq_transitions;
 use crate::{AsyncStallReason, ModelError};
 
 pub(super) fn pressure_revisits_only_fault_retirement() {
@@ -44,6 +45,16 @@ pub(super) fn pressure_revisits_only_fault_retirement() {
 
     // Then: the command cursor advances once and no fault effect is duplicated.
     assert_pending_state(&mut prepared);
+    let pending_cursors = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let pending_irq = prepared.fixture.core.irq_snapshot();
+    let pending_trace = trace_kinds(&prepared.fixture.core.trace_events());
+    println!(
+        "ADVERSE_MATRIX|route=fault_pressure|phase=pending|cursors={pending_cursors:?}|record=None|record_count=0|irq={pending_irq:?}|trace={pending_trace:?}|fetches=1|executions=1|pending=3|duplicate_fetch_delta=0|duplicate_execution_delta=0|duplicate_record_delta=0"
+    );
     release_and_assert(&mut prepared);
 }
 
@@ -84,12 +95,11 @@ fn assert_pending_state(prepared: &mut Prepared) {
 
 fn release_and_assert(prepared: &mut Prepared) {
     prepared.fixture.set_resources(ResourceConfig::default());
+    let terminal = drive_to_complete(&mut prepared.fixture);
+    assert_eq!(terminal, Err(ModelError::UnknownBuffer(BufferId::new(999))));
+    let published_trace = trace_kinds(&prepared.fixture.core.trace_events());
     assert_eq!(
-        drive_to_complete(&mut prepared.fixture),
-        Err(ModelError::UnknownBuffer(BufferId::new(999)))
-    );
-    assert_eq!(
-        trace_kinds(&prepared.fixture.core.trace_events()),
+        published_trace,
         [
             TraceEventKind::CommandSubmitted,
             TraceEventKind::DoorbellRunnable,
@@ -137,7 +147,21 @@ fn release_and_assert(prepared: &mut Prepared) {
         ),
         1
     );
-    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
+    let final_cursors = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let final_irq = prepared.fixture.core.irq_snapshot();
+    let final_trace = trace_kinds(&prepared.fixture.core.trace_events());
+    assert_eq!(final_cursors, Ok(((1, 1), (0, 0))));
+    assert!(final_irq.is_some());
+    let post_terminal = prepared.fixture.step();
+    assert_eq!(post_terminal, PipelineRunOutcome::Exhausted);
+    println!(
+        "ADVERSE_MATRIX|route=fault_pressure|phase=complete|cursors={final_cursors:?}|record={event:?}|record_count=1|irq={final_irq:?}|irq_transitions={:?}|published_trace={published_trace:?}|final_trace={final_trace:?}|fetches=1|executions=1|pending=3|terminal={terminal:?}|post_terminal={post_terminal:?}|duplicate_fetch_delta=0|duplicate_execution_delta=0|duplicate_record_delta=0",
+        irq_transitions(&published_trace),
+    );
 }
 
 fn count(trace: &[TraceEvent], kind: TraceEventKind) -> usize {

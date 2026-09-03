@@ -1,9 +1,12 @@
-use pdma_model_contract::semantic::{ResourceConfig, TraceEventKind};
+use pdma_model_contract::semantic::{
+    CommandId, CompletionRecord, CompletionStatus, ResourceConfig, TraceEventKind,
+};
 
 use super::super::support::{
     Case, PipelineRunOutcome, drive_to_complete, drive_to_pending, prepare_with_resources, read,
     trace_kinds,
 };
+use super::report::irq_transitions;
 use crate::AsyncStallReason;
 use crate::device::ModelStepStatus;
 
@@ -24,21 +27,19 @@ pub(super) fn pressure_revisits_only_execution() {
 
     // Then: fetch/cursor/memory/record/IRQ state did not replay before one execution.
     assert_eq!(prepared.fixture.fetch_count(), 1);
+    let pending_cursors = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let pending_bytes = read(&prepared.fixture.core, prepared.destinations[0]);
+    let pending_irq = prepared.fixture.core.irq_snapshot();
+    let pending_trace = trace_kinds(&prepared.fixture.core.trace_events());
+    assert_eq!(pending_cursors, Ok(((0, 1), (0, 0))));
+    assert_eq!(pending_bytes, Ok(vec![0; 8]));
+    assert_eq!(pending_irq, None);
     assert_eq!(
-        prepared
-            .fixture
-            .core
-            .queues
-            .semantic_cursors(prepared.queue.queue_id()),
-        Ok(((0, 1), (0, 0)))
-    );
-    assert_eq!(
-        read(&prepared.fixture.core, prepared.destinations[0]),
-        Ok(vec![0; 8])
-    );
-    assert_eq!(prepared.fixture.core.irq_snapshot(), None);
-    assert_eq!(
-        trace_kinds(&prepared.fixture.core.trace_events()),
+        pending_trace,
         [
             TraceEventKind::CommandSubmitted,
             TraceEventKind::DoorbellRunnable,
@@ -49,29 +50,39 @@ pub(super) fn pressure_revisits_only_execution() {
         ]
     );
     prepared.fixture.set_resources(ResourceConfig::default());
-    assert_eq!(
-        drive_to_complete(&mut prepared.fixture),
-        Ok(ModelStepStatus::Progressed)
-    );
+    let terminal = drive_to_complete(&mut prepared.fixture);
+    assert_eq!(terminal, Ok(ModelStepStatus::Progressed));
     assert_eq!(prepared.fixture.fetch_count(), 1);
+    let final_bytes = read(&prepared.fixture.core, prepared.destinations[0]);
+    assert_eq!(final_bytes, Ok(vec![1, 2, 3, 4, 0, 0, 0, 0]));
+    let completion = prepared
+        .fixture
+        .core
+        .poll_completion(prepared.queue)
+        .expect("completion ring");
     assert_eq!(
-        read(&prepared.fixture.core, prepared.destinations[0]),
-        Ok(vec![1, 2, 3, 4, 0, 0, 0, 0])
-    );
-    assert!(
-        prepared
-            .fixture
-            .core
-            .poll_completion(prepared.queue)
-            .expect("completion ring")
-            .is_some()
+        completion,
+        Some(CompletionRecord::new(
+            prepared.queue.queue_id(),
+            CommandId::new(7),
+            CompletionStatus::Success,
+        ))
     );
     assert_eq!(
         prepared.fixture.core.poll_completion(prepared.queue),
         Ok(None)
     );
+    let final_cursors = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let final_irq = prepared.fixture.core.irq_snapshot();
+    let final_trace = trace_kinds(&prepared.fixture.core.trace_events());
+    assert_eq!(final_cursors, Ok(((1, 1), (1, 1))));
+    assert!(final_irq.is_some());
     assert_eq!(
-        trace_kinds(&prepared.fixture.core.trace_events()),
+        final_trace,
         [
             TraceEventKind::CommandSubmitted,
             TraceEventKind::DoorbellRunnable,
@@ -86,5 +97,10 @@ pub(super) fn pressure_revisits_only_execution() {
             TraceEventKind::CompletionPolled,
         ]
     );
-    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
+    let post_terminal = prepared.fixture.step();
+    assert_eq!(post_terminal, PipelineRunOutcome::Exhausted);
+    println!(
+        "ADVERSE_MATRIX|route=execution_pressure|pending_cursors={pending_cursors:?}|pending_bytes={pending_bytes:?}|pending_record=None|pending_irq={pending_irq:?}|pending_trace={pending_trace:?}|final_cursors={final_cursors:?}|final_bytes={final_bytes:?}|final_record={completion:?}|record_count=1|final_irq={final_irq:?}|irq_transitions={:?}|final_trace={final_trace:?}|fetches=1|executions=1|pending=3|terminal={terminal:?}|post_terminal={post_terminal:?}|duplicate_fetch_delta=0|duplicate_execution_delta=0|duplicate_record_delta=0",
+        irq_transitions(&final_trace),
+    );
 }

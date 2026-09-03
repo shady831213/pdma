@@ -3,6 +3,7 @@ use pdma_model_contract::semantic::{EpochIrqSource, IrqSource, TraceEvent, Trace
 use super::super::support::{
     PipelineRunOutcome, Prepared, drive_to_complete, drive_to_pending, prepared_pair, trace_kinds,
 };
+use super::report::irq_transitions;
 use crate::AsyncStallReason;
 use crate::device::ModelStepStatus;
 
@@ -44,6 +45,10 @@ pub(super) fn pressure_revisits_only_retirement() {
 
     // Then: repeated Pending changes only the downstream stall trace.
     assert_pending_unchanged(&prepared, &pending_trace, pending_irq, pending_cursors);
+    println!(
+        "ADVERSE_MATRIX|route=completion_pressure|phase=pending|cursors={pending_cursors:?}|record_count=1|irq={pending_irq:?}|trace={:?}|total_fetches=2|pressured_fetches=1|total_executions=2|pressured_executions=1|pending=2|duplicate_fetch_delta=0|duplicate_execution_delta=0|duplicate_record_delta=0",
+        trace_kinds(&prepared.fixture.core.trace_events()),
+    );
     release_and_assert(&mut prepared, source);
 }
 
@@ -97,10 +102,8 @@ fn release_and_assert(prepared: &mut Prepared, source: EpochIrqSource) {
         .core
         .ack_irq_source(source)
         .expect("ack first IRQ");
-    assert_eq!(
-        drive_to_complete(&mut prepared.fixture),
-        Ok(ModelStepStatus::Progressed)
-    );
+    let terminal = drive_to_complete(&mut prepared.fixture);
+    assert_eq!(terminal, Ok(ModelStepStatus::Progressed));
     let second = prepared
         .fixture
         .core
@@ -137,8 +140,17 @@ fn release_and_assert(prepared: &mut Prepared, source: EpochIrqSource) {
         ),
         2
     );
+    let final_cursors = prepared
+        .fixture
+        .core
+        .queues
+        .semantic_cursors(prepared.queue.queue_id());
+    let final_irq = prepared.fixture.core.irq_snapshot();
+    let final_trace = trace_kinds(&prepared.fixture.core.trace_events());
+    assert_eq!(final_cursors, Ok(((2, 2), (2, 2))));
+    assert!(final_irq.is_some());
     assert_eq!(
-        trace_kinds(&prepared.fixture.core.trace_events()),
+        final_trace,
         [
             TraceEventKind::CommandSubmitted,
             TraceEventKind::DoorbellRunnable,
@@ -161,7 +173,12 @@ fn release_and_assert(prepared: &mut Prepared, source: EpochIrqSource) {
             TraceEventKind::CompletionPolled,
         ]
     );
-    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
+    let post_terminal = prepared.fixture.step();
+    assert_eq!(post_terminal, PipelineRunOutcome::Exhausted);
+    println!(
+        "ADVERSE_MATRIX|route=completion_pressure|phase=complete|cursors={final_cursors:?}|records=[{first:?},{second:?}]|record_count=2|irq={final_irq:?}|irq_transitions={:?}|trace={final_trace:?}|total_fetches=2|pressured_fetches=1|total_executions=2|pressured_executions=1|pending=2|terminal={terminal:?}|post_terminal={post_terminal:?}|duplicate_fetch_delta=0|duplicate_execution_delta=0|duplicate_record_delta=0",
+        irq_transitions(&final_trace),
+    );
 }
 
 fn count(trace: &[TraceEvent], kind: TraceEventKind) -> usize {

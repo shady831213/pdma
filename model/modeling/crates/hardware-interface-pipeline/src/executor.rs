@@ -1,8 +1,10 @@
-//! Synchronous policies for driving a [`crate::Stage`].
+//! Policies for driving a [`crate::Stage`].
 
+mod asynchronous;
 mod immediate;
 mod stepped;
 
+pub use asynchronous::{AsyncExecutor, AsyncRunError};
 pub use immediate::ImmediateExecutor;
 pub use stepped::StepExecutor;
 

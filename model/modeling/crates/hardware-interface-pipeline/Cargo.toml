@@ -10,3 +10,6 @@ description = "Runtime-neutral staged hardware-interface contracts"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.49", default-features = false, features = ["macros", "rt"] }

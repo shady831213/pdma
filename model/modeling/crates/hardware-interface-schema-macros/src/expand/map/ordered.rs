@@ -1,3 +1,4 @@
+mod access_tree;
 mod accessors;
 mod collectors;
 mod context;
@@ -82,7 +83,8 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
         extent: &extent,
     };
     let value_items = values::expand(decl, &context, &geometry);
-    let accessor_items = accessors::expand(decl, &context, &geometry);
+    let access_tree = access_tree::expand(decl, &context, &geometry)?;
+    let accessor_items = accessors::expand(decl, &context, &geometry, access_tree);
     let root_collectors = leaf_collectors(decl, marker, &id_name, &facade, &geometry, true);
     let nested_collectors = leaf_collectors(decl, marker, &id_name, &facade, &geometry, false);
     let access_paths = decl

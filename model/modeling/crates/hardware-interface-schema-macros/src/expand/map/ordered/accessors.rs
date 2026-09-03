@@ -3,37 +3,35 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::OrderedMapDecl;
 
-use super::{ExpansionContext, Geometry};
+use super::{ExpansionContext, Geometry, access_tree::Expansion as AccessTreeExpansion};
 
-pub(super) fn expand(
-    decl: &OrderedMapDecl,
+pub(super) struct GetterPair {
+    pub(super) immutable: TokenStream,
+    pub(super) mutable: TokenStream,
+}
+
+pub(super) fn leaf_getters(
+    method: &syn::Ident,
+    item: &Geometry,
     context: &ExpansionContext<'_>,
-    geometry: &[Geometry],
-) -> TokenStream {
+) -> GetterPair {
     let facade = context.facade;
     let marker = context.marker;
-    let view_name = context.view_name;
-    let view_mut_name = context.view_mut_name;
-    let extent = context.extent;
-    let visibility = &decl.visibility;
-    let mut getters = Vec::new();
-    let mut mutable_getters = Vec::new();
-    for item in geometry {
-        let method = &item.symbol;
-        let mutable_method = format_ident!("{}_mut", method);
-        let definition = &item.definition;
-        let placement = &item.placement;
-        let count = item.count;
-        let (parameters, check, instance) = if count == 1 {
-            (quote!(), quote!(), quote!(0usize))
-        } else {
-            (
-                quote!(instance: usize),
-                quote!(if instance >= #count { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count, actual: instance }); }),
-                quote!(instance),
-            )
-        };
-        getters.push(quote! {
+    let mutable_method = format_ident!("{}_mut", method);
+    let definition = &item.definition;
+    let placement = &item.placement;
+    let count = item.count;
+    let (parameters, check, instance) = if count == 1 {
+        (quote!(), quote!(), quote!(0usize))
+    } else {
+        (
+            quote!(instance: usize),
+            quote!(if instance >= #count { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count, actual: instance }); }),
+            quote!(instance),
+        )
+    };
+    GetterPair {
+        immutable: quote! {
             #[doc = "Returns one checked immutable child-layout view."]
             pub fn #method(&self, #parameters) -> ::core::result::Result<<#definition as #facade::RegisterLayout>::View<'_>, #facade::SchemaCodecError> {
                 #check
@@ -43,8 +41,8 @@ pub(super) fn expand(
                 let child = self.bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: self.bytes.len() })?;
                 <#definition as #facade::RegisterLayout>::view(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))
             }
-        });
-        mutable_getters.push(quote! {
+        },
+        mutable: quote! {
             #[doc = "Returns one checked mutable child-layout view."]
             pub fn #mutable_method(&mut self, #parameters) -> ::core::result::Result<<#definition as #facade::RegisterLayout>::ViewMut<'_>, #facade::SchemaCodecError> {
                 #check
@@ -55,7 +53,30 @@ pub(super) fn expand(
                 let child = self.bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
                 <#definition as #facade::RegisterLayout>::view_mut(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))
             }
-        });
+        },
+    }
+}
+
+pub(super) fn expand(
+    decl: &OrderedMapDecl,
+    context: &ExpansionContext<'_>,
+    geometry: &[Geometry],
+    access_tree: AccessTreeExpansion,
+) -> TokenStream {
+    let facade = context.facade;
+    let view_name = context.view_name;
+    let view_mut_name = context.view_mut_name;
+    let extent = context.extent;
+    let visibility = &decl.visibility;
+    let tree_items = access_tree.items;
+    let root_immutable = access_tree.root_immutable;
+    let root_mutable = access_tree.root_mutable;
+    let mut getters = Vec::new();
+    let mut mutable_getters = Vec::new();
+    for item in geometry {
+        let pair = leaf_getters(&item.symbol, item, context);
+        getters.push(pair.immutable);
+        mutable_getters.push(pair.mutable);
     }
     quote! {
         #[doc = "Checked immutable byte view for the generated ordered map."]
@@ -69,6 +90,7 @@ pub(super) fn expand(
                 Ok(Self { bytes })
             }
             #(#getters)*
+            #root_immutable
         }
         #[doc = "Checked mutable byte view for the generated ordered map."]
         #[derive(Debug)]
@@ -82,6 +104,9 @@ pub(super) fn expand(
             }
             #(#getters)*
             #(#mutable_getters)*
+            #root_immutable
+            #root_mutable
         }
+        #tree_items
     }
 }

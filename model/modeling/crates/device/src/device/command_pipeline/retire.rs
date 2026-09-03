@@ -1,102 +1,211 @@
 use hardware_interface_pipeline::{Stage, StepOutcome};
 
 use super::super::{DeviceCore, ModelStepStatus};
-use super::execute::ExecutedRoute;
-use crate::execution::RetirableExecution;
+use crate::execution::{CommandRoute, ExecutionFault, RetirableExecution, SuccessfulExecution};
+use crate::queue::io::NormalizedFault;
 use crate::retirement::{RetirementPorts, RetirementStatus};
 use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug)]
-pub(super) enum Retire {
-    Terminal(ModelStepStatus),
-    RetryCompletion,
-    RetryFault,
-    FrontendFault(crate::queue::io::NormalizedFault),
-    Success(crate::execution::SuccessfulExecution),
-    ExecutionFault(crate::execution::ExecutionFault),
-    InvalidCompletion(crate::execution::CommandRoute),
-    Done,
+pub(super) struct Terminal {
+    status: Option<ModelStepStatus>,
 }
 
-impl From<ExecutedRoute> for Retire {
-    fn from(route: ExecutedRoute) -> Self {
-        match route {
-            ExecutedRoute::Terminal(status) => Self::Terminal(status),
-            ExecutedRoute::RetryCompletion => Self::RetryCompletion,
-            ExecutedRoute::RetryFault => Self::RetryFault,
-            ExecutedRoute::FrontendFault(fault) => Self::FrontendFault(fault),
-            ExecutedRoute::Success(success) => Self::Success(success),
-            ExecutedRoute::Fault(fault) => Self::ExecutionFault(fault),
-            ExecutedRoute::InvalidCompletion(route) => Self::InvalidCompletion(route),
+#[derive(Debug)]
+pub(super) struct Success {
+    outcome: Option<SuccessfulExecution>,
+}
+
+#[derive(Debug)]
+pub(super) struct ExecutionFailure {
+    outcome: Option<ExecutionFault>,
+}
+
+#[derive(Debug)]
+pub(super) struct FrontendFailure {
+    fault: Option<NormalizedFault>,
+}
+
+#[derive(Debug)]
+pub(super) struct InvalidCompletion {
+    route: Option<CommandRoute>,
+}
+
+#[derive(Debug)]
+pub(super) struct PendingCompletion {
+    active: bool,
+}
+
+#[derive(Debug)]
+pub(super) struct PendingFault {
+    active: bool,
+}
+
+impl Terminal {
+    pub(super) const fn new(status: ModelStepStatus) -> Self {
+        Self {
+            status: Some(status),
         }
     }
 }
 
-impl Retire {
-    const fn finish(
-        &mut self,
-        status: Result<RetirementStatus, ModelError>,
-        retry: Self,
-    ) -> StepOutcome<ModelStepStatus, ModelError, AsyncStallReason> {
-        match status {
-            Ok(RetirementStatus::Progressed) => {
-                StepOutcome::Complete(Ok(ModelStepStatus::Progressed))
-            }
-            Ok(RetirementStatus::FaultCached) => {
-                StepOutcome::Complete(Ok(ModelStepStatus::FaultCached))
-            }
-            Ok(RetirementStatus::Stalled(reason)) => {
-                *self = retry;
-                StepOutcome::Pending(reason)
-            }
-            Err(error) => StepOutcome::Complete(Err(error)),
+impl Success {
+    pub(super) const fn new(outcome: SuccessfulExecution) -> Self {
+        Self {
+            outcome: Some(outcome),
         }
     }
 }
 
-impl Stage<DeviceCore> for Retire {
+impl ExecutionFailure {
+    pub(super) const fn new(outcome: ExecutionFault) -> Self {
+        Self {
+            outcome: Some(outcome),
+        }
+    }
+}
+
+impl FrontendFailure {
+    pub(super) const fn new(fault: NormalizedFault) -> Self {
+        Self { fault: Some(fault) }
+    }
+}
+
+impl InvalidCompletion {
+    pub(super) const fn new(route: CommandRoute) -> Self {
+        Self { route: Some(route) }
+    }
+}
+
+impl PendingCompletion {
+    pub(super) const fn new() -> Self {
+        Self { active: true }
+    }
+}
+
+impl PendingFault {
+    pub(super) const fn new() -> Self {
+        Self { active: true }
+    }
+}
+
+type RetireOutcome = StepOutcome<ModelStepStatus, ModelError, AsyncStallReason>;
+
+impl Stage<DeviceCore> for Terminal {
     type Error = ModelError;
     type Output = ModelStepStatus;
     type Wait = AsyncStallReason;
 
-    fn step(
-        &mut self,
-        context: &mut DeviceCore,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let state = std::mem::replace(self, Self::Done);
-        match state {
-            Self::Terminal(status) => StepOutcome::Complete(Ok(status)),
-            Self::RetryCompletion => {
-                let status = retry(context);
-                self.finish(status, Self::RetryCompletion)
+    fn step(&mut self, _: &mut DeviceCore) -> RetireOutcome {
+        self.status.take().map_or(StepOutcome::Exhausted, |status| {
+            StepOutcome::Complete(Ok(status))
+        })
+    }
+}
+
+impl Stage<DeviceCore> for Success {
+    type Error = ModelError;
+    type Output = ModelStepStatus;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
+        let Some(outcome) = self.outcome.take() else {
+            return StepOutcome::Exhausted;
+        };
+        finish(retire(context, RetirableExecution::Success(outcome)))
+    }
+}
+
+impl Stage<DeviceCore> for ExecutionFailure {
+    type Error = ModelError;
+    type Output = ModelStepStatus;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
+        let Some(outcome) = self.outcome.take() else {
+            return StepOutcome::Exhausted;
+        };
+        finish(retire(context, RetirableExecution::Fault(outcome)))
+    }
+}
+
+impl Stage<DeviceCore> for FrontendFailure {
+    type Error = ModelError;
+    type Output = ModelStepStatus;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
+        let Some(fault) = self.fault.take() else {
+            return StepOutcome::Exhausted;
+        };
+        finish(cache_frontend_fault(context, fault))
+    }
+}
+
+impl Stage<DeviceCore> for InvalidCompletion {
+    type Error = ModelError;
+    type Output = ModelStepStatus;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
+        let Some(route) = self.route.take() else {
+            return StepOutcome::Exhausted;
+        };
+        StepOutcome::Complete(context.queues.consume(route.queue).and_then(|()| {
+            if context.queues.has_pending(route.queue)? {
+                context.scheduler.enqueue(route.queue);
             }
-            Self::RetryFault => {
-                let status = retry(context);
-                self.finish(status, Self::RetryFault)
-            }
-            Self::FrontendFault(fault) => {
-                let status = cache_frontend_fault(context, fault);
-                self.finish(status, Self::RetryFault)
-            }
-            Self::Success(success) => {
-                let status = retire(context, RetirableExecution::Success(success));
-                self.finish(status, Self::RetryCompletion)
-            }
-            Self::ExecutionFault(fault) => {
-                let status = retire(context, RetirableExecution::Fault(fault));
-                self.finish(status, Self::RetryFault)
-            }
-            Self::InvalidCompletion(route) => {
-                let result = context.queues.consume(route.queue).and_then(|()| {
-                    if context.queues.has_pending(route.queue)? {
-                        context.scheduler.enqueue(route.queue);
-                    }
-                    Err(ModelError::UnknownCompletionRing(route.completion_ring))
-                });
-                StepOutcome::Complete(result)
-            }
-            Self::Done => StepOutcome::Exhausted,
+            Err(ModelError::UnknownCompletionRing(route.completion_ring))
+        }))
+    }
+}
+
+impl Stage<DeviceCore> for PendingCompletion {
+    type Error = ModelError;
+    type Output = ModelStepStatus;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
+        if !self.active {
+            return StepOutcome::Exhausted;
         }
+        match finish(retry(context)) {
+            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+            terminal => {
+                self.active = false;
+                terminal
+            }
+        }
+    }
+}
+
+impl Stage<DeviceCore> for PendingFault {
+    type Error = ModelError;
+    type Output = ModelStepStatus;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
+        if !self.active {
+            return StepOutcome::Exhausted;
+        }
+        match finish(retry(context)) {
+            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+            terminal => {
+                self.active = false;
+                terminal
+            }
+        }
+    }
+}
+
+const fn finish(status: Result<RetirementStatus, ModelError>) -> RetireOutcome {
+    match status {
+        Ok(RetirementStatus::Progressed) => StepOutcome::Complete(Ok(ModelStepStatus::Progressed)),
+        Ok(RetirementStatus::FaultCached) => {
+            StepOutcome::Complete(Ok(ModelStepStatus::FaultCached))
+        }
+        Ok(RetirementStatus::Stalled(reason)) => StepOutcome::Pending(reason),
+        Err(error) => StepOutcome::Complete(Err(error)),
     }
 }
 
@@ -131,7 +240,7 @@ fn retire(
 
 fn cache_frontend_fault(
     context: &mut DeviceCore,
-    fault: crate::queue::io::NormalizedFault,
+    fault: NormalizedFault,
 ) -> Result<RetirementStatus, ModelError> {
     let resources = context.execution.resources();
     let mut ports = RetirementPorts::new(

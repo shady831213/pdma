@@ -98,6 +98,13 @@ impl DeviceCore {
         self.reset_runner_calls
     }
 }
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "standalone pipeline remains additive until Task 24"
+    )
+)]
 mod command_pipeline;
 mod irq;
 #[doc(hidden)]
@@ -106,7 +113,6 @@ mod probe;
 mod queue;
 mod trace;
 
-pub use command_pipeline::{PipelineFixture, PipelineRunOutcome, PipelineTerminal};
 pub(crate) use pipeline::ModelStepStatus;
 
 #[cfg(test)]

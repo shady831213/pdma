@@ -1,4 +1,27 @@
 //! Async PDMA device model runner.
+//!
+//! ```
+//! use pdma_model_device::{AsyncDevice, AsyncStallReason, DeviceCore, MappedDmaRegion, ModelError};
+//! ```
+//!
+//! ```compile_fail
+//! use pdma_model_device::PipelineFixture;
+//! ```
+//!
+//! ```compile_fail
+//! use pdma_model_device::{PipelineRunOutcome, PipelineTerminal};
+//! ```
+//!
+//! ```compile_fail
+//! use pdma_model_device::PdmaCommandPipeline;
+//! ```
+//!
+//! ```compile_fail
+//! use pdma_model_device::device::command_pipeline::PdmaCommandPipeline;
+//! use pdma_model_device::device::command_pipeline::execute::Copy;
+//! use pdma_model_device::device::command_pipeline::fetch::ProbeFetch;
+//! use pdma_model_device::device::command_pipeline::retire::Success;
+//! ```
 
 #[expect(
     clippy::redundant_pub_crate,
@@ -59,8 +82,6 @@ mod trace;
 )]
 mod device;
 
-#[doc(hidden)]
-pub use device::{PipelineFixture, PipelineRunOutcome, PipelineTerminal};
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,

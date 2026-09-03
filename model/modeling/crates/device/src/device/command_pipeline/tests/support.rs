@@ -1,17 +1,18 @@
 use std::num::NonZeroUsize;
 
+use hardware_interface_pipeline::{ImmediateExecutor, RunError, RunOutcome, StepExecutor};
 use pdma_model_contract::semantic::{
     BufferId, Command, CommandId, CommandOperation, EpochIrqSource, IrqSource, QueueConfigHandle,
-    ResourceConfig, TraceEvent, TraceEventKind,
+    ResourceConfig, TraceEvent,
     desc::{
         BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, StridedCopyRequest,
         VectorAddRequest, VectorBufferRange,
     },
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
-use pdma_model_device::{
-    MappedDmaRegion, ModelError, PipelineFixture, PipelineRunOutcome, PipelineTerminal,
-};
+
+use super::super::{DeviceCore, ModelStepStatus, PdmaCommandPipeline};
+use crate::{AsyncStallReason, MappedDmaRegion, ModelError, ModelResult};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Case {
@@ -37,26 +38,65 @@ impl Case {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Observation {
-    pub(super) terminal: Result<PipelineTerminal, ModelError>,
-    pub(super) destinations: [Vec<u8>; 2],
-    pub(super) completion: Option<pdma_model_contract::semantic::CompletionRecord>,
-    pub(super) event: Option<pdma_model_contract::semantic::EventRecord>,
-    pub(super) irq: bool,
-    pub(super) trace: Vec<TraceEvent>,
+pub(super) enum PipelineRunOutcome {
+    Progressed,
+    Pending(AsyncStallReason),
+    Complete(Result<ModelStepStatus, ModelError>),
+    Exhausted,
+    BudgetExhausted,
+}
+
+#[derive(Debug)]
+pub(super) struct Fixture {
+    pub(super) core: DeviceCore,
+    pub(super) pipeline: PdmaCommandPipeline,
+    historical_fetches: usize,
 }
 
 pub(super) struct Prepared {
-    pub(super) fixture: PipelineFixture,
+    pub(super) fixture: Fixture,
     pub(super) queue: QueueConfigHandle,
     pub(super) destinations: [MappedDmaRegion; 2],
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Drive {
-    Legacy,
-    Stepped,
-    Immediate,
+impl Fixture {
+    pub(super) fn new(resources: ResourceConfig) -> Self {
+        Self {
+            core: DeviceCore::new(
+                std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+                resources,
+            ),
+            pipeline: PdmaCommandPipeline::new(),
+            historical_fetches: 0,
+        }
+    }
+
+    pub(super) fn restart(&mut self) {
+        self.pipeline = PdmaCommandPipeline::new();
+    }
+
+    pub(super) const fn set_resources(&mut self, resources: ResourceConfig) {
+        self.historical_fetches = self
+            .historical_fetches
+            .saturating_add(self.core.execution.native_steps());
+        self.core.execution = crate::execution::ExecutionUnit::new(resources);
+    }
+
+    pub(super) const fn fetch_count(&self) -> usize {
+        self.historical_fetches
+            .saturating_add(self.core.execution.native_steps())
+    }
+
+    pub(super) fn step(&mut self) -> PipelineRunOutcome {
+        normalize(&StepExecutor::new().step(&mut self.pipeline, &mut self.core))
+    }
+
+    pub(super) fn immediate(&mut self) -> PipelineRunOutcome {
+        normalize(
+            &ImmediateExecutor::new(NonZeroUsize::new(16).expect("nonzero budget"))
+                .run(&mut self.pipeline, &mut self.core),
+        )
+    }
 }
 
 pub(super) fn prepare(case: Case) -> Prepared {
@@ -64,19 +104,24 @@ pub(super) fn prepare(case: Case) -> Prepared {
 }
 
 pub(super) fn prepare_with_resources(case: Case, resources: ResourceConfig) -> Prepared {
-    let mut fixture = PipelineFixture::with_resources(resources);
-    fixture.enable_tracing();
-    let source_a = fixture.allocate(8).expect("source A");
-    let source_b = fixture.allocate(8).expect("source B");
-    let destination_a = fixture.allocate(8).expect("destination A");
-    let destination_b = fixture.allocate(8).expect("destination B");
+    let mut fixture = Fixture::new(resources);
+    fixture.core.enable_tracing();
+    let source_a = fixture.core.dma.allocate(8).expect("source A");
+    let source_b = fixture.core.dma.allocate(8).expect("source B");
+    let destination_a = fixture.core.dma.allocate(8).expect("destination A");
+    let destination_b = fixture.core.dma.allocate(8).expect("destination B");
     fixture
-        .write(source_a, &[1, 2, 3, 4, 5, 6, 7, 8])
+        .core
+        .dma
+        .write_object(source_a.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
         .expect("source A bytes");
     fixture
-        .write(source_b, &[8, 7, 6, 5, 4, 3, 2, 1])
+        .core
+        .dma
+        .write_object(source_b.object(), 0, &[8, 7, 6, 5, 4, 3, 2, 1])
         .expect("source B bytes");
     let queue = fixture
+        .core
         .create_queue(QueueConfig::new(
             4,
             4,
@@ -85,18 +130,19 @@ pub(super) fn prepare_with_resources(case: Case, resources: ResourceConfig) -> P
         ))
         .expect("queue");
     fixture
-        .submit(
+        .core
+        .submit_command(
             queue,
             command(case, source_a, source_b, destination_a, destination_b),
         )
         .expect("submission");
-    fixture.doorbell(queue).expect("doorbell");
+    fixture.core.ring_doorbell(queue).expect("doorbell");
     let source = EpochIrqSource::new(
         queue.epoch(),
         IrqSource::Completion(queue.completion_ring_id()),
     );
-    fixture.enable_irq_source(source).expect("enable IRQ");
-    fixture.unmask_irq_source(source).expect("unmask IRQ");
+    fixture.core.enable_irq_source(source).expect("enable IRQ");
+    fixture.core.unmask_irq_source(source).expect("unmask IRQ");
     Prepared {
         fixture,
         queue,
@@ -109,14 +155,22 @@ pub(super) fn prepared_pair() -> Prepared {
         Case::Copy,
         ResourceConfig::default().with_completion_publication_slots(1),
     );
-    let source = prepared.fixture.allocate(8).expect("second source");
+    let source = prepared
+        .fixture
+        .core
+        .dma
+        .allocate(8)
+        .expect("second source");
     prepared
         .fixture
-        .write(source, &[1, 2, 3, 4, 5, 6, 7, 8])
+        .core
+        .dma
+        .write_object(source.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
         .expect("second source bytes");
     prepared
         .fixture
-        .submit(
+        .core
+        .submit_command(
             prepared.queue,
             Command::new(
                 CommandId::new(99),
@@ -176,42 +230,17 @@ fn command(
     Command::new(CommandId::new(7), operation)
 }
 
-pub(super) fn observe(mut prepared: Prepared, drive: Drive) -> Result<Observation, String> {
-    let terminal = match drive {
-        Drive::Legacy => prepared.fixture.legacy_step(),
-        Drive::Stepped => drive_to_complete(&mut prepared.fixture)?,
-        Drive::Immediate => match prepared
-            .fixture
-            .run_immediate(NonZeroUsize::new(8).expect("budget"))
-        {
-            PipelineRunOutcome::Complete(result) => result,
-            other => return Err(format!("unexpected immediate result: {other:?}")),
-        },
-    };
-    let trace = prepared.fixture.trace_events();
-    Ok(Observation {
-        terminal,
-        destinations: [
-            prepared
-                .fixture
-                .read(prepared.destinations[0], 8)
-                .expect("destination A"),
-            prepared
-                .fixture
-                .read(prepared.destinations[1], 8)
-                .expect("destination B"),
-        ],
-        completion: prepared
-            .fixture
-            .poll_completion(prepared.queue)
-            .expect("completion"),
-        event: prepared.fixture.poll_event(prepared.queue).expect("event"),
-        irq: prepared.fixture.irq_snapshot().is_some(),
-        trace,
-    })
+pub(super) fn drive_to_complete(fixture: &mut Fixture) -> Result<ModelStepStatus, ModelError> {
+    loop {
+        match fixture.step() {
+            PipelineRunOutcome::Progressed => {}
+            PipelineRunOutcome::Complete(result) => return result,
+            other => panic!("unexpected step result: {other:?}"),
+        }
+    }
 }
 
-pub(super) fn drive_to_pending(fixture: &mut PipelineFixture) -> PipelineRunOutcome {
+pub(super) fn drive_to_pending(fixture: &mut Fixture) -> PipelineRunOutcome {
     loop {
         match fixture.step() {
             PipelineRunOutcome::Progressed => {}
@@ -220,18 +249,24 @@ pub(super) fn drive_to_pending(fixture: &mut PipelineFixture) -> PipelineRunOutc
     }
 }
 
-pub(super) fn drive_to_complete(
-    fixture: &mut PipelineFixture,
-) -> Result<Result<PipelineTerminal, ModelError>, String> {
-    loop {
-        match fixture.step() {
-            PipelineRunOutcome::Progressed => {}
-            PipelineRunOutcome::Complete(result) => return Ok(result),
-            other => return Err(format!("unexpected stepped result: {other:?}")),
-        }
+pub(super) fn normalize(
+    outcome: &Result<RunOutcome<ModelStepStatus, ModelError, AsyncStallReason>, RunError>,
+) -> PipelineRunOutcome {
+    match outcome {
+        Ok(RunOutcome::Progressed) => PipelineRunOutcome::Progressed,
+        Ok(RunOutcome::Pending(wait)) => PipelineRunOutcome::Pending(*wait),
+        Ok(RunOutcome::Complete(result)) => PipelineRunOutcome::Complete(*result),
+        Err(RunError::Exhausted) => PipelineRunOutcome::Exhausted,
+        Err(RunError::BudgetExhausted) => PipelineRunOutcome::BudgetExhausted,
     }
 }
 
-pub(super) fn count(trace: &[TraceEvent], kind: TraceEventKind) -> usize {
-    trace.iter().filter(|event| event.kind() == kind).count()
+pub(super) fn trace_kinds(
+    trace: &[TraceEvent],
+) -> Vec<pdma_model_contract::semantic::TraceEventKind> {
+    trace.iter().map(TraceEvent::kind).collect()
+}
+
+pub(super) fn read(core: &DeviceCore, region: MappedDmaRegion) -> ModelResult<Vec<u8>> {
+    core.dma.read_object(region.object(), 0, 8)
 }

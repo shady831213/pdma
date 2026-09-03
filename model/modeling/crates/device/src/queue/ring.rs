@@ -34,6 +34,11 @@ impl<T> NativeRing<T> {
         self.len
     }
 
+    #[cfg(test)]
+    pub(crate) const fn cursors(&self) -> (usize, usize) {
+        (self.head, self.tail)
+    }
+
     pub(crate) fn push(&mut self, item: T) -> ModelResult<()> {
         if self.is_full() {
             return Err(ModelError::RingFull);

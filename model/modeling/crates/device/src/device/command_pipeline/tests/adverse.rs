@@ -1,0 +1,227 @@
+use hardware_interface_pipeline::Stage;
+use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, RingLayout};
+use pdma_model_contract::semantic::{
+    BufferId, CommandId, CompletionRingId, DeviceEpoch, EventErrorKind, EventRecord, EventRouting,
+    QueueActivation, QueueConfig, QueueId, QueueRingObjects, SoftwareOwnerId, TraceEventKind,
+    desc::CopyRequest,
+};
+
+use super::super::{PdmaCommandPipeline, execute, retire};
+use super::support::{Case, PipelineRunOutcome, drive_to_complete, prepare, read};
+use crate::ModelError;
+use crate::device::ModelStepStatus;
+use crate::execution::CommandRoute;
+use crate::queue::io::NormalizedFault;
+
+#[test]
+fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
+    // Given: an exact queue whose captured descriptor has invalid ABI metadata.
+    let mut fixture =
+        super::support::Fixture::new(pdma_model_contract::semantic::ResourceConfig::default());
+    fixture.core.enable_tracing();
+    let stage = fixture
+        .core
+        .dma
+        .stage(&[
+            RingLayout::<AbiCommand>::checked_extent(2).expect("command extent"),
+            RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
+            RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
+        ])
+        .expect("ring stage");
+    let [submission, completion, event] = stage.regions() else {
+        panic!("three exact queue rings");
+    };
+    let (submission, completion, event) = (*submission, *completion, *event);
+    let activation = QueueActivation::new(
+        DeviceEpoch::initial(),
+        QueueId::new(0),
+        QueueConfig::new(2, 1, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
+        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
+    );
+    fixture
+        .core
+        .activate_staged_exact_queue(stage, activation)
+        .expect("queue activation");
+    fixture
+        .core
+        .dma
+        .write_memory(submission.base(), &[0; AbiCommand::RECORD_SIZE])
+        .expect("malformed descriptor");
+    let queue = activation.queue();
+    let active = fixture.core.exact_ring_mut(queue).expect("exact queue");
+    active
+        .publish_submission_producer(pdma_model_contract::abi::RingCursor::new(1))
+        .expect("publish producer");
+    active
+        .capture_submission_producer(pdma_model_contract::abi::RingCursor::new(1))
+        .expect("capture producer");
+    fixture.core.ring_dma_bus_doorbell(queue).expect("doorbell");
+
+    // When: fetch normalizes the descriptor violation and retirement publishes it.
+    assert_eq!(
+        drive_to_complete(&mut fixture),
+        Ok(ModelStepStatus::FaultCached)
+    );
+    fixture.restart();
+    assert_eq!(
+        drive_to_complete(&mut fixture),
+        Err(ModelError::DmaSubmissionState)
+    );
+
+    // Then: one SQ slot and one event slot advance with no success publication.
+    let status = fixture
+        .core
+        .exact_ring(queue)
+        .expect("exact queue")
+        .status()
+        .expect("queue status");
+    assert_eq!(
+        (
+            status.submission().producer().raw(),
+            status.submission().consumer().raw(),
+            status.captured_submission_producer().raw(),
+            status.completion().producer().raw(),
+            status.event().producer().raw(),
+        ),
+        (1, 1, 1, 0, 1)
+    );
+    let published = fixture
+        .core
+        .dma
+        .read_memory(event.base(), AbiEvent::RECORD_SIZE as u64)
+        .expect("event bytes");
+    assert_eq!(
+        AbiEvent::decode(&published)
+            .expect("canonical event")
+            .fault()
+            .kind(),
+        pdma_model_contract::abi::AbiEventKind::InvalidVersion
+    );
+    assert_eq!(fixture.core.irq_snapshot(), None);
+    assert_eq!(
+        super::support::trace_kinds(&fixture.core.trace_events()),
+        [TraceEventKind::EventPublished]
+    );
+    assert_eq!(fixture.step(), PipelineRunOutcome::Exhausted);
+}
+
+#[test]
+fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
+    // Given: normalized frontend failure state already staged by the queue frontend.
+    let mut prepared = prepare(Case::Copy);
+    let queue = prepared.queue.queue_id();
+    let source = ModelError::UnknownBuffer(BufferId::new(88));
+    let event = EventRecord::new(
+        queue,
+        CommandId::new(7),
+        EventErrorKind::UnknownBuffer,
+        BufferId::new(88),
+    );
+    assert_eq!(
+        prepared
+            .fixture
+            .core
+            .queues
+            .stage_execution_fault(queue, event),
+        Ok(source)
+    );
+    prepared.fixture.pipeline = PdmaCommandPipeline::FrontendFaultRetirement(
+        retire::FrontendFailure::new(NormalizedFault { queue, source }),
+    );
+
+    // When: the frontend failure caches, then a fresh pipeline retries retirement.
+    assert_eq!(
+        drive_to_complete(&mut prepared.fixture),
+        Ok(ModelStepStatus::FaultCached)
+    );
+    assert_eq!(
+        prepared.fixture.core.queues.semantic_cursors(queue),
+        Ok(((1, 1), (0, 0)))
+    );
+    prepared.fixture.pipeline = PdmaCommandPipeline::PendingFaultRetry(retire::PendingFault::new());
+    let retired = drive_to_complete(&mut prepared.fixture);
+
+    // Then: the exact source, one event, and one consumer advance are preserved.
+    assert_eq!(retired, Err(source));
+    assert_eq!(
+        prepared.fixture.core.poll_queue_event(prepared.queue),
+        Ok(Some(event))
+    );
+    assert_eq!(
+        prepared.fixture.core.poll_queue_event(prepared.queue),
+        Ok(None)
+    );
+    assert_eq!(
+        prepared.fixture.core.queues.semantic_cursors(queue),
+        Ok(((1, 1), (0, 0)))
+    );
+    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
+}
+
+#[test]
+fn invalid_completion_retires_without_dma_or_success_publication() {
+    // Given: a typed copy stage whose accepted route names an absent completion ring.
+    let mut prepared = prepare(Case::Copy);
+    let source = prepared.fixture.core.dma.allocate(8).expect("source");
+    prepared
+        .fixture
+        .core
+        .dma
+        .write_object(source.object(), 0, &[9; 8])
+        .expect("source bytes");
+    let route = CommandRoute::new(
+        prepared.queue.queue_id(),
+        CommandId::new(55),
+        CompletionRingId::new(99),
+        false,
+    );
+    prepared.fixture.pipeline = PdmaCommandPipeline::Copy(execute::Copy::new(
+        route,
+        CopyRequest::new(source.object(), prepared.destinations[0].object(), 4),
+    ));
+
+    // When: execution validates the route and enters invalid-completion retirement.
+    let result = drive_to_complete(&mut prepared.fixture);
+
+    // Then: the command consumes once without DMA, completion, event, or IRQ success.
+    assert_eq!(
+        result,
+        Err(ModelError::UnknownCompletionRing(CompletionRingId::new(99)))
+    );
+    assert_eq!(
+        read(&prepared.fixture.core, prepared.destinations[0]),
+        Ok(vec![0; 8])
+    );
+    assert_eq!(
+        prepared.fixture.core.poll_completion(prepared.queue),
+        Ok(None)
+    );
+    assert_eq!(
+        prepared.fixture.core.poll_queue_event(prepared.queue),
+        Ok(None)
+    );
+    assert_eq!(prepared.fixture.core.irq_snapshot(), None);
+    assert_eq!(
+        prepared
+            .fixture
+            .core
+            .queues
+            .semantic_cursors(prepared.queue.queue_id()),
+        Ok(((1, 1), (0, 0)))
+    );
+    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
+}
+
+#[test]
+fn concrete_pipeline_variants_accept_only_typed_stage_owners() {
+    fn assert_stage<S: Stage<crate::device::DeviceCore, Error = ModelError>>() {}
+    assert_stage::<execute::Copy>();
+    assert_stage::<execute::StridedCopy>();
+    assert_stage::<execute::BroadcastCopy>();
+    assert_stage::<execute::VectorAdd>();
+    assert_stage::<retire::FrontendFailure>();
+    assert_stage::<retire::ExecutionFailure>();
+    assert_stage::<retire::InvalidCompletion>();
+    assert_stage::<retire::PendingCompletion>();
+    assert_stage::<retire::PendingFault>();
+}

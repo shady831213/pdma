@@ -152,6 +152,14 @@ impl QueueIo {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) const fn semantic_cursors(&self) -> Option<((usize, usize), (usize, usize))> {
+        match self {
+            Self::Semantic(io) => Some(io.cursors()),
+            Self::Exact(_) => None,
+        }
+    }
+
     pub(crate) fn publish_completion(
         &mut self,
         memory: &PdmaMemoryMappings,

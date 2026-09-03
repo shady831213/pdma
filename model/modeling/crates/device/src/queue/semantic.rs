@@ -74,6 +74,11 @@ impl SemanticQueueIo {
         !self.commands.is_empty()
     }
 
+    #[cfg(test)]
+    pub(crate) const fn cursors(&self) -> ((usize, usize), (usize, usize)) {
+        (self.commands.cursors(), self.completions.cursors())
+    }
+
     pub(crate) fn publish_completion(&mut self, record: CompletionRecord) -> PublicationOutcome {
         if self.completions.push(record).is_ok() {
             PublicationOutcome::Published

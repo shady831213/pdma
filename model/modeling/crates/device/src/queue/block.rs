@@ -68,6 +68,17 @@ impl QueueBlock {
         self.get(queue).map(|context| context.entry)
     }
 
+    #[cfg(test)]
+    pub(crate) fn semantic_cursors(
+        &self,
+        queue: QueueId,
+    ) -> ModelResult<((usize, usize), (usize, usize))> {
+        self.get(queue)?
+            .io
+            .semantic_cursors()
+            .ok_or(ModelError::UnknownQueue(queue))
+    }
+
     pub(crate) fn contains_completion(&self, completion: CompletionRingId) -> bool {
         self.get_by_completion(completion).is_ok()
     }

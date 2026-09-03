@@ -1,149 +1,176 @@
 use hardware_interface_pipeline::{Stage, StepOutcome};
+use pdma_model_contract::semantic::{
+    BroadcastCopyRequest, CopyRequest, StridedCopyRequest, VectorAddRequest,
+};
 
-use super::super::{DeviceCore, ModelStepStatus};
-use super::fetch::FetchedRoute;
-use crate::execution::ExecutionOutcome;
+use super::super::DeviceCore;
+use crate::execution::{CommandRoute, ExecutionFault, ExecutionOutcome, SuccessfulExecution};
 use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug)]
-pub(super) enum Execute {
-    Terminal(ModelStepStatus),
-    RetryCompletion,
-    RetryFault,
-    FrontendFault(crate::queue::io::NormalizedFault),
-    Copy(
-        crate::execution::CommandRoute,
-        pdma_model_contract::semantic::Command,
-    ),
-    Strided(
-        crate::execution::CommandRoute,
-        pdma_model_contract::semantic::Command,
-    ),
-    Broadcast(
-        crate::execution::CommandRoute,
-        pdma_model_contract::semantic::Command,
-    ),
-    VectorAdd(
-        crate::execution::CommandRoute,
-        pdma_model_contract::semantic::Command,
-    ),
-    Done,
+pub(super) struct Copy {
+    pending: Option<(CommandRoute, CopyRequest)>,
 }
 
 #[derive(Debug)]
+pub(super) struct StridedCopy {
+    pending: Option<(CommandRoute, StridedCopyRequest)>,
+}
+
+#[derive(Debug)]
+pub(super) struct BroadcastCopy {
+    pending: Option<(CommandRoute, BroadcastCopyRequest)>,
+}
+
+#[derive(Debug)]
+pub(super) struct VectorAdd {
+    pending: Option<(CommandRoute, VectorAddRequest)>,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(super) enum ExecutedRoute {
-    Terminal(ModelStepStatus),
-    RetryCompletion,
-    RetryFault,
-    FrontendFault(crate::queue::io::NormalizedFault),
-    Success(crate::execution::SuccessfulExecution),
-    Fault(crate::execution::ExecutionFault),
-    InvalidCompletion(crate::execution::CommandRoute),
+    Success(SuccessfulExecution),
+    Fault(ExecutionFault),
+    InvalidCompletion(CommandRoute),
 }
 
-impl From<FetchedRoute> for Execute {
-    fn from(route: FetchedRoute) -> Self {
-        match route {
-            FetchedRoute::Terminal(status) => Self::Terminal(status),
-            FetchedRoute::RetryCompletion => Self::RetryCompletion,
-            FetchedRoute::RetryFault => Self::RetryFault,
-            FetchedRoute::FrontendFault(fault) => Self::FrontendFault(fault),
-            FetchedRoute::Copy(route, command) => Self::Copy(route, command),
-            FetchedRoute::Strided(route, command) => Self::Strided(route, command),
-            FetchedRoute::Broadcast(route, command) => Self::Broadcast(route, command),
-            FetchedRoute::VectorAdd(route, command) => Self::VectorAdd(route, command),
+impl Copy {
+    pub(super) const fn new(route: CommandRoute, request: CopyRequest) -> Self {
+        Self {
+            pending: Some((route, request)),
         }
     }
 }
 
-impl Execute {
-    fn pending(
-        context: &mut DeviceCore,
-        route: crate::execution::CommandRoute,
-        reason: AsyncStallReason,
-    ) -> Result<StepOutcome<ExecutedRoute, ModelError, AsyncStallReason>, ModelError> {
-        if context.queues.has_pending(route.queue)? {
-            context.scheduler.enqueue(route.queue);
+impl StridedCopy {
+    pub(super) const fn new(route: CommandRoute, request: StridedCopyRequest) -> Self {
+        Self {
+            pending: Some((route, request)),
         }
-        context.trace.stall(Some(route.queue), stall_name(reason));
-        Ok(StepOutcome::Pending(reason))
     }
 }
 
-impl Stage<DeviceCore> for Execute {
+impl BroadcastCopy {
+    pub(super) const fn new(route: CommandRoute, request: BroadcastCopyRequest) -> Self {
+        Self {
+            pending: Some((route, request)),
+        }
+    }
+}
+
+impl VectorAdd {
+    pub(super) const fn new(route: CommandRoute, request: VectorAddRequest) -> Self {
+        Self {
+            pending: Some((route, request)),
+        }
+    }
+}
+
+impl Stage<DeviceCore> for Copy {
     type Error = ModelError;
     type Output = ExecutedRoute;
     type Wait = AsyncStallReason;
 
-    fn step(
-        &mut self,
-        context: &mut DeviceCore,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let state = std::mem::replace(self, Self::Done);
-        match state {
-            Self::Terminal(status) => StepOutcome::Complete(Ok(ExecutedRoute::Terminal(status))),
-            Self::RetryCompletion => StepOutcome::Complete(Ok(ExecutedRoute::RetryCompletion)),
-            Self::RetryFault => StepOutcome::Complete(Ok(ExecutedRoute::RetryFault)),
-            Self::FrontendFault(fault) => {
-                StepOutcome::Complete(Ok(ExecutedRoute::FrontendFault(fault)))
-            }
-            Self::Copy(route, command) => self.run_command(context, route, command, Self::Copy),
-            Self::Strided(route, command) => {
-                self.run_command(context, route, command, Self::Strided)
-            }
-            Self::Broadcast(route, command) => {
-                self.run_command(context, route, command, Self::Broadcast)
-            }
-            Self::VectorAdd(route, command) => {
-                self.run_command(context, route, command, Self::VectorAdd)
-            }
-            Self::Done => StepOutcome::Exhausted,
+    fn step(&mut self, context: &mut DeviceCore) -> ExecuteOutcome {
+        let Some((route, request)) = self.pending.take() else {
+            return StepOutcome::Exhausted;
+        };
+        if !context.execution.can_execute_copy() {
+            self.pending = Some((route, request));
+            return pending(context, route);
         }
+        complete(crate::execution::ExecutionUnit::execute_copy(
+            &context.dma,
+            route,
+            request,
+        ))
     }
 }
 
-impl Execute {
-    fn run_command(
-        &mut self,
-        context: &mut DeviceCore,
-        route: crate::execution::CommandRoute,
-        command: pdma_model_contract::semantic::Command,
-        restore: fn(crate::execution::CommandRoute, pdma_model_contract::semantic::Command) -> Self,
-    ) -> StepOutcome<ExecutedRoute, ModelError, AsyncStallReason> {
-        if !context.execution.can_execute(&command) {
-            return match Self::pending(context, route, AsyncStallReason::ExecutionResourcePressure)
-            {
-                Ok(outcome) => {
-                    *self = restore(route, command);
-                    outcome
-                }
-                Err(error) => StepOutcome::Complete(Err(error)),
-            };
+impl Stage<DeviceCore> for StridedCopy {
+    type Error = ModelError;
+    type Output = ExecutedRoute;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> ExecuteOutcome {
+        let Some((route, request)) = self.pending.take() else {
+            return StepOutcome::Exhausted;
+        };
+        if !context.execution.can_execute_strided(request) {
+            self.pending = Some((route, request));
+            return pending(context, route);
         }
-        match context
-            .execution
-            .execute(&context.dma, route, command.clone())
-        {
-            Ok(outcome) => StepOutcome::Complete(Ok(match outcome {
-                ExecutionOutcome::Success(success) => ExecutedRoute::Success(success),
-                ExecutionOutcome::Fault(fault) => ExecutedRoute::Fault(fault),
-                ExecutionOutcome::InvalidCompletion(route) => {
-                    ExecutedRoute::InvalidCompletion(route)
-                }
-            })),
-            Err(reason) => {
-                *self = restore(route, command);
-                StepOutcome::Pending(reason)
-            }
-        }
+        complete(crate::execution::ExecutionUnit::execute_strided(
+            &context.dma,
+            route,
+            request,
+        ))
     }
 }
 
-const fn stall_name(reason: AsyncStallReason) -> &'static str {
-    match reason {
-        AsyncStallReason::ExecutionResourcePressure => "ExecutionResourcePressure",
-        AsyncStallReason::CompletionPublicationPressure => "CompletionPublicationPressure",
-        AsyncStallReason::EventPublicationPressure => "EventPublicationPressure",
-        AsyncStallReason::FaultRetirementPendingRetry => "FaultRetirementPendingRetry",
+impl Stage<DeviceCore> for BroadcastCopy {
+    type Error = ModelError;
+    type Output = ExecutedRoute;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> ExecuteOutcome {
+        let Some((route, request)) = self.pending.take() else {
+            return StepOutcome::Exhausted;
+        };
+        if !context.execution.can_execute_broadcast(&request) {
+            self.pending = Some((route, request));
+            return pending(context, route);
+        }
+        complete(crate::execution::ExecutionUnit::execute_broadcast(
+            &context.dma,
+            route,
+            &request,
+        ))
+    }
+}
+
+impl Stage<DeviceCore> for VectorAdd {
+    type Error = ModelError;
+    type Output = ExecutedRoute;
+    type Wait = AsyncStallReason;
+
+    fn step(&mut self, context: &mut DeviceCore) -> ExecuteOutcome {
+        let Some((route, request)) = self.pending.take() else {
+            return StepOutcome::Exhausted;
+        };
+        if !context.execution.can_execute_vector_add() {
+            self.pending = Some((route, request));
+            return pending(context, route);
+        }
+        complete(crate::execution::ExecutionUnit::execute_vector_add(
+            &context.dma,
+            route,
+            request,
+        ))
+    }
+}
+
+type ExecuteOutcome = StepOutcome<ExecutedRoute, ModelError, AsyncStallReason>;
+
+const fn complete(outcome: ExecutionOutcome) -> ExecuteOutcome {
+    StepOutcome::Complete(Ok(match outcome {
+        ExecutionOutcome::Success(success) => ExecutedRoute::Success(success),
+        ExecutionOutcome::Fault(fault) => ExecutedRoute::Fault(fault),
+        ExecutionOutcome::InvalidCompletion(route) => ExecutedRoute::InvalidCompletion(route),
+    }))
+}
+
+fn pending(context: &mut DeviceCore, route: CommandRoute) -> ExecuteOutcome {
+    match context.queues.has_pending(route.queue) {
+        Ok(has_pending) => {
+            if has_pending {
+                context.scheduler.enqueue(route.queue);
+            }
+            context
+                .trace
+                .stall(Some(route.queue), "ExecutionResourcePressure");
+            StepOutcome::Pending(AsyncStallReason::ExecutionResourcePressure)
+        }
+        Err(error) => StepOutcome::Complete(Err(error)),
     }
 }

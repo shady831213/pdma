@@ -1,5 +1,7 @@
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use pdma_model_contract::semantic::{Command, CommandOperation};
+use pdma_model_contract::semantic::{
+    BroadcastCopyRequest, CommandOperation, CopyRequest, StridedCopyRequest, VectorAddRequest,
+};
 
 use super::super::probe::{RunStateProbe, probe_run_state};
 use super::super::{DeviceCore, ModelStepStatus};
@@ -26,10 +28,10 @@ pub(super) enum FetchedRoute {
     RetryCompletion,
     RetryFault,
     FrontendFault(NormalizedFault),
-    Copy(CommandRoute, Command),
-    Strided(CommandRoute, Command),
-    Broadcast(CommandRoute, Command),
-    VectorAdd(CommandRoute, Command),
+    Copy(CommandRoute, CopyRequest),
+    StridedCopy(CommandRoute, StridedCopyRequest),
+    BroadcastCopy(CommandRoute, BroadcastCopyRequest),
+    VectorAdd(CommandRoute, VectorAddRequest),
 }
 
 impl ProbeFetch {
@@ -69,11 +71,15 @@ impl ProbeFetch {
                 context
                     .trace
                     .scheduled(queue, operation, command.command_id());
-                Ok(match command.operation() {
-                    CommandOperation::Copy(_) => FetchedRoute::Copy(route, command),
-                    CommandOperation::StridedCopy(_) => FetchedRoute::Strided(route, command),
-                    CommandOperation::BroadcastCopy(_) => FetchedRoute::Broadcast(route, command),
-                    CommandOperation::VectorAdd(_) => FetchedRoute::VectorAdd(route, command),
+                Ok(match command.into_operation() {
+                    CommandOperation::Copy(request) => FetchedRoute::Copy(route, request),
+                    CommandOperation::StridedCopy(request) => {
+                        FetchedRoute::StridedCopy(route, request)
+                    }
+                    CommandOperation::BroadcastCopy(request) => {
+                        FetchedRoute::BroadcastCopy(route, request)
+                    }
+                    CommandOperation::VectorAdd(request) => FetchedRoute::VectorAdd(route, request),
                 })
             }
         }

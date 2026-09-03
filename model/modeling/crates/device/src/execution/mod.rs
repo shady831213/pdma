@@ -9,7 +9,10 @@ mod resources;
 mod vector_add;
 
 use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_contract::semantic::{Command, CommandOperation};
+use pdma_model_contract::semantic::{
+    BroadcastCopyRequest, Command, CommandOperation, CopyRequest, StridedCopyRequest,
+    VectorAddRequest,
+};
 
 pub(crate) use context::{
     CommandRoute, ExecutionFault, ExecutionOutcome, RetirableExecution, SuccessfulExecution,
@@ -43,6 +46,54 @@ impl ExecutionUnit {
 
     pub(crate) fn can_execute(&self, command: &Command) -> bool {
         resources::ResourceDemand::for_command(command).fits(self.resources)
+    }
+
+    pub(crate) const fn can_execute_copy(&self) -> bool {
+        resources::ResourceDemand::copy().fits(self.resources)
+    }
+
+    pub(crate) const fn can_execute_strided(&self, request: StridedCopyRequest) -> bool {
+        resources::ResourceDemand::strided(request).fits(self.resources)
+    }
+
+    pub(crate) fn can_execute_broadcast(&self, request: &BroadcastCopyRequest) -> bool {
+        resources::ResourceDemand::broadcast(request).fits(self.resources)
+    }
+
+    pub(crate) const fn can_execute_vector_add(&self) -> bool {
+        resources::ResourceDemand::vector_add().fits(self.resources)
+    }
+
+    pub(crate) fn execute_copy(
+        dma: &crate::dma::PdmaMemoryMappings,
+        route: CommandRoute,
+        request: CopyRequest,
+    ) -> ExecutionOutcome {
+        copy::execute(dma, route, request)
+    }
+
+    pub(crate) fn execute_strided(
+        dma: &crate::dma::PdmaMemoryMappings,
+        route: CommandRoute,
+        request: StridedCopyRequest,
+    ) -> ExecutionOutcome {
+        copy::execute_strided(dma, route, request)
+    }
+
+    pub(crate) fn execute_broadcast(
+        dma: &crate::dma::PdmaMemoryMappings,
+        route: CommandRoute,
+        request: &BroadcastCopyRequest,
+    ) -> ExecutionOutcome {
+        broadcast::execute(dma, route, request)
+    }
+
+    pub(crate) fn execute_vector_add(
+        dma: &crate::dma::PdmaMemoryMappings,
+        route: CommandRoute,
+        request: VectorAddRequest,
+    ) -> ExecutionOutcome {
+        vector_add::execute(dma, route, request)
     }
 
     pub(crate) fn execute(

@@ -1,7 +1,8 @@
-use super::{SharedMemory, lock_store};
+use super::backend::{MemoryState, inspect, mutate};
+use super::{Memory, MemoryStorage, SharedMemory};
 use crate::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion};
 
-impl MemoryAccess for SharedMemory {
+impl<P: MemoryStorage> MemoryAccess for Memory<P> {
     fn read(
         &self,
         address: MemoryAddress,
@@ -9,16 +10,16 @@ impl MemoryAccess for SharedMemory {
         destination: &mut [u8],
     ) -> Result<(), MemoryAccessError> {
         let access = CheckedAccess::new(address, alignment, destination.len())?;
-        let store = lock_store(&self.inner);
-        let stored = store.resolve(access.address, access.length)?;
-        let range = stored.range(access.address, access.end)?;
-        let source = stored
-            .bytes
-            .get(range)
-            .ok_or_else(|| access.crossing(stored.region))?;
-        destination.copy_from_slice(source);
-        drop(store);
-        Ok(())
+        inspect(&self.backend, |state| {
+            let stored = state.resolve(access.address, access.length)?;
+            let range = stored.range(access.address, access.end)?;
+            let source = stored
+                .bytes
+                .get(range)
+                .ok_or_else(|| access.crossing(stored.region))?;
+            destination.copy_from_slice(source);
+            Ok(())
+        })
     }
 
     fn write(
@@ -27,21 +28,40 @@ impl MemoryAccess for SharedMemory {
         alignment: MemoryAlignment,
         source: &[u8],
     ) -> Result<(), MemoryAccessError> {
-        let mut store = lock_store(&self.inner);
-        write_store(&mut store, address, alignment, source)?;
-        drop(store);
-        Ok(())
+        mutate(&self.backend, |state| {
+            write_store(state, address, alignment, source)
+        })
+    }
+}
+
+impl MemoryAccess for SharedMemory {
+    fn read(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        destination: &mut [u8],
+    ) -> Result<(), MemoryAccessError> {
+        self.memory.read(address, alignment, destination)
+    }
+
+    fn write(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        source: &[u8],
+    ) -> Result<(), MemoryAccessError> {
+        self.memory.write(address, alignment, source)
     }
 }
 
 pub(super) fn write_store(
-    store: &mut super::Store,
+    state: &mut MemoryState,
     address: MemoryAddress,
     alignment: MemoryAlignment,
     source: &[u8],
 ) -> Result<(), MemoryAccessError> {
     let access = CheckedAccess::new(address, alignment, source.len())?;
-    let stored = store.resolve_mut(access.address, access.length)?;
+    let stored = state.resolve_mut(access.address, access.length)?;
     let region = stored.region;
     let range = stored.range(access.address, access.end)?;
     let destination = stored

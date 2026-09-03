@@ -33,7 +33,7 @@ pub use register::{
 };
 pub use storage::{LocalStorage, MutexStorage, StorageBackend, StorageError};
 pub use store::{
-    MemoryTransaction, MemoryTransactionDraft, PreparedRegions, SharedMemory,
-    TransactionPreparedRegions,
+    LocalMemoryStorage, Memory, MemoryStorage, MemoryTransaction, MemoryTransactionDraft,
+    PreparedRegions, SharedMemory, SharedMemoryStorage, TransactionPreparedRegions,
 };
 pub use trace::TraceBuffer;

@@ -1,4 +1,5 @@
-use super::{SharedMemory, Store, StoredRegion, lock_store, validate_overlaps};
+use super::backend::{MemoryState, StoredRegion, mutate, validate_overlaps};
+use super::{Memory, MemoryStorage, SharedMemory};
 use crate::{MemoryError, MemoryRegion, MemoryRevision};
 
 /// A preallocated public proposal bound to one observed revision.
@@ -12,30 +13,38 @@ pub struct PreparedRegions {
 impl PreparedRegions {
     /// Consumes and installs this proposal if its observed revision is current.
     pub fn try_install(self, memory: &SharedMemory) -> Result<(), MemoryError> {
-        let mut store = lock_store(&memory.inner);
-        if store.revision != self.expected_revision {
-            return Err(MemoryError::StaleRevision {
-                expected_revision: self.expected_revision.raw(),
-                actual_revision: store.revision.raw(),
-            });
-        }
-        store.install(self);
-        drop(store);
-        Ok(())
+        self.try_install_on(&memory.memory)
     }
 
-    pub(super) fn prepare(store: &Store, regions: &[MemoryRegion]) -> Result<Self, MemoryError> {
-        validate_overlaps(store, regions)?;
-        let next_revision = store
+    /// Consumes and installs this proposal on generic checked memory.
+    pub fn try_install_on<P: MemoryStorage>(self, memory: &Memory<P>) -> Result<(), MemoryError> {
+        mutate(&memory.backend, |state| {
+            if state.revision != self.expected_revision {
+                return Err(MemoryError::StaleRevision {
+                    expected_revision: self.expected_revision.raw(),
+                    actual_revision: state.revision.raw(),
+                });
+            }
+            state.install(self);
+            Ok(())
+        })
+    }
+
+    pub(super) fn prepare(
+        state: &MemoryState,
+        regions: &[MemoryRegion],
+    ) -> Result<Self, MemoryError> {
+        validate_overlaps(state, regions)?;
+        let next_revision = state
             .revision
             .checked_next()
             .ok_or(MemoryError::RevisionExhausted)?;
-        let final_count = store.regions.len().checked_add(regions.len()).ok_or(
+        let final_count = state.regions.len().checked_add(regions.len()).ok_or(
             MemoryError::RegionTableExhausted {
                 entries: usize::MAX,
             },
         )?;
-        if store
+        if state
             .region_capacity
             .is_some_and(|capacity| final_count > capacity)
         {
@@ -53,7 +62,7 @@ impl PreparedRegions {
             additions.push(StoredRegion::allocate(*region)?);
         }
         Ok(Self {
-            expected_revision: store.revision,
+            expected_revision: state.revision,
             next_revision,
             additions,
         })

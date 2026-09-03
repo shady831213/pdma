@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use super::PreparedRegions;
+use super::backend::MemoryState;
 use super::bulk::write_store;
-use super::{PreparedRegions, Store};
 use crate::{
     MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryError, MemoryRegion, MemoryRevision,
 };
@@ -10,14 +11,14 @@ use crate::{
 /// An exclusive synchronous memory view confined to a transaction closure.
 #[derive(Debug)]
 pub struct MemoryTransaction<'store> {
-    store: &'store mut Store,
+    state: &'store mut MemoryState,
     not_send: PhantomData<Rc<()>>,
 }
 
 impl<'store> MemoryTransaction<'store> {
-    pub(super) const fn new(store: &'store mut Store) -> Self {
+    pub(super) const fn new(state: &'store mut MemoryState) -> Self {
         Self {
-            store,
+            state,
             not_send: PhantomData,
         }
     }
@@ -27,7 +28,7 @@ impl<'store> MemoryTransaction<'store> {
         &self,
         regions: &[MemoryRegion],
     ) -> Result<TransactionPreparedRegions<'store>, MemoryError> {
-        PreparedRegions::prepare(self.store, regions).map(|prepared| TransactionPreparedRegions {
+        PreparedRegions::prepare(self.state, regions).map(|prepared| TransactionPreparedRegions {
             prepared,
             brand: PhantomData,
         })
@@ -39,22 +40,22 @@ impl<'store> MemoryTransaction<'store> {
         prepared: TransactionPreparedRegions<'store>,
     ) -> MemoryRevision {
         let revision = prepared.prepared.next_revision;
-        self.store.install(prepared.prepared);
+        self.state.install(prepared.prepared);
         revision
     }
 
     /// Clones the exclusive view into a fallible transaction-local draft.
     pub fn try_draft(&self) -> Result<MemoryTransactionDraft<'store>, MemoryError> {
         Ok(MemoryTransactionDraft {
-            store: self.store.try_clone()?,
+            state: self.state.try_clone()?,
             brand: PhantomData,
         })
     }
 
     /// Replaces the exclusive view with a completely validated draft.
     pub fn install_draft(&mut self, draft: MemoryTransactionDraft<'store>) -> MemoryRevision {
-        let revision = draft.store.revision;
-        *self.store = draft.store;
+        let revision = draft.state.revision;
+        *self.state = draft.state;
         revision
     }
 }
@@ -69,15 +70,15 @@ pub struct TransactionPreparedRegions<'store> {
 /// A prospective store confined to one exclusive transaction.
 #[derive(Debug)]
 pub struct MemoryTransactionDraft<'store> {
-    store: Store,
+    state: MemoryState,
     brand: PhantomData<&'store mut &'store ()>,
 }
 
 impl MemoryTransactionDraft<'_> {
     /// Prepares and applies regions only to this prospective view.
     pub fn prepare_regions(&mut self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
-        let prepared = PreparedRegions::prepare(&self.store, regions)?;
-        self.store.install(prepared);
+        let prepared = PreparedRegions::prepare(&self.state, regions)?;
+        self.state.install(prepared);
         Ok(())
     }
 
@@ -88,6 +89,6 @@ impl MemoryTransactionDraft<'_> {
         alignment: MemoryAlignment,
         source: &[u8],
     ) -> Result<(), MemoryAccessError> {
-        write_store(&mut self.store, address, alignment, source)
+        write_store(&mut self.state, address, alignment, source)
     }
 }

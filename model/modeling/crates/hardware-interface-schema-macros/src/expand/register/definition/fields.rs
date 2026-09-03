@@ -49,7 +49,8 @@ fn expand_reference(
     let setters = vec![quote! {
         #[doc = "Encodes the reusable typed bits value while preserving undeclared bits."]
         pub fn set_fields(&mut self, value: <#path as #facade::BitsLayout>::Value) -> ::core::result::Result<(), #facade::RegisterCodecError> {
-            let encoded = <#path as #facade::BitsLayout>::encode_register(&value)?;
+            let encoded = <#path as #facade::BitsLayout>::encode_register(&value)
+                .map_err(|error| error.rebased(self.base))?;
             let declared_mask = <#path as #facade::BitsLayout>::DECLARED_MASK;
             let mut view = #marker::SPEC.view_mut(self.bytes)?;
             let current = view.value()?;
@@ -128,7 +129,7 @@ fn expand_inline(
         let setter = format_ident!("set_{}", method);
         let value = quote!(value);
         let encoded = crate::internal::expand::bits::encode_local(&value);
-        setters.push(quote!(#[doc = "Writes the named register field."] pub fn #setter(&mut self, value: #semantic_type) -> ::core::result::Result<(), #facade::RegisterCodecError> { #marker::SPEC.view_mut(self.bytes)?.set_field_by_name(#name, #encoded) }));
+        setters.push(quote!(#[doc = "Writes the named register field."] pub fn #setter(&mut self, value: #semantic_type) -> ::core::result::Result<(), #facade::RegisterCodecError> { #marker::SPEC.view_mut(self.bytes)?.set_field_by_name(#name, #encoded).map_err(|error| error.rebased(self.base)) }));
         let full = quote!(u64::from(self.0));
         let decoded_value = crate::internal::expand::bits::decode(field, &full);
         let with_method = format_ident!("with_{}", method);

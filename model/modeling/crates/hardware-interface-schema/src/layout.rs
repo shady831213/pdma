@@ -1,4 +1,4 @@
-use crate::{RegisterCollection, SchemaCodecError};
+use crate::{RegisterCollection, SchemaCodecError, SchemaCoordinate};
 
 /// Shared byte-layout contract implemented by generated records.
 pub trait RecordLayout {
@@ -64,6 +64,21 @@ pub trait RegisterLayout {
     fn view(bytes: &[u8]) -> Result<Self::View<'_>, SchemaCodecError>;
     /// Creates a checked mutable view.
     fn view_mut(bytes: &mut [u8]) -> Result<Self::ViewMut<'_>, SchemaCodecError>;
+
+    /// Creates an immutable view whose member errors are relative to `base`.
+    #[doc(hidden)]
+    fn view_at(bytes: &[u8], base: SchemaCoordinate) -> Result<Self::View<'_>, SchemaCodecError> {
+        Self::view(bytes).map_err(|error| error.rebased(base))
+    }
+
+    /// Creates a mutable view whose member errors are relative to `base`.
+    #[doc(hidden)]
+    fn view_mut_at(
+        bytes: &mut [u8],
+        base: SchemaCoordinate,
+    ) -> Result<Self::ViewMut<'_>, SchemaCodecError> {
+        Self::view_mut(bytes).map_err(|error| error.rebased(base))
+    }
 
     /// Appends every leaf register below one placement to a resolved map.
     #[doc(hidden)]

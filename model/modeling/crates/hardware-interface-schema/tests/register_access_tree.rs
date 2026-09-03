@@ -126,6 +126,8 @@ fn adverse_grouped_access_rejects_without_mutating_root_bytes()
     let short_before = short;
     let mut bytes = [0x5a_u8; 32];
     let before = bytes;
+    let mut direct = [0x5a_u8; 2];
+    let direct_before = direct;
 
     // When: short-root, maximum-index, and overflowing-field paths are attempted.
     let short_error = AccessTreeViewMut::new(&mut short).err();
@@ -139,6 +141,7 @@ fn adverse_grouped_access_rejects_without_mutating_root_bytes()
         .command_mut()?
         .control_mut(1)?
         .set_mode(8);
+    let direct_overflow_error = TreeControlViewMut::new(&mut direct)?.set_mode(8);
 
     // Then: errors are exact and every root byte remains unchanged.
     assert_eq!(
@@ -158,6 +161,14 @@ fn adverse_grouped_access_rejects_without_mutating_root_bytes()
     assert_eq!(
         overflow_error,
         Err(RegisterValueError::FieldValueOverflow {
+            location: TreeControl::MODE_IDENTITY.at_bit(97),
+            bit_width: 3,
+            value: 8,
+        })
+    );
+    assert_eq!(
+        direct_overflow_error,
+        Err(RegisterValueError::FieldValueOverflow {
             location: TreeControl::MODE_IDENTITY.at_bit(1),
             bit_width: 3,
             value: 8,
@@ -165,6 +176,9 @@ fn adverse_grouped_access_rejects_without_mutating_root_bytes()
     );
     assert_eq!(short, short_before);
     assert_eq!(bytes, before);
-    println!("adverse short=32/31 index=max/count2 overflow=mode8 unchanged=true");
+    assert_eq!(direct, direct_before);
+    println!(
+        "adverse short=32/31 index=max/count2 grouped_overflow=bit97 direct_overflow=bit1 unchanged=true"
+    );
     Ok(())
 }

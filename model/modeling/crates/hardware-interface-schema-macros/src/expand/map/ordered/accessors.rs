@@ -39,7 +39,7 @@ pub(super) fn leaf_getters(
                 let start = range.start;
                 let end = range.end;
                 let child = self.bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: self.bytes.len() })?;
-                <#definition as #facade::RegisterLayout>::view(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))
+                <#definition as #facade::RegisterLayout>::view_at(child, #facade::SchemaCoordinate::Byte(start))
             }
         },
         mutable: quote! {
@@ -51,7 +51,7 @@ pub(super) fn leaf_getters(
                 let end = range.end;
                 let actual = self.bytes.len();
                 let child = self.bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-                <#definition as #facade::RegisterLayout>::view_mut(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))
+                <#definition as #facade::RegisterLayout>::view_mut_at(child, #facade::SchemaCoordinate::Byte(start))
             }
         },
     }

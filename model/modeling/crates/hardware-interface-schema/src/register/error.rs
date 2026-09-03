@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::SchemaLocation;
+use crate::{SchemaCoordinate, SchemaLocation};
 
 /// Failure while validating legacy whole-register metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,6 +227,41 @@ pub enum RegisterValueError {
         /// Supplied value.
         value: u64,
     },
+    /// A field location cannot be represented at its containing layout coordinate.
+    CoordinateRebaseOverflow {
+        /// Original register-local field location.
+        location: SchemaLocation,
+        /// Containing layout coordinate that could not be added.
+        base: SchemaCoordinate,
+    },
+}
+
+impl RegisterValueError {
+    /// Rebases a field-bearing failure under `base` without changing its category.
+    #[must_use]
+    pub const fn rebased(self, base: SchemaCoordinate) -> Self {
+        match self {
+            Self::InvalidDefinition => Self::InvalidDefinition,
+            Self::BufferTooShort { required, actual } => Self::BufferTooShort { required, actual },
+            Self::ValueOverflow { width, value } => Self::ValueOverflow { width, value },
+            Self::UnknownFieldName { name } => Self::UnknownFieldName { name },
+            Self::FieldValueOverflow {
+                location,
+                bit_width,
+                value,
+            } => match location.checked_rebase(base) {
+                Some(location) => Self::FieldValueOverflow {
+                    location,
+                    bit_width,
+                    value,
+                },
+                None => Self::CoordinateRebaseOverflow { location, base },
+            },
+            Self::CoordinateRebaseOverflow { location, base } => {
+                Self::CoordinateRebaseOverflow { location, base }
+            }
+        }
+    }
 }
 
 impl fmt::Display for RegisterValueError {

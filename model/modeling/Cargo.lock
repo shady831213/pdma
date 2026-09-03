@@ -86,6 +86,7 @@ dependencies = [
 name = "pdma-model-device"
 version = "0.1.0"
 dependencies = [
+ "hardware-interface-pipeline",
  "hardware-interface-runtime",
  "pdma-model-contract",
  "tokio",

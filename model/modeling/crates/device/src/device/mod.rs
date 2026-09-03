@@ -98,6 +98,7 @@ impl DeviceCore {
         self.reset_runner_calls
     }
 }
+mod command_pipeline;
 mod irq;
 #[doc(hidden)]
 pub(crate) mod pipeline;
@@ -105,6 +106,7 @@ mod probe;
 mod queue;
 mod trace;
 
+pub use command_pipeline::{PipelineFixture, PipelineRunOutcome, PipelineTerminal};
 pub(crate) use pipeline::ModelStepStatus;
 
 #[cfg(test)]

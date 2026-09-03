@@ -59,6 +59,8 @@ mod trace;
 )]
 mod device;
 
+#[doc(hidden)]
+pub use device::{PipelineFixture, PipelineRunOutcome, PipelineTerminal};
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,

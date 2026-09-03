@@ -1,6 +1,6 @@
 use crate::ModelResult;
 use crate::dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryStage};
-use crate::runtime::{AsyncDeviceHandle, publish, wake};
+use crate::runtime::{AsyncDeviceHandle, wake};
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::semantic::BufferId;
 use std::sync::Arc;
@@ -13,24 +13,27 @@ impl AsyncDeviceHandle {
 
     /// Allocates one raw device-visible DMA region.
     pub async fn allocate_memory_region(&self, len: usize) -> ModelResult<MappedDmaRegion> {
-        let (region, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let region = u64::try_from(len)
-                .map_err(|_| crate::ModelError::DmaAllocationExhausted)
-                .and_then(|length| {
-                    state
-                        .core
-                        .dma
-                        .allocate(length)
-                        .map_err(|_| crate::ModelError::DmaAllocationExhausted)
-                });
-            if region.is_ok() {
-                wake(&mut state);
-            }
-            (region, state.generation)
-        };
+        let (region, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let region = u64::try_from(len)
+                    .map_err(|_| crate::ModelError::DmaAllocationExhausted)
+                    .and_then(|length| {
+                        state
+                            .core
+                            .dma
+                            .allocate(length)
+                            .map_err(|_| crate::ModelError::DmaAllocationExhausted)
+                    });
+                if region.is_ok() {
+                    wake(state);
+                }
+                (region, state.generation)
+            })
+            .await;
         if region.is_ok() {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         region
     }
@@ -40,7 +43,10 @@ impl AsyncDeviceHandle {
         &self,
         lengths: &[u64],
     ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
-        self.shared.state.lock().await.core.dma.stage(lengths)
+        self.shared
+            .backend
+            .interact(|state| state.core.dma.stage(lengths))
+            .await
     }
 
     /// Atomically commits every region in a stage.
@@ -48,13 +54,16 @@ impl AsyncDeviceHandle {
         &self,
         proposal: PdmaMemoryStage,
     ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = state.core.dma.commit(proposal);
-            wake(&mut state);
-            (result, state.generation)
-        };
-        publish(&self.shared, generation);
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = state.core.dma.commit(proposal);
+                wake(state);
+                (result, state.generation)
+            })
+            .await;
+        self.shared.backend.publish(generation);
         result
     }
 
@@ -65,12 +74,9 @@ impl AsyncDeviceHandle {
         length: u64,
     ) -> Result<Vec<u8>, PdmaMemoryError> {
         self.shared
-            .state
-            .lock()
+            .backend
+            .interact(|state| state.core.dma.read_memory(address, length))
             .await
-            .core
-            .dma
-            .read_memory(address, length)
     }
 
     /// Writes one checked mapped-memory extent.
@@ -79,16 +85,19 @@ impl AsyncDeviceHandle {
         address: DmaAddress,
         data: &[u8],
     ) -> Result<(), PdmaMemoryError> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = state.core.dma.write_memory(address, data);
-            if result.is_ok() {
-                wake(&mut state);
-            }
-            (result, state.generation)
-        };
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = state.core.dma.write_memory(address, data);
+                if result.is_ok() {
+                    wake(state);
+                }
+                (result, state.generation)
+            })
+            .await;
         if result.is_ok() {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         result
     }
@@ -96,16 +105,16 @@ impl AsyncDeviceHandle {
     /// Resolves a semantic object to its committed DMA region.
     pub async fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
         self.shared
-            .state
-            .lock()
+            .backend
+            .interact(|state| state.core.dma.region_for_object(object))
             .await
-            .core
-            .dma
-            .region_for_object(object)
     }
 
     /// Returns the committed DMA allocator generation.
     pub async fn memory_generation(&self) -> u64 {
-        self.shared.state.lock().await.core.dma.generation()
+        self.shared
+            .backend
+            .interact(|state| state.core.dma.generation())
+            .await
     }
 }

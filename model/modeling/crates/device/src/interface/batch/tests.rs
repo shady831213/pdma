@@ -36,8 +36,21 @@ async fn pending_real_lock_drop_repeats_without_mutation_then_recovers() -> Test
             return Err("three staged regions required".into());
         };
         let proposed_object = submission.object();
-        let state = handle.shared.state.lock().await;
-        let wake_before = state.wake_generation;
+        let wake_before = handle
+            .shared
+            .backend
+            .interact(|state| state.wake_generation)
+            .await;
+        let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
+        let (release_sender, release_receiver) = std::sync::mpsc::channel();
+        let shared = Arc::clone(&handle.shared);
+        let held = std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("holder runtime")
+                .block_on(shared.backend.hold_for_test(ready_sender, release_receiver));
+        });
+        ready_receiver.recv()?;
         let mut batch =
             Box::pin(handle.bootstrap_queue_batch(QueueBootstrapBatch::new(proposal, activation)));
         let pending =
@@ -45,12 +58,22 @@ async fn pending_real_lock_drop_repeats_without_mutation_then_recovers() -> Test
                 .await;
         assert!(pending);
         drop(batch);
-        assert_eq!(state.core.dma.generation(), 1);
-        assert_eq!(state.core.dma.region_for_object(proposed_object), None);
-        assert_eq!(state.generation, before.generation());
-        assert_eq!(state.wake_generation, wake_before);
-        assert!(state.core.exact_ring(activation.queue()).is_err());
-        drop(state);
+        release_sender.send(())?;
+        held.join().map_err(|_| "holder thread panicked")?;
+        let unchanged = handle
+            .shared
+            .backend
+            .interact(|state| {
+                (
+                    state.core.dma.generation(),
+                    state.core.dma.region_for_object(proposed_object),
+                    state.generation,
+                    state.wake_generation,
+                    state.core.exact_ring(activation.queue()).is_err(),
+                )
+            })
+            .await;
+        assert_eq!(unchanged, (1, None, before.generation(), wake_before, true));
         assert_eq!(
             handle.read_memory(sentinel.base(), 64).await?,
             vec![0x5a; 64]

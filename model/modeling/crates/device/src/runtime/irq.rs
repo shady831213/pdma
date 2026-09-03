@@ -1,6 +1,7 @@
 //! Async device IRQ control surface.
 
 use super::AsyncDeviceHandle;
+use super::DeviceWait;
 use crate::ModelResult;
 use crate::interface::mmio::irq::support::{irq_notification_ready, observe_irq_source};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
@@ -10,37 +11,47 @@ use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot}
 impl AsyncDeviceHandle {
     /// Reports notification readiness without consuming a line assertion or message.
     pub async fn irq_notification_ready(&self) -> bool {
-        let state = self.shared.state.lock().await;
-        irq_notification_ready(&state.core)
+        self.shared
+            .backend
+            .interact(|state| irq_notification_ready(&state.core))
+            .await
     }
 
     /// Waits for notification readiness without consuming it, or returns false on shutdown.
     pub async fn wait_irq_notification_ready(&self) -> bool {
-        let mut changes = self.shared.changed.subscribe();
         loop {
-            let current = {
-                let state = self.shared.state.lock().await;
-                if state.shutdown_requested {
-                    return false;
-                }
-                if irq_notification_ready(&state.core) {
-                    return true;
-                }
-                state.generation
-            };
-            if *changes.borrow_and_update() != current {
-                continue;
-            }
-            if changes.changed().await.is_err() {
+            let (ready, shutdown, generation) = self
+                .shared
+                .backend
+                .interact(|state| {
+                    if state.shutdown_requested {
+                        return (false, true, state.generation);
+                    }
+                    if irq_notification_ready(&state.core) {
+                        return (true, false, state.generation);
+                    }
+                    (false, false, state.generation)
+                })
+                .await;
+            if shutdown {
                 return false;
             }
+            if ready {
+                return true;
+            }
+            self.shared
+                .backend
+                .wait_for_change(DeviceWait::generation(generation))
+                .await;
         }
     }
 
     /// Returns the complete non-consuming state bits for one IRQ source.
     pub async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
-        let state = self.shared.state.lock().await;
-        observe_irq_source(&state.core, source).map(|view| view.status)
+        self.shared
+            .backend
+            .interact(|state| observe_irq_source(&state.core, source).map(|view| view.status))
+            .await
     }
     /// Configures the delivery route of an inactive PDMA-local IRQ source.
     pub async fn configure_irq_route(
@@ -78,74 +89,89 @@ impl AsyncDeviceHandle {
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
     pub async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = {
-                let state = &mut *state;
-                state.core.ack_irq_source(source)
-            };
-            super::wake(&mut state);
-            (result, state.generation)
-        };
-        super::publish(&self.shared, generation);
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = {
+                    let state = &mut *state;
+                    state.core.ack_irq_source(source)
+                };
+                super::wake(state);
+                (result, state.generation)
+            })
+            .await;
+        self.shared.backend.publish(generation);
         result
     }
 
     /// Returns the current pending IRQ snapshot, if any.
     pub async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        self.shared.state.lock().await.core.irq_snapshot()
+        self.shared
+            .backend
+            .interact(|state| state.core.irq_snapshot())
+            .await
     }
 
     /// Waits until the device has an asserted IRQ snapshot.
     pub async fn wait_irq(&self) -> Option<IrqSnapshot> {
-        let mut changes = self.shared.changed.subscribe();
         loop {
-            let current = {
-                let state = self.shared.state.lock().await;
-                if let Some(snapshot) = state
-                    .core
-                    .irq_snapshot()
-                    .filter(|snapshot| snapshot.asserted())
-                {
-                    return Some(snapshot);
-                }
-                if state.shutdown_requested {
-                    return None;
-                }
-                state.generation
-            };
-            if *changes.borrow_and_update() != current {
-                continue;
+            let (snapshot, shutdown, generation) = self
+                .shared
+                .backend
+                .interact(|state| {
+                    if let Some(snapshot) = state
+                        .core
+                        .irq_snapshot()
+                        .filter(|snapshot| snapshot.asserted())
+                    {
+                        return (Some(snapshot), false, state.generation);
+                    }
+                    if state.shutdown_requested {
+                        return (None, true, state.generation);
+                    }
+                    (None, false, state.generation)
+                })
+                .await;
+            if let Some(snapshot) = snapshot {
+                return Some(snapshot);
             }
-            if changes.changed().await.is_err() {
-                return self
-                    .irq_snapshot()
-                    .await
-                    .filter(|snapshot| snapshot.asserted());
+            if shutdown {
+                return None;
             }
+            self.shared
+                .backend
+                .wait_for_change(DeviceWait::generation(generation))
+                .await;
         }
     }
 
     /// Waits for one line or message IRQ notification.
     pub async fn wait_irq_notification(&self) -> Option<IrqNotification> {
-        let mut changes = self.shared.changed.subscribe();
         loop {
-            let current = {
-                let mut state = self.shared.state.lock().await;
-                if let Some(notification) = state.core.take_irq_notification() {
-                    return Some(notification);
-                }
-                if state.shutdown_requested {
-                    return None;
-                }
-                state.generation
-            };
-            if *changes.borrow_and_update() != current {
-                continue;
+            let (notification, shutdown, generation) = self
+                .shared
+                .backend
+                .interact(|state| {
+                    if let Some(notification) = state.core.take_irq_notification() {
+                        return (Some(notification), false, state.generation);
+                    }
+                    if state.shutdown_requested {
+                        return (None, true, state.generation);
+                    }
+                    (None, false, state.generation)
+                })
+                .await;
+            if let Some(notification) = notification {
+                return Some(notification);
             }
-            if changes.changed().await.is_err() {
-                return self.shared.state.lock().await.core.take_irq_notification();
+            if shutdown {
+                return None;
             }
+            self.shared
+                .backend
+                .wait_for_change(DeviceWait::generation(generation))
+                .await;
         }
     }
 }

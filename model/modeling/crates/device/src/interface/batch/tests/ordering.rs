@@ -59,7 +59,7 @@ async fn bootstrap_installs_precede_observation_and_wake() -> TestResult {
     );
     let handle = device.handle();
     *observer.wake.lock().expect("wake probe lock available") =
-        Some(handle.shared.changed.subscribe());
+        Some(handle.shared.backend.subscribe_for_test());
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let activation = activation(&stage)?;
 
@@ -113,7 +113,7 @@ async fn submission_installs_precede_observation_and_wake() -> TestResult {
         .expected_region_count
         .store(4, std::sync::atomic::Ordering::SeqCst);
     *observer.wake.lock().expect("wake probe lock available") =
-        Some(handle.shared.changed.subscribe());
+        Some(handle.shared.backend.subscribe_for_test());
 
     // When: the submission commits its mapping, bytes, registers, and trace.
     handle

@@ -1,4 +1,4 @@
-use super::{AsyncDeviceHandle, publish, wake};
+use super::{AsyncDeviceHandle, wake};
 use crate::interface::batch::{
     PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch, commit_bootstrap,
     commit_submission,
@@ -10,15 +10,18 @@ impl AsyncDeviceHandle {
         &self,
         request: QueueBootstrapBatch,
     ) -> Result<QueueResponseBytes, PdmaBatchError> {
-        let (committed, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let committed =
-                commit_bootstrap(&mut state.core, &request, &self.shared.register_gate)?;
-            wake(&mut state);
-            (committed, state.generation)
-        };
+        let (committed, generation) = self
+            .shared
+            .backend
+            .interact(|state| -> Result<_, PdmaBatchError> {
+                let committed =
+                    commit_bootstrap(&mut state.core, &request, &self.shared.register_gate)?;
+                wake(state);
+                Ok((committed, state.generation))
+            })
+            .await?;
         let response = committed.emit()?;
-        publish(&self.shared, generation);
+        self.shared.backend.publish(generation);
         Ok(response)
     }
 
@@ -27,18 +30,21 @@ impl AsyncDeviceHandle {
         &self,
         request: SubmissionBatch,
     ) -> Result<QueueResponseBytes, PdmaBatchError> {
-        let (committed, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let committed = commit_submission(
-                &mut state.core,
-                request.request(),
-                &self.shared.register_gate,
-            )?;
-            wake(&mut state);
-            (committed, state.generation)
-        };
+        let (committed, generation) = self
+            .shared
+            .backend
+            .interact(|state| -> Result<_, PdmaBatchError> {
+                let committed = commit_submission(
+                    &mut state.core,
+                    request.request(),
+                    &self.shared.register_gate,
+                )?;
+                wake(state);
+                Ok((committed, state.generation))
+            })
+            .await?;
         let response = committed.emit()?;
-        publish(&self.shared, generation);
+        self.shared.backend.publish(generation);
         Ok(response)
     }
 }

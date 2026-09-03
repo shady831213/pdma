@@ -1,6 +1,7 @@
 //! Tokio-backed asynchronous hardware runner.
 
 mod actor;
+mod backend;
 mod batch;
 mod dma;
 mod endpoint;
@@ -22,8 +23,9 @@ use crate::AsyncStepStatus;
 pub use crate::device::DeviceCore;
 pub(crate) use crate::queue::exact::PendingDmaResult;
 pub use actor::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker};
+pub(crate) use backend::DeviceWait;
 pub use endpoint::MmioRegisterEndpoint;
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
-pub(crate) use state::{RunnerShared, publish, wake};
+pub(crate) use state::{RunnerShared, wake};
 pub use types::{AsyncRunSnapshot, AsyncRunSummary};
 use worker::run_worker;

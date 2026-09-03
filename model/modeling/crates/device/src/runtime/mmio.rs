@@ -1,4 +1,4 @@
-use super::{AsyncDeviceHandle, publish, wake};
+use super::{AsyncDeviceHandle, wake};
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount, decode_read, decode_write};
 
 impl AsyncDeviceHandle {
@@ -9,24 +9,32 @@ impl AsyncDeviceHandle {
         width: MmioByteCount,
     ) -> Result<Vec<u8>, MmioAccessError> {
         let register = decode_read(offset, width)?;
-        let state = self.shared.state.lock().await;
-        Ok(crate::interface::mmio::prepare_read(&state.core, register, offset).response)
+        Ok(self
+            .shared
+            .backend
+            .interact(|state| {
+                crate::interface::mmio::prepare_read(&state.core, register, offset).response
+            })
+            .await)
     }
 
     /// Applies one exact byte-bearing MMIO transaction.
     pub async fn write_mmio(&self, offset: u32, bytes: &[u8]) -> Result<(), MmioAccessError> {
         let (register, value) = decode_write(offset, bytes)?;
-        let generation = {
-            let mut state = self.shared.state.lock().await;
-            let changed = crate::interface::mmio::prepare_write(register, value, offset, bytes)
-                .commit(&mut state.core);
-            if changed {
-                wake(&mut state);
-            }
-            changed.then_some(state.generation)
-        };
+        let generation = self
+            .shared
+            .backend
+            .interact(|state| {
+                let changed = crate::interface::mmio::prepare_write(register, value, offset, bytes)
+                    .commit(&mut state.core);
+                if changed {
+                    wake(state);
+                }
+                changed.then_some(state.generation)
+            })
+            .await;
         if let Some(generation) = generation {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         Ok(())
     }

@@ -1,5 +1,6 @@
 use super::AsyncStepStatus;
-use super::state::{RunnerShared, RunnerState, publish};
+use super::backend::DeviceWait;
+use super::state::{RunnerShared, RunnerState};
 use crate::device::ModelStepStatus;
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
@@ -7,44 +8,47 @@ pub(super) async fn run_worker(shared: &RunnerShared) {
 }
 
 async fn run_one(shared: &RunnerShared) -> bool {
-    let outcome = {
-        let mut state = shared.state.lock().await;
-        if state.shutdown_requested {
-            return publish_and_continue(shared, state.generation, false);
-        }
-        match state.core.step() {
-            Ok(ModelStepStatus::Progressed) => {
-                state.steps = state.steps.saturating_add(1);
-                state.last_status = AsyncStepStatus::Progressed;
-                state.generation = state.generation.saturating_add(1);
-                WorkerOutcome::Continue(state.generation)
+    let outcome = shared
+        .backend
+        .interact(|state| {
+            if state.shutdown_requested {
+                return WorkerOutcome::Stop(state.generation);
             }
-            Ok(ModelStepStatus::FaultCached) => {
-                state.last_status = AsyncStepStatus::Progressed;
-                state.generation = state.generation.saturating_add(1);
-                WorkerOutcome::Continue(state.generation)
+            match state.core.step() {
+                Ok(ModelStepStatus::Progressed) => {
+                    state.steps = state.steps.saturating_add(1);
+                    state.last_status = AsyncStepStatus::Progressed;
+                    state.generation = state.generation.saturating_add(1);
+                    WorkerOutcome::Continue(state.generation)
+                }
+                Ok(ModelStepStatus::FaultCached) => {
+                    state.last_status = AsyncStepStatus::Progressed;
+                    state.generation = state.generation.saturating_add(1);
+                    WorkerOutcome::Continue(state.generation)
+                }
+                Ok(ModelStepStatus::Idle) => {
+                    state.last_status = AsyncStepStatus::Idle;
+                    WorkerOutcome::Wait(wait_for_wake(state))
+                }
+                Ok(ModelStepStatus::Stalled(reason)) => {
+                    state.stalls = state.stalls.saturating_add(1);
+                    state.last_status = AsyncStepStatus::Stalled(reason);
+                    WorkerOutcome::Wait(wait_for_wake(state))
+                }
+                Err(_) => {
+                    state.errors = state.errors.saturating_add(1);
+                    state.generation = state.generation.saturating_add(1);
+                    WorkerOutcome::Continue(state.generation)
+                }
             }
-            Ok(ModelStepStatus::Idle) => {
-                state.last_status = AsyncStepStatus::Idle;
-                WorkerOutcome::Wait(wait_for_wake(shared, &mut state))
-            }
-            Ok(ModelStepStatus::Stalled(reason)) => {
-                state.stalls = state.stalls.saturating_add(1);
-                state.last_status = AsyncStepStatus::Stalled(reason);
-                WorkerOutcome::Wait(wait_for_wake(shared, &mut state))
-            }
-            Err(_) => {
-                state.errors = state.errors.saturating_add(1);
-                state.generation = state.generation.saturating_add(1);
-                WorkerOutcome::Continue(state.generation)
-            }
-        }
-    };
+        })
+        .await;
     match outcome {
+        WorkerOutcome::Stop(generation) => publish_and_continue(shared, generation, false),
         WorkerOutcome::Continue(generation) => publish_and_continue(shared, generation, true),
         WorkerOutcome::Wait(wait) => {
-            publish(shared, wait.generation);
-            wait_for_generation_change(shared, wait).await;
+            shared.backend.publish(wait_generation(wait));
+            shared.backend.wait_for_change(wait).await;
             true
         }
     }
@@ -52,46 +56,22 @@ async fn run_one(shared: &RunnerShared) -> bool {
 
 #[derive(Debug, Clone, Copy)]
 enum WorkerOutcome {
+    Stop(usize),
     Continue(usize),
-    Wait(WaitState),
+    Wait(DeviceWait),
 }
 
-#[derive(Debug, Clone, Copy)]
-struct WaitState {
-    generation: usize,
-    wake_generation: usize,
-}
-
-fn wait_for_wake(shared: &RunnerShared, state: &mut RunnerState) -> WaitState {
+const fn wait_for_wake(state: &mut RunnerState) -> DeviceWait {
     let wake_generation = state.wake_generation;
     state.generation = state.generation.saturating_add(1);
-    publish(shared, state.generation);
-    WaitState {
-        generation: state.generation,
-        wake_generation,
-    }
+    DeviceWait::wake(state.generation, wake_generation)
 }
 
-async fn wait_for_generation_change(shared: &RunnerShared, wait: WaitState) {
-    let mut changes = shared.changed.subscribe();
-    loop {
-        let should_wait = {
-            let state = shared.state.lock().await;
-            state.wake_generation == wait.wake_generation && !state.shutdown_requested
-        };
-        if !should_wait {
-            return;
-        }
-        if *changes.borrow_and_update() != wait.generation {
-            continue;
-        }
-        if changes.changed().await.is_err() {
-            return;
-        }
-    }
+const fn wait_generation(wait: DeviceWait) -> usize {
+    wait.generation_value()
 }
 
 fn publish_and_continue(shared: &RunnerShared, generation: usize, keep_running: bool) -> bool {
-    publish(shared, generation);
+    shared.backend.publish(generation);
     keep_running
 }

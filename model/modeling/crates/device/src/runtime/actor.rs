@@ -1,9 +1,10 @@
 //! Tokio actor facade over one shared device core.
 
+use super::backend::DeviceInteractionBackend;
 use super::state::{RunnerState, summary};
 use super::{
     AsyncRunSummary, DeviceCore, MmioRegisterEndpoint, ModelResult, PendingDmaResult, RunnerShared,
-    publish, run_worker, wake,
+    run_worker, wake,
 };
 use hardware_interface_runtime::{
     NoopRegisterObserver, ObservationGate, RegisterObserver, SharedRegisterObserver,
@@ -42,10 +43,8 @@ impl AsyncDevice {
         observer: Arc<dyn RegisterObserver>,
     ) -> (Self, AsyncDeviceWorker) {
         let memory = core.dma.shared_memory();
-        let (changed, _) = tokio::sync::watch::channel(0);
         let shared = Arc::new(RunnerShared {
-            state: tokio::sync::Mutex::new(RunnerState::new(core)),
-            changed,
+            backend: DeviceInteractionBackend::new(RunnerState::new(core)),
             register_gate: ObservationGate::new(SharedRegisterObserver::new(observer)),
         });
         let worker = AsyncDeviceWorker {
@@ -74,8 +73,7 @@ impl AsyncDeviceWorker {
     /// Runs the async hardware worker loop until shutdown is requested.
     pub async fn run(self) -> AsyncRunSummary {
         run_worker(&self.shared).await;
-        let state = self.shared.state.lock().await;
-        summary(&state)
+        self.shared.backend.interact(|state| summary(state)).await
     }
 }
 
@@ -87,23 +85,32 @@ impl AsyncDeviceHandle {
 
     /// Returns committed invocations of the sole reset runner.
     pub async fn reset_runner_calls(&self) -> usize {
-        self.shared.state.lock().await.core.reset_runner_calls()
+        self.shared
+            .backend
+            .interact(|state| state.core.reset_runner_calls())
+            .await
     }
 
     /// Requests worker shutdown.
     pub async fn request_shutdown(&self) {
-        let generation = {
-            let mut state = self.shared.state.lock().await;
-            state.shutdown_requested = true;
-            state.generation = state.generation.saturating_add(1);
-            state.generation
-        };
-        publish(&self.shared, generation);
+        let generation = self
+            .shared
+            .backend
+            .interact(|state| {
+                state.shutdown_requested = true;
+                state.generation = state.generation.saturating_add(1);
+                state.generation
+            })
+            .await;
+        self.shared.backend.publish(generation);
     }
 
     /// Returns the one cached DMA completion or event before bus publication.
     pub async fn pending_dma_result(&self) -> Option<PendingDmaResult> {
-        self.shared.state.lock().await.core.pending_dma_result()
+        self.shared
+            .backend
+            .interact(|state| state.core.pending_dma_result())
+            .await
     }
 
     /// Enables deterministic trace capture.
@@ -123,40 +130,55 @@ impl AsyncDeviceHandle {
 
     /// Returns captured trace events in deterministic sequence order.
     pub async fn trace_events(&self) -> Vec<TraceEvent> {
-        self.shared.state.lock().await.core.trace_events()
+        self.shared
+            .backend
+            .interact(|state| state.core.trace_events())
+            .await
     }
 
     /// Returns normalized frontend fetches that entered the native step core.
     pub async fn native_steps(&self) -> usize {
-        self.shared.state.lock().await.core.native_steps()
+        self.shared
+            .backend
+            .interact(|state| state.core.native_steps())
+            .await
     }
 
     /// Exports captured trace events as Chrome/Perfetto JSON.
     pub async fn trace_json(&self) -> String {
-        self.shared.state.lock().await.core.trace_json()
+        self.shared
+            .backend
+            .interact(|state| state.core.trace_json())
+            .await
     }
 
-    pub(crate) async fn with_device<T>(
+    pub(crate) async fn with_device<T: Send>(
         &self,
-        f: impl FnOnce(&mut DeviceCore) -> ModelResult<T>,
+        f: impl FnOnce(&mut DeviceCore) -> ModelResult<T> + Send,
     ) -> ModelResult<T> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = f(&mut state.core);
-            wake(&mut state);
-            (result, state.generation)
-        };
-        publish(&self.shared, generation);
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = f(&mut state.core);
+                wake(state);
+                (result, state.generation)
+            })
+            .await;
+        self.shared.backend.publish(generation);
         result
     }
 
-    async fn with_device_unit(&self, f: impl FnOnce(&mut DeviceCore)) {
-        let generation = {
-            let mut state = self.shared.state.lock().await;
-            f(&mut state.core);
-            wake(&mut state);
-            state.generation
-        };
-        publish(&self.shared, generation);
+    async fn with_device_unit(&self, f: impl FnOnce(&mut DeviceCore) + Send) {
+        let generation = self
+            .shared
+            .backend
+            .interact(|state| {
+                f(&mut state.core);
+                wake(state);
+                state.generation
+            })
+            .await;
+        self.shared.backend.publish(generation);
     }
 }

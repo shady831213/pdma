@@ -24,15 +24,16 @@ async fn bootstrap_injectors_reject_before_any_prepared_install() -> TestResult 
         let before = handle.snapshot().await;
         let latches = queue_latches(&handle).await?;
         let trace = handle.trace_events().await;
-        let wake = handle.shared.state.lock().await.wake_generation;
+        let wake = handle
+            .shared
+            .backend
+            .interact(|state| state.wake_generation)
+            .await;
         handle
             .shared
-            .state
-            .lock()
-            .await
-            .core
-            .batch_fault
-            .set(Some(fault));
+            .backend
+            .interact(|state| state.core.batch_fault.set(Some(fault)))
+            .await;
 
         // When: the real bootstrap reaches the selected preparation boundary.
         let result = handle
@@ -46,7 +47,14 @@ async fn bootstrap_injectors_reject_before_any_prepared_install() -> TestResult 
         assert!(memory.regions().is_empty());
         assert_eq!(queue_latches(&handle).await?, latches);
         assert_eq!(handle.trace_events().await, trace);
-        assert_eq!(handle.shared.state.lock().await.wake_generation, wake);
+        assert_eq!(
+            handle
+                .shared
+                .backend
+                .interact(|state| state.wake_generation)
+                .await,
+            wake
+        );
         assert!(
             observer
                 .observations
@@ -76,7 +84,7 @@ async fn submission_injectors_reject_before_any_prepared_install() -> TestResult
         );
         let handle = device.handle();
         *observer.wake.lock().expect("wake probe lock available") =
-            Some(handle.shared.changed.subscribe());
+            Some(handle.shared.backend.subscribe_for_test());
         let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
         let descriptor = stage
             .regions()
@@ -97,16 +105,21 @@ async fn submission_injectors_reject_before_any_prepared_install() -> TestResult
         let latches = queue_latches(&handle).await?;
         let regions = memory.regions();
         let trace = handle.trace_events().await;
-        let wake = handle.shared.state.lock().await.wake_generation;
+        let wake = handle
+            .shared
+            .backend
+            .interact(|state| state.wake_generation)
+            .await;
         let observations = observer
             .observations
             .lock()
             .expect("observation probe lock available")
             .len();
-        {
-            let core = handle.shared.state.lock().await;
-            core.core.batch_fault.set(Some(fault));
-        }
+        handle
+            .shared
+            .backend
+            .interact(|state| state.core.batch_fault.set(Some(fault)))
+            .await;
 
         // When: the real submission reaches the selected private preparation boundary.
         let result = handle
@@ -128,7 +141,14 @@ async fn submission_injectors_reject_before_any_prepared_install() -> TestResult
         assert_eq!(memory.regions(), regions);
         assert_eq!(queue_latches(&handle).await?, latches);
         assert_eq!(handle.trace_events().await, trace);
-        assert_eq!(handle.shared.state.lock().await.wake_generation, wake);
+        assert_eq!(
+            handle
+                .shared
+                .backend
+                .interact(|state| state.wake_generation)
+                .await,
+            wake
+        );
         assert_eq!(
             observer
                 .observations

@@ -1,7 +1,7 @@
 //! Tokio-backed asynchronous wait helpers for runner snapshots.
 
 use super::state::{RunnerState, snapshot, snapshot_with_status};
-use super::{AsyncDevice, AsyncDeviceHandle, AsyncRunSnapshot, AsyncStepStatus};
+use super::{AsyncDevice, AsyncDeviceHandle, AsyncRunSnapshot, AsyncStepStatus, DeviceWait};
 
 impl AsyncDevice {
     /// Returns the current runner snapshot.
@@ -33,8 +33,7 @@ impl AsyncDevice {
 impl AsyncDeviceHandle {
     /// Returns the current runner snapshot.
     pub async fn snapshot(&self) -> AsyncRunSnapshot {
-        let state = self.shared.state.lock().await;
-        snapshot(&state)
+        self.shared.backend.interact(|state| snapshot(state)).await
     }
 
     /// Waits until the runner records any change after the supplied snapshot.
@@ -81,21 +80,24 @@ impl AsyncDeviceHandle {
         &self,
         project: impl Fn(&RunnerState) -> Option<AsyncRunSnapshot> + Send + Sync,
     ) -> AsyncRunSnapshot {
-        let mut changes = self.shared.changed.subscribe();
         loop {
-            let current = {
-                let state = self.shared.state.lock().await;
-                if let Some(projected) = project(&state) {
-                    return projected;
-                }
-                state.generation
-            };
-            if *changes.borrow_and_update() != current {
-                continue;
+            let (projected, generation) = self
+                .shared
+                .backend
+                .interact(|state| {
+                    if let Some(projected) = project(state) {
+                        return (Some(projected), state.generation);
+                    }
+                    (None, state.generation)
+                })
+                .await;
+            if let Some(projected) = projected {
+                return projected;
             }
-            if changes.changed().await.is_err() {
-                return self.snapshot().await;
-            }
+            self.shared
+                .backend
+                .wait_for_change(DeviceWait::generation(generation))
+                .await;
         }
     }
 }

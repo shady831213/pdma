@@ -4,7 +4,8 @@ use super::{AsyncRunSnapshot, AsyncRunSummary};
 use crate::AsyncStepStatus;
 pub(crate) use crate::device::DeviceCore;
 use hardware_interface_runtime::ObservationGate;
-use tokio::sync::{Mutex, watch};
+
+use super::backend::DeviceInteractionBackend;
 
 #[derive(Debug)]
 pub(crate) struct RunnerState {
@@ -35,8 +36,7 @@ impl RunnerState {
 
 #[derive(Debug)]
 pub(crate) struct RunnerShared {
-    pub(crate) state: Mutex<RunnerState>,
-    pub(crate) changed: watch::Sender<usize>,
+    pub(crate) backend: DeviceInteractionBackend,
     pub(crate) register_gate: ObservationGate,
 }
 
@@ -73,8 +73,4 @@ pub(crate) const fn summary(state: &RunnerState) -> AsyncRunSummary {
 pub(crate) const fn wake(state: &mut RunnerState) {
     state.wake_generation = state.wake_generation.saturating_add(1);
     state.generation = state.generation.saturating_add(1);
-}
-
-pub(crate) fn publish(shared: &RunnerShared, generation: usize) {
-    shared.changed.send_replace(generation);
 }

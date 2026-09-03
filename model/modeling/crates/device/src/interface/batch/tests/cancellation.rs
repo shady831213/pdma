@@ -39,18 +39,14 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
             return Err("one staged indirect region required".into());
         };
         let indirect_region = *indirect_region;
-        let state = handle.shared.state.lock().await;
         let before_memory = memory_image(&memory)?;
-        let before_mapping_generation = state.core.dma.generation();
-        let before_runner_generation = state.generation;
-        let before_wake_generation = state.wake_generation;
-        let before_latches = queue_latch_values(&state.core);
-        let before_trace = state.core.trace_events().clone();
+        let before_state = state_image(&handle).await;
         let before_observations = observer
             .observations
             .lock()
             .expect("observation probe lock available")
             .clone();
+        let (release_sender, held) = hold_backend(&handle)?;
 
         let mut bootstrap_future = Box::pin(
             handle.bootstrap_queue_batch(QueueBootstrapBatch::new(bootstrap_stage, bootstrap)),
@@ -68,14 +64,12 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
         )));
         assert!(poll_once_pending(&mut submission_future).await);
         drop(submission_future);
+        release_sender.send(())?;
+        held.join().map_err(|_| "holder thread panicked")?;
 
         // Then: both cancelled futures preserve every commit surface exactly.
         assert_eq!(memory_image(&memory)?, before_memory);
-        assert_eq!(state.core.dma.generation(), before_mapping_generation);
-        assert_eq!(state.generation, before_runner_generation);
-        assert_eq!(state.wake_generation, before_wake_generation);
-        assert_eq!(queue_latch_values(&state.core), before_latches);
-        assert_eq!(state.core.trace_events(), before_trace);
+        assert_eq!(state_image(&handle).await, before_state);
         assert_eq!(
             *observer
                 .observations
@@ -83,9 +77,48 @@ async fn bootstrap_and_submission_pending_lock_drops_are_mutation_free() -> Test
                 .expect("observation probe lock available"),
             before_observations
         );
-        drop(state);
     }
     Ok(())
+}
+
+type StateImage = (
+    u64,
+    usize,
+    usize,
+    Vec<Vec<u8>>,
+    Vec<pdma_model_contract::semantic::TraceEvent>,
+);
+
+async fn state_image(handle: &crate::runtime::AsyncDeviceHandle) -> StateImage {
+    handle
+        .shared
+        .backend
+        .interact(|state| {
+            (
+                state.core.dma.generation(),
+                state.generation,
+                state.wake_generation,
+                queue_latch_values(&state.core),
+                state.core.trace_events(),
+            )
+        })
+        .await
+}
+
+fn hold_backend(
+    handle: &crate::runtime::AsyncDeviceHandle,
+) -> TestResult<(std::sync::mpsc::Sender<()>, std::thread::JoinHandle<()>)> {
+    let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
+    let (release_sender, release_receiver) = std::sync::mpsc::channel();
+    let shared = Arc::clone(&handle.shared);
+    let held = std::thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("holder runtime")
+            .block_on(shared.backend.hold_for_test(ready_sender, release_receiver));
+    });
+    ready_receiver.recv()?;
+    Ok((release_sender, held))
 }
 
 async fn poll_once_pending<F: Future>(future: &mut std::pin::Pin<Box<F>>) -> bool {

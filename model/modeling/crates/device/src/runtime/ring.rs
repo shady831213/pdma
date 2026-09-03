@@ -1,4 +1,4 @@
-use super::{AsyncDeviceHandle, publish, wake};
+use super::{AsyncDeviceHandle, wake};
 use crate::dma::PdmaMemoryStage;
 use crate::queue::exact::{PdmaControlError, QueueStatus, SubmissionAcceptance};
 use pdma_model_contract::semantic::{QueueActivation, QueueControl};
@@ -10,16 +10,19 @@ impl AsyncDeviceHandle {
         proposal: PdmaMemoryStage,
         activation: QueueActivation,
     ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = state.core.activate_staged_exact_queue(proposal, activation);
-            if result.is_ok() {
-                wake(&mut state);
-            }
-            (result, state.generation)
-        };
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = state.core.activate_staged_exact_queue(proposal, activation);
+                if result.is_ok() {
+                    wake(state);
+                }
+                (result, state.generation)
+            })
+            .await;
         if result.is_ok() {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         result
     }
@@ -29,16 +32,19 @@ impl AsyncDeviceHandle {
         &self,
         activation: QueueActivation,
     ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = state.core.activate_mapped_exact_queue(activation);
-            if result.is_ok() {
-                wake(&mut state);
-            }
-            (result, state.generation)
-        };
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = state.core.activate_mapped_exact_queue(activation);
+                if result.is_ok() {
+                    wake(state);
+                }
+                (result, state.generation)
+            })
+            .await;
         if result.is_ok() {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         result
     }
@@ -48,16 +54,19 @@ impl AsyncDeviceHandle {
         &self,
         request: SubmissionAcceptance,
     ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let result = state.core.accept_exact_submission(request);
-            if result.is_ok() {
-                wake(&mut state);
-            }
-            (result, state.generation)
-        };
+        let (result, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let result = state.core.accept_exact_submission(request);
+                if result.is_ok() {
+                    wake(state);
+                }
+                (result, state.generation)
+            })
+            .await;
         if result.is_ok() {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         result
     }
@@ -67,16 +76,19 @@ impl AsyncDeviceHandle {
         &self,
         request: QueueControl,
     ) -> Result<QueueStatus, PdmaControlError> {
-        let (result, changed, generation) = {
-            let mut state = self.shared.state.lock().await;
-            let (result, changed) = state.core.control_exact_queue(request);
-            if changed {
-                wake(&mut state);
-            }
-            (result, changed, state.generation)
-        };
+        let (result, changed, generation) = self
+            .shared
+            .backend
+            .interact(|state| {
+                let (result, changed) = state.core.control_exact_queue(request);
+                if changed {
+                    wake(state);
+                }
+                (result, changed, state.generation)
+            })
+            .await;
         if changed {
-            publish(&self.shared, generation);
+            self.shared.backend.publish(generation);
         }
         result
     }

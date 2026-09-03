@@ -2,6 +2,7 @@ mod access;
 mod address;
 mod gate;
 mod observer;
+mod order;
 
 pub use access::{AddressedRegisterAccess, RegisterAccess};
 pub use address::{
@@ -11,4 +12,8 @@ pub use gate::{GateFault, ObservationGate, ObservationGateError, ObservationRese
 pub use observer::{
     AccessKind, AccessOrigin, NoopRegisterObserver, RegisterObservation, RegisterObserver,
     SharedRegisterObserver,
+};
+pub use order::{
+    ObservationBackend, ObservationEmissionReceipt, ObservationOrder, ObservationOrderError,
+    ObservationReservationReceipt,
 };

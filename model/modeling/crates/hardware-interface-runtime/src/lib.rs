@@ -26,9 +26,10 @@ pub use interrupt::{
 pub use region::MemoryRegion;
 pub use register::{
     AccessKind, AccessOrigin, AddressedRegisterAccess, GateFault, NoopRegisterObserver,
-    ObservationGate, ObservationGateError, ObservationReservation, RegisterAccess,
-    RegisterBusAddress, RegisterBusBase, RegisterBusError, RegisterBusOffset, RegisterBusWidth,
-    RegisterObservation, RegisterObserver, SharedRegisterObserver,
+    ObservationBackend, ObservationEmissionReceipt, ObservationGate, ObservationGateError,
+    ObservationOrder, ObservationOrderError, ObservationReservation, ObservationReservationReceipt,
+    RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError, RegisterBusOffset,
+    RegisterBusWidth, RegisterObservation, RegisterObserver, SharedRegisterObserver,
 };
 pub use storage::{LocalStorage, MutexStorage, StorageBackend, StorageError};
 pub use store::{

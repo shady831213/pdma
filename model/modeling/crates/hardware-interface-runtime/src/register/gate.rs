@@ -1,4 +1,7 @@
-use super::{RegisterObservation, SharedRegisterObserver};
+use super::{
+    ObservationOrder, ObservationOrderError, ObservationReservationReceipt, RegisterObservation,
+    SharedRegisterObserver,
+};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -58,11 +61,9 @@ impl Error for ObservationGateError {}
 
 #[derive(Debug)]
 struct GateState {
-    next_reservation: u128,
-    next_emission: u128,
+    order: ObservationOrder,
     emitter_active: bool,
     waiting_emitters: usize,
-    fault: Option<GateFault>,
 }
 
 #[derive(Debug)]
@@ -87,11 +88,9 @@ impl ObservationGate {
         Self(Arc::new(GateInner {
             observer,
             state: Mutex::new(GateState {
-                next_reservation: u128::from(next_sequence),
-                next_emission: u128::from(next_sequence),
+                order: ObservationOrder::new_at(next_sequence),
                 emitter_active: false,
                 waiting_emitters: 0,
-                fault: None,
             }),
             changed: Condvar::new(),
         }))
@@ -100,11 +99,7 @@ impl ObservationGate {
     /// Returns the next sequence that a successful reservation would receive.
     pub fn next_sequence(&self) -> Result<u64, ObservationGateError> {
         let state = self.lock_state()?;
-        Self::ensure_open(&state)?;
-        u64::try_from(state.next_reservation).map_err(|_| ObservationGateError::SequenceExhausted {
-            next_sequence: u64::MAX,
-            count: 1,
-        })
+        state.order.next_sequence().map_err(Self::order_error)
     }
 
     /// Reserves a nonempty contiguous range at a consumer-owned commit point.
@@ -113,28 +108,11 @@ impl ObservationGate {
             return Err(ObservationGateError::InvalidReservationCount);
         }
         let mut state = self.lock_state()?;
-        Self::ensure_open(&state)?;
-        let count_u128 = count as u128;
-        let final_sequence = state
-            .next_reservation
-            .checked_add(count_u128 - 1)
-            .filter(|sequence| *sequence <= u128::from(u64::MAX))
-            .ok_or_else(|| ObservationGateError::SequenceExhausted {
-                next_sequence: u64::try_from(state.next_reservation).unwrap_or(u64::MAX),
-                count,
-            })?;
-        let start = u64::try_from(state.next_reservation).map_err(|_| {
-            ObservationGateError::SequenceExhausted {
-                next_sequence: u64::MAX,
-                count,
-            }
-        })?;
-        state.next_reservation = final_sequence + 1;
+        let receipt = state.order.reserve(count).map_err(Self::order_error)?;
         drop(state);
         Ok(ObservationReservation {
             gate: self.clone(),
-            start,
-            count,
+            receipt,
             armed: true,
         })
     }
@@ -142,9 +120,7 @@ impl ObservationGate {
     fn lock_state(&self) -> Result<MutexGuard<'_, GateState>, ObservationGateError> {
         self.0.state.lock().map_err(|poisoned| {
             let mut state = poisoned.into_inner();
-            state
-                .fault
-                .get_or_insert(GateFault::SynchronizationPoisoned);
+            state.order.fault(GateFault::SynchronizationPoisoned);
             drop(state);
             self.0.changed.notify_all();
             ObservationGateError::Faulted {
@@ -153,27 +129,38 @@ impl ObservationGate {
         })
     }
 
-    fn ensure_open(state: &GateState) -> Result<(), ObservationGateError> {
-        state.fault.map_or(Ok(()), |reason| {
-            Err(ObservationGateError::Faulted { reason })
-        })
-    }
-
     fn fault(&self, reason: GateFault) {
         match self.0.state.lock() {
             Ok(mut state) => {
-                state.fault.get_or_insert(reason);
+                state.order.fault(reason);
                 state.emitter_active = false;
             }
             Err(poisoned) => {
                 let mut state = poisoned.into_inner();
-                state
-                    .fault
-                    .get_or_insert(GateFault::SynchronizationPoisoned);
+                state.order.fault(GateFault::SynchronizationPoisoned);
                 state.emitter_active = false;
             }
         }
         self.0.changed.notify_all();
+    }
+
+    const fn order_error(error: ObservationOrderError) -> ObservationGateError {
+        match error {
+            ObservationOrderError::InvalidReservationCount => {
+                ObservationGateError::InvalidReservationCount
+            }
+            ObservationOrderError::SequenceExhausted {
+                next_sequence,
+                count,
+            } => ObservationGateError::SequenceExhausted {
+                next_sequence,
+                count,
+            },
+            ObservationOrderError::EmissionOutOfOrder { .. } => ObservationGateError::Faulted {
+                reason: GateFault::InvalidEmission,
+            },
+            ObservationOrderError::Faulted { reason } => ObservationGateError::Faulted { reason },
+        }
     }
 }
 
@@ -181,15 +168,14 @@ impl ObservationGate {
 #[derive(Debug)]
 pub struct ObservationReservation {
     gate: ObservationGate,
-    start: u64,
-    count: usize,
+    receipt: ObservationReservationReceipt,
     armed: bool,
 }
 
 impl ObservationReservation {
     /// Returns the first reserved sequence.
     pub const fn start_sequence(&self) -> u64 {
-        self.start
+        self.receipt.start_sequence()
     }
 
     /// Emits the exact reserved range synchronously in sequence order.
@@ -197,17 +183,30 @@ impl ObservationReservation {
         mut self,
         observations: Vec<RegisterObservation>,
     ) -> Result<(), ObservationGateError> {
-        if !self.matches(&observations) {
-            self.armed = false;
-            self.gate.fault(GateFault::InvalidEmission);
-            return Err(ObservationGateError::Faulted {
-                reason: GateFault::InvalidEmission,
-            });
-        }
         let mut state = self.gate.lock_state()?;
+        let mut emission =
+            match state
+                .order
+                .validate_with(&mut self.receipt, observations.len(), |index| {
+                    observations
+                        .get(index)
+                        .map(|observation| observation.sequence)
+                }) {
+                Ok(emission) => emission,
+                Err(error) => {
+                    self.armed = false;
+                    drop(state);
+                    self.gate.0.changed.notify_all();
+                    return Err(ObservationGate::order_error(error));
+                }
+            };
+        self.armed = false;
         loop {
-            ObservationGate::ensure_open(&state)?;
-            if !state.emitter_active && state.next_emission == u128::from(self.start) {
+            let next_emission = state
+                .order
+                .next_emission_sequence()
+                .map_err(ObservationGate::order_error)?;
+            if !state.emitter_active && next_emission == self.start_sequence() {
                 state.emitter_active = true;
                 break;
             }
@@ -216,8 +215,8 @@ impl ObservationReservation {
             state = self.gate.0.changed.wait(state).map_err(|poisoned| {
                 let mut poisoned_state = poisoned.into_inner();
                 poisoned_state
-                    .fault
-                    .get_or_insert(GateFault::SynchronizationPoisoned);
+                    .order
+                    .fault(GateFault::SynchronizationPoisoned);
                 poisoned_state.emitter_active = false;
                 drop(poisoned_state);
                 self.gate.0.changed.notify_all();
@@ -242,21 +241,14 @@ impl ObservationReservation {
             }
         }
         let mut state = self.gate.lock_state()?;
-        state.next_emission += self.count as u128;
+        state
+            .order
+            .advance(&mut emission)
+            .map_err(ObservationGate::order_error)?;
         state.emitter_active = false;
         drop(state);
         self.gate.0.changed.notify_all();
         Ok(())
-    }
-
-    fn matches(&self, observations: &[RegisterObservation]) -> bool {
-        observations.len() == self.count
-            && observations.iter().enumerate().all(|(index, observation)| {
-                u64::try_from(index)
-                    .ok()
-                    .and_then(|index| self.start.checked_add(index))
-                    == Some(observation.sequence)
-            })
     }
 }
 
@@ -264,7 +256,18 @@ impl Drop for ObservationReservation {
     fn drop(&mut self) {
         if self.armed {
             self.armed = false;
-            self.gate.fault(GateFault::ReservationDropped);
+            match self.gate.0.state.lock() {
+                Ok(mut state) => {
+                    let _ = state.order.abandon(&mut self.receipt);
+                    state.emitter_active = false;
+                }
+                Err(poisoned) => {
+                    let mut state = poisoned.into_inner();
+                    state.order.fault(GateFault::SynchronizationPoisoned);
+                    state.emitter_active = false;
+                }
+            }
+            self.gate.0.changed.notify_all();
         }
     }
 }

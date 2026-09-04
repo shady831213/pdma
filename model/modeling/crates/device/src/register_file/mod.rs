@@ -1,5 +1,4 @@
 mod bank;
-mod global;
 mod image;
 mod irq;
 mod queue;

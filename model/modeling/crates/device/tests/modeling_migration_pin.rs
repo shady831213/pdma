@@ -75,7 +75,7 @@ async fn authoritative_image_all_66_metadata_rows_reset_reads_and_request_writes
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn happy_commands_batches_generations_and_clone_order_match_semantics() -> TestResult {
+async fn global_happy_commands_batches_generations_and_clone_order_match_semantics() -> TestResult {
     // Given: one observed device, one direct clone access, and one staged bootstrap.
     let observer = Arc::new(Recorder::default()); let (device, _worker) = AsyncDevice::from_core_observed(DeviceCore::new(Arc::new(hardware_interface_runtime::SharedMemory::new()), ResourceConfig::default()), observer.clone()); let handle = device.handle();
     let mut magic = [0; 4]; handle.register_endpoint().clone().read(0, &mut magic).await?; let stage = handle.stage_memory_regions(&[128, 64, 128]).await?; let sq = *stage.regions().first().ok_or("submission ring")?; let activation = activation(&stage)?; let queue = activation.queue(); let before = handle.snapshot().await;

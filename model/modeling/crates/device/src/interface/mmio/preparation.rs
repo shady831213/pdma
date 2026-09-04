@@ -1,6 +1,7 @@
 use super::dispatch;
 use super::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
 use crate::device::DeviceCore;
+use crate::register_file::narrow_u32;
 use hardware_interface_runtime::{AccessOrigin, ObservationGateError, RegisterObservation};
 use pdma_model_contract::abi::mmio::QueueResponseBank;
 use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_write};
@@ -59,7 +60,10 @@ pub(crate) struct PreparedWrite {
 
 impl PreparedWrite {
     pub(crate) fn commit(&self, state: &mut DeviceCore) -> bool {
-        dispatch::write(state, self.register, self.value, &self.request)
+        match self.register {
+            RegisterId::GCommand => super::global::execute(state, narrow_u32(self.value)),
+            _ => dispatch::write(state, self.register, self.value, &self.request),
+        }
     }
 
     pub(crate) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {

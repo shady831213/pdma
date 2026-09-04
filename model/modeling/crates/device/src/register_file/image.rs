@@ -3,14 +3,12 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::abi::mmio::{
     IrqResponseBank, MmioResultDetails, PdmaMmioMap, PdmaMmioMapView, PdmaMmioMapViewMut,
-    QueueResponseBank, RegisterId, ResponseUpdate,
+    RegisterId, ResponseUpdate,
 };
 
 use super::irq::IrqRequest;
-use super::queue::QueueStaging;
 use super::storage::DeviceRegisterStorage;
-use super::{invariant, irq, queue};
-use crate::interface::mmio::{BootstrapBatchStaging, SubmissionBatchStaging};
+use super::{invariant, irq};
 
 pub(super) type RootImage = RegisterImage<PdmaMmioMap, DeviceRegisterStorage>;
 
@@ -49,20 +47,8 @@ impl PdmaRegisters {
         );
     }
 
-    pub(crate) fn snapshot_queue(&self) -> QueueStaging {
-        queue::staging(&self.image)
-    }
-
     pub(crate) fn snapshot_irq(&self) -> IrqRequest {
         irq::request(&self.image)
-    }
-
-    pub(crate) fn complete_queue(
-        &self,
-        result: MmioResultDetails,
-        update: ResponseUpdate<QueueResponseBank>,
-    ) {
-        queue::complete(&self.image, result, update);
     }
 
     pub(crate) fn complete_irq(
@@ -71,22 +57,6 @@ impl PdmaRegisters {
         update: ResponseUpdate<IrqResponseBank>,
     ) {
         irq::complete(&self.image, result, update);
-    }
-
-    pub(crate) fn complete_bootstrap_batch(
-        &self,
-        staging: BootstrapBatchStaging,
-        response: QueueResponseBank,
-    ) {
-        queue::complete_bootstrap_batch(&self.image, staging, response);
-    }
-
-    pub(crate) fn complete_submission_batch(
-        &self,
-        staging: SubmissionBatchStaging,
-        response: QueueResponseBank,
-    ) {
-        queue::complete_submission_batch(&self.image, staging, response);
     }
 
     pub(crate) fn view<R>(

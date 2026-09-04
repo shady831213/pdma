@@ -1,5 +1,5 @@
 use super::queue_control::{CommandResult, fail, map_abi};
-use super::{QueueStaging, status_response};
+use super::{QueueRequest, status_response};
 use crate::device::DeviceCore;
 use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::abi::{
@@ -25,7 +25,7 @@ enum RingKind {
     Event,
 }
 
-pub(super) fn activate(state: &mut DeviceCore, staging: QueueStaging) -> CommandResult {
+pub(super) fn activate(state: &mut DeviceCore, staging: QueueRequest) -> CommandResult {
     let queue_id = usize::try_from(staging.id)
         .map(QueueId::new)
         .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?;

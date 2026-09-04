@@ -1,6 +1,6 @@
 use super::{
-    CommittedBatch, DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, bootstrap_staging,
-    command_error, map_access_error, submission_staging, validate_submission_shape,
+    CommittedBatch, DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, bootstrap_request,
+    command_error, map_access_error, submission_request, validate_submission_shape,
 };
 use crate::device::DeviceCore;
 use crate::dma::{PdmaMemoryError, PreparedPdmaMapping};
@@ -25,7 +25,7 @@ pub(crate) fn commit_bootstrap(
     {
         return Err(PdmaBatchError::InvalidShape);
     }
-    let staging = bootstrap_staging(request.activation, regions)?;
+    let register_request = bootstrap_request(state, request.activation, regions)?;
     let context = regions
         .first()
         .copied()
@@ -66,8 +66,8 @@ pub(crate) fn commit_bootstrap(
         super::reject_injected(state, super::BatchPreparationFault::Access, context)?;
         #[cfg(test)]
         super::reject_injected(state, super::BatchPreparationFault::Mask, context)?;
-        let command =
-            prepare_bootstrap_batch_write(staging, response).map_err(PdmaBatchError::Access)?;
+        let command = prepare_bootstrap_batch_write(register_request, response)
+            .map_err(PdmaBatchError::Access)?;
         let reservation = register_gate.reserve(1)?;
         transaction.install_draft(draft);
         state.dma.install_mapping(prepared_mapping);
@@ -88,7 +88,7 @@ pub(crate) fn commit_submission(
 ) -> Result<CommittedBatch, PdmaBatchError> {
     validate_submission_shape(state, request)?;
     let prepared_mapping = prepare_submission_mapping(state, request)?;
-    let staging = submission_staging(request);
+    let register_request = submission_request(state, request);
     let memory = state.dma.backing_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
@@ -163,8 +163,8 @@ pub(crate) fn commit_submission(
             super::BatchPreparationFault::Mask,
             DmaBatchContext::None,
         )?;
-        let command =
-            prepare_submission_batch_write(staging, response).map_err(PdmaBatchError::Access)?;
+        let command = prepare_submission_batch_write(register_request, response)
+            .map_err(PdmaBatchError::Access)?;
         let reservation = register_gate.reserve(1)?;
         transaction.install_draft(draft);
         if let Some(prepared) = prepared_mapping {

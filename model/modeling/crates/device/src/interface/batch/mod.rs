@@ -1,7 +1,8 @@
 //! Atomic exact-ABI queue batches and their typed failures.
 
 use crate::MappedDmaRegion;
-use crate::interface::mmio::{BootstrapBatchStaging, PreparedWrite, SubmissionBatchStaging};
+use crate::interface::mmio::PreparedWrite;
+use crate::interface::mmio::queue::{QueueRequest, snapshot_request};
 use crate::queue::exact::{DmaWrite, PdmaControlError, SubmissionAcceptance};
 use hardware_interface_runtime::{AccessOrigin, ObservationReservation};
 use pdma_model_contract::semantic::QueueActivation;
@@ -163,15 +164,17 @@ pub(super) fn validate_submission_shape(
     Ok(())
 }
 
-pub(super) fn bootstrap_staging(
+pub(super) fn bootstrap_request(
+    state: &crate::device::DeviceCore,
     activation: QueueActivation,
     regions: &[MappedDmaRegion],
-) -> Result<BootstrapBatchStaging, PdmaBatchError> {
+) -> Result<QueueRequest, PdmaBatchError> {
     let [submission, completion, event] = regions else {
         return Err(PdmaBatchError::InvalidShape);
     };
     let config = activation.config();
-    Ok(BootstrapBatchStaging {
+    let previous = snapshot_request(&state.registers);
+    Ok(QueueRequest {
         expected_epoch: activation.queue().epoch().raw(),
         id: u64::try_from(activation.queue().queue_id().raw())
             .map_err(|_| PdmaBatchError::InvalidShape)?,
@@ -185,14 +188,21 @@ pub(super) fn bootstrap_staging(
             .map_err(|_| PdmaBatchError::InvalidShape)?,
         eq_base: event.base().raw(),
         eq_depth: u32::try_from(config.event_depth()).map_err(|_| PdmaBatchError::InvalidShape)?,
+        expected_cursor: 0,
+        new_cursor: 0,
+        ..previous
     })
 }
 
-pub(super) fn submission_staging(request: &SubmissionAcceptance) -> SubmissionBatchStaging {
-    SubmissionBatchStaging {
+pub(super) fn submission_request(
+    state: &crate::device::DeviceCore,
+    request: &SubmissionAcceptance,
+) -> QueueRequest {
+    QueueRequest {
         expected_epoch: request.queue.epoch().raw(),
         id: u64::try_from(request.queue.queue_id().raw()).unwrap_or(u64::MAX),
         expected_cursor: request.expected_producer.raw(),
         new_cursor: request.expected_producer.raw().saturating_add(1),
+        ..snapshot_request(&state.registers)
     }
 }

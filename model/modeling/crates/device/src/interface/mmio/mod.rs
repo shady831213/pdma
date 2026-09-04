@@ -12,8 +12,6 @@ pub(crate) use preparation::{
     PreparedRead, PreparedWrite, prepare_bootstrap_batch_write, prepare_read,
     prepare_submission_batch_write, prepare_write,
 };
-pub(crate) use queue::{BootstrapBatchStaging, SubmissionBatchStaging};
-
 pub(crate) fn q_command_offset() -> u32 {
     pdma_model_contract::abi::mmio::PdmaMmioMap::register(
         pdma_model_contract::abi::mmio::RegisterId::QCommand,

@@ -1,10 +1,12 @@
 use super::dispatch;
-use super::queue::{BootstrapBatchStaging, SubmissionBatchStaging};
+use super::queue::{QueueRequest, complete, install_request};
 use crate::device::DeviceCore;
 use crate::register_file::narrow_u32;
 use hardware_interface_runtime::{AccessOrigin, ObservationGateError, RegisterObservation};
-use pdma_model_contract::abi::mmio::QueueResponseBank;
 use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_write};
+use pdma_model_contract::abi::mmio::{
+    MmioResult, MmioResultDetails, QueueResponseBank, ResponseUpdate,
+};
 use std::fmt::{self, Display, Formatter};
 
 /// Failure from an exact generated-view register operation.
@@ -73,18 +75,14 @@ impl PreparedWrite {
 
 pub(crate) struct PreparedBatchWrite {
     write: PreparedWrite,
-    mutation: PreparedBatchRegisterMutation,
+    request: QueueRequest,
+    response: QueueResponseBank,
 }
 
 #[derive(Clone, Copy)]
 pub(super) enum BatchQueueCommand {
     Activate,
     PublishSubmissionProducer,
-}
-
-enum PreparedBatchRegisterMutation {
-    Bootstrap(BootstrapBatchStaging, QueueResponseBank),
-    Submission(SubmissionBatchStaging, QueueResponseBank),
 }
 
 impl BatchQueueCommand {
@@ -98,48 +96,51 @@ impl BatchQueueCommand {
 
 impl PreparedBatchWrite {
     pub(crate) fn commit(self, state: &DeviceCore) -> PreparedWrite {
-        match self.mutation {
-            PreparedBatchRegisterMutation::Bootstrap(staging, response) => {
-                state.registers.complete_bootstrap_batch(staging, response);
-            }
-            PreparedBatchRegisterMutation::Submission(staging, response) => {
-                state.registers.complete_submission_batch(staging, response);
-            }
-        }
+        state.registers.view_mut(|mut root| {
+            install_request(&mut root, self.request);
+            complete(
+                &mut root,
+                MmioResultDetails {
+                    result: MmioResult::Ok,
+                    details: [0; 3],
+                },
+                ResponseUpdate::Replace(self.response),
+            );
+        });
         self.write
     }
 }
 
 fn prepare_batch_write(
     command: BatchQueueCommand,
-    mutation: PreparedBatchRegisterMutation,
+    request: QueueRequest,
+    response: QueueResponseBank,
 ) -> Result<PreparedBatchWrite, MmioAccessError> {
     let bytes = command.code().to_le_bytes();
     let offset = super::q_command_offset();
     let (register, value) = decode_write(offset, &bytes)?;
     Ok(PreparedBatchWrite {
         write: prepare_write(register, value, offset, &bytes),
-        mutation,
+        request,
+        response,
     })
 }
 
 pub(crate) fn prepare_bootstrap_batch_write(
-    staging: BootstrapBatchStaging,
+    request: QueueRequest,
     response: QueueResponseBank,
 ) -> Result<PreparedBatchWrite, MmioAccessError> {
-    prepare_batch_write(
-        BatchQueueCommand::Activate,
-        PreparedBatchRegisterMutation::Bootstrap(staging, response),
-    )
+    prepare_batch_write(BatchQueueCommand::Activate, request, response)
 }
 
 pub(crate) fn prepare_submission_batch_write(
-    staging: SubmissionBatchStaging,
+    request: QueueRequest,
     response: QueueResponseBank,
 ) -> Result<PreparedBatchWrite, MmioAccessError> {
     prepare_batch_write(
         BatchQueueCommand::PublishSubmissionProducer,
-        PreparedBatchRegisterMutation::Submission(staging, response),
+        request,
+        response,
     )
 }
 

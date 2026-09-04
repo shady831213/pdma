@@ -1,4 +1,4 @@
-use super::{QueueStaging, status_response};
+use super::{QueueRequest, status_response};
 use crate::device::DeviceCore;
 use crate::dma::PdmaMemoryError;
 use crate::queue::exact::{PdmaControlError, QueueStatus};
@@ -14,13 +14,12 @@ pub(super) type CommandResult = Result<(QueueResponseBank, bool), MmioResultDeta
 
 pub(super) fn execute(
     state: &mut DeviceCore,
-    staging: QueueStaging,
-    raw_command: u64,
+    staging: QueueRequest,
+    raw_command: u32,
 ) -> (MmioResultDetails, ResponseUpdate<QueueResponseBank>, bool) {
-    let raw = crate::register_file::narrow_u32(raw_command);
-    let Ok(command) = QueueCommand::try_from(raw) else {
+    let Ok(command) = QueueCommand::try_from(raw_command) else {
         return (
-            fail(MmioResult::UnknownCommand, [u64::from(raw), 0, 0]),
+            fail(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]),
             ResponseUpdate::Preserve,
             false,
         );
@@ -35,7 +34,7 @@ pub(super) fn execute(
     }
 }
 
-fn run(state: &mut DeviceCore, staging: QueueStaging, command: QueueCommand) -> CommandResult {
+fn run(state: &mut DeviceCore, staging: QueueRequest, command: QueueCommand) -> CommandResult {
     if command == QueueCommand::Activate {
         return super::queue_config::activate(state, staging);
     }

@@ -45,3 +45,6 @@ impl ObservationReservation {
         self.0.emit(observations)
     }
 }
+
+#[cfg(test)]
+mod tests;

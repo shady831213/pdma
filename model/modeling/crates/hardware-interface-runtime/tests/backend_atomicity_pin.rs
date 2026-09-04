@@ -1,66 +1,21 @@
 #![allow(missing_docs, reason = "integration test crate")]
 #![allow(clippy::expect_used, reason = "checked test fixture operations")]
 
+#[path = "backend_atomicity_pin/fixture.rs"]
+pub mod fixture;
 mod support;
 
-use std::convert::Infallible;
-use std::future::{Future, pending};
+use std::future::Future;
 use std::pin::Pin;
 #[rustfmt::skip]
-use std::sync::{Arc, Barrier, Mutex, atomic::{AtomicU64, AtomicUsize, Ordering}, mpsc};
+use std::sync::{Arc, Barrier, Mutex, atomic::{AtomicU64, Ordering}, mpsc};
 use std::task::{Context, Poll, Waker};
 use std::thread;
 
 #[rustfmt::skip]
 use hardware_interface_runtime::{AccessOrigin, GateFault, MemoryAccess, MemoryAddress, MemoryAlignment, MemoryError, ObservationGate, ObservationGateError, RegisterAccess, RegisterObservation, RegisterObserver, SharedMemory, SharedRegisterObserver};
+use fixture::{PendingEndpoint, Recorder, write};
 use support::region;
-
-#[derive(Debug)]
-struct PendingEndpoint {
-    memory: SharedMemory,
-    gate: ObservationGate,
-    committed_writes: AtomicUsize,
-}
-
-impl RegisterAccess for PendingEndpoint {
-    type Error = Infallible;
-
-    async fn read(&self, _offset: u32, _response: &mut [u8]) -> Result<(), Self::Error> {
-        pending().await
-    }
-
-    async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
-        pending::<()>().await;
-        self.memory
-            .write(MemoryAddress::new(0x1000), MemoryAlignment::ONE, request)
-            .expect("valid deferred write");
-        self.committed_writes.fetch_add(1, Ordering::SeqCst);
-        let reservation = self.gate.reserve(1).expect("one deferred sequence");
-        let sequence = reservation.start_sequence();
-        reservation
-            .emit(vec![RegisterObservation::write(
-                sequence,
-                AccessOrigin::Direct,
-                offset,
-                request,
-            )])
-            .expect("deferred observation emits");
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
-struct Recorder(Mutex<Vec<RegisterObservation>>);
-
-impl RegisterObserver for Recorder {
-    fn observe(&self, observation: RegisterObservation) {
-        self.0.lock().expect("recorder lock").push(observation);
-    }
-}
-
-fn write(sequence: u64, origin: AccessOrigin, offset: u32) -> RegisterObservation {
-    RegisterObservation::write(sequence, origin, offset, &[0xa5])
-}
 
 #[test]
 fn competing_transaction_keeps_its_prepared_install_exclusive() {
@@ -147,11 +102,10 @@ fn cancellation_before_raw_register_commit_preserves_all_state() {
         .write(MemoryAddress::new(0x1000), MemoryAlignment::ONE, &[0x5a; 4])
         .expect("sentinel writes");
     let recorder = Arc::new(Recorder::default());
-    let endpoint = PendingEndpoint {
-        memory: memory.clone(),
-        gate: ObservationGate::new(SharedRegisterObserver::new(recorder.clone())),
-        committed_writes: AtomicUsize::new(0),
-    };
+    let endpoint = PendingEndpoint::new(
+        memory.clone(),
+        ObservationGate::new(SharedRegisterObserver::new(recorder.clone())),
+    );
     let before_revision = memory.revision();
     let mut future = Box::pin(endpoint.write(0x20, &[1, 2, 3, 4]));
 

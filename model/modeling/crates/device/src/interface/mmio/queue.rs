@@ -1,5 +1,5 @@
 use crate::device::DeviceCore;
-use crate::register_file::{PdmaRegisters, narrow_u32};
+use crate::registers::{PdmaRegisters, narrow_u32};
 use pdma_model_contract::abi::mmio::{
     MmioResultDetails, PdmaMmioMapViewMut, QueueResponseBank, ResponseUpdate, apply_response_update,
 };

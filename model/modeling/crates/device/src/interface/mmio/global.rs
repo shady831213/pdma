@@ -1,5 +1,5 @@
 use crate::device::DeviceCore;
-use crate::register_file::PdmaRegisters;
+use crate::registers::PdmaRegisters;
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, GlobalResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
     apply_response_update,

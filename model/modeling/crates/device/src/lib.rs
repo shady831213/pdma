@@ -53,7 +53,7 @@ mod queue;
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
-mod register_file;
+mod registers;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
@@ -82,6 +82,10 @@ mod trace;
 )]
 mod device;
 
+#[cfg(test)]
+#[path = "registers/baseline_manifest.rs"]
+mod register_file;
+
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
@@ -99,5 +103,5 @@ pub use status::{AsyncStallReason, AsyncStepStatus};
 #[cfg(debug_assertions)]
 #[doc(hidden)]
 pub fn __register_image_allocations_for_test() -> (usize, usize) {
-    register_file::allocation_observation()
+    registers::allocation_observation()
 }

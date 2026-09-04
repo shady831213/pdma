@@ -187,3 +187,20 @@ pre-edit ledger, digest, inventory, and fresh header; `task-19-full-gates.log` r
 the workspace and manual lifecycle gates; `task-19-full-gates-error.log` records the
 focused/adversarial checks; and `task-19-implementation-report.md` binds them to the
 documentation commit.
+
+## Later reusable-building-block successor note
+
+A later behavior-preserving refactor completed the reusable four-layer split: schema
+descriptors and generated borrowed views; closure-scoped runtime storage backends and
+generic bus/memory/observation algorithms; statically dispatched pipeline drive
+policies; and PDMA-owned command, DMA, reset, IRQ, execution, and retirement effects.
+The host full-address register bus and device typed access now share one authoritative
+4 KiB root image, with no handwritten full-register dispatch or live response bank.
+
+The accepted-command pipeline persists across interaction boundaries and resumes after
+owned waits without replaying completed upstream work. Immediate, stepped, and async
+executors change drive policy only; all use the same PDMA core. Closed-batch atomicity,
+observation ordering, cancellation, reset epochs, IRQ delivery, public APIs, all 66
+register definitions, and the generated header bytes remain unchanged. This successor
+note makes no timing, transaction, PCIe/MSI-X, cache/coherency, or callable-C claim and
+does not revise the historical v0.9 body above.

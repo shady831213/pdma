@@ -53,15 +53,12 @@ async fn prepared_read_and_write_are_side_effect_free_until_commit() {
         .shared
         .backend
         .interact(|state| {
-            let before = dispatch::read(&state.core, RegisterId::QId).encode();
+            let before = state.core.registers.read(RegisterId::QId);
             let read = prepare_read(&state.core, RegisterId::QId, 0x108);
             let write = prepare_write(RegisterId::QId, 7, 0x108, &7_u64.to_le_bytes());
-            assert_eq!(
-                dispatch::read(&state.core, RegisterId::QId).encode(),
-                before
-            );
+            assert_eq!(state.core.registers.read(RegisterId::QId), before);
             write.commit(&mut state.core);
-            let after = dispatch::read(&state.core, RegisterId::QId).encode();
+            let after = state.core.registers.read(RegisterId::QId);
             (before, read.response, after)
         })
         .await;
@@ -117,7 +114,7 @@ async fn prepared_batch_write_is_typed_consumed_and_has_no_arbitrary_install_hoo
                 (RegisterId::QExpectedCursor, 12_u64),
                 (RegisterId::QNewCursor, 13_u64),
             ]
-            .map(|(register, expected)| (dispatch::read(&state.core, register).encode(), expected));
+            .map(|(register, expected)| (state.core.registers.read(register), expected));
             Ok((activate, submission, registers))
         })
         .await?;
@@ -185,7 +182,7 @@ fn queue_completion_empties_response_with_result_details_in_one_root_mutation() 
             RegisterId::QRspEqProducer,
             RegisterId::QRspEqConsumer,
         ]
-        .map(|register| dispatch::read(&state, register).encode()),
+        .map(|register| state.registers.read(register)),
         [
             2_u32.to_le_bytes().to_vec(),
             13_u64.to_le_bytes().to_vec(),

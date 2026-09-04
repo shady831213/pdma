@@ -42,7 +42,7 @@ The v0 model validates the following end-to-end behaviors:
 - Whole-device reset with checked epoch advancement, stale-capability rejection before
   mutation, and fresh bootstrap under the new epoch.
 - One exact 4 KiB little-endian MMIO region with 66 canonical registers, shared decoding,
-  generated C constants, command banks, and stable response semantics.
+  generated C constants, one root image, generated typed views, and stable response semantics.
 - One canonical `PdmaRegisterPort<AsyncDeviceAccess>` whose split memory/register,
   provisioning, closed-batch, and compound-claim capabilities reuse existing typed
   boundaries.
@@ -73,6 +73,11 @@ It proves 156 committed observations: 154 Direct entries and the two real Batch-
 queue-command writes, while a scenario-local memory decorator records bulk access
 separately. Worker and dispatcher shutdown/join finish before the collector snapshot.
 
+The host presents full `RegisterBusAddress` values relative to a checked base. After one
+checked subtraction, the device endpoint uses the canonical decoder and the same
+`PdmaRegisters` image that generated typed device views borrow. Raw host transactions and
+typed global/queue/IRQ effects therefore cannot diverge into duplicate register bytes.
+
 Schema definitions and resolved layouts belong to `hardware-interface-schema`; shared
 memory, raw registers, CPU-local state, generic interrupt dispatch, and trace storage
 belong to `hardware-interface-runtime`. Contract `semantic` owns conceptual vocabulary,
@@ -82,6 +87,15 @@ semantic-to-exact publication, and execution/retirement. Host owns exact-to-sema
 retirement plus the canonical register port, PDMA interrupt adapter, driver accounting,
 and the explicit async semantic compatibility adapter. Compatibility does not create a
 second executor or canonical E2E.
+
+The reusable implementation is split into four layers. `hardware-interface-schema`
+owns descriptors, codecs, and borrowed flat/grouped views. `hardware-interface-runtime`
+owns closure-scoped storage backends plus generic memory, register-bus, and observation
+algorithms. `hardware-interface-pipeline` owns static stage composition and immediate,
+single-step, or async interaction drive policies. PDMA owns all device effects: command
+acceptance, DMA, reset, queue, IRQ, execution, retirement, trace, and accounting. The
+generic executors can swap how one persistent stage graph is driven; they do not create
+a second PDMA execution core.
 
 ## Software/Driver Responsibility Boundary
 
@@ -128,16 +142,16 @@ The device consumes the contract's two data models: layout-independent values fr
 `contract::abi`. Contract remains the owner of that ABI vocabulary and layout definition;
 the device does not define a second ABI namespace. One synchronous `DeviceCore`
 composition root in `crates/device/src/device/mod.rs` directly owns the device epoch, DMA
-mappings, register banks, queues, scheduler, execution unit, retirement unit, PDMA-local
+mappings, one register image, queues, scheduler, execution unit, retirement unit, PDMA-local
 IRQ controller, and trace sink. The active source tree exposes the hardware roles and its
 private interface helpers directly:
 
 ```text
 crates/device/src/
-├── device/            # DeviceCore composition, pipeline, probes, and object wiring
+├── device/            # DeviceCore composition, persistent command pipeline, drive, and probes
 ├── queue/             # QueueBlock plus semantic or exact ring state
 ├── dma/               # PdmaMemoryMappings and checked memory access
-├── register_file/     # RegisterFile and its global/queue/IRQ banks
+├── registers/         # sole 4 KiB root image and its device-local storage backend
 ├── scheduler/         # Scheduler and deterministic runnable-queue arbitration
 ├── execution/         # ExecutionUnit and native semantic operations
 ├── retirement/        # RetirementUnit, typed ports, publication, and retry state
@@ -145,14 +159,16 @@ crates/device/src/
 ├── trace/             # TraceSink state and format export
 ├── adapter/           # stateless ABI-command to semantic-command conversion
 ├── interface/         # private exact-MMIO and closed-batch preparation/effects
-│   ├── mmio/          # one RegisterId read/write dispatch plus ephemeral prepared effects
+│   ├── mmio/          # decoded leaf preparation plus global/queue/IRQ command effects
 │   └── batch/         # ephemeral closed atomic preparation and commit
 └── runtime/           # private async facade, endpoint/handle/worker, one lock, wake/publication
 ```
 
-`interface::mmio` owns only synchronous, ephemeral preparation and effects: its sole
-`RegisterId` dispatch pair reads or writes the register file through `DeviceCore`. It has
-no persistent device state, async lock, observation gate, or observer. `interface::batch`
+`interface::mmio` owns only synchronous, ephemeral preparation and effects. Ordinary
+decoded leaves read or write the sole root image directly; only the explicit global,
+queue, and IRQ command leaves branch into PDMA effects. There is no handwritten
+full-`RegisterId` dispatch or live global/queue/IRQ bank. It has no persistent device
+state, async lock, observation gate, or observer. `interface::batch`
 owns only the two closed atomic preparation/commit grammars (bootstrap and submission),
 including their temporary staged DMA/register work; it likewise owns no persistent state,
 lock, or observer. The persistent state they act on remains directly owned by
@@ -174,9 +190,9 @@ is no public device `abi` or `runtime` namespace, no public synchronous device f
 and no second executor.
 
 Internal component and composition invariants live beside their owners under `src/**/tests`.
-The four `crates/device/tests` binaries are behavioral public-surface tests, not source
-structure probes: `actor` has 9 tests, `queue` 19, `transactions` 19, and `mmio` 31, for
-78 external tests. The device library has 34 tests. Full host/device, CPU, and interrupt
+The `crates/device/tests` binaries are behavioral public-surface tests, not source
+structure probes; migration pins supplement the actor, queue, transaction, and MMIO
+suites without exposing private owners. Full host/device, CPU, and interrupt
 stories remain in `crates/scenarios/tests`, whose live inventory is 56 tests. `DeviceCore`
 remains a public construction value so callers can inject shared memory and resource
 configuration, but its stepping and hardware-state mutation methods are crate-private.
@@ -188,14 +204,14 @@ normalize fetches into the same semantic command path and share the same schedul
 execution unit, retirement unit, IRQ controller, and trace sink. Execution consumes
 contract semantic commands directly and defines no third command model.
 
-The hardware objects do not receive `&mut DeviceCore`. `DeviceCore::step` is the sole
-synchronous composition point: `QueueBlock` returns a typed `NormalizedFetch`, exact
-descriptor conversion returns a semantic `Command`, `ExecutionUnit` returns an
-`ExecutionOutcome`, and `RetirementUnit` consumes the resulting
-`RetirableExecution` through an explicit `RetirementPorts` bundle and returns a
-`RetirementStatus`. Queue, execution, retirement, and IRQ state transitions therefore
-remain methods of their owning objects while the composition root controls dependency
-direction and ordering.
+The hardware objects do not receive `&mut DeviceCore`. `DeviceCore` stores one private
+exhaustive command-pipeline enum. Admission, fetch/decode, execution, and retirement
+advance as persistent typed stages, at most one architecture-visible interaction per
+leaf step. A downstream wait retains completed upstream state, so resumption cannot
+refetch, re-execute DMA, or republish a prior effect. The test-only synchronous `step`
+uses an immediate drive policy over that same pipeline and core. Queue, execution,
+retirement, and IRQ transitions remain methods of their owning objects while the
+composition root controls dependency direction and ordering.
 
 `runtime` is only the async actor shell. `AsyncDevice` wraps one `DeviceCore` behind the
 single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,
@@ -206,6 +222,15 @@ commit seams described above. No lock, observer, or async primitive exists insid
 hardware objects or execution units, and no guard crosses a device await boundary. There
 is no synchronous public device facade or second executor. Together these layers own the
 following responsibilities:
+
+The interaction lock is the outer linearization boundary. Each register read/write,
+command acceptance, cursor or IRQ transition, and pipeline leaf mutates state inside one
+synchronous closure. Memory backends are entered only beneath that device interaction;
+the reverse lock order is forbidden. A wait token is owned and awaited only after the
+closure releases every guard. Closed batches perform all fallible preparation against a
+draft, then install DMA, mappings, root-register effects, queue/cursors, and observation
+reservation in one interaction. Cancellation before install mutates nothing; successful
+observation emission completes before the endpoint or batch publishes its wake or returns.
 
 - Maintain device memory, the queue directory, command rings, completion rings, queue-tagged events, the runnable queue list, resource configuration, IRQ state, and the trace sink.
 - Accept submissions through `submit_command`, emit a trace event, and queue the command on the correct command ring.
@@ -523,11 +548,15 @@ interleaving exception is
 inside its one main future so the test can order an untraced submission before a traced
 doorbell without inventing a second software entry.
 
-Each device-worker turn advances at most one native command or retirement retry. The
-worker sleeps after idle or stalled observations until a runtime-owned wake generation
-changes. Because the same inputs always produce the same runnable ordering, resource
-decisions, completions, events, IRQ notifications, and trace ordinals, the model is
-deterministic and suitable for regression testing.
+Each device-worker turn advances at most one persistent pipeline leaf. Public `steps`
+accounting changes only when a command reaches its existing terminal progress outcome;
+internal `Progressed` transitions remain unpublished. The worker sleeps after idle or
+stalled observations until a runtime-owned wake generation changes. Reset clears the
+pending pipeline before any discarded stage can publish a completion, cursor, success
+trace, or IRQ; DMA bytes already committed before reset remain. Because the same inputs
+always produce the same runnable ordering, resource decisions, completions, events, IRQ
+notifications, and trace ordinals, the model is deterministic and suitable for regression
+testing.
 
 ## Deferred Items
 

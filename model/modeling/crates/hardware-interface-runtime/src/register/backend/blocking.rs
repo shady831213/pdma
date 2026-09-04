@@ -8,18 +8,18 @@ use crate::register::{
 };
 
 #[derive(Debug)]
-struct BlockingState {
+pub(in crate::register) struct BlockingState {
     order: ObservationOrder,
     emitter_active: bool,
-    waiting_emitters: usize,
+    pub(in crate::register) waiting_emitters: usize,
 }
 
 /// Clone-shared cross-thread policy with ordered blocking emission.
 #[derive(Clone, Debug)]
 pub struct BlockingObservationBackend {
     observer: SharedRegisterObserver,
-    state: Arc<Mutex<BlockingState>>,
-    changed: Arc<Condvar>,
+    pub(in crate::register) state: Arc<Mutex<BlockingState>>,
+    pub(in crate::register) changed: Arc<Condvar>,
 }
 
 impl BlockingObservationBackend {
@@ -233,6 +233,7 @@ mod tests {
     }
 
     #[test]
+    // CLIPPY-ALLOW: deliberate panic is required to exercise poisoned backend recovery.
     #[allow(clippy::panic, reason = "mutex poisoning is the behavior under test")]
     fn synchronization_poison_terminally_faults_backend() {
         let backend = BlockingObservationBackend::new(SharedRegisterObserver::new(Arc::new(

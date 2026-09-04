@@ -1,7 +1,7 @@
 use super::AsyncStepStatus;
 use super::backend::DeviceWait;
 use super::state::{RunnerShared, RunnerState};
-use crate::device::pipeline::{ModelStepStatus, PipelineStep};
+use crate::device::drive::{ModelStepStatus, PipelineStep};
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
     while run_one(shared).await {}

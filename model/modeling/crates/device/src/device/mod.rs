@@ -10,7 +10,7 @@ use crate::execution::ExecutionUnit;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
 use crate::queue::exact::PdmaControlError;
-use crate::register_file::PdmaRegisters;
+use crate::registers::PdmaRegisters;
 use crate::retirement::RetirementUnit;
 use crate::scheduler::Scheduler;
 use crate::trace::TraceSink;
@@ -102,14 +102,14 @@ impl DeviceCore {
     }
 }
 mod command_pipeline;
-mod irq;
 #[doc(hidden)]
-pub(crate) mod pipeline;
+pub(crate) mod drive;
+mod irq;
 mod probe;
 mod queue;
 mod trace;
 
-pub(crate) use pipeline::ModelStepStatus;
+pub(crate) use drive::ModelStepStatus;
 
 #[cfg(test)]
 mod tests;

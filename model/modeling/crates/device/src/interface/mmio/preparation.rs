@@ -1,7 +1,6 @@
-use super::dispatch;
 use super::queue::{QueueRequest, complete, install_request};
 use crate::device::DeviceCore;
-use crate::register_file::narrow_u32;
+use crate::registers::narrow_u32;
 use hardware_interface_runtime::{AccessOrigin, ObservationGateError, RegisterObservation};
 use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_write};
 use pdma_model_contract::abi::mmio::{
@@ -64,7 +63,14 @@ impl PreparedWrite {
     pub(crate) fn commit(&self, state: &mut DeviceCore) -> bool {
         match self.register {
             RegisterId::GCommand => super::global::execute(state, narrow_u32(self.value)),
-            _ => dispatch::write(state, self.register, self.value, &self.request),
+            register => {
+                state.registers.write(register, &self.request);
+                match register {
+                    RegisterId::QCommand => super::queue::execute(state, self.value),
+                    RegisterId::ICommand => super::irq::execute(state, narrow_u32(self.value)),
+                    _ => false,
+                }
+            }
         }
     }
 
@@ -146,7 +152,7 @@ pub(crate) fn prepare_submission_batch_write(
 
 pub(crate) fn prepare_read(state: &DeviceCore, register: RegisterId, offset: u32) -> PreparedRead {
     PreparedRead {
-        response: dispatch::read(state, register).encode(),
+        response: state.registers.read(register),
         offset,
     }
 }

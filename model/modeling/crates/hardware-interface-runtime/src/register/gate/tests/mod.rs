@@ -1,7 +1,7 @@
 use super::*;
-use crate::NoopRegisterObserver;
+use crate::{GateFault, NoopRegisterObserver};
 use std::panic::AssertUnwindSafe;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[derive(Debug, Default)]

@@ -1,5 +1,5 @@
 use super::*;
-use crate::register_file::PdmaRegisters;
+use crate::registers::PdmaRegisters;
 use pdma_model_contract::abi::mmio::{MmioResult, RegisterId};
 
 fn invariant<T, E>(result: Result<T, E>) -> T {

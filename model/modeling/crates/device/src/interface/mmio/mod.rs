@@ -1,5 +1,4 @@
 mod claim;
-mod dispatch;
 mod global;
 pub(crate) mod irq;
 mod preparation;

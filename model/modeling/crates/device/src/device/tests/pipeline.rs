@@ -138,3 +138,8 @@ fn admission_skips_starved_work_without_replaying_accepted_retirement() {
         0
     );
 }
+
+#[test]
+fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
+    admission_skips_starved_work_without_replaying_accepted_retirement();
+}

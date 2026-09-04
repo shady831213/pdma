@@ -1,10 +1,22 @@
 # Hardware interface runtime
 
-Workspace-private, runtime-neutral mechanics shared by hardware-interface models.
-It owns checked bulk memory storage, raw async register access, synchronous ordered
-observation delivery, and software CPU execution contexts. Address allocation, register
-maps and effects, device IDs, epochs, logical zero mappings, recording collectors, actors,
-callbacks, dispatch policy, and timing remain consumer policy.
+Workspace-private mechanics shared by hardware-interface models. It owns generic,
+closure-scoped storage contracts and algorithms for checked bulk memory, register
+images, addressed register buses, and ordered observations. Concrete local, shared,
+and blocking storage or observation policies live in their backend modules. Generic
+algorithms name the backend traits and never expose a guard, reference, or borrow
+outside the synchronous closure.
+
+`SharedMemory` and `RegisterAccess` remain compatibility surfaces. Addressed register
+access subtracts a checked `RegisterBusBase` once and then reuses the consumer's
+canonical offset decoder. A host can therefore issue full bus addresses while a
+device uses generated typed views over the same root image; the runtime does not own a
+register map or device effect.
+
+The crate also contains concrete software CPU, interrupt-dispatch, and trace-buffer
+facilities. Those are runtime services rather than schema/storage algorithms. Address
+allocation, register maps and effects, device IDs, epochs, logical zero mappings,
+recording collectors, actors, PDMA scheduling, and timing remain consumer policy.
 
 `SoftwareCpu` treats each real main `Poll::Pending` as a segment boundary while retaining
 FIFO position during gate acquisition. `run_handler_turn` holds that gate for one complete
@@ -16,3 +28,9 @@ fallible check, inside a non-awaiting commit section, then release effect locks 
 `ObservationReservation::emit` in the same non-cancellable tail. Dropping a reservation,
 emitting a mismatched range, synchronization poison, or observer panic permanently faults
 the gate and wakes all waiters; missing committed observations are never skipped.
+
+In the four-layer model, `hardware-interface-schema` supplies descriptors and borrowed
+views; this crate supplies storage backends and generic memory/register/observation
+algorithms; `hardware-interface-pipeline` supplies drive policies; and the consuming
+device supplies its effects. None of these runtime facilities creates a second device
+execution core.

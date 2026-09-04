@@ -61,12 +61,12 @@ to the containing record or register rather than to the bits schema.
 Its inline `fields` use the same bit language: one-bit fields have typed `bool`
 accessors and wider ranges use the smallest matching unsigned integer. Field IDs are
 inferred in declaration order. Undeclared bits are preserved by field writes, and the
-writable mask may not select an undeclared bit. `register_map!`
-declares map `alignment`, an optional exact `extent`, and one ordered
-`placements: [...]` list. A placement may omit its offset; the macro then aligns the
-current high-water mark to the child layout. `count` defaults to one and a repeated
-placement's omitted stride is the aligned child extent. Registers and maps implement
-the same `RegisterLayout` contract, so maps compose recursively.
+writable mask may not select an undeclared bit. `register_map!` declares an optional
+exact `extent`, ordered `placements: [...]`, and optional `access: [...]` tree. Access
+paths name existing placements and generate borrowed views of the root bytes. A
+placement may omit its offset; the macro aligns the high-water mark. `count` defaults
+to one; omitted repeated strides use the aligned child extent. Maps and registers share
+one composable `RegisterLayout`; access namespaces define no layout, IDs, or storage.
 
 Every generated schema boundary has a distinct raw owner and semantic value. `Decode`
 converts the raw owner into the semantic value, `Encode` performs the reverse, and the
@@ -335,3 +335,9 @@ exact 66-register, 4 KiB little-endian map retain the same bytes, public APIs, e
 precedence, generated C header, and runtime ownership. Execution, retirement, reset,
 and IRQ behavior remain in PDMA's contract, device, host, and scenario crates. This
 extraction is reusable infrastructure, not new PDMA hardware behavior.
+
+The resulting layer boundary is deliberate: this crate owns schema descriptors,
+codecs, and checked flat/grouped views only. `hardware-interface-runtime` supplies
+storage backends and bus/observation algorithms, `hardware-interface-pipeline`
+supplies interaction drive policies, and the PDMA device supplies register command,
+DMA, reset, IRQ, and retirement effects.

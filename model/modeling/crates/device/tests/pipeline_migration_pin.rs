@@ -158,10 +158,10 @@ async fn reset_pending_blocks_pre_execution_and_post_execution_publication() {
     // When: reset advances the epoch at the execution-resource pending boundary.
     let epoch = reset(&blocked.handle).await;
 
-    // Then: fetch is counted, while DMA, cursors, IRQ, and success publication are absent.
+    // Then: admission stalls before fetch, DMA, cursors, IRQ, or success publication.
     assert_eq!(resource_stall.last_status, AsyncStepStatus::Stalled(AsyncStallReason::ExecutionResourcePressure));
     assert_eq!((resource_stall.steps, resource_stall.stalls, resource_stall.errors), (0, 1, 0));
-    assert_eq!(blocked.handle.native_steps().await, 1);
+    assert_eq!(blocked.handle.native_steps().await, 0);
     assert_eq!(blocked.handle.memory_generation().await, memory_generation);
     assert_reset_quiescent(&blocked, epoch, &[target.base()], (vec![vec![0; 4]], [0, 0, 0], false, false)).await;
     blocked.handle.request_shutdown().await;
@@ -190,7 +190,7 @@ async fn reset_pending_blocks_pre_execution_and_post_execution_publication() {
     assert_eq!(pending.handle.memory_generation().await, generation);
     let bytes = vec![vec![0xa5, 0x5a, 0x33, 0xcc]; 2];
     assert_reset_quiescent(&pending, epoch, &[first.base(), second.base()], (bytes, [2, 1, 0], false, false)).await;
-    println!("reset_pending pre_fetch=1 pre_dma=0 post_fetch=2 post_dma=2 publications=1 steps=1 stalls=1 epoch=1 post_idle_stable=true fresh_epoch_result_empty=true");
+    println!("reset_pending pre_fetch=0 pre_dma=0 post_fetch=2 post_dma=2 publications=1 steps=1 stalls=1 epoch=1 post_idle_stable=true fresh_epoch_result_empty=true");
     pending.handle.request_shutdown().await;
     let summary = pending_worker.await.expect("pending worker join");
     assert_eq!((summary.steps, summary.stalls, summary.errors), (1, 1, 0));

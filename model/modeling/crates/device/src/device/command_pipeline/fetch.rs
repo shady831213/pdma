@@ -3,6 +3,7 @@ use pdma_model_contract::semantic::{
     BroadcastCopyRequest, CommandOperation, CopyRequest, StridedCopyRequest, VectorAddRequest,
 };
 
+#[cfg(test)]
 use super::super::probe::{RunStateProbe, probe_run_state};
 use super::super::{DeviceCore, ModelStepStatus};
 use crate::execution::CommandRoute;
@@ -17,6 +18,7 @@ pub(super) struct ProbeFetch {
 
 #[derive(Debug)]
 enum State {
+    #[cfg(test)]
     Probe,
     Fetch,
     Done,
@@ -35,9 +37,16 @@ pub(super) enum FetchedRoute {
 }
 
 impl ProbeFetch {
+    #[cfg(test)]
     pub(super) const fn new() -> Self {
         Self {
             state: State::Probe,
+        }
+    }
+
+    pub(super) const fn accepted() -> Self {
+        Self {
+            state: State::Fetch,
         }
     }
 
@@ -96,6 +105,7 @@ impl Stage<DeviceCore> for ProbeFetch {
         context: &mut DeviceCore,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         match std::mem::replace(&mut self.state, State::Done) {
+            #[cfg(test)]
             State::Probe => match probe_run_state(
                 &context.queues,
                 &context.dma,

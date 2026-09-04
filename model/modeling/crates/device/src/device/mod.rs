@@ -20,6 +20,7 @@ use crate::{ModelError, ModelResult};
 /// Synchronous ownership root for PDMA hardware state consumed by the async runtime.
 pub struct DeviceCore {
     epoch: DeviceEpoch,
+    command_pipeline: command_pipeline::PipelineSlot,
     pub(crate) dma: PdmaMemoryMappings,
     pub(crate) registers: PdmaRegisters,
     queues: QueueBlock,
@@ -38,6 +39,7 @@ impl DeviceCore {
     pub fn new(memory: Arc<SharedMemory>, config: ResourceConfig) -> Self {
         Self {
             epoch: DeviceEpoch::initial(),
+            command_pipeline: command_pipeline::PipelineSlot::new(),
             dma: PdmaMemoryMappings::new(memory),
             registers: PdmaRegisters::new(),
             queues: QueueBlock::default(),
@@ -69,6 +71,7 @@ impl DeviceCore {
 
     pub(crate) fn reset(&mut self, epoch: DeviceEpoch) {
         self.epoch = epoch;
+        self.command_pipeline.clear();
         self.queues.clear();
         self.scheduler.reset();
         self.retirement.reset();
@@ -98,13 +101,6 @@ impl DeviceCore {
         self.reset_runner_calls
     }
 }
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "standalone pipeline remains additive until Task 24"
-    )
-)]
 mod command_pipeline;
 mod irq;
 #[doc(hidden)]

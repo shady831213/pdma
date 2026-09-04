@@ -10,8 +10,7 @@ mod vector_add;
 
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_contract::semantic::{
-    BroadcastCopyRequest, Command, CommandOperation, CopyRequest, StridedCopyRequest,
-    VectorAddRequest,
+    BroadcastCopyRequest, Command, CopyRequest, StridedCopyRequest, VectorAddRequest,
 };
 
 pub(crate) use context::{
@@ -94,22 +93,5 @@ impl ExecutionUnit {
         request: VectorAddRequest,
     ) -> ExecutionOutcome {
         vector_add::execute(dma, route, request)
-    }
-
-    pub(crate) fn execute(
-        &self,
-        dma: &crate::dma::PdmaMemoryMappings,
-        route: CommandRoute,
-        command: Command,
-    ) -> Result<ExecutionOutcome, crate::AsyncStallReason> {
-        if !self.can_execute(&command) {
-            return Err(crate::AsyncStallReason::ExecutionResourcePressure);
-        }
-        Ok(match command.into_operation() {
-            CommandOperation::Copy(request) => copy::execute(dma, route, request),
-            CommandOperation::StridedCopy(request) => copy::execute_strided(dma, route, request),
-            CommandOperation::BroadcastCopy(request) => broadcast::execute(dma, route, &request),
-            CommandOperation::VectorAdd(request) => vector_add::execute(dma, route, request),
-        })
     }
 }

@@ -56,16 +56,6 @@ pub(crate) enum RetirableExecution {
     Fault(ExecutionFault),
 }
 
-impl ExecutionOutcome {
-    pub(crate) const fn into_retirement(self) -> Result<RetirableExecution, CommandRoute> {
-        match self {
-            Self::Success(success) => Ok(RetirableExecution::Success(success)),
-            Self::Fault(fault) => Ok(RetirableExecution::Fault(fault)),
-            Self::InvalidCompletion(route) => Err(route),
-        }
-    }
-}
-
 pub(super) const fn success(route: CommandRoute, operation: TraceOperation) -> ExecutionOutcome {
     ExecutionOutcome::Success(SuccessfulExecution { route, operation })
 }

@@ -22,6 +22,16 @@ impl Scheduler {
         self.runnable.front().copied()
     }
 
+    pub(crate) fn runnable_len(&self) -> usize {
+        self.runnable.len()
+    }
+
+    pub(crate) fn rotate_current(&mut self) {
+        if let Some(queue) = self.runnable.pop_front() {
+            self.runnable.push_back(queue);
+        }
+    }
+
     pub(crate) fn reset(&mut self) {
         self.runnable.clear();
     }

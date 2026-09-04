@@ -1,7 +1,7 @@
 use super::AsyncStepStatus;
 use super::backend::DeviceWait;
 use super::state::{RunnerShared, RunnerState};
-use crate::device::ModelStepStatus;
+use crate::device::pipeline::{ModelStepStatus, PipelineStep};
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
     while run_one(shared).await {}
@@ -12,30 +12,33 @@ async fn run_one(shared: &RunnerShared) -> bool {
         .backend
         .interact(|state| {
             if state.shutdown_requested {
+                state.core.clear_command_pipeline();
                 return WorkerOutcome::Stop(state.generation);
             }
-            match state.core.step() {
-                Ok(ModelStepStatus::Progressed) => {
+            match state.core.step_pipeline() {
+                PipelineStep::InternalProgress => WorkerOutcome::ContinueUnpublished,
+                PipelineStep::Terminal(Ok(ModelStepStatus::Progressed)) => {
                     state.steps = state.steps.saturating_add(1);
                     state.last_status = AsyncStepStatus::Progressed;
                     state.generation = state.generation.saturating_add(1);
                     WorkerOutcome::Continue(state.generation)
                 }
-                Ok(ModelStepStatus::FaultCached) => {
+                PipelineStep::Terminal(Ok(ModelStepStatus::FaultCached)) => {
                     state.last_status = AsyncStepStatus::Progressed;
                     state.generation = state.generation.saturating_add(1);
                     WorkerOutcome::Continue(state.generation)
                 }
-                Ok(ModelStepStatus::Idle) => {
+                PipelineStep::Terminal(Ok(ModelStepStatus::Idle)) => {
                     state.last_status = AsyncStepStatus::Idle;
                     WorkerOutcome::Wait(wait_for_wake(state))
                 }
-                Ok(ModelStepStatus::Stalled(reason)) => {
+                PipelineStep::Terminal(Ok(ModelStepStatus::Stalled(reason)))
+                | PipelineStep::Pending(reason) => {
                     state.stalls = state.stalls.saturating_add(1);
                     state.last_status = AsyncStepStatus::Stalled(reason);
                     WorkerOutcome::Wait(wait_for_wake(state))
                 }
-                Err(_) => {
+                PipelineStep::Terminal(Err(_)) => {
                     state.errors = state.errors.saturating_add(1);
                     state.generation = state.generation.saturating_add(1);
                     WorkerOutcome::Continue(state.generation)
@@ -44,6 +47,7 @@ async fn run_one(shared: &RunnerShared) -> bool {
         })
         .await;
     match outcome {
+        WorkerOutcome::ContinueUnpublished => true,
         WorkerOutcome::Stop(generation) => publish_and_continue(shared, generation, false),
         WorkerOutcome::Continue(generation) => publish_and_continue(shared, generation, true),
         WorkerOutcome::Wait(wait) => {
@@ -56,6 +60,7 @@ async fn run_one(shared: &RunnerShared) -> bool {
 
 #[derive(Debug, Clone, Copy)]
 enum WorkerOutcome {
+    ContinueUnpublished,
     Stop(usize),
     Continue(usize),
     Wait(DeviceWait),
@@ -75,3 +80,6 @@ fn publish_and_continue(shared: &RunnerShared, generation: usize, keep_running: 
     shared.backend.publish(generation);
     keep_running
 }
+
+#[cfg(test)]
+mod tests;

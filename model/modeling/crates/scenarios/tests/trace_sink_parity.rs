@@ -38,7 +38,7 @@ async fn async_trace_log_records_idle_status_steps() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_trace_log_schedules_before_resource_stall() {
+async fn async_trace_log_stalls_before_accepting_resource_starved_work() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -77,16 +77,25 @@ async fn async_trace_log_schedules_before_resource_stall() {
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
-    // Then: scheduling is recorded before resource pressure stalls the command.
-    let scheduled = event_position(&trace_events, TraceEventKind::Scheduled, command)
-        .expect("scheduled event is traced");
+    // Then: resource admission stalls without scheduling or executing the command.
     let stall = trace_events
         .iter()
         .position(|event| {
             event.kind() == TraceEventKind::Stall && event.detail() == "ExecutionResourcePressure"
         })
         .expect("resource stall is traced");
-    assert!(scheduled < stall);
+    assert_eq!(
+        trace_events.get(stall).map(TraceEvent::command_id),
+        Some(None)
+    );
+    assert_eq!(
+        event_position(&trace_events, TraceEventKind::Scheduled, command),
+        None
+    );
+    assert_eq!(
+        event_position(&trace_events, TraceEventKind::ExecutionSucceeded, command),
+        None
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -5,7 +5,7 @@ mod retire;
 #[cfg(test)]
 mod tests;
 
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{RunOutcome, RunResult, Stage, StepExecutor, StepOutcome};
 
 use self::execute::ExecutedRoute;
 use self::fetch::{FetchedRoute, ProbeFetch};
@@ -19,7 +19,6 @@ enum PdmaCommandPipeline {
     StridedCopy(execute::StridedCopy),
     BroadcastCopy(execute::BroadcastCopy),
     VectorAdd(execute::VectorAdd),
-    TerminalRetirement(retire::Terminal),
     SuccessRetirement(retire::Success),
     FrontendFaultRetirement(retire::FrontendFailure),
     ExecutionFaultRetirement(retire::ExecutionFailure),
@@ -30,15 +29,18 @@ enum PdmaCommandPipeline {
 }
 
 impl PdmaCommandPipeline {
+    #[cfg(test)]
     const fn new() -> Self {
         Self::ProbeFetch(ProbeFetch::new())
     }
 
+    const fn accepted() -> Self {
+        Self::ProbeFetch(ProbeFetch::accepted())
+    }
+
     fn from_fetch(route: FetchedRoute) -> Self {
         match route {
-            FetchedRoute::Terminal(status) => {
-                Self::TerminalRetirement(retire::Terminal::new(status))
-            }
+            FetchedRoute::Terminal(_) => Self::Done,
             FetchedRoute::RetryCompletion => {
                 Self::PendingCompletionRetry(retire::PendingCompletion::new())
             }
@@ -86,6 +88,9 @@ impl PdmaCommandPipeline {
             StepOutcome::Pending(wait) => {
                 *self = Self::ProbeFetch(stage);
                 StepOutcome::Pending(wait)
+            }
+            StepOutcome::Complete(Ok(FetchedRoute::Terminal(status))) => {
+                StepOutcome::Complete(Ok(status))
             }
             StepOutcome::Complete(Ok(route)) => {
                 *self = Self::from_fetch(route);
@@ -137,6 +142,40 @@ impl PdmaCommandPipeline {
 
 type PipelineOutcome = StepOutcome<ModelStepStatus, ModelError, AsyncStallReason>;
 
+#[derive(Debug)]
+pub(super) struct PipelineSlot {
+    pipeline: Option<PdmaCommandPipeline>,
+}
+
+impl PipelineSlot {
+    pub(super) const fn new() -> Self {
+        Self { pipeline: None }
+    }
+
+    pub(super) fn step(
+        &mut self,
+        context: &mut DeviceCore,
+    ) -> RunResult<ModelStepStatus, ModelError, AsyncStallReason> {
+        let mut pipeline = self
+            .pipeline
+            .take()
+            .unwrap_or_else(PdmaCommandPipeline::accepted);
+        let outcome = StepExecutor::new().step(&mut pipeline, context);
+        if matches!(outcome, Ok(RunOutcome::Progressed | RunOutcome::Pending(_))) {
+            self.pipeline = Some(pipeline);
+        }
+        outcome
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.pipeline = None;
+    }
+
+    pub(super) const fn is_empty(&self) -> bool {
+        self.pipeline.is_none()
+    }
+}
+
 impl Stage<DeviceCore> for PdmaCommandPipeline {
     type Error = ModelError;
     type Output = ModelStepStatus;
@@ -164,10 +203,6 @@ impl Stage<DeviceCore> for PdmaCommandPipeline {
             Self::VectorAdd(mut stage) => {
                 let outcome = stage.step(context);
                 self.advance_execution(&outcome, Self::VectorAdd(stage))
-            }
-            Self::TerminalRetirement(mut stage) => {
-                let outcome = stage.step(context);
-                self.advance_retirement(&outcome, Self::TerminalRetirement(stage))
             }
             Self::SuccessRetirement(mut stage) => {
                 let outcome = stage.step(context);

@@ -37,6 +37,7 @@ impl RetirementUnit {
         self.pending
     }
 
+    #[cfg(test)]
     pub(crate) const fn is_pending(&self) -> bool {
         self.pending.is_some()
     }

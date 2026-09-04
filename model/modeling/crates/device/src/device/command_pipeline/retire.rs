@@ -7,11 +7,6 @@ use crate::retirement::{RetirementPorts, RetirementStatus};
 use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug)]
-pub(super) struct Terminal {
-    status: Option<ModelStepStatus>,
-}
-
-#[derive(Debug)]
 pub(super) struct Success {
     outcome: Option<SuccessfulExecution>,
 }
@@ -39,14 +34,6 @@ pub(super) struct PendingCompletion {
 #[derive(Debug)]
 pub(super) struct PendingFault {
     active: bool,
-}
-
-impl Terminal {
-    pub(super) const fn new(status: ModelStepStatus) -> Self {
-        Self {
-            status: Some(status),
-        }
-    }
 }
 
 impl Success {
@@ -90,18 +77,6 @@ impl PendingFault {
 }
 
 type RetireOutcome = StepOutcome<ModelStepStatus, ModelError, AsyncStallReason>;
-
-impl Stage<DeviceCore> for Terminal {
-    type Error = ModelError;
-    type Output = ModelStepStatus;
-    type Wait = AsyncStallReason;
-
-    fn step(&mut self, _: &mut DeviceCore) -> RetireOutcome {
-        self.status.take().map_or(StepOutcome::Exhausted, |status| {
-            StepOutcome::Complete(Ok(status))
-        })
-    }
-}
 
 impl Stage<DeviceCore> for Success {
     type Error = ModelError;

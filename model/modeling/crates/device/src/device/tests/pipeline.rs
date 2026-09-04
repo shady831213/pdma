@@ -69,7 +69,7 @@ fn fixture() -> Fixture {
 }
 
 #[test]
-fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
+fn admission_skips_starved_work_without_replaying_accepted_retirement() {
     // Given: two copy commands and one vector command sharing constrained resources.
     let Fixture {
         mut core,
@@ -77,24 +77,18 @@ fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
         second_destination,
     } = fixture();
 
-    // When: execution reaches resource and publication stalls, then retirement is retried.
+    // When: the runnable copy reaches publication pressure before the starved vector is admitted.
     let first_copy = core.step();
-    let resource_stall = core.step();
     let publication_stall = core.step();
     let pending_retry = core.step();
     let first_completion = core.poll_completion(copy_queue).expect("completion ring");
     let retried = core.step();
     let second_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let resource_stall = core.step();
     let repeated_resource_stall = core.step();
 
-    // Then: only retirement retries and the vector remains queued without reexecution.
+    // Then: accepted retirement is retained while inadmissible work is never fetched or executed.
     assert_eq!(first_copy, Ok(ModelStepStatus::Progressed));
-    assert_eq!(
-        resource_stall,
-        Ok(ModelStepStatus::Stalled(
-            AsyncStallReason::ExecutionResourcePressure
-        ))
-    );
     assert_eq!(
         publication_stall,
         Ok(ModelStepStatus::Stalled(
@@ -103,6 +97,12 @@ fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
     );
     assert_eq!(publication_stall, pending_retry);
     assert_eq!(retried, Ok(ModelStepStatus::Progressed));
+    assert_eq!(
+        resource_stall,
+        Ok(ModelStepStatus::Stalled(
+            AsyncStallReason::ExecutionResourcePressure
+        ))
+    );
     assert_eq!(repeated_resource_stall, resource_stall);
     assert_eq!(
         first_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
@@ -135,6 +135,6 @@ fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
                     && event.command_id() == Some(CommandId::new(2))
             })
             .count(),
-        2
+        0
     );
 }

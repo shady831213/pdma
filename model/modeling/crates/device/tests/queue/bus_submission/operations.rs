@@ -134,8 +134,14 @@ pub(in crate::queue) async fn multi_queue_arbitration()
     let copy_status = handle
         .control_queue(QueueControl::ReadStatus(copy_queue))
         .await?;
+    let snapshot = handle.snapshot().await;
     assert_eq!(vector_status.submission().consumer(), RingCursor::new(0));
     assert_eq!(copy_status.submission().consumer(), RingCursor::new(1));
+    assert_eq!(
+        (snapshot.steps, snapshot.stalls, snapshot.errors),
+        (1, 2, 0)
+    );
+    assert_eq!(handle.native_steps().await, 1);
     assert_eq!(
         handle
             .read_memory(copy_destination.base(), copy_destination.length())
@@ -155,6 +161,7 @@ pub(in crate::queue) async fn multi_queue_arbitration()
         .filter(|event| event.kind() == pdma_model_contract::semantic::TraceEventKind::Scheduled)
         .filter_map(|event| event.queue_id())
         .collect();
+    assert_eq!(order, [copy_queue.queue_id()]);
     handle.request_shutdown().await;
     worker.await?;
     Ok(order)

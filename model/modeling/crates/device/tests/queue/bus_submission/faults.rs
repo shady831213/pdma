@@ -85,7 +85,7 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     assert_eq!(result.pending, None);
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 0);
-    assert_eq!(result.native_steps, 2);
+    assert_eq!(result.native_steps, 0);
     assert!(!result.irq_pending);
     Ok(())
 }

@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use hardware_interface_pipeline::{ImmediateExecutor, RunError, RunOutcome, StepExecutor};
 use pdma_model_contract::semantic::{
     BufferId, Command, CommandId, CommandOperation, EpochIrqSource, IrqSource, QueueConfigHandle,
-    ResourceConfig, TraceEvent,
+    ResourceConfig,
     desc::{
         BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, StridedCopyRequest,
         VectorAddRequest, VectorBufferRange,
@@ -12,7 +12,11 @@ use pdma_model_contract::semantic::{
 };
 
 use super::super::{DeviceCore, ModelStepStatus, PdmaCommandPipeline};
-use crate::{AsyncStallReason, MappedDmaRegion, ModelError, ModelResult};
+use crate::{AsyncStallReason, MappedDmaRegion, ModelError};
+
+mod observation;
+
+pub(super) use observation::{drive_to_complete, drive_to_pending, read, trace_kinds};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Case {
@@ -96,6 +100,18 @@ impl Fixture {
             &ImmediateExecutor::new(NonZeroUsize::new(16).expect("nonzero budget"))
                 .run(&mut self.pipeline, &mut self.core),
         )
+    }
+}
+
+pub(super) fn normalize(
+    outcome: &Result<RunOutcome<ModelStepStatus, ModelError, AsyncStallReason>, RunError>,
+) -> PipelineRunOutcome {
+    match outcome {
+        Ok(RunOutcome::Progressed) => PipelineRunOutcome::Progressed,
+        Ok(RunOutcome::Pending(wait)) => PipelineRunOutcome::Pending(*wait),
+        Ok(RunOutcome::Complete(result)) => PipelineRunOutcome::Complete(*result),
+        Err(RunError::Exhausted) => PipelineRunOutcome::Exhausted,
+        Err(RunError::BudgetExhausted) => PipelineRunOutcome::BudgetExhausted,
     }
 }
 
@@ -228,45 +244,4 @@ fn command(
         Case::OutOfBounds => CommandOperation::Copy(CopyRequest::new(a.object(), x.object(), 9)),
     };
     Command::new(CommandId::new(7), operation)
-}
-
-pub(super) fn drive_to_complete(fixture: &mut Fixture) -> Result<ModelStepStatus, ModelError> {
-    loop {
-        match fixture.step() {
-            PipelineRunOutcome::Progressed => {}
-            PipelineRunOutcome::Complete(result) => return result,
-            other => panic!("unexpected step result: {other:?}"),
-        }
-    }
-}
-
-pub(super) fn drive_to_pending(fixture: &mut Fixture) -> PipelineRunOutcome {
-    loop {
-        match fixture.step() {
-            PipelineRunOutcome::Progressed => {}
-            outcome => return outcome,
-        }
-    }
-}
-
-pub(super) fn normalize(
-    outcome: &Result<RunOutcome<ModelStepStatus, ModelError, AsyncStallReason>, RunError>,
-) -> PipelineRunOutcome {
-    match outcome {
-        Ok(RunOutcome::Progressed) => PipelineRunOutcome::Progressed,
-        Ok(RunOutcome::Pending(wait)) => PipelineRunOutcome::Pending(*wait),
-        Ok(RunOutcome::Complete(result)) => PipelineRunOutcome::Complete(*result),
-        Err(RunError::Exhausted) => PipelineRunOutcome::Exhausted,
-        Err(RunError::BudgetExhausted) => PipelineRunOutcome::BudgetExhausted,
-    }
-}
-
-pub(super) fn trace_kinds(
-    trace: &[TraceEvent],
-) -> Vec<pdma_model_contract::semantic::TraceEventKind> {
-    trace.iter().map(TraceEvent::kind).collect()
-}
-
-pub(super) fn read(core: &DeviceCore, region: MappedDmaRegion) -> ModelResult<Vec<u8>> {
-    core.dma.read_object(region.object(), 0, 8)
 }

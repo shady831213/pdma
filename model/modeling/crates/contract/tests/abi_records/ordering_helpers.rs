@@ -98,3 +98,39 @@ fn arithmetic_out_of_bounds() -> AbiFaultCandidate {
         },
     )
 }
+
+fn reserved(opcode: AbiCommandHeaderOpcode, offset: usize) -> AbiFaultCandidate {
+    let location = AbiCommand::PAYLOAD_IDENTITY.at_byte(offset);
+    candidate(
+        AbiFault::invalid_reserved(DmaAddress::new(0x1000), location_index(location), 7),
+        AbiFaultOrder::Descriptor(DescriptorViolationKind::Reserved { opcode, location }),
+    )
+}
+
+fn scalar(location: SchemaLocation) -> AbiFaultCandidate {
+    candidate(
+        AbiFault::value_out_of_range(
+            DmaAddress::new(0x1000),
+            location_index(location),
+            u64::from(u32::MAX) + 1,
+        ),
+        AbiFaultOrder::Descriptor(DescriptorViolationKind::Scalar(location)),
+    )
+}
+
+fn location_index(location: SchemaLocation) -> u64 {
+    let SchemaCoordinate::Byte(offset) = location.coordinate() else {
+        std::process::abort()
+    };
+    u64::try_from(offset).unwrap_or_else(|_| std::process::abort())
+}
+
+fn candidate(fault: AbiFault, order: AbiFaultOrder) -> AbiFaultCandidate {
+    match AbiFaultCandidate::try_new(fault, order) {
+        Ok(candidate) => candidate,
+        Err(error) => {
+            eprintln!("fixture fault must match typed order: {error}");
+            std::process::abort();
+        }
+    }
+}

@@ -38,7 +38,7 @@ async fn async_trace_log_records_idle_status_steps() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_trace_log_schedules_before_resource_stall() {
+async fn async_trace_log_does_not_emit_scheduled_event_before_resource_stall() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),

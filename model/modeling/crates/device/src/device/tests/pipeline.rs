@@ -141,5 +141,67 @@ fn admission_skips_starved_work_without_replaying_accepted_retirement() {
 
 #[test]
 fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
-    admission_skips_starved_work_without_replaying_accepted_retirement();
+    // Given: constrained copy retirement and a vector command that cannot acquire read slots.
+    let Fixture {
+        mut core,
+        copy_queue,
+        ..
+    } = fixture();
+
+    // When: completion pressure clears and the worker retries before encountering resource stalls.
+    let first_copy = core.step();
+    let completion_stall = core.step();
+    let retry_before_poll = core.step();
+    let first_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let retry_after_poll = core.step();
+    let second_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let resource_stall = core.step();
+    let repeated_resource_stall = core.step();
+
+    // Then: retry neither repeats the accepted first copy nor schedules resource-stalled vector work.
+    assert_eq!(first_copy, Ok(ModelStepStatus::Progressed));
+    assert_eq!(
+        completion_stall,
+        Ok(ModelStepStatus::Stalled(
+            AsyncStallReason::CompletionPublicationPressure
+        ))
+    );
+    assert_eq!(retry_before_poll, completion_stall);
+    assert_eq!(retry_after_poll, Ok(ModelStepStatus::Progressed));
+    assert_eq!(
+        first_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
+        Some(CommandId::new(0))
+    );
+    assert_eq!(
+        second_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
+        Some(CommandId::new(1))
+    );
+    assert_eq!(
+        resource_stall,
+        Ok(ModelStepStatus::Stalled(
+            AsyncStallReason::ExecutionResourcePressure
+        ))
+    );
+    assert_eq!(repeated_resource_stall, resource_stall);
+    let events = core.trace_events();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event.kind() == TraceEventKind::ExecutionSucceeded
+                    && event.command_id() == Some(CommandId::new(0))
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| {
+                event.kind() == TraceEventKind::Scheduled
+                    && event.command_id() == Some(CommandId::new(2))
+            })
+            .count(),
+        0
+    );
 }

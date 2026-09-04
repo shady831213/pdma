@@ -59,7 +59,7 @@ pub(crate) struct PreparedWrite {
 
 impl PreparedWrite {
     pub(crate) fn commit(&self, state: &mut DeviceCore) -> bool {
-        dispatch::write(state, self.register, self.value)
+        dispatch::write(state, self.register, self.value, &self.request)
     }
 
     pub(crate) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {
@@ -93,19 +93,13 @@ impl BatchQueueCommand {
 }
 
 impl PreparedBatchWrite {
-    pub(crate) fn commit(self, state: &mut DeviceCore) -> PreparedWrite {
+    pub(crate) fn commit(self, state: &DeviceCore) -> PreparedWrite {
         match self.mutation {
             PreparedBatchRegisterMutation::Bootstrap(staging, response) => {
-                state
-                    .registers
-                    .queue
-                    .complete_bootstrap_batch(staging, response);
+                state.registers.complete_bootstrap_batch(staging, response);
             }
             PreparedBatchRegisterMutation::Submission(staging, response) => {
-                state
-                    .registers
-                    .queue
-                    .complete_submission_batch(staging, response);
+                state.registers.complete_submission_batch(staging, response);
             }
         }
         self.write

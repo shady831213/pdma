@@ -98,11 +98,11 @@ async fn prepared_batch_write_is_typed_consumed_and_has_no_arbitrary_install_hoo
         .interact(|state| {
             let activate = prepare_bootstrap_batch_write(bootstrap, QueueResponseBank::default())
                 .expect("fixed activate write decodes")
-                .commit(&mut state.core);
+                .commit(&state.core);
             let submission =
                 prepare_submission_batch_write(submission, QueueResponseBank::default())
                     .expect("fixed submission write decodes")
-                    .commit(&mut state.core);
+                    .commit(&state.core);
             let registers = [
                 (RegisterId::QExpectedEpoch, 10_u64),
                 (RegisterId::QId, 11_u64),

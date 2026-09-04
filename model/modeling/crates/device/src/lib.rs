@@ -95,3 +95,9 @@ pub use runtime::{
     DeviceCore, DeviceError, MmioRegisterEndpoint, ModelError, ModelResult,
 };
 pub use status::{AsyncStallReason, AsyncStepStatus};
+
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub fn __register_image_allocations_for_test() -> (usize, usize) {
+    register_file::allocation_observation()
+}

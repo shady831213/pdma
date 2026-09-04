@@ -10,7 +10,7 @@ use crate::execution::ExecutionUnit;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
 use crate::queue::exact::PdmaControlError;
-use crate::register_file::RegisterFile;
+use crate::register_file::PdmaRegisters;
 use crate::retirement::RetirementUnit;
 use crate::scheduler::Scheduler;
 use crate::trace::TraceSink;
@@ -21,7 +21,7 @@ use crate::{ModelError, ModelResult};
 pub struct DeviceCore {
     epoch: DeviceEpoch,
     pub(crate) dma: PdmaMemoryMappings,
-    pub(crate) registers: RegisterFile,
+    pub(crate) registers: PdmaRegisters,
     queues: QueueBlock,
     scheduler: Scheduler,
     execution: ExecutionUnit,
@@ -39,7 +39,7 @@ impl DeviceCore {
         Self {
             epoch: DeviceEpoch::initial(),
             dma: PdmaMemoryMappings::new(memory),
-            registers: RegisterFile::new(),
+            registers: PdmaRegisters::new(),
             queues: QueueBlock::default(),
             scheduler: Scheduler::default(),
             execution: ExecutionUnit::new(config),
@@ -88,7 +88,7 @@ impl DeviceCore {
         }
         let next = epoch.next()?;
         self.reset(next);
-        self.registers = RegisterFile::new();
+        self.registers.reset();
         self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
         Ok(next)
     }

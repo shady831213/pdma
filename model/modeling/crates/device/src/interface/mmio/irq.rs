@@ -14,13 +14,13 @@ mod notification;
 pub(crate) mod support;
 
 pub(super) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
-    let bank = &state.registers.irq;
+    let request = state.registers.snapshot_irq();
     let staged = (
-        bank.expected_epoch,
-        bank.source_kind,
-        bank.source_id,
-        bank.route_kind,
-        bank.route_vector,
+        request.expected_epoch,
+        request.source_kind,
+        request.source_id,
+        request.route_kind,
+        request.route_vector,
     );
     let outcome = IrqCommand::try_from(raw_command)
         .map_err(|_| details(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]))
@@ -44,7 +44,7 @@ pub(super) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
         ),
         Err(result) => (result, ResponseUpdate::Preserve, false),
     };
-    state.registers.irq.command.complete(result, update);
+    state.registers.complete_irq(result, update);
     changed
 }
 

@@ -33,7 +33,7 @@ pub(super) fn execute(state: &mut DeviceCore, raw: u32) -> bool {
 }
 
 fn reset(state: &mut DeviceCore) -> bool {
-    let expected_epoch = state.registers.global.reset_expected_epoch;
+    let expected_epoch = state.registers.snapshot_global().reset_expected_epoch;
     match super::reset::execute(state, expected_epoch) {
         super::reset::ResetOutcome::Success(epoch) => {
             complete_success(
@@ -52,10 +52,10 @@ fn reset(state: &mut DeviceCore) -> bool {
     }
 }
 
-fn discover(state: &mut DeviceCore) {
+fn discover(state: &DeviceCore) {
     let request = {
-        let bank = &state.registers.global;
-        DiscoveryRequest::try_new(low_u16(bank.req_abi_version), bank.req_features)
+        let request = state.registers.snapshot_global();
+        DiscoveryRequest::try_new(low_u16(request.abi_version), request.features)
     };
     match request {
         Ok(_request) => {
@@ -73,7 +73,7 @@ fn discover(state: &mut DeviceCore) {
     }
 }
 
-fn read_limits(state: &mut DeviceCore) {
+fn read_limits(state: &DeviceCore) {
     let limits = AbiLimits::v1();
     complete_success(
         state,
@@ -88,7 +88,7 @@ fn read_limits(state: &mut DeviceCore) {
     );
 }
 
-fn read_status(state: &mut DeviceCore) {
+fn read_status(state: &DeviceCore) {
     let run_state = state.run_state();
     let encoded = match run_state {
         DeviceRunState::Idle => 0,
@@ -105,19 +105,17 @@ fn read_status(state: &mut DeviceCore) {
     );
 }
 
-fn complete_success(state: &mut DeviceCore, response: GlobalResponseBank) {
-    state.registers.global.command.complete(
+fn complete_success(state: &DeviceCore, response: GlobalResponseBank) {
+    state.registers.complete_global(
         details(MmioResult::Ok, [0; 3]),
         ResponseUpdate::Replace(response),
     );
 }
 
-fn complete_failure(state: &mut DeviceCore, result: MmioResultDetails) {
+fn complete_failure(state: &DeviceCore, result: MmioResultDetails) {
     state
         .registers
-        .global
-        .command
-        .complete(result, ResponseUpdate::Preserve);
+        .complete_global(result, ResponseUpdate::Preserve);
 }
 
 const fn details(result: MmioResult, values: [u64; 3]) -> MmioResultDetails {

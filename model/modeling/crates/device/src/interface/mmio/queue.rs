@@ -32,8 +32,8 @@ pub(crate) fn status_response(
 }
 
 pub(super) fn execute(state: &mut DeviceCore, value: u64) -> bool {
-    let staging = state.registers.queue.staging();
+    let staging = state.registers.snapshot_queue();
     let (result, response, changed) = queue_control::execute(state, staging, value);
-    state.registers.queue.command.complete(result, response);
+    state.registers.complete_queue(result, response);
     changed
 }

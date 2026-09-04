@@ -4,9 +4,9 @@
 mod pin {
 
 use hardware_interface_runtime::{AccessOrigin, RegisterAccess, RegisterObservation, RegisterObserver};
-use pdma_model_contract::abi::mmio::{MMIO_REGION_SIZE, MmioAccess, MmioAccessError, MmioReset, MmioResult, PdmaMmioMap};
+use pdma_model_contract::abi::mmio::{GlobalResponseRegistersView, IrqResponseRegistersView, MMIO_REGION_SIZE, MmioAccess, MmioAccessError, MmioReset, MmioResult, PdmaMmioMap, QueueResponseRegistersView};
 use pdma_model_contract::semantic::{Command, CommandId, CopyRequest, DeviceEpoch, EventRouting, QueueActivation, QueueConfig, QueueControl, QueueId, QueueRingObjects, ResourceConfig, RingCursor, SoftwareOwnerId, WholeDeviceReset};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, DeviceCore, DmaWrite, MmioRegisterError, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch};
+use pdma_model_device::{__register_image_allocations_for_test, AsyncDevice, AsyncDeviceHandle, DeviceCore, DmaWrite, MmioRegisterError, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch};
 use std::sync::{Arc, Mutex};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -30,27 +30,48 @@ async fn read_number(handle: &AsyncDeviceHandle, offset: u32, width: usize) -> T
     let bytes = handle.read_mmio(offset, width as u128).await?;
     Ok(match width { 4 => u64::from(u32::from_le_bytes(bytes.try_into().map_err(|_| "u32")?)), 8 => u64::from_le_bytes(bytes.try_into().map_err(|_| "u64")?), _ => return Err("width".into()) })
 }
-async fn write_number(handle: &AsyncDeviceHandle, offset: u32, width: usize, value: u64) -> TestResult { match width { 4 => handle.write_mmio(offset, &u32::try_from(value)?.to_le_bytes()).await?, 8 => handle.write_mmio(offset, &value.to_le_bytes()).await?, _ => return Err("width".into()) }; Ok(()) }
+async fn write_number(handle: &AsyncDeviceHandle, offset: u32, width: usize, value: u64) -> TestResult { match width { 4 => handle.write_mmio(offset, &u32::try_from(value)?.to_le_bytes()).await?, 8 => handle.write_mmio(offset, &value.to_le_bytes()).await?, _ => return Err("width".into()) } Ok(()) }
 fn access(offset: usize) -> MmioAccess { if matches!(offset, 0x020 | 0x168 | 0x220) { MmioAccess::WriteOnly } else if matches!(offset, 0x000 | 0x004) || (0x024..=0x068).contains(&offset) || (0x16c..=0x1c8).contains(&offset) || (0x224..=0x270).contains(&offset) { MmioAccess::ReadOnly } else { MmioAccess::ReadWrite } }
 fn mask(offset: usize, width: usize) -> u64 { match access(offset) { MmioAccess::ReadOnly => 0, MmioAccess::WriteOnly => u64::from(u32::MAX), MmioAccess::ReadWrite => match offset { 0x008 => 0xffff, 0x128 => 0, 0x210 | 0x214 => 1, _ if width == 4 => u64::from(u32::MAX), _ => u64::MAX } } }
 fn activation(stage: &pdma_model_device::PdmaMemoryStage) -> TestResult<QueueActivation> { let [sq, cq, eq] = stage.regions() else { return Err("three rings".into()) }; Ok(QueueActivation::new(DeviceEpoch::initial(), QueueId::new(0), QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)), QueueRingObjects::new(sq.object(), cq.object(), eq.object()))) }
 async fn response(handle: &AsyncDeviceHandle, entries: &[(u32, usize)]) -> TestResult<[u64; 9]> { let mut values = [0; 9]; for (slot, &(offset, width)) in values.iter_mut().zip(entries) { *slot = read_number(handle, offset, width).await?; } Ok(values) }
 async fn readable_image(handle: &AsyncDeviceHandle) -> TestResult<Vec<Vec<u8>>> { let mut image = Vec::new(); for (&offset, &width) in OFFSETS.iter().zip(&WIDTHS) { if access(offset) != MmioAccess::WriteOnly { image.push(handle.read_mmio(u32::try_from(offset)?, width as u128).await?); } } Ok(image) }
+async fn response_bytes(handle: &AsyncDeviceHandle, entries: &[(u32, usize)]) -> TestResult<Vec<u8>> { let mut bytes = Vec::new(); for &(offset, width) in entries { bytes.extend(handle.read_mmio(offset, width as u128).await?); } Ok(bytes) }
+async fn typed_values(handle: &AsyncDeviceHandle) -> TestResult<[u64; 66]> {
+    handle.__inspect_register_image_for_test(|root| Ok([
+        root.g_magic()?.value()?, root.g_mmio_abi_version()?.value()?, root.g_req_abi_version()?.value()?, root.g_req_features()?.value()?, root.g_reset_expected_epoch()?.value()?, root.g_command()?.value()?, root.g_result()?.value()?, root.g_detail0()?.value()?, root.g_detail1()?.value()?, root.g_detail2()?.value()?, root.g_rsp_abi_version()?.value()?, root.g_rsp_run_state()?.value()?, root.g_rsp_features()?.value()?, root.g_rsp_epoch()?.value()?, root.g_max_ring_depth()?.value()?, root.g_max_indirect_destinations()?.value()?, root.g_max_transfer_bytes()?.value()?, root.g_max_strided_rows()?.value()?, root.g_max_stride()?.value()?,
+        root.q_expected_epoch()?.value()?, root.q_id()?.value()?, root.q_expected_cursor()?.value()?, root.q_new_cursor()?.value()?, root.q_cfg_sq_depth()?.value()?, root.q_cfg_cq_depth()?.value()?, root.q_cfg_event_policy()?.value()?, root.q_cfg_software_owner()?.value()?, root.q_sq_base()?.value()?, root.q_sq_depth()?.value()?, root.q_cq_base()?.value()?, root.q_cq_depth()?.value()?, root.q_eq_base()?.value()?, root.q_eq_depth()?.value()?, root.q_command()?.value()?, root.q_result()?.value()?, root.q_detail0()?.value()?, root.q_detail1()?.value()?, root.q_detail2()?.value()?, root.q_rsp_epoch()?.value()?, root.q_rsp_id()?.value()?, root.q_rsp_sq_producer()?.value()?, root.q_rsp_sq_captured()?.value()?, root.q_rsp_sq_consumer()?.value()?, root.q_rsp_cq_producer()?.value()?, root.q_rsp_cq_consumer()?.value()?, root.q_rsp_eq_producer()?.value()?, root.q_rsp_eq_consumer()?.value()?,
+        root.i_expected_epoch()?.value()?, root.i_source_id()?.value()?, root.i_source_kind()?.value()?, root.i_route_kind()?.value()?, root.i_route_vector()?.value()?, root.i_command()?.value()?, root.i_result()?.value()?, root.i_detail0()?.value()?, root.i_detail1()?.value()?, root.i_detail2()?.value()?, root.i_rsp_epoch()?.value()?, root.i_rsp_source_id()?.value()?, root.i_rsp_source_kind()?.value()?, root.i_rsp_state()?.value()?, root.i_rsp_route_kind()?.value()?, root.i_rsp_notification_kind()?.value()?, root.i_rsp_vector()?.value()?, root.i_rsp_message_id()?.value()?, root.i_rsp_pending_messages()?.value()?,
+    ])).await
+}
+async fn write_typed_requests(handle: &AsyncDeviceHandle) -> TestResult {
+    handle.__mutate_register_image_for_test(|mut root| -> TestResult {
+        root.g_req_abi_version_mut()?.set_value(2)?; root.g_req_features_mut()?.set_value(2)?; root.g_reset_expected_epoch_mut()?.set_value(2)?;
+        root.q_expected_epoch_mut()?.set_value(2)?; root.q_id_mut()?.set_value(2)?; root.q_expected_cursor_mut()?.set_value(2)?; root.q_new_cursor_mut()?.set_value(2)?; root.q_cfg_sq_depth_mut()?.set_value(2)?; root.q_cfg_cq_depth_mut()?.set_value(2)?; root.q_cfg_event_policy_mut()?.set_value(0)?; root.q_cfg_software_owner_mut()?.set_value(2)?; root.q_sq_base_mut()?.set_value(2)?; root.q_sq_depth_mut()?.set_value(2)?; root.q_cq_base_mut()?.set_value(2)?; root.q_cq_depth_mut()?.set_value(2)?; root.q_eq_base_mut()?.set_value(2)?; root.q_eq_depth_mut()?.set_value(2)?;
+        root.i_expected_epoch_mut()?.set_value(2)?; root.i_source_id_mut()?.set_value(2)?; root.i_source_kind_mut()?.set_value(1)?; root.i_route_kind_mut()?.set_value(1)?; root.i_route_vector_mut()?.set_value(2)?; Ok(())
+    }).await
+}
 
 #[tokio::test(flavor = "current_thread")]
-async fn happy_all_66_metadata_rows_reset_reads_and_request_writes() -> TestResult {
+async fn authoritative_image_all_66_metadata_rows_reset_reads_and_request_writes() -> TestResult {
     // Given: literal v0.9 rows and a fresh public device endpoint.
-    let resolved = PdmaMmioMap::resolve()?; let names: Vec<_> = NAMES.split_whitespace().collect(); let (device, _worker) = fresh(); let handle = device.handle();
+    let allocations = __register_image_allocations_for_test(); let resolved = PdmaMmioMap::resolve()?; let names: Vec<_> = NAMES.split_whitespace().collect(); let core = DeviceCore::new(Arc::new(hardware_interface_runtime::SharedMemory::new()), ResourceConfig::default()); assert_eq!(__register_image_allocations_for_test(), (allocations.0 + 1, allocations.1 + 1)); let (device, worker) = AsyncDevice::from_core(core); let worker = tokio::spawn(worker.run()); let handle = device.handle();
     // When: every row is resolved and every readable/reset or writable/request register is used.
     assert_eq!((resolved.registers().len(), MMIO_REGION_SIZE, PdmaMmioMap::EXTENT), (66, 0x1000, 0x1000));
-    for (index, register) in resolved.registers().iter().enumerate() {
-        let definition = register.definition(); let offset = OFFSETS[index]; let reset = if offset < 8 { MmioReset::Constant } else if offset == 0x050 { MmioReset::PostReset } else { MmioReset::Zero }; let reset_value = match offset { 0x000 => 0x414d_4450, 0x004 => 1, _ => 0 };
-        assert_eq!((register.name(), register.offset(), definition.width(), definition.access(), definition.reset_kind(), definition.reset_value(), definition.writable_mask()), (names[index], offset, WIDTHS[index], access(offset), reset, reset_value, mask(offset, WIDTHS[index])));
-        if access(offset) != MmioAccess::WriteOnly { assert_eq!(read_number(&handle, u32::try_from(offset)?, WIDTHS[index]).await?, reset_value); }
-        if access(offset) == MmioAccess::ReadWrite { let value = mask(offset, WIDTHS[index]) & 1; write_number(&handle, u32::try_from(offset)?, WIDTHS[index], value).await?; assert_eq!(read_number(&handle, u32::try_from(offset)?, WIDTHS[index]).await?, value); }
+    for (((register, &offset), &width), name) in resolved.registers().iter().zip(&OFFSETS).zip(&WIDTHS).zip(&names) {
+        let definition = register.definition(); let reset = if offset < 8 { MmioReset::Constant } else if offset == 0x050 { MmioReset::PostReset } else { MmioReset::Zero }; let reset_value = match offset { 0x000 => 0x414d_4450, 0x004 => 1, _ => 0 };
+        assert_eq!((register.name(), register.offset(), definition.width(), definition.access(), definition.reset_kind(), definition.reset_value(), definition.writable_mask()), (*name, offset, width, access(offset), reset, reset_value, mask(offset, width)));
+        if access(offset) != MmioAccess::WriteOnly { assert_eq!(read_number(&handle, u32::try_from(offset)?, width).await?, reset_value); }
+        if access(offset) == MmioAccess::ReadWrite { let value = mask(offset, width) & 1; write_number(&handle, u32::try_from(offset)?, width, value).await?; assert_eq!(read_number(&handle, u32::try_from(offset)?, width).await?, value); }
     }
-    // Then: the exact extent, 66 complete rows, 63 readable resets, and 25 request latches match.
-    println!("happy metadata_rows=66 extent=4096 readable_resets=63 writable_requests=25"); Ok(())
+    assert_eq!(typed_values(&handle).await?, [0x414d_4450,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+    write_typed_requests(&handle).await?; for (offset,width,value) in [(0x008,4,2),(0x010,8,2),(0x018,8,2),(0x100,8,2),(0x108,8,2),(0x110,8,2),(0x118,8,2),(0x120,4,2),(0x124,4,2),(0x128,4,0),(0x130,8,2),(0x138,8,2),(0x140,4,2),(0x148,8,2),(0x150,4,2),(0x158,8,2),(0x160,4,2),(0x200,8,2),(0x208,8,2),(0x210,4,1),(0x214,4,1),(0x218,8,2)] { assert_eq!(read_number(&handle,offset,width).await?,value); }
+    write_number(&handle, 0x008, 4, 1).await?; write_number(&handle, 0x010, 8, 0).await?; write_number(&handle, 0x020, 4, 1).await?; let global_bytes = response_bytes(&handle, &[(0x040,4),(0x044,4),(0x048,8),(0x050,8),(0x058,4),(0x05c,4),(0x060,4),(0x064,4),(0x068,4)]).await?; let global = GlobalResponseRegistersView::new(&global_bytes)?; assert_eq!((global.abi_version()?.value()?, global.run_state()?.value()?, global.features()?.value()?, global.epoch()?.value()?), (1,0,0xff,0));
+    let stage = handle.stage_memory_regions(&[128,64,128]).await?; let activation = activation(&stage)?; handle.bootstrap_queue_batch(QueueBootstrapBatch::new(stage,activation)).await?; let queue_bytes = response_bytes(&handle, &[(0x188,8),(0x190,8),(0x198,8),(0x1a0,8),(0x1a8,8),(0x1b0,8),(0x1b8,8),(0x1c0,8),(0x1c8,8)]).await?; let queue = QueueResponseRegistersView::new(&queue_bytes)?; assert_eq!((queue.epoch()?.value()?,queue.queue_id()?.value()?,queue.sq_producer()?.value()?,queue.sq_captured()?.value()?,queue.sq_consumer()?.value()?,queue.cq_producer()?.value()?,queue.cq_consumer()?.value()?,queue.eq_producer()?.value()?,queue.eq_consumer()?.value()?), (0,0,0,0,0,0,0,0,0));
+    write_number(&handle,0x200,8,0).await?; write_number(&handle,0x208,8,0).await?; write_number(&handle,0x210,4,0).await?; write_number(&handle,0x220,4,7).await?; let irq_bytes = response_bytes(&handle,&[(0x240,8),(0x248,8),(0x250,4),(0x254,4),(0x258,4),(0x25c,4),(0x260,8),(0x268,8),(0x270,8)]).await?; let irq = IrqResponseRegistersView::new(&irq_bytes)?; assert_eq!((irq.epoch()?.value()?,irq.source_id()?.value()?,irq.source_kind()?.value()?,irq.state()?.value()?,irq.route_kind()?.value()?,irq.notification_kind()?.value()?,irq.vector()?.value()?,irq.message_id()?.value()?,irq.pending_messages()?.value()?), (0,0,0,5,0,0,0,0,0));
+    assert_eq!(__register_image_allocations_for_test(), (allocations.0 + 1, allocations.1 + 1)); device.request_shutdown().await; worker.await?; drop(handle); drop(device); assert_eq!(__register_image_allocations_for_test(), (allocations.0 + 1, allocations.1));
+    // Then: one live image drove every metadata row, raw request, typed effect, and compact response while the spawned actor remained Send.
+    println!("authoritative_image allocations=1 live=1 extent=4096 metadata_rows=66 compact=global,queue,irq actor=spawned_joined"); Ok(())
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -65,7 +86,7 @@ async fn happy_commands_batches_generations_and_clone_order_match_semantics() ->
     write_number(&handle, 0x008, 4, 1).await?; write_number(&handle, 0x020, 4, 1).await?; let discovered = [read_number(&handle, 0x040, 4).await?, read_number(&handle, 0x048, 8).await?]; write_number(&handle, 0x020, 4, 0xfeed).await?; assert_eq!([read_number(&handle, 0x040, 4).await?, read_number(&handle, 0x048, 8).await?], discovered); write_number(&handle, 0x020, 4, 2).await?; write_number(&handle, 0x020, 4, 3).await?; let semantic = handle.control_queue(QueueControl::ReadStatus(queue)).await?;
     // Then: replacement/preservation, exact batch responses, parity, and global order are literal.
     assert_eq!(magic, 0x414d_4450_u32.to_le_bytes()); assert_eq!(bootstrap.as_bytes().len(), 72); assert_eq!(response(&handle, &[(0x188,8),(0x190,8),(0x198,8),(0x1a0,8),(0x1a8,8),(0x1b0,8),(0x1b8,8),(0x1c0,8),(0x1c8,8)]).await?, [semantic.queue().epoch().raw(),0,1,0,0,0,0,0,0]); assert_eq!(handle.current_status().await.epoch(), DeviceEpoch::initial());
-    let observations = observer.snapshot(); assert_eq!((observations[0].sequence, observations[0].origin, observations[1].sequence, observations[1].origin, observations[2].sequence, observations[2].origin), (0,AccessOrigin::Direct,1,AccessOrigin::Batch,2,AccessOrigin::Batch)); println!("happy global_queue_responses=replace,preserve batches=atomic generation_delta=2 observations=ordered"); Ok(())
+    let observations = observer.snapshot(); let [first, second, third, ..] = observations.as_slice() else { return Err("three observations".into()) }; assert_eq!((first.sequence, first.origin, second.sequence, second.origin, third.sequence, third.origin), (0,AccessOrigin::Direct,1,AccessOrigin::Batch,2,AccessOrigin::Batch)); println!("happy global_queue_responses=replace,preserve batches=atomic generation_delta=2 observations=ordered"); Ok(())
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -82,7 +103,7 @@ async fn happy_irq_claim_transcript_and_reset_partitions_are_exact() -> TestResu
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn adverse_errors_batches_and_dropped_futures_are_non_mutating() -> TestResult {
+async fn response_adverse_errors_batches_and_dropped_futures_are_non_mutating() -> TestResult {
     // Given: a clone-observed device, a stale stage, and complete public state snapshots.
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new()); let observer = Arc::new(Recorder::default()); let (device,_worker) = AsyncDevice::from_core_observed(DeviceCore::new(memory.clone(),ResourceConfig::default()),observer.clone()); let handle = device.handle(); let stale = handle.stage_memory_regions(&[128,64,128]).await?; let stale_activation = activation(&stale)?; handle.allocate_memory_region(1).await?; let before = handle.snapshot().await; let generation = handle.memory_generation().await; let regions = memory.regions(); let registers = readable_image(&handle).await?; let observations = observer.snapshot().len();
     // When: malformed accesses, a stale batch, and an unpolled valid batch are rejected/dropped.

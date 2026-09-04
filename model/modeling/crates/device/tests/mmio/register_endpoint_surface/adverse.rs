@@ -1,5 +1,5 @@
 use super::support::{RecordingObserver, TestResult, contend_core, create_message, submit_copy};
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{RegisterAccess, RegisterBusBase};
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, DeviceCore};
 use std::future::Future;
@@ -20,7 +20,9 @@ pub(super) async fn run() -> TestResult {
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let endpoint = handle.register_endpoint();
+    let endpoint = handle
+        .register_endpoint()
+        .at_mmio_base(RegisterBusBase::new(0x1_0000_0000));
     let queue = create_message(&handle).await?;
     submit_copy(&handle, queue).await?;
     handle.ring_doorbell(queue).await?;

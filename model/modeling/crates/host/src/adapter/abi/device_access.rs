@@ -10,7 +10,8 @@ use crate::adapter::abi::{
     PdmaRegionRequest, PdmaRegisterAccessError, PdmaSubmissionBatch,
 };
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+    AddressedRegisterAccess, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
+    RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError, SharedMemory,
 };
 use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
 use pdma_model_contract::semantic::QueueActivation;
@@ -23,17 +24,39 @@ use std::sync::{Arc, RwLock};
 pub struct AsyncDeviceAccess {
     handle: AsyncDeviceHandle,
     memory: Arc<SharedMemory>,
+    mmio_base: RegisterBusBase,
     zero_bases: Arc<RwLock<BTreeSet<MemoryAddress>>>,
 }
 
 impl AsyncDeviceAccess {
     /// Derives every capability from one existing asynchronous device handle.
     pub fn new(handle: AsyncDeviceHandle) -> Self {
+        Self::new_at_mmio_base(handle, RegisterBusBase::new(0))
+    }
+
+    /// Derives every capability with register traffic rooted at `mmio_base`.
+    pub fn new_at_mmio_base(handle: AsyncDeviceHandle, mmio_base: RegisterBusBase) -> Self {
         Self {
             memory: handle.memory_access(),
             handle,
+            mmio_base,
             zero_bases: Arc::new(RwLock::new(BTreeSet::new())),
         }
+    }
+
+    /// Returns the full-address base used for register traffic.
+    pub const fn mmio_base(&self) -> RegisterBusBase {
+        self.mmio_base
+    }
+
+    fn register_address(&self, offset: u32) -> Result<RegisterBusAddress, PdmaRegisterAccessError> {
+        self.mmio_base
+            .raw()
+            .checked_add(u64::from(offset))
+            .map(RegisterBusAddress::new)
+            .ok_or(PdmaRegisterAccessError::Access(
+                pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset { offset },
+            ))
     }
 
     fn remember_zero_regions(&self, regions: &[PdmaMappedRegion]) {
@@ -81,15 +104,37 @@ impl RegisterAccess for AsyncDeviceAccess {
     type Error = PdmaRegisterAccessError;
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
-        RegisterAccess::read(&self.handle.register_endpoint(), offset, response)
+        let address = self.register_address(offset)?;
+        let endpoint = self.handle.register_endpoint().at_mmio_base(self.mmio_base);
+        endpoint
+            .read_addressed(self.mmio_base, address, response)
             .await
-            .map_err(map_register)
+            .map_err(|error| map_addressed_register(error, offset))
     }
 
     async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
-        RegisterAccess::write(&self.handle.register_endpoint(), offset, request)
+        let address = self.register_address(offset)?;
+        let endpoint = self.handle.register_endpoint().at_mmio_base(self.mmio_base);
+        endpoint
+            .write_addressed(self.mmio_base, address, request)
             .await
-            .map_err(map_register)
+            .map_err(|error| map_addressed_register(error, offset))
+    }
+}
+
+const fn map_addressed_register(
+    error: RegisterBusError<pdma_model_device::MmioRegisterError>,
+    fallback: u32,
+) -> PdmaRegisterAccessError {
+    match error {
+        RegisterBusError::Endpoint { source, .. } => map_register(source),
+        RegisterBusError::AddressBelowBase { .. } | RegisterBusError::OffsetOutOfRange { .. } => {
+            PdmaRegisterAccessError::Access(
+                pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset {
+                    offset: fallback,
+                },
+            )
+        }
     }
 }
 

@@ -2,6 +2,11 @@ mod claim;
 mod fake;
 mod real;
 
+#[cfg(test)]
+mod address_adverse;
+#[cfg(test)]
+mod nonzero_base;
+
 use fake::{FakeAccess, activation, message};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
 use pdma_model_contract::semantic::RingCursor;

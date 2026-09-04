@@ -2,13 +2,11 @@ use hardware_interface_runtime::{
     RegisterBusAddress, RegisterBusBase, RegisterBusOffset, RegisterBusWidth, RegisterImage,
 };
 use pdma_model_contract::abi::mmio::{
-    IrqResponseBank, MmioResultDetails, PdmaMmioMap, PdmaMmioMapView, PdmaMmioMapViewMut,
-    RegisterId, ResponseUpdate,
+    PdmaMmioMap, PdmaMmioMapView, PdmaMmioMapViewMut, RegisterId,
 };
 
-use super::irq::IrqRequest;
+use super::invariant;
 use super::storage::DeviceRegisterStorage;
-use super::{invariant, irq};
 
 pub(super) type RootImage = RegisterImage<PdmaMmioMap, DeviceRegisterStorage>;
 
@@ -45,18 +43,6 @@ impl PdmaRegisters {
             self.image
                 .write_leaf(offset(definition.offset(), bytes.len()), bytes),
         );
-    }
-
-    pub(crate) fn snapshot_irq(&self) -> IrqRequest {
-        irq::request(&self.image)
-    }
-
-    pub(crate) fn complete_irq(
-        &self,
-        result: MmioResultDetails,
-        update: ResponseUpdate<IrqResponseBank>,
-    ) {
-        irq::complete(&self.image, result, update);
     }
 
     pub(crate) fn view<R>(

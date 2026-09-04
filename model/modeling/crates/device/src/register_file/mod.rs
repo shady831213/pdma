@@ -1,6 +1,5 @@
 mod bank;
 mod image;
-mod irq;
 mod storage;
 
 pub(crate) use bank::{MmioScalar, narrow_u32};

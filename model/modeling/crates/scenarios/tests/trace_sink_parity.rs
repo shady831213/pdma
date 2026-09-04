@@ -99,7 +99,7 @@ async fn async_trace_log_does_not_emit_scheduled_event_before_resource_stall() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
+async fn async_trace_log_schedules_before_resource_stall() {
     // Given: two traced copies behind a one-slot completion publication path.
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
@@ -159,7 +159,9 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
-    // Then: execution success for the second command is retained before publication pressure.
+    // Then: post-admission execution is scheduled before publication pressure can stall it.
+    let scheduled = event_position(&trace_events, TraceEventKind::Scheduled, second_command)
+        .expect("second command scheduling is traced");
     let succeeded = event_position(
         &trace_events,
         TraceEventKind::ExecutionSucceeded,
@@ -173,6 +175,7 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
                 && event.detail() == "CompletionPublicationPressure"
         })
         .expect("completion publication stall is traced");
+    assert!(scheduled < stall);
     assert!(succeeded < stall);
 }
 

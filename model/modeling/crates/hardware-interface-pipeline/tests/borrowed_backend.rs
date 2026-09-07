@@ -2,7 +2,9 @@
 
 use std::{convert::Infallible, sync::Mutex};
 
-use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Stage, StepOutcome};
+use hardware_interface_pipeline::{
+    AsyncExecutor, AsyncInteractionBackend, Operation, Stage, StepOutcome,
+};
 
 struct Backend(Mutex<u32>);
 
@@ -26,22 +28,22 @@ impl AsyncInteractionBackend<u32, ()> for Backend {
     }
 }
 
-struct IncrementWhenReady(bool);
+struct IncrementWhenReady;
 
 impl Stage<u32> for IncrementWhenReady {
+    type Input = ();
     type Output = u32;
     type Error = Infallible;
     type Wait = ();
+    type State = ();
 
-    fn step(&mut self, value: &mut u32) -> StepOutcome<u32, Infallible, ()> {
-        if self.0 {
-            return StepOutcome::Exhausted;
-        }
+    fn start((): Self::Input) -> Self::State {}
+
+    fn step(&mut self, value: &mut u32, (): &mut Self::State) -> StepOutcome<u32, Infallible, ()> {
         if *value == 0 {
             return StepOutcome::Pending(());
         }
         *value += 1;
-        self.0 = true;
         StepOutcome::Complete(Ok(*value))
     }
 }
@@ -50,10 +52,13 @@ impl Stage<u32> for IncrementWhenReady {
 async fn executor_borrows_the_existing_backend_and_resumes_on_its_wait() {
     // Given: an externally owned backend whose value becomes available on wait.
     let backend = Backend(Mutex::new(0));
-    let mut stage = IncrementWhenReady(false);
+    let mut stage = IncrementWhenReady;
+    let mut operation = Operation::new(());
 
     // When: the executor drives the stage through a borrowed backend.
-    let result = AsyncExecutor::new(&backend).run(&mut stage).await;
+    let result = AsyncExecutor::new(&backend)
+        .run(&mut stage, &mut operation)
+        .await;
 
     // Then: waiting and execution mutate the original backend, which remains usable.
     assert_eq!(result, Ok(8));

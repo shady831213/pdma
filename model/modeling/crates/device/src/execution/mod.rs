@@ -6,6 +6,7 @@ pub(crate) mod context;
 mod copy;
 mod memory;
 mod resources;
+pub(crate) mod stage;
 mod vector_add;
 
 use pdma_model_contract::semantic::ResourceConfig;
@@ -19,48 +20,25 @@ pub(crate) use context::{
 
 #[derive(Debug)]
 pub(crate) struct ExecutionUnit {
-    resources: ResourceConfig,
-    native_steps: usize,
+    stages: hardware_interface_pipeline::Then<stage::ResourceGate, stage::Datapath>,
 }
 
 impl ExecutionUnit {
     pub(crate) const fn new(resources: ResourceConfig) -> Self {
         Self {
-            resources,
-            native_steps: 0,
+            stages: hardware_interface_pipeline::Then::new(
+                stage::ResourceGate { config: resources },
+                stage::Datapath,
+            ),
         }
     }
 
     pub(crate) const fn resources(&self) -> ResourceConfig {
-        self.resources
-    }
-
-    pub(crate) const fn record_fetch(&mut self) {
-        self.native_steps += 1;
-    }
-
-    pub(crate) const fn native_steps(&self) -> usize {
-        self.native_steps
+        self.stages.upstream.config
     }
 
     pub(crate) fn can_execute(&self, command: &Command) -> bool {
-        resources::ResourceDemand::for_command(command).fits(self.resources)
-    }
-
-    pub(crate) const fn can_execute_copy(&self) -> bool {
-        resources::ResourceDemand::copy().fits(self.resources)
-    }
-
-    pub(crate) const fn can_execute_strided(&self, request: StridedCopyRequest) -> bool {
-        resources::ResourceDemand::strided(request).fits(self.resources)
-    }
-
-    pub(crate) fn can_execute_broadcast(&self, request: &BroadcastCopyRequest) -> bool {
-        resources::ResourceDemand::broadcast(request).fits(self.resources)
-    }
-
-    pub(crate) const fn can_execute_vector_add(&self) -> bool {
-        resources::ResourceDemand::vector_add().fits(self.resources)
+        resources::ResourceDemand::for_command(command).fits(self.resources())
     }
 
     pub(crate) fn execute_copy(

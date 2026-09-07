@@ -84,6 +84,7 @@ mod trace;
 mod device;
 
 pub use device::DeviceCore;
+pub use device::drive::HardwareStepStatus;
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
 pub use interface::batch::{

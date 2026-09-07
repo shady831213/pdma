@@ -4,10 +4,12 @@ pub(crate) mod block;
 pub(crate) mod exact;
 #[doc(hidden)]
 pub(crate) mod io;
+pub(crate) mod issue;
 #[doc(hidden)]
 pub(crate) mod ring;
 #[doc(hidden)]
 pub(crate) mod semantic;
+pub(crate) mod stage;
 
 #[cfg(test)]
 mod tests;

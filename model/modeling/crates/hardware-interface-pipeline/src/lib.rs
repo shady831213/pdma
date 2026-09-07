@@ -3,13 +3,15 @@
 mod backend;
 mod compose;
 mod executor;
+mod operation;
 mod outcome;
 mod stage;
 
 pub use backend::AsyncInteractionBackend;
-pub use compose::{PipelineExt, Then};
+pub use compose::{PipelineExt, Then, ThenState};
 pub use executor::{
     AsyncExecutor, AsyncRunError, ImmediateExecutor, RunError, RunOutcome, RunResult, StepExecutor,
 };
+pub use operation::Operation;
 pub use outcome::StepOutcome;
 pub use stage::Stage;

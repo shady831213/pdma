@@ -4,7 +4,6 @@ use crate::dma::PdmaMemoryMappings;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
 use crate::queue::io::NormalizedFault;
-use crate::scheduler::Scheduler;
 use crate::trace::TraceSink;
 use pdma_model_contract::semantic::{
     Command, CommandId, CommandOperation, DeviceEpoch, IrqLine, IrqVector, QueueId, ResourceConfig,
@@ -38,7 +37,6 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
     let dma = PdmaMemoryMappings::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
-    let mut scheduler = Scheduler::default();
     let mut irq = PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0)));
     let mut trace = TraceSink::default();
     let mut unit = RetirementUnit::default();
@@ -49,7 +47,6 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
         let mut ports = super::RetirementPorts::new(
             &mut queues,
             &dma,
-            &mut scheduler,
             &mut irq,
             &mut trace,
             ResourceConfig::default(),

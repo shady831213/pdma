@@ -7,8 +7,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::task::{Context as TaskContext, Poll, Waker};
 
 use hip::{
-    AsyncExecutor, AsyncInteractionBackend, ImmediateExecutor, PipelineExt, RunOutcome, Stage,
-    StepExecutor, StepOutcome,
+    AsyncExecutor, AsyncInteractionBackend, ImmediateExecutor, Operation, PipelineExt, RunOutcome,
+    Stage, StepExecutor, StepOutcome,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -19,49 +19,60 @@ struct Model {
 }
 
 #[derive(Debug, Default)]
-struct Source(bool);
+struct Source;
 
 impl Stage<Model> for Source {
+    type Input = u32;
     type Output = u32;
     type Error = &'static str;
     type Wait = usize;
+    type State = u32;
 
-    fn step(&mut self, model: &mut Model) -> StepOutcome<u32, &'static str, usize> {
-        if self.0 {
-            return StepOutcome::Exhausted;
-        }
-        self.0 = true;
+    fn start(input: Self::Input) -> Self::State {
+        input
+    }
+
+    fn step(
+        &mut self,
+        model: &mut Model,
+        input: &mut Self::State,
+    ) -> StepOutcome<u32, &'static str, usize> {
         model.upstream_calls += 1;
-        StepOutcome::Complete(Ok(20))
+        StepOutcome::Complete(Ok(*input))
     }
 }
 
 #[derive(Debug)]
-struct Sink {
-    input: u32,
-    done: bool,
-}
+struct Sink;
 
 impl Stage<Model> for Sink {
+    type Input = u32;
     type Output = u32;
     type Error = &'static str;
     type Wait = usize;
+    type State = u32;
 
-    fn step(&mut self, model: &mut Model) -> StepOutcome<u32, &'static str, usize> {
-        if self.done {
-            return StepOutcome::Exhausted;
-        }
+    fn start(input: Self::Input) -> Self::State {
+        input
+    }
+
+    fn step(
+        &mut self,
+        model: &mut Model,
+        input: &mut Self::State,
+    ) -> StepOutcome<u32, &'static str, usize> {
         model.downstream_calls += 1;
         if model.readiness < 2 {
             return StepOutcome::Pending(model.readiness);
         }
-        self.done = true;
-        StepOutcome::Complete(Ok(self.input + 22))
+        StepOutcome::Complete(Ok(*input + 22))
     }
 }
 
-fn pipeline() -> impl Stage<Model, Output = u32, Error = &'static str, Wait = usize> + Send {
-    Source::default().then(|input| Sink { input, done: false })
+fn pipeline()
+-> impl Stage<Model, Input = u32, Output = u32, Error = &'static str, Wait = usize, State: Send> + Send
+{
+    Source.then(Sink)
 }
 
 #[derive(Debug, Default)]
@@ -115,11 +126,14 @@ fn block_on<F: Future>(future: F) -> Result<F::Output, &'static str> {
 
 fn drive_immediate() -> Result<(u32, Model), Box<dyn std::error::Error>> {
     let mut stage = pipeline();
+    let mut operation = Operation::new(20);
     let mut model = Model::default();
     let executor = ImmediateExecutor::new(NonZeroUsize::new(8).ok_or("nonzero budget")?);
     for readiness in 0..=2 {
         model.readiness = readiness;
-        if let Ok(RunOutcome::Complete(Ok(output))) = executor.run(&mut stage, &mut model) {
+        if let Ok(RunOutcome::Complete(Ok(output))) =
+            executor.run(&mut stage, &mut operation, &mut model)
+        {
             return Ok((output, model));
         }
     }
@@ -128,11 +142,14 @@ fn drive_immediate() -> Result<(u32, Model), Box<dyn std::error::Error>> {
 
 fn drive_stepped() -> Result<(u32, Model), Box<dyn std::error::Error>> {
     let mut stage = pipeline();
+    let mut operation = Operation::new(20);
     let mut model = Model::default();
     let executor = StepExecutor::new();
     for readiness in [0, 0, 1, 2] {
         model.readiness = readiness;
-        if let Ok(RunOutcome::Complete(Ok(output))) = executor.step(&mut stage, &mut model) {
+        if let Ok(RunOutcome::Complete(Ok(output))) =
+            executor.step(&mut stage, &mut operation, &mut model)
+        {
             return Ok((output, model));
         }
     }
@@ -149,7 +166,7 @@ fn same_static_pipeline_has_literal_policy_parity_without_replay()
     let mut asynchronous = pipeline();
 
     // When: the async sink genuinely suspends twice before it becomes ready.
-    let async_output = block_on(executor.run(&mut asynchronous))?
+    let async_output = block_on(executor.run(&mut asynchronous, &mut Operation::new(20)))?
         .map_err(|error| std::io::Error::other(format!("async pipeline failed: {error:?}")))?;
     let async_model = lock(&executor.backend().0).clone();
 

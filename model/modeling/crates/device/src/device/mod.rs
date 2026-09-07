@@ -18,9 +18,14 @@ use crate::{ModelError, ModelResult};
 
 #[derive(Debug)]
 /// Synchronous ownership root for PDMA hardware state consumed by the async runtime.
+///
+/// Its reusable `Stage<()>` interface services one singleton device request at a time.
+/// Accepted work belongs to the device across driving-future cancellation. Resetting a
+/// generic operation does not reset that hardware; whole-device reset invalidates it.
 pub struct DeviceCore {
     epoch: DeviceEpoch,
     command_pipeline: command_pipeline::PipelineSlot,
+    native_fetches: usize,
     pub(crate) dma: PdmaMemoryMappings,
     pub(crate) registers: PdmaRegisters,
     queues: QueueBlock,
@@ -40,6 +45,7 @@ impl DeviceCore {
         Self {
             epoch: DeviceEpoch::initial(),
             command_pipeline: command_pipeline::PipelineSlot::new(),
+            native_fetches: 0,
             dma: PdmaMemoryMappings::new(memory),
             registers: PdmaRegisters::new(),
             queues: QueueBlock::default(),
@@ -104,6 +110,7 @@ impl DeviceCore {
 mod command_pipeline;
 #[doc(hidden)]
 pub(crate) mod drive;
+pub(crate) mod hardware_context;
 mod irq;
 mod probe;
 mod queue;

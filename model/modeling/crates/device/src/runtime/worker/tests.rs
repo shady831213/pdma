@@ -1,4 +1,5 @@
 use super::*;
+use hardware_interface_pipeline::Operation;
 use hardware_interface_runtime::{NoopRegisterObserver, ObservationGate, SharedRegisterObserver};
 use pdma_model_contract::semantic::{
     Command, CommandId, CommandOperation, DeviceEpoch, QueueConfig, ResourceConfig,
@@ -104,12 +105,15 @@ async fn observation(fixture: &AcceptedCopy) -> (usize, Vec<u8>, usize, usize) {
         .await
 }
 
-async fn worker_turn(fixture: &AcceptedCopy, service: &mut DeviceService) -> bool {
+async fn worker_turn(
+    fixture: &AcceptedCopy,
+    operation: &mut Operation<DeviceService, RunnerState>,
+) -> bool {
     matches!(
         fixture
             .shared
             .backend
-            .interact(|state| service.step(state))
+            .interact(|state| operation.step(&mut DeviceService::new(), state))
             .await,
         StepOutcome::Progressed
     )
@@ -119,7 +123,7 @@ async fn worker_turn(fixture: &AcceptedCopy, service: &mut DeviceService) -> boo
 async fn accepted_command_advances_one_leaf_per_worker_turn() {
     // Given: one accepted copy whose observable stages are fetch, execute, and retire.
     let fixture = accepted_copy();
-    let mut service = DeviceService::new();
+    let mut service = Operation::new(());
 
     // When: the worker is advanced through three deterministic interaction turns.
     let mut observations = Vec::new();
@@ -143,10 +147,10 @@ async fn accepted_command_advances_one_leaf_per_worker_turn() {
 async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
     // Given: copies retained immediately after fetch and immediately after execution.
     let before_execution = accepted_copy();
-    let mut before_execution_service = DeviceService::new();
+    let mut before_execution_service = Operation::new(());
     assert!(worker_turn(&before_execution, &mut before_execution_service).await);
     let after_execution = accepted_copy();
-    let mut after_execution_service = DeviceService::new();
+    let mut after_execution_service = Operation::new(());
     for _ in 0..2 {
         assert!(worker_turn(&after_execution, &mut after_execution_service).await);
     }
@@ -169,18 +173,18 @@ async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
                 state.shutdown_requested = true;
             })
             .await;
-        let mut service = DeviceService::new();
+        let mut service = Operation::new(());
         assert!(matches!(
             fixture
                 .shared
                 .backend
-                .interact(|state| service.step(state))
+                .interact(|state| service.step(&mut DeviceService::new(), state))
                 .await,
             StepOutcome::Complete(Ok(()))
         ));
     }
     let shutdown = accepted_copy();
-    let mut shutdown_service = DeviceService::new();
+    let mut shutdown_service = Operation::new(());
     assert!(worker_turn(&shutdown, &mut shutdown_service).await);
     shutdown
         .shared
@@ -191,7 +195,7 @@ async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
         shutdown
             .shared
             .backend
-            .interact(|state| shutdown_service.step(state))
+            .interact(|state| shutdown_service.step(&mut DeviceService::new(), state))
             .await,
         StepOutcome::Complete(Ok(()))
     ));
@@ -199,7 +203,7 @@ async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
         shutdown
             .shared
             .backend
-            .interact(|state| shutdown_service.step(state))
+            .interact(|state| shutdown_service.step(&mut DeviceService::new(), state))
             .await,
         StepOutcome::Exhausted
     ));

@@ -1,17 +1,22 @@
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, RingLayout};
 use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRingId, DeviceEpoch, EventErrorKind, EventRecord, EventRouting,
-    QueueActivation, QueueConfig, QueueId, QueueRingObjects, SoftwareOwnerId, TraceEventKind,
-    desc::CopyRequest,
+    BufferId, CommandId, CommandOperation, CompletionRingId, DeviceEpoch, EventErrorKind,
+    EventRecord, EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects,
+    SoftwareOwnerId, TraceEventKind, desc::CopyRequest,
 };
 
-use super::super::{PdmaCommandPipeline, execute, retire};
 use super::support::{Case, PipelineRunOutcome, drive_to_complete, prepare, read};
 use crate::ModelError;
-use crate::device::ModelStepStatus;
+use crate::device::{ModelStepStatus, hardware_context::HardwareContext};
 use crate::execution::CommandRoute;
 use crate::queue::io::NormalizedFault;
+use crate::queue::stage::{FetchedCommand, FetchedWork};
+use crate::retirement::stage::RetirementInput;
+
+mod hardware;
+
+use hardware::retire;
 
 #[test]
 fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
@@ -125,22 +130,19 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
             .stage_execution_fault(queue, event),
         Ok(source)
     );
-    prepared.fixture.pipeline = PdmaCommandPipeline::from_route(
-        super::super::fetch::FetchedRoute::FrontendFault(NormalizedFault { queue, source }),
-    );
-
-    // When: the frontend failure caches, then a fresh pipeline retries retirement.
+    // When: the retirement owner caches the frontend failure, then retries it.
     assert_eq!(
-        drive_to_complete(&mut prepared.fixture),
+        retire(
+            &mut prepared.fixture.core,
+            RetirementInput::FrontendFault(NormalizedFault { queue, source }),
+        ),
         Ok(ModelStepStatus::FaultCached)
     );
     assert_eq!(
         prepared.fixture.core.queues.semantic_cursors(queue),
         Ok(((1, 1), (0, 0)))
     );
-    prepared.fixture.pipeline =
-        PdmaCommandPipeline::from_route(super::super::fetch::FetchedRoute::RetryFault);
-    let retired = drive_to_complete(&mut prepared.fixture);
+    let retired = retire(&mut prepared.fixture.core, RetirementInput::Retry);
 
     // Then: the exact source, one event, and one consumer advance are preserved.
     assert_eq!(retired, Err(source));
@@ -156,12 +158,11 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
         prepared.fixture.core.queues.semantic_cursors(queue),
         Ok(((1, 1), (0, 0)))
     );
-    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
 }
 
 #[test]
 fn invalid_completion_retires_without_dma_or_success_publication() {
-    // Given: a typed copy stage whose accepted route names an absent completion ring.
+    // Given: the execution hardware receives a route naming an absent completion ring.
     let mut prepared = prepare(Case::Copy);
     let source = prepared.fixture.core.dma.allocate(8).expect("source");
     prepared
@@ -176,14 +177,37 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
         CompletionRingId::new(99),
         false,
     );
-    prepared.fixture.pipeline =
-        PdmaCommandPipeline::from_route(super::super::fetch::FetchedRoute::Copy(
-            route,
-            CopyRequest::new(source.object(), prepared.destinations[0].object(), 4),
-        ));
+    let mut operation = Operation::new(FetchedWork::Command(FetchedCommand {
+        route,
+        operation: CommandOperation::Copy(CopyRequest::new(
+            source.object(),
+            prepared.destinations[0].object(),
+            4,
+        )),
+    }));
 
     // When: execution validates the route and enters invalid-completion retirement.
-    let result = drive_to_complete(&mut prepared.fixture);
+    let core = &mut prepared.fixture.core;
+    let input = {
+        let mut context = HardwareContext {
+            dma: &core.dma,
+            trace: &mut core.trace,
+            fetches: &mut core.native_fetches,
+        };
+        let input = loop {
+            match operation.step(&mut core.execution, &mut context) {
+                StepOutcome::Progressed => {}
+                StepOutcome::Complete(Ok(input)) => break input,
+                other => panic!("unexpected execution outcome: {other:?}"),
+            }
+        };
+        assert!(matches!(
+            operation.step(&mut core.execution, &mut context),
+            StepOutcome::Exhausted
+        ));
+        input
+    };
+    let result = retire(core, input);
 
     // Then: the command consumes once without DMA, completion, event, or IRQ success.
     assert_eq!(
@@ -211,37 +235,4 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
             .semantic_cursors(prepared.queue.queue_id()),
         Ok(((1, 1), (0, 0)))
     );
-    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
-}
-
-#[test]
-fn concrete_pipeline_variants_accept_only_typed_stage_owners() {
-    fn assert_stage<S: Stage<crate::device::DeviceCore, Error = ModelError>>() {}
-    assert_stage::<execute::Copy>();
-    assert_stage::<execute::StridedCopy>();
-    assert_stage::<execute::BroadcastCopy>();
-    assert_stage::<execute::VectorAdd>();
-    assert_stage::<retire::FrontendFailure>();
-    assert_stage::<retire::ExecutionFailure>();
-    assert_stage::<retire::InvalidCompletion>();
-    assert_stage::<retire::PendingCompletion>();
-    assert_stage::<retire::PendingFault>();
-}
-
-#[test]
-fn retry_route_adapter_exhausts_after_transferring_owned_route() {
-    // Given: a retry operation selected by a completed fetch stage.
-    let mut fixture =
-        super::support::Fixture::new(pdma_model_contract::semantic::ResourceConfig::default());
-    let mut operation = super::super::route::Operation::from_fetch(
-        super::super::fetch::FetchedRoute::RetryCompletion,
-    );
-
-    // When: the route is stepped twice.
-    let first = operation.step(&mut fixture.core);
-    let second = operation.step(&mut fixture.core);
-
-    // Then: ownership transfers once and the terminal adapter becomes inert.
-    assert!(matches!(first, StepOutcome::Complete(Ok(_))));
-    assert!(matches!(second, StepOutcome::Exhausted));
 }

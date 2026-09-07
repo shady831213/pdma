@@ -1,25 +1,50 @@
 use crate::StepOutcome;
 
-/// A deterministic pipeline stage driven through explicit, bounded steps.
+/// Reusable hardware with typed ports and separately owned operation state.
 ///
-/// Each call to [`Stage::step`] performs at most one externally meaningful interaction. Before
-/// returning [`StepOutcome::Progressed`], the implementation must advance its internal state so
-/// the interaction cannot be repeated on the next call.
-///
-/// [`StepOutcome::Pending`] transfers owned wait state and marks a cancellation boundary: dropping
-/// that value must not undo an interaction that already committed. Output and error values are
-/// likewise transferred by ownership through [`StepOutcome::Complete`]. After completion, every
-/// later call must return [`StepOutcome::Exhausted`] without performing an interaction.
+/// Hardware outlives each operation. Starting creates request state, never hardware.
+/// Each step performs at most one bounded interaction and retains accepted work.
+/// Domain faults needing downstream handling belong in Output; Error terminates
+/// the operation. No context borrow escapes a step.
 pub trait Stage<C> {
-    /// The owned successful terminal value.
+    /// Owned request accepted by this hardware.
+    type Input;
+    /// Owned result passed downstream.
     type Output;
-
-    /// The owned failed terminal value.
+    /// Structural failure terminating this operation.
     type Error;
-
-    /// The owned state describing why the stage is pending.
+    /// Owned notification key for a suspended operation.
     type Wait;
+    /// Request state retained independently of hardware and the driving future.
+    type State;
 
-    /// Attempts at most one interaction and reports the stage's observable boundary.
-    fn step(&mut self, context: &mut C) -> StepOutcome<Self::Output, Self::Error, Self::Wait>;
+    /// Constructs request state without interacting with hardware or context.
+    fn start(input: Self::Input) -> Self::State;
+
+    /// Advances one operation through at most one bounded interaction.
+    fn step(
+        &mut self,
+        context: &mut C,
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait>;
+}
+
+impl<C, S: Stage<C> + ?Sized> Stage<C> for &mut S {
+    type Input = S::Input;
+    type Output = S::Output;
+    type Error = S::Error;
+    type Wait = S::Wait;
+    type State = S::State;
+
+    fn start(input: Self::Input) -> Self::State {
+        S::start(input)
+    }
+
+    fn step(
+        &mut self,
+        context: &mut C,
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        S::step(self, context, state)
+    }
 }

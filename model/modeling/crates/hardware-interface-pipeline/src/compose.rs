@@ -1,83 +1,93 @@
 use crate::{Stage, StepOutcome};
 
-/// A statically composed pair of stages.
+/// Persistent hardware stages connected by matching output and input ports.
 #[derive(Debug)]
-pub struct Then<A, F, B> {
-    state: State<A, F, B>,
+pub struct Then<A, B> {
+    /// Hardware producing the intermediate value.
+    pub upstream: A,
+    /// Hardware consuming the intermediate value.
+    pub downstream: B,
 }
 
+/// Owned state of one request passing through a composed stage.
 #[derive(Debug)]
-enum State<A, F, B> {
-    Upstream(A, Option<F>),
+pub enum ThenState<A, B> {
+    /// The upstream operation is active.
+    Upstream(A),
+    /// Upstream finished; its result belongs to downstream operation state.
     Downstream(B),
+    /// This operation is finished; the hardware remains reusable.
     Done,
 }
 
-impl<A, F, B> Then<A, F, B> {
-    const fn new(upstream: A, bind: F) -> Self {
+impl<A, B> Then<A, B> {
+    /// Connects two hardware objects without creating an operation.
+    pub const fn new(upstream: A, downstream: B) -> Self {
         Self {
-            state: State::Upstream(upstream, Some(bind)),
+            upstream,
+            downstream,
         }
     }
 }
 
-impl<C, A, F, B> Stage<C> for Then<A, F, B>
+impl<C, A, B> Stage<C> for Then<A, B>
 where
     A: Stage<C>,
-    B: Stage<C, Error = A::Error, Wait = A::Wait>,
-    F: FnOnce(A::Output) -> B,
+    B: Stage<C, Input = A::Output, Error = A::Error, Wait = A::Wait>,
 {
-    type Error = A::Error;
+    type Input = A::Input;
     type Output = B::Output;
+    type Error = A::Error;
     type Wait = A::Wait;
+    type State = ThenState<A::State, B::State>;
 
-    fn step(&mut self, context: &mut C) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        match std::mem::replace(&mut self.state, State::Done) {
-            State::Upstream(mut upstream, bind) => match upstream.step(context) {
-                StepOutcome::Progressed => {
-                    self.state = State::Upstream(upstream, bind);
+    fn start(input: Self::Input) -> Self::State {
+        ThenState::Upstream(A::start(input))
+    }
+
+    fn step(
+        &mut self,
+        context: &mut C,
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        match state {
+            ThenState::Upstream(upstream) => match self.upstream.step(context, upstream) {
+                StepOutcome::Progressed => StepOutcome::Progressed,
+                StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+                StepOutcome::Complete(Ok(output)) => {
+                    *state = ThenState::Downstream(B::start(output));
                     StepOutcome::Progressed
                 }
-                StepOutcome::Pending(wait) => {
-                    self.state = State::Upstream(upstream, bind);
-                    StepOutcome::Pending(wait)
+                StepOutcome::Complete(Err(error)) => {
+                    *state = ThenState::Done;
+                    StepOutcome::Complete(Err(error))
                 }
-                StepOutcome::Complete(Ok(output)) => match bind {
-                    Some(bind) => {
-                        self.state = State::Downstream(bind(output));
-                        StepOutcome::Progressed
-                    }
-                    None => StepOutcome::Exhausted,
-                },
-                StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-                StepOutcome::Exhausted => StepOutcome::Exhausted,
+                StepOutcome::Exhausted => {
+                    *state = ThenState::Done;
+                    StepOutcome::Exhausted
+                }
             },
-            State::Downstream(mut downstream) => match downstream.step(context) {
-                StepOutcome::Progressed => {
-                    self.state = State::Downstream(downstream);
-                    StepOutcome::Progressed
+            ThenState::Downstream(downstream) => {
+                let outcome = self.downstream.step(context, downstream);
+                if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
+                    *state = ThenState::Done;
                 }
-                StepOutcome::Pending(wait) => {
-                    self.state = State::Downstream(downstream);
-                    StepOutcome::Pending(wait)
-                }
-                StepOutcome::Complete(result) => StepOutcome::Complete(result),
-                StepOutcome::Exhausted => StepOutcome::Exhausted,
-            },
-            State::Done => StepOutcome::Exhausted,
+                outcome
+            }
+            ThenState::Done => StepOutcome::Exhausted,
         }
     }
 }
 
-/// Extension methods for statically composing pipeline stages.
+/// Static composition for reusable hardware stages.
 pub trait PipelineExt<C>: Stage<C> + Sized {
-    /// Constructs a downstream stage from this stage's owned successful output.
-    fn then<F, B>(self, bind: F) -> Then<Self, F, B>
+    /// Connects an existing downstream stage with a matching input port.
+    fn then<B>(self, downstream: B) -> Then<Self, B>
     where
-        F: FnOnce(Self::Output) -> B,
+        B: Stage<C, Input = Self::Output, Error = Self::Error, Wait = Self::Wait>,
     {
-        Then::new(self, bind)
+        Then::new(self, downstream)
     }
 }
 
-impl<C, A> PipelineExt<C> for A where A: Stage<C> {}
+impl<C, A: Stage<C>> PipelineExt<C> for A {}

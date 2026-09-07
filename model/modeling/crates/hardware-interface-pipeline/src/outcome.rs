@@ -10,8 +10,8 @@ pub enum StepOutcome<O, E, W> {
     Progressed,
     /// The stage cannot currently advance and transfers its wait state to the caller.
     Pending(W),
-    /// The stage reached its terminal output or error and transfers that value to the caller.
+    /// The operation reached its output or error and transfers that value to the caller.
     Complete(Result<O, E>),
-    /// The stage was already terminal and performed no interaction.
+    /// This operation was already terminal and performed no interaction.
     Exhausted,
 }

@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+pub(crate) mod stage;
 
 use pdma_model_contract::semantic::QueueId;
 

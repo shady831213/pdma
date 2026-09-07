@@ -12,8 +12,11 @@ use crate::device::ModelStepStatus;
 
 pub(super) fn pressure_revisits_only_execution() {
     // Given: one fetched copy blocked before atomic execution.
-    let mut prepared =
-        prepare_with_resources(Case::Copy, ResourceConfig::default().with_read_slots(0));
+    let mut prepared = prepare_with_resources(Case::Copy, ResourceConfig::default());
+    assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Progressed);
+    prepared
+        .fixture
+        .set_resources(ResourceConfig::default().with_read_slots(0));
 
     // When: execution pressure repeats and is then released.
     let wait = AsyncStallReason::ExecutionResourcePressure;

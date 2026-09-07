@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Stage, StepOutcome};
+use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Operation, Stage, StepOutcome};
 
 use super::AsyncStepStatus;
 use super::backend::DeviceWait;
@@ -10,7 +10,8 @@ use crate::device::drive::ModelStepStatus;
 pub(super) async fn run_worker(shared: &RunnerShared) {
     let executor = AsyncExecutor::new(&shared.backend);
     let mut service = DeviceService::new();
-    match executor.run(&mut service).await {
+    let mut operation = Operation::new(());
+    match executor.run(&mut service, &mut operation).await {
         Ok(()) | Err(AsyncRunError::Exhausted) => {}
         Err(AsyncRunError::BackendInteraction(error) | AsyncRunError::BackendWait(error)) => {
             match error {}
@@ -20,35 +21,40 @@ pub(super) async fn run_worker(shared: &RunnerShared) {
 }
 
 #[derive(Debug)]
-struct DeviceService {
-    active: bool,
-}
+struct DeviceService;
 
 impl DeviceService {
     const fn new() -> Self {
-        Self { active: true }
+        Self
     }
 }
 
 impl Stage<RunnerState> for DeviceService {
+    type Input = ();
     type Error = Infallible;
     type Output = ();
     type Wait = DeviceWait;
+    type State = bool;
+
+    fn start((): Self::Input) -> Self::State {
+        true
+    }
 
     fn step(
         &mut self,
         state: &mut RunnerState,
+        active: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        if !self.active {
+        if !*active {
             return StepOutcome::Exhausted;
         }
         if state.shutdown_requested {
             state.core.clear_command_pipeline();
-            self.active = false;
+            *active = false;
             state.worker_publication = Some(state.generation);
             return StepOutcome::Complete(Ok(()));
         }
-        let outcome = state.core.step_pipeline();
+        let outcome = Stage::step(&mut state.core, &mut (), &mut ());
         match outcome {
             StepOutcome::Progressed => StepOutcome::Progressed,
             StepOutcome::Pending(reason)

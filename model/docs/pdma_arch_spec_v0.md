@@ -202,7 +202,9 @@ structure probes; migration pins supplement the actor, queue, transaction, and M
 suites without exposing private owners. Full host/device, CPU, and interrupt
 stories remain in `crates/scenarios/tests`, whose live inventory is 56 tests. `DeviceCore`
 remains a public construction value so callers can inject shared memory and resource
-configuration, but its stepping and hardware-state mutation methods are crate-private.
+configuration. Its reusable `Stage<()>` implementation services one singleton device
+request and exposes `HardwareStepStatus`; queue provisioning and control remain on the
+existing host/device surfaces.
 
 Every `PdmaQueue` owns its directory entry and one closed `QueueIo` variant.
 `SemanticQueueIo` owns semantic rings; `ExactQueueIo` owns the active exact SQ/CQ/EQ
@@ -211,23 +213,48 @@ normalize fetches into the same semantic command path and share the same schedul
 execution unit, retirement unit, IRQ controller, and trace sink. Execution consumes
 contract semantic commands directly and defines no third command model.
 
-The hardware objects do not receive `&mut DeviceCore`. `DeviceCore` stores one private
-command pipeline composed with `hardware-interface-pipeline::Then`: fetch/decode,
-operation, then retirement. Private enums select the operation and retirement branches;
-`Then` owns phase advancement and retains downstream state. Admission and these stages
-advance as persistent typed stages, at most one architecture-visible interaction per
-leaf step. A downstream wait retains completed upstream state, so resumption cannot
-refetch, re-execute DMA, or republish a prior effect. The test-only synchronous `step`
-uses an immediate drive policy over that same pipeline and core. Queue, execution,
-retirement, and IRQ transitions remain methods of their owning objects while the
-composition root controls dependency direction and ordering.
+The hardware objects do not receive `&mut DeviceCore`. `Stage<C>` describes reusable
+hardware with explicit `Input`, `Output`, and separately owned request `State`.
+`Then<A, B>` owns both hardware operands and requires `A::Output = B::Input`; its
+`ThenState` retains the downstream request after upstream completes. Starting an
+operation creates request state without replacing hardware. `Operation` makes a
+completed or reset request inert, while the same stage accepts subsequent operations.
+
+The actual issue view borrows the unique scheduler and queue block, composing
+`Scheduler -> QueueBlock`. Its `SelectedQueue` carries queue identity; the queue produces
+`FetchedWork`, including command identity, completion routing, and the semantic operation
+or a frontend fault. `ExecutionUnit` owns a nested `Then<ResourceGate, Datapath>`:
+resource acceptance produces `AdmittedWork`, and the datapath turns it into
+`RetirementInput`. DMA faults are output data and reach retirement; they do not
+short-circuit the generic composition. Structural model failures may terminate a request.
+
+The device composes issue with execution, then routes the resulting typed retirement
+input to `RetirementUnit`. This explicit feedback topology matters: the same queue block
+owns both fetch and CQ/EQ publication, so it cannot be uniquely borrowed twice in one
+straight `Then` chain. Retirement borrows narrow queue/publication ports after dispatch
+releases them and returns `QueueFeedback` to the scheduler after publication and consume.
+There is no duplicate queue state. Dispatch context contains only shared DMA access,
+trace, and fetch accounting; stage owners remain outside it.
+
+Each outer turn preserves one architecture-visible interaction: selection and fetch are
+atomic together; the pure resource check and DMA are atomic together; retirement is the
+third turn. Composed inner stages use the same step semantics without introducing host
+interleavings, timing, or extra in-flight requests. The device retains dispatch/retirement
+state across waits, so resumption cannot refetch, repeat DMA, or republish an effect.
+Owned transfer types make these states independent of the temporary borrowed stage views;
+no GAT or higher-kinded encoding is needed for these non-borrowing request edges.
 
 `runtime` is only the async actor shell. Its worker uses the generic `AsyncExecutor`
 with a borrowed `DeviceInteractionBackend`. Command advancement returns `StepOutcome`
 directly, without an intermediate step executor or result translation enum. The private
-`DeviceService` stage adapts finite command outcomes to continuous service: accounting,
+`DeviceService` stage drives `DeviceCore` through its `Stage` implementation and adapts
+finite command outcomes to continuous service: accounting,
 idle/stall wake tokens, and shutdown. The executor owns interaction and wait driving.
-The retained command pipeline stays in `DeviceCore`, so reset clears it synchronously.
+The driving future owns no accepted command state. Accepted work stays in `DeviceCore`,
+so whole-device reset clears it synchronously. Device `Input = ()` requests service of
+this singleton hardware; it does not promise independently concurrent operations.
+Dropping an async driving future releases context access and leaves accepted work owned
+by the device; resetting an external generic operation alone does not reset hardware.
 `AsyncDevice` wraps one `DeviceCore` behind the
 single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,
 `RunnerShared`, the register endpoint, observation gate, closed-batch async facades,
@@ -235,7 +262,8 @@ waits, publication generations, and every lock acquisition live only in `runtime
 `interface::{mmio,batch}` contains only the synchronous preparation/effect and ordered
 commit seams described above. No lock, observer, or async primitive exists inside the
 hardware objects or execution units, and no guard crosses a device await boundary. There
-is no synchronous public device facade or second executor. Together these layers own the
+is no second synchronous device facade or second execution core. The reusable stage also
+permits deterministic inspection using the same interaction semantics. These layers own the
 following responsibilities:
 
 The interaction lock is the outer linearization boundary. Each register read/write,
@@ -563,7 +591,7 @@ interleaving exception is
 inside its one main future so the test can order an untraced submission before a traced
 doorbell without inventing a second software entry.
 
-Each device-worker turn advances at most one persistent pipeline leaf. Public `steps`
+Each device-worker turn advances at most one architecture-visible hardware interaction. Public `steps`
 accounting changes only when a command reaches its existing terminal progress outcome;
 internal `Progressed` transitions remain unpublished. The worker sleeps after idle or
 stalled observations until a runtime-owned wake generation changes. Reset clears the

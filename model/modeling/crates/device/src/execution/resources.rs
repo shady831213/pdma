@@ -12,7 +12,11 @@ pub(super) struct ResourceDemand {
 
 impl ResourceDemand {
     pub(super) fn for_command(command: &Command) -> Self {
-        match command.operation() {
+        Self::for_operation(command.operation())
+    }
+
+    pub(super) fn for_operation(operation: &CommandOperation) -> Self {
+        match operation {
             CommandOperation::Copy(_) => Self::copy(),
             CommandOperation::StridedCopy(operation) => Self::strided(*operation),
             CommandOperation::BroadcastCopy(operation) => Self::broadcast(operation),

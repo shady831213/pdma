@@ -1,6 +1,8 @@
 use std::num::NonZeroUsize;
 
-use hardware_interface_pipeline::{ImmediateExecutor, RunError, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{
+    ImmediateExecutor, Operation, RunError, RunOutcome, StepExecutor,
+};
 use pdma_model_contract::semantic::{
     BufferId, Command, CommandId, CommandOperation, EpochIrqSource, IrqSource, QueueConfigHandle,
     ResourceConfig,
@@ -11,7 +13,7 @@ use pdma_model_contract::semantic::{
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 
-use super::super::{DeviceCore, ModelStepStatus, PdmaCommandPipeline};
+use super::super::{DeviceCore, ModelStepStatus};
 use crate::{AsyncStallReason, MappedDmaRegion, ModelError};
 
 mod observation;
@@ -53,8 +55,7 @@ pub(super) enum PipelineRunOutcome {
 #[derive(Debug)]
 pub(super) struct Fixture {
     pub(super) core: DeviceCore,
-    pub(super) pipeline: PdmaCommandPipeline,
-    historical_fetches: usize,
+    pub(super) operation: Operation<DeviceCore, ()>,
 }
 
 pub(super) struct Prepared {
@@ -70,35 +71,33 @@ impl Fixture {
                 std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
                 resources,
             ),
-            pipeline: PdmaCommandPipeline::new(),
-            historical_fetches: 0,
+            operation: Operation::new(()),
         }
     }
 
     pub(super) fn restart(&mut self) {
-        self.pipeline = PdmaCommandPipeline::new();
+        self.operation = Operation::new(());
     }
 
     pub(super) const fn set_resources(&mut self, resources: ResourceConfig) {
-        self.historical_fetches = self
-            .historical_fetches
-            .saturating_add(self.core.execution.native_steps());
         self.core.execution = crate::execution::ExecutionUnit::new(resources);
     }
 
     pub(super) const fn fetch_count(&self) -> usize {
-        self.historical_fetches
-            .saturating_add(self.core.execution.native_steps())
+        self.core.native_steps()
     }
 
     pub(super) fn step(&mut self) -> PipelineRunOutcome {
-        normalize(&StepExecutor::new().step(&mut self.pipeline, &mut self.core))
+        normalize(&StepExecutor::new().step(&mut self.core, &mut self.operation, &mut ()))
     }
 
     pub(super) fn immediate(&mut self) -> PipelineRunOutcome {
         normalize(
-            &ImmediateExecutor::new(NonZeroUsize::new(16).expect("nonzero budget"))
-                .run(&mut self.pipeline, &mut self.core),
+            &ImmediateExecutor::new(NonZeroUsize::new(16).expect("nonzero budget")).run(
+                &mut self.core,
+                &mut self.operation,
+                &mut (),
+            ),
         )
     }
 }

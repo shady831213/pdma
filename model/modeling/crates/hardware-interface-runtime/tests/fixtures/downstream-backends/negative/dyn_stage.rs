@@ -3,16 +3,21 @@ use hip::{PipelineExt, Stage, StepOutcome};
 struct Terminal;
 
 impl Stage<()> for Terminal {
+    type Input = ();
     type Output = ();
     type Error = ();
     type Wait = ();
+    type State = ();
 
-    fn step(&mut self, _: &mut ()) -> StepOutcome<(), (), ()> {
+    fn start((): ()) {}
+
+    fn step(&mut self, _: &mut (), _: &mut ()) -> StepOutcome<(), (), ()> {
         StepOutcome::Complete(Ok(()))
     }
 }
 
 fn main() {
-    let stage: Box<dyn Stage<(), Output = (), Error = (), Wait = ()>> = Box::new(Terminal);
-    let _composed = stage.then(|()| Terminal);
+    let stage: Box<dyn Stage<(), Input = (), Output = (), Error = (), Wait = (), State = ()>> =
+        Box::new(Terminal);
+    let _composed = stage.then(Terminal);
 }

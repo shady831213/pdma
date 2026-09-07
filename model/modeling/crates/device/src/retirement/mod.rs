@@ -2,6 +2,7 @@ mod completion;
 mod fault;
 #[doc(hidden)]
 pub(crate) mod ports;
+pub(crate) mod stage;
 
 pub(crate) use ports::RetirementPorts;
 

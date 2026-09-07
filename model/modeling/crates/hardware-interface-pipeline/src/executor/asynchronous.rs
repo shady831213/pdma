@@ -1,4 +1,4 @@
-use crate::{AsyncInteractionBackend, Stage, StepOutcome};
+use crate::{AsyncInteractionBackend, Operation, Stage, StepOutcome};
 
 /// A statically dispatched asynchronous pipeline executor.
 #[derive(Debug)]
@@ -17,14 +17,21 @@ impl<B> AsyncExecutor<B> {
         &self.backend
     }
 
-    /// Runs a stage to terminal completion, waiting at each owned pending boundary.
+    /// Drives a retained operation to completion, awaiting each owned notification key.
+    ///
+    /// # Cancel safety
+    /// Dropping this future releases any pending backend acquisition or wait. The caller's
+    /// operation retains accepted request state and committed hardware effects remain.
+    /// Calling this method again resumes that operation without reconstructing hardware.
     pub async fn run<C, S>(
         &self,
         stage: &mut S,
+        operation: &mut Operation<S, C>,
     ) -> Result<S::Output, AsyncRunError<B::Error, S::Error>>
     where
         B: AsyncInteractionBackend<C, S::Wait> + Sync,
         S: Stage<C> + Send,
+        S::State: Send,
         S::Output: Send,
         S::Error: Send,
         S::Wait: Send,
@@ -32,7 +39,7 @@ impl<B> AsyncExecutor<B> {
         loop {
             let outcome = self
                 .backend
-                .interact(|context| stage.step(context))
+                .interact(|context| operation.step(stage, context))
                 .await
                 .map_err(AsyncRunError::BackendInteraction)?;
             match outcome {

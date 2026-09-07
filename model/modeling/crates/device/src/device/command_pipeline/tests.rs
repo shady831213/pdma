@@ -4,13 +4,13 @@
     reason = "checked unit-test fixtures"
 )]
 
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use pdma_model_contract::semantic::ResourceConfig;
 
-use super::{PdmaCommandPipeline, PipelineSlot};
-use crate::device::DeviceCore;
+use crate::device::{DeviceCore, ModelStepStatus};
 
 mod adverse;
+mod composition;
 mod no_replay;
 mod parity;
 mod support;
@@ -26,28 +26,29 @@ fn no_replay() {
 }
 
 #[test]
-#[should_panic(expected = "command pipeline exhausted before terminal result")]
-fn compatibility_step_rejects_exhausted_retained_pipeline() {
-    // Given: an already-terminal command pipeline is retained in the device slot.
+fn completed_operation_is_inert_and_device_accepts_another_operation() {
+    // Given: an idle device and one accepted generic operation.
     let mut core = DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default(),
     );
-    let mut pipeline = PdmaCommandPipeline::new();
-    loop {
-        match pipeline.step(&mut core) {
-            StepOutcome::Progressed => {}
-            StepOutcome::Complete(_) => break,
-            StepOutcome::Pending(reason) => panic!("idle pipeline stalled: {reason:?}"),
-            StepOutcome::Exhausted => panic!("pipeline exhausted before initial completion"),
-        }
-    }
-    core.command_pipeline = PipelineSlot {
-        pipeline: Some(pipeline),
-    };
+    core.enable_tracing();
+    let mut operation = Operation::new(());
+    assert_eq!(
+        operation.step(&mut core, &mut ()),
+        StepOutcome::Complete(Ok(ModelStepStatus::Idle))
+    );
+    let trace = core.trace_events();
 
-    // When: the compatibility driver tries to advance that retained pipeline.
-    let _ = core.step();
+    // When: the completed operation is revisited, then the hardware is reused.
+    assert_eq!(operation.step(&mut core, &mut ()), StepOutcome::Exhausted);
+    assert_eq!(core.trace_events(), trace);
+    let mut next = Operation::new(());
 
-    // Then: the should-panic contract rejects spinning on a non-interaction outcome.
+    // Then: a fresh operation completes without any retained exhausted state.
+    assert_eq!(
+        next.step(&mut core, &mut ()),
+        StepOutcome::Complete(Ok(ModelStepStatus::Idle))
+    );
+    assert!(core.command_pipeline.is_empty());
 }

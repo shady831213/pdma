@@ -23,6 +23,6 @@ impl DeviceCore {
     }
 
     pub(crate) const fn native_steps(&self) -> usize {
-        self.execution.native_steps()
+        self.native_fetches
     }
 }

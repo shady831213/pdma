@@ -6,17 +6,20 @@ use super::probe::{RunStateProbe, probe_run_state};
 use crate::ModelResult;
 use crate::status::AsyncStallReason;
 
+/// Observable completion of one singleton hardware service request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ModelStepStatus {
+pub enum HardwareStepStatus {
+    /// A command completed execution and retirement.
     Progressed,
+    /// A frontend fault was cached and awaits a separate retirement attempt.
     FaultCached,
+    /// The device has no runnable work.
     Idle,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "test-only stepped compatibility")
-    )]
+    /// The device requires an external capacity or queue-state change.
     Stalled(AsyncStallReason),
 }
+
+pub(crate) use HardwareStepStatus as ModelStepStatus;
 
 pub(crate) type CommandStepOutcome =
     StepOutcome<ModelStepStatus, crate::ModelError, AsyncStallReason>;

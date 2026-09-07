@@ -1,4 +1,4 @@
-use crate::dma::PdmaMemoryStage;
+use crate::memory::PdmaMemoryStage;
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::semantic::{EpochQueue, RingCursor};
 

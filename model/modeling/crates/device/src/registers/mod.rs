@@ -2,10 +2,16 @@ mod image;
 mod storage;
 
 #[cfg(test)]
-mod baseline_manifest;
+mod responses;
+
+#[cfg(test)]
+mod coherence;
+
+#[cfg(test)]
+mod lifecycle;
 
 pub(crate) use image::PdmaRegisters;
-#[cfg(debug_assertions)]
+#[cfg(test)]
 pub(crate) use storage::allocation_observation;
 
 fn invariant<T, E>(result: Result<T, E>) -> T {

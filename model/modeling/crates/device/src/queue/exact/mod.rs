@@ -1,6 +1,5 @@
 #[doc(hidden)]
 pub(crate) mod block;
-pub(crate) mod control;
 mod error;
 mod publication;
 mod request;
@@ -18,7 +17,7 @@ pub(crate) use ring_state::{RingState, SubmissionRingState, exact_cursor};
 pub(crate) use state::ActiveQueue;
 pub use status::{PendingDmaResult, QueueStatus};
 
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::io::{NormalizedFault, NormalizedFetch, PublicationOutcome};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{AbiEvent, QueueRingLayouts};

@@ -149,13 +149,14 @@ private interface helpers directly:
 ```text
 crates/device/src/
 ├── device/            # DeviceCore composition, retained request state, drive, and probes
-│   └── issue/         # Arbitration and Fetch operators composed as IssueUnit
+│   ├── issue/         # Arbitration and Fetch operators composed as IssueUnit
+│   ├── execution/    # ExecutionUnit and native semantic operations
+│   ├── retirement/   # RetirementUnit, typed ports, publication, and retry state
+│   └── control/      # cross-state queue activation, IRQ and whole-device reset
 ├── queue/             # QueueBlock plus semantic or exact ring state
-├── dma/               # PdmaMemoryMappings and checked memory access
+│   └── runnable.rs    # shared FIFO/deduplication state, not a stage
+├── memory/            # PdmaMemoryMappings, allocation proposals and checked access
 ├── registers/         # sole 4 KiB root image and its device-local storage backend
-├── scheduler/         # RunnableQueues FIFO/deduplication state, not a stage
-├── execution/         # ExecutionUnit and native semantic operations
-├── retirement/        # RetirementUnit, typed ports, publication, and retry state
 ├── irq/               # PdmaIrqController route, mask, latch, and notification state
 ├── trace/             # TraceSink state and format export
 ├── adapter/           # stateless ABI-command to semantic-command conversion
@@ -177,13 +178,15 @@ including their temporary staged DMA/register work; it likewise owns no persiste
 lock, or observer. The persistent state they act on remains directly owned by
 `DeviceCore` and its hardware objects.
 
-`queue::exact` owns exact queue requests, status, errors, controls, and ring-local
-transitions. It is the device-side owner of exact SQ/CQ/EQ mechanics, while the contract
+`queue::exact` owns exact queue requests, status, errors, and ring-local transitions.
+Cross-state activation and publication controls belong to `device::control::queue`.
+It is the device-side owner of exact SQ/CQ/EQ mechanics, while the contract
 continues to own the fixed ABI layouts and codecs. `DeviceCore` directly composes the one
 whole-device reset: after checked epoch advancement it clears resettable queues,
-scheduler, retirement, IRQ, and register state while retaining the specified persistent
+runnable, retirement, IRQ, and register state while retaining the specified persistent
 DMA mappings/bytes/generation, trace history, resource configuration, and lifecycle
-accounting.
+accounting. Typed reset calls this device operation directly; MMIO reset maps the same
+typed result into its exact response vocabulary.
 
 `runtime` is the private asynchronous facade over the core. It owns the single Tokio lock
 that serializes host calls and worker steps, wake/publication generations, the register
@@ -193,9 +196,10 @@ model. The backend centralizes locked updates and notification publication. Oper
 with observers commit under the lock, emit after unlocking, then publish the notification;
 an emission error does not roll back committed state or publish a success notification.
 Each caller retains its explicit notification policy, including legacy error paths.
-The public device API is intentionally only crate-root reexports plus `pub mod dma`; there
-is no public device `abi` or `runtime` namespace, no public synchronous device facade,
-and no second executor.
+The public device API is intentionally only crate-root reexports plus `pub mod memory`;
+`dma` remains an import alias for existing downstream users, not a separate implementation.
+There is no public device `abi` or `runtime` namespace, no public synchronous device
+facade, and no second executor.
 
 Internal component and composition invariants live beside their owners under `src/**/tests`.
 The `crates/device/tests` binaries are behavioral public-surface tests, not source

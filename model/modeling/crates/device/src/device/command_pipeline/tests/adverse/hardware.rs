@@ -1,9 +1,9 @@
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 
 use crate::ModelError;
-use crate::device::{DeviceCore, ModelStepStatus, hardware_context::HardwareContext};
-use crate::retirement::RetirementUnit;
-use crate::retirement::stage::RetirementInput;
+use crate::device::retirement::RetirementUnit;
+use crate::device::retirement::stage::RetirementInput;
+use crate::device::{DeviceCore, ModelStepStatus, context::HardwareContext};
 
 #[test]
 fn real_hardware_owners_implement_the_shared_stage_contract() {
@@ -11,7 +11,7 @@ fn real_hardware_owners_implement_the_shared_stage_contract() {
     fn assert_device<S: Stage<(), Error = ModelError>>() {}
 
     assert_stage::<crate::device::issue::IssueUnit>();
-    assert_stage::<crate::execution::ExecutionUnit>();
+    assert_stage::<crate::device::execution::ExecutionUnit>();
     assert_stage::<RetirementUnit>();
     assert_device::<DeviceCore>();
 }
@@ -39,7 +39,7 @@ pub(super) fn retire(
     let mut operation = Operation::new(input);
     let mut context = HardwareContext {
         queues: &mut core.queues,
-        scheduler: &mut core.scheduler,
+        runnable: &mut core.runnable,
         dma: &core.dma,
         irq: &mut core.irq,
         trace: &mut core.trace,

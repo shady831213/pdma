@@ -2,13 +2,13 @@ use std::cell::{Cell, RefCell};
 
 use hardware_interface_runtime::{StorageBackend, StorageError};
 
-#[cfg(debug_assertions)]
+#[cfg(test)]
 thread_local! {
     static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
     static LIVE_IMAGES: Cell<usize> = const { Cell::new(0) };
 }
 
-#[cfg(debug_assertions)]
+#[cfg(test)]
 pub(crate) fn allocation_observation() -> (usize, usize) {
     (ALLOCATIONS.get(), LIVE_IMAGES.get())
 }
@@ -30,9 +30,9 @@ impl DeviceRegisterStorage {
 
 impl From<Vec<u8>> for DeviceRegisterStorage {
     fn from(value: Vec<u8>) -> Self {
-        #[cfg(debug_assertions)]
+        #[cfg(test)]
         ALLOCATIONS.set(ALLOCATIONS.get().saturating_add(1));
-        #[cfg(debug_assertions)]
+        #[cfg(test)]
         LIVE_IMAGES.set(LIVE_IMAGES.get().saturating_add(1));
         Self {
             value: RefCell::new(value),
@@ -41,9 +41,10 @@ impl From<Vec<u8>> for DeviceRegisterStorage {
     }
 }
 
+#[cfg(test)]
 impl Drop for DeviceRegisterStorage {
     fn drop(&mut self) {
-        #[cfg(debug_assertions)]
+        #[cfg(test)]
         LIVE_IMAGES.set(LIVE_IMAGES.get().saturating_sub(1));
     }
 }

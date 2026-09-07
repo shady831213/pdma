@@ -3,8 +3,8 @@ use pdma_model_contract::semantic::CommandOperation;
 
 use super::arbitrate::SelectedQueue;
 use crate::device::ModelStepStatus;
-use crate::device::hardware_context::HardwareContext;
-use crate::execution::CommandRoute;
+use crate::device::context::HardwareContext;
+use crate::device::execution::CommandRoute;
 use crate::queue::io::{NormalizedFault, NormalizedFetch};
 use crate::{AsyncStallReason, ModelError};
 

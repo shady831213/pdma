@@ -44,10 +44,12 @@ Ignore generated `model/modeling/target/` content.
 | --- | --- | --- |
 | Contract ABI | `crates/contract/src/abi/` | Layout-exact records, registers, MMIO, rings, codecs, and errors. |
 | Contract semantic | `crates/contract/src/semantic/` | Layout-independent commands, identities, queue controls, results, IRQ, resources, and trace vocabulary. |
-| Device engine | `crates/device/src/engine/` | Deterministic behavior that directly executes contract semantic commands; it is behavior, not another data model. |
-| Device ABI state | `crates/device/src/abi/` | Exact DMA addressing, ring state and publication, MMIO behavior, and register endpoint. |
+| Device composition | `crates/device/src/device/` | Ownership root, issue/execution/retirement operators, retained requests and typed control. |
+| Device queue state | `crates/device/src/queue/` | Shared semantic/exact queues, ring-local transitions and runnable FIFO state. |
+| Device memory | `crates/device/src/memory/` | Reset-persistent mappings and checked access over runtime storage; public `dma` is a compatibility alias. |
+| Device MMIO | `crates/device/src/registers/`, `crates/device/src/interface/` | Generated register image, synchronous MMIO effects and closed atomic batches. |
 | Device adapter | `crates/device/src/adapter/` | Stateless typed conversion from ABI descriptors into contract semantic commands. |
-| Device runtime | `crates/device/src/runtime/` | Actor facade, shared orchestration state, reset, worker, and wait mechanics. |
+| Device runtime | `crates/device/src/runtime/` | Async facade, lock/notification backend, thin access adapters, worker and wait mechanics. |
 | Host semantic | `crates/host/src/semantic/` | Driver, accounting, semantic port, and transport-independent errors. |
 | Host ABI adapter | `crates/host/src/adapter/abi/` | Register port, device access, exact capabilities, and semantic-to-ABI projection. |
 | Host runtime | `crates/host/src/runtime/` | CPU-local and interrupt delivery integration. |

@@ -4,19 +4,13 @@ use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ResetOutcome {
     Success(DeviceEpoch),
     Rejected(PdmaControlError, MmioResultDetails),
-}
-
-impl ResetOutcome {
-    pub(crate) const fn typed_result(self) -> Result<DeviceEpoch, PdmaControlError> {
-        match self {
-            Self::Success(epoch) => Ok(epoch),
-            Self::Rejected(error, _) => Err(error),
-        }
-    }
 }
 
 pub(crate) fn execute(state: &mut DeviceCore, expected_epoch: u64) -> ResetOutcome {

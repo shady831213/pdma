@@ -1,7 +1,7 @@
 use hardware_interface_pipeline::{Stage, StepOutcome, Then};
 
 use super::DeviceCore;
-use super::hardware_context::HardwareContext;
+use super::context::HardwareContext;
 use super::probe::{RunStateProbe, probe_run_state};
 #[cfg(test)]
 use crate::ModelResult;
@@ -47,7 +47,7 @@ impl DeviceCore {
         }
         let mut context = HardwareContext {
             queues: &mut self.queues,
-            scheduler: &mut self.scheduler,
+            runnable: &mut self.runnable,
             dma: &self.dma,
             irq: &mut self.irq,
             trace: &mut self.trace,
@@ -73,12 +73,12 @@ impl DeviceCore {
     }
 
     fn scan_admission(&mut self) -> Admission {
-        let candidates = self.scheduler.runnable_len();
+        let candidates = self.runnable.runnable_len();
         if candidates == 0 {
             return match probe_run_state(
                 &self.queues,
                 &self.dma,
-                &self.scheduler,
+                &self.runnable,
                 &self.execution,
                 &self.retirement,
             ) {
@@ -91,7 +91,7 @@ impl DeviceCore {
             match probe_run_state(
                 &self.queues,
                 &self.dma,
-                &self.scheduler,
+                &self.runnable,
                 &self.execution,
                 &self.retirement,
             ) {
@@ -100,7 +100,7 @@ impl DeviceCore {
                     reason: AsyncStallReason::ExecutionResourcePressure,
                 } => {
                     first_starved.get_or_insert(queue);
-                    self.scheduler.rotate_current();
+                    self.runnable.rotate_current();
                 }
                 RunStateProbe::Idle => return Admission::Idle,
                 RunStateProbe::Running | RunStateProbe::Blocked { .. } => {

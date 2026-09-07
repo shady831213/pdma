@@ -1,5 +1,5 @@
-use crate::dma::MappedDmaRegion;
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::MappedDmaRegion;
+use crate::memory::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
     AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultSite, AbiOperandVisit,

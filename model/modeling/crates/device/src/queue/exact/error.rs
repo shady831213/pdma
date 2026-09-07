@@ -1,4 +1,4 @@
-use crate::dma::PdmaMemoryError;
+use crate::memory::PdmaMemoryError;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::semantic::{DeviceEpoch, SemanticError};
 use std::fmt;

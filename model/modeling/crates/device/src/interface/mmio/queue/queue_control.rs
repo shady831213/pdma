@@ -1,6 +1,6 @@
 use super::{QueueRequest, status_response};
 use crate::device::DeviceCore;
-use crate::dma::PdmaMemoryError;
+use crate::memory::PdmaMemoryError;
 use crate::queue::exact::{PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{

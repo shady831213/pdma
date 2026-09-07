@@ -1,7 +1,6 @@
 //! Device-local interrupt routing, masking, latching, and notification state.
 
 #[doc(hidden)]
-#[doc(hidden)]
 pub(crate) mod controller;
 
 pub(crate) use controller::PdmaIrqController;

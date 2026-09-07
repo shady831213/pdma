@@ -1,4 +1,4 @@
-use crate::dma::PdmaMemoryStage;
+use crate::memory::PdmaMemoryStage;
 use crate::queue::exact::{PdmaControlError, QueueStatus, SubmissionAcceptance};
 use crate::runtime::AsyncDeviceHandle;
 use pdma_model_contract::semantic::{QueueActivation, QueueControl};

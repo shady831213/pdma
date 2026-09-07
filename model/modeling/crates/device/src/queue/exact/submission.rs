@@ -1,7 +1,7 @@
 use super::ActiveQueue;
 use super::PdmaControlError;
 use crate::adapter::command::ExactCommandContext;
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::io::{NormalizedFault, NormalizedFetch};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{

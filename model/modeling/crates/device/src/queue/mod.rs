@@ -6,6 +6,7 @@ pub(crate) mod exact;
 pub(crate) mod io;
 #[doc(hidden)]
 pub(crate) mod ring;
+pub(crate) mod runnable;
 #[doc(hidden)]
 pub(crate) mod semantic;
 
@@ -19,7 +20,7 @@ pub(crate) struct QueueBlock {
 
 use self::io::{NormalizedFetch, PublicationOutcome};
 use self::semantic::SemanticQueueIo;
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::exact::ExactQueueIo;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::{

@@ -1,7 +1,7 @@
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use pdma_model_contract::semantic::QueueId;
 
-use crate::device::hardware_context::HardwareContext;
+use crate::device::context::HardwareContext;
 use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug, Clone, Copy)]
@@ -27,7 +27,7 @@ impl Stage<HardwareContext<'_>> for Arbitration {
         active: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         if std::mem::replace(active, false) {
-            StepOutcome::Complete(Ok(SelectedQueue(context.scheduler.next())))
+            StepOutcome::Complete(Ok(SelectedQueue(context.runnable.next())))
         } else {
             StepOutcome::Exhausted
         }

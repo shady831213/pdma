@@ -4,7 +4,7 @@ mod resolve;
 mod vector;
 
 use crate::ModelResult;
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::PdmaMemoryMappings;
 use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, AbiEvent, AbiFault};
 use pdma_model_contract::semantic::{Command, CommandId, CommandOperation};
 

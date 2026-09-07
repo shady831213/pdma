@@ -1,6 +1,6 @@
 use super::io::{FaultPublication, NormalizedFetch, PublicationOutcome};
 use super::{PdmaQueue, QueueBlock};
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::PdmaMemoryMappings;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::{
     Command, CommandId, CompletionRecord, CompletionRingId, DeviceEpoch, EventRecord, QueueConfig,

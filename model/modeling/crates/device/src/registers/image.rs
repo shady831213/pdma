@@ -63,22 +63,6 @@ impl PdmaRegisters {
     pub(crate) fn image_extent(&self) -> usize {
         invariant(self.image.view(|_| PdmaMmioMap::EXTENT))
     }
-
-    #[cfg(debug_assertions)]
-    pub(crate) fn inspect_for_test<R>(
-        &self,
-        operation: impl for<'view> FnOnce(PdmaMmioMapView<'view>) -> R,
-    ) -> R {
-        self.view(operation)
-    }
-
-    #[cfg(debug_assertions)]
-    pub(crate) fn mutate_for_test<R>(
-        &self,
-        operation: impl for<'view> FnOnce(PdmaMmioMapViewMut<'view>) -> R,
-    ) -> R {
-        self.view_mut(operation)
-    }
 }
 
 fn offset(raw: usize, width: usize) -> RegisterBusOffset {

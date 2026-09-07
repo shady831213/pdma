@@ -1,11 +1,11 @@
 use hardware_interface_pipeline::{Stage, StepOutcome, Then, ThenState};
 
 use super::DeviceCore;
-use super::hardware_context::HardwareContext;
+use super::context::HardwareContext;
 use super::issue::IssueUnit;
-use crate::execution::ExecutionUnit;
-use crate::retirement::RetirementUnit;
-use crate::retirement::stage::RetirementInput;
+use crate::device::execution::ExecutionUnit;
+use crate::device::retirement::RetirementUnit;
+use crate::device::retirement::stage::RetirementInput;
 use crate::{AsyncStallReason, ModelError};
 
 type CommandStages = Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>;

@@ -6,7 +6,7 @@ mod pin {
 use hardware_interface_runtime::{AccessOrigin, RegisterAccess, RegisterObservation, RegisterObserver};
 use pdma_model_contract::abi::mmio::{GlobalResponseRegistersView, IrqResponseRegistersView, MMIO_REGION_SIZE, MmioAccess, MmioAccessError, MmioReset, MmioResult, PdmaMmioMap, QueueResponseRegistersView};
 use pdma_model_contract::semantic::{Command, CommandId, CopyRequest, DeviceEpoch, EventRouting, QueueActivation, QueueConfig, QueueControl, QueueId, QueueRingObjects, ResourceConfig, RingCursor, SoftwareOwnerId, WholeDeviceReset};
-use pdma_model_device::{__register_image_allocations_for_test, AsyncDevice, AsyncDeviceHandle, DeviceCore, DmaWrite, MmioRegisterError, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, DeviceCore, DmaWrite, MmioRegisterError, PdmaBatchError, QueueBootstrapBatch, SubmissionBatch};
 use std::sync::{Arc, Mutex};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -37,25 +37,11 @@ fn activation(stage: &pdma_model_device::PdmaMemoryStage) -> TestResult<QueueAct
 async fn response(handle: &AsyncDeviceHandle, entries: &[(u32, usize)]) -> TestResult<[u64; 9]> { let mut values = [0; 9]; for (slot, &(offset, width)) in values.iter_mut().zip(entries) { *slot = read_number(handle, offset, width).await?; } Ok(values) }
 async fn readable_image(handle: &AsyncDeviceHandle) -> TestResult<Vec<Vec<u8>>> { let mut image = Vec::new(); for (&offset, &width) in OFFSETS.iter().zip(&WIDTHS) { if access(offset) != MmioAccess::WriteOnly { image.push(handle.read_mmio(u32::try_from(offset)?, width as u128).await?); } } Ok(image) }
 async fn response_bytes(handle: &AsyncDeviceHandle, entries: &[(u32, usize)]) -> TestResult<Vec<u8>> { let mut bytes = Vec::new(); for &(offset, width) in entries { bytes.extend(handle.read_mmio(offset, width as u128).await?); } Ok(bytes) }
-async fn typed_values(handle: &AsyncDeviceHandle) -> TestResult<[u64; 66]> {
-    handle.__inspect_register_image_for_test(|root| Ok([
-        root.g_magic()?.value()?, root.g_mmio_abi_version()?.value()?, root.g_req_abi_version()?.value()?, root.g_req_features()?.value()?, root.g_reset_expected_epoch()?.value()?, root.g_command()?.value()?, root.g_result()?.value()?, root.g_detail0()?.value()?, root.g_detail1()?.value()?, root.g_detail2()?.value()?, root.g_rsp_abi_version()?.value()?, root.g_rsp_run_state()?.value()?, root.g_rsp_features()?.value()?, root.g_rsp_epoch()?.value()?, root.g_max_ring_depth()?.value()?, root.g_max_indirect_destinations()?.value()?, root.g_max_transfer_bytes()?.value()?, root.g_max_strided_rows()?.value()?, root.g_max_stride()?.value()?,
-        root.q_expected_epoch()?.value()?, root.q_id()?.value()?, root.q_expected_cursor()?.value()?, root.q_new_cursor()?.value()?, root.q_cfg_sq_depth()?.value()?, root.q_cfg_cq_depth()?.value()?, root.q_cfg_event_policy()?.value()?, root.q_cfg_software_owner()?.value()?, root.q_sq_base()?.value()?, root.q_sq_depth()?.value()?, root.q_cq_base()?.value()?, root.q_cq_depth()?.value()?, root.q_eq_base()?.value()?, root.q_eq_depth()?.value()?, root.q_command()?.value()?, root.q_result()?.value()?, root.q_detail0()?.value()?, root.q_detail1()?.value()?, root.q_detail2()?.value()?, root.q_rsp_epoch()?.value()?, root.q_rsp_id()?.value()?, root.q_rsp_sq_producer()?.value()?, root.q_rsp_sq_captured()?.value()?, root.q_rsp_sq_consumer()?.value()?, root.q_rsp_cq_producer()?.value()?, root.q_rsp_cq_consumer()?.value()?, root.q_rsp_eq_producer()?.value()?, root.q_rsp_eq_consumer()?.value()?,
-        root.i_expected_epoch()?.value()?, root.i_source_id()?.value()?, root.i_source_kind()?.value()?, root.i_route_kind()?.value()?, root.i_route_vector()?.value()?, root.i_command()?.value()?, root.i_result()?.value()?, root.i_detail0()?.value()?, root.i_detail1()?.value()?, root.i_detail2()?.value()?, root.i_rsp_epoch()?.value()?, root.i_rsp_source_id()?.value()?, root.i_rsp_source_kind()?.value()?, root.i_rsp_state()?.value()?, root.i_rsp_route_kind()?.value()?, root.i_rsp_notification_kind()?.value()?, root.i_rsp_vector()?.value()?, root.i_rsp_message_id()?.value()?, root.i_rsp_pending_messages()?.value()?,
-    ])).await
-}
-async fn write_typed_requests(handle: &AsyncDeviceHandle) -> TestResult {
-    handle.__mutate_register_image_for_test(|mut root| -> TestResult {
-        root.g_req_abi_version_mut()?.set_value(2)?; root.g_req_features_mut()?.set_value(2)?; root.g_reset_expected_epoch_mut()?.set_value(2)?;
-        root.q_expected_epoch_mut()?.set_value(2)?; root.q_id_mut()?.set_value(2)?; root.q_expected_cursor_mut()?.set_value(2)?; root.q_new_cursor_mut()?.set_value(2)?; root.q_cfg_sq_depth_mut()?.set_value(2)?; root.q_cfg_cq_depth_mut()?.set_value(2)?; root.q_cfg_event_policy_mut()?.set_value(0)?; root.q_cfg_software_owner_mut()?.set_value(2)?; root.q_sq_base_mut()?.set_value(2)?; root.q_sq_depth_mut()?.set_value(2)?; root.q_cq_base_mut()?.set_value(2)?; root.q_cq_depth_mut()?.set_value(2)?; root.q_eq_base_mut()?.set_value(2)?; root.q_eq_depth_mut()?.set_value(2)?;
-        root.i_expected_epoch_mut()?.set_value(2)?; root.i_source_id_mut()?.set_value(2)?; root.i_source_kind_mut()?.set_value(1)?; root.i_route_kind_mut()?.set_value(1)?; root.i_route_vector_mut()?.set_value(2)?; Ok(())
-    }).await
-}
 
 #[tokio::test(flavor = "current_thread")]
 async fn authoritative_image_all_66_metadata_rows_reset_reads_and_request_writes() -> TestResult {
     // Given: literal v0.9 rows and a fresh public device endpoint.
-    let allocations = __register_image_allocations_for_test(); let resolved = PdmaMmioMap::resolve()?; let names: Vec<_> = NAMES.split_whitespace().collect(); let core = DeviceCore::new(Arc::new(hardware_interface_runtime::SharedMemory::new()), ResourceConfig::default()); assert_eq!(__register_image_allocations_for_test(), (allocations.0 + 1, allocations.1 + 1)); let (device, worker) = AsyncDevice::from_core(core); let worker = tokio::spawn(worker.run()); let handle = device.handle();
+    let resolved = PdmaMmioMap::resolve()?; let names: Vec<_> = NAMES.split_whitespace().collect(); let core = DeviceCore::new(Arc::new(hardware_interface_runtime::SharedMemory::new()), ResourceConfig::default()); let (device, worker) = AsyncDevice::from_core(core); let worker = tokio::spawn(worker.run()); let handle = device.handle();
     // When: every row is resolved and every readable/reset or writable/request register is used.
     assert_eq!((resolved.registers().len(), MMIO_REGION_SIZE, PdmaMmioMap::EXTENT), (66, 0x1000, 0x1000));
     for (((register, &offset), &width), name) in resolved.registers().iter().zip(&OFFSETS).zip(&WIDTHS).zip(&names) {
@@ -64,14 +50,12 @@ async fn authoritative_image_all_66_metadata_rows_reset_reads_and_request_writes
         if access(offset) != MmioAccess::WriteOnly { assert_eq!(read_number(&handle, u32::try_from(offset)?, width).await?, reset_value); }
         if access(offset) == MmioAccess::ReadWrite { let value = mask(offset, width) & 1; write_number(&handle, u32::try_from(offset)?, width, value).await?; assert_eq!(read_number(&handle, u32::try_from(offset)?, width).await?, value); }
     }
-    assert_eq!(typed_values(&handle).await?, [0x414d_4450,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
-    write_typed_requests(&handle).await?; for (offset,width,value) in [(0x008,4,2),(0x010,8,2),(0x018,8,2),(0x100,8,2),(0x108,8,2),(0x110,8,2),(0x118,8,2),(0x120,4,2),(0x124,4,2),(0x128,4,0),(0x130,8,2),(0x138,8,2),(0x140,4,2),(0x148,8,2),(0x150,4,2),(0x158,8,2),(0x160,4,2),(0x200,8,2),(0x208,8,2),(0x210,4,1),(0x214,4,1),(0x218,8,2)] { assert_eq!(read_number(&handle,offset,width).await?,value); }
     write_number(&handle, 0x008, 4, 1).await?; write_number(&handle, 0x010, 8, 0).await?; write_number(&handle, 0x020, 4, 1).await?; let global_bytes = response_bytes(&handle, &[(0x040,4),(0x044,4),(0x048,8),(0x050,8),(0x058,4),(0x05c,4),(0x060,4),(0x064,4),(0x068,4)]).await?; let global = GlobalResponseRegistersView::new(&global_bytes)?; assert_eq!((global.abi_version()?.value()?, global.run_state()?.value()?, global.features()?.value()?, global.epoch()?.value()?), (1,0,0xff,0));
     let stage = handle.stage_memory_regions(&[128,64,128]).await?; let activation = activation(&stage)?; handle.bootstrap_queue_batch(QueueBootstrapBatch::new(stage,activation)).await?; let queue_bytes = response_bytes(&handle, &[(0x188,8),(0x190,8),(0x198,8),(0x1a0,8),(0x1a8,8),(0x1b0,8),(0x1b8,8),(0x1c0,8),(0x1c8,8)]).await?; let queue = QueueResponseRegistersView::new(&queue_bytes)?; assert_eq!((queue.epoch()?.value()?,queue.queue_id()?.value()?,queue.sq_producer()?.value()?,queue.sq_captured()?.value()?,queue.sq_consumer()?.value()?,queue.cq_producer()?.value()?,queue.cq_consumer()?.value()?,queue.eq_producer()?.value()?,queue.eq_consumer()?.value()?), (0,0,0,0,0,0,0,0,0));
     write_number(&handle,0x200,8,0).await?; write_number(&handle,0x208,8,0).await?; write_number(&handle,0x210,4,0).await?; write_number(&handle,0x220,4,7).await?; let irq_bytes = response_bytes(&handle,&[(0x240,8),(0x248,8),(0x250,4),(0x254,4),(0x258,4),(0x25c,4),(0x260,8),(0x268,8),(0x270,8)]).await?; let irq = IrqResponseRegistersView::new(&irq_bytes)?; assert_eq!((irq.epoch()?.value()?,irq.source_id()?.value()?,irq.source_kind()?.value()?,irq.state()?.value()?,irq.route_kind()?.value()?,irq.notification_kind()?.value()?,irq.vector()?.value()?,irq.message_id()?.value()?,irq.pending_messages()?.value()?), (0,0,0,5,0,0,0,0,0));
-    assert_eq!(__register_image_allocations_for_test(), (allocations.0 + 1, allocations.1 + 1)); device.request_shutdown().await; worker.await?; drop(handle); drop(device); assert_eq!(__register_image_allocations_for_test(), (allocations.0 + 1, allocations.1));
-    // Then: one live image drove every metadata row, raw request, typed effect, and compact response while the spawned actor remained Send.
-    println!("authoritative_image allocations=1 live=1 extent=4096 metadata_rows=66 compact=global,queue,irq actor=spawned_joined"); Ok(())
+    device.request_shutdown().await; worker.await?;
+    // Then: the endpoint exposes every metadata row, raw request, and compact response from a spawned actor.
+    println!("authoritative_endpoint extent=4096 metadata_rows=66 compact=global,queue,irq actor=spawned_joined"); Ok(())
 }
 
 #[tokio::test(flavor = "current_thread")]

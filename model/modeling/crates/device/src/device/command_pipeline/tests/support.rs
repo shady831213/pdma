@@ -80,7 +80,7 @@ impl Fixture {
     }
 
     pub(super) const fn set_resources(&mut self, resources: ResourceConfig) {
-        self.core.execution = crate::execution::ExecutionUnit::new(resources);
+        self.core.execution = crate::device::execution::ExecutionUnit::new(resources);
     }
 
     pub(super) const fn fetch_count(&self) -> usize {

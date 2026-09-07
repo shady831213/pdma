@@ -3,9 +3,9 @@ use super::{
     command_error, map_access_error, submission_request, validate_submission_shape,
 };
 use crate::device::DeviceCore;
-use crate::dma::{PdmaMemoryError, PreparedPdmaMapping};
 use crate::interface::mmio::queue::status_response;
 use crate::interface::mmio::{prepare_bootstrap_batch_write, prepare_submission_batch_write};
+use crate::memory::{PdmaMemoryError, PreparedPdmaMapping};
 use crate::queue::exact::SubmissionAcceptance;
 use hardware_interface_runtime::{MemoryAlignment, ObservationGate};
 
@@ -38,7 +38,7 @@ pub(crate) fn commit_bootstrap(
         .dma
         .prepare_stage(&request.stage)
         .map_err(|error| PdmaBatchError::from_dma(error, context))?;
-    let memory = state.dma.backing_memory();
+    let memory = state.dma.shared_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
             PdmaBatchError::from_dma(PdmaMemoryError::from_runtime_memory(&error), context)
@@ -89,7 +89,7 @@ pub(crate) fn commit_submission(
     validate_submission_shape(state, request)?;
     let prepared_mapping = prepare_submission_mapping(state, request)?;
     let register_request = submission_request(state, request);
-    let memory = state.dma.backing_memory();
+    let memory = state.dma.shared_memory();
     memory.transaction(|transaction| {
         let mut draft = transaction.try_draft().map_err(|error| {
             PdmaBatchError::from_dma(
@@ -110,7 +110,7 @@ pub(crate) fn commit_submission(
         if let Some((_, write)) = &request.indirect {
             draft
                 .write(
-                    crate::dma::runtime_address(write.address()),
+                    crate::memory::runtime_address(write.address()),
                     MemoryAlignment::ONE,
                     write.bytes(),
                 )
@@ -120,7 +120,7 @@ pub(crate) fn commit_submission(
         }
         draft
             .write(
-                crate::dma::runtime_address(request.descriptor.address()),
+                crate::memory::runtime_address(request.descriptor.address()),
                 MemoryAlignment::ONE,
                 request.descriptor.bytes(),
             )

@@ -1,5 +1,5 @@
 use super::{ActiveQueue, RingState};
-use crate::dma::PdmaMemoryMappings;
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::io::PublicationOutcome;
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiRingEntry};
 use pdma_model_contract::semantic::CompletionRecord;

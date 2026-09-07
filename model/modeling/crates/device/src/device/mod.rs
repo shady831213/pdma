@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
 use hardware_interface_runtime::SharedMemory;
-use pdma_model_contract::semantic::{
-    DeviceEpoch, IrqLine, IrqVector, ResourceConfig, WholeDeviceReset,
-};
+use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector, ResourceConfig};
 
-use crate::dma::PdmaMemoryMappings;
-use crate::execution::ExecutionUnit;
+use crate::device::execution::ExecutionUnit;
+use crate::device::retirement::RetirementUnit;
 use crate::irq::PdmaIrqController;
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
-use crate::queue::exact::PdmaControlError;
+use crate::queue::runnable::RunnableQueues;
 use crate::registers::PdmaRegisters;
-use crate::retirement::RetirementUnit;
-use crate::scheduler::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 
@@ -29,7 +26,7 @@ pub struct DeviceCore {
     pub(crate) dma: PdmaMemoryMappings,
     pub(crate) registers: PdmaRegisters,
     queues: QueueBlock,
-    scheduler: RunnableQueues,
+    runnable: RunnableQueues,
     issue: issue::IssueUnit,
     execution: ExecutionUnit,
     retirement: RetirementUnit,
@@ -50,7 +47,7 @@ impl DeviceCore {
             dma: PdmaMemoryMappings::new(memory),
             registers: PdmaRegisters::new(),
             queues: QueueBlock::default(),
-            scheduler: RunnableQueues::default(),
+            runnable: RunnableQueues::default(),
             issue: issue::IssueUnit::default(),
             execution: ExecutionUnit::new(config),
             retirement: RetirementUnit::default(),
@@ -77,46 +74,20 @@ impl DeviceCore {
         }
     }
 
-    pub(crate) fn reset(&mut self, epoch: DeviceEpoch) {
-        self.epoch = epoch;
-        self.command_pipeline.clear();
-        self.queues.clear();
-        self.scheduler.reset();
-        self.retirement.reset();
-        self.irq = PdmaIrqController::new(epoch, IrqLine::new(IrqVector::new(0)));
-    }
-
-    pub(crate) fn reset_runner(
-        &mut self,
-        request: WholeDeviceReset,
-    ) -> Result<DeviceEpoch, PdmaControlError> {
-        let epoch = self.epoch();
-        if request.expected_epoch() != epoch {
-            return Err(PdmaControlError::StaleEpoch {
-                expected: epoch,
-                actual: request.expected_epoch(),
-            });
-        }
-        let next = epoch.next()?;
-        self.reset(next);
-        self.registers.reset();
-        self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
-        Ok(next)
-    }
-
     /// Returns committed invocations of the sole reset transition.
     pub const fn reset_runner_calls(&self) -> usize {
         self.reset_runner_calls
     }
 }
 mod command_pipeline;
+pub(crate) mod context;
+mod control;
 #[doc(hidden)]
 pub(crate) mod drive;
-pub(crate) mod hardware_context;
-mod irq;
+pub(crate) mod execution;
 pub(crate) mod issue;
 mod probe;
-mod queue;
+pub(crate) mod retirement;
 mod trace;
 
 pub(crate) use drive::ModelStepStatus;

@@ -92,25 +92,8 @@ async fn run() -> TestResult {
     assert_eq!(handle.snapshot().await, before);
     assert_eq!(response(&handle).await?, prior);
     assert_eq!(result(&handle).await?, prior_result);
-    let typed = handle
-        .__inspect_register_image_for_test(|root| -> TestResult<[u64; 9]> {
-            let global = root.global()?;
-            Ok([
-                global.rsp_abi_version()?.value()?,
-                global.rsp_run_state()?.value()?,
-                global.rsp_features()?.value()?,
-                global.rsp_epoch()?.value()?,
-                global.max_ring_depth()?.value()?,
-                global.max_indirect_destinations()?.value()?,
-                global.max_transfer_bytes()?.value()?,
-                global.max_strided_rows()?.value()?,
-                global.max_stride()?.value()?,
-            ])
-        })
-        .await?;
-    assert_eq!(typed, prior);
     println!(
-        "global result=[1,0,0,0] failures=[0x100,0x101,0x11b] response={prior:?} typed_raw=agree same_write_future=committed"
+        "global result=[1,0,0,0] failures=[0x100,0x101,0x11b] response={prior:?} same_write_future=committed"
     );
     Ok(())
 }

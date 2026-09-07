@@ -19,6 +19,7 @@ crates/
 ├── hardware-interface-schema/ # reusable runtime-neutral record/register schema facade
 ├── hardware-interface-schema-macros/ # proc-macro implementation for the schema facade
 ├── hardware-interface-runtime/ # shared memory/register/CPU/interrupt/trace runtime
+├── hardware-interface-pipeline/ # reusable typed stage composition and driving policies
 ├── host/             # driver, canonical register port, PDMA IRQ adapter, and compat ports
 └── scenarios/        # active host/device/IRQ-delivery validation stories
 ```
@@ -46,7 +47,8 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - `AsyncDevice::from_core(DeviceCore)` returns `(AsyncDevice, AsyncDeviceWorker)`; callers
   choose whether to `tokio::spawn(worker.run())`, directly await it, or use another
   executor strategy.
-- `SyncDevice::run_until_idle(max_steps)` and `SyncDevice::run_until_blocked(max_steps)` calls belong only in explicit manual-drive helper/status/trace and step-budget tests.
+- Explicit manual-drive helpers belong only in manual status/trace and step-budget tests;
+  there is no public `SyncDevice` facade. Normal system scenarios run the async worker.
 - `AsyncDriver` is CPU-bound: setup requires an active matching `SoftwareCpu`, clones share
   one command-ID/slot accounting state, and it alone services IRQs. `ManualDriver` is the
   explicit CPU-unbound observability facade, constructed with `ManualDriver::setup_on` or

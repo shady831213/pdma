@@ -1,10 +1,10 @@
 use super::DeviceCore;
-use crate::dma::PdmaMemoryMappings;
-use crate::execution::ExecutionUnit;
+use crate::device::execution::ExecutionUnit;
+use crate::device::retirement::{PendingRetirement, RetirementUnit};
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
 use crate::queue::io::NormalizedFetch;
-use crate::retirement::{PendingRetirement, RetirementUnit};
-use crate::scheduler::RunnableQueues;
+use crate::queue::runnable::RunnableQueues;
 use crate::status::AsyncStallReason;
 use pdma_model_contract::semantic::{DeviceRunState, DeviceStatus, QueueId};
 
@@ -21,14 +21,14 @@ pub(super) enum RunStateProbe {
 pub(super) fn probe_run_state(
     queues: &QueueBlock,
     dma: &PdmaMemoryMappings,
-    scheduler: &RunnableQueues,
+    runnable: &RunnableQueues,
     execution: &ExecutionUnit,
     retirement: &RetirementUnit,
 ) -> RunStateProbe {
     if let Some(pending) = retirement.pending() {
         return pending_probe(queues, execution, pending);
     }
-    let Some(queue) = scheduler.current() else {
+    let Some(queue) = runnable.current() else {
         return if queues.has_any_pending() {
             RunStateProbe::Running
         } else {
@@ -57,7 +57,7 @@ impl DeviceCore {
         match probe_run_state(
             &self.queues,
             &self.dma,
-            &self.scheduler,
+            &self.runnable,
             &self.execution,
             &self.retirement,
         ) {

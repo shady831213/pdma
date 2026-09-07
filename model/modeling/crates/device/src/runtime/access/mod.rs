@@ -1,5 +1,4 @@
 mod batch;
-mod dma;
 mod endpoint;
 mod irq;
 mod memory;

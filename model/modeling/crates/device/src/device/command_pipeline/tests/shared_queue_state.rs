@@ -3,7 +3,7 @@ use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatu
 
 use super::support::prepared_pair;
 use crate::HardwareStepStatus;
-use crate::device::hardware_context::HardwareContext;
+use crate::device::context::HardwareContext;
 use crate::device::issue::IssueUnit;
 
 #[test]
@@ -13,7 +13,7 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
     let core = &mut prepared.fixture.core;
     let mut context = HardwareContext {
         queues: &mut core.queues,
-        scheduler: &mut core.scheduler,
+        runnable: &mut core.runnable,
         dma: &core.dma,
         irq: &mut core.irq,
         trace: &mut core.trace,
@@ -59,7 +59,7 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
         context.queues.semantic_cursors(prepared.queue.queue_id()),
         Ok(((2, 2), (2, 2)))
     );
-    assert_eq!(context.scheduler.current(), None);
+    assert_eq!(context.runnable.current(), None);
     assert!(context.irq.line_asserted());
     for destination in prepared.destinations {
         assert_eq!(

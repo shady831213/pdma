@@ -22,4 +22,6 @@ fn main() {
     let _ = DmaAddress::new(0);
     let _ = BufferId::new(0);
     let _ = std::mem::size_of::<MappedDmaRegion>();
+    let mapping: Option<pdma_model_device::memory::MappedDmaRegion> = None;
+    let _: Option<MappedDmaRegion> = mapping;
 }

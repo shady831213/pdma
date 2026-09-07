@@ -1,6 +1,6 @@
 use hardware_interface_pipeline::{Stage, StepOutcome, Then, ThenState};
 
-use super::hardware_context::HardwareContext;
+use super::context::HardwareContext;
 use crate::{AsyncStallReason, ModelError};
 
 mod arbitrate;

@@ -1,5 +1,23 @@
 //! Async PDMA device model runner.
 //!
+//! Register storage instrumentation is private to owner unit tests.
+//!
+//! ```compile_fail
+//! use pdma_model_device::__register_image_allocations_for_test;
+//! ```
+//!
+//! ```compile_fail
+//! async fn inspect(handle: pdma_model_device::AsyncDeviceHandle) {
+//!     handle.__inspect_register_image_for_test(|_| ()).await;
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! async fn mutate(handle: pdma_model_device::AsyncDeviceHandle) {
+//!     handle.__mutate_register_image_for_test(|_| ()).await;
+//! }
+//! ```
+//!
 //! ```
 //! use pdma_model_device::{AsyncDevice, AsyncStallReason, DeviceCore, MappedDmaRegion, ModelError};
 //! ```
@@ -28,13 +46,10 @@
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
 mod adapter;
-pub mod dma;
+pub mod memory;
+/// Compatibility import for the existing device-memory API.
+pub use memory as dma;
 mod error;
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
-)]
-mod execution;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
@@ -59,17 +74,7 @@ mod registers;
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
-mod retirement;
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
-)]
 mod runtime;
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
-)]
-mod scheduler;
 mod status;
 #[expect(
     clippy::redundant_pub_crate,
@@ -85,12 +90,12 @@ mod device;
 
 pub use device::DeviceCore;
 pub use device::drive::HardwareStepStatus;
-pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
 };
 pub use interface::mmio::MmioRegisterError;
+pub use memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use queue::exact::{
     DmaWrite, PdmaControlError, PendingDmaResult, QueueStatus, SubmissionAcceptance,
 };
@@ -99,9 +104,3 @@ pub use runtime::{
     MmioRegisterEndpoint,
 };
 pub use status::{AsyncStallReason, AsyncStepStatus};
-
-#[cfg(debug_assertions)]
-#[doc(hidden)]
-pub fn __register_image_allocations_for_test() -> (usize, usize) {
-    registers::allocation_observation()
-}

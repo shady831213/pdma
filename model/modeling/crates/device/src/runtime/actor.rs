@@ -4,7 +4,7 @@ use super::backend::DeviceInteractionBackend;
 use super::state::{RunnerState, summary};
 use super::{
     AsyncRunSummary, DeviceCore, MmioRegisterEndpoint, ModelResult, PendingDmaResult, RunnerShared,
-    run_worker, wake,
+    run_worker,
 };
 use hardware_interface_runtime::{
     NoopRegisterObserver, ObservationGate, RegisterObserver, SharedRegisterObserver,
@@ -156,29 +156,16 @@ impl AsyncDeviceHandle {
         &self,
         f: impl FnOnce(&mut DeviceCore) -> ModelResult<T> + Send,
     ) -> ModelResult<T> {
-        let (result, generation) = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| {
-                let result = f(&mut state.core);
-                wake(state);
-                (result, state.generation)
-            })
-            .await;
-        self.shared.backend.publish(generation);
-        result
+            .update(|state| (f(&mut state.core), true))
+            .await
     }
 
     async fn with_device_unit(&self, f: impl FnOnce(&mut DeviceCore) + Send) {
-        let generation = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| {
-                f(&mut state.core);
-                wake(state);
-                state.generation
-            })
+            .update(|state| (f(&mut state.core), true))
             .await;
-        self.shared.backend.publish(generation);
     }
 }

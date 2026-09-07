@@ -161,7 +161,9 @@ crates/device/src/
 ├── interface/         # private exact-MMIO and closed-batch preparation/effects
 │   ├── mmio/          # decoded leaf preparation plus global/queue/IRQ command effects
 │   └── batch/         # ephemeral closed atomic preparation and commit
-└── runtime/           # private async facade, endpoint/handle/worker, one lock, wake/publication
+├── error.rs           # device error vocabulary, reexported at the crate root
+└── runtime/           # private async actor, backend, worker, waits and runtime state
+    └── access/        # thin handle/endpoint adapters grouped by public operation
 ```
 
 `interface::mmio` owns only synchronous, ephemeral preparation and effects. Ordinary
@@ -185,6 +187,11 @@ accounting.
 `runtime` is the private asynchronous facade over the core. It owns the single Tokio lock
 that serializes host calls and worker steps, wake/publication generations, the register
 endpoint and observation gate, and the public async device, handle, and worker facade.
+Its `access` modules forward operations to the core; they do not define another device
+model. The backend centralizes locked updates and notification publication. Operations
+with observers commit under the lock, emit after unlocking, then publish the notification;
+an emission error does not roll back committed state or publish a success notification.
+Each caller retains its explicit notification policy, including legacy error paths.
 The public device API is intentionally only crate-root reexports plus `pub mod dma`; there
 is no public device `abi` or `runtime` namespace, no public synchronous device facade,
 and no second executor.
@@ -216,8 +223,10 @@ retirement, and IRQ transitions remain methods of their owning objects while the
 composition root controls dependency direction and ordering.
 
 `runtime` is only the async actor shell. Its worker uses the generic `AsyncExecutor`
-with a borrowed `DeviceInteractionBackend`. A private worker stage maps command outcomes
-to PDMA accounting and owned wake tokens; the executor owns interaction and wait driving.
+with a borrowed `DeviceInteractionBackend`. Command advancement returns `StepOutcome`
+directly, without an intermediate step executor or result translation enum. The private
+`DeviceService` stage adapts finite command outcomes to continuous service: accounting,
+idle/stall wake tokens, and shutdown. The executor owns interaction and wait driving.
 The retained command pipeline stays in `DeviceCore`, so reset clears it synchronously.
 `AsyncDevice` wraps one `DeviceCore` behind the
 single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,

@@ -1,9 +1,8 @@
 //! Async device IRQ control surface.
 
-use super::AsyncDeviceHandle;
-use super::DeviceWait;
 use crate::ModelResult;
 use crate::interface::mmio::irq::support::{irq_notification_ready, observe_irq_source};
+use crate::runtime::{AsyncDeviceHandle, DeviceWait};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::semantic::EpochIrqSource;
 use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};
@@ -89,20 +88,8 @@ impl AsyncDeviceHandle {
 
     /// Acknowledges a source, retaining a Line cause while source records remain.
     pub async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        let (result, generation) = self
-            .shared
-            .backend
-            .interact(|state| {
-                let result = {
-                    let state = &mut *state;
-                    state.core.ack_irq_source(source)
-                };
-                super::wake(state);
-                (result, state.generation)
-            })
-            .await;
-        self.shared.backend.publish(generation);
-        result
+        self.with_device(|device| device.ack_irq_source(source))
+            .await
     }
 
     /// Returns the current pending IRQ snapshot, if any.

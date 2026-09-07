@@ -1,4 +1,4 @@
-use super::{AsyncDeviceHandle, wake};
+use crate::runtime::AsyncDeviceHandle;
 use pdma_model_contract::abi::mmio::{MmioAccessError, MmioByteCount, decode_read, decode_write};
 
 impl AsyncDeviceHandle {
@@ -49,21 +49,14 @@ impl AsyncDeviceHandle {
     /// Applies one exact byte-bearing MMIO transaction.
     pub async fn write_mmio(&self, offset: u32, bytes: &[u8]) -> Result<(), MmioAccessError> {
         let (register, value) = decode_write(offset, bytes)?;
-        let generation = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| {
+            .update(|state| {
                 let changed = crate::interface::mmio::prepare_write(register, value, offset, bytes)
                     .commit(&mut state.core);
-                if changed {
-                    wake(state);
-                }
-                changed.then_some(state.generation)
+                ((), changed)
             })
             .await;
-        if let Some(generation) = generation {
-            self.shared.backend.publish(generation);
-        }
         Ok(())
     }
 }

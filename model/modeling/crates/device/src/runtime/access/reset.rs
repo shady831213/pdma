@@ -1,32 +1,24 @@
-use super::AsyncDeviceHandle;
-use super::state::wake;
-#[cfg(test)]
-use super::state::{DeviceCore, RunnerState};
 use crate::queue::exact::PdmaControlError;
+use crate::runtime::AsyncDeviceHandle;
+#[cfg(test)]
+use crate::runtime::state::{DeviceCore, RunnerState};
 use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
 
 impl AsyncDeviceHandle {
     /// Atomically resets device-owned state and advances recovery identity.
     pub async fn reset(&self, request: WholeDeviceReset) -> Result<DeviceEpoch, PdmaControlError> {
-        let (result, generation) = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| {
+            .update(|state| {
                 let result = crate::interface::mmio::reset::execute(
                     &mut state.core,
                     request.expected_epoch().raw(),
                 )
                 .typed_result();
-                if result.is_ok() {
-                    wake(state);
-                }
-                (result, state.generation)
+                let changed = result.is_ok();
+                (result, changed)
             })
-            .await;
-        if result.is_ok() {
-            self.shared.backend.publish(generation);
-        }
-        result
+            .await
     }
 }
 

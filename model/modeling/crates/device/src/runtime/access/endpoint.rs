@@ -1,7 +1,7 @@
-use super::{AsyncDevice, DeviceCore, RunnerShared, wake};
 use crate::interface::mmio::{
     MmioRegisterError, claim_observation_count, prepare_claim, prepare_read, prepare_write,
 };
+use crate::runtime::{AsyncDevice, DeviceCore, RunnerShared};
 use hardware_interface_runtime::{
     AccessOrigin, RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusOffset,
     RegisterBusWidth, RegisterObservation,
@@ -80,30 +80,25 @@ impl MmioRegisterEndpoint {
     pub async fn claim_notification_exact(
         &self,
     ) -> Result<Option<pdma_model_contract::semantic::IrqNotification>, MmioRegisterError> {
-        let (committed, reservation, generation) = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| -> Result<_, MmioRegisterError> {
-                let reservation = self
-                    .shared
-                    .register_gate
-                    .reserve(claim_observation_count(&state.core))?;
-                let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
-                let generation = if committed.changed() {
-                    wake(state);
-                    Some(state.generation)
-                } else {
-                    None
-                };
-                Ok((committed, reservation, generation))
-            })
-            .await?;
-        let (notification, observations) = committed.into_parts();
-        reservation.emit(observations)?;
-        if let Some(generation) = generation {
-            self.shared.backend.publish(generation);
-        }
-        Ok(notification)
+            .commit(
+                |state| -> Result<_, MmioRegisterError> {
+                    let reservation = self
+                        .shared
+                        .register_gate
+                        .reserve(claim_observation_count(&state.core))?;
+                    let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
+                    let changed = committed.changed();
+                    Ok(((committed, reservation), changed))
+                },
+                |(committed, reservation)| {
+                    let (notification, observations) = committed.into_parts();
+                    reservation.emit(observations)?;
+                    Ok(notification)
+                },
+            )
+            .await
     }
 
     /// Claims one IRQ notification and returns the exact emitted direct transcript.
@@ -116,30 +111,25 @@ impl MmioRegisterEndpoint {
         ),
         MmioRegisterError,
     > {
-        let (committed, reservation, generation) = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| -> Result<_, MmioRegisterError> {
-                let reservation = self
-                    .shared
-                    .register_gate
-                    .reserve(claim_observation_count(&state.core))?;
-                let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
-                let generation = if committed.changed() {
-                    wake(state);
-                    Some(state.generation)
-                } else {
-                    None
-                };
-                Ok((committed, reservation, generation))
-            })
-            .await?;
-        let (notification, observations) = committed.into_parts();
-        reservation.emit(observations.clone())?;
-        if let Some(generation) = generation {
-            self.shared.backend.publish(generation);
-        }
-        Ok((notification, observations))
+            .commit(
+                |state| -> Result<_, MmioRegisterError> {
+                    let reservation = self
+                        .shared
+                        .register_gate
+                        .reserve(claim_observation_count(&state.core))?;
+                    let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
+                    let changed = committed.changed();
+                    Ok(((committed, reservation), changed))
+                },
+                |(committed, reservation)| {
+                    let (notification, observations) = committed.into_parts();
+                    reservation.emit(observations.clone())?;
+                    Ok((notification, observations))
+                },
+            )
+            .await
     }
 }
 
@@ -169,25 +159,22 @@ impl RegisterAccess for MmioRegisterEndpoint {
         let address = self.full_address(offset)?;
         let offset = self.canonical_offset(address, request.len(), offset)?;
         let (register, value) = decode_write(offset, request)?;
-        let (prepared, reservation, generation) = self
-            .shared
+        self.shared
             .backend
-            .interact(|state| -> Result<_, MmioRegisterError> {
-                let prepared = prepare_write(register, value, offset, request);
-                let reservation = self.shared.register_gate.reserve(1)?;
-                let changed = prepared.commit(&mut state.core);
-                if changed {
-                    wake(state);
-                }
-                let generation = changed.then_some(state.generation);
-                Ok((prepared, reservation, generation))
-            })
-            .await?;
-        let observed = prepared.observation(reservation.start_sequence(), AccessOrigin::Direct);
-        reservation.emit(vec![observed])?;
-        if let Some(generation) = generation {
-            self.shared.backend.publish(generation);
-        }
-        Ok(())
+            .commit(
+                |state| -> Result<_, MmioRegisterError> {
+                    let prepared = prepare_write(register, value, offset, request);
+                    let reservation = self.shared.register_gate.reserve(1)?;
+                    let changed = prepared.commit(&mut state.core);
+                    Ok(((prepared, reservation), changed))
+                },
+                |(prepared, reservation)| {
+                    let observed =
+                        prepared.observation(reservation.start_sequence(), AccessOrigin::Direct);
+                    reservation.emit(vec![observed])?;
+                    Ok(())
+                },
+            )
+            .await
     }
 }

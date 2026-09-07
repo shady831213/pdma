@@ -73,19 +73,46 @@ impl DeviceInteractionBackend {
         &self,
         interaction: impl FnOnce(&mut RunnerState) -> T + Send,
     ) -> T {
-        self.run_interaction(interaction).await
-    }
-
-    async fn run_interaction<T: Send>(
-        &self,
-        interaction: impl FnOnce(&mut RunnerState) -> T + Send,
-    ) -> T {
         let mut state = self.state.lock().await;
         interaction(&mut state)
     }
 
     pub(crate) fn publish(&self, generation: usize) {
         self.changed.send_replace(generation);
+    }
+
+    pub(crate) async fn update<T: Send>(
+        &self,
+        operation: impl FnOnce(&mut RunnerState) -> (T, bool) + Send,
+    ) -> T {
+        match self
+            .commit(|state| Ok::<_, Infallible>(operation(state)), Ok)
+            .await
+        {
+            Ok(value) => value,
+            Err(error) => match error {},
+        }
+    }
+
+    pub(crate) async fn commit<T: Send, R: Send, E: Send>(
+        &self,
+        operation: impl FnOnce(&mut RunnerState) -> Result<(T, bool), E> + Send,
+        complete: impl FnOnce(T) -> Result<R, E> + Send,
+    ) -> Result<R, E> {
+        let (value, publication) = self
+            .interact(|state| {
+                let (value, notify) = operation(state)?;
+                if notify {
+                    super::state::wake(state);
+                }
+                Ok((value, notify.then_some(state.generation)))
+            })
+            .await?;
+        let result = complete(value)?;
+        if let Some(generation) = publication {
+            self.publish(generation);
+        }
+        Ok(result)
     }
 
     #[cfg(test)]
@@ -151,7 +178,7 @@ impl AsyncInteractionBackend<RunnerState, DeviceWait> for DeviceInteractionBacke
         #[cfg(test)]
         self.generic_interactions.fetch_add(1, Ordering::Relaxed);
         let (outcome, publication) = self
-            .run_interaction(|state| {
+            .interact(|state| {
                 let outcome = interaction(state);
                 (outcome, state.worker_publication.take())
             })

@@ -12,6 +12,8 @@ use hardware_interface_pipeline::AsyncInteractionBackend;
 use super::{DeviceInteractionBackend, DeviceWait};
 use crate::runtime::state::RunnerState;
 
+mod updates;
+
 fn backend() -> Arc<DeviceInteractionBackend> {
     Arc::new(DeviceInteractionBackend::new(RunnerState::new(
         crate::DeviceCore::new(

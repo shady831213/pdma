@@ -29,6 +29,7 @@
 )]
 mod adapter;
 pub mod dma;
+mod error;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
@@ -82,7 +83,9 @@ mod trace;
 )]
 mod device;
 
+pub use device::DeviceCore;
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
+pub use error::{ModelError, ModelError as DeviceError, ModelResult};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
 };
@@ -92,7 +95,7 @@ pub use queue::exact::{
 };
 pub use runtime::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
-    DeviceCore, DeviceError, MmioRegisterEndpoint, ModelError, ModelResult,
+    MmioRegisterEndpoint,
 };
 pub use status::{AsyncStallReason, AsyncStepStatus};
 

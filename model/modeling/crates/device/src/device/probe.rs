@@ -6,7 +6,7 @@ use crate::queue::io::NormalizedFetch;
 use crate::retirement::{PendingRetirement, RetirementUnit};
 use crate::scheduler::Scheduler;
 use crate::status::AsyncStallReason;
-use pdma_model_contract::semantic::{DeviceRunState, QueueId};
+use pdma_model_contract::semantic::{DeviceRunState, DeviceStatus, QueueId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RunStateProbe {
@@ -49,6 +49,10 @@ pub(super) fn probe_run_state(
 }
 
 impl DeviceCore {
+    pub(crate) fn current_status(&self) -> DeviceStatus {
+        DeviceStatus::new(self.epoch(), self.run_state())
+    }
+
     pub(crate) fn run_state(&self) -> DeviceRunState {
         match probe_run_state(
             &self.queues,

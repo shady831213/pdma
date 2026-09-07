@@ -17,6 +17,7 @@ pub(crate) struct RunnerState {
     pub(crate) shutdown_requested: bool,
     pub(crate) generation: usize,
     pub(crate) wake_generation: usize,
+    pub(crate) worker_publication: Option<usize>,
 }
 
 impl RunnerState {
@@ -30,6 +31,7 @@ impl RunnerState {
             shutdown_requested: false,
             generation: 0,
             wake_generation: 0,
+            worker_publication: None,
         }
     }
 }

@@ -9,9 +9,9 @@ mod no_replay;
 mod parity;
 mod support;
 
-#[test]
-fn drive_policy_parity() {
-    parity::drive_policy_parity();
+#[tokio::test(flavor = "current_thread")]
+async fn drive_policy_parity() {
+    parity::drive_policy_parity().await;
 }
 
 #[test]

@@ -1,84 +1,92 @@
+use std::convert::Infallible;
+
+use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Stage, StepOutcome};
+
 use super::AsyncStepStatus;
 use super::backend::DeviceWait;
 use super::state::{RunnerShared, RunnerState};
 use crate::device::drive::{ModelStepStatus, PipelineStep};
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
-    while run_one(shared).await {}
+    let executor = AsyncExecutor::new(&shared.backend);
+    let mut pipeline = WorkerPipeline::new();
+    match executor.run(&mut pipeline).await {
+        Ok(()) | Err(AsyncRunError::Exhausted) => {}
+        Err(AsyncRunError::BackendInteraction(error) | AsyncRunError::BackendWait(error)) => {
+            match error {}
+        }
+        Err(AsyncRunError::Stage(error)) => match error {},
+    }
 }
 
-async fn run_one(shared: &RunnerShared) -> bool {
-    let outcome = shared
-        .backend
-        .interact(|state| {
-            if state.shutdown_requested {
-                state.core.clear_command_pipeline();
-                return WorkerOutcome::Stop(state.generation);
+#[derive(Debug)]
+struct WorkerPipeline {
+    active: bool,
+}
+
+impl WorkerPipeline {
+    const fn new() -> Self {
+        Self { active: true }
+    }
+}
+
+impl Stage<RunnerState> for WorkerPipeline {
+    type Error = Infallible;
+    type Output = ();
+    type Wait = DeviceWait;
+
+    fn step(
+        &mut self,
+        state: &mut RunnerState,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        if !self.active {
+            return StepOutcome::Exhausted;
+        }
+        if state.shutdown_requested {
+            state.core.clear_command_pipeline();
+            self.active = false;
+            state.worker_publication = Some(state.generation);
+            return StepOutcome::Complete(Ok(()));
+        }
+        match state.core.step_pipeline() {
+            PipelineStep::InternalProgress => StepOutcome::Progressed,
+            PipelineStep::Terminal(Ok(ModelStepStatus::Progressed)) => {
+                state.steps = state.steps.saturating_add(1);
+                progressed(state)
             }
-            match state.core.step_pipeline() {
-                PipelineStep::InternalProgress => WorkerOutcome::ContinueUnpublished,
-                PipelineStep::Terminal(Ok(ModelStepStatus::Progressed)) => {
-                    state.steps = state.steps.saturating_add(1);
-                    state.last_status = AsyncStepStatus::Progressed;
-                    state.generation = state.generation.saturating_add(1);
-                    WorkerOutcome::Continue(state.generation)
-                }
-                PipelineStep::Terminal(Ok(ModelStepStatus::FaultCached)) => {
-                    state.last_status = AsyncStepStatus::Progressed;
-                    state.generation = state.generation.saturating_add(1);
-                    WorkerOutcome::Continue(state.generation)
-                }
-                PipelineStep::Terminal(Ok(ModelStepStatus::Idle)) => {
-                    state.last_status = AsyncStepStatus::Idle;
-                    WorkerOutcome::Wait(wait_for_wake(state))
-                }
-                PipelineStep::Terminal(Ok(ModelStepStatus::Stalled(reason)))
-                | PipelineStep::Pending(reason) => {
-                    state.stalls = state.stalls.saturating_add(1);
-                    state.last_status = AsyncStepStatus::Stalled(reason);
-                    WorkerOutcome::Wait(wait_for_wake(state))
-                }
-                PipelineStep::Terminal(Err(_)) => {
-                    state.errors = state.errors.saturating_add(1);
-                    state.generation = state.generation.saturating_add(1);
-                    WorkerOutcome::Continue(state.generation)
-                }
+            PipelineStep::Terminal(Ok(ModelStepStatus::FaultCached)) => progressed(state),
+            PipelineStep::Terminal(Ok(ModelStepStatus::Idle)) => {
+                state.last_status = AsyncStepStatus::Idle;
+                StepOutcome::Pending(wait_for_wake(state))
             }
-        })
-        .await;
-    match outcome {
-        WorkerOutcome::ContinueUnpublished => true,
-        WorkerOutcome::Stop(generation) => publish_and_continue(shared, generation, false),
-        WorkerOutcome::Continue(generation) => publish_and_continue(shared, generation, true),
-        WorkerOutcome::Wait(wait) => {
-            shared.backend.publish(wait_generation(wait));
-            shared.backend.wait_for_change(wait).await;
-            true
+            PipelineStep::Terminal(Ok(ModelStepStatus::Stalled(reason)))
+            | PipelineStep::Pending(reason) => {
+                state.stalls = state.stalls.saturating_add(1);
+                state.last_status = AsyncStepStatus::Stalled(reason);
+                StepOutcome::Pending(wait_for_wake(state))
+            }
+            PipelineStep::Terminal(Err(_)) => {
+                state.errors = state.errors.saturating_add(1);
+                state.generation = state.generation.saturating_add(1);
+                state.worker_publication = Some(state.generation);
+                StepOutcome::Progressed
+            }
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum WorkerOutcome {
-    ContinueUnpublished,
-    Stop(usize),
-    Continue(usize),
-    Wait(DeviceWait),
+const fn progressed(state: &mut RunnerState) -> StepOutcome<(), Infallible, DeviceWait> {
+    state.last_status = AsyncStepStatus::Progressed;
+    state.generation = state.generation.saturating_add(1);
+    state.worker_publication = Some(state.generation);
+    StepOutcome::Progressed
 }
 
 const fn wait_for_wake(state: &mut RunnerState) -> DeviceWait {
     let wake_generation = state.wake_generation;
     state.generation = state.generation.saturating_add(1);
+    state.worker_publication = Some(state.generation);
     DeviceWait::wake(state.generation, wake_generation)
-}
-
-const fn wait_generation(wait: DeviceWait) -> usize {
-    wait.generation_value()
-}
-
-fn publish_and_continue(shared: &RunnerShared, generation: usize, keep_running: bool) -> bool {
-    shared.backend.publish(generation);
-    keep_running
 }
 
 #[cfg(test)]

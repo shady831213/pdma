@@ -205,7 +205,9 @@ execution unit, retirement unit, IRQ controller, and trace sink. Execution consu
 contract semantic commands directly and defines no third command model.
 
 The hardware objects do not receive `&mut DeviceCore`. `DeviceCore` stores one private
-exhaustive command-pipeline enum. Admission, fetch/decode, execution, and retirement
+command pipeline composed with `hardware-interface-pipeline::Then`: fetch/decode,
+operation, then retirement. Private enums select the operation and retirement branches;
+`Then` owns phase advancement and retains downstream state. Admission and these stages
 advance as persistent typed stages, at most one architecture-visible interaction per
 leaf step. A downstream wait retains completed upstream state, so resumption cannot
 refetch, re-execute DMA, or republish a prior effect. The test-only synchronous `step`
@@ -213,7 +215,11 @@ uses an immediate drive policy over that same pipeline and core. Queue, executio
 retirement, and IRQ transitions remain methods of their owning objects while the
 composition root controls dependency direction and ordering.
 
-`runtime` is only the async actor shell. `AsyncDevice` wraps one `DeviceCore` behind the
+`runtime` is only the async actor shell. Its worker uses the generic `AsyncExecutor`
+with a borrowed `DeviceInteractionBackend`. A private worker stage maps command outcomes
+to PDMA accounting and owned wake tokens; the executor owns interaction and wait driving.
+The retained command pipeline stays in `DeviceCore`, so reset clears it synchronously.
+`AsyncDevice` wraps one `DeviceCore` behind the
 single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,
 `RunnerShared`, the register endpoint, observation gate, closed-batch async facades,
 waits, publication generations, and every lock acquisition live only in `runtime`;
@@ -388,8 +394,8 @@ Shutdown has deterministic priority over a simultaneously ready notification. De
 progress is synchronized by handler-owned channels when a scenario needs it, while the
 actor's final `IrqDeliverySummary` reports only successfully completed handler turns; no
 separate delivery-progress watch API exists. Evidence:
-`crates/device/src/device/tests/irq.rs`, `crates/host/tests/irq_runtime_surface.rs`, and
-`crates/scenarios/tests/irq_delivery.rs`.
+`crates/device/src/device/tests/irq.rs`, `crates/host/tests/irq_runtime_surface/mod.rs`, and
+`crates/scenarios/tests/irq_delivery/mod.rs`.
 
 IRQ scenarios bootstrap without transferring driver ownership away from main. Main
 performs CPU-bound setup, retains one driver capability, and publishes a clone plus

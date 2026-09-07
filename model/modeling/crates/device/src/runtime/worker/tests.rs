@@ -11,9 +11,13 @@ struct AcceptedCopy {
 }
 
 fn accepted_copy() -> AcceptedCopy {
+    accepted_copy_with_resources(ResourceConfig::default())
+}
+
+fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
     let mut core = crate::DeviceCore::new(
         std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        ResourceConfig::default(),
+        resources,
     );
     core.enable_tracing();
     let source = core.dma.allocate(4).expect("source allocation");
@@ -49,6 +53,33 @@ fn accepted_copy() -> AcceptedCopy {
     }
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn async_worker_drives_forced_pending_through_generic_executor_boundaries() {
+    // Given: one accepted copy with no read slot, forcing execution-resource pending.
+    let fixture = accepted_copy_with_resources(ResourceConfig::default().with_read_slots(0));
+    let mut changes = fixture.shared.backend.subscribe_for_test();
+
+    // When: the real worker reaches its wait boundary, then shutdown wakes it.
+    let shutdown = async {
+        changes.changed().await.expect("worker stall publication");
+        let generation = fixture
+            .shared
+            .backend
+            .interact(|state| {
+                state.shutdown_requested = true;
+                state.generation = state.generation.saturating_add(1);
+                state.generation
+            })
+            .await;
+        fixture.shared.backend.publish(generation);
+    };
+    tokio::join!(run_worker(&fixture.shared), shutdown);
+
+    // Then: AsyncExecutor owns both real interactions and the single forced wait.
+    assert_eq!(fixture.shared.backend.generic_boundaries_for_test(), (2, 1));
+    assert_eq!(observation(&fixture).await, (0, vec![0; 4], 0, 0));
+}
+
 async fn observation(fixture: &AcceptedCopy) -> (usize, Vec<u8>, usize, usize) {
     fixture
         .shared
@@ -73,15 +104,27 @@ async fn observation(fixture: &AcceptedCopy) -> (usize, Vec<u8>, usize, usize) {
         .await
 }
 
+async fn worker_turn(fixture: &AcceptedCopy, pipeline: &mut WorkerPipeline) -> bool {
+    matches!(
+        fixture
+            .shared
+            .backend
+            .interact(|state| pipeline.step(state))
+            .await,
+        StepOutcome::Progressed
+    )
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn accepted_command_advances_one_leaf_per_worker_turn() {
     // Given: one accepted copy whose observable stages are fetch, execute, and retire.
     let fixture = accepted_copy();
+    let mut pipeline = WorkerPipeline::new();
 
     // When: the worker is advanced through three deterministic interaction turns.
     let mut observations = Vec::new();
     for _ in 0..3 {
-        assert!(run_one(&fixture.shared).await);
+        assert!(worker_turn(&fixture, &mut pipeline).await);
         observations.push(observation(&fixture).await);
     }
 
@@ -100,10 +143,12 @@ async fn accepted_command_advances_one_leaf_per_worker_turn() {
 async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
     // Given: copies retained immediately after fetch and immediately after execution.
     let before_execution = accepted_copy();
-    assert!(run_one(&before_execution.shared).await);
+    let mut before_execution_pipeline = WorkerPipeline::new();
+    assert!(worker_turn(&before_execution, &mut before_execution_pipeline).await);
     let after_execution = accepted_copy();
+    let mut after_execution_pipeline = WorkerPipeline::new();
     for _ in 0..2 {
-        assert!(run_one(&after_execution.shared).await);
+        assert!(worker_turn(&after_execution, &mut after_execution_pipeline).await);
     }
     assert_eq!(observation(&before_execution).await, (1, vec![0; 4], 0, 0));
     assert_eq!(
@@ -124,16 +169,40 @@ async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
                 state.shutdown_requested = true;
             })
             .await;
-        assert!(!run_one(&fixture.shared).await);
+        let mut pipeline = WorkerPipeline::new();
+        assert!(matches!(
+            fixture
+                .shared
+                .backend
+                .interact(|state| pipeline.step(state))
+                .await,
+            StepOutcome::Complete(Ok(()))
+        ));
     }
     let shutdown = accepted_copy();
-    assert!(run_one(&shutdown.shared).await);
+    let mut shutdown_pipeline = WorkerPipeline::new();
+    assert!(worker_turn(&shutdown, &mut shutdown_pipeline).await);
     shutdown
         .shared
         .backend
         .interact(|state| state.shutdown_requested = true)
         .await;
-    assert!(!run_one(&shutdown.shared).await);
+    assert!(matches!(
+        shutdown
+            .shared
+            .backend
+            .interact(|state| shutdown_pipeline.step(state))
+            .await,
+        StepOutcome::Complete(Ok(()))
+    ));
+    assert!(matches!(
+        shutdown
+            .shared
+            .backend
+            .interact(|state| shutdown_pipeline.step(state))
+            .await,
+        StepOutcome::Exhausted
+    ));
 
     // Then: only the DMA committed before reset persists; no retirement becomes visible.
     assert_eq!(observation(&before_execution).await, (1, vec![0; 4], 0, 0));

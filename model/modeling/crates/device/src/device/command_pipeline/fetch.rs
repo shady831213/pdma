@@ -20,6 +20,8 @@ pub(super) struct ProbeFetch {
 enum State {
     #[cfg(test)]
     Probe,
+    #[cfg(test)]
+    Injected(Option<FetchedRoute>),
     Fetch,
     Done,
 }
@@ -47,6 +49,13 @@ impl ProbeFetch {
     pub(super) const fn accepted() -> Self {
         Self {
             state: State::Fetch,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) const fn injected(route: FetchedRoute) -> Self {
+        Self {
+            state: State::Injected(Some(route)),
         }
     }
 
@@ -122,6 +131,10 @@ impl Stage<DeviceCore> for ProbeFetch {
                     StepOutcome::Progressed
                 }
             },
+            #[cfg(test)]
+            State::Injected(mut route) => route.take().map_or(StepOutcome::Exhausted, |route| {
+                StepOutcome::Complete(Ok(route))
+            }),
             State::Fetch => StepOutcome::Complete(Self::fetch(context)),
             State::Done => StepOutcome::Exhausted,
         }

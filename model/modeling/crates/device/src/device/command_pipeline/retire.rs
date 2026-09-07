@@ -9,16 +9,22 @@ use crate::{AsyncStallReason, ModelError};
 #[derive(Debug)]
 pub(super) struct Success {
     outcome: Option<SuccessfulExecution>,
+    retry: PendingCompletion,
+    active: bool,
 }
 
 #[derive(Debug)]
 pub(super) struct ExecutionFailure {
     outcome: Option<ExecutionFault>,
+    retry: PendingFault,
+    active: bool,
 }
 
 #[derive(Debug)]
 pub(super) struct FrontendFailure {
     fault: Option<NormalizedFault>,
+    retry: PendingFault,
+    active: bool,
 }
 
 #[derive(Debug)]
@@ -40,6 +46,8 @@ impl Success {
     pub(super) const fn new(outcome: SuccessfulExecution) -> Self {
         Self {
             outcome: Some(outcome),
+            retry: PendingCompletion::new(),
+            active: true,
         }
     }
 }
@@ -48,13 +56,19 @@ impl ExecutionFailure {
     pub(super) const fn new(outcome: ExecutionFault) -> Self {
         Self {
             outcome: Some(outcome),
+            retry: PendingFault::new(),
+            active: true,
         }
     }
 }
 
 impl FrontendFailure {
     pub(super) const fn new(fault: NormalizedFault) -> Self {
-        Self { fault: Some(fault) }
+        Self {
+            fault: Some(fault),
+            retry: PendingFault::new(),
+            active: true,
+        }
     }
 }
 
@@ -84,10 +98,14 @@ impl Stage<DeviceCore> for Success {
     type Wait = AsyncStallReason;
 
     fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
-        let Some(outcome) = self.outcome.take() else {
+        if !self.active {
             return StepOutcome::Exhausted;
+        }
+        let outcome = match self.outcome.take() {
+            Some(outcome) => finish(retire(context, RetirableExecution::Success(outcome))),
+            None => self.retry.step(context),
         };
-        finish(retire(context, RetirableExecution::Success(outcome)))
+        retain_pending(&mut self.active, outcome)
     }
 }
 
@@ -97,10 +115,14 @@ impl Stage<DeviceCore> for ExecutionFailure {
     type Wait = AsyncStallReason;
 
     fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
-        let Some(outcome) = self.outcome.take() else {
+        if !self.active {
             return StepOutcome::Exhausted;
+        }
+        let outcome = match self.outcome.take() {
+            Some(outcome) => finish(retire(context, RetirableExecution::Fault(outcome))),
+            None => self.retry.step(context),
         };
-        finish(retire(context, RetirableExecution::Fault(outcome)))
+        retain_pending(&mut self.active, outcome)
     }
 }
 
@@ -110,10 +132,14 @@ impl Stage<DeviceCore> for FrontendFailure {
     type Wait = AsyncStallReason;
 
     fn step(&mut self, context: &mut DeviceCore) -> RetireOutcome {
-        let Some(fault) = self.fault.take() else {
+        if !self.active {
             return StepOutcome::Exhausted;
+        }
+        let outcome = match self.fault.take() {
+            Some(fault) => finish(cache_frontend_fault(context, fault)),
+            None => self.retry.step(context),
         };
-        finish(cache_frontend_fault(context, fault))
+        retain_pending(&mut self.active, outcome)
     }
 }
 
@@ -182,6 +208,13 @@ const fn finish(status: Result<RetirementStatus, ModelError>) -> RetireOutcome {
         Ok(RetirementStatus::Stalled(reason)) => StepOutcome::Pending(reason),
         Err(error) => StepOutcome::Complete(Err(error)),
     }
+}
+
+const fn retain_pending(active: &mut bool, outcome: RetireOutcome) -> RetireOutcome {
+    if !matches!(outcome, StepOutcome::Pending(_)) {
+        *active = false;
+    }
+    outcome
 }
 
 fn retry(context: &mut DeviceCore) -> Result<RetirementStatus, ModelError> {

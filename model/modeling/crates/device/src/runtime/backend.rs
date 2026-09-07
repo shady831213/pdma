@@ -1,4 +1,6 @@
 use std::convert::Infallible;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use tokio::sync::{Mutex, watch};
@@ -9,6 +11,10 @@ use super::state::RunnerState;
 pub(crate) struct DeviceInteractionBackend {
     state: Mutex<RunnerState>,
     changed: watch::Sender<usize>,
+    #[cfg(test)]
+    generic_interactions: AtomicUsize,
+    #[cfg(test)]
+    generic_waits: AtomicUsize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,6 +62,10 @@ impl DeviceInteractionBackend {
         Self {
             state: Mutex::new(state),
             changed,
+            #[cfg(test)]
+            generic_interactions: AtomicUsize::new(0),
+            #[cfg(test)]
+            generic_waits: AtomicUsize::new(0),
         }
     }
 
@@ -81,6 +91,14 @@ impl DeviceInteractionBackend {
     #[cfg(test)]
     pub(crate) fn subscribe_for_test(&self) -> watch::Receiver<usize> {
         self.changed.subscribe()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn generic_boundaries_for_test(&self) -> (usize, usize) {
+        (
+            self.generic_interactions.load(Ordering::Relaxed),
+            self.generic_waits.load(Ordering::Relaxed),
+        )
     }
 
     #[cfg(test)]
@@ -130,10 +148,23 @@ impl AsyncInteractionBackend<RunnerState, DeviceWait> for DeviceInteractionBacke
     where
         F: FnOnce(&mut RunnerState) -> StepOutcome<O, E, DeviceWait> + Send,
     {
-        Ok(self.run_interaction(interaction).await)
+        #[cfg(test)]
+        self.generic_interactions.fetch_add(1, Ordering::Relaxed);
+        let (outcome, publication) = self
+            .run_interaction(|state| {
+                let outcome = interaction(state);
+                (outcome, state.worker_publication.take())
+            })
+            .await;
+        if let Some(generation) = publication {
+            self.publish(generation);
+        }
+        Ok(outcome)
     }
 
     async fn wait(&self, wait: DeviceWait) -> Result<(), Self::Error> {
+        #[cfg(test)]
+        self.generic_waits.fetch_add(1, Ordering::Relaxed);
         self.wait_inner(wait).await;
         Ok(())
     }

@@ -32,3 +32,7 @@ observation algorithms belong to `hardware-interface-runtime`; operation, reset,
 publication, and accounting effects belong to the consuming device. Swapping an
 executor changes only how the same stage graph is driven and never creates another
 PDMA core, driver, or end-to-end path.
+
+PDMA's command path composes fetch, operation, and retirement with `Then`. Its async
+worker runs through `AsyncExecutor` using a borrowed device backend; command state
+remains owned by the device core so reset can discard retained work synchronously.

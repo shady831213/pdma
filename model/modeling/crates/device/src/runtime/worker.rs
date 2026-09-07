@@ -5,12 +5,12 @@ use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Stage, StepOutco
 use super::AsyncStepStatus;
 use super::backend::DeviceWait;
 use super::state::{RunnerShared, RunnerState};
-use crate::device::drive::{ModelStepStatus, PipelineStep};
+use crate::device::drive::ModelStepStatus;
 
 pub(super) async fn run_worker(shared: &RunnerShared) {
     let executor = AsyncExecutor::new(&shared.backend);
-    let mut pipeline = WorkerPipeline::new();
-    match executor.run(&mut pipeline).await {
+    let mut service = DeviceService::new();
+    match executor.run(&mut service).await {
         Ok(()) | Err(AsyncRunError::Exhausted) => {}
         Err(AsyncRunError::BackendInteraction(error) | AsyncRunError::BackendWait(error)) => {
             match error {}
@@ -20,17 +20,17 @@ pub(super) async fn run_worker(shared: &RunnerShared) {
 }
 
 #[derive(Debug)]
-struct WorkerPipeline {
+struct DeviceService {
     active: bool,
 }
 
-impl WorkerPipeline {
+impl DeviceService {
     const fn new() -> Self {
         Self { active: true }
     }
 }
 
-impl Stage<RunnerState> for WorkerPipeline {
+impl Stage<RunnerState> for DeviceService {
     type Error = Infallible;
     type Output = ();
     type Wait = DeviceWait;
@@ -48,29 +48,31 @@ impl Stage<RunnerState> for WorkerPipeline {
             state.worker_publication = Some(state.generation);
             return StepOutcome::Complete(Ok(()));
         }
-        match state.core.step_pipeline() {
-            PipelineStep::InternalProgress => StepOutcome::Progressed,
-            PipelineStep::Terminal(Ok(ModelStepStatus::Progressed)) => {
-                state.steps = state.steps.saturating_add(1);
-                progressed(state)
-            }
-            PipelineStep::Terminal(Ok(ModelStepStatus::FaultCached)) => progressed(state),
-            PipelineStep::Terminal(Ok(ModelStepStatus::Idle)) => {
-                state.last_status = AsyncStepStatus::Idle;
-                StepOutcome::Pending(wait_for_wake(state))
-            }
-            PipelineStep::Terminal(Ok(ModelStepStatus::Stalled(reason)))
-            | PipelineStep::Pending(reason) => {
+        let outcome = state.core.step_pipeline();
+        match outcome {
+            StepOutcome::Progressed => StepOutcome::Progressed,
+            StepOutcome::Pending(reason)
+            | StepOutcome::Complete(Ok(ModelStepStatus::Stalled(reason))) => {
                 state.stalls = state.stalls.saturating_add(1);
                 state.last_status = AsyncStepStatus::Stalled(reason);
                 StepOutcome::Pending(wait_for_wake(state))
             }
-            PipelineStep::Terminal(Err(_)) => {
+            StepOutcome::Complete(Ok(ModelStepStatus::Progressed)) => {
+                state.steps = state.steps.saturating_add(1);
+                progressed(state)
+            }
+            StepOutcome::Complete(Ok(ModelStepStatus::FaultCached)) => progressed(state),
+            StepOutcome::Complete(Ok(ModelStepStatus::Idle)) => {
+                state.last_status = AsyncStepStatus::Idle;
+                StepOutcome::Pending(wait_for_wake(state))
+            }
+            StepOutcome::Complete(Err(_)) => {
                 state.errors = state.errors.saturating_add(1);
                 state.generation = state.generation.saturating_add(1);
                 state.worker_publication = Some(state.generation);
                 StepOutcome::Progressed
             }
+            StepOutcome::Exhausted => StepOutcome::Exhausted,
         }
     }
 }

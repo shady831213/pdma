@@ -6,9 +6,7 @@ mod route;
 #[cfg(test)]
 mod tests;
 
-use hardware_interface_pipeline::{
-    PipelineExt, RunOutcome, RunResult, Stage, StepExecutor, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{PipelineExt, Stage, StepOutcome, Then};
 
 use self::fetch::{FetchedRoute, ProbeFetch};
 use self::route::{Operation, Retirement};
@@ -74,13 +72,13 @@ impl PipelineSlot {
     pub(super) fn step(
         &mut self,
         context: &mut DeviceCore,
-    ) -> RunResult<ModelStepStatus, ModelError, AsyncStallReason> {
+    ) -> StepOutcome<ModelStepStatus, ModelError, AsyncStallReason> {
         let mut pipeline = self
             .pipeline
             .take()
             .unwrap_or_else(PdmaCommandPipeline::accepted);
-        let outcome = StepExecutor::new().step(&mut pipeline, context);
-        if matches!(outcome, Ok(RunOutcome::Progressed | RunOutcome::Pending(_))) {
+        let outcome = pipeline.step(context);
+        if matches!(outcome, StepOutcome::Progressed | StepOutcome::Pending(_)) {
             self.pipeline = Some(pipeline);
         }
         outcome

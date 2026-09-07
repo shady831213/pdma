@@ -1,7 +1,8 @@
-use hardware_interface_pipeline::{RunError, RunOutcome};
+use hardware_interface_pipeline::StepOutcome;
 
 use super::DeviceCore;
 use super::probe::{RunStateProbe, probe_run_state};
+#[cfg(test)]
 use crate::ModelResult;
 use crate::status::AsyncStallReason;
 
@@ -17,12 +18,8 @@ pub(crate) enum ModelStepStatus {
     Stalled(AsyncStallReason),
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum PipelineStep {
-    InternalProgress,
-    Pending(AsyncStallReason),
-    Terminal(ModelResult<ModelStepStatus>),
-}
+pub(crate) type CommandStepOutcome =
+    StepOutcome<ModelStepStatus, crate::ModelError, AsyncStallReason>;
 
 enum Admission {
     Accepted,
@@ -31,16 +28,16 @@ enum Admission {
 }
 
 impl DeviceCore {
-    pub(crate) fn step_pipeline(&mut self) -> PipelineStep {
+    pub(crate) fn step_pipeline(&mut self) -> CommandStepOutcome {
         if self.command_pipeline.is_empty() {
             match self.scan_admission() {
                 Admission::Accepted => {}
                 Admission::Idle => {
                     self.trace.idle();
-                    return PipelineStep::Terminal(Ok(ModelStepStatus::Idle));
+                    return StepOutcome::Complete(Ok(ModelStepStatus::Idle));
                 }
                 Admission::Starved => {
-                    return PipelineStep::Pending(AsyncStallReason::ExecutionResourcePressure);
+                    return StepOutcome::Pending(AsyncStallReason::ExecutionResourcePressure);
                 }
             }
         }
@@ -50,13 +47,7 @@ impl DeviceCore {
         );
         let outcome = slot.step(self);
         self.command_pipeline = slot;
-        match outcome {
-            Ok(RunOutcome::Progressed) | Err(RunError::Exhausted | RunError::BudgetExhausted) => {
-                PipelineStep::InternalProgress
-            }
-            Ok(RunOutcome::Pending(wait)) => PipelineStep::Pending(wait),
-            Ok(RunOutcome::Complete(result)) => PipelineStep::Terminal(result),
-        }
+        outcome
     }
 
     pub(crate) fn clear_command_pipeline(&mut self) {
@@ -112,9 +103,12 @@ impl DeviceCore {
     pub(crate) fn step(&mut self) -> ModelResult<ModelStepStatus> {
         loop {
             match self.step_pipeline() {
-                PipelineStep::InternalProgress => {}
-                PipelineStep::Pending(reason) => return Ok(ModelStepStatus::Stalled(reason)),
-                PipelineStep::Terminal(result) => return result,
+                StepOutcome::Progressed => {}
+                StepOutcome::Pending(reason) => return Ok(ModelStepStatus::Stalled(reason)),
+                StepOutcome::Complete(result) => return result,
+                StepOutcome::Exhausted => {
+                    panic!("command pipeline exhausted before terminal result")
+                }
             }
         }
     }

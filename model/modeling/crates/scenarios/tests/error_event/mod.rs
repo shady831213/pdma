@@ -10,7 +10,6 @@ use pdma_model_host::{
     compat::AsyncDevicePort,
 };
 
-#[path = "error_event/recovery.rs"]
 mod recovery;
 
 #[tokio::test(flavor = "current_thread")]

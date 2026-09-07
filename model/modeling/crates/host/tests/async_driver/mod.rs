@@ -2,19 +2,12 @@
 
 use pdma_model_host::{DriverError, PortError};
 
-#[path = "async_driver/allocation.rs"]
 mod allocation;
-#[path = "async_driver/cancellation.rs"]
 mod cancellation;
-#[path = "async_driver/poll_preflight.rs"]
 mod poll_preflight;
-#[path = "async_driver/repoll_guard.rs"]
 mod repoll_guard;
-#[path = "async_driver/semantics.rs"]
 mod semantics;
-#[path = "async_driver/stale_capability.rs"]
 mod stale_capability;
-#[path = "async_driver/support.rs"]
 pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;

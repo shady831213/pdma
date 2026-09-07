@@ -23,15 +23,15 @@ workspace = true
 
 [[test]]
 name = "async_driver"
-path = "tests/async_driver.rs"
+path = "tests/async_driver/mod.rs"
 
 [[test]]
 name = "host_core_surface"
-path = "tests/host_core_surface.rs"
+path = "tests/host_core_surface/mod.rs"
 
 [[test]]
 name = "irq_runtime_surface"
-path = "tests/irq_runtime_surface.rs"
+path = "tests/irq_runtime_surface/mod.rs"
 
 [[test]]
 name = "source_layer_boundaries"

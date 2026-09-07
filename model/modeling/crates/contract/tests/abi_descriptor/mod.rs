@@ -1,19 +1,14 @@
 //! ABI-v1 command descriptor golden vectors and malformed-input checks.
 
 /// Malformed descriptor and boundary-error assertions.
-#[path = "abi_descriptor/errors.rs"]
 pub mod errors;
 /// Generated semantic descriptor-value assertions.
-#[path = "abi_descriptor/schema_values.rs"]
 pub mod schema_values;
 /// Typed descriptor fixtures and byte mutation helpers.
-#[path = "abi_descriptor/support.rs"]
 pub mod support;
 /// Independent literal ABI-v1 golden byte arrays.
-#[path = "abi_descriptor/vectors.rs"]
 pub mod vectors;
 /// Hardware-visible descriptor violation assertions.
-#[path = "abi_descriptor/violations.rs"]
 pub mod violations;
 
 use pdma_model_contract::abi::{

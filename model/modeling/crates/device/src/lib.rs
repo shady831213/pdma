@@ -82,10 +82,6 @@ mod trace;
 )]
 mod device;
 
-#[cfg(test)]
-#[path = "registers/baseline_manifest.rs"]
-mod register_file;
-
 pub use dma::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
 pub use interface::batch::{
     DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,

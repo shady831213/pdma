@@ -1,8 +1,6 @@
 //! State-derived probes behind the Task 23 terminal surface.
 
-#[path = "support/port.rs"]
 pub mod port;
-#[path = "support/source.rs"]
 pub mod source;
 
 pub(super) use port::ProbePort;

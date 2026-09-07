@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-#[path = "stall_annotations/manual.rs"]
 mod manual;
 
 use hardware_interface_runtime::SoftwareCpu;

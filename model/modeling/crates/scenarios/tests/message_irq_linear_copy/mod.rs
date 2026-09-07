@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-#[path = "message_irq_linear_copy/support.rs"]
 pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;

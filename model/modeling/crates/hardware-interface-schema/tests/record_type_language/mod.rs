@@ -2,9 +2,7 @@
 
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError, bits_schema, record_schema};
 
-#[path = "record_type_language/location.rs"]
 mod location;
-#[path = "record_type_language/nested.rs"]
 mod nested;
 
 bits_schema! {

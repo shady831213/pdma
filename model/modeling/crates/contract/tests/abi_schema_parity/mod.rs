@@ -1,6 +1,5 @@
 //! ABI record-schema migration parity tests.
 
-#[path = "abi_schema_parity/support.rs"]
 pub(crate) mod support;
 
 use pdma_model_contract::abi::{

@@ -185,13 +185,8 @@ fn noop() -> SharedInterruptObserver<Notice> {
     Arc::new(NoopInterruptObserver)
 }
 
-#[path = "atomicity.rs"]
 mod atomicity;
-#[path = "cases.rs"]
 mod cases;
-#[path = "error_cases.rs"]
 mod error_cases;
-#[path = "heterogeneous.rs"]
 mod heterogeneous;
-#[path = "lifecycle.rs"]
 mod lifecycle;

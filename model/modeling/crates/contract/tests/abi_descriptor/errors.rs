@@ -1,5 +1,4 @@
 use super::{support, vectors};
-#[path = "errors/construction.rs"]
 mod construction;
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandHeaderOpcode, AbiCommandPayloadBroadcastCopyValues,

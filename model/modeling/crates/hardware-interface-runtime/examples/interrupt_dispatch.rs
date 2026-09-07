@@ -1,6 +1,5 @@
 //! Real Tokio dispatch and adverse shutdown/unregistered demonstration.
 
-#[path = "interrupt_dispatch/support.rs"]
 /// Runtime-neutral toy source, handler, observer, and frozen registry.
 pub mod support;
 

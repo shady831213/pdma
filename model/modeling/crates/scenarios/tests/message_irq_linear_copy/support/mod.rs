@@ -1,6 +1,4 @@
-#[path = "assertions.rs"]
 mod assertions;
-#[path = "recording.rs"]
 mod recording;
 
 pub use assertions::assert_outcome;

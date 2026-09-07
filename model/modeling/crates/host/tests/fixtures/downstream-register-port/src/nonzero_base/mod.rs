@@ -15,7 +15,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::TestResult;
 
-#[path = "nonzero_base/expected.rs"]
 mod expected;
 
 #[derive(Debug, Default)]

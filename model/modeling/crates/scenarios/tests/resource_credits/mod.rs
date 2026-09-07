@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-#[path = "resource_credits/vector_read.rs"]
 mod vector_read;
 
 use hardware_interface_runtime::SoftwareCpu;

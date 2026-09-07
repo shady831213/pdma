@@ -1,4 +1,3 @@
-#[path = "support/types.rs"]
 mod types;
 
 pub use types::*;

@@ -1,5 +1,4 @@
 use super::{support, vectors};
-#[path = "violations/scalar.rs"]
 mod scalar;
 use pdma_model_contract::abi::{
     ABI_VERSION, AbiCommand, AbiCommandHeader, AbiCommandHeaderOpcode,

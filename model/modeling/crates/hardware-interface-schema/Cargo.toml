@@ -20,3 +20,15 @@ export-c-header = []
 
 [lints]
 workspace = true
+
+[[test]]
+name = "c_header"
+path = "tests/c_header/mod.rs"
+
+[[test]]
+name = "record_type_language"
+path = "tests/record_type_language/mod.rs"
+
+[[test]]
+name = "register_layout_dsl"
+path = "tests/register_layout_dsl/mod.rs"

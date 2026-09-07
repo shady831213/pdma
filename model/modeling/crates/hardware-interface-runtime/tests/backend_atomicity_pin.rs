@@ -1,7 +1,6 @@
 #![allow(missing_docs, reason = "integration test crate")]
 #![allow(clippy::expect_used, reason = "checked test fixture operations")]
 
-#[path = "backend_atomicity_pin/fixture.rs"]
 pub mod fixture;
 mod support;
 

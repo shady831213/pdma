@@ -5,13 +5,10 @@ use hardware_interface_schema::{
     register_schema,
 };
 
-include!("register_layout_dsl/located_child.rs");
+include!("located_child.rs");
 
-#[path = "register_layout_dsl/errors.rs"]
 mod errors;
-#[path = "register_layout_dsl/layout.rs"]
 mod layout;
-#[path = "register_layout_dsl/values.rs"]
 mod values;
 
 register_schema! {

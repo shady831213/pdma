@@ -1,10 +1,6 @@
-#[path = "crate_path.rs"]
 mod crate_path;
-#[path = "expand/mod.rs"]
 mod expand;
-#[path = "syntax/mod.rs"]
 mod syntax;
-#[path = "validate/mod.rs"]
 mod validate;
 
 impl crate::Expansion for () {

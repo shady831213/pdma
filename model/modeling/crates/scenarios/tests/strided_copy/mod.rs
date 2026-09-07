@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-#[path = "strided_copy/retry.rs"]
 mod retry;
 
 use hardware_interface_runtime::SoftwareCpu;

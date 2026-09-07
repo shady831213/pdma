@@ -1,6 +1,5 @@
 //! Exact-claim source probe and cancellation schedules.
 
-#[path = "source/adverse.rs"]
 mod adverse;
 
 use super::lock;

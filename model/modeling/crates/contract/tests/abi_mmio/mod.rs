@@ -1,9 +1,8 @@
 //! Exact numeric MMIO ABI conformance.
 
-#[path = "abi_mmio/register_literals/mod.rs"]
 pub mod register_literals;
-#[path = "abi_mmio/response_banks.rs"]
 mod response_banks;
+mod schema_parity;
 
 use pdma_model_contract::abi::mmio::{
     GlobalCommand, IrqCommand, IrqSourceStatus, MMIO_REGION_SIZE, MmioAccess, MmioAccessError,

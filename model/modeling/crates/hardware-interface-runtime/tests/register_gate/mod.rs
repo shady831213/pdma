@@ -183,5 +183,4 @@ impl RegisterObserver for SharedVecObserver {
     }
 }
 
-#[path = "register_gate/faults.rs"]
 mod faults;

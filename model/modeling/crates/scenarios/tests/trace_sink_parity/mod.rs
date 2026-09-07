@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-#[path = "trace_sink_parity/completion_pressure.rs"]
 mod completion_pressure;
 
 use completion_pressure::completion_pressure_trace;

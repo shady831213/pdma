@@ -1,6 +1,9 @@
 mod image;
 mod storage;
 
+#[cfg(test)]
+mod baseline_manifest;
+
 pub(crate) use image::PdmaRegisters;
 #[cfg(debug_assertions)]
 pub(crate) use storage::allocation_observation;

@@ -17,3 +17,11 @@ tokio = { version = "1.49", default-features = false, features = ["macros", "rt"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "interrupt_dispatch"
+path = "tests/interrupt_dispatch/mod.rs"
+
+[[test]]
+name = "register_gate"
+path = "tests/register_gate/mod.rs"

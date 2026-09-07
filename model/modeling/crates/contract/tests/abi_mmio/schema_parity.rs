@@ -1,7 +1,6 @@
 //! Literal parity coverage for the generated PDMA MMIO schema map.
 
-#[path = "abi_mmio/register_literals/mod.rs"]
-pub mod expected;
+use super::register_literals as expected;
 
 use std::{fmt::Debug, hash::Hash};
 

@@ -1,8 +1,6 @@
 #![allow(missing_docs)]
 
-#[path = "message_irq_dual_handler/assertions.rs"]
 pub mod assertions;
-#[path = "message_irq_dual_handler/delivery.rs"]
 pub mod delivery;
 
 use hardware_interface_runtime::SoftwareCpu;

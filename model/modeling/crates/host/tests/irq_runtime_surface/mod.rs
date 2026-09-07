@@ -1,6 +1,5 @@
 //! Runtime-backed PDMA interrupt delivery surface.
 
-#[path = "irq_runtime_surface/support.rs"]
 pub mod support;
 
 use hardware_interface_runtime::{HandlerRegistry, InterruptLifecycleObserver, SoftwareCpu};

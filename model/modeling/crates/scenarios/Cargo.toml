@@ -19,3 +19,35 @@ tokio = { version = "1.49", features = ["macros", "rt", "sync"] }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "error_event"
+path = "tests/error_event/mod.rs"
+
+[[test]]
+name = "irq_delivery"
+path = "tests/irq_delivery/mod.rs"
+
+[[test]]
+name = "message_irq_dual_handler"
+path = "tests/message_irq_dual_handler/mod.rs"
+
+[[test]]
+name = "message_irq_linear_copy"
+path = "tests/message_irq_linear_copy/mod.rs"
+
+[[test]]
+name = "resource_credits"
+path = "tests/resource_credits/mod.rs"
+
+[[test]]
+name = "stall_annotations"
+path = "tests/stall_annotations/mod.rs"
+
+[[test]]
+name = "strided_copy"
+path = "tests/strided_copy/mod.rs"
+
+[[test]]
+name = "trace_sink_parity"
+path = "tests/trace_sink_parity/mod.rs"

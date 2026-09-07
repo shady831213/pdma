@@ -89,6 +89,10 @@ the explicit compatibility ports; the canonical E2E uses `PdmaRegisterPort` over
 
 ## CONVENTIONS
 
+- Rust module redirection with `#[path]` is forbidden repository-wide outside
+  `retired/` trees, including tests, examples, macros and conditional attributes.
+  Use native Rust module declarations and matching directory/file names. Do not
+  bypass this rule with `include!`, symlinks, or duplicated source trees.
 - Keep the model deterministic and step-based; do not add cycle timing.
 - Add failing scenario tests first, then minimum model behavior.
 - Preserve existing behavior for linear, strided, event, queue-config, arbitration, broadcast, vector-add, resource-credit, stall-annotation, and trace-sink slices.

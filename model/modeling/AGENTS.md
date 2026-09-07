@@ -38,6 +38,10 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 
 ## CONVENTIONS
 
+- Use native Rust module layout everywhere; `#[path]` and conditional path
+  attributes are forbidden. Only repository `retired/` trees are exempt.
+  `cargo test -p hardware-interface-schema-macros --test repository_layout`
+  enforces the rule across repository Rust sources during workspace tests.
 - Tests use Given/When/Then comments and assert observable completions, events, and memory contents.
 - `AsyncDevice::from_core(DeviceCore)` returns `(AsyncDevice, AsyncDeviceWorker)`; callers
   choose whether to `tokio::spawn(worker.run())`, directly await it, or use another

@@ -1,7 +1,6 @@
 //! Canonical host-core downstream surface tests.
 
-include!("host_core_surface/compiler.rs");
-#[path = "host_core_surface/support.rs"]
+include!("compiler.rs");
 mod support;
 
 use hardware_interface_runtime::{CpuContextError, SoftwareCpu};

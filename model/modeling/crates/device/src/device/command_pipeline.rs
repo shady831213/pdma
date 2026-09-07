@@ -1,21 +1,15 @@
-use hardware_interface_pipeline::{Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{Stage, StepOutcome, Then, ThenState};
 
+use super::DeviceCore;
 use super::hardware_context::HardwareContext;
-use super::{DeviceCore, ModelStepStatus};
+use super::issue::IssueUnit;
 use crate::execution::ExecutionUnit;
-use crate::queue::issue::IssueView;
-use crate::retirement::RetirementPorts;
+use crate::retirement::RetirementUnit;
 use crate::retirement::stage::RetirementInput;
 use crate::{AsyncStallReason, ModelError};
 
-type Dispatch = Then<IssueView<'static>, ExecutionUnit>;
-type DispatchState = <Dispatch as Stage<HardwareContext<'static>>>::State;
-
-#[derive(Debug)]
-enum CommandState {
-    Dispatch(DispatchState),
-    Retiring(Option<RetirementInput>),
-}
+type CommandStages = Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>;
+type CommandState = <CommandStages as Stage<HardwareContext<'static>>>::State;
 
 #[derive(Debug)]
 pub(super) struct PipelineSlot {
@@ -27,68 +21,14 @@ impl PipelineSlot {
         Self { state: None }
     }
 
-    pub(super) fn step(
-        &mut self,
-        core: &mut DeviceCore,
-    ) -> StepOutcome<ModelStepStatus, ModelError, AsyncStallReason> {
-        let state = self.state.get_or_insert_with(|| {
-            if core.retirement.pending().is_some() {
-                CommandState::Retiring(Some(RetirementInput::Retry))
+    pub(super) fn request(&mut self, retirement_pending: bool) -> &mut CommandState {
+        self.state.get_or_insert_with(|| {
+            if retirement_pending {
+                ThenState::Downstream(ThenState::Downstream(Some(RetirementInput::Retry)))
             } else {
-                CommandState::Dispatch(<Dispatch as Stage<HardwareContext<'_>>>::start(()))
+                <CommandStages as Stage<HardwareContext<'_>>>::start(())
             }
-        });
-        let outcome = match state {
-            CommandState::Dispatch(dispatch) => {
-                let mut stages = Then::new(
-                    IssueView {
-                        scheduler: &mut core.scheduler,
-                        queues: &mut core.queues,
-                    },
-                    &mut core.execution,
-                );
-                let mut context = HardwareContext {
-                    dma: &core.dma,
-                    trace: &mut core.trace,
-                    fetches: &mut core.native_fetches,
-                };
-                match stages.step(&mut context, dispatch) {
-                    StepOutcome::Progressed => StepOutcome::Progressed,
-                    StepOutcome::Pending(reason) => StepOutcome::Pending(reason),
-                    StepOutcome::Complete(Ok(input)) => {
-                        *state = CommandState::Retiring(Some(input));
-                        StepOutcome::Progressed
-                    }
-                    StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-                    StepOutcome::Exhausted => StepOutcome::Exhausted,
-                }
-            }
-            CommandState::Retiring(retirement) => {
-                let mut ports = RetirementPorts::new(
-                    &mut core.queues,
-                    &core.dma,
-                    &mut core.irq,
-                    &mut core.trace,
-                    core.execution.resources(),
-                );
-                match core.retirement.step(&mut ports, retirement) {
-                    StepOutcome::Progressed => StepOutcome::Progressed,
-                    StepOutcome::Pending(reason) => StepOutcome::Pending(reason),
-                    StepOutcome::Complete(Ok(feedback)) => {
-                        if let Some(runnable) = feedback.runnable {
-                            core.scheduler.accept_feedback(runnable);
-                        }
-                        StepOutcome::Complete(feedback.result)
-                    }
-                    StepOutcome::Complete(Err(error)) => match error {},
-                    StepOutcome::Exhausted => StepOutcome::Exhausted,
-                }
-            }
-        };
-        if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
-            self.clear();
-        }
-        outcome
+        })
     }
 
     pub(super) fn clear(&mut self) {

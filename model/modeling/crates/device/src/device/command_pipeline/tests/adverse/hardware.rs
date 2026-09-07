@@ -2,19 +2,17 @@ use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 
 use crate::ModelError;
 use crate::device::{DeviceCore, ModelStepStatus, hardware_context::HardwareContext};
+use crate::retirement::RetirementUnit;
 use crate::retirement::stage::RetirementInput;
-use crate::retirement::{RetirementPorts, RetirementUnit};
 
 #[test]
 fn real_hardware_owners_implement_the_shared_stage_contract() {
     fn assert_stage<S: for<'a> Stage<HardwareContext<'a>, Error = ModelError>>() {}
-    fn assert_retirement<S: for<'a> Stage<RetirementPorts<'a>>>() {}
     fn assert_device<S: Stage<(), Error = ModelError>>() {}
 
-    assert_stage::<crate::scheduler::Scheduler>();
-    assert_stage::<crate::queue::QueueBlock>();
+    assert_stage::<crate::device::issue::IssueUnit>();
     assert_stage::<crate::execution::ExecutionUnit>();
-    assert_retirement::<RetirementUnit>();
+    assert_stage::<RetirementUnit>();
     assert_device::<DeviceCore>();
 }
 
@@ -39,23 +37,21 @@ pub(super) fn retire(
     input: RetirementInput,
 ) -> crate::ModelResult<ModelStepStatus> {
     let mut operation = Operation::new(input);
-    let mut ports = RetirementPorts::new(
-        &mut core.queues,
-        &core.dma,
-        &mut core.irq,
-        &mut core.trace,
-        core.execution.resources(),
-    );
-    let StepOutcome::Complete(Ok(feedback)) = operation.step(&mut core.retirement, &mut ports)
-    else {
+    let mut context = HardwareContext {
+        queues: &mut core.queues,
+        scheduler: &mut core.scheduler,
+        dma: &core.dma,
+        irq: &mut core.irq,
+        trace: &mut core.trace,
+        fetches: &mut core.native_fetches,
+        resources: core.execution.resources(),
+    };
+    let StepOutcome::Complete(result) = operation.step(&mut core.retirement, &mut context) else {
         panic!("retirement should complete");
     };
     assert!(matches!(
-        operation.step(&mut core.retirement, &mut ports),
+        operation.step(&mut core.retirement, &mut context),
         StepOutcome::Exhausted
     ));
-    if let Some(runnable) = feedback.runnable {
-        core.scheduler.accept_feedback(runnable);
-    }
-    feedback.result
+    result
 }

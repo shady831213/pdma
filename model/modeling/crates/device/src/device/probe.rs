@@ -4,7 +4,7 @@ use crate::execution::ExecutionUnit;
 use crate::queue::QueueBlock;
 use crate::queue::io::NormalizedFetch;
 use crate::retirement::{PendingRetirement, RetirementUnit};
-use crate::scheduler::Scheduler;
+use crate::scheduler::RunnableQueues;
 use crate::status::AsyncStallReason;
 use pdma_model_contract::semantic::{DeviceRunState, DeviceStatus, QueueId};
 
@@ -21,7 +21,7 @@ pub(super) enum RunStateProbe {
 pub(super) fn probe_run_state(
     queues: &QueueBlock,
     dma: &PdmaMemoryMappings,
-    scheduler: &Scheduler,
+    scheduler: &RunnableQueues,
     execution: &ExecutionUnit,
     retirement: &RetirementUnit,
 ) -> RunStateProbe {

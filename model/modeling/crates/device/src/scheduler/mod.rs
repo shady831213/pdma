@@ -1,14 +1,13 @@
 use std::collections::VecDeque;
-pub(crate) mod stage;
 
 use pdma_model_contract::semantic::QueueId;
 
 #[derive(Debug, Default)]
-pub(crate) struct Scheduler {
+pub(crate) struct RunnableQueues {
     runnable: VecDeque<QueueId>,
 }
 
-impl Scheduler {
+impl RunnableQueues {
     pub(crate) fn enqueue(&mut self, queue: QueueId) {
         if !self.runnable.contains(&queue) {
             self.runnable.push_back(queue);

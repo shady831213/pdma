@@ -8,10 +8,10 @@ use pdma_model_contract::semantic::{
 
 use super::support::{Case, PipelineRunOutcome, drive_to_complete, prepare, read};
 use crate::ModelError;
+use crate::device::issue::{FetchedCommand, FetchedWork};
 use crate::device::{ModelStepStatus, hardware_context::HardwareContext};
 use crate::execution::CommandRoute;
 use crate::queue::io::NormalizedFault;
-use crate::queue::stage::{FetchedCommand, FetchedWork};
 use crate::retirement::stage::RetirementInput;
 
 mod hardware;
@@ -190,9 +190,13 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
     let core = &mut prepared.fixture.core;
     let input = {
         let mut context = HardwareContext {
+            queues: &mut core.queues,
+            scheduler: &mut core.scheduler,
             dma: &core.dma,
+            irq: &mut core.irq,
             trace: &mut core.trace,
             fetches: &mut core.native_fetches,
+            resources: core.execution.resources(),
         };
         let input = loop {
             match operation.step(&mut core.execution, &mut context) {

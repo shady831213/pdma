@@ -1,6 +1,7 @@
-use hardware_interface_pipeline::StepOutcome;
+use hardware_interface_pipeline::{Stage, StepOutcome, Then};
 
 use super::DeviceCore;
+use super::hardware_context::HardwareContext;
 use super::probe::{RunStateProbe, probe_run_state};
 #[cfg(test)]
 use crate::ModelResult;
@@ -44,12 +45,26 @@ impl DeviceCore {
                 }
             }
         }
-        let mut slot = std::mem::replace(
-            &mut self.command_pipeline,
-            super::command_pipeline::PipelineSlot::new(),
+        let mut context = HardwareContext {
+            queues: &mut self.queues,
+            scheduler: &mut self.scheduler,
+            dma: &self.dma,
+            irq: &mut self.irq,
+            trace: &mut self.trace,
+            fetches: &mut self.native_fetches,
+            resources: self.execution.resources(),
+        };
+        let state = self
+            .command_pipeline
+            .request(self.retirement.pending().is_some());
+        let mut stages = Then::new(
+            &mut self.issue,
+            Then::new(&mut self.execution, &mut self.retirement),
         );
-        let outcome = slot.step(self);
-        self.command_pipeline = slot;
+        let outcome = stages.step(&mut context, state);
+        if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
+            self.command_pipeline.clear();
+        }
         outcome
     }
 

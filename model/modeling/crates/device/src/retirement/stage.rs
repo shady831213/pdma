@@ -2,10 +2,10 @@ use hardware_interface_pipeline::{Stage, StepOutcome};
 
 use super::{RetirementPorts, RetirementStatus, RetirementUnit};
 use crate::device::ModelStepStatus;
+use crate::device::hardware_context::HardwareContext;
 use crate::execution::{ExecutionOutcome, RetirableExecution};
 use crate::queue::io::NormalizedFault;
-use crate::scheduler::stage::QueueFeedback;
-use crate::{AsyncStallReason, ModelError, ModelResult};
+use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug)]
 pub(crate) enum RetirementInput {
@@ -15,16 +15,10 @@ pub(crate) enum RetirementInput {
     Retry,
 }
 
-#[derive(Debug)]
-pub(crate) struct RetirementFeedback {
-    pub(crate) result: ModelResult<ModelStepStatus>,
-    pub(crate) runnable: Option<QueueFeedback>,
-}
-
-impl Stage<RetirementPorts<'_>> for RetirementUnit {
+impl Stage<HardwareContext<'_>> for RetirementUnit {
     type Input = RetirementInput;
-    type Output = RetirementFeedback;
-    type Error = std::convert::Infallible;
+    type Output = ModelStepStatus;
+    type Error = ModelError;
     type Wait = AsyncStallReason;
     type State = Option<RetirementInput>;
 
@@ -34,27 +28,25 @@ impl Stage<RetirementPorts<'_>> for RetirementUnit {
 
     fn step(
         &mut self,
-        ports: &mut RetirementPorts<'_>,
+        context: &mut HardwareContext<'_>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         let Some(input) = state.take() else {
             return StepOutcome::Exhausted;
         };
+        let mut ports = RetirementPorts::new(context);
         let status = match input {
             RetirementInput::Empty(status) => {
-                return StepOutcome::Complete(Ok(RetirementFeedback {
-                    result: Ok(status),
-                    runnable: None,
-                }));
+                return StepOutcome::Complete(Ok(status));
             }
-            RetirementInput::FrontendFault(fault) => self.cache_frontend_fault(ports, fault),
-            RetirementInput::Retry => self.retry(ports),
+            RetirementInput::FrontendFault(fault) => self.cache_frontend_fault(&mut ports, fault),
+            RetirementInput::Retry => self.retry(&mut ports),
             RetirementInput::Executed(outcome) => match outcome {
                 ExecutionOutcome::Success(success) => {
-                    self.retire(ports, RetirableExecution::Success(success))
+                    self.retire(&mut ports, RetirableExecution::Success(success))
                 }
                 ExecutionOutcome::Fault(fault) => {
-                    self.retire(ports, RetirableExecution::Fault(fault))
+                    self.retire(&mut ports, RetirableExecution::Fault(fault))
                 }
                 ExecutionOutcome::InvalidCompletion(route) => ports
                     .retire_command(route.queue)
@@ -72,9 +64,6 @@ impl Stage<RetirementPorts<'_>> for RetirementUnit {
             Ok(RetirementStatus::FaultCached) => Ok(ModelStepStatus::FaultCached),
             Err(error) => Err(error),
         };
-        StepOutcome::Complete(Ok(RetirementFeedback {
-            result,
-            runnable: ports.feedback.take(),
-        }))
+        StepOutcome::Complete(result)
     }
 }

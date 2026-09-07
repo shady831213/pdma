@@ -1,9 +1,11 @@
 use super::{PendingRetirement, RetirementStatus, RetirementUnit};
 use crate::ModelError;
+use crate::device::hardware_context::HardwareContext;
 use crate::dma::PdmaMemoryMappings;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
 use crate::queue::io::NormalizedFault;
+use crate::scheduler::RunnableQueues;
 use crate::trace::TraceSink;
 use pdma_model_contract::semantic::{
     Command, CommandId, CommandOperation, DeviceEpoch, IrqLine, IrqVector, QueueId, ResourceConfig,
@@ -39,18 +41,23 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
     ));
     let mut irq = PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0)));
     let mut trace = TraceSink::default();
+    let mut scheduler = RunnableQueues::default();
+    let mut fetches = 0;
     let mut unit = RetirementUnit::default();
     let source = ModelError::DmaSubmissionState;
 
     // When: a frontend fault is cached for retirement.
     let status = {
-        let mut ports = super::RetirementPorts::new(
-            &mut queues,
-            &dma,
-            &mut irq,
-            &mut trace,
-            ResourceConfig::default(),
-        );
+        let mut context = HardwareContext {
+            queues: &mut queues,
+            scheduler: &mut scheduler,
+            dma: &dma,
+            irq: &mut irq,
+            trace: &mut trace,
+            fetches: &mut fetches,
+            resources: ResourceConfig::default(),
+        };
+        let mut ports = super::RetirementPorts::new(&mut context);
         unit.cache_frontend_fault(
             &mut ports,
             NormalizedFault {

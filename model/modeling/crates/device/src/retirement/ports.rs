@@ -1,8 +1,9 @@
+use crate::device::hardware_context::HardwareContext;
 use crate::dma::PdmaMemoryMappings;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
 use crate::queue::io::{FaultPublication, PublicationOutcome};
-use crate::scheduler::stage::QueueFeedback;
+use crate::scheduler::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::semantic::{
@@ -12,27 +13,21 @@ use pdma_model_contract::semantic::{
 pub(crate) struct RetirementPorts<'a> {
     pub(super) queues: &'a mut QueueBlock,
     pub(super) dma: &'a PdmaMemoryMappings,
-    pub(super) feedback: Option<QueueFeedback>,
+    pub(super) scheduler: &'a mut RunnableQueues,
     pub(super) irq: &'a mut PdmaIrqController,
     pub(super) trace: &'a mut TraceSink,
     pub(super) resources: ResourceConfig,
 }
 
 impl<'a> RetirementPorts<'a> {
-    pub(crate) const fn new(
-        queues: &'a mut QueueBlock,
-        dma: &'a PdmaMemoryMappings,
-        irq: &'a mut PdmaIrqController,
-        trace: &'a mut TraceSink,
-        resources: ResourceConfig,
-    ) -> Self {
+    pub(crate) const fn new(context: &'a mut HardwareContext<'_>) -> Self {
         Self {
-            queues,
-            dma,
-            feedback: None,
-            irq,
-            trace,
-            resources,
+            queues: context.queues,
+            dma: context.dma,
+            scheduler: context.scheduler,
+            irq: context.irq,
+            trace: context.trace,
+            resources: context.resources,
         }
     }
 
@@ -47,7 +42,7 @@ impl<'a> RetirementPorts<'a> {
 
     pub(super) fn requeue(&mut self, queue: QueueId) -> ModelResult<()> {
         if self.queues.has_pending(queue)? {
-            self.feedback = Some(QueueFeedback(queue));
+            self.scheduler.enqueue(queue);
         }
         Ok(())
     }

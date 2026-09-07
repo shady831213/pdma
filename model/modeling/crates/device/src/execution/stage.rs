@@ -4,7 +4,7 @@ use pdma_model_contract::semantic::{CommandOperation, ResourceConfig};
 use super::resources::ResourceDemand;
 use super::{ExecutionOutcome, ExecutionUnit};
 use crate::device::hardware_context::HardwareContext;
-use crate::queue::stage::FetchedWork;
+use crate::device::issue::FetchedWork;
 use crate::retirement::stage::RetirementInput;
 use crate::{AsyncStallReason, ModelError};
 

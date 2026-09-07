@@ -1,7 +1,7 @@
 use pdma_model_contract::semantic::TraceEvent;
 
-use super::super::super::{DeviceCore, ModelStepStatus};
 use super::{Fixture, PipelineRunOutcome};
+use crate::device::{DeviceCore, ModelStepStatus};
 use crate::{MappedDmaRegion, ModelError, ModelResult};
 
 pub(crate) fn drive_to_complete(fixture: &mut Fixture) -> Result<ModelStepStatus, ModelError> {

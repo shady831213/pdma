@@ -142,17 +142,18 @@ The device consumes the contract's two data models: layout-independent values fr
 `contract::abi`. Contract remains the owner of that ABI vocabulary and layout definition;
 the device does not define a second ABI namespace. One synchronous `DeviceCore`
 composition root in `crates/device/src/device/mod.rs` directly owns the device epoch, DMA
-mappings, one register image, queues, scheduler, execution unit, retirement unit, PDMA-local
+mappings, one register image, queues, runnable-queue state, issue/execution/retirement operators, PDMA-local
 IRQ controller, and trace sink. The active source tree exposes the hardware roles and its
 private interface helpers directly:
 
 ```text
 crates/device/src/
-├── device/            # DeviceCore composition, persistent command pipeline, drive, and probes
+├── device/            # DeviceCore composition, retained request state, drive, and probes
+│   └── issue/         # Arbitration and Fetch operators composed as IssueUnit
 ├── queue/             # QueueBlock plus semantic or exact ring state
 ├── dma/               # PdmaMemoryMappings and checked memory access
 ├── registers/         # sole 4 KiB root image and its device-local storage backend
-├── scheduler/         # Scheduler and deterministic runnable-queue arbitration
+├── scheduler/         # RunnableQueues FIFO/deduplication state, not a stage
 ├── execution/         # ExecutionUnit and native semantic operations
 ├── retirement/        # RetirementUnit, typed ports, publication, and retry state
 ├── irq/               # PdmaIrqController route, mask, latch, and notification state
@@ -220,26 +221,41 @@ hardware with explicit `Input`, `Output`, and separately owned request `State`.
 operation creates request state without replacing hardware. `Operation` makes a
 completed or reset request inert, while the same stage accepts subsequent operations.
 
-The actual issue view borrows the unique scheduler and queue block, composing
-`Scheduler -> QueueBlock`. Its `SelectedQueue` carries queue identity; the queue produces
-`FetchedWork`, including command identity, completion routing, and the semantic operation
-or a frontend fault. `ExecutionUnit` owns a nested `Then<ResourceGate, Datapath>`:
+`QueueBlock` is shared hardware state, like the MMIO register image. Its SQ, CQ, and EQ
+storage is used by multiple operators; the queue itself does not implement `Stage`.
+`RunnableQueues` similarly owns FIFO ordering and deduplication state. This follows the
+state/operator distinction in etha_model: request gathering, frame loading, and response
+storage are operators over the same channel state, while arbitration is a separate
+transform ([pinned reference](https://github.com/shady831213/etha_model/blob/5270f00874a1ad390fbbce6f5395be24a52d0ec9/src/etha/tx_sequencer.rs)).
+
+`IssueUnit` owns `Then<Arbitration, Fetch>`. Arbitration reads and advances runnable
+state, producing a `SelectedQueue` identity. Fetch accesses queue state through context
+and produces `FetchedWork`, including command identity, completion routing, and the
+semantic operation or a frontend fault. `ExecutionUnit` owns a nested
+`Then<ResourceGate, Datapath>`:
 resource acceptance produces `AdmittedWork`, and the datapath turns it into
 `RetirementInput`. DMA faults are output data and reach retirement; they do not
 short-circuit the generic composition. Structural model failures may terminate a request.
 
-The device composes issue with execution, then routes the resulting typed retirement
-input to `RetirementUnit`. This explicit feedback topology matters: the same queue block
-owns both fetch and CQ/EQ publication, so it cannot be uniquely borrowed twice in one
-straight `Then` chain. Retirement borrows narrow queue/publication ports after dispatch
-releases them and returns `QueueFeedback` to the scheduler after publication and consume.
-There is no duplicate queue state. Dispatch context contains only shared DMA access,
-trace, and fetch accounting; stage owners remain outside it.
+The root is one ordinary `Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>` chain.
+Every operator receives the same `HardwareContext`, a scoped unique view of queue state,
+runnable state, DMA, IRQ, trace, fetch accounting, and an immutable resource snapshot.
+Issue, execution, and retirement operators remain outside that context. Fetch and
+retirement never compete for separate persistent queue loans: each accesses the shared
+state only during its own step. Retirement publishes/consumes queue entries and requeues
+later work directly through its narrow ports before returning success or a domain error.
+There is no duplicate queue owner, artificial feedback message, or separate manual
+dispatch-to-retirement state machine.
+
+The device retains the chain's derived `ThenState`. A previously cached frontend fault
+uses an explicit nested downstream `Retry` entry so retirement resumes immediately
+without arbitration, refetch, or execution. This retains the existing fault-cache and
+publication-retry boundaries without a second execution path.
 
 Each outer turn preserves one architecture-visible interaction: selection and fetch are
 atomic together; the pure resource check and DMA are atomic together; retirement is the
 third turn. Composed inner stages use the same step semantics without introducing host
-interleavings, timing, or extra in-flight requests. The device retains dispatch/retirement
+interleavings, timing, or extra in-flight requests. The device retains composed request
 state across waits, so resumption cannot refetch, repeat DMA, or republish an effect.
 Owned transfer types make these states independent of the temporary borrowed stage views;
 no GAT or higher-kinded encoding is needed for these non-borrowing request edges.

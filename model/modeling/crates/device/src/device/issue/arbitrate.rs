@@ -1,23 +1,16 @@
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use pdma_model_contract::semantic::QueueId;
 
-use super::Scheduler;
 use crate::device::hardware_context::HardwareContext;
 use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SelectedQueue(pub(crate) Option<QueueId>);
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct QueueFeedback(pub(crate) QueueId);
+#[derive(Debug)]
+pub(super) struct Arbitration;
 
-impl Scheduler {
-    pub(crate) fn accept_feedback(&mut self, feedback: QueueFeedback) {
-        self.enqueue(feedback.0);
-    }
-}
-
-impl Stage<HardwareContext<'_>> for Scheduler {
+impl Stage<HardwareContext<'_>> for Arbitration {
     type Input = ();
     type Output = SelectedQueue;
     type Error = ModelError;
@@ -30,11 +23,11 @@ impl Stage<HardwareContext<'_>> for Scheduler {
 
     fn step(
         &mut self,
-        _: &mut HardwareContext<'_>,
+        context: &mut HardwareContext<'_>,
         active: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         if std::mem::replace(active, false) {
-            StepOutcome::Complete(Ok(SelectedQueue(self.next())))
+            StepOutcome::Complete(Ok(SelectedQueue(context.scheduler.next())))
         } else {
             StepOutcome::Exhausted
         }

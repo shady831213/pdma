@@ -12,7 +12,7 @@ use crate::queue::QueueBlock;
 use crate::queue::exact::PdmaControlError;
 use crate::registers::PdmaRegisters;
 use crate::retirement::RetirementUnit;
-use crate::scheduler::Scheduler;
+use crate::scheduler::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 
@@ -29,7 +29,8 @@ pub struct DeviceCore {
     pub(crate) dma: PdmaMemoryMappings,
     pub(crate) registers: PdmaRegisters,
     queues: QueueBlock,
-    scheduler: Scheduler,
+    scheduler: RunnableQueues,
+    issue: issue::IssueUnit,
     execution: ExecutionUnit,
     retirement: RetirementUnit,
     irq: PdmaIrqController,
@@ -49,7 +50,8 @@ impl DeviceCore {
             dma: PdmaMemoryMappings::new(memory),
             registers: PdmaRegisters::new(),
             queues: QueueBlock::default(),
-            scheduler: Scheduler::default(),
+            scheduler: RunnableQueues::default(),
+            issue: issue::IssueUnit::default(),
             execution: ExecutionUnit::new(config),
             retirement: RetirementUnit::default(),
             irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
@@ -112,6 +114,7 @@ mod command_pipeline;
 pub(crate) mod drive;
 pub(crate) mod hardware_context;
 mod irq;
+pub(crate) mod issue;
 mod probe;
 mod queue;
 mod trace;

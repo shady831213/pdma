@@ -13,7 +13,7 @@ use pdma_model_contract::semantic::{
     queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 
-use super::super::{DeviceCore, ModelStepStatus};
+use crate::device::{DeviceCore, ModelStepStatus};
 use crate::{AsyncStallReason, MappedDmaRegion, ModelError};
 
 mod observation;

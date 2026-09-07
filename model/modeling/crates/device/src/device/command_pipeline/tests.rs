@@ -13,6 +13,7 @@ mod adverse;
 mod composition;
 mod no_replay;
 mod parity;
+mod shared_queue_state;
 mod support;
 
 #[tokio::test(flavor = "current_thread")]

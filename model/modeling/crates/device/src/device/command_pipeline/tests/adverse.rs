@@ -1,5 +1,7 @@
 use hardware_interface_pipeline::{Operation, StepOutcome};
-use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, RingLayout};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCompletion, AbiEvent, AbiEventKind, RingCursor, RingLayout,
+};
 use pdma_model_contract::semantic::{
     BufferId, CommandId, CommandOperation, CompletionRingId, DeviceEpoch, EventErrorKind,
     EventRecord, EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects,
@@ -23,13 +25,15 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     let mut fixture = Fixture::new(ResourceConfig::default());
     fixture.core.enable_tracing();
     let stage = fixture
-        .core
-        .memory
-        .stage(&[
-            RingLayout::<AbiCommand>::checked_extent(2).expect("command extent"),
-            RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
-            RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
-        ])
+        .provisioning
+        .stage(
+            &fixture.core.memory,
+            &[
+                RingLayout::<AbiCommand>::checked_extent(2).expect("command extent"),
+                RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
+                RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
+            ],
+        )
         .expect("ring stage");
     let &[submission, completion, event] = stage.regions() else {
         panic!("three exact queue rings");
@@ -40,7 +44,10 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
         QueueConfig::new(2, 1, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
         QueueRingObjects::new(submission.object(), completion.object(), event.object()),
     );
-    fixture.core.memory.commit(stage).expect("ring mappings");
+    fixture
+        .provisioning
+        .commit(&mut fixture.core.memory, stage)
+        .expect("ring mappings");
     fixture
         .core
         .activate_mapped_exact_queue(activation)
@@ -53,10 +60,10 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     let queue = activation.queue();
     let active = fixture.core.exact_ring_mut(queue).expect("exact queue");
     active
-        .publish_submission_producer(pdma_model_contract::abi::RingCursor::new(1))
+        .publish_submission_producer(RingCursor::new(1))
         .expect("publish producer");
     active
-        .capture_submission_producer(pdma_model_contract::abi::RingCursor::new(1))
+        .capture_submission_producer(RingCursor::new(1))
         .expect("capture producer");
     fixture.core.ring_dma_bus_doorbell(queue).expect("doorbell");
 
@@ -111,13 +118,8 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
         .memory
         .read_memory(event.base(), AbiEvent::RECORD_SIZE as u64)
         .expect("event bytes");
-    assert_eq!(
-        AbiEvent::decode(&published)
-            .expect("canonical event")
-            .fault()
-            .kind(),
-        pdma_model_contract::abi::AbiEventKind::InvalidVersion
-    );
+    let event = AbiEvent::decode(&published).expect("canonical event");
+    assert_eq!(event.fault().kind(), AbiEventKind::InvalidVersion);
     assert_eq!(fixture.core.irq_snapshot(), None);
     assert_eq!(
         super::support::trace_kinds(&fixture.core.trace_events()),
@@ -183,7 +185,11 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
 fn invalid_completion_retires_without_dma_or_success_publication() {
     // Given: the execution hardware receives a route naming an absent completion ring.
     let mut prepared = prepare(Case::Copy);
-    let source = prepared.fixture.core.memory.allocate(8).expect("source");
+    let source = prepared
+        .fixture
+        .provisioning
+        .allocate(&mut prepared.fixture.core.memory, 8)
+        .expect("source");
     prepared
         .fixture
         .core

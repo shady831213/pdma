@@ -14,10 +14,12 @@ use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_default_policy_retires_runnable_queues_in_submission_order() {
     // Given: two async queues with one runnable copy each, submitted in queue order.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     let mut handle = AsyncDevicePort::new(raw_handle.clone());
@@ -222,10 +224,12 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
 }
 
 fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
-    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ))
+    )
 }
 
 async fn wait_for_steps(runner: &AsyncDevice, steps: usize) {

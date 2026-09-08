@@ -11,10 +11,12 @@ use pdma_model_device::AsyncDevice;
 #[tokio::test(flavor = "current_thread")]
 async fn message_irq_delivers_each_completion_publication_without_coalescing() {
     // Given: two successful copies routed to one enabled message-signaled IRQ source.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     let queue = handle

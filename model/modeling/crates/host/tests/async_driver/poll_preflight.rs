@@ -83,10 +83,12 @@ impl PollFixture {
 }
 
 fn new_device() -> (AsyncDevice, AsyncDeviceWorker) {
-    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ))
+    )
 }
 
 async fn completion_fixture() -> DriverResult<PollFixture> {

@@ -24,7 +24,10 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end()
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     start_trace(&handle).await;
-    let access = RecordingMemoryAccess::new(AsyncDeviceAccess::new(handle.clone()));
+    let access = RecordingMemoryAccess::new(AsyncDeviceAccess::new(
+        handle.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    ));
     let cpu = Arc::new(SoftwareCpu::new());
     let phase = cpu.local(SoftwarePhase::MainBeforeSubmit);
     let vector = IrqVector::new(64);

@@ -4,11 +4,11 @@ mod global;
 mod irq;
 mod queue;
 
-use pdma_model_contract::abi::mmio::{MmioAccess, MmioReset, RegisterId};
+use pdma_model_contract::abi::mmio::{MmioAccess, MmioReset, PdmaMmioMapRegisterId};
 
 /// One literal register row independent of the production registry.
 pub type RegisterLiteral = (
-    RegisterId,
+    PdmaMmioMapRegisterId,
     &'static str,
     u32,
     u128,

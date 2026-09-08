@@ -11,16 +11,25 @@ use crate::AsyncStallReason;
 use crate::device::{DeviceCore, context::HardwareContext};
 
 fn fixture() -> (DeviceCore, [QueueConfigHandle; 2]) {
+    let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let mut core = DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        provisioning.memory_access(),
         ResourceConfig::default().with_read_slots(1),
     );
     core.enable_tracing();
     let config = QueueConfig::new(4, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
     let vector = core.create_queue(config).expect("vector queue");
     let copy = core.create_queue(config).expect("copy queue");
-    let source = core.memory.allocate(4).expect("source").object();
-    let destination = core.memory.allocate(4).expect("destination").object();
+    let source = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("source")
+        .object();
+    let destination = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("destination")
+        .object();
     for (queue, operation) in [
         (
             vector,

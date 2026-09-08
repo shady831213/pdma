@@ -34,7 +34,7 @@ fn main() {
 
 fn apply(
     state: &mut [u8; 32],
-    decoded: Result<(pdma_model_contract::abi::mmio::RegisterId, u64), MmioAccessError>,
+    decoded: Result<(pdma_model_contract::abi::mmio::RegisterSpec, u64), MmioAccessError>,
 ) -> Result<(), MmioAccessError> {
     let (_, value) = decoded?;
     state[..8].copy_from_slice(&value.to_le_bytes());

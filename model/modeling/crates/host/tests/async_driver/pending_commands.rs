@@ -1,3 +1,4 @@
+mod irq;
 mod reset;
 pub mod support;
 
@@ -5,7 +6,7 @@ use hardware_interface_runtime::{SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{
     CommandId, CopyRequest, EventRouting, QueueConfig, ResourceConfig, SoftwareOwnerId,
 };
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, DriverError, DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -16,11 +17,14 @@ use support::{GatedAccess, drop_pending};
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_activation_response_is_recovered_by_a_clone_without_new_rings() {
     // Given: an empty real device and a gate after ACTIVATE has committed.
-    let (device, _worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
+    );
+    let access = GatedAccess::new(AsyncDeviceAccess::new(
+        device.handle(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
     ));
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -47,12 +51,15 @@ async fn cancelled_activation_response_is_recovered_by_a_clone_without_new_rings
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_publication_response_keeps_the_accepted_driver_slot() {
     // Given: a depth-one queue with real storage and an explicit worker actor.
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(
+        device.handle(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    ));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -124,12 +131,15 @@ async fn cancelled_event_response_delivers_the_consumed_record_once() {
 )]
 async fn cancelled_retirement_response(fault: bool) {
     // Given: a completed command (or fault) in a real depth-one hardware queue.
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(
+        device.handle(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    ));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

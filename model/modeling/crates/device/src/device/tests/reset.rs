@@ -1,5 +1,6 @@
 use super::super::{DeviceCore, ModelStepStatus};
 use crate::AsyncStallReason;
+use crate::runtime::PdmaMemoryProvisioning;
 use pdma_model_contract::semantic::{
     Command, CommandId, CommandOperation, DeviceEpoch, ResourceConfig, WholeDeviceReset,
     desc::CopyRequest,
@@ -17,11 +18,18 @@ const fn queue_config(completion_depth: usize) -> QueueConfig {
 
 fn submit_copy(
     core: &mut DeviceCore,
+    provisioning: &mut PdmaMemoryProvisioning,
     command: usize,
 ) -> pdma_model_contract::semantic::QueueConfigHandle {
     let queue = core.create_queue(queue_config(1)).expect("queue");
-    let source = core.memory.allocate(1).expect("source").object();
-    let destination = core.memory.allocate(1).expect("destination").object();
+    let source = provisioning
+        .allocate(&mut core.memory, 1)
+        .expect("source")
+        .object();
+    let destination = provisioning
+        .allocate(&mut core.memory, 1)
+        .expect("destination")
+        .object();
     core.memory
         .write_object(source, 0, &[0x5a])
         .expect("source write");
@@ -40,12 +48,12 @@ fn submit_copy(
 #[test]
 fn reset_preserves_persistent_state_and_clears_resettable_hardware() {
     // Given: one completed copy, trace history, DMA bytes, and an epoch-zero queue.
-    let mut core = DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        ResourceConfig::default(),
-    );
+    let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let mut core = DeviceCore::new(provisioning.memory_access(), ResourceConfig::default());
     core.enable_tracing();
-    let queue = submit_copy(&mut core, 0);
+    let queue = submit_copy(&mut core, &mut provisioning, 0);
     let destination = pdma_model_contract::semantic::BufferId::new(1);
     assert_eq!(core.step(), Ok(ModelStepStatus::Progressed));
     let generation = core.memory.generation();
@@ -73,11 +81,14 @@ fn reset_preserves_persistent_state_and_clears_resettable_hardware() {
 #[test]
 fn reset_discards_resource_stalled_work_before_execution() {
     // Given: a queued copy that cannot acquire a read slot.
+    let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let mut core = DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        provisioning.memory_access(),
         ResourceConfig::default().with_read_slots(0),
     );
-    let queue = submit_copy(&mut core, 0);
+    let queue = submit_copy(&mut core, &mut provisioning, 0);
     let destination = pdma_model_contract::semantic::BufferId::new(1);
     assert_eq!(
         core.step(),
@@ -100,16 +111,24 @@ fn reset_discards_resource_stalled_work_before_execution() {
 #[test]
 fn reset_discards_pending_retirement_without_late_publication() {
     // Given: two executed copies with the second retained behind publication pressure.
+    let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let mut core = DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        provisioning.memory_access(),
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let queue = core.create_queue(queue_config(2)).expect("queue");
-    let source = core.memory.allocate(1).expect("source").object();
-    let first_destination = core.memory.allocate(1).expect("first destination").object();
-    let second_destination = core
-        .memory
-        .allocate(1)
+    let source = provisioning
+        .allocate(&mut core.memory, 1)
+        .expect("source")
+        .object();
+    let first_destination = provisioning
+        .allocate(&mut core.memory, 1)
+        .expect("first destination")
+        .object();
+    let second_destination = provisioning
+        .allocate(&mut core.memory, 1)
         .expect("second destination")
         .object();
     core.memory

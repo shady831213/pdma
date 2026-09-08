@@ -8,14 +8,18 @@ use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 #[tokio::test(flavor = "current_thread")]
 async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestResult {
     // Given: independent typed and raw devices with identical committed ring mappings.
-    let (typed_device, _typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (typed_device, _typed_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
-    let (raw_device, _raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    );
+    let (raw_device, _raw_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let typed = typed_device.handle();
     let raw = raw_device.handle();
     let typed_stage = typed.stage_memory_regions(&[128, 64, 128]).await?;
@@ -37,7 +41,7 @@ async fn mapped_activation_and_all_cursor_shadows_match_typed_control() -> TestR
     write_u64(&raw, 0x110, 0).await?;
     write_u64(&raw, 0x118, 1).await?;
     for command in 3..=9 {
-        write_u32(&raw, 0x168, command).await?;
+        write_u32(&raw, 0x164, command).await?;
     }
     let typed_status = typed.control_queue(QueueControl::ReadStatus(queue)).await?;
 
@@ -80,7 +84,7 @@ async fn activate_raw(
     for (offset, value) in [(0x120, 2), (0x124, 2), (0x140, 2), (0x150, 2), (0x160, 2)] {
         write_u32(handle, offset, value).await?;
     }
-    write_u32(handle, 0x168, 1).await
+    write_u32(handle, 0x164, 1).await
 }
 
 async fn read_response(handle: &AsyncDeviceHandle) -> TestResult<[u64; 9]> {

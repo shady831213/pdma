@@ -5,10 +5,12 @@ use pdma_model_host::{ManualDriver, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors() {
     // Given: a CPU-unbound observability driver with one copy and no read resources.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_read_slots(0),
-    ));
+    );
     let before = runner.snapshot().await;
     let mut port = AsyncDevicePort::new(runner.handle());
     let mut driver = ManualDriver::setup_on(&mut port, 4, 4)

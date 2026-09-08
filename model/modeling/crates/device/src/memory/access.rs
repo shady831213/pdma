@@ -128,7 +128,7 @@ impl PdmaMemoryMappings {
         length: u64,
     ) -> Result<Vec<u8>, PdmaMemoryError> {
         let backing = self.resolve_extent(address, length)?;
-        if backing.storage.is_none() {
+        if backing.region.is_empty() {
             return Ok(Vec::new());
         }
         let length = usize::try_from(length).map_err(|_| PdmaMemoryError::StorageExhausted)?;
@@ -143,7 +143,7 @@ impl PdmaMemoryMappings {
     pub fn write_memory(&self, address: DmaAddress, data: &[u8]) -> Result<(), PdmaMemoryError> {
         let length = u64::try_from(data.len()).map_err(|_| PdmaMemoryError::AddressExhausted)?;
         let backing = self.resolve_extent(address, length)?;
-        if backing.storage.is_none() {
+        if backing.region.is_empty() {
             return Ok(());
         }
         self.memory

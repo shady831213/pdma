@@ -1,6 +1,5 @@
 use crate::adapter::abi::{
-    PdmaClaimError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegisterAccessError,
+    PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegisterAccessError,
 };
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_device::MappedDmaRegion;
@@ -41,13 +40,6 @@ pub(super) const fn map_register(error: MmioRegisterError) -> PdmaRegisterAccess
     match error {
         MmioRegisterError::Access(error) => PdmaRegisterAccessError::Access(error),
         MmioRegisterError::Observation(error) => PdmaRegisterAccessError::Observation(error),
-    }
-}
-
-pub(super) const fn map_claim(error: MmioRegisterError) -> PdmaClaimError {
-    match error {
-        MmioRegisterError::Access(error) => PdmaClaimError::Access(error),
-        MmioRegisterError::Observation(error) => PdmaClaimError::Observation(error),
     }
 }
 

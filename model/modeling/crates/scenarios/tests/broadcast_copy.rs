@@ -12,10 +12,12 @@ use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_publishes_one_completion()
  {
     // Given: async runner handle, AsyncDriver, one source range, and two destination ranges.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, no_completion, left_bytes, right_bytes) =
         SoftwareCpu::new()
@@ -92,10 +94,12 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_broadcast_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, one valid destination, and one too-small destination.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, command_id, bad_dst, no_completion) = SoftwareCpu::new()
         .run_main(async {
@@ -164,10 +168,12 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_overlap() {
     // Given: a broadcast whose first destination overlaps and mutates the source range.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, src_bytes, dst_bytes) = SoftwareCpu::new()
         .run_main(async {

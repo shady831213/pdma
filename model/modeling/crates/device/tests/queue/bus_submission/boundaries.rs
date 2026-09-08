@@ -4,10 +4,12 @@ use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceCon
 use pdma_model_device::{AsyncDevice, PendingDmaResult};
 
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default(),
-    ));
+    );
     let handle = runner.handle();
     let (queue, submission) =
         activate(&handle, pdma_model_contract::semantic::QueueId::new(0)).await?;

@@ -20,6 +20,23 @@ register_schema! { pub register IRspVector { width: 8, alignment: 8, endian: Lit
 register_schema! { pub register IRspMessageId { width: 8, alignment: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: 0..64, }, } }
 register_schema! { pub register IRspPendingMessages { width: 8, alignment: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: 0..64, }, } }
 
+register_map! { pub map IrqRegisters {
+    alignment: 8,
+    placements: [
+        pub expected_epoch: IExpectedEpoch,
+        pub source_id: ISourceId,
+        pub source_kind: ISourceKind,
+        pub route_kind: IRouteKind,
+        pub route_vector: IRouteVector,
+        pub command: ICommand,
+        pub result: IResult,
+        pub detail0: IDetail0,
+        pub detail1: IDetail1,
+        pub detail2: IDetail2,
+        pub response: IrqResponseRegisters,
+    ],
+} }
+
 register_map! { pub map IrqResponseRegisters {
     alignment: 8,
     placements: [

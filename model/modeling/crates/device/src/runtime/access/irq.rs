@@ -1,7 +1,7 @@
 //! Async device IRQ control surface.
 
 use crate::ModelResult;
-use crate::interface::mmio::irq::support::{irq_notification_ready, observe_irq_source};
+use crate::irq::mmio::support::{irq_notification_ready, observe_irq_source};
 use crate::runtime::{AsyncDeviceHandle, DeviceWait};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::semantic::EpochIrqSource;

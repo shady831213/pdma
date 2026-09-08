@@ -11,7 +11,7 @@ use pdma_model_contract::semantic::{
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, DriverError, DriverIrqRecord, DriverPort, DriverResult, PortError,
-    adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
+    adapter::abi::{AsyncDeviceAccess, PdmaIrqCoordinator, PdmaRegisterPort},
     runtime::interrupt::PdmaIrqHandler,
 };
 use std::sync::Arc;
@@ -88,7 +88,7 @@ async fn message_irq_two_handlers_share_driver_accounting()
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let raw_port = device.handle();
-    let access = AsyncDeviceAccess::new(raw_port);
+    let access = AsyncDeviceAccess::new(raw_port, PdmaIrqCoordinator::default());
     let main_access = access.clone();
     let cpu = Arc::new(SoftwareCpu::new());
     let completion_vector = IrqVector::new(65);
@@ -191,10 +191,12 @@ async fn message_irq_two_handlers_share_driver_accounting()
 }
 
 fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
-    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ))
+    )
 }
 
 const fn notification_source(notification: IrqNotification) -> IrqSource {

@@ -37,14 +37,14 @@ The v0 model validates the following end-to-end behaviors:
   command acceptance.
 - ABI-v1 fixed-width little-endian descriptor, completion, event, DMA address, ring, and typed
   control vocabulary, with a checked-in C11 data header generated from Rust metadata.
-- One system-owned `SharedMemory` per device instance, with PDMA mapping policy retained
-  by the device and checked bulk access supplied by `hardware-interface-runtime`.
+- A system-selected external-memory capability shared by host and device. Runtime owns
+  allocation and backing installation; hardware retains checked mapping metadata only.
 - Whole-device reset with checked epoch advancement, stale-capability rejection before
   mutation, and fresh bootstrap under the new epoch.
 - One exact 4 KiB little-endian MMIO region with 66 canonical registers, shared decoding,
-  generated C constants, one root image, generated typed views, and stable response semantics.
+  generated C constants, owner-local typed register blocks, canonical codecs, and stable responses.
 - One canonical `PdmaRegisterPort<AsyncDeviceAccess>` whose split memory/register,
-  provisioning and compound-claim capabilities reuse existing typed
+  provisioning and host-owned IRQ coordination capabilities reuse existing typed
   boundaries.
 
 The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
@@ -71,18 +71,33 @@ hardware abort; there is no software-cancellation input or cross-memory/MMIO bat
 transaction in the device. This supersedes the historical v0.9 closed-batch mechanism,
 without changing its wire ABI.
 
-`PdmaRegisterPort` owns clone-shared selector state. Notification readiness is
-non-consuming; `PdmaInterruptSource` performs one compound exact claim after wake.
+`PdmaRegisterPort` owns clone-shared queue selector state. Notification readiness is
+non-consuming. IRQ source commands and `PdmaInterruptSource` share a host coordinator;
+claim writes ICommand and reads result/response registers as individual accesses.
+An issued claim survives software cancellation in host recovery state, without reissuing
+the consuming command. Recovery precedes any coordinated command that could overwrite
+the IRQ response. Reset-invalidated responses produce a typed error, not a notification.
+Host assembly explicitly supplies one `PdmaIrqCoordinator` to all adapters for a device;
+adapter constructors never silently create independent IRQ windows. Fully recovered
+notifications remain host-owned even when later commands replace response registers.
+Their epoch is validated by the existing delivery/service path, not by treating a
+latched register response as a live device epoch.
 The canonical scenario injects one system-owned register observer through
-`AsyncDevice::from_core_observed`; the synchronous `DeviceCore` owns no observation gate.
+`AsyncDevice::new_observed`; the synchronous `DeviceCore` owns no observation gate.
 It observes ACTIVATE and producer publication as ordinary Direct register writes,
 while a scenario-local memory decorator records bulk access separately, including the
 descriptor write. Worker and dispatcher shutdown/join finish before the collector snapshot.
 
 The host presents full `RegisterBusAddress` values relative to a checked base. After one
 checked subtraction, the device endpoint uses the canonical decoder and the same
-`PdmaRegisters` image that generated typed device views borrow. Raw host transactions and
-typed global/queue/IRQ effects therefore cannot diverge into duplicate register bytes.
+owner-local typed register values used by hardware effects. Contract defines composable
+GlobalRegisters, QueueRegisters and IrqRegisters, each containing its response block;
+PdmaMmioMap places those three blocks. QueueBlock, PdmaIrqController and DeviceCore hold
+the corresponding generated values directly. Generated layout access descends into the
+selected block without a handwritten leaf dispatch table, storage backend or central
+byte image. The 4 KiB extent describes the bus, not a required allocation.
+Local addresses follow block alignment and declaration order. In this successor layout,
+queue command/result are at 0x164/0x168; the historical v0.9 addresses are not a constraint.
 
 Schema definitions and resolved layouts belong to `hardware-interface-schema`; shared
 memory, raw registers, CPU-local state, generic interrupt dispatch, and trace storage
@@ -148,9 +163,9 @@ The device consumes the contract's two data models: layout-independent values fr
 `contract::abi`. Contract remains the owner of that ABI vocabulary and layout definition;
 the device does not define a second ABI namespace. One synchronous `DeviceCore`
 composition root in `crates/device/src/device/mod.rs` directly owns the device epoch, DMA
-mappings, one register image, queues, runnable-queue state, issue/execution/retirement operators, PDMA-local
+mappings, global registers, queues, runnable-queue state, issue/execution/retirement operators, PDMA-local
 IRQ controller, and trace sink. The active source tree exposes the hardware roles and its
-private interface helpers directly:
+resource ownership directly:
 
 ```text
 crates/device/src/
@@ -159,28 +174,28 @@ crates/device/src/
 │   ├── execution/     # ExecutionUnit and native semantic operations
 │   ├── retirement/    # RetirementUnit, typed ports, publication, and retry state
 │   ├── flow.rs        # concrete owned values passed between hardware operators
+│   ├── mmio/          # address routing, global commands and reset response projection
 │   └── control/       # cross-state queue activation, IRQ and whole-device reset
-├── queue/             # QueueBlock plus semantic or exact ring state
+├── queue/             # QueueBlock, its register window, and semantic/exact ring state
+│   ├── mmio/          # queue request/response projection and command handling
 │   └── runnable.rs    # shared FIFO/deduplication state, not a stage
-├── memory/            # PdmaMemoryMappings, allocation proposals and checked access
-├── registers/         # sole 4 KiB root image and its device-local storage backend
-├── irq/               # PdmaIrqController route, mask, latch, and notification state
+├── memory/            # mapping metadata and injected external-memory read/write access
+├── irq/               # IRQ controller, its register window and notification operations
+│   └── mmio/          # IRQ request/response projection and command handling
 ├── trace/             # TraceSink state and format export
 ├── adapter/           # stateless ABI-command to semantic-command conversion
-├── interface/         # private exact-MMIO preparation/effects
-│   └── mmio/          # decoded leaf preparation plus global/queue/IRQ command effects
 ├── error.rs           # device error vocabulary, reexported at the crate root
 └── runtime/           # private async actor, backend, worker, waits and runtime state
+    ├── provisioning.rs # external allocation/staging/backing installation policy
     └── access/        # thin handle/endpoint adapters grouped by public operation
 ```
 
-`interface::mmio` owns only synchronous, ephemeral preparation and effects. Ordinary
-decoded leaves read or write the sole root image directly; only the explicit global,
-queue, and IRQ command leaves branch into PDMA effects. There is no handwritten
-full-`RegisterId` dispatch or live global/queue/IRQ bank. It has no persistent device
-state, async lock, observation gate, or observer. Multi-access bootstrap and submission
-sequences belong to the host register port. Persistent hardware state remains directly
-owned by `DeviceCore` and its hardware objects.
+`device::mmio` routes canonical register identities to their hardware owners and composes
+global control. Queue and IRQ owners snapshot their request registers and update their
+response registers. Cross-resource transitions still use the shared device control core.
+Runtime access preparation contains only per-access buffers and observation construction.
+Multi-access bootstrap, submission and IRQ claim sequences belong to host software; there
+is no separate `interface` layer or device compound-claim endpoint.
 
 `queue::exact` owns exact queue requests, status, errors, and ring-local transitions.
 Cross-state activation and publication controls belong to `device::control::queue`.
@@ -210,7 +225,7 @@ The `crates/device/tests` binaries are behavioral public-surface tests, not sour
 structure probes; migration pins supplement the actor, queue, transaction, and MMIO
 suites without exposing private owners. Full host/device, CPU, and interrupt
 stories remain in `crates/scenarios/tests`, whose live inventory is 56 tests. `DeviceCore`
-remains a public construction value so callers can inject shared memory and resource
+remains a public construction value so callers can inject a read/write capability and resource
 configuration. Its reusable `Stage<()>` implementation services one singleton device
 request and exposes `HardwareStepStatus`; queue provisioning and control remain on the
 existing host/device surfaces.
@@ -294,8 +309,8 @@ by the device; resetting an external generic operation alone does not reset hard
 single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,
 `RunnerShared`, the register endpoint, observation gate,
 waits, publication generations, and every lock acquisition live only in `runtime`;
-`interface::mmio` contains only the synchronous preparation/effect and ordered
-commit seams described above. No lock, observer, or async primitive exists inside the
+`device::mmio` and owner-local MMIO handlers contain synchronous hardware effects.
+No async lock, observer, or async primitive exists inside the
 hardware objects or execution units, and no guard crosses a device await boundary. There
 is no second synchronous device facade or second execution core. The reusable stage also
 permits deterministic inspection using the same interaction semantics. These layers own the
@@ -331,7 +346,8 @@ synchronous hardware-object methods, not peer pipelines with separate ownership.
 `WholeDeviceReset` succeeds only when its expected epoch matches the one canonical
 device epoch, then checked-advances it. The bus-control snapshot projects that same
 epoch rather than owning a shadow epoch. Success preserves committed
-`PdmaMemoryMappings` regions, bytes, and allocator generation, trace history, resource
+`PdmaMemoryMappings` metadata and generation, external bytes and runtime allocation state,
+trace history, resource
 configuration, and lifecycle accounting. It clears device queues, completion/event
 records, runnable work, pending retirement, exact queue/cursor state, and
 PDMA-local IRQ routes, causes, and queued notifications. A fresh bootstrap may reuse

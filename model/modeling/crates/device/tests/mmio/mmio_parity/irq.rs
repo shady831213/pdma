@@ -9,10 +9,12 @@ use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 #[tokio::test(flavor = "current_thread")]
 async fn readiness_preserves_one_message_until_one_raw_claim() -> TestResult {
     // Given: one masked Message-routed completion source with one pending notification.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let queue = create_queue(&handle).await?;
@@ -70,14 +72,18 @@ async fn readiness_preserves_one_message_until_one_raw_claim() -> TestResult {
 #[tokio::test(flavor = "current_thread")]
 async fn typed_irq_observation_and_notification_match_raw_mmio() -> TestResult {
     // Given: equivalent typed and raw devices with enabled Message-routed completion sources.
-    let (typed_device, typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (typed_device, typed_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
-    let (raw_device, raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    );
+    let (raw_device, raw_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let typed_worker = tokio::spawn(typed_worker.run());
     let raw_worker = tokio::spawn(raw_worker.run());
     let typed = typed_device.handle();
@@ -206,10 +212,12 @@ async fn response(handle: &AsyncDeviceHandle) -> TestResult<[u64; 9]> {
 #[tokio::test(flavor = "current_thread")]
 async fn readiness_wait_returns_shutdown_without_notification() -> TestResult {
     // Given: a pending readiness wait on a device with no notification.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let cancelled = tokio::spawn({
         let handle = handle.clone();

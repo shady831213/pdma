@@ -78,8 +78,8 @@ async fn observer_records_every_register_access_in_order() -> TestResult {
     // Then: request writes, command writes, and response reads each own an observation.
     let observations = observer.snapshot();
     let expected_offsets = [
-        0x100, 0x108, 0x130, 0x138, 0x148, 0x158, 0x120, 0x124, 0x140, 0x150, 0x160, 0x168, 0x188,
-        0x190, 0x198, 0x1a0, 0x1a8, 0x1b0, 0x1b8, 0x1c0, 0x1c8, 0x100, 0x108, 0x110, 0x118, 0x168,
+        0x100, 0x108, 0x130, 0x138, 0x148, 0x158, 0x120, 0x124, 0x140, 0x150, 0x160, 0x164, 0x188,
+        0x190, 0x198, 0x1a0, 0x1a8, 0x1b0, 0x1b8, 0x1c0, 0x1c8, 0x100, 0x108, 0x110, 0x118, 0x164,
     ];
     assert_eq!(observations.len(), expected_offsets.len());
     for (sequence, (observation, offset)) in observations.iter().zip(expected_offsets).enumerate() {
@@ -89,7 +89,7 @@ async fn observer_records_every_register_access_in_order() -> TestResult {
     }
     let commands: Vec<_> = observations
         .iter()
-        .filter(|item| item.offset == 0x168)
+        .filter(|item| item.offset == 0x164)
         .map(|item| item.request_bytes.clone())
         .collect();
     assert_eq!(

@@ -11,6 +11,7 @@ description = "Async PDMA device model skeleton"
 [dependencies]
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
+hardware-interface-schema = { path = "../hardware-interface-schema" }
 pdma-model-contract = { path = "../contract" }
 tokio = { version = "1.49", features = ["rt", "sync"] }
 

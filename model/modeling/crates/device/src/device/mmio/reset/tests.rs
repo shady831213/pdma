@@ -1,5 +1,5 @@
 use super::*;
-use crate::interface::mmio::reset::{self as mmio_reset, ResetOutcome};
+use crate::device::mmio::reset::{self as mmio_reset, ResetOutcome};
 use crate::runtime::state::RunnerState;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
 use pdma_model_contract::semantic::{SemanticError, ids::BufferId};
@@ -43,13 +43,19 @@ fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
 fn epoch_overflow_preserves_complete_runner_state() {
     // Given: matching exhausted epochs beside persistent DMA and lifecycle accounting.
     let exhausted = DeviceEpoch::new(u64::MAX);
+    let provisioning = crate::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let core = DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        provisioning.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
-    let mut state = RunnerState::new(core);
+    let mut state = RunnerState::new(core, provisioning);
     state.core.reset(exhausted);
-    let region = state.core.memory.allocate(1).expect("DMA allocation");
+    let region = state
+        .provisioning
+        .allocate(&mut state.core.memory, 1)
+        .expect("DMA allocation");
     state
         .core
         .memory

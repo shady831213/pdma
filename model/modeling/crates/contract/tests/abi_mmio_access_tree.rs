@@ -2,13 +2,13 @@
 
 use hardware_interface_schema::{Encode, RegisterLayout, SchemaCodecError};
 use pdma_model_contract::abi::mmio::{
-    GlobalResponseRegistersView, GlobalResponseRegistersViewMut, IrqResponseRegistersView,
-    IrqResponseRegistersViewMut, PdmaMmioMap, PdmaMmioMapRegisterId, PdmaMmioMapView,
-    PdmaMmioMapViewMut, QueueResponseRegistersView, QueueResponseRegistersViewMut, RegisterId,
-    global, irq, queue,
+    GlobalRegistersViewMut, GlobalResponseRegistersView, GlobalResponseRegistersViewMut,
+    IrqRegistersViewMut, IrqResponseRegistersView, IrqResponseRegistersViewMut, PdmaMmioMap,
+    PdmaMmioMapRegisterId, PdmaMmioMapView, PdmaMmioMapViewMut, QueueRegistersViewMut,
+    QueueResponseRegistersView, QueueResponseRegistersViewMut, global, irq, queue,
 };
 
-macro_rules! legacy_root_entries {
+macro_rules! root_entries {
     ($view:ident, $view_mut:ident; $($id:ident => $accessor:ident, $mutable:ident),+ $(,)?) => {{
         $(let _ = $view.$accessor()?; let _ = $view_mut.$mutable()?;)+
         [$(PdmaMmioMapRegisterId::$id),+]
@@ -84,38 +84,41 @@ fn projection_matches_compact_response_bytes_through_grouped_roots()
 
     // When: the response ranges are projected through the grouped root views.
     let root = PdmaMmioMapView::new(&root_bytes)?;
-    let global = root.global()?;
-    let queue = root.queue()?;
-    let irq = root.irq()?;
+    let global_block = root.global()?;
+    let queue_block = root.queue()?;
+    let irq_block = root.irq()?;
+    let global = global_block.response()?;
+    let queue = queue_block.response()?;
+    let irq = irq_block.response()?;
 
     // Then: every contiguous compact byte range and every grouped response leaf agree.
     assert_eq!(&root_bytes[0x040..0x06c], global_raw.as_bytes());
     assert_eq!(&root_bytes[0x188..0x1d0], queue_raw.as_bytes());
     assert_eq!(&root_bytes[0x240..0x278], irq_raw.as_bytes());
     assert_grouped_values!(global, global_compact;
-        rsp_abi_version => abi_version, rsp_run_state => run_state, rsp_features => features,
-        rsp_epoch => epoch, max_ring_depth => max_ring_depth,
+        abi_version => abi_version, run_state => run_state, features => features,
+        epoch => epoch, max_ring_depth => max_ring_depth,
         max_indirect_destinations => max_indirect_destinations,
         max_transfer_bytes => max_transfer_bytes, max_strided_rows => max_strided_rows,
         max_stride => max_stride,
     );
     assert_grouped_values!(queue, queue_compact;
-        rsp_epoch => epoch, rsp_id => queue_id, rsp_sq_producer => sq_producer,
-        rsp_sq_captured => sq_captured, rsp_sq_consumer => sq_consumer,
-        rsp_cq_producer => cq_producer, rsp_cq_consumer => cq_consumer,
-        rsp_eq_producer => eq_producer, rsp_eq_consumer => eq_consumer,
+        epoch => epoch, queue_id => queue_id, sq_producer => sq_producer,
+        sq_captured => sq_captured, sq_consumer => sq_consumer,
+        cq_producer => cq_producer, cq_consumer => cq_consumer,
+        eq_producer => eq_producer, eq_consumer => eq_consumer,
     );
     assert_grouped_values!(irq, irq_compact;
-        rsp_epoch => epoch, rsp_source_id => source_id, rsp_source_kind => source_kind,
-        rsp_state => state, rsp_route_kind => route_kind,
-        rsp_notification_kind => notification_kind, rsp_vector => vector,
-        rsp_message_id => message_id, rsp_pending_messages => pending_messages,
+        epoch => epoch, source_id => source_id, source_kind => source_kind,
+        state => state, route_kind => route_kind,
+        notification_kind => notification_kind, vector => vector,
+        message_id => message_id, pending_messages => pending_messages,
     );
     Ok(())
 }
 
 #[test]
-fn grouped_and_flat_mutations_alias_and_reject_invalid_images()
+fn root_and_block_mutations_alias_and_reject_invalid_images()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a root image and malformed images with distinct before-bytes.
     let mut bytes = [0_u8; 0x1000];
@@ -123,31 +126,31 @@ fn grouped_and_flat_mutations_alias_and_reject_invalid_images()
     let short_before = short;
     let before = bytes;
 
-    // When: writable leaves are selected through groups and flats, then a malformed root is tried.
+    // When: writable leaves are selected through root and block views, then a malformed root is tried.
     PdmaMmioMapViewMut::new(&mut bytes)?
         .global_mut()?
         .req_abi_version_mut()?
         .set_value(0x1122_3344)?;
-    PdmaMmioMapViewMut::new(&mut bytes)?
-        .g_req_abi_version_mut()?
+    GlobalRegistersViewMut::new(&mut bytes[..0x6c])?
+        .req_abi_version_mut()?
         .set_value(0x5566_7788)?;
     PdmaMmioMapViewMut::new(&mut bytes)?
         .queue_mut()?
         .expected_epoch_mut()?
         .set_value(0x0102_0304_0506_0708)?;
-    PdmaMmioMapViewMut::new(&mut bytes)?
-        .q_expected_epoch_mut()?
+    QueueRegistersViewMut::new(&mut bytes[0x100..0x1d0])?
+        .expected_epoch_mut()?
         .set_value(0x1112_1314_1516_1718)?;
     PdmaMmioMapViewMut::new(&mut bytes)?
         .irq_mut()?
         .route_vector_mut()?
         .set_value(0x2122_2324_2526_2728)?;
-    PdmaMmioMapViewMut::new(&mut bytes)?
-        .i_route_vector_mut()?
+    IrqRegistersViewMut::new(&mut bytes[0x200..0x278])?
+        .route_vector_mut()?
         .set_value(0x3132_3334_3536_3738)?;
     let short_error = PdmaMmioMapViewMut::new(&mut short).err();
 
-    // Then: groups and flats share bytes while the exact malformed error preserves its image.
+    // Then: root and block views share bytes while the exact malformed error preserves its image.
     assert_eq!(&bytes[0x008..0x00c], &[0x88, 0x77, 0x66, 0x55]);
     assert_eq!(
         &bytes[0x100..0x108],
@@ -170,51 +173,20 @@ fn grouped_and_flat_mutations_alias_and_reject_invalid_images()
 }
 
 #[test]
-fn legacy_generated_root_symbols_and_ids_remain_public() -> Result<(), Box<dyn std::error::Error>> {
-    // Given: a full root image and every generated legacy root accessor/identity.
+fn generated_root_symbols_expose_three_owned_blocks() -> Result<(), Box<dyn std::error::Error>> {
+    // Given: a full root image and the three generated block accessors and identities.
     let bytes = [0_u8; 0x1000];
     let mut mutable_bytes = [0xa5_u8; 0x1000];
     let root = PdmaMmioMapView::new(&bytes)?;
     let mut root_mut = PdmaMmioMapViewMut::new(&mut mutable_bytes)?;
-    let expected = legacy_root_entries!(root, root_mut;
-        GMagic => g_magic, g_magic_mut, GMmioAbiVersion => g_mmio_abi_version, g_mmio_abi_version_mut,
-        GReqAbiVersion => g_req_abi_version, g_req_abi_version_mut, GReqFeatures => g_req_features, g_req_features_mut,
-        GResetExpectedEpoch => g_reset_expected_epoch, g_reset_expected_epoch_mut, GCommand => g_command, g_command_mut,
-        GResult => g_result, g_result_mut, GDetail0 => g_detail0, g_detail0_mut, GDetail1 => g_detail1, g_detail1_mut,
-        GDetail2 => g_detail2, g_detail2_mut, GRspAbiVersion => g_rsp_abi_version, g_rsp_abi_version_mut,
-        GRspRunState => g_rsp_run_state, g_rsp_run_state_mut, GRspFeatures => g_rsp_features, g_rsp_features_mut,
-        GRspEpoch => g_rsp_epoch, g_rsp_epoch_mut, GMaxRingDepth => g_max_ring_depth, g_max_ring_depth_mut,
-        GMaxIndirectDestinations => g_max_indirect_destinations, g_max_indirect_destinations_mut,
-        GMaxTransferBytes => g_max_transfer_bytes, g_max_transfer_bytes_mut,
-        GMaxStridedRows => g_max_strided_rows, g_max_strided_rows_mut, GMaxStride => g_max_stride, g_max_stride_mut,
-        QExpectedEpoch => q_expected_epoch, q_expected_epoch_mut, QId => q_id, q_id_mut,
-        QExpectedCursor => q_expected_cursor, q_expected_cursor_mut, QNewCursor => q_new_cursor, q_new_cursor_mut,
-        QCfgSqDepth => q_cfg_sq_depth, q_cfg_sq_depth_mut, QCfgCqDepth => q_cfg_cq_depth, q_cfg_cq_depth_mut,
-        QCfgEventPolicy => q_cfg_event_policy, q_cfg_event_policy_mut, QCfgSoftwareOwner => q_cfg_software_owner, q_cfg_software_owner_mut,
-        QSqBase => q_sq_base, q_sq_base_mut, QSqDepth => q_sq_depth, q_sq_depth_mut,
-        QCqBase => q_cq_base, q_cq_base_mut, QCqDepth => q_cq_depth, q_cq_depth_mut,
-        QEqBase => q_eq_base, q_eq_base_mut, QEqDepth => q_eq_depth, q_eq_depth_mut,
-        QCommand => q_command, q_command_mut, QResult => q_result, q_result_mut,
-        QDetail0 => q_detail0, q_detail0_mut, QDetail1 => q_detail1, q_detail1_mut, QDetail2 => q_detail2, q_detail2_mut,
-        QRspEpoch => q_rsp_epoch, q_rsp_epoch_mut, QRspId => q_rsp_id, q_rsp_id_mut,
-        QRspSqProducer => q_rsp_sq_producer, q_rsp_sq_producer_mut, QRspSqCaptured => q_rsp_sq_captured, q_rsp_sq_captured_mut,
-        QRspSqConsumer => q_rsp_sq_consumer, q_rsp_sq_consumer_mut, QRspCqProducer => q_rsp_cq_producer, q_rsp_cq_producer_mut,
-        QRspCqConsumer => q_rsp_cq_consumer, q_rsp_cq_consumer_mut, QRspEqProducer => q_rsp_eq_producer, q_rsp_eq_producer_mut,
-        QRspEqConsumer => q_rsp_eq_consumer, q_rsp_eq_consumer_mut, IExpectedEpoch => i_expected_epoch, i_expected_epoch_mut,
-        ISourceId => i_source_id, i_source_id_mut, ISourceKind => i_source_kind, i_source_kind_mut,
-        IRouteKind => i_route_kind, i_route_kind_mut, IRouteVector => i_route_vector, i_route_vector_mut,
-        ICommand => i_command, i_command_mut, IResult => i_result, i_result_mut,
-        IDetail0 => i_detail0, i_detail0_mut, IDetail1 => i_detail1, i_detail1_mut, IDetail2 => i_detail2, i_detail2_mut,
-        IRspEpoch => i_rsp_epoch, i_rsp_epoch_mut, IRspSourceId => i_rsp_source_id, i_rsp_source_id_mut,
-        IRspSourceKind => i_rsp_source_kind, i_rsp_source_kind_mut, IRspState => i_rsp_state, i_rsp_state_mut,
-        IRspRouteKind => i_rsp_route_kind, i_rsp_route_kind_mut,
-        IRspNotificationKind => i_rsp_notification_kind, i_rsp_notification_kind_mut,
-        IRspVector => i_rsp_vector, i_rsp_vector_mut, IRspMessageId => i_rsp_message_id, i_rsp_message_id_mut,
-        IRspPendingMessages => i_rsp_pending_messages, i_rsp_pending_messages_mut,
+    let expected = root_entries!(root, root_mut;
+        Global => global, global_mut,
+        Queue => queue, queue_mut,
+        Irq => irq, irq_mut,
     );
 
-    // When: all flat symbols and their stable IDs are checked against generated metadata.
-    let first: RegisterId = PdmaMmioMapRegisterId::GMagic;
+    // When: all block symbols and their generated IDs are checked against generated metadata.
+    let first = PdmaMmioMapRegisterId::Global;
     type_exists::<PdmaMmioMap>();
     type_exists::<PdmaMmioMapRegisterId>();
     type_exists::<PdmaMmioMapRaw>();
@@ -234,18 +206,9 @@ fn legacy_generated_root_symbols_and_ids_remain_public() -> Result<(), Box<dyn s
     type_exists::<IrqResponseRegistersView<'static>>();
     type_exists::<IrqResponseRegistersViewMut<'static>>();
 
-    // Then: every legacy root accessor and generated ID keeps its identity/order.
+    // Then: the root declares exactly the three blocks, with no access-only projection tree.
     assert_eq!(first, expected[0]);
     assert_eq!(PdmaMmioMapRegisterId::ALL, expected);
-    assert_eq!(PdmaMmioMap::ACCESS_PATHS.len(), expected.len());
-    for (path, id) in PdmaMmioMap::ACCESS_PATHS.iter().zip(expected) {
-        assert_eq!(path.leaf().target(), id);
-        assert_eq!(path.groups().len(), 1);
-        assert!(
-            path.groups()
-                .first()
-                .is_some_and(|group| matches!(group.name(), "global" | "queue" | "irq"))
-        );
-    }
+    assert!(PdmaMmioMap::ACCESS_PATHS.is_empty());
     Ok(())
 }

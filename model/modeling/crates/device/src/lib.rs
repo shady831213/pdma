@@ -54,22 +54,12 @@ mod error;
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
-mod interface;
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
-)]
 mod irq;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
 mod queue;
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
-)]
-mod registers;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
@@ -91,11 +81,11 @@ mod device;
 pub use device::DeviceCore;
 pub use device::drive::HardwareStepStatus;
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
-pub use interface::mmio::MmioRegisterError;
-pub use memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
+pub use memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings};
 pub use queue::exact::{PdmaControlError, PendingDmaResult, QueueStatus};
 pub use runtime::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
-    MmioRegisterEndpoint,
+    MmioRegisterEndpoint, MmioRegisterError,
 };
+pub use runtime::{PdmaMemoryProvisioning, PdmaMemoryStage};
 pub use status::{AsyncStallReason, AsyncStepStatus};

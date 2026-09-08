@@ -7,11 +7,12 @@ use pdma_model_host::{ManualDriver, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_tracing_preserves_manual_run_until_idle_behavior() {
     // Given: the same copy submitted through separate baseline and traced observability drivers.
-    let (baseline_runner, baseline_worker) =
-        AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ));
+    let (baseline_runner, baseline_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+    );
     let mut baseline_port = AsyncDevicePort::new(baseline_runner.handle());
     let mut baseline_driver = ManualDriver::setup_on(&mut baseline_port, 4, 4)
         .await
@@ -36,11 +37,12 @@ async fn async_tracing_preserves_manual_run_until_idle_behavior() {
         .await
         .expect("baseline copy submission has ring space");
 
-    let (traced_runner, traced_worker) =
-        AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ));
+    let (traced_runner, traced_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+    );
     let traced_handle = traced_runner.handle();
     traced_handle.enable_tracing().await;
     traced_handle.clear_trace().await;

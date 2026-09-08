@@ -176,6 +176,7 @@ impl QueueBlock {
 
     pub(crate) fn clear(&mut self) {
         self.contexts.clear();
+        self.registers = pdma_model_contract::abi::mmio::QueueRegistersValues::default();
     }
 
     pub(super) fn get(&self, id: QueueId) -> ModelResult<&PdmaQueue> {

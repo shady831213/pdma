@@ -137,11 +137,12 @@ impl StatefulIrqHandler for ResetHandler {
 /// Panics when stale service reaches acknowledgement or returns the wrong typed error.
 pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Given: an old driver and host-owned notification facing a reset epoch service port.
-    let (device, _worker) =
-        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ));
+    let (device, _worker) = pdma_model_device::AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+    );
     let cpu = SoftwareCpu::new();
     let mut device_port = DevicePort::new(device.handle());
     let driver = cpu

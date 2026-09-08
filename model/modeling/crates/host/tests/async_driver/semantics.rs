@@ -7,10 +7,12 @@ use pdma_model_host::{AsyncDriver, ManualDriver, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a completed command on a depth-one CPU-bound driver.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let mut port = AsyncDevicePort::new(device.handle());
 
@@ -46,10 +48,12 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
 #[tokio::test(flavor = "current_thread")]
 async fn event_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a fault event for a depth-one CPU-bound driver.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let mut port = AsyncDevicePort::new(device.handle());
 
@@ -87,10 +91,12 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
 #[tokio::test(flavor = "current_thread")]
 async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
     // Given: two manual driver capabilities for one depth-one queue.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let mut port = AsyncDevicePort::new(device.handle());
     let (mut first, mut second, src, dst, submitted, full) = {

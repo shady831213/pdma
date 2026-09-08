@@ -15,10 +15,12 @@ async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     // Given: async runner handle, AsyncDriver, padded source rows, and sentinel destination bytes.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, queue_id, dst_bytes, no_completion) = SoftwareCpu::new()
         .run_main(async {
@@ -93,10 +95,12 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buffer() {
     // Given: async runner handle, AsyncDriver, and a strided copy whose second row is too long.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, no_completion) = SoftwareCpu::new()
         .run_main(async {
@@ -136,10 +140,12 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_work() {
     // Given: a bad strided copy followed by a valid strided copy in the same async queue.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (error_snapshot, progress_snapshot, completion, good_command, good_dst_bytes) =
         SoftwareCpu::new()

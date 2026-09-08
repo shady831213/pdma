@@ -2,12 +2,14 @@
 
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::semantic::ids::BufferId;
-use pdma_model_device::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings};
+use pdma_model_device::{MappedDmaRegion, PdmaMemoryError};
+mod fixture;
+use fixture::ProvisionedMemory;
 
 #[test]
 fn staged_batch_returns_regions_and_commits_all_or_none() {
     // Given an empty checked DMA space.
-    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let mut space = ProvisionedMemory::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
 
@@ -42,7 +44,7 @@ fn staged_batch_returns_regions_and_commits_all_or_none() {
 #[test]
 fn committed_region_exposes_object_base_and_length() {
     // Given: a fresh checked DMA space.
-    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let mut space = ProvisionedMemory::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
 
@@ -61,7 +63,7 @@ fn committed_region_exposes_object_base_and_length() {
 #[test]
 fn allocation_exhaustion_preserves_allocator_state() {
     // Given: one committed mapping with sentinel bytes and its next allocation staged.
-    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let mut space = ProvisionedMemory::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
     let first = space.allocate(4).expect("first allocation");
@@ -99,7 +101,7 @@ fn allocation_exhaustion_preserves_allocator_state() {
 #[test]
 fn dropped_and_conflicting_stages_preserve_allocator_mapping_and_bytes() {
     // Given one mapped region with nonzero data and two stages from the same generation.
-    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let mut space = ProvisionedMemory::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
     let initial = space.allocate(4).expect("initial allocation");
@@ -135,7 +137,7 @@ fn dropped_and_conflicting_stages_preserve_allocator_mapping_and_bytes() {
 #[test]
 fn rejects_exhausted_overlapping_unmapped_and_cross_region_access() {
     // Given two adjacent allocations and a conflicting stale proposal.
-    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let mut space = ProvisionedMemory::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
     let first = space.allocate(64).expect("first allocation");
@@ -204,7 +206,7 @@ fn rejects_exhausted_overlapping_unmapped_and_cross_region_access() {
 #[test]
 fn zero_length_region_accepts_only_empty_dma_address_access_at_base() {
     // Given a committed zero-length region followed by a non-empty mapping.
-    let mut space = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let mut space = ProvisionedMemory::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
     let empty = space.allocate(0).expect("zero-length allocation");

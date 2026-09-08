@@ -10,6 +10,7 @@ use super::backend::DeviceInteractionBackend;
 #[derive(Debug)]
 pub(crate) struct RunnerState {
     pub(crate) core: DeviceCore,
+    pub(crate) provisioning: super::PdmaMemoryProvisioning,
     pub(crate) steps: usize,
     pub(crate) errors: usize,
     pub(crate) stalls: usize,
@@ -21,9 +22,10 @@ pub(crate) struct RunnerState {
 }
 
 impl RunnerState {
-    pub(crate) const fn new(core: DeviceCore) -> Self {
+    pub(crate) const fn new(core: DeviceCore, provisioning: super::PdmaMemoryProvisioning) -> Self {
         Self {
             core,
+            provisioning,
             steps: 0,
             errors: 0,
             stalls: 0,

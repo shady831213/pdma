@@ -100,6 +100,12 @@ impl PdmaExactInterruptClaim for RecordingMemoryAccess {
     }
 }
 
+impl pdma_model_host::adapter::abi::PdmaIrqAccess for RecordingMemoryAccess {
+    fn irq_coordinator(&self) -> &pdma_model_host::adapter::abi::PdmaIrqCoordinator {
+        self.inner.irq_coordinator()
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct RecordingRegisterObserver(Mutex<Vec<RegisterObservation>>);
 
@@ -142,7 +148,7 @@ pub(super) fn assert_register_transcript(accesses: &[RegisterObservation]) {
         .iter()
         .filter(|access| {
             access.kind == AccessKind::Write
-                && access.offset == 0x168
+                && access.offset == 0x164
                 && matches!(access.request_bytes.as_slice(), [1 | 3 | 4, 0, 0, 0])
         })
         .map(|access| access.request_bytes.as_slice())
@@ -158,31 +164,40 @@ pub(super) fn assert_register_transcript(accesses: &[RegisterObservation]) {
             && access.request_bytes == [9, 0, 0, 0]
     });
     let claim_start = claim_start.expect("one exact claim must occur");
-    let sequence = u64::try_from(claim_start).expect("test sequence fits");
-    let exact = [
-        RegisterObservation::write(sequence, AccessOrigin::Direct, 0x220, &[9, 0, 0, 0]),
-        RegisterObservation::read(sequence + 1, AccessOrigin::Direct, 0x224, &[1, 0, 0, 0]),
-        RegisterObservation::read(sequence + 2, AccessOrigin::Direct, 0x240, &[0; 8]),
-        RegisterObservation::read(sequence + 3, AccessOrigin::Direct, 0x248, &[0; 8]),
-        RegisterObservation::read(sequence + 4, AccessOrigin::Direct, 0x250, &[0; 4]),
-        RegisterObservation::read(sequence + 5, AccessOrigin::Direct, 0x254, &[75, 0, 0, 0]),
-        RegisterObservation::read(sequence + 6, AccessOrigin::Direct, 0x258, &[1, 0, 0, 0]),
-        RegisterObservation::read(sequence + 7, AccessOrigin::Direct, 0x25c, &[2, 0, 0, 0]),
-        RegisterObservation::read(
-            sequence + 8,
-            AccessOrigin::Direct,
-            0x260,
-            &[64, 0, 0, 0, 0, 0, 0, 0],
-        ),
-        RegisterObservation::read(sequence + 9, AccessOrigin::Direct, 0x268, &[0; 8]),
-        RegisterObservation::read(sequence + 10, AccessOrigin::Direct, 0x270, &[0; 8]),
+    let actual = accesses
+        .iter()
+        .skip(claim_start)
+        .filter(|access| (0x200..0x278).contains(&access.offset))
+        .take(12)
+        .map(|access| {
+            (
+                access.kind,
+                access.offset,
+                if access.kind == AccessKind::Write {
+                    access.request_bytes.clone()
+                } else {
+                    access.response_bytes.clone()
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let expected = [
+        (AccessKind::Write, 0x220, vec![9, 0, 0, 0]),
+        (AccessKind::Read, 0x224, vec![1, 0, 0, 0]),
+        (AccessKind::Read, 0x240, vec![0; 8]),
+        (AccessKind::Read, 0x248, vec![0; 8]),
+        (AccessKind::Read, 0x250, vec![0; 4]),
+        (AccessKind::Read, 0x254, vec![75, 0, 0, 0]),
+        (AccessKind::Read, 0x258, vec![1, 0, 0, 0]),
+        (AccessKind::Read, 0x25c, vec![2, 0, 0, 0]),
+        (AccessKind::Read, 0x260, vec![64, 0, 0, 0, 0, 0, 0, 0]),
+        (AccessKind::Read, 0x268, vec![0; 8]),
+        (AccessKind::Read, 0x270, vec![0; 8]),
+        (AccessKind::Read, 0x224, vec![1, 0, 0, 0]),
     ];
-    assert_eq!(
-        accesses.get(claim_start..claim_start + exact.len()),
-        Some(exact.as_slice())
-    );
+    assert_eq!(actual, expected);
     println!(
-        "manual-qa register transcript: accesses={} all-direct publication=[1,3,4] claim-index={claim_start} claim-items=11",
+        "manual-qa register transcript: accesses={} all-direct publication=[1,3,4] claim-index={claim_start} claim-items=12",
         accesses.len()
     );
 }

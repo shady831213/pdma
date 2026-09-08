@@ -5,17 +5,8 @@ use std::error::Error;
 type TestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 type ExpectedObservation = (AccessKind, u32, usize, &'static [u8], &'static [u8]);
 
-pub fn observations(result: &PdmaClaimResult) -> TestResult<&[RegisterObservation]> {
-    match result {
-        PdmaClaimResult::Notification { observations, .. } => Ok(observations),
-        PdmaClaimResult::Empty | PdmaClaimResult::Shutdown => {
-            Err("expected notification transcript".into())
-        }
-    }
-}
-
 pub fn assert_exact(actual: &[RegisterObservation]) -> TestResult<()> {
-    let expected: [ExpectedObservation; 11] = [
+    let expected: [ExpectedObservation; 12] = [
         (AccessKind::Write, 0x220, 4, &[9, 0, 0, 0], &[]),
         (AccessKind::Read, 0x224, 4, &[], &[1, 0, 0, 0]),
         (AccessKind::Read, 0x240, 8, &[], &[0; 8]),
@@ -33,6 +24,7 @@ pub fn assert_exact(actual: &[RegisterObservation]) -> TestResult<()> {
         ),
         (AccessKind::Read, 0x268, 8, &[], &[0; 8]),
         (AccessKind::Read, 0x270, 8, &[], &[0; 8]),
+        (AccessKind::Read, 0x224, 4, &[], &[1, 0, 0, 0]),
     ];
     if actual.len() != expected.len() {
         return Err("claim transcript length differs".into());
@@ -40,7 +32,7 @@ pub fn assert_exact(actual: &[RegisterObservation]) -> TestResult<()> {
     for (sequence, (item, (kind, offset, width, request, response))) in
         actual.iter().zip(expected).enumerate()
     {
-        if item.sequence != sequence as u64
+        if item.sequence != u64::try_from(sequence)?
             || item.origin != AccessOrigin::Direct
             || item.kind != kind
             || item.offset != offset

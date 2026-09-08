@@ -145,3 +145,30 @@ pub(super) async fn submit_copy(
         .await?;
     Ok(())
 }
+
+pub(super) async fn claim(endpoint: &pdma_model_device::MmioRegisterEndpoint) -> TestResult<bool> {
+    use hardware_interface_runtime::RegisterAccess;
+    endpoint.write(0x220, &[9, 0, 0, 0]).await?;
+    let mut result = [0; 4];
+    endpoint.read(0x224, &mut result).await?;
+    match u32::from_le_bytes(result) {
+        1 => {
+            for (offset, width) in [
+                (0x240, 8),
+                (0x248, 8),
+                (0x250, 4),
+                (0x254, 4),
+                (0x258, 4),
+                (0x25c, 4),
+                (0x260, 8),
+                (0x268, 8),
+                (0x270, 8),
+            ] {
+                endpoint.read(offset, &mut vec![0; width]).await?;
+            }
+            Ok(true)
+        }
+        2 => Ok(false),
+        result => Err(format!("unexpected claim result: {result}").into()),
+    }
+}

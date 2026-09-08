@@ -33,7 +33,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 | Shared contract | `crates/contract/src/` | ABI-v1 metadata/codecs and vocabulary; no backing memory, runtime, handler traits, or device execution. |
 | Reusable schemas | `crates/hardware-interface-schema/` | Runtime-neutral record/register metadata, scalar codecs, exact-start lookup, format-neutral exports, and default-off generic C11 fragments. |
 | Reusable runtime | `crates/hardware-interface-runtime/` | Shared memory, raw register access/observation, `SoftwareCpu`/`CpuLocal`, generic interrupt dispatch, and generic trace storage. |
-| Device behavior | `crates/device/src/` | Queue-port model, device-owned PDMA mappings over runtime memory, typed reset/control, shared execution/retirement, async worker, trace, and PDMA-local IRQ. |
+| Device behavior | `crates/device/src/` | Hardware-owned queue/IRQ registers and state, checked mapping metadata over injected memory access, typed reset/control and shared execution/retirement. |
 | Host-side model | `crates/host/src/` | CPU-bound `AsyncDriver`, `PdmaRegisterPort<AsyncDeviceAccess>`, PDMA interrupt adapters, and explicit semantic/async compatibility ports. |
 | System scenarios | `crates/scenarios/tests/` | Concurrent actors; `message_irq_linear_copy` is the canonical ABI Message-IRQ E2E. |
 
@@ -44,9 +44,18 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   `cargo test -p hardware-interface-schema-macros --test repository_layout`
   enforces the rule across repository Rust sources during workspace tests.
 - Tests use Given/When/Then comments and assert observable completions, events, and memory contents.
-- `AsyncDevice::from_core(DeviceCore)` returns `(AsyncDevice, AsyncDeviceWorker)`; callers
+- `AsyncDevice::new(PdmaMemoryProvisioning, ResourceConfig)` constructs a matched
+  core/runtime pair and returns `(AsyncDevice, AsyncDeviceWorker)`; callers
   choose whether to `tokio::spawn(worker.run())`, directly await it, or use another
   executor strategy.
+- `DeviceCore` accepts only external-memory read/write capability. Runtime provisioning
+  owns address allocation and backing installation. `from_core(core, provisioning)`
+  checks that both share one backend; external backends register pre-provisioned mappings.
+- Contract composes GlobalRegisters, QueueRegisters and IrqRegisters from generated
+  register layouts and response sub-blocks. Hardware owners directly store their generated
+  Values; DeviceCore routes only the three blocks. Do not add a flat leaf dispatch table,
+  runtime owner tags or a private register storage backend. Addresses derive from the
+  composition; preserve semantic behavior rather than historical numeric placements.
 - Explicit manual-drive helpers belong only in manual status/trace and step-budget tests;
   there is no public synchronous device facade. Normal system scenarios run the async worker.
 - `device::issue` owns resource admission and runnable selection; `device::probe` only
@@ -94,9 +103,16 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
 - `PdmaRegisterPort<AsyncDeviceAccess>` is the canonical frontend for new E2E scenarios.
-  Its split runtime memory/register access plus PDMA provisioning and exact-claim
+  Its split runtime memory/register access plus PDMA provisioning and host IRQ coordination
   capabilities add no second executor; explicit semantic/async compatibility ports
   share the same device core, execution and retirement behavior.
+- IRQ delivery and register-port IRQ commands share one host coordinator. Claim is
+  individual command/result/response accesses; cancelled issued claims are recovered
+  before another command overwrites the response. Hardware has no cancellation input.
+  `AsyncDeviceAccess::new` and `new_at_mmio_base` require an explicit
+  `PdmaIrqCoordinator`; independently constructed adapters over the same device must
+  receive clones of the same coordinator. Fully recovered notifications belong to host
+  delivery state, not to the subsequently overwritten IRQ response registers.
 - A successful whole-device reset checked-advances `DeviceEpoch`, preserves committed
   device-owned PDMA mappings plus runtime memory bytes/revision, trace history, resource configuration, and
   lifecycle accounting, and clears queue/control/runnable/result/pending-retirement/
@@ -138,7 +154,8 @@ storage/MMIO effects, DMA, reset, IRQ, actor, and executor behavior. The crate i
 by the PDMA contract for the existing exact generated data header.
 
 `hardware-interface-runtime` is the active workspace-private generic runtime. It owns
-the one shared byte store, raw register access/observation, software CPU-local state,
+the default shared byte store and backend-neutral read/write capability, raw register
+access/observation, software CPU-local state,
 generic interrupt registry/dispatcher contracts, and generic trace storage. PDMA owns
 mapping policy, register effects, the canonical register port, driver accounting, IRQ
 adaptation, actors and execution/retirement behavior.

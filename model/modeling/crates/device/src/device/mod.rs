@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use hardware_interface_runtime::SharedMemory;
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector, ResourceConfig};
 
 use crate::device::execution::ExecutionUnit;
@@ -9,9 +7,9 @@ use crate::irq::PdmaIrqController;
 use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
 use crate::queue::runnable::RunnableQueues;
-use crate::registers::PdmaRegisters;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
+use pdma_model_contract::abi::mmio::GlobalRegistersValues;
 
 #[derive(Debug)]
 /// Synchronous ownership root for PDMA hardware state consumed by the async runtime.
@@ -24,26 +22,26 @@ pub struct DeviceCore {
     command_pipeline: command_pipeline::PipelineSlot,
     native_fetches: usize,
     pub(crate) memory: PdmaMemoryMappings,
-    pub(crate) registers: PdmaRegisters,
-    queues: QueueBlock,
+    pub(crate) global_registers: GlobalRegistersValues,
+    pub(crate) queues: QueueBlock,
     runnable: RunnableQueues,
     issue: issue::IssueUnit,
     execution: ExecutionUnit,
     retirement: RetirementUnit,
-    irq: PdmaIrqController,
+    pub(crate) irq: PdmaIrqController,
     trace: TraceSink,
     reset_runner_calls: usize,
 }
 
 impl DeviceCore {
     /// Creates one synchronous device core over system-owned integration capabilities.
-    pub fn new(memory: Arc<SharedMemory>, config: ResourceConfig) -> Self {
+    pub fn new(memory: impl Into<SharedMemoryAccess>, config: ResourceConfig) -> Self {
         Self {
             epoch: DeviceEpoch::initial(),
             command_pipeline: command_pipeline::PipelineSlot::new(),
             native_fetches: 0,
             memory: PdmaMemoryMappings::new(memory),
-            registers: PdmaRegisters::new(),
+            global_registers: GlobalRegistersValues::default(),
             queues: QueueBlock::default(),
             runnable: RunnableQueues::default(),
             issue: issue::IssueUnit::default(),
@@ -83,6 +81,7 @@ pub(crate) mod drive;
 mod execution;
 mod flow;
 mod issue;
+pub(crate) mod mmio;
 mod probe;
 mod retirement;
 mod trace;

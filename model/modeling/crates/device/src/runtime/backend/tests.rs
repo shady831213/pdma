@@ -15,11 +15,15 @@ use crate::runtime::state::RunnerState;
 mod updates;
 
 fn backend() -> Arc<DeviceInteractionBackend> {
+    let provisioning = crate::runtime::PdmaMemoryProvisioning::shared(Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     Arc::new(DeviceInteractionBackend::new(RunnerState::new(
         crate::DeviceCore::new(
-            Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            provisioning.memory_access(),
             pdma_model_contract::semantic::ResourceConfig::default(),
         ),
+        provisioning,
     )))
 }
 

@@ -21,7 +21,10 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(port.clone());
+    let access = AsyncDeviceAccess::new(
+        port.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    );
     let compat_port = AsyncDevicePort::new(port.clone());
     let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
@@ -127,7 +130,10 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(port.clone());
+    let access = AsyncDeviceAccess::new(
+        port.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    );
     let compat_port = AsyncDevicePort::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
@@ -228,8 +234,10 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
 }
 
 fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
-    AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ))
+    )
 }

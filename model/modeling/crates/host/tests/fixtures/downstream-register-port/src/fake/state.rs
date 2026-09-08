@@ -2,8 +2,8 @@ use super::helpers::{align, lock};
 use hardware_interface_runtime::{MemoryAddress, MemoryRegion};
 use pdma_model_contract::semantic::{BufferId, IrqNotification};
 use pdma_model_host::adapter::abi::{
-    PdmaClaimError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegionRequest, PdmaRegisterAccessError,
+    PdmaClaimError, PdmaIrqCoordinator, PdmaMappedRegion, PdmaProvisioningCause,
+    PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
 };
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
 pub struct FakeAccess {
+    pub(super) irq: PdmaIrqCoordinator,
     pub(super) state: Arc<Mutex<FakeSnapshot>>,
     pub(super) fail_allocation: Arc<AtomicBool>,
     pub(super) pending_claim: Arc<AtomicBool>,
@@ -32,6 +33,7 @@ pub struct FakeSnapshot {
 impl FakeAccess {
     pub fn new(notification: IrqNotification) -> Self {
         Self {
+            irq: PdmaIrqCoordinator::default(),
             state: Arc::new(Mutex::new(FakeSnapshot {
                 generation: 0,
                 next_base: 0x1_0000,

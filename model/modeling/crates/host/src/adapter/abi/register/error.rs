@@ -30,7 +30,7 @@ impl Error for PdmaProvisioningCause {}
 /// Host-owned mapping allocation failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PdmaProvisioningError {
-    /// The device-owned allocator rejected the operation.
+    /// Runtime memory provisioning rejected the operation.
     Provisioning(PdmaProvisioningCause),
     /// Runtime memory rejected a checked access.
     Access(MemoryAccessError),
@@ -77,13 +77,20 @@ impl Error for PdmaRegisterAccessError {
     }
 }
 
-/// Host projection of readiness/compound-claim failure.
+/// Host projection of readiness or sequential claim failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PdmaClaimError {
     /// The exact claim access was structurally invalid.
     Access(MmioAccessError),
     /// Ordered claim observation emission failed.
     Observation(ObservationGateError),
+    /// The result register rejected the command or contained an unknown code.
+    CommandResult {
+        #[doc = "Untruncated result-register value."]
+        code: u64,
+    },
+    /// The response bank cannot represent a notification.
+    MalformedResponse,
 }
 impl fmt::Display for PdmaClaimError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -95,6 +102,16 @@ impl Error for PdmaClaimError {
         match self {
             Self::Access(source) => Some(source),
             Self::Observation(source) => Some(source),
+            Self::CommandResult { .. } | Self::MalformedResponse => None,
+        }
+    }
+}
+
+impl From<PdmaRegisterAccessError> for PdmaClaimError {
+    fn from(source: PdmaRegisterAccessError) -> Self {
+        match source {
+            PdmaRegisterAccessError::Access(source) => Self::Access(source),
+            PdmaRegisterAccessError::Observation(source) => Self::Observation(source),
         }
     }
 }

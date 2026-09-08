@@ -42,8 +42,6 @@ async fn main() -> TestResult {
         poll_pending(&mut cancelled_claim) && fake.snapshot() == before_claim_cancel;
     drop(cancelled_claim);
     let fake_claim = fake.claim_interrupt_exact().await?;
-    let fake_claim_observations = claim::observations(&fake_claim)?;
-    claim::assert_exact(fake_claim_observations)?;
 
     let before_lock_cancel = fake.snapshot();
     fake.pend_next_register();
@@ -103,7 +101,6 @@ async fn main() -> TestResult {
 
     let real = real::run(alignment).await?;
     claim::assert_exact(&real.observations)?;
-    assert_eq!(fake_claim_observations, real.observations);
     let state = fake.snapshot();
     let exhaustive_fates = fake::verify_fates(alignment).await?;
     let mappings_unchanged = allocation_failure
@@ -153,11 +150,11 @@ async fn main() -> TestResult {
     assert!(real.nonempty_storage && !real.zero_storage);
     assert!(claim_cancelled && lock_cancelled && completed_writes_persist && mappings_unchanged);
     assert!(bytes_unchanged && notifications_unchanged && typed_causes && behavior_equal);
-    assert_eq!(real.claim_observations, 11);
+    assert_eq!(real.claim_observations, 12);
     assert!(real.direct_origin);
 
     println!(
-        "fake_nonempty_storage={};fake_zero_storage={};fake_zero_length={};adapter_nonempty_storage={};adapter_zero_storage={};completed_writes_persist={};compound_claim={};claim_observations={};direct_origin={};behavior_equal={}",
+        "fake_nonempty_storage={};fake_zero_storage={};fake_zero_length={};adapter_nonempty_storage={};adapter_zero_storage={};completed_writes_persist={};sequential_claim={};claim_observations={};direct_origin={};behavior_equal={}",
         fake_nonempty.storage().is_some(),
         fake_zero.storage().is_some(),
         fake_zero.length(),

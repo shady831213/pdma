@@ -77,7 +77,7 @@ async fn verify_provisioning(alignment: MemoryAlignment) -> TestResult<()> {
 async fn verify_register() -> TestResult<()> {
     let cases = [
         PdmaRegisterAccessError::Access(MmioAccessError::WrongWidth {
-            offset: 0x168,
+            offset: 0x164,
             expected: 4,
             actual: 8,
         }),
@@ -104,8 +104,11 @@ async fn verify_claim() -> TestResult<()> {
         PdmaClaimError::Access(MmioAccessError::ReadFromWriteOnly { offset: 0x220 }),
         PdmaClaimError::Observation(ObservationGateError::SequenceExhausted {
             next_sequence: u64::MAX,
-            count: 11,
+            count: 1,
         }),
+        PdmaClaimError::CommandResult { code: 0 },
+        PdmaClaimError::CommandResult { code: 2 },
+        PdmaClaimError::MalformedResponse,
     ];
     for expected in cases {
         let fake = FakeAccess::new(message());
@@ -125,6 +128,9 @@ async fn verify_claim() -> TestResult<()> {
                 Error::source(&actual).and_then(|value| value.downcast_ref()),
                 Some(&source)
             ),
+            PdmaClaimError::CommandResult { .. } | PdmaClaimError::MalformedResponse => {
+                assert!(Error::source(&actual).is_none());
+            }
         }
         assert_eq!(fake.snapshot(), before);
     }

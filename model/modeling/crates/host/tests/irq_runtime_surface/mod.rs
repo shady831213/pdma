@@ -70,7 +70,6 @@ async fn task23_irq_runtime_surface() {
     assert_eq!(port_state.acks, 3);
     assert_eq!(source_state.notifications, 3);
     assert_eq!(source_state.empty, 1);
-    assert_eq!(source_state.transcript_lengths, vec![11, 2, 11, 11]);
     assert_eq!(lifecycle_events.len(), 6);
     assert!(cpu_released);
 

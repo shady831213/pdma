@@ -1,43 +1,50 @@
 mod mapping;
 
 use self::mapping::{
-    map_claim, map_model_allocation, map_register, project_region, read_lock, validate_alignment,
-    write_lock,
+    map_model_allocation, map_register, project_region, read_lock, validate_alignment, write_lock,
 };
 use crate::adapter::abi::{
-    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
-    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaIrqAccess, PdmaIrqCoordinator,
+    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest,
+    PdmaRegisterAccessError,
 };
 use hardware_interface_runtime::{
     AddressedRegisterAccess, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
-    RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError, SharedMemory,
+    RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError, SharedMemoryAccess,
 };
 use pdma_model_device::AsyncDeviceHandle;
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
 
 /// One-core concrete canonical access adapter.
+/// Adapters for one backend must receive clones of the same host IRQ coordinator.
 #[derive(Clone, Debug)]
 pub struct AsyncDeviceAccess {
     handle: AsyncDeviceHandle,
-    memory: Arc<SharedMemory>,
+    memory: SharedMemoryAccess,
     mmio_base: RegisterBusBase,
     zero_bases: Arc<RwLock<BTreeSet<MemoryAddress>>>,
+    irq: PdmaIrqCoordinator,
 }
 
 impl AsyncDeviceAccess {
     /// Derives every capability from one existing asynchronous device handle.
-    pub fn new(handle: AsyncDeviceHandle) -> Self {
-        Self::new_at_mmio_base(handle, RegisterBusBase::new(0))
+    pub fn new(handle: AsyncDeviceHandle, irq: PdmaIrqCoordinator) -> Self {
+        Self::new_at_mmio_base(handle, RegisterBusBase::new(0), irq)
     }
 
     /// Derives every capability with register traffic rooted at `mmio_base`.
-    pub fn new_at_mmio_base(handle: AsyncDeviceHandle, mmio_base: RegisterBusBase) -> Self {
+    pub fn new_at_mmio_base(
+        handle: AsyncDeviceHandle,
+        mmio_base: RegisterBusBase,
+        irq: PdmaIrqCoordinator,
+    ) -> Self {
         Self {
             memory: handle.memory_access(),
             handle,
             mmio_base,
             zero_bases: Arc::new(RwLock::new(BTreeSet::new())),
+            irq,
         }
     }
 
@@ -161,25 +168,20 @@ impl PdmaExactInterruptClaim for AsyncDeviceAccess {
     type Error = PdmaClaimError;
 
     async fn wait_interrupt_ready(&self) -> Result<bool, Self::Error> {
-        Ok(self.handle.wait_irq_notification_ready().await)
+        self.irq
+            .wait_ready(self, self.handle.wait_irq_notification_ready())
+            .await
     }
 
     async fn claim_interrupt_exact(&self) -> Result<PdmaClaimResult, Self::Error> {
-        if !self.handle.wait_irq_notification_ready().await {
-            return Ok(PdmaClaimResult::Shutdown);
-        }
-        self.handle
-            .register_endpoint()
-            .claim_notification_exact_observed()
+        self.irq
+            .claim(self, self.handle.wait_irq_notification_ready())
             .await
-            .map(|(notification, observations)| {
-                notification.map_or(PdmaClaimResult::Empty, |notification| {
-                    PdmaClaimResult::Notification {
-                        notification,
-                        observations,
-                    }
-                })
-            })
-            .map_err(map_claim)
+    }
+}
+
+impl PdmaIrqAccess for AsyncDeviceAccess {
+    fn irq_coordinator(&self) -> &PdmaIrqCoordinator {
+        &self.irq
     }
 }

@@ -14,6 +14,7 @@ use pdma_model_contract::semantic::{
 };
 
 use crate::device::{DeviceCore, ModelStepStatus};
+use crate::runtime::PdmaMemoryProvisioning;
 use crate::{AsyncStallReason, MappedDmaRegion, ModelError};
 
 mod observation;
@@ -55,6 +56,7 @@ pub(super) enum PipelineRunOutcome {
 #[derive(Debug)]
 pub(super) struct Fixture {
     pub(super) core: DeviceCore,
+    pub(super) provisioning: PdmaMemoryProvisioning,
     pub(super) operation: Operation<DeviceCore, ()>,
 }
 
@@ -66,11 +68,12 @@ pub(super) struct Prepared {
 
 impl Fixture {
     pub(super) fn new(resources: ResourceConfig) -> Self {
+        let provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        ));
         Self {
-            core: DeviceCore::new(
-                std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-                resources,
-            ),
+            core: DeviceCore::new(provisioning.memory_access(), resources),
+            provisioning,
             operation: Operation::new(()),
         }
     }
@@ -121,10 +124,22 @@ pub(super) fn prepare(case: Case) -> Prepared {
 pub(super) fn prepare_with_resources(case: Case, resources: ResourceConfig) -> Prepared {
     let mut fixture = Fixture::new(resources);
     fixture.core.enable_tracing();
-    let source_a = fixture.core.memory.allocate(8).expect("source A");
-    let source_b = fixture.core.memory.allocate(8).expect("source B");
-    let destination_a = fixture.core.memory.allocate(8).expect("destination A");
-    let destination_b = fixture.core.memory.allocate(8).expect("destination B");
+    let source_a = fixture
+        .provisioning
+        .allocate(&mut fixture.core.memory, 8)
+        .expect("source A");
+    let source_b = fixture
+        .provisioning
+        .allocate(&mut fixture.core.memory, 8)
+        .expect("source B");
+    let destination_a = fixture
+        .provisioning
+        .allocate(&mut fixture.core.memory, 8)
+        .expect("destination A");
+    let destination_b = fixture
+        .provisioning
+        .allocate(&mut fixture.core.memory, 8)
+        .expect("destination B");
     fixture
         .core
         .memory
@@ -172,9 +187,8 @@ pub(super) fn prepared_pair() -> Prepared {
     );
     let source = prepared
         .fixture
-        .core
-        .memory
-        .allocate(8)
+        .provisioning
+        .allocate(&mut prepared.fixture.core.memory, 8)
         .expect("second source");
     prepared
         .fixture

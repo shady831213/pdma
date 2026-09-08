@@ -3,7 +3,6 @@
 mod adverse;
 
 use super::lock;
-use hardware_interface_runtime::{AccessOrigin, RegisterObservation};
 use pdma_model_contract::abi::mmio::MmioAccessError;
 use pdma_model_contract::semantic::{
     EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqVector, QueueConfigHandle,
@@ -28,7 +27,6 @@ struct State {
     pend_claim: bool,
     notifications: usize,
     empty: usize,
-    transcript_lengths: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,8 +36,6 @@ pub struct SourceSnapshot {
     pub notifications: usize,
     /// Empty revalidation count.
     pub empty: usize,
-    /// Exact observation cardinality of each compound claim.
-    pub transcript_lengths: Vec<usize>,
 }
 
 impl ProbeAccess {
@@ -65,7 +61,6 @@ impl ProbeAccess {
                 pend_claim: false,
                 notifications: 0,
                 empty: 0,
-                transcript_lengths: Vec::new(),
             })),
         }
     }
@@ -75,7 +70,6 @@ impl ProbeAccess {
         SourceSnapshot {
             notifications: state.notifications,
             empty: state.empty,
-            transcript_lengths: state.transcript_lengths.clone(),
         }
     }
 }
@@ -103,13 +97,11 @@ impl PdmaExactInterruptClaim for ProbeAccess {
         }
         let result = state.claims.pop_front().unwrap_or(PdmaClaimResult::Empty);
         match &result {
-            PdmaClaimResult::Notification { observations, .. } => {
+            PdmaClaimResult::Notification { .. } => {
                 state.notifications = state.notifications.saturating_add(1);
-                state.transcript_lengths.push(observations.len());
             }
             PdmaClaimResult::Empty => {
                 state.empty = state.empty.saturating_add(1);
-                state.transcript_lengths.push(2);
             }
             PdmaClaimResult::Shutdown => {}
         }
@@ -118,45 +110,14 @@ impl PdmaExactInterruptClaim for ProbeAccess {
     }
 }
 
-fn notification(vector: IrqVector, source: EpochIrqSource, id: usize) -> PdmaClaimResult {
+const fn notification(vector: IrqVector, source: EpochIrqSource, id: usize) -> PdmaClaimResult {
     PdmaClaimResult::Notification {
         notification: IrqNotification::Message(IrqMessage::new(
             IrqMessageId::new(id),
             vector,
             source,
         )),
-        observations: exact_claim_observations(),
     }
-}
-
-fn exact_claim_observations() -> Vec<RegisterObservation> {
-    let reads: [(u32, &[u8]); 10] = [
-        (0x224, &[1, 0, 0, 0]),
-        (0x240, &[0; 8]),
-        (0x248, &[0; 8]),
-        (0x250, &[0; 4]),
-        (0x254, &[0x4b, 0, 0, 0]),
-        (0x258, &[1, 0, 0, 0]),
-        (0x25c, &[2, 0, 0, 0]),
-        (0x260, &[0x29, 0, 0, 0, 0, 0, 0, 0]),
-        (0x268, &[0; 8]),
-        (0x270, &[0; 8]),
-    ];
-    let mut observations = vec![RegisterObservation::write(
-        0,
-        AccessOrigin::Direct,
-        0x220,
-        &[9, 0, 0, 0],
-    )];
-    observations.extend(
-        reads
-            .into_iter()
-            .enumerate()
-            .map(|(index, (offset, bytes))| {
-                RegisterObservation::read(index as u64 + 1, AccessOrigin::Direct, offset, bytes)
-            }),
-    );
-    observations
 }
 
 const fn probe_error() -> PdmaClaimError {

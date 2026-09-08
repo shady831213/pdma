@@ -10,10 +10,12 @@ enum MalformedRead {
 #[tokio::test]
 async fn malformed_reads_preserve_all_observable_state() {
     // Given: distinct bank, runner, and DMA state snapshots.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let buffer = handle
         .allocate_buffer(4)
@@ -110,10 +112,12 @@ async fn malformed_reads_preserve_all_observable_state() {
 #[tokio::test]
 async fn malformed_writes_preserve_all_observable_state() {
     // Given: a seeded register bank and its device snapshot.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let seed = 0x0123_4567_89ab_cdef_u64.to_le_bytes();
     handle

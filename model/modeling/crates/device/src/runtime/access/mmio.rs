@@ -9,13 +9,11 @@ impl AsyncDeviceHandle {
         width: MmioByteCount,
     ) -> Result<Vec<u8>, MmioAccessError> {
         let register = decode_read(offset, width)?;
-        Ok(self
-            .shared
+        self.shared
             .backend
-            .interact(|state| {
-                crate::interface::mmio::prepare_read(&state.core, register, offset).response
-            })
-            .await)
+            .interact(|state| state.core.read_register(register))
+            .await
+            .ok_or(MmioAccessError::ReservedOffset { offset })
     }
 
     /// Applies one exact byte-bearing MMIO transaction.
@@ -24,11 +22,11 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .update(|state| {
-                let changed = crate::interface::mmio::prepare_write(register, value, offset, bytes)
-                    .commit(&mut state.core);
-                ((), changed)
+                state.core.write_mmio_register(register, value).map_or(
+                    (Err(MmioAccessError::ReservedOffset { offset }), false),
+                    |changed| (Ok(()), changed),
+                )
             })
-            .await;
-        Ok(())
+            .await
     }
 }

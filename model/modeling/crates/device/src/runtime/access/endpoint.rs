@@ -1,10 +1,10 @@
-use crate::interface::mmio::{
-    MmioRegisterError, claim_observation_count, prepare_claim, prepare_read, prepare_write,
-};
-use crate::runtime::{AsyncDevice, DeviceCore, RunnerShared};
+use super::MmioRegisterError;
+use super::preparation::{prepare_read, prepare_write};
+use crate::runtime::{DeviceCore, PdmaMemoryProvisioning, RunnerShared};
+use crate::runtime::{backend::DeviceInteractionBackend, state::RunnerState};
 use hardware_interface_runtime::{
-    AccessOrigin, RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusOffset,
-    RegisterBusWidth, RegisterObservation,
+    AccessOrigin, NoopRegisterObserver, ObservationGate, RegisterAccess, RegisterBusAddress,
+    RegisterBusBase, RegisterBusOffset, RegisterBusWidth, SharedRegisterObserver,
 };
 use pdma_model_contract::abi::mmio::{decode_read, decode_write};
 use std::sync::Arc;
@@ -19,8 +19,13 @@ pub struct MmioRegisterEndpoint {
 impl MmioRegisterEndpoint {
     /// Consumes a core into a standalone exact register endpoint.
     pub fn from_core(core: DeviceCore) -> Self {
-        let (device, _worker) = AsyncDevice::from_core(core);
-        device.handle().register_endpoint()
+        let provisioning = PdmaMemoryProvisioning::external(core.memory.memory_access());
+        Self::new(Arc::new(RunnerShared {
+            backend: DeviceInteractionBackend::new(RunnerState::new(core, provisioning)),
+            register_gate: ObservationGate::new(SharedRegisterObserver::new(Arc::new(
+                NoopRegisterObserver,
+            ))),
+        }))
     }
 
     /// Consumes a core into an exact register endpoint at `mmio_base`.
@@ -75,62 +80,6 @@ impl MmioRegisterEndpoint {
                 )
             })
     }
-
-    /// Claims one exact IRQ notification and emits its complete direct transcript atomically.
-    pub async fn claim_notification_exact(
-        &self,
-    ) -> Result<Option<pdma_model_contract::semantic::IrqNotification>, MmioRegisterError> {
-        self.shared
-            .backend
-            .commit(
-                |state| -> Result<_, MmioRegisterError> {
-                    let reservation = self
-                        .shared
-                        .register_gate
-                        .reserve(claim_observation_count(&state.core))?;
-                    let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
-                    let changed = committed.changed();
-                    Ok(((committed, reservation), changed))
-                },
-                |(committed, reservation)| {
-                    let (notification, observations) = committed.into_parts();
-                    reservation.emit(observations)?;
-                    Ok(notification)
-                },
-            )
-            .await
-    }
-
-    /// Claims one IRQ notification and returns the exact emitted direct transcript.
-    pub async fn claim_notification_exact_observed(
-        &self,
-    ) -> Result<
-        (
-            Option<pdma_model_contract::semantic::IrqNotification>,
-            Vec<RegisterObservation>,
-        ),
-        MmioRegisterError,
-    > {
-        self.shared
-            .backend
-            .commit(
-                |state| -> Result<_, MmioRegisterError> {
-                    let reservation = self
-                        .shared
-                        .register_gate
-                        .reserve(claim_observation_count(&state.core))?;
-                    let committed = prepare_claim(&mut state.core, reservation.start_sequence())?;
-                    let changed = committed.changed();
-                    Ok(((committed, reservation), changed))
-                },
-                |(committed, reservation)| {
-                    let (notification, observations) = committed.into_parts();
-                    reservation.emit(observations.clone())?;
-                    Ok((notification, observations))
-                },
-            )
-            .await
-    }
 }
 
 impl RegisterAccess for MmioRegisterEndpoint {
@@ -144,7 +93,7 @@ impl RegisterAccess for MmioRegisterEndpoint {
             .shared
             .backend
             .interact(|state| -> Result<_, MmioRegisterError> {
-                let prepared = prepare_read(&state.core, register, offset);
+                let prepared = prepare_read(&state.core, register, offset)?;
                 let reservation = self.shared.register_gate.reserve(1)?;
                 Ok((prepared, reservation))
             })
@@ -165,7 +114,7 @@ impl RegisterAccess for MmioRegisterEndpoint {
                 |state| -> Result<_, MmioRegisterError> {
                     let prepared = prepare_write(register, value, offset, request);
                     let reservation = self.shared.register_gate.reserve(1)?;
-                    let changed = prepared.commit(&mut state.core);
+                    let changed = prepared.commit(&mut state.core)?;
                     Ok(((prepared, reservation), changed))
                 },
                 |(prepared, reservation)| {

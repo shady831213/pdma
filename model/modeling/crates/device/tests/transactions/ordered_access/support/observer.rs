@@ -61,7 +61,7 @@ impl GatedObserver {
 
 impl hardware_interface_runtime::RegisterObserver for GatedObserver {
     fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
-        let command = observation.offset == 0x168;
+        let command = observation.offset == 0x164;
         self.observations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

@@ -21,7 +21,7 @@ async fn register_observer_runs_after_effect_and_before_wake() -> support::TestR
             .block_on(
                 command_handle
                     .register_endpoint()
-                    .write(0x168, &1_u32.to_le_bytes()),
+                    .write(0x164, &1_u32.to_le_bytes()),
             )?;
         Ok(())
     });
@@ -37,7 +37,7 @@ async fn register_observer_runs_after_effect_and_before_wake() -> support::TestR
     assert_eq!(published.generation(), before.generation() + 1);
     let observations = observer.snapshot();
     let command = observations.last().ok_or("activation observation")?;
-    assert_eq!(command.offset, 0x168);
+    assert_eq!(command.offset, 0x164);
     assert_eq!(command.request_bytes, 1_u32.to_le_bytes());
     assert_eq!(command.origin, AccessOrigin::Direct);
     assert_eq!(

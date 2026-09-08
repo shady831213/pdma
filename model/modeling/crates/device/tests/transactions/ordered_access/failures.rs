@@ -13,11 +13,11 @@ async fn malformed_activation_preserves_previously_committed_mapping() -> TestRe
     support::program_activation(&handle, &regions).await?;
 
     // When: raw activation validates the actual mapped ring lengths.
-    handle.write_mmio(0x168, &1_u32.to_le_bytes()).await?;
+    handle.write_mmio(0x164, &1_u32.to_le_bytes()).await?;
 
     // Then: queue activation fails, but the earlier memory commit remains visible.
     assert_eq!(
-        handle.read_mmio(0x16c, 4).await?,
+        handle.read_mmio(0x168, 4).await?,
         MmioResult::RingExtentMismatch.code().to_le_bytes()
     );
     assert!(
@@ -40,7 +40,7 @@ async fn rejected_publication_preserves_written_bytes_and_updates_result_latch()
     // Given: an active queue and a descriptor write already completed.
     let handle = support::new_handle();
     let (queue, submission, _) = support::bootstrap(&handle).await?;
-    handle.write_mmio(0x168, &99_u32.to_le_bytes()).await?;
+    handle.write_mmio(0x164, &99_u32.to_le_bytes()).await?;
     handle.write_memory(submission.base(), &[0xaa; 64]).await?;
     let status_before = support::queue_status(&handle, queue).await?;
 
@@ -49,7 +49,7 @@ async fn rejected_publication_preserves_written_bytes_and_updates_result_latch()
 
     // Then: the command rejects without undoing earlier writes or advancing the cursor.
     assert_eq!(
-        handle.read_mmio(0x16c, 4).await?,
+        handle.read_mmio(0x168, 4).await?,
         MmioResult::InvalidTransaction.code().to_le_bytes()
     );
     assert_eq!(
@@ -114,11 +114,11 @@ async fn stale_activation_after_reset_preserves_committed_memory() -> TestResult
     support::program_activation(&handle, &regions).await?;
 
     // When: activation carries the preceding hardware epoch.
-    handle.write_mmio(0x168, &1_u32.to_le_bytes()).await?;
+    handle.write_mmio(0x164, &1_u32.to_le_bytes()).await?;
 
     // Then: stale activation rejects, while reset-persistent mapping state survives.
     assert_eq!(
-        handle.read_mmio(0x16c, 4).await?,
+        handle.read_mmio(0x168, 4).await?,
         MmioResult::StaleEpoch.code().to_le_bytes()
     );
     assert_eq!(handle.memory_generation().await, 1);

@@ -1,4 +1,4 @@
-use crate::device::DeviceCore;
+use super::DeviceCore;
 use crate::queue::exact::PdmaControlError;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
@@ -20,7 +20,7 @@ pub(crate) fn execute(state: &mut DeviceCore, expected_epoch: u64) -> ResetOutco
     }
 }
 
-pub(super) const fn details(result: MmioResult, values: [u64; 3]) -> MmioResultDetails {
+pub(crate) const fn details(result: MmioResult, values: [u64; 3]) -> MmioResultDetails {
     MmioResultDetails {
         result,
         details: values,

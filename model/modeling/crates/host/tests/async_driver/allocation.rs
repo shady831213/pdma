@@ -8,10 +8,12 @@ use std::{future::poll_fn, task::Poll};
 #[tokio::test(flavor = "current_thread")]
 async fn fallible_allocation_propagates_through_both_driver_facades() {
     // Given: CPU-bound and manual drivers on separate queues of one async device.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let mut port = AsyncDevicePort::new(handle.clone());
     let async_driver = SoftwareCpu::new()
@@ -54,10 +56,12 @@ async fn fallible_allocation_propagates_through_both_driver_facades() {
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
     // Given: an async driver whose allocation port can suspend before device mutation.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     handle.enable_tracing().await;
     let mut port = BlockingPort::new(handle.clone());

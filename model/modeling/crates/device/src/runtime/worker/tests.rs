@@ -16,13 +16,17 @@ fn accepted_copy() -> AcceptedCopy {
 }
 
 fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
-    let mut core = crate::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        resources,
-    );
+    let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let mut core = crate::DeviceCore::new(provisioning.memory_access(), resources);
     core.enable_tracing();
-    let source = core.memory.allocate(4).expect("source allocation");
-    let target = core.memory.allocate(4).expect("target allocation");
+    let source = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("source allocation");
+    let target = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("target allocation");
     core.memory
         .write_object(source.object(), 0, &[1, 3, 5, 7])
         .expect("source bytes");
@@ -45,7 +49,10 @@ fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
     core.ring_doorbell(queue).expect("doorbell");
     AcceptedCopy {
         shared: RunnerShared {
-            backend: crate::runtime::backend::DeviceInteractionBackend::new(RunnerState::new(core)),
+            backend: crate::runtime::backend::DeviceInteractionBackend::new(RunnerState::new(
+                core,
+                provisioning,
+            )),
             register_gate: ObservationGate::new(SharedRegisterObserver::new(std::sync::Arc::new(
                 NoopRegisterObserver,
             ))),

@@ -21,10 +21,12 @@ async fn async_runner_vector_add_stalls_with_one_read_slot() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_stalls_without_read_slots() {
     // Given: an async copy on a device with no read slots.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_read_slots(0),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
@@ -75,10 +77,12 @@ async fn async_runner_copy_stalls_without_read_slots() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copy_completes_with_one_read_slot() {
     // Given: an async copy on a device with one read slot available.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_read_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion, copied) = SoftwareCpu::new()
         .run_main(async {
@@ -128,12 +132,14 @@ async fn async_runner_copy_completes_with_one_read_slot() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_credit() {
     // Given: an async broadcast on a device with insufficient write and descriptor credit.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default()
             .with_write_slots(1)
             .with_internal_descriptors(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
@@ -199,10 +205,12 @@ async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_cr
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_vector_add_stalls_without_compute_slots() {
     // Given: an async vector-add command on a device with no compute slots.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_compute_slots(0),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {

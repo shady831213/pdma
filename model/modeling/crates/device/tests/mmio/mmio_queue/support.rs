@@ -99,7 +99,7 @@ pub(super) async fn issue_queue_command(
     handle: &AsyncDeviceHandle,
     command: u32,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    write_u32(handle, 0x168, command).await?;
+    write_u32(handle, 0x164, command).await?;
     Ok(())
 }
 

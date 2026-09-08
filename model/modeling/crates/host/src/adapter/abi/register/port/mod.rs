@@ -11,8 +11,9 @@ mod state;
 mod submission;
 
 use super::{
-    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMemoryProvisioning,
-    PdmaProvisioningError, PdmaRegisterAccessError, PdmaRegisterPortError, RegisterQueueStatus,
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaIrqAccess,
+    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegisterAccessError, PdmaRegisterPortError,
+    RegisterQueueStatus,
 };
 use crate::PortError;
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, RegisterAccess};
@@ -37,7 +38,6 @@ pub struct PdmaRegisterPort<A> {
     access: A,
     state: CpuLocal<state::PortState>,
     queue_window: Arc<Mutex<()>>,
-    irq_window: Arc<Mutex<()>>,
 }
 
 impl<A: CanonicalAccess> PdmaRegisterPort<A> {
@@ -56,7 +56,6 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
             state: CpuLocal::capture_active(state::PortState::new(epoch))
                 .map_err(PdmaRegisterPortError::from)?,
             queue_window: Arc::new(Mutex::new(())),
-            irq_window: Arc::new(Mutex::new(())),
         })
     }
     /// Returns the clone-shared split capability.
@@ -153,6 +152,7 @@ pub trait CanonicalAccess:
     + RegisterAccess<Error = PdmaRegisterAccessError>
     + PdmaMemoryProvisioning<Error = PdmaProvisioningError>
     + PdmaExactInterruptClaim<Error = PdmaClaimError>
+    + PdmaIrqAccess
 {
 }
 impl<T> CanonicalAccess for T where
@@ -163,5 +163,6 @@ impl<T> CanonicalAccess for T where
         + RegisterAccess<Error = PdmaRegisterAccessError>
         + PdmaMemoryProvisioning<Error = PdmaProvisioningError>
         + PdmaExactInterruptClaim<Error = PdmaClaimError>
+        + PdmaIrqAccess
 {
 }

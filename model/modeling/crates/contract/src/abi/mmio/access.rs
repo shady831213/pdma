@@ -1,8 +1,7 @@
 use hardware_interface_schema::register_map::RegisterLocation;
 
 use super::{
-    MMIO_REGION_SIZE, MmioAccess, MmioAccessError, MmioByteCount, PdmaMmioMap, RegisterId,
-    RegisterSpec,
+    MMIO_REGION_SIZE, MmioAccess, MmioAccessError, MmioByteCount, PdmaMmioMap, RegisterSpec,
 };
 
 #[derive(Clone, Copy)]
@@ -33,7 +32,7 @@ fn register_for(
     if u128::from(offset) % width != 0 {
         return Err(MmioAccessError::Misaligned { offset, width });
     }
-    let Some(RegisterLocation::Fixed { register, .. }) = PdmaMmioMap::locate(
+    let Some(register) = register_at(
         usize::try_from(offset).map_err(|_| MmioAccessError::UnmappedOffset { offset })?,
     ) else {
         return Err(MmioAccessError::ReservedOffset { offset });
@@ -80,13 +79,21 @@ fn decode_scalar(bytes: &[u8]) -> u64 {
     }
 }
 
-/// Validates one raw read and returns its stable register identity.
-pub fn decode_read(offset: u32, width: MmioByteCount) -> Result<RegisterId, MmioAccessError> {
-    register_for(offset, width, Operation::Read).map(RegisterSpec::id)
+/// Returns leaf metadata only at an exact registered MMIO address.
+pub fn register_at(offset: usize) -> Option<RegisterSpec> {
+    match PdmaMmioMap::locate(offset) {
+        Some(RegisterLocation::Fixed { register, .. }) => Some(register),
+        Some(RegisterLocation::Repeated { .. }) | None => None,
+    }
+}
+
+/// Validates one raw read and returns its register metadata.
+pub fn decode_read(offset: u32, width: MmioByteCount) -> Result<RegisterSpec, MmioAccessError> {
+    register_for(offset, width, Operation::Read)
 }
 
 /// Validates and little-endian decodes one raw write.
-pub fn decode_write(offset: u32, bytes: &[u8]) -> Result<(RegisterId, u64), MmioAccessError> {
+pub fn decode_write(offset: u32, bytes: &[u8]) -> Result<(RegisterSpec, u64), MmioAccessError> {
     let width = write_width(bytes);
     if width != 4 && width != 8 {
         return Err(MmioAccessError::WrongWidth {
@@ -96,5 +103,5 @@ pub fn decode_write(offset: u32, bytes: &[u8]) -> Result<(RegisterId, u64), Mmio
         });
     }
     let value = decode_scalar(bytes);
-    register_for(offset, width, Operation::Write(value)).map(|register| (register.id(), value))
+    register_for(offset, width, Operation::Write(value)).map(|register| (register, value))
 }

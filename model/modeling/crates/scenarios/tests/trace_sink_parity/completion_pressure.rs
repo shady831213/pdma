@@ -15,12 +15,14 @@ pub(super) struct CompletionPressureTrace {
 
 #[allow(clippy::expect_used, clippy::redundant_pub_crate)]
 pub(super) async fn completion_pressure_trace() -> CompletionPressureTrace {
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default()
             .with_compute_slots(0)
             .with_completion_publication_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     let handle = AsyncDevicePort::new(raw_handle.clone());

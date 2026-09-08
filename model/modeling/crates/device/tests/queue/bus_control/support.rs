@@ -5,11 +5,12 @@ use pdma_model_device::AsyncDeviceHandle;
 
 /// Creates a fresh asynchronous queue-port handle.
 pub(super) fn new_handle() -> AsyncDeviceHandle {
-    let (device, _worker) =
-        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ));
+    let (device, _worker) = pdma_model_device::AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+    );
     device.handle()
 }
 

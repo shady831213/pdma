@@ -6,7 +6,7 @@ use pdma_model_contract::semantic::{
     Command, CommandId, CommandOperation, CopyRequest, EpochQueue, EventRouting, IrqNotification,
     IrqRoute, IrqVector, QueueConfig, ResourceConfig, SoftwareOwnerId,
 };
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -74,16 +74,21 @@ async fn nonzero_base_routes_canonical_offsets_as_full_addresses() -> TestResult
 
 async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
     let observer = Arc::new(Observer::default());
-    let (device, worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default()),
+    let (device, worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = AsyncDeviceAccess::new_at_mmio_base(handle.clone(), mmio_base);
+    let access = AsyncDeviceAccess::new_at_mmio_base(
+        handle.clone(),
+        mmio_base,
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    );
     assert_eq!(access.mmio_base(), mmio_base);
     let cpu = SoftwareCpu::new();
-    let (mut port, queue, destination) = cpu
+    let (notification, completion, copied, retired) = cpu
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access)?;
             let queue = DriverPort::create_queue(
@@ -109,12 +114,6 @@ async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
             )
             .await?;
             DriverPort::ring_doorbell(&mut port, queue).await?;
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((port, queue, destination))
-        })
-        .await?;
-    device.wait_for_progress_after(0).await;
-    let (notification, completion, copied, retired) = cpu
-        .run_main(async {
             let notification = port.try_wait_irq_notification().await?;
             let completion = DriverPort::poll_completion(&mut port, queue).await?;
             let copied = DriverPort::read_buffer(&port, destination, 0, 4).await?;

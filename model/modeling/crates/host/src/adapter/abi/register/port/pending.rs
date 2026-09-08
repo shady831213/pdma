@@ -1,9 +1,10 @@
+use super::registers::queue_offset;
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, control, registers};
 use crate::{PortError, adapter::abi::RegisterQueueStatus, semantic::SubmissionReceipt};
 use pdma_model_contract::{
     abi::{
         QueueRingLayouts,
-        mmio::{MmioResult, RegisterId},
+        mmio::{MmioResult, QueueRegisters, QueueResponseRegisters},
     },
     semantic::{CompletionRecord, EpochQueue, EventRecord, QueueConfigHandle},
 };
@@ -46,8 +47,9 @@ pub(super) async fn resolve<A: CanonicalAccess>(
     let Some(pending) = port.with_state(|state| state.pending.clone())? else {
         return Ok(None);
     };
-    let result = u32::try_from(registers::read(port, RegisterId::QResult).await?)
-        .map_err(|_| PortError::SubmissionState)?;
+    let result =
+        u32::try_from(registers::read(port, queue_offset(QueueRegisters::RESULT.offset())).await?)
+            .map_err(|_| PortError::SubmissionState)?;
     let result = MmioResult::try_from(result).map_err(|_| PortError::SubmissionState)?;
     if result != MmioResult::Ok {
         if result.is_error()
@@ -60,11 +62,15 @@ pub(super) async fn resolve<A: CanonicalAccess>(
         return Err(error.into());
     }
     let status = control::decode_status(
-        &registers::read_bank(port, &control::QUEUE_RESPONSE).await?,
+        &registers::read_bank(port, control::response_offsets()).await?,
         pending.rings,
     )?;
-    let epoch = registers::read(port, RegisterId::QRspEpoch).await?;
-    let result = registers::read(port, RegisterId::QResult).await?;
+    let epoch = registers::read(
+        port,
+        queue_offset(QueueRegisters::RESPONSE.offset() + QueueResponseRegisters::EPOCH.offset()),
+    )
+    .await?;
+    let result = registers::read(port, queue_offset(QueueRegisters::RESULT.offset())).await?;
     if result != u64::from(MmioResult::Ok.code())
         || status.queue() != pending.queue
         || epoch != pending.queue.epoch().raw()

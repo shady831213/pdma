@@ -11,10 +11,12 @@ use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     // Given: two traced copies behind a one-slot completion publication path.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_completion_publication_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     let mut handle = AsyncDevicePort::new(raw_handle.clone());
@@ -88,10 +90,12 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     // Given: a command submitted while trace capture is disabled.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     let mut handle = AsyncDevicePort::new(raw_handle.clone());
@@ -149,10 +153,12 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     // Given: two traced async drivers where one queue faults and the other remains unrelated.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     let mut handle = AsyncDevicePort::new(raw_handle.clone());

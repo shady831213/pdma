@@ -1,6 +1,6 @@
 use super::{PdmaClaimResult, PdmaExactInterruptClaim};
 use crate::runtime::interrupt::PdmaNotificationEnvelope;
-use hardware_interface_runtime::{InterruptEnvelope, InterruptSource, RegisterObservation};
+use hardware_interface_runtime::{InterruptEnvelope, InterruptSource};
 use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use std::{error::Error, fmt};
 
@@ -8,22 +8,16 @@ use std::{error::Error, fmt};
 #[derive(Debug)]
 pub struct PdmaInterruptReady(());
 
-/// One atomically claimed PDMA notification and its exact register transcript.
+/// One notification decoded from the host's retained individual register reads.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PdmaInterruptNotification {
     notification: IrqNotification,
-    observations: Vec<RegisterObservation>,
 }
 
 impl PdmaInterruptNotification {
     /// Returns the semantic notification captured by the exact claim.
     pub const fn notification(&self) -> IrqNotification {
         self.notification
-    }
-
-    /// Returns the exact Direct observations emitted by the compound claim.
-    pub fn observations(&self) -> &[RegisterObservation] {
-        &self.observations
     }
 }
 
@@ -108,13 +102,9 @@ where
             .await
             .map_err(PdmaInterruptSourceError::Access)?
         {
-            PdmaClaimResult::Notification {
-                notification,
-                observations,
-            } => Ok(Some(PdmaInterruptNotification {
-                notification,
-                observations,
-            })),
+            PdmaClaimResult::Notification { notification } => {
+                Ok(Some(PdmaInterruptNotification { notification }))
+            }
             PdmaClaimResult::Empty => Ok(None),
             PdmaClaimResult::Shutdown => Err(PdmaInterruptSourceError::Closed),
         }

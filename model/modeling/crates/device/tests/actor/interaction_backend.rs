@@ -5,14 +5,16 @@ use pdma_model_contract::{
     abi::mmio::MmioByteCount,
     semantic::{EventRouting, QueueConfig, ResourceConfig, SoftwareOwnerId, WholeDeviceReset},
 };
-use pdma_model_device::{AsyncDevice, AsyncStepStatus, DeviceCore};
+use pdma_model_device::{AsyncDevice, AsyncStepStatus};
 
 #[tokio::test(flavor = "current_thread")]
 async fn interaction_backend_routes_complete_actor_surface() {
-    let (device, worker) = AsyncDevice::from_core(DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let initial = device.snapshot().await;
     let region = handle.allocate_memory_region(8).await.expect("allocation");

@@ -1,24 +1,20 @@
+use super::registers::queue_offset;
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, registers};
 use crate::PortError;
 use crate::adapter::abi::RegisterQueueStatus;
 use pdma_model_contract::abi::mmio::{
-    MmioResult, MmioResultDetails, QueueCommand, QueueResponseRegistersView, RegisterId,
-    ResponseCodecError,
+    MmioResult, MmioResultDetails, QueueCommand, QueueRegisters, QueueResponseBank,
+    QueueResponseRegisters, ResponseCodecError,
 };
 use pdma_model_contract::abi::{AbiRingEntry, QueueRingLayouts, RingLayout};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId, RingCursor, RingCursors};
 
-pub(super) const QUEUE_RESPONSE: [RegisterId; 9] = [
-    RegisterId::QRspEpoch,
-    RegisterId::QRspId,
-    RegisterId::QRspSqProducer,
-    RegisterId::QRspSqCaptured,
-    RegisterId::QRspSqConsumer,
-    RegisterId::QRspCqProducer,
-    RegisterId::QRspCqConsumer,
-    RegisterId::QRspEqProducer,
-    RegisterId::QRspEqConsumer,
-];
+pub(super) fn response_offsets() -> impl Iterator<Item = usize> {
+    QueueResponseRegisters::SPEC
+        .placements()
+        .iter()
+        .map(|placement| queue_offset(QueueRegisters::RESPONSE.offset() + placement.offset()))
+}
 
 pub(super) async fn read_status<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
@@ -66,8 +62,18 @@ pub(super) async fn update_cursor<A: CanonicalAccess>(
     if observed != current {
         return Err(PortError::SubmissionState.into());
     }
-    registers::write(port, RegisterId::QExpectedCursor, current.raw()).await?;
-    registers::write(port, RegisterId::QNewCursor, update.cursor().raw()).await?;
+    registers::write(
+        port,
+        queue_offset(QueueRegisters::EXPECTED_CURSOR.offset()),
+        current.raw(),
+    )
+    .await?;
+    registers::write(
+        port,
+        queue_offset(QueueRegisters::NEW_CURSOR.offset()),
+        update.cursor().raw(),
+    )
+    .await?;
     command_status(port, command, rings, queue, effect).await
 }
 
@@ -75,9 +81,14 @@ pub(super) async fn stage_queue<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     queue: EpochQueue,
 ) -> PdmaPortResult<()> {
-    registers::write(port, RegisterId::QExpectedEpoch, queue.epoch().raw()).await?;
+    registers::write(
+        port,
+        queue_offset(QueueRegisters::EXPECTED_EPOCH.offset()),
+        queue.epoch().raw(),
+    )
+    .await?;
     let id = u64::try_from(queue.queue_id().raw()).map_err(|_| PortError::SubmissionState)?;
-    registers::write(port, RegisterId::QId, id).await
+    registers::write(port, queue_offset(QueueRegisters::ID.offset()), id).await
 }
 
 pub(super) async fn command_status<A: CanonicalAccess>(
@@ -87,7 +98,12 @@ pub(super) async fn command_status<A: CanonicalAccess>(
     queue: EpochQueue,
     effect: super::pending::Effect,
 ) -> PdmaPortResult<RegisterQueueStatus> {
-    registers::write(port, RegisterId::QCommand, u64::from(command.code())).await?;
+    registers::write(
+        port,
+        queue_offset(QueueRegisters::COMMAND.offset()),
+        u64::from(command.code()),
+    )
+    .await?;
     if let Some(receipt) = effect.receipt() {
         receipt.issued();
     }
@@ -110,9 +126,9 @@ pub(super) async fn map_result<A: CanonicalAccess>(
 ) -> PdmaPortResult<PortError> {
     let result = MmioResult::try_from(result).map_err(|_| PortError::SubmissionState)?;
     let details = [
-        registers::read(port, RegisterId::QDetail0).await?,
-        registers::read(port, RegisterId::QDetail1).await?,
-        registers::read(port, RegisterId::QDetail2).await?,
+        registers::read(port, queue_offset(QueueRegisters::DETAIL0.offset())).await?,
+        registers::read(port, queue_offset(QueueRegisters::DETAIL1.offset())).await?,
+        registers::read(port, queue_offset(QueueRegisters::DETAIL2.offset())).await?,
     ];
     match (MmioResultDetails { result, details }) {
         MmioResultDetails {
@@ -134,73 +150,29 @@ pub(super) fn decode_status(
     bytes: &[u8],
     rings: QueueRingLayouts,
 ) -> PdmaPortResult<RegisterQueueStatus> {
-    let view = QueueResponseRegistersView::new(bytes).map_err(ResponseCodecError::from)?;
-    let epoch = view
-        .epoch()
-        .map_err(ResponseCodecError::from)?
-        .value()
-        .map_err(ResponseCodecError::from)?;
-    let queue_id = view
-        .queue_id()
-        .map_err(ResponseCodecError::from)?
-        .value()
-        .map_err(ResponseCodecError::from)?;
-    let cursor = |value| -> RingCursor { RingCursor::new(value) };
+    let response = QueueResponseBank::from_bytes(bytes).map_err(ResponseCodecError::from)?;
     Ok(RegisterQueueStatus::new(
         EpochQueue::new(
-            DeviceEpoch::new(epoch),
-            QueueId::new(usize::try_from(queue_id).map_err(|_| PortError::SubmissionState)?),
+            DeviceEpoch::new(response.epoch.raw()),
+            QueueId::new(
+                usize::try_from(response.queue_id.raw()).map_err(|_| PortError::SubmissionState)?,
+            ),
         ),
         cursors(
             rings.submission(),
-            cursor(
-                view.sq_producer()
-                    .map_err(ResponseCodecError::from)?
-                    .value()
-                    .map_err(ResponseCodecError::from)?,
-            ),
-            cursor(
-                view.sq_consumer()
-                    .map_err(ResponseCodecError::from)?
-                    .value()
-                    .map_err(ResponseCodecError::from)?,
-            ),
+            RingCursor::new(response.sq_producer.raw()),
+            RingCursor::new(response.sq_consumer.raw()),
         )?,
-        cursor(
-            view.sq_captured()
-                .map_err(ResponseCodecError::from)?
-                .value()
-                .map_err(ResponseCodecError::from)?,
-        ),
+        RingCursor::new(response.sq_captured.raw()),
         cursors(
             rings.completion(),
-            cursor(
-                view.cq_producer()
-                    .map_err(ResponseCodecError::from)?
-                    .value()
-                    .map_err(ResponseCodecError::from)?,
-            ),
-            cursor(
-                view.cq_consumer()
-                    .map_err(ResponseCodecError::from)?
-                    .value()
-                    .map_err(ResponseCodecError::from)?,
-            ),
+            RingCursor::new(response.cq_producer.raw()),
+            RingCursor::new(response.cq_consumer.raw()),
         )?,
         cursors(
             rings.event(),
-            cursor(
-                view.eq_producer()
-                    .map_err(ResponseCodecError::from)?
-                    .value()
-                    .map_err(ResponseCodecError::from)?,
-            ),
-            cursor(
-                view.eq_consumer()
-                    .map_err(ResponseCodecError::from)?
-                    .value()
-                    .map_err(ResponseCodecError::from)?,
-            ),
+            RingCursor::new(response.eq_producer.raw()),
+            RingCursor::new(response.eq_consumer.raw()),
         )?,
     ))
 }

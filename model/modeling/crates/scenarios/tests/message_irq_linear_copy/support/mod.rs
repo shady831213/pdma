@@ -11,7 +11,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::semantic::{
     CommandId, IrqNotification, IrqSource, IrqVector, QueueConfigHandle, TraceEvent,
 };
-use pdma_model_device::{AsyncDevice, AsyncDeviceWorker, DeviceCore};
+use pdma_model_device::{AsyncDevice, AsyncDeviceWorker};
 use pdma_model_host::{
     AsyncDriver, DriverIrqRecord,
     adapter::abi::{PdmaInterruptSource, PdmaRegisterPort, RegisterQueueStatus},
@@ -78,11 +78,11 @@ pub struct DeliveryActor {
 }
 
 pub fn fresh_device(observer: Arc<RecordingRegisterObserver>) -> (AsyncDevice, AsyncDeviceWorker) {
-    AsyncDevice::from_core_observed(
-        DeviceCore::new(
-            Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ),
+    AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         observer,
     )
 }

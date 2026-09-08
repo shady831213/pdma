@@ -1,8 +1,5 @@
 use super::FakeSnapshot;
-use hardware_interface_runtime::{
-    AccessOrigin, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
-    RegisterObservation,
-};
+use hardware_interface_runtime::{MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::abi::mmio::{decode_read, decode_write};
 use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification,
@@ -22,36 +19,6 @@ pub fn message() -> IrqNotification {
             IrqSource::Completion(CompletionRingId::new(0)),
         ),
     ))
-}
-
-pub(super) fn claim_observations() -> Vec<RegisterObservation> {
-    let reads: [(u32, &[u8]); 10] = [
-        (0x224, &[1, 0, 0, 0]),
-        (0x240, &[0, 0, 0, 0, 0, 0, 0, 0]),
-        (0x248, &[0, 0, 0, 0, 0, 0, 0, 0]),
-        (0x250, &[0, 0, 0, 0]),
-        (0x254, &[0x4b, 0, 0, 0]),
-        (0x258, &[1, 0, 0, 0]),
-        (0x25c, &[2, 0, 0, 0]),
-        (0x260, &[0x29, 0, 0, 0, 0, 0, 0, 0]),
-        (0x268, &[0, 0, 0, 0, 0, 0, 0, 0]),
-        (0x270, &[0, 0, 0, 0, 0, 0, 0, 0]),
-    ];
-    let mut observations = vec![RegisterObservation::write(
-        0,
-        AccessOrigin::Direct,
-        0x220,
-        &[9, 0, 0, 0],
-    )];
-    observations.extend(
-        reads
-            .into_iter()
-            .enumerate()
-            .map(|(index, (offset, bytes))| {
-                RegisterObservation::read(index as u64 + 1, AccessOrigin::Direct, offset, bytes)
-            }),
-    );
-    observations
 }
 
 pub(super) fn validate_read(offset: u32, width: usize) -> Result<(), PdmaRegisterAccessError> {

@@ -27,10 +27,12 @@ pub(in crate::queue) struct RunResult {
 }
 
 pub(in crate::queue) async fn fixture(resources: ResourceConfig) -> TestResult<Fixture> {
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         resources,
-    ));
+    );
     let handle = runner.handle();
     let (queue, submission) = activate(&handle, QueueId::new(0)).await?;
     Ok(Fixture {

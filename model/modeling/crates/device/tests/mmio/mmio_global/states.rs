@@ -38,10 +38,12 @@ async fn run() -> TestResult {
 
 async fn assert_current_epoch_is_reported() -> TestResult {
     // Given: a device advanced through the existing typed whole-device reset.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let epoch = handle
         .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
@@ -62,10 +64,12 @@ async fn assert_unstarted_state(
     expected: u64,
 ) -> TestResult {
     // Given: an unstarted worker with either no work, runnable work, or constrained work.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         config,
-    ));
+    );
     let handle = device.handle();
     let work = if let Some(build) = command {
         let (queue, source, destination) = fixture(&handle).await?;
@@ -106,10 +110,12 @@ async fn assert_unstarted_state(
 
 async fn assert_reads_preserve_device_observables() -> TestResult {
     // Given: committed DMA, one active queue, and a stable IRQ snapshot.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [submission, completion, event] = stage.regions() else {
@@ -154,10 +160,12 @@ async fn assert_worker_pressure(
     build: fn(BufferId, BufferId) -> Command,
 ) -> TestResult {
     // Given: a worker that reaches a real publication-pressure stall.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         config,
-    ));
+    );
     let handle = device.handle();
     let (queue, source, destination) = fixture(&handle).await?;
     handle

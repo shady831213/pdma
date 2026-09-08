@@ -14,13 +14,18 @@ use tokio::sync::{mpsc, oneshot};
 async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_accounting()
 -> DriverResult<()> {
     // Given: one retained main capability and handlers registered for distinct MSI-style vectors.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(port.clone());
+    let access = AsyncDeviceAccess::new(
+        port.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    );
     let compat_port = AsyncDevicePort::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;

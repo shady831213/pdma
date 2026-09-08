@@ -14,8 +14,11 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
+    let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let mut core = DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        provisioning.memory_access(),
         ResourceConfig::default()
             .with_read_slots(1)
             .with_completion_publication_slots(1),
@@ -24,18 +27,28 @@ fn fixture() -> Fixture {
     let config = QueueConfig::new(4, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
     let copy_queue = core.create_queue(config).expect("copy queue");
     let vector_queue = core.create_queue(config).expect("vector queue");
-    let source = core.memory.allocate(4).expect("source").object();
-    let first_destination = core.memory.allocate(4).expect("first destination").object();
-    let second_destination = core
-        .memory
-        .allocate(4)
+    let source = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("source")
+        .object();
+    let first_destination = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("first destination")
+        .object();
+    let second_destination = provisioning
+        .allocate(&mut core.memory, 4)
         .expect("second destination")
         .object();
-    let vector_left = core.memory.allocate(4).expect("vector left").object();
-    let vector_right = core.memory.allocate(4).expect("vector right").object();
-    let vector_destination = core
-        .memory
-        .allocate(4)
+    let vector_left = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("vector left")
+        .object();
+    let vector_right = provisioning
+        .allocate(&mut core.memory, 4)
+        .expect("vector right")
+        .object();
+    let vector_destination = provisioning
+        .allocate(&mut core.memory, 4)
         .expect("vector destination")
         .object();
     core.memory

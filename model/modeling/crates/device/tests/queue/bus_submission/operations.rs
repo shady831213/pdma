@@ -73,10 +73,12 @@ pub async fn execute_operation(case: OperationCase) -> TestResult {
 pub(in crate::queue) async fn multi_queue_arbitration()
 -> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
     let resources = ResourceConfig::default().with_compute_slots(0);
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         resources,
-    ));
+    );
     let handle = runner.handle();
     handle.enable_tracing().await;
     let (vector_queue, vector_slot) =

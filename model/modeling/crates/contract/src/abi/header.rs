@@ -126,7 +126,7 @@ fn render_resolved(schemas: &PdmaHeaderSchemas) -> String {
     constants::push(&mut output);
     output.push('\n');
     records::push(&mut output, &fragments.records);
-    mmio::push(&mut output, &fragments.mmio);
+    mmio::push(&mut output, &schemas.mmio);
     output.push_str("#endif /* PDMA_MODEL_ABI_H */\n");
     output
 }

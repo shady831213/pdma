@@ -2,9 +2,9 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess,
 };
 use pdma_model_host::adapter::abi::{
-    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
-    PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegionRequest,
-    PdmaRegisterAccessError,
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaIrqAccess, PdmaIrqCoordinator,
+    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError,
+    PdmaRegionRequest, PdmaRegisterAccessError,
 };
 use std::error::Error;
 use std::sync::atomic::Ordering;
@@ -14,7 +14,7 @@ mod helpers;
 mod state;
 pub(crate) use fates::verify_fates;
 pub use helpers::message;
-use helpers::{claim_observations, crossing, lock, validate_read, validate_write};
+use helpers::{crossing, lock, validate_read, validate_write};
 pub use state::{FakeAccess, FakeSnapshot};
 
 type TestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -97,10 +97,10 @@ impl RegisterAccess for FakeAccess {
         validate_write(offset, request)?;
         let mut state = lock(&self.state);
         state.registers.insert(offset, request.to_vec());
-        if offset == 0x168 {
+        if offset == 0x164 {
             let epoch = state.registers.get(&0x100).cloned().unwrap_or(vec![0; 8]);
             let queue = state.registers.get(&0x108).cloned().unwrap_or(vec![0; 8]);
-            state.registers.insert(0x16c, 1_u32.to_le_bytes().to_vec());
+            state.registers.insert(0x168, 1_u32.to_le_bytes().to_vec());
             state.registers.insert(0x188, epoch);
             state.registers.insert(0x190, queue);
         }
@@ -135,13 +135,18 @@ impl PdmaExactInterruptClaim for FakeAccess {
         if let Some(error) = lock(&self.next_claim_error).take() {
             return Err(error);
         }
-        Ok(lock(&self.state).notifications.pop_front().map_or(
-            PdmaClaimResult::Empty,
-            |notification| PdmaClaimResult::Notification {
-                notification,
-                observations: claim_observations(),
-            },
-        ))
+        Ok(lock(&self.state)
+            .notifications
+            .pop_front()
+            .map_or(PdmaClaimResult::Empty, |notification| {
+                PdmaClaimResult::Notification { notification }
+            }))
+    }
+}
+
+impl PdmaIrqAccess for FakeAccess {
+    fn irq_coordinator(&self) -> &PdmaIrqCoordinator {
+        &self.irq
     }
 }
 

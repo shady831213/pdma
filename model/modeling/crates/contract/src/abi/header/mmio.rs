@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 use hardware_interface_schema::{
     export::backends::c_header::RegisterMapCHeaderModel,
     register::{Access, ResetKind},
+    register_map::ResolvedRegisterMap,
 };
 
 use super::super::mmio::{
@@ -10,10 +11,18 @@ use super::super::mmio::{
     PdmaMmioMapRegisterId, QueueCommand,
 };
 
-pub(super) fn push(output: &mut String, model: &RegisterMapCHeaderModel<PdmaMmioMapRegisterId>) {
+pub(super) fn push(output: &mut String, schema: &ResolvedRegisterMap<PdmaMmioMapRegisterId>) {
+    let model = RegisterMapCHeaderModel::from_resolved(schema);
     push_access_and_reset(output);
-    for register in model.fixed() {
-        let prefix = format!("PDMA_MODEL_MMIO_{}", register.name());
+    for (register, resolved) in model.fixed().iter().zip(schema.registers()) {
+        let name = resolved
+            .path()
+            .split('.')
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("_")
+            .to_ascii_uppercase();
+        let prefix = format!("PDMA_MODEL_MMIO_{name}");
         push_usize(output, &format!("{prefix}_OFFSET"), register.offset());
         let _ = writeln!(
             output,

@@ -14,10 +14,12 @@ use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
     // Given: an idle async runner with tracing enabled after startup noise is cleared.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     raw_handle.enable_tracing().await;
@@ -89,10 +91,12 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_queue_only_doorbells() {
     // Given: two drivers whose first commands reuse the same command id on distinct queues.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     let mut handle = AsyncDevicePort::new(raw_handle.clone());

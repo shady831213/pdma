@@ -3,7 +3,7 @@ use hardware_interface_runtime::{
     RegisterObservation, RegisterObserver,
 };
 use pdma_model_contract::{abi::mmio::MmioAccessError, semantic::ResourceConfig};
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::TestResult;
@@ -22,11 +22,11 @@ async fn address_adverse_rejects_translation_before_pdma_decode() -> TestResult 
     // Given: one base-aware endpoint and an immutable device/observation snapshot.
     let base = RegisterBusBase::new(0x1_0000_0000);
     let observer = Arc::new(Observer::default());
-    let (device, worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(
-            Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            ResourceConfig::default(),
-        ),
+    let (device, worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());

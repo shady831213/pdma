@@ -24,10 +24,12 @@ struct Fixture {
 
 impl Fixture {
     async fn new(resources: ResourceConfig) -> Self {
-        let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        let (device, worker) = AsyncDevice::new(
+            pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+                hardware_interface_runtime::SharedMemory::new(),
+            )),
             resources,
-        ));
+        );
         let handle = device.handle();
         let stage = handle
             .stage_memory_regions(&[

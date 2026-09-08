@@ -24,6 +24,8 @@ struct Gate {
     response_offset: u32,
     reject_publication: bool,
     blocked: bool,
+    fail_read: Option<(u32, PdmaRegisterAccessError)>,
+    corrupt_read: Option<(u32, u32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,35 @@ pub struct GatedAccess {
 }
 
 impl GatedAccess {
+    pub(crate) fn inner(&self) -> AsyncDeviceAccess {
+        self.inner.clone()
+    }
+
+    pub(crate) fn fail_read(&self, offset: u32) {
+        self.gate.lock().expect("gate").fail_read = Some((
+            offset,
+            PdmaRegisterAccessError::Access(
+                pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset { offset },
+            ),
+        ));
+    }
+
+    pub(crate) fn fail_observation(&self, offset: u32) {
+        self.gate.lock().expect("gate").fail_read = Some((
+            offset,
+            PdmaRegisterAccessError::Observation(
+                hardware_interface_runtime::ObservationGateError::SequenceExhausted {
+                    next_sequence: u64::MAX,
+                    count: 2,
+                },
+            ),
+        ));
+    }
+
+    pub(crate) fn corrupt_read(&self, offset: u32, value: u32) {
+        self.gate.lock().expect("gate").corrupt_read = Some((offset, value));
+    }
+
     pub(crate) fn new(inner: AsyncDeviceAccess) -> Self {
         Self {
             inner,
@@ -48,7 +79,7 @@ impl GatedAccess {
     }
 
     pub(crate) fn arm_after(&self, command: u32) {
-        self.arm_after_at(command, 0x16c);
+        self.arm_after_at(command, 0x168);
     }
 
     pub(crate) fn arm_after_at(&self, command: u32, response_offset: u32) {
@@ -81,6 +112,10 @@ impl RegisterAccess for GatedAccess {
     type Error = PdmaRegisterAccessError;
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
+        let failure = self.gate.lock().expect("gate").fail_read;
+        if let Some((_, error)) = failure.filter(|(target, _)| *target == offset) {
+            return Err(error);
+        }
         let blocked = {
             let mut gate = self.gate.lock().expect("gate");
             let blocked = offset == gate.response_offset && gate.response;
@@ -90,11 +125,18 @@ impl RegisterAccess for GatedAccess {
         if blocked {
             pending::<()>().await;
         }
-        RegisterAccess::read(&self.inner, offset, response).await
+        RegisterAccess::read(&self.inner, offset, response).await?;
+        let corrupt_read = self.gate.lock().expect("gate").corrupt_read;
+        if let Some((target, value)) = corrupt_read {
+            if target == offset {
+                response.copy_from_slice(&value.to_le_bytes());
+            }
+        }
+        Ok(())
     }
 
     async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
-        let command = if offset == 0x168 {
+        let command = if offset == 0x164 || offset == 0x220 {
             Some(u32::from_le_bytes(
                 request.try_into().expect("QCommand width"),
             ))
@@ -163,7 +205,18 @@ impl PdmaExactInterruptClaim for GatedAccess {
     }
 
     async fn claim_interrupt_exact(&self) -> Result<PdmaClaimResult, Self::Error> {
-        self.inner.claim_interrupt_exact().await
+        use pdma_model_host::adapter::abi::PdmaIrqAccess;
+        self.irq_coordinator()
+            .claim(self, async {
+                self.inner.wait_interrupt_ready().await.expect("readiness")
+            })
+            .await
+    }
+}
+
+impl pdma_model_host::adapter::abi::PdmaIrqAccess for GatedAccess {
+    fn irq_coordinator(&self) -> &pdma_model_host::adapter::abi::PdmaIrqCoordinator {
+        self.inner.irq_coordinator()
     }
 }
 

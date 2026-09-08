@@ -35,10 +35,43 @@ async fn cancellation_and_clone_state_hold_when_scheduled_twenty_five_ways() -> 
 
         // Then: a fresh claim consumes once and both clones observe the same committed mapping.
         let claimed = clone.claim_interrupt_exact().await?;
-        crate::claim::assert_exact(crate::claim::observations(&claimed)?)?;
+        assert_eq!(
+            claimed,
+            PdmaClaimResult::Notification {
+                notification: message()
+            }
+        );
+        assert_eq!(fake.claim_interrupt_exact().await?, PdmaClaimResult::Empty);
         assert_eq!(clone.snapshot().mappings, fake.snapshot().mappings);
     }
     Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn irq_coordinator_serializes_clones_when_window_is_owned() {
+    // Given: the first backend holds its IRQ command window.
+    let fake = FakeAccess::new(message());
+    let clone = fake.clone();
+    fake.pend_next_register();
+    let before = fake.snapshot();
+    let mut owned = Box::pin(fake.irq_coordinator().claim(&fake, async { true }));
+    assert!(poll_pending(&mut owned));
+
+    // When: a clone requests that same window.
+    let mut contender = Box::pin(clone.irq_coordinator().claim(&clone, async { true }));
+    assert!(poll_pending(&mut contender));
+    assert_eq!(fake.snapshot(), before);
+
+    // Then: releasing the owner lets the clone acquire it.
+    drop(owned);
+    assert_eq!(
+        contender.await,
+        Err(PdmaClaimError::CommandResult { code: 0 })
+    );
+    assert_eq!(
+        fake.snapshot().registers.get(&0x220),
+        Some(&9_u32.to_le_bytes().to_vec())
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

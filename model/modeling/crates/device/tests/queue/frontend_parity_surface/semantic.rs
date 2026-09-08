@@ -19,10 +19,12 @@ pub(super) struct SemanticObservation {
 }
 
 pub(super) async fn observe(case: OperationCase) -> TestResult<SemanticObservation> {
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     handle.enable_tracing().await;
@@ -89,10 +91,12 @@ pub(super) async fn observe(case: OperationCase) -> TestResult<SemanticObservati
 }
 
 pub(super) async fn arbitration() -> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_compute_slots(0),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     handle.enable_tracing().await;

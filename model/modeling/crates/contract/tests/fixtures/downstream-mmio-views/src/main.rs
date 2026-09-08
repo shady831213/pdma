@@ -4,13 +4,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bytes = [0_u8; 0x1000];
     let registers = PdmaMmioMap::resolve()?;
     let mut view = PdmaMmioMapViewMut::new(&mut bytes)?;
-    view.g_req_abi_version_mut()?.set_bits(0x1234_5678)?;
-    view.q_cfg_sq_depth_mut()?.set_bits(1)?;
-    view.i_rsp_state_mut()?.set_bits(0x40)?;
+    view.global_mut()?.req_abi_version_mut()?.set_bits(0x1234_5678)?;
+    view.queue_mut()?.cfg_sq_depth_mut()?.set_bits(1)?;
+    view.irq_mut()?.response_mut()?.state_mut()?.set_bits(0x40)?;
     let view = PdmaMmioMapView::new(&bytes)?;
-    let roundtrip = view.g_req_abi_version()?.bits()? == 0x1234_5678
-        && view.q_cfg_sq_depth()?.bits()? == 1
-        && view.i_rsp_state()?.bits()? == 0x40;
+    let roundtrip = view.global()?.req_abi_version()?.bits()? == 0x1234_5678
+        && view.queue()?.cfg_sq_depth()?.bits()? == 1
+        && view.irq()?.response()?.state()?.bits()? == 0x40;
     println!(
         "registers={};map=0x{:x};global={};queue={};irq={};roundtrip={roundtrip}",
         registers.registers().len(),

@@ -80,17 +80,15 @@ fn host_exact_interrupt_and_descriptor_planning_have_single_owners() -> io::Resu
     let descriptor = fs::read_to_string(source.join("adapter/abi/register/port/descriptor.rs"))?;
 
     // When/Then: exact source ownership stays in the ABI adapter and encoding stays out of commit code.
-    for forbidden in [
-        "PdmaExactInterruptClaim",
-        "PdmaClaimResult",
-        "RegisterObservation",
-    ] {
+    for forbidden in ["PdmaExactInterruptClaim", "PdmaClaimResult"] {
         assert!(!runtime.contains(forbidden), "runtime owns {forbidden}");
         assert!(
             interrupt.contains(forbidden),
             "ABI adapter lacks {forbidden}"
         );
     }
+    assert!(!runtime.contains("RegisterObservation"));
+    assert!(!interrupt.contains("RegisterObservation"));
     for forbidden in ["AbiCommandPayload", "fn encode_command"] {
         assert!(
             !submission.contains(forbidden),

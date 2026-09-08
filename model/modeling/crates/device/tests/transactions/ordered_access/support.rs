@@ -14,11 +14,12 @@ pub(in crate::transactions) type TestResult<T = ()> =
     Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 pub(in crate::transactions) fn new_handle() -> AsyncDeviceHandle {
-    let (device, _worker) =
-        pdma_model_device::AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ));
+    let (device, _worker) = pdma_model_device::AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        pdma_model_contract::semantic::ResourceConfig::default(),
+    );
     device.handle()
 }
 
@@ -41,11 +42,9 @@ pub(in crate::transactions) fn observed_handle_for_memory(
     memory: &Arc<hardware_interface_runtime::SharedMemory>,
 ) -> (AsyncDeviceHandle, Arc<RecordingObserver>) {
     let observer = Arc::new(RecordingObserver::default());
-    let (device, _worker) = pdma_model_device::AsyncDevice::from_core_observed(
-        pdma_model_device::DeviceCore::new(
-            Arc::clone(memory),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ),
+    let (device, _worker) = pdma_model_device::AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::clone(memory)),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         observer.clone(),
     );
     (device.handle(), observer)
@@ -58,11 +57,9 @@ pub(in crate::transactions) fn gated_handle() -> (
 ) {
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
     let observer = Arc::new(GatedObserver::new());
-    let (device, _worker) = pdma_model_device::AsyncDevice::from_core_observed(
-        pdma_model_device::DeviceCore::new(
-            Arc::clone(&memory),
-            pdma_model_contract::semantic::ResourceConfig::default(),
-        ),
+    let (device, _worker) = pdma_model_device::AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::clone(&memory)),
+        pdma_model_contract::semantic::ResourceConfig::default(),
         observer.clone(),
     );
     (device.handle(), observer, memory)
@@ -102,7 +99,7 @@ pub(in crate::transactions) async fn bootstrap(
     program_activation(handle, &regions).await?;
     handle
         .register_endpoint()
-        .write(0x168, &1_u32.to_le_bytes())
+        .write(0x164, &1_u32.to_le_bytes())
         .await?;
     let response = response_bytes(handle).await?;
     Ok((activation.queue(), submission, response))
@@ -131,7 +128,7 @@ pub(in crate::transactions) async fn queue_latches(
 ) -> TestResult<Vec<Vec<u8>>> {
     let mut values = Vec::new();
     for (offset, width) in [
-        (0x16c, MmioByteCount::from(4_u8)),
+        (0x168, MmioByteCount::from(4_u8)),
         (0x170, MmioByteCount::from(8_u8)),
         (0x178, MmioByteCount::from(8_u8)),
         (0x180, MmioByteCount::from(8_u8)),
@@ -169,7 +166,7 @@ pub(in crate::transactions) async fn publish(
     }
     handle
         .register_endpoint()
-        .write(0x168, &3_u32.to_le_bytes())
+        .write(0x164, &3_u32.to_le_bytes())
         .await?;
     Ok(())
 }

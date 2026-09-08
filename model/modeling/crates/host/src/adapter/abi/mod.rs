@@ -9,7 +9,8 @@ pub use interrupt::{
     PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSource, PdmaInterruptSourceError,
 };
 pub use register::{
-    DriverPort, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
-    PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegionRequest,
-    PdmaRegisterAccessError, PdmaRegisterPort, PdmaRegisterPortError, RegisterQueueStatus,
+    DriverPort, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaIrqAccess,
+    PdmaIrqCoordinator, PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningCause,
+    PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError, PdmaRegisterPort,
+    PdmaRegisterPortError, RegisterQueueStatus,
 };

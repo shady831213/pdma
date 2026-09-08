@@ -21,10 +21,12 @@ pub(in crate::queue) struct Fixture {
 
 impl Fixture {
     pub(in crate::queue) async fn new(epoch: DeviceEpoch, result_depth: u64) -> TestResult<Self> {
-        let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        let (runner, worker) = AsyncDevice::new(
+            pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+                hardware_interface_runtime::SharedMemory::new(),
+            )),
             pdma_model_contract::semantic::ResourceConfig::default(),
-        ));
+        );
         let handle = runner.handle();
         let command_depth = 4;
         let stage = handle

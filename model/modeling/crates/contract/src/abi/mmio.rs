@@ -8,13 +8,26 @@ mod response;
 mod result;
 mod status;
 
-pub use access::{decode_read, decode_write};
+pub use access::{decode_read, decode_write, register_at};
 pub use codec::{decode_u32, decode_u64, encode_u32, encode_u64};
 pub use error::MmioAccessError;
+pub use register::global::{
+    GlobalRegisters, GlobalRegistersRaw, GlobalRegistersRegisterId, GlobalRegistersValues,
+    GlobalRegistersView, GlobalRegistersViewMut,
+};
+pub use register::irq::{
+    IrqRegisters, IrqRegistersRaw, IrqRegistersRegisterId, IrqRegistersValues, IrqRegistersView,
+    IrqRegistersViewMut,
+};
 pub use register::queue::QueueResponseRegistersRaw;
+pub use register::queue::{
+    QueueRegisters, QueueRegistersRaw, QueueRegistersRegisterId, QueueRegistersValues,
+    QueueRegistersView, QueueRegistersViewMut,
+};
 pub use register::{
-    MMIO_REGION_SIZE, MmioAccess, MmioByteCount, MmioReset, PdmaMmioMap, PdmaMmioMapRegisterId,
-    PdmaMmioMapView, PdmaMmioMapViewMut, RegisterId, RegisterSpec, global, irq, queue,
+    MMIO_REGION_SIZE, MmioAccess, MmioByteCount, MmioReset, PdmaMmioMap, PdmaMmioMapRaw,
+    PdmaMmioMapRegisterId, PdmaMmioMapValues, PdmaMmioMapView, PdmaMmioMapViewMut, RegisterSpec,
+    global, irq, queue,
 };
 pub use response::{
     GlobalLimitsResponse, GlobalResetResponse, GlobalResponse, GlobalResponseBank,

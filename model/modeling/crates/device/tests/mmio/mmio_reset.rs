@@ -19,10 +19,12 @@ const fn config() -> QueueConfig {
 #[tokio::test(flavor = "current_thread")]
 async fn typed_reset_clears_resettable_state_and_preserves_persistent_partition() -> TestResult {
     // Given: completed work, pending record/IRQ state, persistent DMA, trace, and staged banks.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     handle.enable_tracing().await;
@@ -68,7 +70,7 @@ async fn typed_reset_clears_resettable_state_and_preserves_persistent_partition(
     assert_eq!(read_u64(&handle, 0x010).await?, 0);
     assert_eq!(read_u64(&handle, 0x108).await?, 0);
     assert_eq!(read_u64(&handle, 0x208).await?, 0);
-    assert_eq!(read_u32(&handle, 0x16c).await?, 0);
+    assert_eq!(read_u32(&handle, 0x168).await?, 0);
     assert_eq!(read_u32(&handle, 0x224).await?, 0);
     assert_eq!(handle.memory_generation().await, memory_generation);
     assert_eq!(handle.read_buffer(destination, 0, 1).await?, [0x6d]);
@@ -89,10 +91,12 @@ async fn typed_reset_clears_resettable_state_and_preserves_persistent_partition(
 #[tokio::test(flavor = "current_thread")]
 async fn stale_typed_reset_rejects_before_any_mutation() -> TestResult {
     // Given: epoch one with committed DMA and new nonzero queue/IRQ staging.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let buffer = handle.allocate_buffer(1).await?;
     handle.write_buffer(buffer, 0, &[0x3c]).await?;
@@ -125,10 +129,12 @@ async fn stale_typed_reset_rejects_before_any_mutation() -> TestResult {
 #[tokio::test(flavor = "current_thread")]
 async fn global_reset_dispatch_returns_post_reset_receipt_and_preserves_dma() -> TestResult {
     // Given: a published global response, staged queue/IRQ banks, and committed DMA.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let buffer = handle.allocate_buffer(1).await?;
     handle.write_buffer(buffer, 0, &[0xa5]).await?;

@@ -26,7 +26,7 @@ impl DeviceCore {
         }
         let next = epoch.next()?;
         self.reset(next);
-        self.registers.reset();
+        self.global_registers = pdma_model_contract::abi::mmio::GlobalRegistersValues::default();
         self.reset_runner_calls = self.reset_runner_calls.saturating_add(1);
         Ok(next)
     }

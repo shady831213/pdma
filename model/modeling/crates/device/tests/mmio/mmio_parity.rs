@@ -51,10 +51,12 @@ pub(super) async fn read_u64(
 #[tokio::test(flavor = "current_thread")]
 async fn raw_endpoint_preserves_little_endian_bytes_and_exact_width_errors() -> TestResult {
     // Given: one untouched device and literal malformed write slices.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
 
     // When: constants are read and arbitrary byte lengths cross the public raw endpoint.
@@ -87,14 +89,18 @@ async fn raw_endpoint_preserves_little_endian_bytes_and_exact_width_errors() -> 
 #[tokio::test(flavor = "current_thread")]
 async fn typed_and_raw_discovery_and_current_status_match() -> TestResult {
     // Given: equivalent untouched devices and one validated discovery request.
-    let (typed_device, _typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (typed_device, _typed_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
-    let (raw_device, _raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    );
+    let (raw_device, _raw_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let typed = typed_device.handle();
     let raw = raw_device.handle();
     let request = DiscoveryRequest::try_new(1, 0)?;
@@ -132,14 +138,18 @@ async fn typed_and_raw_discovery_and_current_status_match() -> TestResult {
 #[tokio::test(flavor = "current_thread")]
 async fn raw_reset_matches_typed_reset_outcome() -> TestResult {
     // Given: two independent devices at the same initial epoch.
-    let (typed_device, _typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (typed_device, _typed_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
-    let (raw_device, _raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    );
+    let (raw_device, _raw_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let raw_before = raw_device.handle().snapshot().await;
 
     // When: one resets through the typed endpoint and one through raw MMIO.
@@ -167,14 +177,18 @@ async fn raw_reset_matches_typed_reset_outcome() -> TestResult {
 #[tokio::test(flavor = "current_thread")]
 async fn stale_raw_reset_matches_typed_error_without_publication() -> TestResult {
     // Given: typed and raw devices both advanced to epoch one.
-    let (typed_device, _typed_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (typed_device, _typed_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
-    let (raw_device, _raw_worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    );
+    let (raw_device, _raw_worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let typed = typed_device.handle();
     let raw = raw_device.handle();
     typed

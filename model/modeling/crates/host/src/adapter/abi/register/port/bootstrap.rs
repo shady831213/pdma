@@ -1,7 +1,8 @@
+use super::registers::queue_offset;
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, control, registers};
 use crate::PortError;
 use pdma_model_contract::{
-    abi::{QueueRingLayouts, mmio::RegisterId},
+    abi::{QueueRingLayouts, mmio::QueueRegisters},
     semantic::QueueActivation,
 };
 
@@ -14,33 +15,45 @@ pub(super) async fn stage_activation<A: CanonicalAccess>(
     let config = activation.config();
     let values = [
         (
-            RegisterId::QCfgSqDepth,
+            QueueRegisters::CFG_SQ_DEPTH.offset(),
             u64::from(rings.submission().depth()),
         ),
         (
-            RegisterId::QCfgCqDepth,
+            QueueRegisters::CFG_CQ_DEPTH.offset(),
             u64::from(rings.completion().depth()),
         ),
-        (RegisterId::QCfgEventPolicy, 0),
+        (QueueRegisters::CFG_EVENT_POLICY.offset(), 0),
         (
-            RegisterId::QCfgSoftwareOwner,
+            QueueRegisters::CFG_SOFTWARE_OWNER.offset(),
             u64::try_from(config.software_owner().raw()).map_err(|_| PortError::SubmissionState)?,
         ),
         (
-            RegisterId::QSqBase,
+            QueueRegisters::SQ_BASE.offset(),
             rings.submission().region().base().raw(),
         ),
-        (RegisterId::QSqDepth, u64::from(rings.submission().depth())),
         (
-            RegisterId::QCqBase,
+            QueueRegisters::SQ_DEPTH.offset(),
+            u64::from(rings.submission().depth()),
+        ),
+        (
+            QueueRegisters::CQ_BASE.offset(),
             rings.completion().region().base().raw(),
         ),
-        (RegisterId::QCqDepth, u64::from(rings.completion().depth())),
-        (RegisterId::QEqBase, rings.event().region().base().raw()),
-        (RegisterId::QEqDepth, u64::from(rings.event().depth())),
+        (
+            QueueRegisters::CQ_DEPTH.offset(),
+            u64::from(rings.completion().depth()),
+        ),
+        (
+            QueueRegisters::EQ_BASE.offset(),
+            rings.event().region().base().raw(),
+        ),
+        (
+            QueueRegisters::EQ_DEPTH.offset(),
+            u64::from(rings.event().depth()),
+        ),
     ];
-    for (id, value) in values {
-        registers::write(port, id, value).await?;
+    for (offset, value) in values {
+        registers::write(port, queue_offset(offset), value).await?;
     }
     Ok(())
 }

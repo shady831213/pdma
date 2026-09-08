@@ -1,7 +1,8 @@
 use super::*;
+use crate::MmioRegisterError;
 use crate::device::DeviceCore;
-use crate::runtime::MmioRegisterEndpoint;
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
+use pdma_model_contract::abi::mmio::{QueueResponseBank, register_at};
 use pdma_model_contract::semantic::ResourceConfig;
 use std::future::Future;
 use std::pin::pin;
@@ -11,10 +12,13 @@ use std::task::{Context, Poll, Waker};
 #[tokio::test]
 async fn pending_lock_acquisition_is_cancel_safe_before_commit() {
     // Given: a real core lock held before an exact register future reaches its commit point.
-    let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let endpoint = crate::AsyncDevice::new(
+        crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    )
+    .0
+    .handle()
+    .register_endpoint();
     let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
     let (release_sender, release_receiver) = std::sync::mpsc::channel();
     let shared = Arc::clone(&endpoint.shared);
@@ -44,20 +48,27 @@ async fn pending_lock_acquisition_is_cancel_safe_before_commit() {
 #[tokio::test]
 async fn prepared_read_and_write_are_side_effect_free_until_commit() {
     // Given: an unchanged core and generated read/write register identities.
-    let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let endpoint = crate::AsyncDevice::new(
+        crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    )
+    .0
+    .handle()
+    .register_endpoint();
     let (before, read_response, after) = endpoint
         .shared
         .backend
         .interact(|state| {
-            let before = state.core.registers.read(RegisterId::QId);
-            let read = prepare_read(&state.core, RegisterId::QId, 0x108);
-            let write = prepare_write(RegisterId::QId, 7, 0x108, &7_u64.to_le_bytes());
-            assert_eq!(state.core.registers.read(RegisterId::QId), before);
-            write.commit(&mut state.core);
-            let after = state.core.registers.read(RegisterId::QId);
+            let register = register_at(0x108).expect("queue ID register");
+            let before = state.core.read_register(register).expect("queue ID bytes");
+            let read = prepare_read(&state.core, register, 0x108).expect("prepared read");
+            let write = prepare_write(register, 7, 0x108, &7_u64.to_le_bytes());
+            assert_eq!(
+                state.core.read_register(register).expect("queue ID bytes"),
+                before
+            );
+            write.commit(&mut state.core).expect("committed write");
+            let after = state.core.read_register(register).expect("queue ID bytes");
             (before, read.response, after)
         })
         .await;
@@ -70,10 +81,13 @@ async fn prepared_read_and_write_are_side_effect_free_until_commit() {
 async fn completed_register_writes_survive_later_rejection_and_unpolled_write()
 -> Result<(), MmioRegisterError> {
     // Given: a CPU-independent endpoint with separately committed request registers.
-    let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let endpoint = crate::AsyncDevice::new(
+        crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    )
+    .0
+    .handle()
+    .register_endpoint();
     endpoint.write(0x100, &10_u64.to_le_bytes()).await?;
     endpoint.write(0x108, &11_u64.to_le_bytes()).await?;
 
@@ -93,9 +107,9 @@ async fn completed_register_writes_survive_later_rejection_and_unpolled_write()
 }
 
 #[test]
-fn queue_completion_empties_response_with_result_details_in_one_root_mutation() {
+fn queue_completion_empties_response_with_result_details_in_one_owner_transition() {
     // Given: a queue response bank with every lane distinct from the empty value.
-    let state = DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
+    let mut state = DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
     let response = QueueResponseBank {
         epoch: 1.into(),
         queue_id: 2.into(),
@@ -108,47 +122,34 @@ fn queue_completion_empties_response_with_result_details_in_one_root_mutation() 
         eq_consumer: 9.into(),
     };
 
-    state.registers.view_mut(|mut root| {
-        queue::complete(
-            &mut root,
-            pdma_model_contract::abi::mmio::MmioResultDetails {
-                result: pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction,
-                details: [10, 11, 12],
-            },
-            pdma_model_contract::abi::mmio::ResponseUpdate::Replace(response),
-        );
-    });
+    state.queues.complete(
+        pdma_model_contract::abi::mmio::MmioResultDetails {
+            result: pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction,
+            details: [10, 11, 12],
+        },
+        pdma_model_contract::abi::mmio::ResponseUpdate::Replace(response),
+    );
 
-    // When: one typed root mutation explicitly empties the prior response.
-    state.registers.view_mut(|mut root| {
-        queue::complete(
-            &mut root,
-            pdma_model_contract::abi::mmio::MmioResultDetails {
-                result: pdma_model_contract::abi::mmio::MmioResult::Empty,
-                details: [13, 14, 15],
-            },
-            pdma_model_contract::abi::mmio::ResponseUpdate::Empty,
-        );
-    });
+    // When: one typed owner transition explicitly empties the prior response.
+    state.queues.complete(
+        pdma_model_contract::abi::mmio::MmioResultDetails {
+            result: pdma_model_contract::abi::mmio::MmioResult::Empty,
+            details: [13, 14, 15],
+        },
+        pdma_model_contract::abi::mmio::ResponseUpdate::Empty,
+    );
 
     // Then: the result/detail tuple and all nine response lanes change atomically as typed data.
     assert_eq!(
         [
-            RegisterId::QResult,
-            RegisterId::QDetail0,
-            RegisterId::QDetail1,
-            RegisterId::QDetail2,
-            RegisterId::QRspEpoch,
-            RegisterId::QRspId,
-            RegisterId::QRspSqProducer,
-            RegisterId::QRspSqCaptured,
-            RegisterId::QRspSqConsumer,
-            RegisterId::QRspCqProducer,
-            RegisterId::QRspCqConsumer,
-            RegisterId::QRspEqProducer,
-            RegisterId::QRspEqConsumer,
+            0x168, 0x170, 0x178, 0x180, 0x188, 0x190, 0x198, 0x1a0, 0x1a8, 0x1b0, 0x1b8, 0x1c0,
+            0x1c8,
         ]
-        .map(|register| state.registers.read(register)),
+        .map(|offset| {
+            state
+                .read_register(register_at(offset).expect("queue completion register"))
+                .expect("queue completion bytes")
+        }),
         [
             2_u32.to_le_bytes().to_vec(),
             13_u64.to_le_bytes().to_vec(),

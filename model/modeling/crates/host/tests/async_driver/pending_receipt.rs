@@ -1,7 +1,7 @@
 use super::pending_commands::support::{GatedAccess, drop_pending};
 use hardware_interface_runtime::{SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{CopyRequest, ResourceConfig};
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, DriverError,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -16,7 +16,7 @@ async fn accepted_receipt_survives_a_cancelled_response_bank_and_last_port_drop(
 
 #[tokio::test(flavor = "current_thread")]
 async fn issued_receipt_survives_an_unread_result_and_last_port_drop() {
-    receipt_survives_last_port_drop(0x16c).await;
+    receipt_survives_last_port_drop(0x168).await;
 }
 
 #[expect(
@@ -25,12 +25,15 @@ async fn issued_receipt_survives_an_unread_result_and_last_port_drop() {
 )]
 async fn receipt_survives_last_port_drop(response_offset: u32) {
     // Given: a real depth-one queue pauses during its publication response.
-    let (device, _worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
-    let access = GatedAccess::new(AsyncDeviceAccess::new(handle.clone()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(
+        handle.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    ));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -64,12 +67,15 @@ async fn receipt_survives_last_port_drop(response_offset: u32) {
 #[tokio::test(flavor = "current_thread")]
 async fn rejected_receipt_refunds_after_cancelled_details_and_last_port_drop() {
     // Given: real hardware rejects publication because its expected cursor was corrupted.
-    let (device, _worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
-    let access = GatedAccess::new(AsyncDeviceAccess::new(handle.clone()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(
+        handle.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    ));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

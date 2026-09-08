@@ -1,21 +1,21 @@
-use hardware_interface_runtime::{NoopRegisterObserver, SharedMemory, SoftwareCpu};
+use hardware_interface_runtime::{SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{BufferId, CopyRequest, ResourceConfig, WholeDeviceReset};
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
 use pdma_model_host::adapter::abi::AsyncDeviceAccess;
-use pdma_model_host::compat::AsyncDevicePort;
 use pdma_model_host::adapter::abi::PdmaRegisterPort;
+use pdma_model_host::compat::AsyncDevicePort;
 use pdma_model_host::{AsyncDriver, DriverError, DriverPort, PortError};
 use std::{path::Path, sync::Arc};
 
 mod compiler;
 
-fn core() -> DeviceCore {
-    DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default())
+fn provisioning() -> PdmaMemoryProvisioning {
+    PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new()))
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let (device, worker) = AsyncDevice::from_core(core());
+    let (device, worker) = AsyncDevice::new(provisioning(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let mut async_port = AsyncDevicePort::new(handle.clone());
@@ -73,8 +73,8 @@ async fn main() {
     device.request_shutdown().await;
     worker.await.expect("worker must join");
 
-    let (register_device, _worker) = AsyncDevice::from_core(core());
-    let access = AsyncDeviceAccess::new(register_device.handle());
+    let (register_device, _worker) = AsyncDevice::new(provisioning(), ResourceConfig::default());
+    let access = AsyncDeviceAccess::new(register_device.handle(), pdma_model_host::adapter::abi::PdmaIrqCoordinator::default());
     let register_port = SoftwareCpu::new()
         .run_main(async { PdmaRegisterPort::new(access).is_ok() })
         .await;

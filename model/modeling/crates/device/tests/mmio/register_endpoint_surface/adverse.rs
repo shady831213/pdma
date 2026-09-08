@@ -1,7 +1,7 @@
 use super::support::{RecordingObserver, TestResult, contend_core, create_message, submit_copy};
 use hardware_interface_runtime::{RegisterAccess, RegisterBusBase};
 use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use std::future::Future;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
@@ -14,8 +14,9 @@ pub(super) async fn run() -> TestResult {
     // Given: one live endpoint with snapshots and a real pending message available to claim.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(memory.clone(), ResourceConfig::default()),
+    let (device, worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(memory.clone()),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());
@@ -64,7 +65,7 @@ pub(super) async fn run() -> TestResult {
         .map(|item| item.sequence)
         .collect::<Vec<_>>();
     {
-        let mut cancelled_claim = Box::pin(endpoint.claim_notification_exact());
+        let mut cancelled_claim = Box::pin(endpoint.write(0x220, &[9, 0, 0, 0]));
         let waker = Waker::noop();
         let mut context = Context::from_waker(waker);
         assert!(matches!(
@@ -80,10 +81,10 @@ pub(super) async fn run() -> TestResult {
     assert_eq!(after_claim_cancel.len(), before_claim_cancel.len());
     assert_eq!(after_claim_sequences, before_claim_sequences);
     held.release()?;
-    let claimed = endpoint.claim_notification_exact().await?;
-    let cancelled_consumed = claimed.is_none();
+    let claimed = super::support::claim(&endpoint).await?;
+    let cancelled_consumed = !claimed;
     let before_empty = observer.snapshot().len();
-    let empty = endpoint.claim_notification_exact().await?;
+    let empty = super::support::claim(&endpoint).await?;
     let empty_items = observer.snapshot().len() - before_empty;
     let epoch_bytes = handle.read_mmio(0x050, 8).await?;
     let epoch = <[u8; 8]>::try_from(epoch_bytes)
@@ -100,12 +101,10 @@ pub(super) async fn run() -> TestResult {
     assert_eq!(cancelled_observations, 0);
     assert!(!cancelled_consumed);
     assert_eq!(empty_items, 2);
-    assert!(empty.is_none());
+    assert!(!empty);
     assert!(state_unchanged);
     println!(
-        "errors=width,alignment,interior,permission,mask,epoch;failed_observations=0;cancelled_observations=0;cancelled_consumed=false;empty_items={};empty_consumed={};empty_result=Empty;state_unchanged=true",
-        empty_items,
-        empty.is_some(),
+        "errors=width,alignment,interior,permission,mask,epoch;failed_observations=0;cancelled_observations=0;cancelled_consumed=false;empty_items={empty_items};empty_consumed={empty};empty_result=Empty;state_unchanged=true",
     );
     device.request_shutdown().await;
     worker.await?;

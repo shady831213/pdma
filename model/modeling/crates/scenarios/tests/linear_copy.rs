@@ -8,10 +8,12 @@ use pdma_model_host::{AsyncDriver, ManualDriver, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     // Given: async runner handle, AsyncDriver, source/destination buffers, source write.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let cpu = SoftwareCpu::new();
     let (completion, command_id, snapshot, dst_bytes) = cpu
@@ -62,10 +64,12 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn reports_step_budget_exhaustion_when_work_remains() {
     // Given: one pending copy submitted through the CPU-unbound observability driver.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let mut port = AsyncDevicePort::new(runner.handle());
     let mut driver = ManualDriver::setup_on(&mut port, 4, 4)
         .await

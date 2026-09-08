@@ -7,7 +7,7 @@ pub(super) async fn result_latches(
 ) -> Result<[Vec<u8>; 3], MmioAccessError> {
     Ok([
         handle.read_mmio(0x024, 4).await?,
-        handle.read_mmio(0x16c, 4).await?,
+        handle.read_mmio(0x168, 4).await?,
         handle.read_mmio(0x224, 4).await?,
     ])
 }

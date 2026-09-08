@@ -5,40 +5,10 @@ mod response_banks;
 mod schema_parity;
 
 use pdma_model_contract::abi::mmio::{
-    GlobalCommand, IrqCommand, IrqSourceStatus, MMIO_REGION_SIZE, MmioAccess, MmioAccessError,
-    MmioReset, MmioResult, PdmaMmioMap, QueueCommand, RegisterId, ResponseUpdate,
-    apply_response_update, decode_read, decode_write, encode_u32, encode_u64,
+    GlobalCommand, IrqCommand, IrqSourceStatus, MmioAccess, MmioAccessError, MmioReset, MmioResult,
+    QueueCommand, ResponseUpdate, apply_response_update, decode_read, decode_write, encode_u32,
+    encode_u64, register_at,
 };
-
-#[test]
-fn literal_register_inventory_is_exact() {
-    assert_eq!(MMIO_REGION_SIZE, 0x1000);
-    let resolved = PdmaMmioMap::resolve().expect("canonical MMIO map must resolve");
-    let registers = resolved.registers();
-    assert_eq!(registers.len(), register_literals::len());
-    for (actual, expected) in registers.iter().zip(register_literals::iter()) {
-        let definition = actual.definition();
-        assert_eq!(
-            (
-                actual.id(),
-                actual.name(),
-                u32::try_from(actual.offset()).expect("literal offset fits u32"),
-                u128::try_from(definition.width()).expect("literal width fits u128"),
-                definition.access(),
-                definition.reset_kind(),
-                definition.reset_value(),
-                definition.writable_mask()
-            ),
-            expected
-        );
-        assert_eq!(actual.offset() % definition.width(), 0);
-        assert!(actual.offset() + actual.definition().width() <= PdmaMmioMap::EXTENT);
-    }
-    println!(
-        "literal MMIO registers checked: {}",
-        register_literals::len()
-    );
-}
 
 #[test]
 fn command_and_result_numbers_are_exact() {
@@ -129,11 +99,11 @@ fn codecs_are_exact_little_endian() {
     );
     assert_eq!(
         decode_write(0x120, &[0xef, 0xcd, 0xab, 0x89]),
-        Ok((RegisterId::QCfgSqDepth, 0x89ab_cdef))
+        Ok((register_at(0x120).unwrap(), 0x89ab_cdef))
     );
     assert_eq!(
         decode_write(0x010, &[0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01]),
-        Ok((RegisterId::GReqFeatures, 0x0123_4567_89ab_cdef))
+        Ok((register_at(0x010).unwrap(), 0x0123_4567_89ab_cdef))
     );
     println!("LE32=efcdab89 LE64=efcdab8967452301");
 }

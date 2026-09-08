@@ -78,24 +78,24 @@ const IRQ_STATE_BITS: [(&str, u32); 7] = [
 ];
 
 const REGISTER_SENTINELS: [&str; 18] = [
-    "#define PDMA_MODEL_MMIO_G_MAGIC_OFFSET UINT32_C(0)",
-    "#define PDMA_MODEL_MMIO_G_MAGIC_WIDTH UINT32_C(4)",
-    "#define PDMA_MODEL_MMIO_G_MAGIC_ACCESS UINT32_C(0)",
-    "#define PDMA_MODEL_MMIO_G_MAGIC_RESET_CLASS UINT32_C(0)",
-    "#define PDMA_MODEL_MMIO_G_MAGIC_RESET_VALUE UINT64_C(1095582800)",
-    "#define PDMA_MODEL_MMIO_G_MAGIC_WRITABLE_MASK UINT64_C(0)",
-    "#define PDMA_MODEL_MMIO_G_REQ_FEATURES_OFFSET UINT32_C(16)",
-    "#define PDMA_MODEL_MMIO_G_REQ_FEATURES_WIDTH UINT32_C(8)",
-    "#define PDMA_MODEL_MMIO_G_REQ_FEATURES_ACCESS UINT32_C(1)",
-    "#define PDMA_MODEL_MMIO_G_REQ_FEATURES_RESET_CLASS UINT32_C(1)",
-    "#define PDMA_MODEL_MMIO_G_REQ_FEATURES_RESET_VALUE UINT64_C(0)",
-    "#define PDMA_MODEL_MMIO_G_REQ_FEATURES_WRITABLE_MASK UINT64_C(18446744073709551615)",
-    "#define PDMA_MODEL_MMIO_G_COMMAND_ACCESS UINT32_C(2)",
-    "#define PDMA_MODEL_MMIO_G_RSP_EPOCH_RESET_CLASS UINT32_C(2)",
-    "#define PDMA_MODEL_MMIO_G_RSP_EPOCH_RESET_VALUE UINT64_C(0)",
-    "#define PDMA_MODEL_MMIO_Q_EXPECTED_EPOCH_OFFSET UINT32_C(256)",
-    "#define PDMA_MODEL_MMIO_I_EXPECTED_EPOCH_OFFSET UINT32_C(512)",
-    "#define PDMA_MODEL_MMIO_I_RSP_PENDING_MESSAGES_WRITABLE_MASK UINT64_C(0)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_MAGIC_OFFSET UINT32_C(0)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_MAGIC_WIDTH UINT32_C(4)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_MAGIC_ACCESS UINT32_C(0)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_MAGIC_RESET_CLASS UINT32_C(0)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_MAGIC_RESET_VALUE UINT64_C(1095582800)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_MAGIC_WRITABLE_MASK UINT64_C(0)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_REQ_FEATURES_OFFSET UINT32_C(16)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_REQ_FEATURES_WIDTH UINT32_C(8)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_REQ_FEATURES_ACCESS UINT32_C(1)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_REQ_FEATURES_RESET_CLASS UINT32_C(1)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_REQ_FEATURES_RESET_VALUE UINT64_C(0)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_REQ_FEATURES_WRITABLE_MASK UINT64_C(18446744073709551615)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_COMMAND_ACCESS UINT32_C(2)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_RESPONSE_EPOCH_RESET_CLASS UINT32_C(2)",
+    "#define PDMA_MODEL_MMIO_GLOBAL_RESPONSE_EPOCH_RESET_VALUE UINT64_C(0)",
+    "#define PDMA_MODEL_MMIO_QUEUE_EXPECTED_EPOCH_OFFSET UINT32_C(256)",
+    "#define PDMA_MODEL_MMIO_IRQ_EXPECTED_EPOCH_OFFSET UINT32_C(512)",
+    "#define PDMA_MODEL_MMIO_IRQ_RESPONSE_PENDING_MESSAGES_WRITABLE_MASK UINT64_C(0)",
 ];
 
 #[test]
@@ -111,6 +111,12 @@ fn generated_header_matches_every_literal_mmio_macro() {
 
     // Then: every approved macro is exact and no additional MMIO macro drifts in.
     assert_eq!(mmio_defines, 463);
+    let symbols: std::collections::BTreeSet<_> = header
+        .lines()
+        .filter_map(|line| line.strip_prefix("#define PDMA_MODEL_MMIO_"))
+        .map(|line| line.split_whitespace().next().unwrap())
+        .collect();
+    assert_eq!(symbols.len(), mmio_defines);
     assert_u32(&header, "ACCESS_RO", 0);
     assert_u32(&header, "ACCESS_RW", 1);
     assert_u32(&header, "ACCESS_WO", 2);
@@ -123,7 +129,12 @@ fn generated_header_matches_every_literal_mmio_macro() {
 
     let resolved = PdmaMmioMap::resolve().expect("canonical MMIO map must resolve");
     for register in resolved.registers() {
-        let name = register.name();
+        let name = register
+            .path()
+            .strip_prefix("PdmaMmioMap.")
+            .unwrap()
+            .replace('.', "_")
+            .to_ascii_uppercase();
         let definition = register.definition();
         assert_define(
             &header,

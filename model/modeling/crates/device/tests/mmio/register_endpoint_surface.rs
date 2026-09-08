@@ -9,10 +9,10 @@ mod surface;
 
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::abi::mmio::{
-    MmioAccessError, PdmaMmioMap, QueueResponseRegistersRaw, RegisterId,
+    IrqRegisters, MmioAccessError, PdmaMmioMap, QueueResponseRegistersRaw, register_at,
 };
 use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_device::{AsyncDevice, DeviceCore, MmioRegisterError};
+use pdma_model_device::{AsyncDevice, MmioRegisterError};
 use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]
@@ -30,8 +30,9 @@ async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResul
     // Given: one pending message and an observer with a stable pre-claim transcript.
     let observer = Arc::new(support::RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(memory, ResourceConfig::default()),
+    let (device, worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(memory),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());
@@ -43,7 +44,8 @@ async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResul
     device.wait_for_progress_after(0).await;
     let before_state = handle.snapshot().await;
     let before_observations = observer.snapshot();
-    let register = PdmaMmioMap::register(RegisterId::ICommand).ok_or("missing claim register")?;
+    let register = register_at(PdmaMmioMap::IRQ.offset() + IrqRegisters::COMMAND.offset())
+        .ok_or("missing claim register")?;
     let offset = u32::try_from(register.offset())?;
 
     // When: the 4-byte claim command is presented with a supported but wrong 8-byte width.
@@ -64,7 +66,7 @@ async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResul
     ));
     assert_eq!(handle.snapshot().await, before_state);
     assert_eq!(observer.snapshot(), before_observations);
-    assert!(endpoint.claim_notification_exact().await?.is_some());
+    assert!(support::claim(&endpoint).await?);
     device.request_shutdown().await;
     worker.await?;
     Ok(())

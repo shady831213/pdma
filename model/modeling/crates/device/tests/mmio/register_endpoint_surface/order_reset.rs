@@ -1,7 +1,7 @@
 use super::support::{RecordingObserver, TestResult, contend_core};
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
-use pdma_model_device::{AsyncDevice, DeviceCore, MmioRegisterEndpoint};
+use pdma_model_device::{AsyncDevice, MmioRegisterEndpoint};
 use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]
@@ -9,8 +9,9 @@ async fn endpoint_clones_share_order_and_observe_before_return() -> TestResult {
     // Given: two endpoint clones over one core-owned observer and ordered gate.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, _worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(memory.clone(), ResourceConfig::default()),
+    let (device, _worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(memory.clone()),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let handle = device.handle();
@@ -58,11 +59,11 @@ fn spawn_read(
 async fn endpoint_reset_preserves_history_and_advances_sequence() -> TestResult {
     // Given: one observed endpoint access before whole-device reset.
     let observer = Arc::new(RecordingObserver::default());
-    let (device, _worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(
-            Arc::new(hardware_interface_runtime::SharedMemory::new()),
-            ResourceConfig::default(),
-        ),
+    let (device, _worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let handle = device.handle();

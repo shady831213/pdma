@@ -20,6 +20,23 @@ register_schema! { pub register GMaxTransferBytes { width: 4, alignment: 4, endi
 register_schema! { pub register GMaxStridedRows { width: 4, alignment: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: 0..32, }, } }
 register_schema! { pub register GMaxStride { width: 4, alignment: 4, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: 0..32, }, } }
 
+register_map! { pub map GlobalRegisters {
+    alignment: 8,
+    placements: [
+        pub magic: GMagic,
+        pub mmio_abi_version: GMmioAbiVersion,
+        pub req_abi_version: GReqAbiVersion,
+        pub req_features: GReqFeatures,
+        pub reset_expected_epoch: GResetExpectedEpoch,
+        pub command: GCommand,
+        pub result: GResult,
+        pub detail0: GDetail0,
+        pub detail1: GDetail1,
+        pub detail2: GDetail2,
+        pub response: GlobalResponseRegisters,
+    ],
+} }
+
 register_map! { pub map GlobalResponseRegisters {
     alignment: 8,
     placements: [

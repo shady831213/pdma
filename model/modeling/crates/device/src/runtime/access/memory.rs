@@ -1,14 +1,14 @@
 use crate::ModelResult;
-use crate::memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryStage};
+use crate::memory::{MappedDmaRegion, PdmaMemoryError};
 use crate::runtime::AsyncDeviceHandle;
+use crate::runtime::PdmaMemoryStage;
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::semantic::BufferId;
-use std::sync::Arc;
 
 impl AsyncDeviceHandle {
     /// Returns the clone-shared runtime memory capability owned by this device core.
-    pub fn memory_access(&self) -> Arc<hardware_interface_runtime::SharedMemory> {
-        Arc::clone(&self.memory)
+    pub fn memory_access(&self) -> hardware_interface_runtime::SharedMemoryAccess {
+        self.memory.clone()
     }
 
     /// Allocates one raw device-visible DMA region.
@@ -20,9 +20,8 @@ impl AsyncDeviceHandle {
                     .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                     .and_then(|length| {
                         state
-                            .core
-                            .memory
-                            .allocate(length)
+                            .provisioning
+                            .allocate(&mut state.core.memory, length)
                             .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                     });
                 let changed = region.is_ok();
@@ -38,7 +37,7 @@ impl AsyncDeviceHandle {
     ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
         self.shared
             .backend
-            .interact(|state| state.core.memory.stage(lengths))
+            .interact(|state| state.provisioning.stage(&state.core.memory, lengths))
             .await
     }
 
@@ -50,7 +49,7 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .update(|state| {
-                let result = state.core.memory.commit(proposal);
+                let result = state.provisioning.commit(&mut state.core.memory, proposal);
                 (result, true)
             })
             .await
@@ -65,6 +64,21 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .interact(|state| state.core.memory.read_memory(address, length))
+            .await
+    }
+
+    /// Registers externally provisioned addresses without allocating or overwriting bytes.
+    pub async fn register_memory_regions(
+        &self,
+        regions: &[MappedDmaRegion],
+    ) -> Result<(), PdmaMemoryError> {
+        self.shared
+            .backend
+            .update(|state| {
+                let result = state.core.memory.register_regions(regions);
+                let changed = result.is_ok();
+                (result, changed)
+            })
             .await
     }
 

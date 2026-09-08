@@ -1,25 +1,14 @@
+mod notification;
+
+use super::registers::irq_offset;
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, registers};
 use crate::PortError;
 use pdma_model_contract::abi::mmio::{
-    IrqCommand, IrqResponseRegistersView, IrqSourceStatus, MmioResult, RegisterId,
-    ResponseCodecError,
+    IrqCommand, IrqRegisters, IrqResponseRegisters, IrqSourceStatus, MmioResult,
 };
 use pdma_model_contract::semantic::{
-    CompletionRingId, DeviceEpoch, EpochIrqSource, IrqCause, IrqLine, IrqMessage, IrqMessageId,
-    IrqNotification, IrqRoute, IrqSnapshot, IrqSource, IrqVector, QueueId,
+    DeviceEpoch, EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, IrqSource,
 };
-
-const IRQ_RESPONSE: [RegisterId; 9] = [
-    RegisterId::IRspEpoch,
-    RegisterId::IRspSourceId,
-    RegisterId::IRspSourceKind,
-    RegisterId::IRspState,
-    RegisterId::IRspRouteKind,
-    RegisterId::IRspNotificationKind,
-    RegisterId::IRspVector,
-    RegisterId::IRspMessageId,
-    RegisterId::IRspPendingMessages,
-];
 
 pub(super) async fn source_command<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
@@ -28,58 +17,113 @@ pub(super) async fn source_command<A: CanonicalAccess>(
     command: IrqCommand,
 ) -> PdmaPortResult<()> {
     validate_source(port, source)?;
-    let _window = port.irq_window.lock().await;
-    registers::write(port, RegisterId::IExpectedEpoch, source.epoch().raw()).await?;
+    let mut window = port.access.irq_coordinator().lock().await;
+    port.poll_claim(window.recover(&port.access)).await?;
+    registers::write(
+        port,
+        irq_offset(IrqRegisters::EXPECTED_EPOCH.offset()),
+        source.epoch().raw(),
+    )
+    .await?;
     let (kind, id) = encode_source(source.source())?;
-    registers::write(port, RegisterId::ISourceId, id).await?;
-    registers::write(port, RegisterId::ISourceKind, u64::from(kind)).await?;
+    registers::write(port, irq_offset(IrqRegisters::SOURCE_ID.offset()), id).await?;
+    registers::write(
+        port,
+        irq_offset(IrqRegisters::SOURCE_KIND.offset()),
+        u64::from(kind),
+    )
+    .await?;
     if let Some(route) = route {
         let (kind, vector) = encode_route(route)?;
-        registers::write(port, RegisterId::IRouteKind, u64::from(kind)).await?;
-        registers::write(port, RegisterId::IRouteVector, vector).await?;
+        registers::write(
+            port,
+            irq_offset(IrqRegisters::ROUTE_KIND.offset()),
+            u64::from(kind),
+        )
+        .await?;
+        registers::write(
+            port,
+            irq_offset(IrqRegisters::ROUTE_VECTOR.offset()),
+            vector,
+        )
+        .await?;
     }
-    registers::write(port, RegisterId::ICommand, u64::from(command.code())).await?;
-    let result = u32::try_from(registers::read(port, RegisterId::IResult).await?)
-        .map_err(|_| PortError::SubmissionState)?;
-    match MmioResult::try_from(result) {
+    registers::write(
+        port,
+        irq_offset(IrqRegisters::COMMAND.offset()),
+        u64::from(command.code()),
+    )
+    .await?;
+    let result =
+        u32::try_from(registers::read(port, irq_offset(IrqRegisters::RESULT.offset())).await?)
+            .map_err(|_| PortError::SubmissionState)?;
+    let outcome = match MmioResult::try_from(result) {
         Ok(MmioResult::Ok) => {
-            let state = u32::try_from(registers::read(port, RegisterId::IRspState).await?)
-                .map_err(|_| PortError::SubmissionState)?;
+            let state = u32::try_from(
+                registers::read(
+                    port,
+                    irq_offset(
+                        IrqRegisters::RESPONSE.offset() + IrqResponseRegisters::STATE.offset(),
+                    ),
+                )
+                .await?,
+            )
+            .map_err(|_| PortError::SubmissionState)?;
             IrqSourceStatus::try_from(state).map_err(|_| PortError::SubmissionState)?;
             Ok(())
         }
         Ok(MmioResult::StaleEpoch) => Err(PortError::StaleEpoch {
-            expected: DeviceEpoch::new(registers::read(port, RegisterId::IDetail0).await?),
-            actual: DeviceEpoch::new(registers::read(port, RegisterId::IDetail1).await?),
+            expected: DeviceEpoch::new(
+                registers::read(port, irq_offset(IrqRegisters::DETAIL0.offset())).await?,
+            ),
+            actual: DeviceEpoch::new(
+                registers::read(port, irq_offset(IrqRegisters::DETAIL1.offset())).await?,
+            ),
         }
         .into()),
         Ok(MmioResult::InvalidIrqSource) => {
             Err(PortError::UnknownIrqSource(source.source()).into())
         }
         Ok(MmioResult::IrqSourceActive) => Err(PortError::IrqSourceActive(source.source()).into()),
-        _ => Err(PortError::SubmissionState.into()),
-    }
+        _ => Err(super::PdmaClaimError::CommandResult {
+            code: u64::from(result),
+        }
+        .into()),
+    };
+    drop(window);
+    outcome
 }
 
 pub(super) async fn snapshot<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
 ) -> PdmaPortResult<Option<IrqSnapshot>> {
-    let _window = port.irq_window.lock().await;
+    let mut window = port.access.irq_coordinator().lock().await;
+    port.poll_claim(window.recover(&port.access)).await?;
     registers::write(
         port,
-        RegisterId::ICommand,
+        irq_offset(IrqRegisters::COMMAND.offset()),
         u64::from(IrqCommand::SnapshotLine.code()),
     )
     .await?;
-    let result = u32::try_from(registers::read(port, RegisterId::IResult).await?)
-        .map_err(|_| PortError::SubmissionState)?;
-    if MmioResult::try_from(result) != Ok(MmioResult::Ok) {
-        return Ok(None);
+    let result =
+        u32::try_from(registers::read(port, irq_offset(IrqRegisters::RESULT.offset())).await?)
+            .map_err(|_| PortError::SubmissionState)?;
+    match MmioResult::try_from(result) {
+        Ok(MmioResult::Ok) => {}
+        Ok(MmioResult::Empty) => return Ok(None),
+        _ => {
+            return Err(super::PdmaClaimError::CommandResult {
+                code: u64::from(result),
+            }
+            .into());
+        }
     }
-    match parse_notification(port).await? {
+    let outcome = match notification::parse_notification(port).await? {
         IrqNotification::Line(snapshot) => Ok(Some(snapshot)),
         IrqNotification::Message(_) => Ok(None),
-    }
+    };
+    drop(window);
+    outcome
 }
 
 pub(super) async fn wait_line<A: CanonicalAccess>(
@@ -92,83 +136,6 @@ pub(super) async fn wait_line<A: CanonicalAccess>(
         if let Some(snapshot) = snapshot(port).await? {
             return Ok(Some(snapshot));
         }
-    }
-}
-
-async fn parse_notification<A: CanonicalAccess>(
-    port: &PdmaRegisterPort<A>,
-) -> PdmaPortResult<IrqNotification> {
-    let bytes = registers::read_bank(port, &IRQ_RESPONSE).await?;
-    let view = IrqResponseRegistersView::new(&bytes).map_err(ResponseCodecError::from)?;
-    let epoch = DeviceEpoch::new(
-        view.epoch()
-            .map_err(ResponseCodecError::from)?
-            .value()
-            .map_err(ResponseCodecError::from)?,
-    );
-    let source_id = usize::try_from(
-        view.source_id()
-            .map_err(ResponseCodecError::from)?
-            .value()
-            .map_err(ResponseCodecError::from)?,
-    )
-    .map_err(|_| PortError::SubmissionState)?;
-    let source_kind = view
-        .source_kind()
-        .map_err(ResponseCodecError::from)?
-        .value()
-        .map_err(ResponseCodecError::from)?;
-    let source = match source_kind {
-        0 => IrqSource::Completion(CompletionRingId::new(source_id)),
-        1 => IrqSource::Event(QueueId::new(source_id)),
-        _ => return Err(PortError::SubmissionState.into()),
-    };
-    let state = u32::try_from(
-        view.state()
-            .map_err(ResponseCodecError::from)?
-            .value()
-            .map_err(ResponseCodecError::from)?,
-    )
-    .map_err(|_| PortError::SubmissionState)?;
-    IrqSourceStatus::try_from(state).map_err(|_| PortError::SubmissionState)?;
-    let route_kind = view
-        .route_kind()
-        .map_err(ResponseCodecError::from)?
-        .value()
-        .map_err(ResponseCodecError::from)?;
-    let notification_kind = view
-        .notification_kind()
-        .map_err(ResponseCodecError::from)?
-        .value()
-        .map_err(ResponseCodecError::from)?;
-    let vector = IrqVector::new(
-        usize::try_from(
-            view.vector()
-                .map_err(ResponseCodecError::from)?
-                .value()
-                .map_err(ResponseCodecError::from)?,
-        )
-        .map_err(|_| PortError::SubmissionState)?,
-    );
-    let message_id = usize::try_from(
-        view.message_id()
-            .map_err(ResponseCodecError::from)?
-            .value()
-            .map_err(ResponseCodecError::from)?,
-    )
-    .map_err(|_| PortError::SubmissionState)?;
-    let source = EpochIrqSource::new(epoch, source);
-    match (notification_kind, route_kind) {
-        (1, 0) if message_id == 0 => Ok(IrqNotification::Line(IrqSnapshot::new(
-            IrqCause::new(IrqLine::new(vector), source),
-            true,
-        ))),
-        (2, 1) => Ok(IrqNotification::Message(IrqMessage::new(
-            IrqMessageId::new(message_id),
-            vector,
-            source,
-        ))),
-        _ => Err(PortError::SubmissionState.into()),
     }
 }
 

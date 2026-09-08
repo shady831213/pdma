@@ -8,6 +8,7 @@ mod error;
 mod interrupt;
 mod region;
 mod register;
+mod shared_access;
 mod storage;
 mod store;
 mod trace;
@@ -34,6 +35,7 @@ pub use register::{
     RegisterBusWidth, RegisterEndpointError, RegisterImage, RegisterImageError,
     RegisterObservation, RegisterObserver, SharedRegisterObserver,
 };
+pub use shared_access::SharedMemoryAccess;
 pub use storage::{LocalStorage, MutexStorage, StorageBackend, StorageError};
 pub use store::{
     LocalMemoryStorage, Memory, MemoryStorage, MemoryTransaction, MemoryTransactionDraft,

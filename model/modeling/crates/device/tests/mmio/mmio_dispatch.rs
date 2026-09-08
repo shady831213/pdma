@@ -1,11 +1,13 @@
 //! Device MMIO dispatcher integration coverage.
 
+use hardware_interface_runtime::SharedMemory;
 use pdma_model_contract::abi::mmio::{
     MmioAccess, MmioAccessError, MmioReset, MmioResult, PdmaMmioMap,
 };
-use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
-use pdma_model_device::AsyncDevice;
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
+use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 mod malformed;
 /// Shared observability helpers for malformed-access cases.
@@ -14,10 +16,10 @@ mod support;
 #[tokio::test]
 async fn canonical_mmio_map_drives_all_runtime_access_and_reset_behavior() {
     // Given: a fresh device and the fully resolved canonical register map.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    let (device, _worker) = AsyncDevice::new(
+        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        ResourceConfig::default(),
+    );
     let handle = device.handle();
     let scalar_bytes = |width: usize, value: u64| match width {
         4 => u32::try_from(value)
@@ -126,10 +128,10 @@ async fn canonical_mmio_map_drives_all_runtime_access_and_reset_behavior() {
 #[tokio::test]
 async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
     // Given: a newly constructed device register bank.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    let (device, _worker) = AsyncDevice::new(
+        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        ResourceConfig::default(),
+    );
     let handle = device.handle();
 
     // When: representative command writes route into the non-semantic family scaffolds.
@@ -138,7 +140,7 @@ async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
         .await
         .expect("global command scaffold should accept the write");
     handle
-        .write_mmio(0x168, &1_u32.to_le_bytes())
+        .write_mmio(0x164, &1_u32.to_le_bytes())
         .await
         .expect("queue command scaffold should accept the write");
     handle
@@ -148,7 +150,7 @@ async fn result_and_reset_banks_round_trip_when_commands_are_not_implemented() {
     let magic = handle.read_mmio(0x000, 4).await;
     let version = handle.read_mmio(0x004, 4).await;
     let global_result = handle.read_mmio(0x024, 4).await;
-    let queue_result = handle.read_mmio(0x16c, 4).await;
+    let queue_result = handle.read_mmio(0x168, 4).await;
     let irq_result = handle.read_mmio(0x224, 4).await;
 
     // Then: constants and construction reset values match the canonical encodings.

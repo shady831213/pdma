@@ -1,9 +1,9 @@
-use super::reset::details;
 use crate::ModelError;
 use crate::device::DeviceCore;
-use crate::registers::{PdmaRegisters, narrow_u32};
+use crate::device::mmio::reset::details;
+use crate::irq::PdmaIrqController;
 use pdma_model_contract::abi::mmio::{
-    IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, PdmaMmioMapViewMut, ResponseUpdate,
+    IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
     apply_response_update,
 };
 use support::{
@@ -17,8 +17,8 @@ pub(crate) mod support;
 #[cfg(test)]
 mod tests;
 
-pub(super) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
-    let request = snapshot_request(&state.registers);
+pub(crate) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
+    let request = state.irq.snapshot_request();
     let staged = (
         request.expected_epoch,
         request.source_kind,
@@ -48,9 +48,7 @@ pub(super) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
         ),
         Err(result) => (result, ResponseUpdate::Preserve, false),
     };
-    state
-        .registers
-        .view_mut(|mut root| complete(&mut root, result, update));
+    state.irq.complete(result, update);
     changed
 }
 
@@ -63,57 +61,27 @@ struct IrqRequest {
     route_vector: u64,
 }
 
-fn snapshot_request(registers: &PdmaRegisters) -> IrqRequest {
-    registers.view(|root| {
-        let irq = invariant(root.irq());
+impl PdmaIrqController {
+    const fn snapshot_request(&self) -> IrqRequest {
+        let registers = &self.registers;
         IrqRequest {
-            expected_epoch: invariant(invariant(irq.expected_epoch()).value()),
-            source_id: invariant(invariant(irq.source_id()).value()),
-            source_kind: narrow_u32(invariant(invariant(irq.source_kind()).value())),
-            route_kind: narrow_u32(invariant(invariant(irq.route_kind()).value())),
-            route_vector: invariant(invariant(irq.route_vector()).value()),
+            expected_epoch: registers.expected_epoch.raw(),
+            source_id: registers.source_id.raw(),
+            source_kind: registers.source_kind.raw(),
+            route_kind: registers.route_kind.raw(),
+            route_vector: registers.route_vector.raw(),
         }
-    })
-}
+    }
 
-fn complete(
-    root: &mut PdmaMmioMapViewMut<'_>,
-    result: MmioResultDetails,
-    update: ResponseUpdate<IrqResponseBank>,
-) {
-    let mut irq = invariant(root.irq_mut());
-    let previous = IrqResponseBank {
-        epoch: invariant(invariant(irq.rsp_epoch()).value()).into(),
-        source_id: invariant(invariant(irq.rsp_source_id()).value()).into(),
-        source_kind: narrow_u32(invariant(invariant(irq.rsp_source_kind()).value())).into(),
-        state: narrow_u32(invariant(invariant(irq.rsp_state()).value())).into(),
-        route_kind: narrow_u32(invariant(invariant(irq.rsp_route_kind()).value())).into(),
-        notification_kind: narrow_u32(invariant(invariant(irq.rsp_notification_kind()).value()))
-            .into(),
-        vector: invariant(invariant(irq.rsp_vector()).value()).into(),
-        message_id: invariant(invariant(irq.rsp_message_id()).value()).into(),
-        pending_messages: invariant(invariant(irq.rsp_pending_messages()).value()).into(),
-    };
-    let response = apply_response_update(previous, update);
-    invariant(invariant(irq.result_mut()).set_value(u64::from(result.result.code())));
-    let [detail0, detail1, detail2] = result.details;
-    invariant(invariant(irq.detail0_mut()).set_value(detail0));
-    invariant(invariant(irq.detail1_mut()).set_value(detail1));
-    invariant(invariant(irq.detail2_mut()).set_value(detail2));
-    invariant(invariant(irq.rsp_epoch_mut()).set_value(response.epoch.raw()));
-    invariant(invariant(irq.rsp_source_id_mut()).set_value(response.source_id.raw()));
-    invariant(
-        invariant(irq.rsp_source_kind_mut()).set_value(u64::from(response.source_kind.raw())),
-    );
-    invariant(invariant(irq.rsp_state_mut()).set_value(u64::from(response.state.raw())));
-    invariant(invariant(irq.rsp_route_kind_mut()).set_value(u64::from(response.route_kind.raw())));
-    invariant(
-        invariant(irq.rsp_notification_kind_mut())
-            .set_value(u64::from(response.notification_kind.raw())),
-    );
-    invariant(invariant(irq.rsp_vector_mut()).set_value(response.vector.raw()));
-    invariant(invariant(irq.rsp_message_id_mut()).set_value(response.message_id.raw()));
-    invariant(invariant(irq.rsp_pending_messages_mut()).set_value(response.pending_messages.raw()));
+    fn complete(&mut self, result: MmioResultDetails, update: ResponseUpdate<IrqResponseBank>) {
+        let registers = &mut self.registers;
+        registers.response = apply_response_update(registers.response, update);
+        registers.result = result.result.code().into();
+        let [detail0, detail1, detail2] = result.details;
+        registers.detail0 = detail0.into();
+        registers.detail1 = detail1.into();
+        registers.detail2 = detail2.into();
+    }
 }
 
 struct CommandOutcome {
@@ -186,11 +154,4 @@ fn line_response(view: IrqSourceView, vector: usize) -> IrqResponseBank {
         pending_messages: 0.into(),
         ..source_response(view)
     }
-}
-
-fn invariant<T, E>(result: Result<T, E>) -> T {
-    let Ok(value) = result else {
-        std::process::abort();
-    };
-    value
 }

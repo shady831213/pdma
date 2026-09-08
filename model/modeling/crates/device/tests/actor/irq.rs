@@ -16,10 +16,12 @@ mod stale;
 #[tokio::test(flavor = "current_thread")]
 async fn completion_irq_latches_only_after_publication_retry_succeeds() {
     // Given: two copies behind one completion publication slot and an enabled completion IRQ.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_completion_publication_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     let queue = handle
@@ -101,10 +103,12 @@ async fn completion_irq_latches_only_after_publication_retry_succeeds() {
 #[tokio::test(flavor = "current_thread")]
 async fn invalid_irq_source_control_returns_error_without_creating_state() {
     // Given: a device with one queue and invalid IRQ source identities.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     handle
@@ -142,10 +146,12 @@ async fn invalid_irq_source_control_returns_error_without_creating_state() {
 #[tokio::test(flavor = "current_thread")]
 async fn event_irq_latches_only_after_publication_retry_succeeds() {
     // Given: two faulty copies behind one event publication slot and an enabled event IRQ.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_event_publication_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let handle = runner.handle();
     let queue = handle

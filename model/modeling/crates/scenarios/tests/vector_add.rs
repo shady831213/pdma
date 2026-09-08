@@ -13,15 +13,20 @@ use pdma_model_host::{
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() {
     // Given: async runner handle, AsyncDriver, two source buffers, and sentinel destination bytes.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, no_completion, dst_bytes) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                runner.handle(),
+                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+            ))
+            .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -106,15 +111,20 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b_read_fails() {
     // Given: async runner handle, AsyncDriver, and a vector add whose source B read is too long.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, event, src_b, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                runner.handle(),
+                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+            ))
+            .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -173,15 +183,20 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_vector_add_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, and a vector add whose destination write is too long.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, event, dst, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                runner.handle(),
+                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+            ))
+            .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

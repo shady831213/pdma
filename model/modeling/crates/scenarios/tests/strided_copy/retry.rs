@@ -3,10 +3,12 @@ use super::*;
 #[allow(clippy::expect_used, clippy::redundant_pub_crate)]
 pub(super) async fn run_strided_completion_retry_scenario() {
     // Given: two strided copies sharing a one-slot completion ring.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (stalled_snapshot, second_snapshot, second_completion, second_command, second_dst_bytes) =
         SoftwareCpu::new()

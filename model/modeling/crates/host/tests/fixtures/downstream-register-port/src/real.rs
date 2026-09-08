@@ -6,7 +6,7 @@ use pdma_model_contract::semantic::{
     Command, CommandId, CopyRequest, EventRouting, IrqNotification, IrqRoute, IrqVector,
     QueueConfig, ResourceConfig, SoftwareOwnerId,
 };
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::adapter::abi::AsyncDeviceAccess;
 use pdma_model_host::adapter::abi::{
     PdmaExactInterruptClaim, PdmaMemoryProvisioning, PdmaRegionRequest,
@@ -35,13 +35,17 @@ impl RegisterObserver for Observer {
 
 pub async fn run(alignment: MemoryAlignment) -> TestResult<RealResult> {
     let observer = Arc::new(Observer::default());
-    let (device, worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default()),
+    let (device, worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = AsyncDeviceAccess::new(handle.clone());
+    let access = AsyncDeviceAccess::new(
+        handle.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    );
     let nonempty = access
         .allocate_region(PdmaRegionRequest::new(8, alignment))
         .await?;

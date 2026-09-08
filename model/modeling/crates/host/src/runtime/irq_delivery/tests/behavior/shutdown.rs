@@ -21,10 +21,12 @@ impl IrqHandler for CountingHandler {
 #[tokio::test(flavor = "current_thread")]
 async fn shutdown_wins_over_a_ready_notification() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a pending message notification and a delivery actor not yet running.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let mut device_port = AsyncDevicePort::new(device.handle());
     let cpu = SoftwareCpu::new();

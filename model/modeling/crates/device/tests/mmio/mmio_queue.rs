@@ -19,10 +19,12 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync + 's
 #[tokio::test]
 async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors() -> TestResult {
     // Given: exact committed depth-two SQ/CQ/EQ mappings and programmed raw registers.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let committed = handle.commit_memory_stage(stage).await?;
@@ -31,7 +33,7 @@ async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors()
     activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &committed).await?;
 
     // Then: the complete response bank reports the queue and seven zero cursor shadows.
-    assert_eq!(read_u32(&handle, 0x16c).await?, MmioResult::Ok.code());
+    assert_eq!(read_u32(&handle, 0x168).await?, MmioResult::Ok.code());
     assert_eq!(read_u64(&handle, 0x188).await?, 0);
     assert_eq!(read_u64(&handle, 0x190).await?, 0);
     for offset in (0x198..=0x1c8).step_by(8) {
@@ -43,10 +45,12 @@ async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors()
 #[tokio::test]
 async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutation() -> TestResult {
     // Given: exact mappings paired with misaligned, wrong-ID, and stale activation registers.
-    let (wrong_device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (wrong_device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let wrong = wrong_device.handle();
     let wrong_stage = wrong.stage_memory_regions(&[128, 64, 128]).await?;
     let wrong_regions = wrong.commit_memory_stage(wrong_stage).await?;
@@ -72,7 +76,7 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
     .await?;
     issue_queue_command(&wrong, 1).await?;
     assert_eq!(
-        read_u32(&wrong, 0x16c).await?,
+        read_u32(&wrong, 0x168).await?,
         MmioResult::MisalignedRing.code()
     );
 
@@ -85,7 +89,7 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
     )
     .await?;
     assert_eq!(
-        read_u32(&wrong, 0x16c).await?,
+        read_u32(&wrong, 0x168).await?,
         MmioResult::InvalidQueue.code()
     );
     activate_raw(
@@ -95,7 +99,7 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
         &wrong_regions,
     )
     .await?;
-    assert_eq!(read_u32(&wrong, 0x16c).await?, MmioResult::Ok.code());
+    assert_eq!(read_u32(&wrong, 0x168).await?, MmioResult::Ok.code());
 
     let current = wrong
         .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
@@ -108,27 +112,29 @@ async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutatio
     )
     .await?;
     assert_eq!(
-        read_u32(&wrong, 0x16c).await?,
+        read_u32(&wrong, 0x168).await?,
         MmioResult::StaleEpoch.code()
     );
     support::write_u64(&wrong, 0x118, 1).await?;
     issue_queue_command(&wrong, 3).await?;
     assert_eq!(
-        read_u32(&wrong, 0x16c).await?,
+        read_u32(&wrong, 0x168).await?,
         MmioResult::StaleEpoch.code()
     );
     activate_raw(&wrong, current, QueueId::new(0), &wrong_regions).await?;
-    assert_eq!(read_u32(&wrong, 0x16c).await?, MmioResult::Ok.code());
+    assert_eq!(read_u32(&wrong, 0x168).await?, MmioResult::Ok.code());
     Ok(())
 }
 
 #[tokio::test]
 async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() -> TestResult {
     // Given: one mapped active depth-two queue with every cursor at zero.
-    let (device, _worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let regions = handle.commit_memory_stage(stage).await?;
@@ -138,7 +144,7 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     // When: all seven cursor commands advance their selected shadow from zero to one.
     for command in 3..=9 {
         issue_queue_command(&handle, command).await?;
-        assert_eq!(read_u32(&handle, 0x16c).await?, MmioResult::Ok.code());
+        assert_eq!(read_u32(&handle, 0x168).await?, MmioResult::Ok.code());
     }
     issue_queue_command(&handle, 2).await?;
 
@@ -152,7 +158,7 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     support::write_u64(&handle, 0x118, 2).await?;
     issue_queue_command(&handle, 7).await?;
     assert_eq!(
-        read_u32(&handle, 0x16c).await?,
+        read_u32(&handle, 0x168).await?,
         MmioResult::InvalidTransaction.code()
     );
     assert_eq!(read_response(&handle).await?, preserved);
@@ -161,7 +167,7 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     support::write_u64(&handle, 0x118, 0).await?;
     issue_queue_command(&handle, 7).await?;
     assert_eq!(
-        read_u32(&handle, 0x16c).await?,
+        read_u32(&handle, 0x168).await?,
         MmioResult::CursorUpdateRegression.code()
     );
     assert_eq!(read_response(&handle).await?, preserved);
@@ -170,7 +176,7 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     support::write_u64(&handle, 0x118, 0).await?;
     issue_queue_command(&handle, 3).await?;
     assert_eq!(
-        read_u32(&handle, 0x16c).await?,
+        read_u32(&handle, 0x168).await?,
         MmioResult::CursorUpdateRegression.code()
     );
     assert_eq!(read_u64(&handle, 0x180).await?, 0);
@@ -180,7 +186,7 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
     support::write_u64(&handle, 0x118, u64::MAX).await?;
     issue_queue_command(&handle, 3).await?;
     assert_eq!(
-        read_u32(&handle, 0x16c).await?,
+        read_u32(&handle, 0x168).await?,
         MmioResult::CursorDistanceExceeded.code()
     );
     assert_eq!(read_response(&handle).await?, preserved);
@@ -191,10 +197,12 @@ async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() ->
 async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_event() -> TestResult
 {
     // Given: an active queue whose first committed descriptor slot contains malformed bytes.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let regions = handle.commit_memory_stage(stage).await?;
@@ -208,7 +216,7 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     support::write_u64(&handle, 0x118, 1).await?;
     issue_queue_command(&handle, 4).await?;
     assert_eq!(
-        read_u32(&handle, 0x16c).await?,
+        read_u32(&handle, 0x168).await?,
         MmioResult::InvalidTransaction.code()
     );
     issue_queue_command(&handle, 2).await?;

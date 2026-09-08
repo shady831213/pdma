@@ -12,10 +12,12 @@ use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
     // Given: a queue-port async runner with no queued work.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
 
     // When: software observes the runner before submitting commands.
@@ -31,10 +33,12 @@ async fn async_runner_no_work_reports_idle_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_successful_copy_reports_progressed_status() {
     // Given: an async copy on a queue-port async runner with default resources.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let snapshot = SoftwareCpu::new()
         .run_main(async {
@@ -74,10 +78,12 @@ async fn async_runner_successful_copy_reports_progressed_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_resource_stall_reports_execution_reason() {
     // Given: an async copy on a device with no read slots.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_read_slots(0),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
@@ -123,10 +129,12 @@ async fn async_runner_resource_stall_reports_execution_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_completion_publication_stall_reports_reason() {
     // Given: two async copies behind a one-slot completion publication path.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_completion_publication_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (snapshot, first_completion) = SoftwareCpu::new()
         .run_main(async {
@@ -194,10 +202,12 @@ async fn async_runner_completion_publication_stall_reports_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     // Given: a faulting async copy behind a one-deep event publication path.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_event_publication_slots(0),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (first_snapshot, second_snapshot, event) = SoftwareCpu::new()
         .run_main(async {

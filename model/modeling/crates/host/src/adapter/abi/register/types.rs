@@ -1,6 +1,4 @@
-use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, MemoryRegion, RegisterObservation,
-};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::semantic::{BufferId, IrqNotification};
 
 /// One logical PDMA mapping request.
@@ -94,7 +92,7 @@ impl PdmaMappedRegion {
     }
 }
 
-/// Result of one readiness-plus-compound exact notification claim.
+/// Result of one host-owned sequential notification claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PdmaClaimResult {
     /// Readiness ended because the source shut down.
@@ -105,7 +103,5 @@ pub enum PdmaClaimResult {
     Notification {
         /// Claimed semantic notification.
         notification: IrqNotification,
-        /// Exact command/result/response observations emitted in the commit poll.
-        observations: Vec<RegisterObservation>,
     },
 }

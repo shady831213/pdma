@@ -3,10 +3,12 @@ use super::*;
 #[allow(clippy::expect_used, clippy::redundant_pub_crate)]
 pub(super) async fn run_vector_add_one_read_slot_scenario() {
     // Given: an async vector-add command on a device with only one read slot.
-    let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (runner, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         ResourceConfig::default().with_read_slots(1),
-    ));
+    );
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {

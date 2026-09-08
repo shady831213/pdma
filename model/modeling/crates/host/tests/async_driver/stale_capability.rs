@@ -9,10 +9,12 @@ use pdma_model_host::{DriverPort, PortError, compat::AsyncDevicePort};
 #[tokio::test(flavor = "current_thread")]
 async fn stale_queue_and_result_capabilities_commit_nothing() {
     // Given: one live queue and a same-ID capability from a later epoch.
-    let (device, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
-        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+    let (device, worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
+            hardware_interface_runtime::SharedMemory::new(),
+        )),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
     let queue = handle
         .create_queue(QueueConfig::new(

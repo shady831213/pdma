@@ -3,7 +3,7 @@ use hardware_interface_runtime::{SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{
     DeviceEpoch, EventRouting, QueueConfig, ResourceConfig, SoftwareOwnerId, WholeDeviceReset,
 };
-use pdma_model_device::{AsyncDevice, DeviceCore};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     DriverPort, PortError,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -13,12 +13,15 @@ use std::sync::Arc;
 #[tokio::test(flavor = "current_thread")]
 async fn reset_discards_an_unread_activation_result_without_replaying_it() {
     // Given: ACTIVATE committed, but its response has not reached software.
-    let (device, _worker) = AsyncDevice::from_core(DeviceCore::new(
-        Arc::new(SharedMemory::new()),
+    let (device, _worker) = AsyncDevice::new(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
         ResourceConfig::default(),
-    ));
+    );
     let handle = device.handle();
-    let access = GatedAccess::new(AsyncDeviceAccess::new(handle.clone()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(
+        handle.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    ));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

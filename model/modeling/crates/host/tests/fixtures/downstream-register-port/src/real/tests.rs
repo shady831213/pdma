@@ -2,14 +2,14 @@ use super::*;
 use hardware_interface_runtime::RegisterAccess;
 
 #[tokio::test(flavor = "current_thread")]
-async fn direct_adapter_claim_parity_holds_for_twenty_five_real_schedules() -> TestResult<()> {
+async fn direct_claim_observes_real_accesses_for_twenty_five_schedules() -> TestResult<()> {
     // Given: every schedule creates a fresh real device core, observer, store, and adapter.
     let alignment = MemoryAlignment::try_new(64)?;
     for _ in 0..25 {
-        // When: real work produces and the compound adapter claims one message.
+        // When: real work produces and the host coordinator claims one message.
         let result = run(alignment).await?;
 
-        // Then: every literal Task 18 field and order is exact for every fresh schedule.
+        // Then: the endpoint observes the command, notification fields, and final result check.
         assert!(result.notification_is_message);
         crate::claim::assert_exact(&result.observations)?;
     }
@@ -22,13 +22,17 @@ async fn canonical_adapter_preserves_every_mmio_fate_and_full_state() -> TestRes
     use pdma_model_host::adapter::abi::PdmaRegisterAccessError;
 
     let observer = Arc::new(Observer::default());
-    let (device, worker) = AsyncDevice::from_core_observed(
-        DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default()),
+    let (device, worker) = AsyncDevice::new_observed(
+        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = AsyncDeviceAccess::new(handle.clone());
+    let access = AsyncDeviceAccess::new(
+        handle.clone(),
+        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
+    );
 
     macro_rules! assert_fate {
         ($operation:expr, $expected:expr) => {{

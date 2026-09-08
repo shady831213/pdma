@@ -1,6 +1,7 @@
 mod block;
 pub(crate) mod exact;
 pub(crate) mod io;
+pub(crate) mod mmio;
 mod ring;
 pub(crate) mod runnable;
 mod semantic;
@@ -11,6 +12,7 @@ mod tests;
 #[derive(Debug, Default)]
 pub(crate) struct QueueBlock {
     contexts: Vec<PdmaQueue>,
+    pub(crate) registers: pdma_model_contract::abi::mmio::QueueRegistersValues,
 }
 
 use self::io::{NormalizedFetch, PublicationOutcome};

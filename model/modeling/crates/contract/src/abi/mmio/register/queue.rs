@@ -29,6 +29,32 @@ register_schema! { pub register QRspCqConsumer { width: 8, alignment: 8, endian:
 register_schema! { pub register QRspEqProducer { width: 8, alignment: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: 0..64, }, } }
 register_schema! { pub register QRspEqConsumer { width: 8, alignment: 8, endian: Little, access: ReadOnly, reset: Zero(0), writable_mask: 0, fields: { bits: 0..64, }, } }
 
+register_map! { pub map QueueRegisters {
+    alignment: 8,
+    placements: [
+        pub expected_epoch: QExpectedEpoch,
+        pub id: QId,
+        pub expected_cursor: QExpectedCursor,
+        pub new_cursor: QNewCursor,
+        pub cfg_sq_depth: QCfgSqDepth,
+        pub cfg_cq_depth: QCfgCqDepth,
+        pub cfg_event_policy: QCfgEventPolicy,
+        pub cfg_software_owner: QCfgSoftwareOwner,
+        pub sq_base: QSqBase,
+        pub sq_depth: QSqDepth,
+        pub cq_base: QCqBase,
+        pub cq_depth: QCqDepth,
+        pub eq_base: QEqBase,
+        pub eq_depth: QEqDepth,
+        pub command: QCommand,
+        pub result: QResult,
+        pub detail0: QDetail0,
+        pub detail1: QDetail1,
+        pub detail2: QDetail2,
+        pub response: QueueResponseRegisters,
+    ],
+} }
+
 register_map! { pub map QueueResponseRegisters {
     alignment: 8,
     placements: [

@@ -6,6 +6,7 @@ use crate::internal::syntax::OrderedMapDecl;
 use super::{ExpansionContext, Geometry};
 
 mod codec;
+mod scalar_access;
 
 pub(super) fn expand(
     decl: &OrderedMapDecl,
@@ -21,6 +22,7 @@ pub(super) fn expand(
     let extent = context.extent;
     let visibility = &decl.visibility;
     let members = value_members(decl, context, geometry);
+    let scalar_access = scalar_access::expand(context, geometry);
     let fields = members.fields;
     let zero_fields = members.zero_fields;
     let default_fields = members.default_fields;
@@ -77,6 +79,7 @@ pub(super) fn expand(
             const EXTENT: usize = #marker::EXTENT;
             const ZERO: Self::Value = #values_name::ZERO;
             const DEFAULT: Self::Value = #values_name::DEFAULT;
+            #scalar_access
             fn decode(bytes: &[u8]) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> { #values_name::decode_from(bytes) }
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> { value.encode_into(bytes) }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { #view_name::new(bytes) }

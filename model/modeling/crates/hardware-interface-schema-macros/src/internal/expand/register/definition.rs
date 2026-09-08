@@ -82,6 +82,15 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
             const EXTENT: usize = #width;
             const ZERO: Self::Value = #values_name::ZERO;
             const DEFAULT: Self::Value = #values_name::RESET;
+            fn read_register(value: &Self::Value, offset: usize) -> ::core::option::Option<u64> {
+                (offset == 0).then(|| ::core::convert::Into::<u64>::into(value.raw()))
+            }
+            fn write_register(value: &mut Self::Value, offset: usize, raw: u64) -> ::core::option::Option<()> {
+                if offset != 0 { return ::core::option::Option::None; }
+                let raw = <#scalar as ::core::convert::TryFrom<u64>>::try_from(raw).ok()?;
+                *value = #values_name::new(raw);
+                ::core::option::Option::Some(())
+            }
             fn decode(bytes: &[u8]) -> ::core::result::Result<Self::Value, #facade::SchemaCodecError> { #facade::read_scalar(bytes, #facade::Endian::#endian).map(#values_name::new) }
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> { #facade::write_scalar(bytes, #facade::Endian::#endian, value.raw()) }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { Self::view_at(bytes, #facade::SchemaCoordinate::Byte(0)) }

@@ -22,6 +22,14 @@ impl RegisterLayout for LocatedChild {
     };
     const DEFAULT: Self::Value = Self::ZERO;
 
+    fn read_register(_value: &Self::Value, _offset: usize) -> Option<u64> {
+        None
+    }
+
+    fn write_register(_value: &mut Self::Value, _offset: usize, _raw: u64) -> Option<()> {
+        None
+    }
+
     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError> {
         match bytes.first().copied() {
             Some(0) => Ok(Self::ZERO),

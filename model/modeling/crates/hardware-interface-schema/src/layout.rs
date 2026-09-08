@@ -56,6 +56,13 @@ pub trait RegisterLayout {
     /// Declared default value used when constructing this layout.
     const DEFAULT: Self::Value;
 
+    /// Reads the full scalar only at an exact leaf-register start.
+    /// This owned-value operation does not apply bus access permissions.
+    fn read_register(value: &Self::Value, offset: usize) -> Option<u64>;
+    /// Replaces one leaf scalar, returning `None` without mutation for an unknown
+    /// start or a value exceeding its width. Bus permissions and masks are not applied.
+    fn write_register(value: &mut Self::Value, offset: usize, raw: u64) -> Option<()>;
+
     /// Decodes one owned value from the start of `bytes`.
     fn decode(bytes: &[u8]) -> Result<Self::Value, SchemaCodecError>;
     /// Encodes one owned value at the start of `bytes`.

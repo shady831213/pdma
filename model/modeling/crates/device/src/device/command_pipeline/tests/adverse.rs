@@ -14,6 +14,7 @@ use crate::device::flow::{CommandRoute, FetchedCommand, FetchedWork, RetirementW
 use crate::device::retirement::stage::RetirementState;
 use crate::device::{ModelStepStatus, context::HardwareContext};
 use crate::queue::io::NormalizedFault;
+use crate::queue::{QueueBlock, exact::QueueStatus};
 
 mod hardware;
 
@@ -57,15 +58,19 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
         .memory
         .write_memory(submission.base(), &[0; AbiCommand::RECORD_SIZE])
         .expect("malformed descriptor");
-    let queue = activation.queue();
-    let active = fixture.core.exact_ring_mut(queue).expect("exact queue");
+    let queue = activation.queue().queue_id();
+    let active = fixture
+        .core
+        .queues
+        .exact_ring_mut(queue)
+        .expect("exact queue");
     active
         .publish_submission_producer(RingCursor::new(1))
         .expect("publish producer");
     active
         .capture_submission_producer(RingCursor::new(1))
         .expect("capture producer");
-    fixture.core.ring_dma_bus_doorbell(queue).expect("doorbell");
+    fixture.core.runnable.enqueue(queue);
 
     // When: fetch normalizes the descriptor violation and retirement publishes it.
     assert_eq!(
@@ -75,12 +80,7 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     assert!(fixture.core.command_pipeline.is_empty());
     assert!(fixture.core.retirement.is_pending());
     assert_eq!(fixture.fetch_count(), 1);
-    let cached = fixture
-        .core
-        .exact_ring(queue)
-        .expect("exact queue")
-        .status()
-        .expect("cached status");
+    let cached = exact_status(&fixture.core.queues, queue);
     assert_eq!(cached.submission().consumer().raw(), 1);
     assert_eq!(cached.event().producer().raw(), 0);
     assert_eq!(cached.completion().producer().raw(), 0);
@@ -97,12 +97,7 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     assert!(!fixture.core.retirement.is_pending());
 
     // Then: one SQ slot and one event slot advance with no success publication.
-    let status = fixture
-        .core
-        .exact_ring(queue)
-        .expect("exact queue")
-        .status()
-        .expect("queue status");
+    let status = exact_status(&fixture.core.queues, queue);
     assert_eq!(
         (
             status.submission().producer().raw(),
@@ -126,6 +121,14 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
         [TraceEventKind::EventPublished]
     );
     assert_eq!(fixture.step(), PipelineRunOutcome::Exhausted);
+}
+
+fn exact_status(queues: &QueueBlock, queue: QueueId) -> QueueStatus {
+    queues
+        .exact_ring(queue)
+        .expect("exact queue")
+        .status()
+        .expect("queue status")
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use crate::ModelError;
-use crate::device::DeviceCore;
-use crate::device::mmio::reset::details;
 use crate::irq::PdmaIrqController;
+use crate::queue::QueueBlock;
+use crate::trace::TraceSink;
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
     apply_response_update,
@@ -12,67 +12,44 @@ use support::{
 };
 
 mod notification;
+#[cfg(test)]
+mod owner_commands;
 #[doc(hidden)]
 pub(crate) mod support;
 #[cfg(test)]
 mod tests;
 
-pub(crate) fn execute(state: &mut DeviceCore, raw_command: u32) -> bool {
-    let request = state.irq.snapshot_request();
-    let staged = (
-        request.expected_epoch,
-        request.source_kind,
-        request.source_id,
-        request.route_kind,
-        request.route_vector,
-    );
-    let outcome = IrqCommand::try_from(raw_command)
-        .map_err(|_| details(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]))
-        .and_then(|command| execute_command(state, command, staged));
-    let (result, update, changed) = match outcome {
-        Ok(CommandOutcome {
-            response: Some(response),
-            changed,
-        }) => (
-            details(MmioResult::Ok, [0; 3]),
-            ResponseUpdate::Replace(response),
-            changed,
-        ),
-        Ok(CommandOutcome {
-            response: None,
-            changed,
-        }) => (
-            details(MmioResult::Empty, [0; 3]),
-            ResponseUpdate::Empty,
-            changed,
-        ),
-        Err(result) => (result, ResponseUpdate::Preserve, false),
-    };
-    state.irq.complete(result, update);
-    changed
-}
-
-#[derive(Clone, Copy)]
-struct IrqRequest {
-    expected_epoch: u64,
-    source_id: u64,
-    source_kind: u32,
-    route_kind: u32,
-    route_vector: u64,
+impl PdmaIrqController {
+    pub(crate) fn execute_mmio(&mut self, queues: &QueueBlock, trace: &mut TraceSink) -> bool {
+        let raw_command = self.registers.command.raw();
+        let outcome = IrqCommand::try_from(raw_command)
+            .map_err(|_| details(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]))
+            .and_then(|command| self.execute_request(command, queues, trace));
+        let (result, update, changed) = match outcome {
+            Ok(CommandOutcome {
+                response: Some(response),
+                changed,
+            }) => (
+                details(MmioResult::Ok, [0; 3]),
+                ResponseUpdate::Replace(response),
+                changed,
+            ),
+            Ok(CommandOutcome {
+                response: None,
+                changed,
+            }) => (
+                details(MmioResult::Empty, [0; 3]),
+                ResponseUpdate::Empty,
+                changed,
+            ),
+            Err(result) => (result, ResponseUpdate::Preserve, false),
+        };
+        self.complete(result, update);
+        changed
+    }
 }
 
 impl PdmaIrqController {
-    const fn snapshot_request(&self) -> IrqRequest {
-        let registers = &self.registers;
-        IrqRequest {
-            expected_epoch: registers.expected_epoch.raw(),
-            source_id: registers.source_id.raw(),
-            source_kind: registers.source_kind.raw(),
-            route_kind: registers.route_kind.raw(),
-            route_vector: registers.route_vector.raw(),
-        }
-    }
-
     fn complete(&mut self, result: MmioResultDetails, update: ResponseUpdate<IrqResponseBank>) {
         let registers = &mut self.registers;
         registers.response = apply_response_update(registers.response, update);
@@ -89,46 +66,63 @@ struct CommandOutcome {
     changed: bool,
 }
 
-fn execute_command(
-    state: &mut DeviceCore,
-    command: IrqCommand,
-    staged: (u64, u32, u64, u32, u64),
-) -> Result<CommandOutcome, MmioResultDetails> {
-    let (epoch, source_kind, source_id, route_kind, route_vector) = staged;
-    if command == IrqCommand::SnapshotLine {
-        return notification::snapshot_line(state);
-    }
-    if command == IrqCommand::ClaimNotification {
-        return notification::claim(state);
-    }
-    let source = decode_source(epoch, source_kind, source_id).ok_or_else(|| {
-        details(
-            MmioResult::InvalidIrqSource,
-            [u64::from(source_kind), source_id, 0],
-        )
-    })?;
-    let before = observe_irq_source(state, source).ok();
-    let result = match command {
-        IrqCommand::ConfigureRoute => decode_route(route_kind, route_vector)
-            .ok_or(ModelError::DmaSubmissionState)
-            .and_then(|route| state.configure_irq_route(source, route)),
-        IrqCommand::Enable => state.enable_irq_source(source),
-        IrqCommand::Disable => state.disable_irq_source(source),
-        IrqCommand::Mask => state.mask_irq_source(source),
-        IrqCommand::Unmask => state.unmask_irq_source(source),
-        IrqCommand::Acknowledge => state.ack_irq_source(source),
-        IrqCommand::ObserveSource => Ok(()),
-        IrqCommand::SnapshotLine | IrqCommand::ClaimNotification => {
-            Err(ModelError::DmaSubmissionState)
+impl PdmaIrqController {
+    fn execute_request(
+        &mut self,
+        command: IrqCommand,
+        queues: &QueueBlock,
+        trace: &mut TraceSink,
+    ) -> Result<CommandOutcome, MmioResultDetails> {
+        match command {
+            IrqCommand::SnapshotLine => return notification::snapshot_line(self, queues),
+            IrqCommand::ClaimNotification => return notification::claim(self, queues, trace),
+            IrqCommand::ConfigureRoute
+            | IrqCommand::Enable
+            | IrqCommand::Disable
+            | IrqCommand::Mask
+            | IrqCommand::Unmask
+            | IrqCommand::Acknowledge
+            | IrqCommand::ObserveSource => {}
         }
-    };
-    result.map_err(|error| map_mmio_error(error, command, source))?;
-    let view = observe_irq_source(state, source)
-        .map_err(|error| map_mmio_error(error, command, source))?;
-    Ok(CommandOutcome {
-        response: Some(source_response(view)),
-        changed: before.is_some_and(|previous| previous != view),
-    })
+        let source_kind = self.registers.source_kind.raw();
+        let source_id = self.registers.source_id.raw();
+        let source = decode_source(self.registers.expected_epoch.raw(), source_kind, source_id)
+            .ok_or_else(|| {
+                details(
+                    MmioResult::InvalidIrqSource,
+                    [u64::from(source_kind), source_id, 0],
+                )
+            })?;
+        let before = observe_irq_source(self, queues, source).ok();
+        let result = match command {
+            IrqCommand::ConfigureRoute => decode_route(
+                self.registers.route_kind.raw(),
+                self.registers.route_vector.raw(),
+            )
+            .ok_or(ModelError::DmaSubmissionState)
+            .and_then(|route| self.configure_source_route(source, route, queues)),
+            IrqCommand::Enable => self.enable_source(source, queues, trace),
+            IrqCommand::Disable => self.disable_source(source, queues, trace),
+            IrqCommand::Mask => self.mask_source(source, queues, trace),
+            IrqCommand::Unmask => self.unmask_source(source, queues, trace),
+            IrqCommand::Acknowledge => self.ack_source(source, queues, trace),
+            IrqCommand::ObserveSource => Ok(()),
+            IrqCommand::SnapshotLine | IrqCommand::ClaimNotification => {
+                Err(ModelError::DmaSubmissionState)
+            }
+        };
+        result.map_err(|error| map_mmio_error(error, command, source))?;
+        let view = observe_irq_source(self, queues, source)
+            .map_err(|error| map_mmio_error(error, command, source))?;
+        Ok(CommandOutcome {
+            response: Some(source_response(view)),
+            changed: before.is_some_and(|previous| previous != view),
+        })
+    }
+}
+
+const fn details(result: MmioResult, details: [u64; 3]) -> MmioResultDetails {
+    MmioResultDetails { result, details }
 }
 
 fn source_response(view: IrqSourceView) -> IrqResponseBank {

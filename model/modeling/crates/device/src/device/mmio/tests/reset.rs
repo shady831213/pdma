@@ -1,8 +1,8 @@
-use super::*;
-use crate::device::mmio::reset::{self as mmio_reset, ResetOutcome};
+use crate::DeviceCore;
+use crate::queue::exact::PdmaControlError;
 use crate::runtime::state::RunnerState;
-use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails};
-use pdma_model_contract::semantic::{SemanticError, ids::BufferId};
+use pdma_model_contract::abi::mmio::{GlobalCommand, MmioResult};
+use pdma_model_contract::semantic::{DeviceEpoch, SemanticError, WholeDeviceReset, ids::BufferId};
 
 #[test]
 fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
@@ -13,29 +13,30 @@ fn raw_reset_seam_maps_success_and_stale_epoch_exactly() {
     );
 
     // When: the raw reset seam receives the current epoch.
-    let success = mmio_reset::execute(&mut state, 0);
+    state.global_registers.reset_expected_epoch = 0.into();
+    state.global_registers.command = GlobalCommand::Reset.code().into();
+    let success = state.execute_global_command();
 
     // Then: it advances both identities and returns the new epoch.
-    assert_eq!(success, ResetOutcome::Success(DeviceEpoch::new(1)));
+    assert!(success);
+    assert_eq!(state.global_registers.result.raw(), MmioResult::Ok.code());
+    assert_eq!(state.global_registers.response.epoch.raw(), 1);
     assert_eq!(state.epoch(), DeviceEpoch::new(1));
 
     // When: the same raw epoch is submitted again.
-    let stale_outcome = mmio_reset::execute(&mut state, 0);
+    state.global_registers.command = GlobalCommand::Reset.code().into();
+    let stale_outcome = state.execute_global_command();
 
     // Then: exact stale details are returned before either identity changes.
+    assert!(!stale_outcome);
     assert_eq!(
-        stale_outcome,
-        ResetOutcome::Rejected(
-            PdmaControlError::StaleEpoch {
-                expected: DeviceEpoch::new(1),
-                actual: DeviceEpoch::initial(),
-            },
-            MmioResultDetails {
-                result: MmioResult::StaleEpoch,
-                details: [1, 0, 0],
-            }
-        )
+        state.global_registers.result.raw(),
+        MmioResult::StaleEpoch.code()
     );
+    assert_eq!(state.global_registers.detail0.raw(), 1);
+    assert_eq!(state.global_registers.detail1.raw(), 0);
+    assert_eq!(state.global_registers.detail2.raw(), 0);
+    assert_eq!(state.global_registers.response.epoch.raw(), 1);
     assert_eq!(state.epoch(), DeviceEpoch::new(1));
 }
 
@@ -87,19 +88,19 @@ fn epoch_overflow_preserves_complete_runner_state() {
     assert_eq!(state.generation, generation);
 
     // When: the raw reset seam receives the same exhausted expected epoch.
-    let raw = mmio_reset::execute(&mut state.core, u64::MAX);
+    state.core.global_registers.reset_expected_epoch = u64::MAX.into();
+    state.core.global_registers.command = GlobalCommand::Reset.code().into();
+    let raw = state.core.execute_global_command();
 
     // Then: it reports exact overflow details and still commits no mutation.
+    assert!(!raw);
     assert_eq!(
-        raw,
-        ResetOutcome::Rejected(
-            PdmaControlError::Semantic(SemanticError::DeviceEpochOverflow { current: u64::MAX }),
-            pdma_model_contract::abi::mmio::MmioResultDetails {
-                result: pdma_model_contract::abi::mmio::MmioResult::DeviceEpochOverflow,
-                details: [u64::MAX, 0, 0],
-            }
-        )
+        state.core.global_registers.result.raw(),
+        MmioResult::DeviceEpochOverflow.code()
     );
+    assert_eq!(state.core.global_registers.detail0.raw(), u64::MAX);
+    assert_eq!(state.core.global_registers.detail1.raw(), 0);
+    assert_eq!(state.core.global_registers.detail2.raw(), 0);
     assert_eq!(state.core.epoch(), exhausted);
     assert_eq!(state.generation, generation);
 }

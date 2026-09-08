@@ -37,19 +37,18 @@ impl DeviceCore {
             PdmaMmioMapRegisterId::Global => {
                 let local = offset.checked_sub(PdmaMmioMap::GLOBAL.offset())?;
                 GlobalRegisters::write_register(&mut self.global_registers, local, value)?;
-                local == GlobalRegisters::COMMAND.offset()
-                    && super::global::execute(self, self.global_registers.command.raw())
+                local == GlobalRegisters::COMMAND.offset() && self.execute_global_command()
             }
             PdmaMmioMapRegisterId::Queue => {
                 let local = offset.checked_sub(PdmaMmioMap::QUEUE.offset())?;
                 QueueRegisters::write_register(&mut self.queues.registers, local, value)?;
-                local == QueueRegisters::COMMAND.offset() && crate::queue::mmio::execute(self)
+                local == QueueRegisters::COMMAND.offset() && self.execute_queue_command()
             }
             PdmaMmioMapRegisterId::Irq => {
                 let local = offset.checked_sub(PdmaMmioMap::IRQ.offset())?;
                 IrqRegisters::write_register(&mut self.irq.registers, local, value)?;
                 local == IrqRegisters::COMMAND.offset()
-                    && crate::irq::mmio::execute(self, self.irq.registers.command.raw())
+                    && self.irq.execute_mmio(&self.queues, &mut self.trace)
             }
         };
         Some(changed)

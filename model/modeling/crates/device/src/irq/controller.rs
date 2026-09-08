@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 #[derive(Debug)]
 pub(crate) struct PdmaIrqController {
     pub(crate) registers: pdma_model_contract::abi::mmio::IrqRegistersValues,
-    epoch: DeviceEpoch,
+    pub(super) epoch: DeviceEpoch,
     line: IrqLine,
     sources: BTreeMap<IrqSource, PdmaIrqSourceState>,
 }

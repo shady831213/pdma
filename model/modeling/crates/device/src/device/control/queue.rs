@@ -2,9 +2,9 @@ mod activation;
 mod transactions;
 use super::DeviceCore;
 use crate::ModelResult;
-use crate::queue::exact::{ActiveQueue, PdmaControlError, PendingDmaResult, PreparedExactQueue};
+use crate::queue::exact::{PendingDmaResult, PreparedExactQueue};
 use pdma_model_contract::semantic::{
-    Command, CompletionRecord, EpochQueue, EventRecord, QueueConfig, QueueConfigHandle, QueueId,
+    Command, CompletionRecord, EventRecord, QueueConfig, QueueConfigHandle, QueueId,
 };
 
 impl DeviceCore {
@@ -72,31 +72,6 @@ impl DeviceCore {
         self.queues.install_exact(self.epoch, prepared)
     }
 
-    pub(crate) fn ring_dma_bus_doorbell(&mut self, queue: EpochQueue) -> ModelResult<()> {
-        self.validate_epoch(queue.epoch())?;
-        self.queues.validate_exact(queue.queue_id())?;
-        self.runnable.enqueue(queue.queue_id());
-        Ok(())
-    }
-
-    pub(crate) fn validate_dma_bus_queue(&self, queue: EpochQueue) -> ModelResult<()> {
-        self.validate_epoch(queue.epoch())?;
-        self.queues.validate_exact(queue.queue_id())
-    }
-
-    pub(crate) fn exact_ring(&self, queue: EpochQueue) -> Result<&ActiveQueue, PdmaControlError> {
-        self.validate_exact_epoch(queue)?;
-        self.queues.exact_ring(queue.queue_id())
-    }
-
-    pub(crate) fn exact_ring_mut(
-        &mut self,
-        queue: EpochQueue,
-    ) -> Result<&mut ActiveQueue, PdmaControlError> {
-        self.validate_exact_epoch(queue)?;
-        self.queues.exact_ring_mut(queue.queue_id())
-    }
-
     pub(crate) fn pending_dma_result(&self) -> Option<PendingDmaResult> {
         match self.retirement.pending() {
             Some(crate::device::retirement::PendingRetirement::Completion(success)) => {
@@ -115,16 +90,5 @@ impl DeviceCore {
 
     pub(crate) fn next_queue_id(&self) -> QueueId {
         self.queues.next_queue_id()
-    }
-
-    fn validate_exact_epoch(&self, queue: EpochQueue) -> Result<(), PdmaControlError> {
-        if queue.epoch() == self.epoch {
-            Ok(())
-        } else {
-            Err(PdmaControlError::StaleEpoch {
-                expected: self.epoch,
-                actual: queue.epoch(),
-            })
-        }
     }
 }

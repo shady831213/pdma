@@ -1,4 +1,5 @@
 mod block;
+mod control;
 mod error;
 mod publication;
 mod ring_state;

@@ -1,18 +1,23 @@
 use super::support::{map_mmio_error, observe_irq_source, usize_to_u64};
 use super::{CommandOutcome, line_response, source_response};
-use crate::device::DeviceCore;
+use crate::irq::PdmaIrqController;
+use crate::queue::QueueBlock;
+use crate::trace::TraceSink;
 use pdma_model_contract::abi::mmio::{IrqCommand, MmioResultDetails};
 use pdma_model_contract::semantic::IrqNotification;
 
-pub(super) fn snapshot_line(state: &DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
-    let Some(snapshot) = state.irq_snapshot() else {
+pub(super) fn snapshot_line(
+    irq: &PdmaIrqController,
+    queues: &QueueBlock,
+) -> Result<CommandOutcome, MmioResultDetails> {
+    let Some(snapshot) = irq.pending_snapshot() else {
         return Ok(CommandOutcome {
             response: None,
             changed: false,
         });
     };
     let source = snapshot.cause().source_capability();
-    let view = observe_irq_source(state, source)
+    let view = observe_irq_source(irq, queues, source)
         .map_err(|error| map_mmio_error(error, IrqCommand::SnapshotLine, source))?;
     Ok(CommandOutcome {
         response: Some(line_response(view, snapshot.cause().line().vector().raw())),
@@ -20,15 +25,19 @@ pub(super) fn snapshot_line(state: &DeviceCore) -> Result<CommandOutcome, MmioRe
     })
 }
 
-pub(super) fn claim(state: &mut DeviceCore) -> Result<CommandOutcome, MmioResultDetails> {
-    let Some(notification) = state.take_irq_notification() else {
+pub(super) fn claim(
+    irq: &mut PdmaIrqController,
+    queues: &QueueBlock,
+    trace: &mut TraceSink,
+) -> Result<CommandOutcome, MmioResultDetails> {
+    let Some(notification) = irq.take_traced_notification(trace) else {
         return Ok(CommandOutcome {
             response: None,
             changed: false,
         });
     };
     let source = notification.source_capability();
-    let view = observe_irq_source(state, source)
+    let view = observe_irq_source(irq, queues, source)
         .map_err(|error| map_mmio_error(error, IrqCommand::ClaimNotification, source))?;
     let changed = matches!(notification, IrqNotification::Message(_));
     let response = match notification {

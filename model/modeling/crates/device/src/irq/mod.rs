@@ -1,5 +1,6 @@
 //! Device-local interrupt routing, masking, latching, and notification state.
 
+mod control;
 mod controller;
 pub(crate) mod mmio;
 

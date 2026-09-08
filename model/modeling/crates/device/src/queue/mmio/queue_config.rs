@@ -1,7 +1,6 @@
-use super::queue_control::{CommandResult, fail, map_abi};
-use super::{QueueRequest, status_response};
-use crate::device::DeviceCore;
-use pdma_model_contract::abi::mmio::MmioResult;
+use super::queue_control::{fail, map_abi};
+use crate::memory::PdmaMemoryMappings;
+use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails, QueueRegistersValues};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCompletion, AbiControlError, AbiEvent, AbiRingEntry, DmaAddress, RingLayout,
 };
@@ -25,60 +24,59 @@ enum RingKind {
     Event,
 }
 
-pub(super) fn activate(state: &mut DeviceCore, staging: QueueRequest) -> CommandResult {
-    let queue_id = usize::try_from(staging.id)
+pub(super) fn activation(
+    memory: &PdmaMemoryMappings,
+    staging: &QueueRegistersValues,
+) -> Result<QueueActivation, MmioResultDetails> {
+    let queue_id = usize::try_from(staging.id.raw())
         .map(QueueId::new)
         .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?;
-    let owner = usize::try_from(staging.cfg_software_owner)
+    let owner = usize::try_from(staging.cfg_software_owner.raw())
         .map(SoftwareOwnerId::new)
         .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?;
     let rings = [
         StagedRing {
-            base: staging.sq_base,
-            depth: staging.sq_depth,
+            base: staging.sq_base.raw(),
+            depth: staging.sq_depth.raw(),
             kind: RingKind::Submission,
             role: 0,
         },
         StagedRing {
-            base: staging.cq_base,
-            depth: staging.cq_depth,
+            base: staging.cq_base.raw(),
+            depth: staging.cq_depth.raw(),
             kind: RingKind::Completion,
             role: 1,
         },
         StagedRing {
-            base: staging.eq_base,
-            depth: staging.eq_depth,
+            base: staging.eq_base.raw(),
+            depth: staging.eq_depth.raw(),
             kind: RingKind::Event,
             role: 2,
         },
     ];
     let [submission_ring, completion_ring, event_ring] = rings;
-    let submission = ring_object::<AbiCommand>(state, submission_ring)?;
-    let completion = ring_object::<AbiCompletion>(state, completion_ring)?;
-    let event = ring_object::<AbiEvent>(state, event_ring)?;
+    let submission = ring_object::<AbiCommand>(memory, submission_ring)?;
+    let completion = ring_object::<AbiCompletion>(memory, completion_ring)?;
+    let event = ring_object::<AbiEvent>(memory, event_ring)?;
     let config = QueueConfig::new(
-        usize::try_from(staging.cfg_sq_depth)
+        usize::try_from(staging.cfg_sq_depth.raw())
             .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?,
-        usize::try_from(staging.cfg_cq_depth)
+        usize::try_from(staging.cfg_cq_depth.raw())
             .map_err(|_| fail(MmioResult::InvalidTransaction, [0x1_0000_0001, 0, 0]))?,
         EventRouting::QueueLocal,
         owner,
     );
     validate_config_depths(config, rings)?;
-    let activation = QueueActivation::new(
-        DeviceEpoch::new(staging.expected_epoch),
+    Ok(QueueActivation::new(
+        DeviceEpoch::new(staging.expected_epoch.raw()),
         queue_id,
         config,
         QueueRingObjects::new(submission, completion, event),
-    );
-    let status = state
-        .activate_mapped_exact_queue(activation)
-        .map_err(|error| super::queue_control::map_bus(error, staging.id, 1, 0))?;
-    Ok((status_response(status)?, true))
+    ))
 }
 
 fn ring_object<R: AbiRingEntry>(
-    state: &DeviceCore,
+    memory: &PdmaMemoryMappings,
     staging: StagedRing,
 ) -> Result<BufferId, pdma_model_contract::abi::mmio::MmioResultDetails> {
     if staging.depth == 0 {
@@ -102,8 +100,7 @@ fn ring_object<R: AbiRingEntry>(
     let extent = RingLayout::<R>::checked_extent(u64::from(staging.depth))
         .map_err(|error| map_abi(error, staging.role))?;
     let address = DmaAddress::new(staging.base);
-    let region = state
-        .memory
+    let region = memory
         .region_containing(address)
         .ok_or_else(|| fail(MmioResult::DmaUnmapped, [staging.base, extent, 0]))?;
     if region.base() != address {

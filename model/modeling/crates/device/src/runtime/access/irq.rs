@@ -1,7 +1,7 @@
 //! Async device IRQ control surface.
 
 use crate::ModelResult;
-use crate::irq::mmio::support::{irq_notification_ready, observe_irq_source};
+use crate::irq::mmio::support::observe_irq_source;
 use crate::runtime::{AsyncDeviceHandle, DeviceWait};
 use pdma_model_contract::abi::mmio::IrqSourceStatus;
 use pdma_model_contract::semantic::EpochIrqSource;
@@ -12,7 +12,7 @@ impl AsyncDeviceHandle {
     pub async fn irq_notification_ready(&self) -> bool {
         self.shared
             .backend
-            .interact(|state| irq_notification_ready(&state.core))
+            .interact(|state| state.core.irq_notification_ready())
             .await
     }
 
@@ -26,7 +26,7 @@ impl AsyncDeviceHandle {
                     if state.shutdown_requested {
                         return (false, true, state.generation);
                     }
-                    if irq_notification_ready(&state.core) {
+                    if state.core.irq_notification_ready() {
                         return (true, false, state.generation);
                     }
                     (false, false, state.generation)
@@ -49,7 +49,10 @@ impl AsyncDeviceHandle {
     pub async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
         self.shared
             .backend
-            .interact(|state| observe_irq_source(&state.core, source).map(|view| view.status))
+            .interact(|state| {
+                observe_irq_source(&state.core.irq, &state.core.queues, source)
+                    .map(|view| view.status)
+            })
             .await
     }
     /// Configures the delivery route of an inactive PDMA-local IRQ source.

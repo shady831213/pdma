@@ -1,6 +1,6 @@
 mod access;
 mod global;
-pub(crate) mod reset;
+mod queue;
 
 use super::DeviceCore;
 

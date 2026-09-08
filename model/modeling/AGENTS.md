@@ -56,6 +56,10 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   Values; DeviceCore routes only the three blocks. Do not add a flat leaf dispatch table,
   runtime owner tags or a private register storage backend. Addresses derive from the
   composition; preserve semantic behavior rather than historical numeric placements.
+- Queue and IRQ MMIO behavior must not receive or call back into DeviceCore. Owners
+  consume their generated registers directly; the device coordinates mapped activation,
+  runnable publication and whole-device operations. Share local transitions between
+  semantic and MMIO entrypoints instead of implementing another command state machine.
 - Explicit manual-drive helpers belong only in manual status/trace and step-budget tests;
   there is no public synchronous device facade. Normal system scenarios run the async worker.
 - `device::issue` owns resource admission and runnable selection; `device::probe` only

@@ -96,6 +96,11 @@ PdmaMmioMap places those three blocks. QueueBlock, PdmaIrqController and DeviceC
 the corresponding generated values directly. Generated layout access descends into the
 selected block without a handwritten leaf dispatch table, storage backend or central
 byte image. The 4 KiB extent describes the bus, not a required allocation.
+Register ownership includes command behavior: the IRQ controller handles its commands
+using explicit queue observations and a trace sink; QueueBlock handles status and cursor
+transitions. Neither owner calls back into DeviceCore. The device coordinates mapped
+queue activation, enqueues captured queues, and implements global status/reset. Command
+handlers consume their generated registers directly rather than duplicating request banks.
 Local addresses follow block alignment and declaration order. In this successor layout,
 queue command/result are at 0x164/0x168; the historical v0.9 addresses are not a constraint.
 

@@ -1,4 +1,5 @@
-use crate::device::DeviceCore;
+use crate::irq::PdmaIrqController;
+use crate::queue::QueueBlock;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::mmio::{
     IrqCommand, IrqSourceStatus, IrqStateBit, MmioResult, MmioResultDetails,
@@ -15,10 +16,11 @@ pub(crate) struct IrqSourceView {
 }
 
 pub(crate) fn observe_irq_source(
-    state: &DeviceCore,
+    irq: &PdmaIrqController,
+    queues: &QueueBlock,
     source: EpochIrqSource,
 ) -> ModelResult<IrqSourceView> {
-    let (observed, records_pending) = state.observe_irq_source(source)?;
+    let (observed, records_pending) = irq.observe_source(source, queues)?;
     let mut bits = IrqStateBit::Present.mask();
     for (set, bit) in [
         (observed.enabled(), IrqStateBit::Enabled),
@@ -39,10 +41,6 @@ pub(crate) fn observe_irq_source(
         status,
         pending_messages: observed.pending_messages,
     })
-}
-
-pub(crate) fn irq_notification_ready(state: &DeviceCore) -> bool {
-    state.irq_notification_ready()
 }
 
 pub(crate) fn decode_source(epoch: u64, kind: u32, id: u64) -> Option<EpochIrqSource> {

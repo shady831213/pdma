@@ -1,48 +1,48 @@
-use crate::device::DeviceCore;
+use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
+use crate::queue::exact::QueueStatus;
 use pdma_model_contract::abi::mmio::{
-    MmioResultDetails, QueueResponseBank, ResponseUpdate, apply_response_update,
+    MmioResult, MmioResultDetails, QueueResponseBank, ResponseUpdate, apply_response_update,
 };
+use pdma_model_contract::semantic::{DeviceEpoch, QueueActivation, QueueId};
 
+mod errors;
 mod queue_config;
-pub(crate) mod queue_control;
+mod queue_control;
 
-#[derive(Clone, Copy)]
-pub(crate) struct QueueRequest {
-    pub(crate) expected_epoch: u64,
-    pub(crate) id: u64,
-    pub(crate) expected_cursor: u64,
-    pub(crate) new_cursor: u64,
-    pub(crate) cfg_sq_depth: u32,
-    pub(crate) cfg_cq_depth: u32,
-    pub(crate) cfg_software_owner: u64,
-    pub(crate) sq_base: u64,
-    pub(crate) sq_depth: u32,
-    pub(crate) cq_base: u64,
-    pub(crate) cq_depth: u32,
-    pub(crate) eq_base: u64,
-    pub(crate) eq_depth: u32,
-    pub(crate) command: u32,
-}
+pub(crate) use queue_control::map_bus;
+
+#[cfg(test)]
+mod tests;
 
 impl QueueBlock {
-    pub(crate) const fn snapshot_request(&self) -> QueueRequest {
-        let registers = &self.registers;
-        QueueRequest {
-            expected_epoch: registers.expected_epoch.raw(),
-            id: registers.id.raw(),
-            expected_cursor: registers.expected_cursor.raw(),
-            new_cursor: registers.new_cursor.raw(),
-            cfg_sq_depth: registers.cfg_sq_depth.raw(),
-            cfg_cq_depth: registers.cfg_cq_depth.raw(),
-            cfg_software_owner: registers.cfg_software_owner.raw(),
-            sq_base: registers.sq_base.raw(),
-            sq_depth: registers.sq_depth.raw(),
-            cq_base: registers.cq_base.raw(),
-            cq_depth: registers.cq_depth.raw(),
-            eq_base: registers.eq_base.raw(),
-            eq_depth: registers.eq_depth.raw(),
-            command: registers.command.raw(),
+    pub(crate) fn execute_mmio(&mut self, epoch: DeviceEpoch) -> (bool, Option<QueueId>) {
+        queue_control::execute(self, epoch)
+    }
+
+    pub(crate) fn mmio_activation(
+        &self,
+        memory: &PdmaMemoryMappings,
+    ) -> Result<QueueActivation, MmioResultDetails> {
+        queue_config::activation(memory, &self.registers)
+    }
+
+    pub(crate) fn complete_activation(
+        &mut self,
+        result: Result<QueueStatus, MmioResultDetails>,
+    ) -> bool {
+        match result.and_then(status_response) {
+            Ok(response) => {
+                self.complete(
+                    queue_control::fail(MmioResult::Ok, [0; 3]),
+                    ResponseUpdate::Replace(response),
+                );
+                true
+            }
+            Err(error) => {
+                self.complete(error, ResponseUpdate::Preserve);
+                false
+            }
         }
     }
 
@@ -82,11 +82,4 @@ pub(crate) fn status_response(
         eq_producer: status.event().producer().raw().into(),
         eq_consumer: status.event().consumer().raw().into(),
     })
-}
-
-pub(crate) fn execute(state: &mut DeviceCore) -> bool {
-    let request = state.queues.snapshot_request();
-    let (result, response, changed) = queue_control::execute(state, request, request.command);
-    state.queues.complete(result, response);
-    changed
 }

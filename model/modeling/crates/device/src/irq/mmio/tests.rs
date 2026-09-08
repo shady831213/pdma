@@ -3,34 +3,6 @@ use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector};
 
 #[test]
-fn owner_irq_request_snapshot_reads_all_five_selector_fields_once() {
-    // Given: five distinct selector values installed through the IRQ owner's bank.
-    let mut controller =
-        PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0)));
-    let registers = &mut controller.registers;
-    registers.expected_epoch = 11.into();
-    registers.source_id = 12.into();
-    registers.source_kind = 1.into();
-    registers.route_kind = 1.into();
-    registers.route_vector = 13.into();
-
-    // When: the IRQ request is captured from the IRQ owner.
-    let request = controller.snapshot_request();
-
-    // Then: the owned snapshot contains every selector and route field exactly.
-    assert_eq!(
-        (
-            request.expected_epoch,
-            request.source_id,
-            request.source_kind,
-            request.route_kind,
-            request.route_vector,
-        ),
-        (11, 12, 1, 1, 13)
-    );
-}
-
-#[test]
 fn owner_irq_effect_empties_result_details_and_response_atomically() {
     // Given: an IRQ response bank whose result, details, and lanes are all nonzero.
     let mut controller =

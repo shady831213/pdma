@@ -1,73 +1,98 @@
-use super::{QueueRequest, status_response};
-use crate::device::DeviceCore;
-use crate::memory::PdmaMemoryError;
+use super::status_response;
+use crate::queue::QueueBlock;
 use crate::queue::exact::{PdmaControlError, QueueStatus};
-use pdma_model_contract::abi::AbiControlError;
-use pdma_model_contract::abi::mmio::{
-    MmioResult, MmioResultDetails, QueueCommand, QueueResponseBank, ResponseUpdate,
-};
+use pdma_model_contract::abi::mmio::{MmioResult, MmioResultDetails, QueueCommand, ResponseUpdate};
 use pdma_model_contract::semantic::{
-    DeviceEpoch, EpochQueue, QueueControl, QueueCursorUpdate, QueueId, RingCursor, SemanticError,
+    DeviceEpoch, EpochQueue, QueueControl, QueueCursorUpdate, QueueId, RingCursor,
 };
 
-pub(super) type CommandResult = Result<(QueueResponseBank, bool), MmioResultDetails>;
+pub(super) use super::errors::map_abi;
+use super::errors::{map_dma, map_semantic};
 
-pub(super) fn execute(
-    state: &mut DeviceCore,
-    staging: QueueRequest,
-    raw_command: u32,
-) -> (MmioResultDetails, ResponseUpdate<QueueResponseBank>, bool) {
+type CommandResult = Result<(QueueStatus, bool), MmioResultDetails>;
+
+pub(super) fn execute(queues: &mut QueueBlock, epoch: DeviceEpoch) -> (bool, Option<QueueId>) {
+    let raw_command = queues.registers.command.raw();
     let Ok(command) = QueueCommand::try_from(raw_command) else {
-        return (
+        queues.complete(
             fail(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]),
             ResponseUpdate::Preserve,
-            false,
         );
+        return (false, None);
     };
-    match run(state, staging, command) {
-        Ok((response, changed)) => (
-            fail(MmioResult::Ok, [0; 3]),
-            ResponseUpdate::Replace(response),
-            changed,
-        ),
-        Err(error) => (error, ResponseUpdate::Preserve, false),
+    let result = run(queues, epoch, command).and_then(|(status, changed)| {
+        status_response(status).map(|response| (response, status.queue().queue_id(), changed))
+    });
+    match result {
+        Ok((response, queue_id, changed)) => {
+            let runnable = match command {
+                QueueCommand::CaptureSqProducer => Some(queue_id),
+                QueueCommand::Activate
+                | QueueCommand::ReadStatus
+                | QueueCommand::PublishSqProducer
+                | QueueCommand::PublishSqConsumer
+                | QueueCommand::PublishCqProducer
+                | QueueCommand::PublishCqConsumer
+                | QueueCommand::PublishEqProducer
+                | QueueCommand::PublishEqConsumer => None,
+            };
+            queues.complete(
+                fail(MmioResult::Ok, [0; 3]),
+                ResponseUpdate::Replace(response),
+            );
+            (changed, runnable)
+        }
+        Err(error) => {
+            queues.complete(error, ResponseUpdate::Preserve);
+            (false, None)
+        }
     }
 }
 
-fn run(state: &mut DeviceCore, staging: QueueRequest, command: QueueCommand) -> CommandResult {
-    if command == QueueCommand::Activate {
-        return super::queue_config::activate(state, staging);
-    }
-    let queue_id = usize::try_from(staging.id)
+fn run(queues: &mut QueueBlock, epoch: DeviceEpoch, command: QueueCommand) -> CommandResult {
+    let staging = queues.registers;
+    let queue_id = usize::try_from(staging.id.raw())
         .map(QueueId::new)
         .map_err(|_| invalid_transaction(command))?;
-    let queue = EpochQueue::new(DeviceEpoch::new(staging.expected_epoch), queue_id);
-    if command == QueueCommand::ReadStatus {
-        let (result, _) = state.control_exact_queue(QueueControl::ReadStatus(queue));
-        return result
-            .map_err(|error| map_bus(error, staging.id, command.code(), 0))
-            .and_then(|status| status_response(status).map(|response| (response, false)));
+    let queue = EpochQueue::new(DeviceEpoch::new(staging.expected_epoch.raw()), queue_id);
+    let current = current_status(queues, epoch, queue, command)?;
+    match command {
+        QueueCommand::ReadStatus => return Ok((current, false)),
+        QueueCommand::Activate => return Err(invalid_transaction(command)),
+        QueueCommand::PublishSqProducer
+        | QueueCommand::CaptureSqProducer
+        | QueueCommand::PublishSqConsumer
+        | QueueCommand::PublishCqProducer
+        | QueueCommand::PublishCqConsumer
+        | QueueCommand::PublishEqProducer
+        | QueueCommand::PublishEqConsumer => {}
     }
-    let current = current_status(state, queue, staging.id, command)?;
     let role = cursor_role(command);
-    if selected_cursor(current, command).raw() != staging.expected_cursor {
+    if selected_cursor(current, command).raw() != staging.expected_cursor.raw() {
         return Err(invalid_transaction(command));
     }
-    let update = QueueCursorUpdate::new(queue, RingCursor::new(staging.new_cursor));
+    let update = QueueCursorUpdate::new(queue, RingCursor::new(staging.new_cursor.raw()));
     let request = cursor_request(command, update)?;
-    let (result, changed) = state.control_exact_queue(request);
-    let status = result.map_err(|error| map_bus(error, staging.id, command.code(), role))?;
-    Ok((status_response(status)?, changed))
+    let (result, changed) = queues.control_exact_queue(epoch, request);
+    let status = result.map_err(|error| map_bus(error, staging.id.raw(), command.code(), role))?;
+    Ok((status, changed))
 }
 
 fn current_status(
-    state: &mut DeviceCore,
+    queues: &mut QueueBlock,
+    epoch: DeviceEpoch,
     queue: EpochQueue,
-    queue_id: u64,
     command: QueueCommand,
 ) -> Result<QueueStatus, MmioResultDetails> {
-    let (result, _) = state.control_exact_queue(QueueControl::ReadStatus(queue));
-    result.map_err(|error| map_bus(error, queue_id, command.code(), cursor_role(command)))
+    let (result, _) = queues.control_exact_queue(epoch, QueueControl::ReadStatus(queue));
+    result.map_err(|error| {
+        map_bus(
+            error,
+            queues.registers.id.raw(),
+            command.code(),
+            cursor_role(command),
+        )
+    })
 }
 
 fn cursor_request(
@@ -140,118 +165,5 @@ pub(crate) fn map_bus(
             MmioResult::InvalidTransaction,
             [(1_u64 << 32) | u64::from(command), 0, 0],
         ),
-    }
-}
-
-fn map_semantic(error: SemanticError, role: u64) -> MmioResultDetails {
-    match error {
-        SemanticError::CursorRegression { producer, consumer } => {
-            fail(MmioResult::CursorRegression, [producer, consumer, role])
-        }
-        SemanticError::CursorUpdateRegression { current, proposed } => fail(
-            MmioResult::CursorUpdateRegression,
-            [current, proposed, role],
-        ),
-        SemanticError::CursorDistanceExceeded {
-            producer,
-            consumer,
-            depth,
-        } => fail(
-            MmioResult::CursorDistanceExceeded,
-            [producer, consumer, u64::from(depth)],
-        ),
-        SemanticError::CursorIncrementOverflow { cursor, increment } => fail(
-            MmioResult::CursorIncrementOverflow,
-            [cursor, increment, role],
-        ),
-        SemanticError::DeviceEpochOverflow { current } => {
-            fail(MmioResult::DeviceEpochOverflow, [current, 0, 0])
-        }
-        SemanticError::ZeroCapacity | SemanticError::RingFull => {
-            fail(MmioResult::InvalidTransaction, [role, 0, 0])
-        }
-    }
-}
-
-const fn map_dma(error: PdmaMemoryError) -> MmioResultDetails {
-    match error {
-        PdmaMemoryError::AddressExhausted => fail(MmioResult::DmaAddressExhausted, [0; 3]),
-        PdmaMemoryError::StorageExhausted => fail(MmioResult::DmaStorageExhausted, [0; 3]),
-        PdmaMemoryError::OverlappingRegion => fail(MmioResult::DmaOverlap, [0; 3]),
-        PdmaMemoryError::InvalidRegion => fail(MmioResult::DmaInvalidRegion, [0; 3]),
-        PdmaMemoryError::StaleStage {
-            expected_generation,
-            actual_generation,
-        } => fail(
-            MmioResult::DmaStaleStage,
-            [expected_generation, actual_generation, 0],
-        ),
-        PdmaMemoryError::Unmapped => fail(MmioResult::DmaUnmapped, [0; 3]),
-        PdmaMemoryError::CrossesRegion => fail(MmioResult::DmaCrossesRegion, [0; 3]),
-    }
-}
-
-pub(super) fn map_abi(error: AbiControlError, role: u64) -> MmioResultDetails {
-    match error {
-        AbiControlError::InvalidRingDepth { depth, maximum } => fail(
-            MmioResult::InvalidRingDepth,
-            [depth, u64::from(maximum), role],
-        ),
-        AbiControlError::RingExtentOverflow { depth, record_size } => fail(
-            MmioResult::RingExtentOverflow,
-            [depth, u64::from(record_size), role],
-        ),
-        AbiControlError::MisalignedRing { base, alignment } => {
-            fail(MmioResult::MisalignedRing, [base, alignment, role])
-        }
-        AbiControlError::RingExtentMismatch { expected, actual } => {
-            fail(MmioResult::RingExtentMismatch, [expected, actual, role])
-        }
-        AbiControlError::CursorRegression { producer, consumer } => {
-            fail(MmioResult::CursorRegression, [producer, consumer, role])
-        }
-        AbiControlError::CursorDistanceExceeded {
-            producer,
-            consumer,
-            depth,
-        } => fail(
-            MmioResult::CursorDistanceExceeded,
-            [producer, consumer, u64::from(depth)],
-        ),
-        AbiControlError::CursorUpdateRegression { current, proposed } => fail(
-            MmioResult::CursorUpdateRegression,
-            [current, proposed, role],
-        ),
-        AbiControlError::CursorIncrementOverflow { cursor, increment } => fail(
-            MmioResult::CursorIncrementOverflow,
-            [cursor, increment, role],
-        ),
-        AbiControlError::QueueDepthMismatch {
-            expected, actual, ..
-        } => fail(
-            MmioResult::QueueDepthMismatch,
-            [
-                u64::try_from(expected).unwrap_or(u64::MAX),
-                u64::from(actual),
-                role,
-            ],
-        ),
-        AbiControlError::EventDepthMismatch { expected, actual } => fail(
-            MmioResult::EventDepthMismatch,
-            [
-                u64::try_from(expected).unwrap_or(u64::MAX),
-                u64::from(actual),
-                2,
-            ],
-        ),
-        AbiControlError::UnsupportedVersion { requested } => {
-            fail(MmioResult::UnsupportedVersion, [u64::from(requested), 0, 0])
-        }
-        AbiControlError::UnknownFeatureBits { bits } => {
-            fail(MmioResult::UnknownFeatureBits, [bits, 0, 0])
-        }
-        AbiControlError::UnknownStatusValue { value } => {
-            fail(MmioResult::UnknownStatusValue, [u64::from(value), 0, 0])
-        }
     }
 }

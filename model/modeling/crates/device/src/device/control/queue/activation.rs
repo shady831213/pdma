@@ -1,7 +1,7 @@
 //! Exact queue activation preparation and commit.
 
 use crate::device::DeviceCore;
-use crate::memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryStage};
+use crate::memory::{MappedDmaRegion, PdmaMemoryError};
 use crate::queue::exact::{PdmaControlError, PreparedExactQueue, QueueStatus};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCompletion, AbiEvent, AbiRingEntry, QueueRingLayouts, RingLayout,
@@ -13,28 +13,12 @@ struct ValidatedQueueActivation {
     layouts: QueueRingLayouts,
 }
 
-pub(crate) struct PreparedQueueActivation {
+struct PreparedQueueActivation {
     native: PreparedExactQueue,
     status: QueueStatus,
 }
 
-impl PreparedQueueActivation {
-    pub(crate) const fn status(&self) -> QueueStatus {
-        self.status
-    }
-}
-
 impl DeviceCore {
-    pub(crate) fn activate_staged_exact_queue(
-        &mut self,
-        stage: PdmaMemoryStage,
-        activation: QueueActivation,
-    ) -> Result<QueueStatus, PdmaControlError> {
-        let prepared = self.prepare_staged_exact_queue(&stage, activation)?;
-        self.dma.commit(stage)?;
-        Ok(self.install_exact_queue_activation(prepared))
-    }
-
     pub(crate) fn activate_mapped_exact_queue(
         &mut self,
         activation: QueueActivation,
@@ -43,28 +27,13 @@ impl DeviceCore {
         Ok(self.install_exact_queue_activation(prepared))
     }
 
-    pub(crate) fn prepare_staged_exact_queue(
-        &mut self,
-        stage: &PdmaMemoryStage,
-        activation: QueueActivation,
-    ) -> Result<PreparedQueueActivation, PdmaControlError> {
-        self.validate_exact_activation(activation)?;
-        if stage.generation() != self.dma.generation() {
-            return Err(PdmaControlError::InvalidTransaction);
-        }
-        self.dma.validate_stage(stage)?;
-        let regions = staged_regions(stage, activation)?;
-        let validated = validate_layouts(activation, regions)?;
-        self.prepare_exact_queue_activation(&validated)
-    }
-
     fn prepare_mapped_exact_queue(
         &mut self,
         activation: QueueActivation,
     ) -> Result<PreparedQueueActivation, PdmaControlError> {
         self.validate_exact_activation(activation)?;
         let regions = mapped_regions(self, activation)?;
-        self.dma.validate_region_set(&regions)?;
+        self.memory.validate_region_set(&regions)?;
         let validated = validate_layouts(activation, regions)?;
         self.prepare_exact_queue_activation(&validated)
     }
@@ -102,30 +71,10 @@ impl DeviceCore {
         Ok(PreparedQueueActivation { native, status })
     }
 
-    pub(crate) fn install_exact_queue_activation(
-        &mut self,
-        prepared: PreparedQueueActivation,
-    ) -> QueueStatus {
+    fn install_exact_queue_activation(&mut self, prepared: PreparedQueueActivation) -> QueueStatus {
         self.install_dma_bus_queue(prepared.native);
         prepared.status
     }
-}
-
-fn staged_regions(
-    stage: &PdmaMemoryStage,
-    activation: QueueActivation,
-) -> Result<[MappedDmaRegion; 3], PdmaControlError> {
-    let [submission, completion, event] = stage.regions() else {
-        return Err(PdmaControlError::InvalidTransaction);
-    };
-    let regions = [*submission, *completion, *event];
-    let objects = activation.rings();
-    if regions.map(MappedDmaRegion::object)
-        != [objects.submission(), objects.completion(), objects.event()]
-    {
-        return Err(PdmaControlError::InvalidTransaction);
-    }
-    Ok(regions)
 }
 
 fn mapped_regions(
@@ -135,7 +84,7 @@ fn mapped_regions(
     let objects = activation.rings();
     let resolve = |object| {
         runner
-            .dma
+            .memory
             .region_for_object(object)
             .ok_or(PdmaControlError::Dma(PdmaMemoryError::InvalidRegion))
     };

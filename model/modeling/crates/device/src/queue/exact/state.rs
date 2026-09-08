@@ -1,5 +1,5 @@
 use super::ring_state::{RingState, SubmissionRingState, semantic_cursors};
-use super::{DmaWrite, PdmaControlError, QueueStatus};
+use super::{PdmaControlError, QueueStatus};
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, QueueRingLayouts};
 use pdma_model_contract::semantic::QueueActivation;
 
@@ -31,27 +31,6 @@ impl ActiveQueue {
             semantic_cursors(self.completion)?,
             semantic_cursors(self.event)?,
         ))
-    }
-
-    pub(crate) fn prepare_submission(
-        self,
-        expected_producer: pdma_model_contract::abi::RingCursor,
-        descriptor: &DmaWrite,
-    ) -> Result<SubmissionRingState, PdmaControlError> {
-        let ring = self.submission.ring();
-        if ring.producer() != expected_producer || ring.is_full() {
-            return Err(PdmaControlError::InvalidTransaction);
-        }
-        let expected_address = ring
-            .entry_address(ring.producer())
-            .map_err(|_| PdmaControlError::InvalidTransaction)?;
-        if descriptor.address() != expected_address
-            || descriptor.bytes().len() != usize::from(ring.layout().entry_size())
-        {
-            return Err(PdmaControlError::InvalidTransaction);
-        }
-        self.submission
-            .update_producer(expected_producer.checked_increment(1)?)
     }
 
     pub(crate) fn publish_submission_producer(

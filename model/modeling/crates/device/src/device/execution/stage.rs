@@ -77,16 +77,16 @@ impl Stage<HardwareContext<'_>> for Datapath {
                 let route = command.route;
                 let outcome: ExecutionOutcome = match command.operation {
                     CommandOperation::Copy(request) => {
-                        ExecutionUnit::execute_copy(context.dma, route, request)
+                        ExecutionUnit::execute_copy(context.memory, route, request)
                     }
                     CommandOperation::StridedCopy(request) => {
-                        ExecutionUnit::execute_strided(context.dma, route, request)
+                        ExecutionUnit::execute_strided(context.memory, route, request)
                     }
                     CommandOperation::BroadcastCopy(request) => {
-                        ExecutionUnit::execute_broadcast(context.dma, route, &request)
+                        ExecutionUnit::execute_broadcast(context.memory, route, &request)
                     }
                     CommandOperation::VectorAdd(request) => {
-                        ExecutionUnit::execute_vector_add(context.dma, route, request)
+                        ExecutionUnit::execute_vector_add(context.memory, route, request)
                     }
                 };
                 RetirementWork::Executed(outcome)

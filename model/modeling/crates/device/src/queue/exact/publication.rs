@@ -5,7 +5,7 @@ use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiRingEntry};
 use pdma_model_contract::semantic::CompletionRecord;
 
 pub(super) fn completion(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     active: &mut ActiveQueue,
     record: CompletionRecord,
 ) -> PublicationOutcome {
@@ -20,11 +20,11 @@ pub(super) fn completion(
     if exact.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
     }
-    publish(dma_space, &mut active.completion, &bytes)
+    publish(memory, &mut active.completion, &bytes)
 }
 
 pub(super) fn event(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     active: &mut ActiveQueue,
     event: AbiEvent,
 ) -> PublicationOutcome {
@@ -32,11 +32,11 @@ pub(super) fn event(
     if event.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
     }
-    publish(dma_space, &mut active.event, &bytes)
+    publish(memory, &mut active.event, &bytes)
 }
 
 fn publish<R: AbiRingEntry>(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     ring: &mut RingState<R>,
     bytes: &[u8],
 ) -> PublicationOutcome {
@@ -52,7 +52,7 @@ fn publish<R: AbiRingEntry>(
     let Ok(address) = ring.entry_address(ring.producer()) else {
         return PublicationOutcome::Retry;
     };
-    if dma_space.write_memory(address, bytes).is_err() {
+    if memory.write_memory(address, bytes).is_err() {
         return PublicationOutcome::Retry;
     }
     *ring = updated;

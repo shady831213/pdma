@@ -45,34 +45,34 @@ impl ExecutionUnit {
     }
 
     pub(super) fn execute_copy(
-        dma: &crate::memory::PdmaMemoryMappings,
+        memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
         request: CopyRequest,
     ) -> ExecutionOutcome {
-        copy::execute(dma, route, request)
+        copy::execute(memory, route, request)
     }
 
     pub(super) fn execute_strided(
-        dma: &crate::memory::PdmaMemoryMappings,
+        memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
         request: StridedCopyRequest,
     ) -> ExecutionOutcome {
-        copy::execute_strided(dma, route, request)
+        copy::execute_strided(memory, route, request)
     }
 
     pub(super) fn execute_broadcast(
-        dma: &crate::memory::PdmaMemoryMappings,
+        memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
         request: &BroadcastCopyRequest,
     ) -> ExecutionOutcome {
-        broadcast::execute(dma, route, request)
+        broadcast::execute(memory, route, request)
     }
 
     pub(super) fn execute_vector_add(
-        dma: &crate::memory::PdmaMemoryMappings,
+        memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
         request: VectorAddRequest,
     ) -> ExecutionOutcome {
-        vector_add::execute(dma, route, request)
+        vector_add::execute(memory, route, request)
     }
 }

@@ -40,7 +40,7 @@ fn fetch_selected(
     let Some(queue) = selected.0 else {
         return Ok(FetchedWork::Empty(ModelStepStatus::Idle));
     };
-    let Some(fetched) = context.queues.fetch(context.dma, queue)? else {
+    let Some(fetched) = context.queues.fetch(context.memory, queue)? else {
         return Ok(FetchedWork::Empty(ModelStepStatus::Progressed));
     };
     *context.fetches += 1;

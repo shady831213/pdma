@@ -8,7 +8,7 @@ use pdma_model_contract::abi::mmio::{
 use pdma_model_contract::abi::{AbiRingEntry, QueueRingLayouts, RingLayout};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, QueueId, RingCursor, RingCursors};
 
-const QUEUE_RESPONSE: [RegisterId; 9] = [
+pub(super) const QUEUE_RESPONSE: [RegisterId; 9] = [
     RegisterId::QRspEpoch,
     RegisterId::QRspId,
     RegisterId::QRspSqProducer,
@@ -25,23 +25,39 @@ pub(super) async fn read_status<A: CanonicalAccess>(
     queue: EpochQueue,
     rings: QueueRingLayouts,
 ) -> PdmaPortResult<RegisterQueueStatus> {
-    let _window = port.queue_window.lock().await;
+    super::pending::resolve(port).await?;
     stage_queue(port, queue).await?;
-    command_status(port, QueueCommand::ReadStatus, rings, queue).await
+    command_status(
+        port,
+        QueueCommand::ReadStatus,
+        rings,
+        queue,
+        super::pending::Effect::Status,
+    )
+    .await
 }
 
 pub(super) async fn update_cursor<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    queue: EpochQueue,
+    update: pdma_model_contract::semantic::QueueCursorUpdate,
     rings: QueueRingLayouts,
     command: QueueCommand,
     current: RingCursor,
-    proposed: RingCursor,
+    effect: super::pending::Effect,
 ) -> PdmaPortResult<RegisterQueueStatus> {
-    let _window = port.queue_window.lock().await;
+    let queue = update.queue();
+    super::pending::resolve(port).await?;
     stage_queue(port, queue).await?;
-    let before = command_status(port, QueueCommand::ReadStatus, rings, queue).await?;
+    let before = command_status(
+        port,
+        QueueCommand::ReadStatus,
+        rings,
+        queue,
+        super::pending::Effect::Status,
+    )
+    .await?;
     let observed = match command {
+        QueueCommand::PublishSqProducer => before.submission().producer(),
         QueueCommand::CaptureSqProducer => before.captured_submission_producer(),
         QueueCommand::PublishCqConsumer => before.completion().consumer(),
         QueueCommand::PublishEqConsumer => before.event().consumer(),
@@ -51,11 +67,11 @@ pub(super) async fn update_cursor<A: CanonicalAccess>(
         return Err(PortError::SubmissionState.into());
     }
     registers::write(port, RegisterId::QExpectedCursor, current.raw()).await?;
-    registers::write(port, RegisterId::QNewCursor, proposed.raw()).await?;
-    command_status(port, command, rings, queue).await
+    registers::write(port, RegisterId::QNewCursor, update.cursor().raw()).await?;
+    command_status(port, command, rings, queue, effect).await
 }
 
-async fn stage_queue<A: CanonicalAccess>(
+pub(super) async fn stage_queue<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     queue: EpochQueue,
 ) -> PdmaPortResult<()> {
@@ -64,26 +80,34 @@ async fn stage_queue<A: CanonicalAccess>(
     registers::write(port, RegisterId::QId, id).await
 }
 
-async fn command_status<A: CanonicalAccess>(
+pub(super) async fn command_status<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     command: QueueCommand,
     rings: QueueRingLayouts,
     queue: EpochQueue,
+    effect: super::pending::Effect,
 ) -> PdmaPortResult<RegisterQueueStatus> {
     registers::write(port, RegisterId::QCommand, u64::from(command.code())).await?;
-    let result = u32::try_from(registers::read(port, RegisterId::QResult).await?)
-        .map_err(|_| PortError::SubmissionState)?;
-    if result != MmioResult::Ok.code() {
-        return map_result(port, result, queue).await;
+    if let Some(receipt) = effect.receipt() {
+        receipt.issued();
     }
-    decode_status(&registers::read_bank(port, &QUEUE_RESPONSE).await?, rings)
+    port.with_state(|state| {
+        state.pending = Some(super::pending::PendingCommand {
+            queue,
+            rings,
+            effect,
+        });
+    })?;
+    super::pending::resolve(port)
+        .await?
+        .ok_or_else(|| PortError::SubmissionState.into())
 }
 
-async fn map_result<A: CanonicalAccess>(
+pub(super) async fn map_result<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     result: u32,
     queue: EpochQueue,
-) -> PdmaPortResult<RegisterQueueStatus> {
+) -> PdmaPortResult<PortError> {
     let result = MmioResult::try_from(result).map_err(|_| PortError::SubmissionState)?;
     let details = [
         registers::read(port, RegisterId::QDetail0).await?,
@@ -94,16 +118,15 @@ async fn map_result<A: CanonicalAccess>(
         MmioResultDetails {
             result: MmioResult::StaleEpoch,
             details: [expected, actual, _],
-        } => Err(PortError::StaleEpoch {
+        } => Ok(PortError::StaleEpoch {
             expected: DeviceEpoch::new(expected),
             actual: DeviceEpoch::new(actual),
-        }
-        .into()),
+        }),
         MmioResultDetails {
             result: MmioResult::InvalidQueue,
             ..
-        } => Err(PortError::UnknownQueue(queue.queue_id()).into()),
-        _ => Err(PortError::SubmissionState.into()),
+        } => Ok(PortError::UnknownQueue(queue.queue_id())),
+        _ => Ok(PortError::SubmissionState),
     }
 }
 

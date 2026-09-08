@@ -49,10 +49,10 @@ fn epoch_overflow_preserves_complete_runner_state() {
     );
     let mut state = RunnerState::new(core);
     state.core.reset(exhausted);
-    let region = state.core.dma.allocate(1).expect("DMA allocation");
+    let region = state.core.memory.allocate(1).expect("DMA allocation");
     state
         .core
-        .dma
+        .memory
         .write_object(region.object(), 0, &[0x6d])
         .expect("DMA write");
     state.steps = 7;
@@ -73,7 +73,7 @@ fn epoch_overflow_preserves_complete_runner_state() {
     );
     assert_eq!(state.core.epoch(), exhausted);
     assert_eq!(
-        state.core.dma.read_object(BufferId::new(0), 0, 1),
+        state.core.memory.read_object(BufferId::new(0), 0, 1),
         Ok(vec![0x6d])
     );
     assert_eq!((state.steps, state.errors, state.stalls), (7, 3, 2));

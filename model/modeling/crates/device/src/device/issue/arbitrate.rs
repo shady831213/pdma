@@ -36,7 +36,7 @@ impl Stage<HardwareContext<'_>> for Arbitration {
             let Some(queue) = context.runnable.current() else {
                 break;
             };
-            match context.queues.probe(context.dma, queue) {
+            match context.queues.probe(context.memory, queue) {
                 Ok(Some(NormalizedFetch::Command { command, .. }))
                     if !ResourceDemand::for_command(&command).fits(context.resources) =>
                 {

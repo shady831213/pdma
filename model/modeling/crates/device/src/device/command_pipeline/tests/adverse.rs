@@ -24,30 +24,30 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     fixture.core.enable_tracing();
     let stage = fixture
         .core
-        .dma
+        .memory
         .stage(&[
             RingLayout::<AbiCommand>::checked_extent(2).expect("command extent"),
             RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
             RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
         ])
         .expect("ring stage");
-    let [submission, completion, event] = stage.regions() else {
+    let &[submission, completion, event] = stage.regions() else {
         panic!("three exact queue rings");
     };
-    let (submission, completion, event) = (*submission, *completion, *event);
     let activation = QueueActivation::new(
         DeviceEpoch::initial(),
         QueueId::new(0),
         QueueConfig::new(2, 1, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
         QueueRingObjects::new(submission.object(), completion.object(), event.object()),
     );
+    fixture.core.memory.commit(stage).expect("ring mappings");
     fixture
         .core
-        .activate_staged_exact_queue(stage, activation)
+        .activate_mapped_exact_queue(activation)
         .expect("queue activation");
     fixture
         .core
-        .dma
+        .memory
         .write_memory(submission.base(), &[0; AbiCommand::RECORD_SIZE])
         .expect("malformed descriptor");
     let queue = activation.queue();
@@ -108,7 +108,7 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     );
     let published = fixture
         .core
-        .dma
+        .memory
         .read_memory(event.base(), AbiEvent::RECORD_SIZE as u64)
         .expect("event bytes");
     assert_eq!(
@@ -183,11 +183,11 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
 fn invalid_completion_retires_without_dma_or_success_publication() {
     // Given: the execution hardware receives a route naming an absent completion ring.
     let mut prepared = prepare(Case::Copy);
-    let source = prepared.fixture.core.dma.allocate(8).expect("source");
+    let source = prepared.fixture.core.memory.allocate(8).expect("source");
     prepared
         .fixture
         .core
-        .dma
+        .memory
         .write_object(source.object(), 0, &[9; 8])
         .expect("source bytes");
     let route = CommandRoute::new(
@@ -211,7 +211,7 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
         let mut context = HardwareContext {
             queues: &mut core.queues,
             runnable: &mut core.runnable,
-            dma: &core.dma,
+            memory: &core.memory,
             irq: &mut core.irq,
             trace: &mut core.trace,
             fetches: &mut core.native_fetches,

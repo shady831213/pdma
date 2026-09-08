@@ -4,18 +4,18 @@ use crate::memory::PdmaMemoryMappings;
 use pdma_model_contract::semantic::{BroadcastCopyRequest, DmaRangeStart, TraceOperation};
 
 pub(super) fn execute(
-    dma: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     route: CommandRoute,
     request: &BroadcastCopyRequest,
 ) -> ExecutionOutcome {
-    let memory = QueueMemoryResolver::new(route.queue, route.command);
+    let resolver = QueueMemoryResolver::new(route.queue, route.command);
     let source = DmaRangeStart::new(request.src(), request.src_offset());
     for destination in request.destinations() {
         let destination = DmaRangeStart::new(destination.dst(), destination.dst_offset());
-        if let Err(fault) = memory.validate(dma, source, request.len()) {
+        if let Err(fault) = resolver.validate(memory, source, request.len()) {
             return ExecutionOutcome::Fault(fault);
         }
-        if let Err(fault) = memory.validate(dma, destination, request.len()) {
+        if let Err(fault) = resolver.validate(memory, destination, request.len()) {
             return ExecutionOutcome::Fault(fault);
         }
     }
@@ -24,11 +24,11 @@ pub(super) fn execute(
     }
     for destination in request.destinations() {
         let destination = DmaRangeStart::new(destination.dst(), destination.dst_offset());
-        let bytes = match memory.read(dma, source, request.len()) {
+        let bytes = match resolver.read(memory, source, request.len()) {
             Ok(bytes) => bytes,
             Err(fault) => return ExecutionOutcome::Fault(fault),
         };
-        if let Err(fault) = memory.write(dma, destination, &bytes) {
+        if let Err(fault) = resolver.write(memory, destination, &bytes) {
             return ExecutionOutcome::Fault(fault);
         }
     }

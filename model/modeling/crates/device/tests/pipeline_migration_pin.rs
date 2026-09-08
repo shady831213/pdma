@@ -11,8 +11,8 @@ use pdma_model_contract::semantic::{
     SoftwareOwnerId, TraceEvent, TraceEventKind, WholeDeviceReset,
 };
 use pdma_model_device::{
-    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncStallReason, AsyncStepStatus, DmaWrite,
-    PendingDmaResult, SubmissionAcceptance,
+    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncStallReason, AsyncStepStatus,
+    PendingDmaResult,
 };
 
 struct Fixture {
@@ -44,7 +44,11 @@ impl Fixture {
         let rings = QueueRingObjects::new(submission.object(), completion.object(), event.object());
         let submission = submission.base();
         handle
-            .activate_queue(stage, activation(DeviceEpoch::initial(), rings))
+            .commit_memory_stage(stage)
+            .await
+            .expect("ring mappings");
+        handle
+            .activate_mapped_queue(activation(DeviceEpoch::initial(), rings))
             .await
             .expect("queue activation");
         Self {
@@ -71,14 +75,11 @@ impl Fixture {
             .checked_add(producer * 64)
             .expect("descriptor address");
         self.handle
-            .accept_submission(SubmissionAcceptance::new(
-                self.queue,
-                RingCursor::new(producer),
-                DmaWrite::new(address, bytes.to_vec()),
-                None,
-            ))
+            .write_memory(address, &bytes)
             .await
-            .expect("submission acceptance");
+            .expect("descriptor write");
+        self.cursor(QueueControl::PublishSubmissionProducer, producer + 1)
+            .await;
     }
 
     async fn cursor(&self, control: fn(QueueCursorUpdate) -> QueueControl, value: u64) {

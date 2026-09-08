@@ -4,10 +4,7 @@ use pdma_model_contract::semantic::{
     EventRouting, QueueActivation, QueueConfig, QueueControl, QueueCursorUpdate, QueueId,
     QueueRingObjects, ResourceConfig, SoftwareOwnerId,
 };
-use pdma_model_device::{
-    AsyncDevice, AsyncDeviceHandle, DmaWrite, MappedDmaRegion, PendingDmaResult,
-    SubmissionAcceptance,
-};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, MappedDmaRegion, PendingDmaResult};
 
 pub(in crate::queue) type TestResult<T = ()> =
     Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
@@ -68,7 +65,8 @@ pub(in crate::queue) async fn activate_on(
         config,
         QueueRingObjects::new(submission.object(), completion.object(), event.object()),
     );
-    handle.activate_queue(stage, activation).await?;
+    handle.commit_memory_stage(stage).await?;
+    handle.activate_mapped_queue(activation).await?;
     Ok((activation.queue(), submission.base()))
 }
 
@@ -104,11 +102,12 @@ pub(in crate::queue) async fn run_descriptor(
         .await?;
     fixture
         .handle
-        .accept_submission(SubmissionAcceptance::new(
-            fixture.queue,
-            RingCursor::new(0),
-            DmaWrite::new(fixture.submission, bytes.to_vec()),
-            None,
+        .write_memory(fixture.submission, &bytes)
+        .await?;
+    fixture
+        .handle
+        .control_queue(QueueControl::PublishSubmissionProducer(
+            QueueCursorUpdate::new(fixture.queue, RingCursor::new(1)),
         ))
         .await?;
     fixture

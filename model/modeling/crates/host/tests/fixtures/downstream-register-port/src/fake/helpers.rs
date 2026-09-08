@@ -1,39 +1,17 @@
-use super::{FakeSnapshot, TestResult};
+use super::FakeSnapshot;
 use hardware_interface_runtime::{
     AccessOrigin, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     RegisterObservation,
 };
-use pdma_model_contract::abi::mmio::{QueueResponseBank, decode_read, decode_write};
+use pdma_model_contract::abi::mmio::{decode_read, decode_write};
 use pdma_model_contract::semantic::{
     CompletionRingId, DeviceEpoch, EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification,
-    IrqSource, IrqVector, QueueActivation, QueueConfig, QueueId, QueueRingObjects, SoftwareOwnerId,
+    IrqSource, IrqVector,
 };
 use pdma_model_host::adapter::abi::{
-    PdmaBatchError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegisterAccessError,
+    PdmaProvisioningCause, PdmaProvisioningError, PdmaRegisterAccessError,
 };
 use std::sync::{Mutex, MutexGuard};
-
-pub fn activation(regions: &[PdmaMappedRegion]) -> TestResult<QueueActivation> {
-    let [submission, completion, event] = regions else {
-        return Err("three ring regions required".into());
-    };
-    Ok(QueueActivation::new(
-        DeviceEpoch::initial(),
-        QueueId::new(0),
-        QueueConfig::new(
-            2,
-            2,
-            pdma_model_contract::semantic::EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ),
-        QueueRingObjects::new(
-            submission.object(),
-            completion.object(),
-            event.object(),
-        ),
-    ))
-}
 
 pub fn message() -> IrqNotification {
     IrqNotification::Message(IrqMessage::new(
@@ -74,24 +52,6 @@ pub(super) fn claim_observations() -> Vec<RegisterObservation> {
             }),
     );
     observations
-}
-
-pub(super) fn response(
-    epoch: u64,
-    queue: usize,
-    producer: u64,
-) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, PdmaBatchError> {
-    QueueResponseBank {
-        epoch: epoch.into(),
-        queue_id: u64::try_from(queue)
-            .map_err(|_| PdmaBatchError::InvalidShape)?
-            .into(),
-        sq_producer: producer.into(),
-        ..QueueResponseBank::default()
-    }
-    .to_bytes()
-    .map(Into::into)
-    .map_err(|_| PdmaBatchError::InvalidShape)
 }
 
 pub(super) fn validate_read(offset: u32, width: usize) -> Result<(), PdmaRegisterAccessError> {

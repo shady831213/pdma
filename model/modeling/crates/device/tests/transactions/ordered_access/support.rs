@@ -1,94 +1,14 @@
+use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::abi::mmio::{MmioByteCount, QueueResponseBank};
 use pdma_model_contract::semantic::{
     DeviceEpoch, EpochQueue, EventRouting, QueueActivation, QueueConfig, QueueControl, QueueId,
     QueueRingObjects, RingCursor, SoftwareOwnerId,
 };
-use pdma_model_device::{
-    AsyncDeviceHandle, DmaWrite, MappedDmaRegion, PdmaMemoryStage, QueueBootstrapBatch,
-    SubmissionBatch,
-};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use pdma_model_device::{AsyncDeviceHandle, MappedDmaRegion, PdmaMemoryStage};
+use std::sync::Arc;
 
-#[derive(Debug, Default)]
-pub(in crate::transactions) struct RecordingObserver(
-    Mutex<Vec<hardware_interface_runtime::RegisterObservation>>,
-);
-
-impl RecordingObserver {
-    pub(in crate::transactions) fn snapshot(
-        &self,
-    ) -> Vec<hardware_interface_runtime::RegisterObservation> {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-}
-
-impl hardware_interface_runtime::RegisterObserver for RecordingObserver {
-    fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(observation);
-    }
-}
-
-#[derive(Debug)]
-pub(in crate::transactions) struct GatedObserver {
-    observations: Mutex<Vec<hardware_interface_runtime::RegisterObservation>>,
-    expected_regions: AtomicUsize,
-    memory: Arc<hardware_interface_runtime::SharedMemory>,
-    entered: std::sync::Barrier,
-    release: std::sync::Barrier,
-}
-
-impl GatedObserver {
-    pub(in crate::transactions) const fn new(
-        memory: Arc<hardware_interface_runtime::SharedMemory>,
-    ) -> Self {
-        Self {
-            observations: Mutex::new(Vec::new()),
-            expected_regions: AtomicUsize::new(3),
-            memory,
-            entered: std::sync::Barrier::new(2),
-            release: std::sync::Barrier::new(2),
-        }
-    }
-
-    pub(in crate::transactions) fn await_observation(&self) {
-        self.entered.wait();
-    }
-
-    pub(in crate::transactions) fn release_observation(&self) {
-        self.release.wait();
-    }
-
-    pub(in crate::transactions) fn snapshot(
-        &self,
-    ) -> Vec<hardware_interface_runtime::RegisterObservation> {
-        self.observations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-}
-
-impl hardware_interface_runtime::RegisterObserver for GatedObserver {
-    fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
-        assert_eq!(
-            self.memory.regions().len(),
-            self.expected_regions.load(Ordering::SeqCst)
-        );
-        self.observations
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(observation);
-        self.entered.wait();
-        self.release.wait();
-    }
-}
+mod observer;
+use observer::{GatedObserver, RecordingObserver};
 
 pub(in crate::transactions) type TestResult<T = ()> =
     Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
@@ -137,7 +57,7 @@ pub(in crate::transactions) fn gated_handle() -> (
     Arc<hardware_interface_runtime::SharedMemory>,
 ) {
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let observer = Arc::new(GatedObserver::new(Arc::clone(&memory)));
+    let observer = Arc::new(GatedObserver::new());
     let (device, _worker) = pdma_model_device::AsyncDevice::from_core_observed(
         pdma_model_device::DeviceCore::new(
             Arc::clone(&memory),
@@ -171,20 +91,20 @@ pub(in crate::transactions) fn activation(
 
 pub(in crate::transactions) async fn bootstrap(
     handle: &AsyncDeviceHandle,
-) -> TestResult<(
-    EpochQueue,
-    MappedDmaRegion,
-    pdma_model_device::QueueResponseBytes,
-)> {
+) -> TestResult<(EpochQueue, MappedDmaRegion, Vec<u8>)> {
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let [submission, _, _] = stage.regions() else {
         return Err("three staged regions required".into());
     };
     let submission = *submission;
     let activation = activation(&stage, DeviceEpoch::initial())?;
-    let response = handle
-        .bootstrap_queue_batch(QueueBootstrapBatch::new(stage, activation))
+    let regions = handle.commit_memory_stage(stage).await?;
+    program_activation(handle, &regions).await?;
+    handle
+        .register_endpoint()
+        .write(0x168, &1_u32.to_le_bytes())
         .await?;
+    let response = response_bytes(handle).await?;
     Ok((activation.queue(), submission, response))
 }
 
@@ -231,16 +151,66 @@ pub(in crate::transactions) async fn queue_status(
         .await?)
 }
 
-pub(in crate::transactions) fn submission(
+pub(in crate::transactions) async fn publish(
+    handle: &AsyncDeviceHandle,
     queue: EpochQueue,
     expected: RingCursor,
-    address: pdma_model_contract::abi::DmaAddress,
-    byte: u8,
-) -> SubmissionBatch {
-    SubmissionBatch::new(
-        queue,
-        expected,
-        DmaWrite::new(address, vec![byte; 64]),
-        None,
-    )
+) -> TestResult {
+    for (offset, value) in [
+        (0x100, queue.epoch().raw()),
+        (0x108, u64::try_from(queue.queue_id().raw())?),
+        (0x110, expected.raw()),
+        (0x118, expected.raw() + 1),
+    ] {
+        handle
+            .register_endpoint()
+            .write(offset, &value.to_le_bytes())
+            .await?;
+    }
+    handle
+        .register_endpoint()
+        .write(0x168, &3_u32.to_le_bytes())
+        .await?;
+    Ok(())
+}
+
+pub(in crate::transactions) async fn program_activation(
+    handle: &AsyncDeviceHandle,
+    regions: &[MappedDmaRegion],
+) -> TestResult {
+    let [sq, cq, eq] = regions else {
+        return Err("three rings required".into());
+    };
+    for (offset, value) in [
+        (0x100, 0_u64),
+        (0x108, 0),
+        (0x130, 7),
+        (0x138, sq.base().raw()),
+        (0x148, cq.base().raw()),
+        (0x158, eq.base().raw()),
+    ] {
+        handle
+            .register_endpoint()
+            .write(offset, &value.to_le_bytes())
+            .await?;
+    }
+    for offset in [0x120, 0x124, 0x140, 0x150, 0x160] {
+        handle
+            .register_endpoint()
+            .write(offset, &2_u32.to_le_bytes())
+            .await?;
+    }
+    Ok(())
+}
+
+pub(in crate::transactions) async fn response_bytes(
+    handle: &AsyncDeviceHandle,
+) -> TestResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    for offset in (0x188..=0x1c8).step_by(8) {
+        let mut value = [0; 8];
+        handle.register_endpoint().read(offset, &mut value).await?;
+        bytes.extend(value);
+    }
+    Ok(bytes)
 }

@@ -1,11 +1,7 @@
-use super::queue::{QueueRequest, complete, install_request};
 use crate::device::DeviceCore;
 use crate::registers::narrow_u32;
 use hardware_interface_runtime::{AccessOrigin, ObservationGateError, RegisterObservation};
-use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId, decode_write};
-use pdma_model_contract::abi::mmio::{
-    MmioResult, MmioResultDetails, QueueResponseBank, ResponseUpdate,
-};
+use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterId};
 use std::fmt::{self, Display, Formatter};
 
 /// Failure from an exact generated-view register operation.
@@ -77,77 +73,6 @@ impl PreparedWrite {
     pub(crate) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {
         RegisterObservation::write(sequence, origin, self.offset, &self.request)
     }
-}
-
-pub(crate) struct PreparedBatchWrite {
-    write: PreparedWrite,
-    request: QueueRequest,
-    response: QueueResponseBank,
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum BatchQueueCommand {
-    Activate,
-    PublishSubmissionProducer,
-}
-
-impl BatchQueueCommand {
-    const fn code(self) -> u32 {
-        match self {
-            Self::Activate => 1,
-            Self::PublishSubmissionProducer => 3,
-        }
-    }
-}
-
-impl PreparedBatchWrite {
-    pub(crate) fn commit(self, state: &DeviceCore) -> PreparedWrite {
-        state.registers.view_mut(|mut root| {
-            install_request(&mut root, self.request);
-            complete(
-                &mut root,
-                MmioResultDetails {
-                    result: MmioResult::Ok,
-                    details: [0; 3],
-                },
-                ResponseUpdate::Replace(self.response),
-            );
-        });
-        self.write
-    }
-}
-
-fn prepare_batch_write(
-    command: BatchQueueCommand,
-    request: QueueRequest,
-    response: QueueResponseBank,
-) -> Result<PreparedBatchWrite, MmioAccessError> {
-    let bytes = command.code().to_le_bytes();
-    let offset = super::q_command_offset();
-    let (register, value) = decode_write(offset, &bytes)?;
-    Ok(PreparedBatchWrite {
-        write: prepare_write(register, value, offset, &bytes),
-        request,
-        response,
-    })
-}
-
-pub(crate) fn prepare_bootstrap_batch_write(
-    request: QueueRequest,
-    response: QueueResponseBank,
-) -> Result<PreparedBatchWrite, MmioAccessError> {
-    prepare_batch_write(BatchQueueCommand::Activate, request, response)
-}
-
-pub(crate) fn prepare_submission_batch_write(
-    request: QueueRequest,
-    response: QueueResponseBank,
-) -> Result<PreparedBatchWrite, MmioAccessError> {
-    prepare_batch_write(
-        BatchQueueCommand::PublishSubmissionProducer,
-        request,
-        response,
-    )
 }
 
 pub(crate) fn prepare_read(state: &DeviceCore, register: RegisterId, offset: u32) -> PreparedRead {

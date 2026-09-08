@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, MemoryRegion, RegisterObservation,
 };
-use pdma_model_contract::semantic::{BufferId, EpochQueue, IrqNotification, RingCursor};
+use pdma_model_contract::semantic::{BufferId, IrqNotification};
 
 /// One logical PDMA mapping request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ impl PdmaRegionRequest {
     }
 }
 
-/// One committed or proposed logical PDMA mapping.
+/// One committed logical PDMA mapping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PdmaMappedRegion {
     object: BufferId,
@@ -91,78 +91,6 @@ impl PdmaMappedRegion {
     /// Exact non-empty runtime storage, absent for a zero-length mapping.
     pub const fn storage(self) -> Option<MemoryRegion> {
         self.storage
-    }
-}
-
-/// Opaque typed proposal that can only be consumed by a closed batch.
-pub trait PdmaPreparedProposal: Send {
-    /// Mutation-free proposed mapping projections.
-    fn regions(&self) -> &[PdmaMappedRegion];
-    /// Allocator generation captured during preparation.
-    fn generation(&self) -> u64;
-}
-
-/// One byte-opaque DMA write carried by a closed batch.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PdmaDmaWrite {
-    address: MemoryAddress,
-    bytes: Vec<u8>,
-}
-
-impl PdmaDmaWrite {
-    /// Creates a write at an exact mapped address.
-    pub const fn new(address: MemoryAddress, bytes: Vec<u8>) -> Self {
-        Self { address, bytes }
-    }
-    /// Target address.
-    pub const fn address(&self) -> MemoryAddress {
-        self.address
-    }
-    /// Opaque bytes.
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-    /// Consumes the write into its canonical address and bytes.
-    pub fn into_parts(self) -> (MemoryAddress, Vec<u8>) {
-        (self.address, self.bytes)
-    }
-}
-
-/// The closed submission-producer batch request.
-#[derive(Debug)]
-pub struct PdmaSubmissionBatch<P> {
-    queue: EpochQueue,
-    producer: RingCursor,
-    descriptor: PdmaDmaWrite,
-    indirect: Option<(P, PdmaDmaWrite)>,
-}
-
-impl<P> PdmaSubmissionBatch<P> {
-    /// Creates the fixed indirect/write/publish/response grammar.
-    pub const fn new(
-        queue: EpochQueue,
-        producer: RingCursor,
-        descriptor: PdmaDmaWrite,
-        indirect: Option<(P, PdmaDmaWrite)>,
-    ) -> Self {
-        Self {
-            queue,
-            producer,
-            descriptor,
-            indirect,
-        }
-    }
-
-    /// Consumes the closed request into its canonical fields.
-    pub fn into_parts(
-        self,
-    ) -> (
-        EpochQueue,
-        RingCursor,
-        PdmaDmaWrite,
-        Option<(P, PdmaDmaWrite)>,
-    ) {
-        (self.queue, self.producer, self.descriptor, self.indirect)
     }
 }
 

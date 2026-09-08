@@ -7,14 +7,11 @@ mod status;
 mod types;
 
 pub use crate::semantic::DriverPort;
-pub use capability::{PdmaBatchAccess, PdmaExactInterruptClaim, PdmaMemoryProvisioning};
+pub use capability::{PdmaExactInterruptClaim, PdmaMemoryProvisioning};
 pub use error::{
-    PdmaBatchError, PdmaClaimError, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegisterAccessError, PdmaRegisterPortError,
+    PdmaClaimError, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegisterAccessError,
+    PdmaRegisterPortError,
 };
 pub use port::PdmaRegisterPort;
 pub use status::RegisterQueueStatus;
-pub use types::{
-    PdmaClaimResult, PdmaDmaWrite, PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest,
-    PdmaSubmissionBatch,
-};
+pub use types::{PdmaClaimResult, PdmaMappedRegion, PdmaRegionRequest};

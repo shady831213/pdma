@@ -24,13 +24,21 @@ fn fixture() -> Fixture {
     let config = QueueConfig::new(4, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
     let copy_queue = core.create_queue(config).expect("copy queue");
     let vector_queue = core.create_queue(config).expect("vector queue");
-    let source = core.dma.allocate(4).expect("source").object();
-    let first_destination = core.dma.allocate(4).expect("first destination").object();
-    let second_destination = core.dma.allocate(4).expect("second destination").object();
-    let vector_left = core.dma.allocate(4).expect("vector left").object();
-    let vector_right = core.dma.allocate(4).expect("vector right").object();
-    let vector_destination = core.dma.allocate(4).expect("vector destination").object();
-    core.dma
+    let source = core.memory.allocate(4).expect("source").object();
+    let first_destination = core.memory.allocate(4).expect("first destination").object();
+    let second_destination = core
+        .memory
+        .allocate(4)
+        .expect("second destination")
+        .object();
+    let vector_left = core.memory.allocate(4).expect("vector left").object();
+    let vector_right = core.memory.allocate(4).expect("vector right").object();
+    let vector_destination = core
+        .memory
+        .allocate(4)
+        .expect("vector destination")
+        .object();
+    core.memory
         .write_object(source, 0, &[2, 4, 6, 8])
         .expect("source write");
     for (command, destination) in [first_destination, second_destination]
@@ -113,7 +121,7 @@ fn admission_skips_starved_work_without_replaying_accepted_retirement() {
         Some((CommandId::new(1), CompletionStatus::Success))
     );
     assert_eq!(
-        core.dma.read_object(second_destination, 0, 4),
+        core.memory.read_object(second_destination, 0, 4),
         Ok(vec![2, 4, 6, 8])
     );
     let events = core.trace_events();

@@ -5,10 +5,13 @@ use pdma_model_contract::semantic::{
     IrqSnapshot, QueueConfig, QueueConfigHandle,
 };
 
-impl<A: CanonicalAccess> DriverPort for PdmaRegisterPort<A>
-where
-    A::Proposal: Send,
-{
+impl<A: CanonicalAccess> DriverPort for PdmaRegisterPort<A> {
+    async fn recover_queue(&mut self, queue: QueueConfigHandle) -> PortResult<()> {
+        let _window = self.queue_window.lock().await;
+        self.with_state(|state| state.queue(queue))
+            .map_err(PortError::from)??;
+        super::pending::recover(self).await.map_err(PortError::from)
+    }
     async fn create_queue(&mut self, config: QueueConfig) -> PortResult<QueueConfigHandle> {
         state::create_queue(self, config)
             .await
@@ -28,7 +31,17 @@ where
         queue: QueueConfigHandle,
         command: Command,
     ) -> PortResult<()> {
-        submission::submit(self, queue, command)
+        submission::submit(self, queue, command, None)
+            .await
+            .map_err(PortError::from)
+    }
+    async fn submit_command_tracked(
+        &mut self,
+        queue: QueueConfigHandle,
+        command: Command,
+        receipt: crate::semantic::SubmissionReceipt,
+    ) -> PortResult<()> {
+        submission::submit(self, queue, command, Some(receipt))
             .await
             .map_err(PortError::from)
     }

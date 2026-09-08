@@ -26,11 +26,11 @@ impl ExactCommandContext {
 
     pub(crate) fn resolve(
         self,
-        dma: &PdmaMemoryMappings,
+        memory: &PdmaMemoryMappings,
         command: AbiCommand,
     ) -> ModelResult<Result<Command, AbiEvent>> {
         let resolution = ResolutionContext {
-            dma,
+            memory,
             command: self.command,
         };
         let result: Result<Command, AbiFault> = match command.payload() {
@@ -47,7 +47,7 @@ impl ExactCommandContext {
 
 #[derive(Clone, Copy)]
 struct ResolutionContext<'a> {
-    dma: &'a PdmaMemoryMappings,
+    memory: &'a PdmaMemoryMappings,
     command: CommandId,
 }
 

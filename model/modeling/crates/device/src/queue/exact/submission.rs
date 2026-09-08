@@ -16,7 +16,7 @@ pub(super) enum ExactFetch {
 }
 
 pub(super) fn fetch(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     active: &ActiveQueue,
     queue_id: QueueId,
 ) -> ModelResult<Option<ExactFetch>> {
@@ -27,7 +27,7 @@ pub(super) fn fetch(
     let slot = ring
         .entry_address(ring.consumer())
         .map_err(|_| ModelError::DmaSubmissionState)?;
-    let bytes = dma_space
+    let bytes = memory
         .read_memory(slot, u64::from(ring.layout().entry_size()))
         .map_err(|_| ModelError::DmaSubmissionState)?;
     let (exact_command_id, command_id) = command_id(&bytes)?;
@@ -35,7 +35,7 @@ pub(super) fn fetch(
         u64::try_from(queue_id.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
     match AbiCommand::decode(&bytes) {
         Ok(command) => ExactCommandContext::new(exact_queue_id, exact_command_id, command_id)
-            .resolve(dma_space, command)
+            .resolve(memory, command)
             .map(|result| {
                 Some(result.map_or_else(
                     |event| ExactFetch::Fault(queue_id, event),

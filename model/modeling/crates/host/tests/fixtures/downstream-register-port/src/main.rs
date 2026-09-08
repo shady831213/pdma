@@ -7,12 +7,10 @@ mod address_adverse;
 #[cfg(test)]
 mod nonzero_base;
 
-use fake::{FakeAccess, activation, message};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
-use pdma_model_contract::semantic::RingCursor;
+use fake::{FakeAccess, message};
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
 use pdma_model_host::adapter::abi::{
-    PdmaBatchAccess, PdmaDmaWrite, PdmaExactInterruptClaim, PdmaMemoryProvisioning,
-    PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch,
+    PdmaExactInterruptClaim, PdmaMemoryProvisioning, PdmaRegionRequest,
 };
 use std::error::Error;
 use std::future::Future;
@@ -32,27 +30,10 @@ async fn main() -> TestResult {
         .allocate_region(PdmaRegionRequest::new(0, alignment))
         .await?;
 
-    let rings = fake
-        .prepare_regions(&[
-            PdmaRegionRequest::new(128, alignment),
-            PdmaRegionRequest::new(64, alignment),
-            PdmaRegionRequest::new(128, alignment),
-        ])
-        .await?;
-    let activation = activation(rings.regions())?;
-    fake.bootstrap_queue(rings, activation).await?;
-    let indirect = fake
-        .prepare_regions(&[PdmaRegionRequest::new(16, alignment)])
-        .await?;
-    let descriptor = PdmaDmaWrite::new(MemoryAddress::new(0x1_0000), vec![7; 64]);
-    let indirect_write = PdmaDmaWrite::new(indirect.regions()[0].base(), vec![9; 16]);
-    fake.submit_queue(PdmaSubmissionBatch::new(
-        activation.queue(),
-        RingCursor::new(0),
-        descriptor,
-        Some((indirect, indirect_write)),
-    ))
-    .await?;
+    MemoryAccess::write(&fake, fake_nonempty.base(), alignment, &[7; 8])?;
+    let mut memory_bytes = [0; 8];
+    MemoryAccess::read(&fake, fake_nonempty.base(), alignment, &mut memory_bytes)?;
+    let completed_writes_persist = memory_bytes == [7; 8];
 
     let before_claim_cancel = fake.snapshot();
     fake.pend_next_claim();
@@ -78,36 +59,6 @@ async fn main() -> TestResult {
     drop(cancelled_register);
     RegisterAccess::write(&fake, 0x100, &[0; 8]).await?;
 
-    let before_drop = fake.snapshot();
-    let dropped = fake
-        .prepare_regions(&[PdmaRegionRequest::new(32, alignment)])
-        .await?;
-    drop(dropped);
-    let after_drop = fake.snapshot();
-    let batch_dropped = before_drop == after_drop;
-
-    let stale = fake
-        .prepare_regions(&[PdmaRegionRequest::new(32, alignment)])
-        .await?;
-    fake.allocate_region(PdmaRegionRequest::new(1, alignment))
-        .await?;
-    let before_stale = fake.snapshot();
-    let stale_error = fake
-        .bootstrap_queue(stale, activation)
-        .await
-        .expect_err("stale proposal must fail");
-    let after_stale = fake.snapshot();
-    let stale_proposal = matches!(
-        stale_error,
-        pdma_model_host::adapter::abi::PdmaBatchError::Provisioning(
-            pdma_model_host::adapter::abi::PdmaProvisioningError::Provisioning(
-                pdma_model_host::adapter::abi::PdmaProvisioningCause::StaleProposal { .. }
-            )
-        )
-    ) && Error::source(&stale_error)
-        .and_then(Error::source)
-        .is_some()
-        && before_stale == after_stale;
     let before_failure = fake.snapshot();
     fake.fail_next_allocation();
     let allocation_error = fake
@@ -155,21 +106,16 @@ async fn main() -> TestResult {
     assert_eq!(fake_claim_observations, real.observations);
     let state = fake.snapshot();
     let exhaustive_fates = fake::verify_fates(alignment).await?;
-    let mappings_unchanged = batch_dropped
-        && allocation_failure
-        && stale_proposal
+    let mappings_unchanged = allocation_failure
         && before_offset == after_offset
         && before_width == after_width
         && claim_cancelled
         && lock_cancelled
         && exhaustive_fates;
-    let bytes_unchanged = before_drop.bytes == after_drop.bytes;
+    let bytes_unchanged = before_lock_cancel.bytes == fake.snapshot().bytes;
     let notifications_unchanged = claim_cancelled;
-    let typed_causes = stale_proposal
-        && allocation_failure
-        && malformed_offset
-        && malformed_width
-        && exhaustive_fates;
+    let typed_causes =
+        allocation_failure && malformed_offset && malformed_width && exhaustive_fates;
     let behavior_equal = claim::is_notification(&fake_claim) && real.notification_is_message;
 
     assert!(fake_nonempty.storage().is_some());
@@ -205,42 +151,31 @@ async fn main() -> TestResult {
         .is_err()
     );
     assert!(real.nonempty_storage && !real.zero_storage);
-    assert!(
-        state.queue_staged
-            && state.indirect_staged
-            && state.submission_committed
-            && state.retirement
-    );
-    assert!(claim_cancelled && lock_cancelled && batch_dropped && mappings_unchanged);
+    assert!(claim_cancelled && lock_cancelled && completed_writes_persist && mappings_unchanged);
     assert!(bytes_unchanged && notifications_unchanged && typed_causes && behavior_equal);
     assert_eq!(real.claim_observations, 11);
     assert!(real.direct_origin);
 
     println!(
-        "fake_nonempty_storage={};fake_zero_storage={};fake_zero_length={};adapter_nonempty_storage={};adapter_zero_storage={};queue_staged={};indirect_staged={};submission_committed={};retirement={};compound_claim={};claim_observations={};direct_origin={};behavior_equal={}",
+        "fake_nonempty_storage={};fake_zero_storage={};fake_zero_length={};adapter_nonempty_storage={};adapter_zero_storage={};completed_writes_persist={};compound_claim={};claim_observations={};direct_origin={};behavior_equal={}",
         fake_nonempty.storage().is_some(),
         fake_zero.storage().is_some(),
         fake_zero.length(),
         real.nonempty_storage,
         real.zero_storage,
-        state.queue_staged,
-        state.indirect_staged,
-        state.submission_committed,
-        state.retirement,
+        completed_writes_persist,
         claim::label(&fake_claim),
         real.claim_observations,
         real.direct_origin,
         behavior_equal
     );
     println!(
-        "stale_proposal={};allocation_failure={};malformed_offset={};malformed_width={};lock_cancelled={};claim_cancelled={};batch_dropped={};mappings_unchanged={};bytes_unchanged={};notifications_unchanged={};typed_causes={}",
-        stale_proposal,
+        "allocation_failure={};malformed_offset={};malformed_width={};lock_cancelled={};claim_cancelled={};mappings_unchanged={};bytes_unchanged={};notifications_unchanged={};typed_causes={}",
         allocation_failure,
         malformed_offset,
         malformed_width,
         lock_cancelled,
         claim_cancelled,
-        batch_dropped,
         mappings_unchanged,
         bytes_unchanged,
         notifications_unchanged,

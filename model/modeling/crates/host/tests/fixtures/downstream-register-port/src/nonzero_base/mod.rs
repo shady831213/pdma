@@ -56,10 +56,7 @@ async fn nonzero_base_routes_canonical_offsets_as_full_addresses() -> TestResult
     assert_eq!(zero.offsets, nonzero.offsets);
     assert_eq!(zero.offsets, expected::OFFSETS);
     assert_eq!(zero.addresses, expected_addresses(zero_base)?);
-    assert_eq!(
-        nonzero.addresses,
-        expected_addresses(nonzero_base)?
-    );
+    assert_eq!(nonzero.addresses, expected_addresses(nonzero_base)?);
     assert!(
         nonzero
             .addresses

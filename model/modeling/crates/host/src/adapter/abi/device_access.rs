@@ -1,20 +1,17 @@
 mod mapping;
 
 use self::mapping::{
-    device_write, map_batch, map_claim, map_memory, map_model_allocation, map_register,
-    project_region, read_lock, validate_alignment, write_lock,
+    map_claim, map_model_allocation, map_register, project_region, read_lock, validate_alignment,
+    write_lock,
 };
 use crate::adapter::abi::{
-    PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
-    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaPreparedProposal, PdmaProvisioningError,
-    PdmaRegionRequest, PdmaRegisterAccessError, PdmaSubmissionBatch,
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
+    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
 };
 use hardware_interface_runtime::{
     AddressedRegisterAccess, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
     RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError, SharedMemory,
 };
-use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
-use pdma_model_contract::semantic::QueueActivation;
 use pdma_model_device::AsyncDeviceHandle;
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
@@ -138,24 +135,7 @@ const fn map_addressed_register(
     }
 }
 
-/// Concrete opaque prepared proposal; the device stage is never exposed.
-#[derive(Debug)]
-pub struct AsyncDevicePreparedRegions {
-    stage: pdma_model_device::PdmaMemoryStage,
-    regions: Vec<PdmaMappedRegion>,
-}
-
-impl PdmaPreparedProposal for AsyncDevicePreparedRegions {
-    fn regions(&self) -> &[PdmaMappedRegion] {
-        &self.regions
-    }
-    fn generation(&self) -> u64 {
-        self.stage.generation()
-    }
-}
-
 impl PdmaMemoryProvisioning for AsyncDeviceAccess {
-    type Proposal = AsyncDevicePreparedRegions;
     type Error = PdmaProvisioningError;
 
     async fn allocate_region(
@@ -174,75 +154,6 @@ impl PdmaMemoryProvisioning for AsyncDeviceAccess {
         let mapped = project_region(region, request.alignment())?;
         self.remember_zero_regions(&[mapped]);
         Ok(mapped)
-    }
-
-    async fn prepare_regions(
-        &self,
-        requests: &[PdmaRegionRequest],
-    ) -> Result<Self::Proposal, Self::Error> {
-        for request in requests {
-            validate_alignment(request.alignment())?;
-        }
-        let lengths = requests
-            .iter()
-            .map(|request| request.length())
-            .collect::<Vec<_>>();
-        let stage = self
-            .handle
-            .stage_memory_regions(&lengths)
-            .await
-            .map_err(map_memory)?;
-        let regions = stage
-            .regions()
-            .iter()
-            .zip(requests)
-            .map(|(region, request)| project_region(*region, request.alignment()))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(AsyncDevicePreparedRegions { stage, regions })
-    }
-}
-
-impl PdmaBatchAccess for AsyncDeviceAccess {
-    type BatchError = PdmaBatchError;
-
-    async fn bootstrap_queue(
-        &self,
-        proposal: Self::Proposal,
-        activation: QueueActivation,
-    ) -> Result<QueueResponseRegistersRaw, Self::BatchError> {
-        let regions = proposal.regions.clone();
-        let request = pdma_model_device::QueueBootstrapBatch::new(proposal.stage, activation);
-        let response = self
-            .handle
-            .bootstrap_queue_batch(request)
-            .await
-            .map_err(map_batch)?;
-        self.remember_zero_regions(&regions);
-        Ok(response)
-    }
-
-    async fn submit_queue(
-        &self,
-        request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> Result<QueueResponseRegistersRaw, Self::BatchError> {
-        let (queue, producer, descriptor, indirect) = request.into_parts();
-        let descriptor = device_write(descriptor);
-        let (indirect, regions) = match indirect {
-            Some((proposal, write)) => {
-                let regions = proposal.regions.clone();
-                (Some((proposal.stage, device_write(write))), regions)
-            }
-            None => (None, Vec::new()),
-        };
-        let request =
-            pdma_model_device::SubmissionBatch::new(queue, producer, descriptor, indirect);
-        let response = self
-            .handle
-            .submit_queue_batch(request)
-            .await
-            .map_err(map_batch)?;
-        self.remember_zero_regions(&regions);
-        Ok(response)
     }
 }
 

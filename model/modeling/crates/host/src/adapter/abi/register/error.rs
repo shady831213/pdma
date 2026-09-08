@@ -1,6 +1,6 @@
 use hardware_interface_runtime::CpuContextError;
 use hardware_interface_runtime::{MemoryAccessError, ObservationGateError};
-use pdma_model_contract::abi::mmio::{MmioAccessError, MmioResultDetails, ResponseCodecError};
+use pdma_model_contract::abi::mmio::{MmioAccessError, ResponseCodecError};
 use std::{error::Error, fmt};
 
 /// Underlying host-owned provisioning cause.
@@ -14,17 +14,10 @@ pub enum PdmaProvisioningCause {
     Unmapped,
     /// An access extends beyond its containing mapping.
     CrossesRegion,
-    /// A proposal overlaps an existing mapping.
+    /// A region overlaps an existing mapping.
     OverlappingRegion,
     /// Mapping metadata is inconsistent.
     InvalidRegion,
-    /// The allocator advanced after preparation.
-    StaleProposal {
-        /// Generation captured by the proposal.
-        expected: u64,
-        /// Current allocator generation.
-        actual: u64,
-    },
 }
 
 impl fmt::Display for PdmaProvisioningCause {
@@ -34,7 +27,7 @@ impl fmt::Display for PdmaProvisioningCause {
 }
 impl Error for PdmaProvisioningCause {}
 
-/// Host-owned mapping allocation/preparation failure.
+/// Host-owned mapping allocation failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PdmaProvisioningError {
     /// The device-owned allocator rejected the operation.
@@ -84,36 +77,6 @@ impl Error for PdmaRegisterAccessError {
     }
 }
 
-/// Host projection of a closed batch failure.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PdmaBatchError {
-    /// Mapping preparation or commit failed.
-    Provisioning(PdmaProvisioningError),
-    /// A fixed register access was structurally invalid.
-    Access(MmioAccessError),
-    /// The terminal command returned a non-success result.
-    Result(MmioResultDetails),
-    /// The request did not satisfy the closed batch grammar.
-    InvalidShape,
-    /// Ordered observation emission failed.
-    Observation(ObservationGateError),
-}
-impl fmt::Display for PdmaBatchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PDMA batch failed: {self:?}")
-    }
-}
-impl Error for PdmaBatchError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Provisioning(source) => Some(source),
-            Self::Access(source) => Some(source),
-            Self::Observation(source) => Some(source),
-            Self::Result(_) | Self::InvalidShape => None,
-        }
-    }
-}
-
 /// Host projection of readiness/compound-claim failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PdmaClaimError {
@@ -147,8 +110,6 @@ pub enum PdmaRegisterPortError {
     Provisioning(PdmaProvisioningError),
     /// One generated register access failed.
     Register(PdmaRegisterAccessError),
-    /// A closed queue batch failed.
-    Batch(PdmaBatchError),
     /// Interrupt readiness or claim failed.
     Claim(PdmaClaimError),
     /// Checked DMA memory access failed.
@@ -170,7 +131,6 @@ impl Error for PdmaRegisterPortError {
             Self::Semantic(source) => Some(source),
             Self::Provisioning(source) => Some(source),
             Self::Register(source) => Some(source),
-            Self::Batch(source) => Some(source),
             Self::Claim(source) => Some(source),
             Self::Memory(source) => Some(source),
             Self::Response(source) => Some(source),
@@ -196,11 +156,6 @@ impl From<PdmaProvisioningError> for PdmaRegisterPortError {
 impl From<PdmaRegisterAccessError> for PdmaRegisterPortError {
     fn from(source: PdmaRegisterAccessError) -> Self {
         Self::Register(source)
-    }
-}
-impl From<PdmaBatchError> for PdmaRegisterPortError {
-    fn from(source: PdmaBatchError) -> Self {
-        Self::Batch(source)
     }
 }
 impl From<PdmaClaimError> for PdmaRegisterPortError {
@@ -231,9 +186,6 @@ impl From<PdmaRegisterPortError> for crate::semantic::PortError {
             }
             PdmaRegisterPortError::Register(source) => {
                 Self::Backend(PortBackendError::new(PortBackendKind::Register, source))
-            }
-            PdmaRegisterPortError::Batch(source) => {
-                Self::Backend(PortBackendError::new(PortBackendKind::Batch, source))
             }
             PdmaRegisterPortError::Claim(source) => {
                 Self::Backend(PortBackendError::new(PortBackendKind::Claim, source))

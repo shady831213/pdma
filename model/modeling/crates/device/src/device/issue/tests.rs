@@ -19,8 +19,8 @@ fn fixture() -> (DeviceCore, [QueueConfigHandle; 2]) {
     let config = QueueConfig::new(4, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
     let vector = core.create_queue(config).expect("vector queue");
     let copy = core.create_queue(config).expect("copy queue");
-    let source = core.dma.allocate(4).expect("source").object();
-    let destination = core.dma.allocate(4).expect("destination").object();
+    let source = core.memory.allocate(4).expect("source").object();
+    let destination = core.memory.allocate(4).expect("destination").object();
     for (queue, operation) in [
         (
             vector,
@@ -51,7 +51,7 @@ fn issue(
         &mut HardwareContext {
             queues: &mut core.queues,
             runnable: &mut core.runnable,
-            dma: &core.dma,
+            memory: &core.memory,
             irq: &mut core.irq,
             trace: &mut core.trace,
             fetches: &mut core.native_fetches,

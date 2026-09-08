@@ -13,7 +13,7 @@ pub(super) fn copy(
     let length =
         usize::try_from(command.length.value()).map_err(|_| ModelError::DmaSubmissionState)?;
     let source = resolve::direct(
-        context.dma,
+        context.memory,
         DmaAddress::new(command.source_dma_address),
         u64::from(command.length.value()),
         AbiOperandVisit::CopySource,
@@ -23,7 +23,7 @@ pub(super) fn copy(
         Err(fault) => return Ok(Err(fault)),
     };
     let destination = resolve::direct(
-        context.dma,
+        context.memory,
         DmaAddress::new(command.destination_dma_address),
         u64::from(command.length.value()),
         AbiOperandVisit::CopyDestination,
@@ -88,7 +88,7 @@ fn row_source(
     row: u64,
 ) -> ModelResult<Result<pdma_model_contract::semantic::DmaRangeStart, AbiFault>> {
     resolve::strided(
-        context.dma,
+        context.memory,
         DmaAddress::new(command.source_dma_address),
         row,
         u64::from(command.source_stride.value()),
@@ -103,7 +103,7 @@ fn row_destination(
     row: u64,
 ) -> ModelResult<Result<pdma_model_contract::semantic::DmaRangeStart, AbiFault>> {
     resolve::strided(
-        context.dma,
+        context.memory,
         DmaAddress::new(command.destination_dma_address),
         row,
         u64::from(command.destination_stride.value()),

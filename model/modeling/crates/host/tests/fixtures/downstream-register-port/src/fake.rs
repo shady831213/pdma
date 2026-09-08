@@ -1,11 +1,10 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess,
 };
-use pdma_model_contract::semantic::QueueActivation;
 use pdma_model_host::adapter::abi::{
-    PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
-    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegionRequest, PdmaRegisterAccessError, PdmaSubmissionBatch,
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
+    PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegionRequest,
+    PdmaRegisterAccessError,
 };
 use std::error::Error;
 use std::sync::atomic::Ordering;
@@ -14,9 +13,9 @@ mod fates;
 mod helpers;
 mod state;
 pub(crate) use fates::verify_fates;
-pub use helpers::{activation, message};
-use helpers::{claim_observations, crossing, lock, response, validate_read, validate_write};
-pub use state::{FakeAccess, FakeProposal, FakeSnapshot};
+pub use helpers::message;
+use helpers::{claim_observations, crossing, lock, validate_read, validate_write};
+pub use state::{FakeAccess, FakeSnapshot};
 
 type TestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -96,84 +95,31 @@ impl RegisterAccess for FakeAccess {
             tokio::task::yield_now().await;
         }
         validate_write(offset, request)?;
-        lock(&self.state).registers.insert(offset, request.to_vec());
+        let mut state = lock(&self.state);
+        state.registers.insert(offset, request.to_vec());
+        if offset == 0x168 {
+            let epoch = state.registers.get(&0x100).cloned().unwrap_or(vec![0; 8]);
+            let queue = state.registers.get(&0x108).cloned().unwrap_or(vec![0; 8]);
+            state.registers.insert(0x16c, 1_u32.to_le_bytes().to_vec());
+            state.registers.insert(0x188, epoch);
+            state.registers.insert(0x190, queue);
+        }
         Ok(())
     }
 }
 
 impl PdmaMemoryProvisioning for FakeAccess {
-    type Proposal = FakeProposal;
     type Error = PdmaProvisioningError;
     async fn allocate_region(
         &self,
         request: PdmaRegionRequest,
     ) -> Result<PdmaMappedRegion, Self::Error> {
-        let proposal = self.prepare(&[request])?;
         if self.fail_allocation.swap(false, Ordering::SeqCst) {
             return Err(PdmaProvisioningError::Provisioning(
                 PdmaProvisioningCause::StorageExhausted,
             ));
         }
-        self.commit(proposal)?
-            .into_iter()
-            .next()
-            .ok_or(PdmaProvisioningError::InvalidProjection)
-    }
-    async fn prepare_regions(
-        &self,
-        requests: &[PdmaRegionRequest],
-    ) -> Result<Self::Proposal, Self::Error> {
-        self.prepare(requests)
-    }
-}
-
-impl PdmaBatchAccess for FakeAccess {
-    type BatchError = PdmaBatchError;
-    async fn bootstrap_queue(
-        &self,
-        proposal: Self::Proposal,
-        activation: QueueActivation,
-    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
-        if let Some(error) = lock(&self.next_batch_error).take() {
-            return Err(error);
-        }
-        self.commit(proposal)
-            .map_err(PdmaBatchError::Provisioning)?;
-        lock(&self.state).queue_staged = true;
-        response(
-            activation.queue().epoch().raw(),
-            activation.queue().queue_id().raw(),
-            0,
-        )
-    }
-    async fn submit_queue(
-        &self,
-        request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
-        if let Some(error) = lock(&self.next_batch_error).take() {
-            return Err(error);
-        }
-        let (queue, producer, descriptor, indirect) = request.into_parts();
-        if let Some((proposal, write)) = indirect {
-            self.commit(proposal)
-                .map_err(PdmaBatchError::Provisioning)?;
-            lock(&self.state)
-                .bytes
-                .insert(write.address(), write.bytes().to_vec());
-            lock(&self.state).indirect_staged = true;
-        }
-        let mut state = lock(&self.state);
-        state
-            .bytes
-            .insert(descriptor.address(), descriptor.bytes().to_vec());
-        state.submission_committed = true;
-        state.retirement = true;
-        drop(state);
-        response(
-            queue.epoch().raw(),
-            queue.queue_id().raw(),
-            producer.raw() + 1,
-        )
+        self.allocate(request)
     }
 }
 

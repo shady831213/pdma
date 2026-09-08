@@ -4,13 +4,12 @@ mod device_access;
 mod interrupt;
 mod register;
 
-pub use device_access::{AsyncDeviceAccess, AsyncDevicePreparedRegions};
+pub use device_access::AsyncDeviceAccess;
 pub use interrupt::{
     PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSource, PdmaInterruptSourceError,
 };
 pub use register::{
-    DriverPort, PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaDmaWrite,
-    PdmaExactInterruptClaim, PdmaMappedRegion, PdmaMemoryProvisioning, PdmaPreparedProposal,
-    PdmaProvisioningCause, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
-    PdmaRegisterPort, PdmaRegisterPortError, PdmaSubmissionBatch, RegisterQueueStatus,
+    DriverPort, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
+    PdmaMemoryProvisioning, PdmaProvisioningCause, PdmaProvisioningError, PdmaRegionRequest,
+    PdmaRegisterAccessError, PdmaRegisterPort, PdmaRegisterPortError, RegisterQueueStatus,
 };

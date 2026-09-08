@@ -8,9 +8,7 @@ use pdma_model_contract::semantic::{
     QueueControl, QueueCursorUpdate, QueueId, QueueRingObjects, RingCursor, SoftwareOwnerId,
 };
 use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
-use pdma_model_device::{
-    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, DmaWrite, SubmissionAcceptance,
-};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker};
 
 pub(in crate::queue) struct Fixture {
     pub(in crate::queue) handle: AsyncDeviceHandle,
@@ -52,7 +50,8 @@ impl Fixture {
             config,
             QueueRingObjects::new(submission.object(), completion.object(), event.object()),
         );
-        handle.activate_queue(stage, activation).await?;
+        handle.commit_memory_stage(stage).await?;
+        handle.activate_mapped_queue(activation).await?;
         Ok(Self {
             handle,
             worker: Some(worker),
@@ -95,12 +94,10 @@ impl Fixture {
         let mut bytes = [0_u8; 64];
         descriptor.encode(&mut bytes)?;
         let address = self.submission.checked_add(producer * 64)?;
+        self.handle.write_memory(address, &bytes).await?;
         self.handle
-            .accept_submission(SubmissionAcceptance::new(
-                self.queue,
-                RingCursor::new(producer),
-                DmaWrite::new(address, bytes.to_vec()),
-                None,
+            .control_queue(QueueControl::PublishSubmissionProducer(
+                QueueCursorUpdate::new(self.queue, RingCursor::new(producer + 1)),
             ))
             .await?;
         Ok(())
@@ -108,12 +105,10 @@ impl Fixture {
 
     pub(super) async fn submit_bytes(&self, producer: u64, bytes: [u8; 64]) -> TestResult {
         let address = self.submission.checked_add(producer * 64)?;
+        self.handle.write_memory(address, &bytes).await?;
         self.handle
-            .accept_submission(SubmissionAcceptance::new(
-                self.queue,
-                RingCursor::new(producer),
-                DmaWrite::new(address, bytes.to_vec()),
-                None,
+            .control_queue(QueueControl::PublishSubmissionProducer(
+                QueueCursorUpdate::new(self.queue, RingCursor::new(producer + 1)),
             ))
             .await?;
         Ok(())

@@ -1,4 +1,4 @@
-//! Atomic DMA queue-control integration tests.
+//! Individual memory and queue-control integration tests.
 
 /// Shared typed queue-control fixtures.
 mod support;
@@ -12,5 +12,5 @@ use pdma_model_contract::semantic::{
     BufferId, DeviceEpoch, EpochQueue, QueueActivation, QueueControl, QueueCursorUpdate, QueueId,
     QueueRingObjects, RingCursor,
 };
-use pdma_model_device::{DmaWrite, MappedDmaRegion, PdmaControlError, SubmissionAcceptance};
+use pdma_model_device::{MappedDmaRegion, PdmaControlError};
 use support::{activation, new_handle};

@@ -14,7 +14,12 @@ pub(super) async fn completion<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     handle: QueueConfigHandle,
 ) -> PdmaPortResult<Option<CompletionRecord>> {
+    let _window = port.queue_window.lock().await;
+    super::pending::recover(port).await?;
     let queue = super::submission::refresh(port, handle).await?;
+    if let Some(record) = port.with_state(|state| state.completion.take())? {
+        return Ok(Some(record));
+    }
     let cursors = queue.status.completion();
     if cursors.producer() == cursors.consumer() {
         return Ok(None);
@@ -41,9 +46,10 @@ pub(super) async fn completion<A: CanonicalAccess>(
         cursors.consumer(),
         next,
         pdma_model_contract::abi::mmio::QueueCommand::PublishCqConsumer,
+        super::pending::Effect::Completion(record),
     )
     .await?;
-    Ok(Some(record))
+    port.with_state(|state| state.completion.take())
 }
 
 fn semantic_completion(decoded: AbiCompletion) -> PortResult<CompletionRecord> {
@@ -64,7 +70,12 @@ pub(super) async fn event<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     handle: QueueConfigHandle,
 ) -> PdmaPortResult<Option<EventRecord>> {
+    let _window = port.queue_window.lock().await;
+    super::pending::recover(port).await?;
     let queue = super::submission::refresh(port, handle).await?;
+    if let Some(record) = port.with_state(|state| state.event.take())? {
+        return Ok(Some(record));
+    }
     let cursors = queue.status.event();
     if cursors.producer() == cursors.consumer() {
         return Ok(None);
@@ -91,9 +102,10 @@ pub(super) async fn event<A: CanonicalAccess>(
         cursors.consumer(),
         next,
         pdma_model_contract::abi::mmio::QueueCommand::PublishEqConsumer,
+        super::pending::Effect::Event(record),
     )
     .await?;
-    Ok(Some(record))
+    port.with_state(|state| state.event.take())
 }
 
 async fn commit_consumer<A: CanonicalAccess>(
@@ -102,6 +114,7 @@ async fn commit_consumer<A: CanonicalAccess>(
     expected: RingCursor,
     proposed: RingCursor,
     command: pdma_model_contract::abi::mmio::QueueCommand,
+    effect: super::pending::Effect,
 ) -> PdmaPortResult<()> {
     let queue = port.with_state(|state| state.queue(handle))??;
     let observed = if command == pdma_model_contract::abi::mmio::QueueCommand::PublishCqConsumer {
@@ -114,11 +127,11 @@ async fn commit_consumer<A: CanonicalAccess>(
     }
     let status = super::control::update_cursor(
         port,
-        queue.status.queue(),
+        pdma_model_contract::semantic::QueueCursorUpdate::new(queue.status.queue(), proposed),
         queue.rings,
         command,
         expected,
-        proposed,
+        effect,
     )
     .await?;
     port.with_state(|state| {

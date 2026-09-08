@@ -14,7 +14,7 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
     let mut context = HardwareContext {
         queues: &mut core.queues,
         runnable: &mut core.runnable,
-        dma: &core.dma,
+        memory: &core.memory,
         irq: &mut core.irq,
         trace: &mut core.trace,
         fetches: &mut core.native_fetches,
@@ -63,7 +63,7 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
     assert!(context.irq.line_asserted());
     for destination in prepared.destinations {
         assert_eq!(
-            context.dma.read_object(destination.object(), 0, 8),
+            context.memory.read_object(destination.object(), 0, 8),
             Ok(vec![1, 2, 3, 4, 0, 0, 0, 0])
         );
     }

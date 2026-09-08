@@ -1,7 +1,7 @@
 use super::common::{TestResult, activate, allocate, encode};
 use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues};
 use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceConfig, RingCursor};
-use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
+use pdma_model_device::{AsyncDevice, PendingDmaResult};
 
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {
     let (runner, worker) = AsyncDevice::from_core(pdma_model_device::DeviceCore::new(
@@ -17,12 +17,10 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
 
     let mut poisoned = [0_u8; 64];
     poisoned[0..2].copy_from_slice(&2_u16.to_le_bytes());
+    handle.write_memory(submission, &poisoned).await?;
     handle
-        .accept_submission(SubmissionAcceptance::new(
-            queue,
-            RingCursor::new(0),
-            DmaWrite::new(submission, poisoned.to_vec()),
-            None,
+        .control_queue(QueueControl::PublishSubmissionProducer(
+            QueueCursorUpdate::new(queue, RingCursor::new(1)),
         ))
         .await?;
     assert_eq!(handle.snapshot().await.steps, 0);
@@ -42,12 +40,10 @@ pub(super) async fn capture_and_nonzero_slot() -> TestResult {
             length: 4.into(),
         }),
     ))?;
+    handle.write_memory(second_slot, &command).await?;
     handle
-        .accept_submission(SubmissionAcceptance::new(
-            queue,
-            RingCursor::new(1),
-            DmaWrite::new(second_slot, command.to_vec()),
-            None,
+        .control_queue(QueueControl::PublishSubmissionProducer(
+            QueueCursorUpdate::new(queue, RingCursor::new(2)),
         ))
         .await?;
     let ring = handle.read_memory(submission, 128).await?;

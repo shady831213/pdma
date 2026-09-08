@@ -1,5 +1,5 @@
 use core::fmt;
-use hardware_interface_runtime::{MemoryAccessError, MemoryError};
+use hardware_interface_runtime::MemoryError;
 
 /// Failure while staging, committing, or accessing checked DMA storage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,15 +56,6 @@ impl PdmaMemoryError {
             MemoryError::Overlap { .. } => Self::OverlappingRegion,
             MemoryError::StaleRevision { .. } => Self::InvalidRegion,
             MemoryError::RevisionExhausted => Self::AddressExhausted,
-        }
-    }
-
-    pub(crate) const fn from_runtime_access(error: &MemoryAccessError) -> Self {
-        match error {
-            MemoryAccessError::Unmapped { .. } => Self::Unmapped,
-            MemoryAccessError::CrossesRegion { .. } => Self::CrossesRegion,
-            MemoryAccessError::AddressOverflow { .. } => Self::AddressExhausted,
-            MemoryAccessError::Misaligned { .. } => Self::InvalidRegion,
         }
     }
 }

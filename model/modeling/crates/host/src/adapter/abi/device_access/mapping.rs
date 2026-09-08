@@ -1,13 +1,10 @@
 use crate::adapter::abi::{
-    PdmaBatchError, PdmaClaimError, PdmaDmaWrite, PdmaMappedRegion, PdmaProvisioningCause,
-    PdmaProvisioningError, PdmaRegisterAccessError,
+    PdmaClaimError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
+    PdmaRegisterAccessError,
 };
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
-use pdma_model_contract::abi::mmio::MmioResult;
 use pdma_model_device::MappedDmaRegion;
-use pdma_model_device::{
-    DeviceError, MmioRegisterError, PdmaBatchError as DevicePdmaBatchError, PdmaMemoryError,
-};
+use pdma_model_device::{DeviceError, MmioRegisterError};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub(super) fn validate_alignment(alignment: MemoryAlignment) -> Result<(), PdmaProvisioningError> {
@@ -36,35 +33,8 @@ pub(super) fn project_region(
     PdmaMappedRegion::try_new(region.object(), base, region.length(), alignment, storage)
 }
 
-pub(super) fn device_write(write: PdmaDmaWrite) -> pdma_model_device::DmaWrite {
-    let (address, bytes) = write.into_parts();
-    pdma_model_device::DmaWrite::new(
-        pdma_model_contract::abi::DmaAddress::new(address.raw()),
-        bytes,
-    )
-}
-
 pub(super) const fn map_model_allocation(_: DeviceError) -> PdmaProvisioningError {
     PdmaProvisioningError::Provisioning(PdmaProvisioningCause::AddressExhausted)
-}
-
-pub(super) const fn map_memory(error: PdmaMemoryError) -> PdmaProvisioningError {
-    let cause = match error {
-        PdmaMemoryError::AddressExhausted => PdmaProvisioningCause::AddressExhausted,
-        PdmaMemoryError::StorageExhausted => PdmaProvisioningCause::StorageExhausted,
-        PdmaMemoryError::OverlappingRegion => PdmaProvisioningCause::OverlappingRegion,
-        PdmaMemoryError::InvalidRegion => PdmaProvisioningCause::InvalidRegion,
-        PdmaMemoryError::StaleStage {
-            expected_generation,
-            actual_generation,
-        } => PdmaProvisioningCause::StaleProposal {
-            expected: expected_generation,
-            actual: actual_generation,
-        },
-        PdmaMemoryError::Unmapped => PdmaProvisioningCause::Unmapped,
-        PdmaMemoryError::CrossesRegion => PdmaProvisioningCause::CrossesRegion,
-    };
-    PdmaProvisioningError::Provisioning(cause)
 }
 
 pub(super) const fn map_register(error: MmioRegisterError) -> PdmaRegisterAccessError {
@@ -78,30 +48,6 @@ pub(super) const fn map_claim(error: MmioRegisterError) -> PdmaClaimError {
     match error {
         MmioRegisterError::Access(error) => PdmaClaimError::Access(error),
         MmioRegisterError::Observation(error) => PdmaClaimError::Observation(error),
-    }
-}
-
-pub(super) const fn map_batch(error: DevicePdmaBatchError) -> PdmaBatchError {
-    match error {
-        DevicePdmaBatchError::InvalidShape => PdmaBatchError::InvalidShape,
-        DevicePdmaBatchError::Access(error) => PdmaBatchError::Access(error),
-        DevicePdmaBatchError::Dma(details) => {
-            let cause = match details.result {
-                MmioResult::DmaAddressExhausted => PdmaProvisioningCause::AddressExhausted,
-                MmioResult::DmaStorageExhausted => PdmaProvisioningCause::StorageExhausted,
-                MmioResult::DmaUnmapped => PdmaProvisioningCause::Unmapped,
-                MmioResult::DmaCrossesRegion => PdmaProvisioningCause::CrossesRegion,
-                MmioResult::DmaOverlap => PdmaProvisioningCause::OverlappingRegion,
-                MmioResult::DmaStaleStage => PdmaProvisioningCause::StaleProposal {
-                    expected: details.details[0],
-                    actual: details.details[1],
-                },
-                _ => PdmaProvisioningCause::InvalidRegion,
-            };
-            PdmaBatchError::Provisioning(PdmaProvisioningError::Provisioning(cause))
-        }
-        DevicePdmaBatchError::Command(details) => PdmaBatchError::Result(details),
-        DevicePdmaBatchError::Observation(error) => PdmaBatchError::Observation(error),
     }
 }
 

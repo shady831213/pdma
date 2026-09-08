@@ -12,7 +12,7 @@ use pdma_model_contract::semantic::{
 
 pub(crate) struct RetirementPorts<'a> {
     pub(super) queues: &'a mut QueueBlock,
-    pub(super) dma: &'a PdmaMemoryMappings,
+    pub(super) memory: &'a PdmaMemoryMappings,
     pub(super) runnable: &'a mut RunnableQueues,
     pub(super) irq: &'a mut PdmaIrqController,
     pub(super) trace: &'a mut TraceSink,
@@ -23,7 +23,7 @@ impl<'a> RetirementPorts<'a> {
     pub(crate) const fn new(context: &'a mut HardwareContext<'_>) -> Self {
         Self {
             queues: context.queues,
-            dma: context.dma,
+            memory: context.memory,
             runnable: context.runnable,
             irq: context.irq,
             trace: context.trace,
@@ -52,11 +52,11 @@ impl<'a> RetirementPorts<'a> {
         queue: QueueId,
         record: CompletionRecord,
     ) -> ModelResult<PublicationOutcome> {
-        self.queues.publish_completion(self.dma, queue, record)
+        self.queues.publish_completion(self.memory, queue, record)
     }
 
     pub(super) fn publish_fault(&mut self, queue: QueueId) -> ModelResult<PublicationOutcome> {
-        match self.queues.publish_fault(self.dma, queue)? {
+        match self.queues.publish_fault(self.memory, queue)? {
             FaultPublication::Retry => Ok(PublicationOutcome::Retry),
             FaultPublication::Semantic(event) => {
                 self.trace.event_published(event);

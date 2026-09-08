@@ -1,111 +1,106 @@
 use super::*;
 
 #[tokio::test]
-async fn dropped_conflicting_and_invalid_bootstrap_leave_dma_and_queue_unchanged()
+async fn dropped_and_rejected_activation_preserve_completed_memory_allocations()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: dropped and conflicting stages plus an activation naming the wrong queue.
+    // Given: committed rings plus a stale allocation proposal.
     let handle = new_handle();
-    let dropped = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let dropped_activation = activation(&dropped, QueueId::new(0))?;
-    let pending = handle.activate_queue(dropped, dropped_activation);
-    drop(pending);
-    let stale = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let winner = handle.stage_memory_regions(&[8]).await?;
-    handle.commit_memory_stage(winner).await?;
-    let invalid = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let invalid_activation = activation(&invalid, QueueId::new(1))?;
-    let [invalid_submission, _, _] = invalid.regions() else {
-        return Err("three invalid ring regions required".into());
-    };
-    let invalid_submission = *invalid_submission;
+    let rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
+    let valid = activation(&rings, QueueId::new(0))?;
+    let invalid = activation(&rings, QueueId::new(1))?;
+    let stale = rings.clone();
+    let committed = handle.commit_memory_stage(rings).await?;
 
-    // When: stale and wrong-ID bootstrap transactions are rejected.
+    // When: allocation conflicts, wrong queue activation rejects, and a fresh activation drops.
+    assert!(matches!(
+        handle.commit_memory_stage(stale).await,
+        Err(pdma_model_device::PdmaMemoryError::StaleStage {
+            expected_generation: 0,
+            actual_generation: 1,
+        })
+    ));
     assert_eq!(
-        handle
-            .activate_queue(stale.clone(), activation(&stale, QueueId::new(0))?)
-            .await,
-        Err(PdmaControlError::InvalidTransaction)
-    );
-    assert_eq!(
-        handle.activate_queue(invalid, invalid_activation).await,
+        handle.activate_mapped_queue(invalid).await,
         Err(PdmaControlError::InvalidQueue)
     );
+    drop(handle.activate_mapped_queue(valid));
 
-    // Then: only the independent winner exists and the original ID/base remains reusable.
+    // Then: memory stays committed while the hardware has no active queue.
     assert_eq!(handle.memory_generation().await, 1);
-    assert_eq!(handle.region_for_object(BufferId::new(1)).await, None);
-    let valid = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let [valid_submission, _, _] = valid.regions() else {
-        return Err("three valid ring regions required".into());
-    };
-    assert_eq!(*valid_submission, invalid_submission);
-    let status = handle
-        .activate_queue(valid.clone(), activation(&valid, QueueId::new(0))?)
-        .await?;
-    assert_eq!(status.queue().queue_id(), QueueId::new(0));
+    for region in committed {
+        assert_eq!(
+            handle.region_for_object(region.object()).await,
+            Some(region)
+        );
+        assert_eq!(
+            handle.read_memory(region.base(), region.length()).await?,
+            vec![0; usize::try_from(region.length())?]
+        );
+    }
+    assert!(
+        handle
+            .control_queue(QueueControl::ReadStatus(valid.queue()))
+            .await
+            .is_err()
+    );
     Ok(())
 }
 
 #[tokio::test]
-async fn cancelled_or_invalid_submission_accept_changes_no_dma_bytes_mapping_or_producer()
+async fn invalid_or_unpolled_publication_preserves_completed_descriptor_and_indirect_writes()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: one active queue, a dropped acceptance value, and an invalid descriptor extent.
+    // Given: separate indirect and partial descriptor writes on a depth-two queue.
     let handle = new_handle();
     let rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
-    let [submission, _, _] = rings.regions() else {
-        return Err("three ring regions required".into());
-    };
-    let submission = *submission;
-    handle
-        .activate_queue(rings.clone(), activation(&rings, QueueId::new(0))?)
-        .await?;
-    let indirect = handle.stage_memory_regions(&[8]).await?;
-    let [indirect_region] = indirect.regions() else {
-        return Err("one indirect region required".into());
-    };
-    let indirect_region = *indirect_region;
-    let cancelled = handle.accept_submission(SubmissionAcceptance::new(
-        queue,
-        RingCursor::new(0),
-        DmaWrite::new(submission.base(), vec![1; 64]),
-        Some((
-            indirect.clone(),
-            DmaWrite::new(indirect_region.base(), vec![2; 8]),
+    let request = activation(&rings, QueueId::new(0))?;
+    let submission = *rings.regions().first().ok_or("submission mapping")?;
+    handle.commit_memory_stage(rings).await?;
+    handle.activate_mapped_queue(request).await?;
+    let indirect = handle.allocate_memory_region(8).await?;
+    handle.write_memory(indirect.base(), &[4; 8]).await?;
+    handle.write_memory(submission.base(), &[3; 63]).await?;
+    let queue = request.queue();
+
+    // When: an out-of-capacity producer rejects and a valid publication is never polled.
+    assert!(
+        handle
+            .control_queue(QueueControl::PublishSubmissionProducer(
+                QueueCursorUpdate::new(queue, RingCursor::new(3)),
+            ))
+            .await
+            .is_err()
+    );
+    drop(
+        handle.control_queue(QueueControl::PublishSubmissionProducer(
+            QueueCursorUpdate::new(queue, RingCursor::new(1)),
         )),
-    ));
-    drop(cancelled);
-    let invalid = SubmissionAcceptance::new(
-        queue,
+    );
+
+    // Then: completed bytes and mappings persist without publishing a descriptor.
+    assert_eq!(handle.memory_generation().await, 2);
+    assert_eq!(
+        handle.region_for_object(indirect.object()).await,
+        Some(indirect)
+    );
+    assert_eq!(handle.read_memory(indirect.base(), 8).await?, [4; 8]);
+    let mut expected = vec![3; 63];
+    expected.push(0);
+    assert_eq!(handle.read_memory(submission.base(), 64).await?, expected);
+    assert_eq!(
+        handle
+            .control_queue(QueueControl::ReadStatus(queue))
+            .await?
+            .submission()
+            .producer(),
         RingCursor::new(0),
-        DmaWrite::new(submission.base(), vec![3; 63]),
-        Some((indirect, DmaWrite::new(indirect_region.base(), vec![4; 8]))),
     );
-
-    // When: the malformed acceptance is rejected.
-    assert!(handle.accept_submission(invalid).await.is_err());
-
-    // Then: no stage, byte, mapping, or producer mutation occurred.
-    assert_eq!(handle.memory_generation().await, 1);
-    assert_eq!(
-        handle.region_for_object(indirect_region.object()).await,
-        None
-    );
-    assert_eq!(
-        handle.read_memory(submission.base(), 64).await?,
-        vec![0; 64]
-    );
-    let status = handle
-        .control_queue(QueueControl::ReadStatus(queue))
-        .await?;
-    assert_eq!(status.submission().producer(), RingCursor::new(0));
     Ok(())
 }
 
 #[tokio::test]
 async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged()
 -> Result<(), Box<dyn std::error::Error>> {
-    // Given: staged rings plus epoch, ID, layout, overlap, and depth-invalid activations.
+    // Given: committed rings plus epoch, ID, layout, overlap, and depth-invalid activations.
     let handle = new_handle();
     let rings = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let queue = EpochQueue::new(DeviceEpoch::initial(), QueueId::new(0));
@@ -148,11 +143,12 @@ async fn invalid_epoch_id_layout_overlap_depth_and_cursor_leave_state_unchanged(
         ),
         valid.rings(),
     );
+    handle.commit_memory_stage(rings).await?;
     for invalid in [stale, wrong_id, overlapping, mismatched, wrong_depth] {
-        assert!(handle.activate_queue(rings.clone(), invalid).await.is_err());
-        assert_eq!(handle.memory_generation().await, 0);
+        assert!(handle.activate_mapped_queue(invalid).await.is_err());
+        assert_eq!(handle.memory_generation().await, 1);
     }
-    handle.activate_queue(rings.clone(), valid).await?;
+    handle.activate_mapped_queue(valid).await?;
     let generation = handle.memory_generation().await;
 
     // When: stale/unknown controls and full, regressing, or beyond-capacity cursors are rejected.

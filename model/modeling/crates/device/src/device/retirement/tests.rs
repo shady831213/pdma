@@ -36,7 +36,7 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
             ),
         )
         .expect("submission");
-    let dma = PdmaMemoryMappings::new(std::sync::Arc::new(
+    let memory = PdmaMemoryMappings::new(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
     let mut irq = PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0)));
@@ -51,7 +51,7 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
         let mut context = HardwareContext {
             queues: &mut queues,
             runnable: &mut runnable,
-            dma: &dma,
+            memory: &memory,
             irq: &mut irq,
             trace: &mut trace,
             fetches: &mut fetches,

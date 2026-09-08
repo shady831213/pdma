@@ -8,7 +8,7 @@ use pdma_model_contract::abi::{
 use pdma_model_contract::semantic::DmaRangeStart;
 
 pub(super) fn direct(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     address: DmaAddress,
     length: u64,
     visit: AbiOperandVisit,
@@ -17,11 +17,11 @@ pub(super) fn direct(
     let Ok(end) = address.checked_add(length) else {
         return Ok(Err(AbiFault::range_overflow_direct(address, length, site)));
     };
-    resolve_representable(dma_space, address, end, length, visit)
+    resolve_representable(memory, address, end, length, visit)
 }
 
 pub(super) fn strided(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     base: DmaAddress,
     row: u64,
     stride: u64,
@@ -41,11 +41,11 @@ pub(super) fn strided(
             )));
         }
     };
-    direct(dma_space, start, length, visit)
+    direct(memory, start, length, visit)
 }
 
 pub(super) fn indirect_container(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     base: DmaAddress,
     count: u64,
 ) -> ModelResult<Result<(DmaRangeStart, u64), AbiFault>> {
@@ -56,18 +56,18 @@ pub(super) fn indirect_container(
     let Ok(end) = base.checked_add(extent) else {
         return Ok(Err(AbiFault::range_overflow_indirect(base, count)));
     };
-    resolve_representable(dma_space, base, end, extent, visit)
+    resolve_representable(memory, base, end, extent, visit)
         .map(|result| result.map(|start| (start, extent)))
 }
 
 fn resolve_representable(
-    dma_space: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     start: DmaAddress,
     end: DmaAddress,
     length: u64,
     visit: AbiOperandVisit,
 ) -> ModelResult<Result<DmaRangeStart, AbiFault>> {
-    let Some(region) = dma_space.region_containing(start) else {
+    let Some(region) = memory.region_containing(start) else {
         return Ok(Err(AbiFault::unmapped(start, length, site(visit))));
     };
     if end > region.exclusive_end() {

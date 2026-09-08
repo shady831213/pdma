@@ -1,10 +1,9 @@
 use super::*;
 
-pub(super) async fn run() -> support::TestResult<bool> {
-    // Given: one writer holds the real memory transaction ahead of a bootstrap batch.
+pub(in crate::transactions) async fn run() -> support::TestResult<bool> {
+    // Given: one writer holds the real memory transaction ahead of a standalone mapping commit.
     let (handle, _, memory) = support::observed_handle_with_memory();
     let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let activation = support::activation(&stage, DeviceEpoch::initial())?;
     let region = MemoryRegion::try_new(
         MemoryAddress::new(0x5_0000),
         64,
@@ -13,10 +12,10 @@ pub(super) async fn run() -> support::TestResult<bool> {
     let writer_memory = std::sync::Arc::clone(&memory);
     let (entered_tx, entered_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
-    let (batch_started_tx, batch_started_rx) = std::sync::mpsc::channel();
-    let (batch_done_tx, batch_done_rx) = std::sync::mpsc::channel();
+    let (mapping_started_tx, mapping_started_rx) = std::sync::mpsc::channel();
+    let (mapping_done_tx, mapping_done_rx) = std::sync::mpsc::channel();
 
-    // When: the batch starts while the competing writer owns the transaction view.
+    // When: the mapping starts while the competing writer owns the transaction view.
     let writer = std::thread::spawn(move || {
         writer_memory.transaction(|transaction| {
             entered_tx.send(())?;
@@ -27,27 +26,25 @@ pub(super) async fn run() -> support::TestResult<bool> {
         })
     });
     entered_rx.recv()?;
-    let batch_handle = handle.clone();
-    let batch = std::thread::spawn(move || -> support::TestResult {
-        batch_started_tx.send(())?;
+    let mapping_handle = handle.clone();
+    let mapping = std::thread::spawn(move || -> support::TestResult {
+        mapping_started_tx.send(())?;
         tokio::runtime::Builder::new_current_thread()
             .build()?
-            .block_on(
-                batch_handle.bootstrap_queue_batch(QueueBootstrapBatch::new(stage, activation)),
-            )?;
-        batch_done_tx.send(())?;
+            .block_on(mapping_handle.commit_memory_stage(stage))?;
+        mapping_done_tx.send(())?;
         Ok(())
     });
-    batch_started_rx.recv()?;
+    mapping_started_rx.recv()?;
     let blocked_before_release = matches!(
-        batch_done_rx.try_recv(),
+        mapping_done_rx.try_recv(),
         Err(std::sync::mpsc::TryRecvError::Empty)
     );
     assert!(blocked_before_release);
     release_tx.send(())?;
     writer.join().map_err(|_| "writer thread panicked")??;
-    batch.join().map_err(|_| "batch thread panicked")??;
-    batch_done_rx.recv()?;
+    mapping.join().map_err(|_| "mapping thread panicked")??;
+    mapping_done_rx.recv()?;
 
     // Then: both commits survive in serial revision order with no stale inner install.
     let serialized = memory.revision().raw() == 2

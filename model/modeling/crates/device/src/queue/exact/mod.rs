@@ -1,7 +1,6 @@
 mod block;
 mod error;
 mod publication;
-mod request;
 mod ring_state;
 mod state;
 mod status;
@@ -9,8 +8,7 @@ mod submission;
 
 pub(crate) use block::PreparedExactQueue;
 pub use error::PdmaControlError;
-pub use request::{DmaWrite, SubmissionAcceptance};
-pub(crate) use ring_state::{RingState, SubmissionRingState, exact_cursor};
+pub(crate) use ring_state::{RingState, exact_cursor};
 pub(crate) use state::ActiveQueue;
 pub use status::{PendingDmaResult, QueueStatus};
 

@@ -41,11 +41,7 @@ async fn address_adverse_rejects_translation_before_pdma_decode() -> TestResult 
         .await
         .expect_err("below-base address must fail");
     let overflow = endpoint
-        .read_addressed(
-            base,
-            RegisterBusAddress::new(0x2_0000_0000),
-            &mut response,
-        )
+        .read_addressed(base, RegisterBusAddress::new(0x2_0000_0000), &mut response)
         .await
         .expect_err("unrepresentable offset must fail");
     let mut wrong_width = [0; 4];
@@ -60,20 +56,27 @@ async fn address_adverse_rejects_translation_before_pdma_decode() -> TestResult 
 
     // Then: runtime translation wins before PDMA decode and valid translation preserves MMIO.
     assert!(matches!(below, RegisterBusError::AddressBelowBase { .. }));
-    assert!(matches!(overflow, RegisterBusError::OffsetOutOfRange { delta: 0x1_0000_0000, .. }));
     assert!(matches!(
-        &translated,
-        RegisterBusError::Endpoint {
-            source: pdma_model_device::MmioRegisterError::Access(
-                MmioAccessError::WrongWidth {
+        overflow,
+        RegisterBusError::OffsetOutOfRange {
+            delta: 0x1_0000_0000,
+            ..
+        }
+    ));
+    assert!(
+        matches!(
+            &translated,
+            RegisterBusError::Endpoint {
+                source: pdma_model_device::MmioRegisterError::Access(MmioAccessError::WrongWidth {
                     offset: 0x010,
                     expected: 8,
                     actual: 4,
-                }
-            ),
-            ..
-        }
-    ), "{translated:?}");
+                }),
+                ..
+            }
+        ),
+        "{translated:?}"
+    );
     assert_eq!(handle.snapshot().await, before);
     assert!(lock(&observer.0).is_empty());
     assert_eq!(endpoint.mmio_base(), base);

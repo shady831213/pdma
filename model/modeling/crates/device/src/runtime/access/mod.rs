@@ -1,4 +1,3 @@
-mod batch;
 mod endpoint;
 mod irq;
 mod memory;

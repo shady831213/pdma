@@ -2,14 +2,9 @@ use hardware_interface_runtime::{
     AccessKind, AccessOrigin, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
     RegisterAccess, RegisterObservation, RegisterObserver,
 };
-use pdma_model_contract::semantic::QueueActivation;
-use pdma_model_host::{
-    adapter::abi::{AsyncDeviceAccess, AsyncDevicePreparedRegions},
-    adapter::abi::{
-        PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
-        PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest,
-        PdmaRegisterAccessError, PdmaSubmissionBatch,
-    },
+use pdma_model_host::adapter::abi::{
+    AsyncDeviceAccess, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
+    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
 };
 use std::sync::{Arc, Mutex};
 
@@ -86,36 +81,12 @@ impl RegisterAccess for RecordingMemoryAccess {
 }
 
 impl PdmaMemoryProvisioning for RecordingMemoryAccess {
-    type Proposal = AsyncDevicePreparedRegions;
     type Error = PdmaProvisioningError;
     async fn allocate_region(
         &self,
         request: PdmaRegionRequest,
     ) -> Result<PdmaMappedRegion, Self::Error> {
         self.inner.allocate_region(request).await
-    }
-    async fn prepare_regions(
-        &self,
-        requests: &[PdmaRegionRequest],
-    ) -> Result<Self::Proposal, Self::Error> {
-        self.inner.prepare_regions(requests).await
-    }
-}
-
-impl PdmaBatchAccess for RecordingMemoryAccess {
-    type BatchError = PdmaBatchError;
-    async fn bootstrap_queue(
-        &self,
-        proposal: Self::Proposal,
-        activation: QueueActivation,
-    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
-        self.inner.bootstrap_queue(proposal, activation).await
-    }
-    async fn submit_queue(
-        &self,
-        request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> Result<pdma_model_contract::abi::mmio::QueueResponseRegistersRaw, Self::BatchError> {
-        self.inner.submit_queue(request).await
     }
 }
 
@@ -150,43 +121,35 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "test transcript assertions must fail the test"
+)]
 pub(super) fn assert_register_transcript(accesses: &[RegisterObservation]) {
-    assert_eq!(accesses.len(), 156);
+    assert!(!accesses.is_empty());
     assert!(
         accesses
             .iter()
             .enumerate()
             .all(|(index, access)| access.sequence == index as u64)
     );
-    let batch = accesses
-        .iter()
-        .filter(|access| access.origin == AccessOrigin::Batch)
-        .collect::<Vec<_>>();
-    assert_eq!(batch.len(), 2);
-    let bootstrap = batch.first().unwrap_or_else(|| std::process::abort());
-    let submission = batch.last().unwrap_or_else(|| std::process::abort());
-    assert_eq!(
-        (
-            bootstrap.kind,
-            bootstrap.offset,
-            bootstrap.request_bytes.as_slice()
-        ),
-        (AccessKind::Write, 0x168, &[1, 0, 0, 0][..])
-    );
-    assert_eq!(
-        (
-            submission.kind,
-            submission.offset,
-            submission.request_bytes.as_slice()
-        ),
-        (AccessKind::Write, 0x168, &[3, 0, 0, 0][..])
-    );
-    assert_eq!(
+    assert!(
         accesses
             .iter()
-            .filter(|access| access.origin == AccessOrigin::Direct)
-            .count(),
-        154
+            .all(|access| access.origin == AccessOrigin::Direct)
+    );
+    let publication = accesses
+        .iter()
+        .filter(|access| {
+            access.kind == AccessKind::Write
+                && access.offset == 0x168
+                && matches!(access.request_bytes.as_slice(), [1 | 3 | 4, 0, 0, 0])
+        })
+        .map(|access| access.request_bytes.as_slice())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        publication,
+        [&[1, 0, 0, 0][..], &[3, 0, 0, 0], &[4, 0, 0, 0]]
     );
     let claim_start = accesses.iter().position(|access| {
         access.origin == AccessOrigin::Direct
@@ -194,27 +157,40 @@ pub(super) fn assert_register_transcript(accesses: &[RegisterObservation]) {
             && access.offset == 0x220
             && access.request_bytes == [9, 0, 0, 0]
     });
-    assert_eq!(claim_start, Some(74));
+    let claim_start = claim_start.expect("one exact claim must occur");
+    let sequence = u64::try_from(claim_start).expect("test sequence fits");
     let exact = [
-        RegisterObservation::write(74, AccessOrigin::Direct, 0x220, &[9, 0, 0, 0]),
-        RegisterObservation::read(75, AccessOrigin::Direct, 0x224, &[1, 0, 0, 0]),
-        RegisterObservation::read(76, AccessOrigin::Direct, 0x240, &[0; 8]),
-        RegisterObservation::read(77, AccessOrigin::Direct, 0x248, &[0; 8]),
-        RegisterObservation::read(78, AccessOrigin::Direct, 0x250, &[0; 4]),
-        RegisterObservation::read(79, AccessOrigin::Direct, 0x254, &[75, 0, 0, 0]),
-        RegisterObservation::read(80, AccessOrigin::Direct, 0x258, &[1, 0, 0, 0]),
-        RegisterObservation::read(81, AccessOrigin::Direct, 0x25c, &[2, 0, 0, 0]),
-        RegisterObservation::read(82, AccessOrigin::Direct, 0x260, &[64, 0, 0, 0, 0, 0, 0, 0]),
-        RegisterObservation::read(83, AccessOrigin::Direct, 0x268, &[0; 8]),
-        RegisterObservation::read(84, AccessOrigin::Direct, 0x270, &[0; 8]),
+        RegisterObservation::write(sequence, AccessOrigin::Direct, 0x220, &[9, 0, 0, 0]),
+        RegisterObservation::read(sequence + 1, AccessOrigin::Direct, 0x224, &[1, 0, 0, 0]),
+        RegisterObservation::read(sequence + 2, AccessOrigin::Direct, 0x240, &[0; 8]),
+        RegisterObservation::read(sequence + 3, AccessOrigin::Direct, 0x248, &[0; 8]),
+        RegisterObservation::read(sequence + 4, AccessOrigin::Direct, 0x250, &[0; 4]),
+        RegisterObservation::read(sequence + 5, AccessOrigin::Direct, 0x254, &[75, 0, 0, 0]),
+        RegisterObservation::read(sequence + 6, AccessOrigin::Direct, 0x258, &[1, 0, 0, 0]),
+        RegisterObservation::read(sequence + 7, AccessOrigin::Direct, 0x25c, &[2, 0, 0, 0]),
+        RegisterObservation::read(
+            sequence + 8,
+            AccessOrigin::Direct,
+            0x260,
+            &[64, 0, 0, 0, 0, 0, 0, 0],
+        ),
+        RegisterObservation::read(sequence + 9, AccessOrigin::Direct, 0x268, &[0; 8]),
+        RegisterObservation::read(sequence + 10, AccessOrigin::Direct, 0x270, &[0; 8]),
     ];
-    assert_eq!(accesses.get(74..85), Some(exact.as_slice()));
+    assert_eq!(
+        accesses.get(claim_start..claim_start + exact.len()),
+        Some(exact.as_slice())
+    );
     println!(
-        "manual-qa register transcript: accesses={} direct=154 batch=2 batch-values=[1,3] claim-index=74 claim-items=11",
+        "manual-qa register transcript: accesses={} all-direct publication=[1,3,4] claim-index={claim_start} claim-items=11",
         accesses.len()
     );
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "test memory assertions must fail the test"
+)]
 pub(super) fn assert_memory_accesses(records: &[MemoryAccessRecord]) {
     assert_eq!(
         records
@@ -223,18 +199,23 @@ pub(super) fn assert_memory_accesses(records: &[MemoryAccessRecord]) {
             .collect::<Vec<_>>(),
         [
             (AccessKind::Write, 4, 1),
+            (AccessKind::Write, 64, 1),
             (AccessKind::Read, 32, 1),
             (AccessKind::Read, 4, 1),
         ]
     );
     let payload_write = records.first().unwrap_or_else(|| std::process::abort());
-    let descriptor_read = records.get(1).unwrap_or_else(|| std::process::abort());
+    let descriptor_write = records
+        .get(1)
+        .expect("host wrote the submission descriptor");
+    let completion_read = records.get(2).expect("host read the completion");
     let payload_read = records.last().unwrap_or_else(|| std::process::abort());
     println!(
-        "manual-qa bulk memory: records={} payload-write={:#x}/4/1 descriptor-read={:#x}/32/1 payload-read={:#x}/4/1",
+        "manual-qa bulk memory: records={} payload-write={:#x}/4/1 descriptor-write={:#x}/64/1 completion-read={:#x}/32/1 payload-read={:#x}/4/1",
         records.len(),
         payload_write.address.raw(),
-        descriptor_read.address.raw(),
+        descriptor_write.address.raw(),
+        completion_read.address.raw(),
         payload_read.address.raw()
     );
 }

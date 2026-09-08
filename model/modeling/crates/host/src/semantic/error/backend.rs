@@ -8,8 +8,6 @@ pub enum PortBackendKind {
     Provisioning,
     /// One register access failed.
     Register,
-    /// One closed batch failed.
-    Batch,
     /// Interrupt readiness or claim failed.
     Claim,
     /// Checked memory access failed.

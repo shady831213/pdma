@@ -20,7 +20,7 @@ pub(super) enum RunStateProbe {
 
 pub(super) fn probe_run_state(
     queues: &QueueBlock,
-    dma: &PdmaMemoryMappings,
+    memory: &PdmaMemoryMappings,
     runnable: &RunnableQueues,
     execution: &ExecutionUnit,
     retirement: &RetirementUnit,
@@ -35,7 +35,7 @@ pub(super) fn probe_run_state(
             RunStateProbe::Idle
         };
     };
-    match queues.probe(dma, queue) {
+    match queues.probe(memory, queue) {
         Ok(Some(NormalizedFetch::Command { command, .. })) if !execution.can_execute(&command) => {
             RunStateProbe::Blocked {
                 queue,
@@ -56,7 +56,7 @@ impl DeviceCore {
     pub(crate) fn run_state(&self) -> DeviceRunState {
         match probe_run_state(
             &self.queues,
-            &self.dma,
+            &self.memory,
             &self.runnable,
             &self.execution,
             &self.retirement,

@@ -4,7 +4,10 @@ use pdma_model_host::{DriverError, PortError};
 
 mod allocation;
 mod cancellation;
+pub mod pending_commands;
+mod pending_receipt;
 mod poll_preflight;
+mod register_flow;
 mod repoll_guard;
 mod semantics;
 mod stale_capability;

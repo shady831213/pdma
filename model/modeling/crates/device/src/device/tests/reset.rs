@@ -20,9 +20,9 @@ fn submit_copy(
     command: usize,
 ) -> pdma_model_contract::semantic::QueueConfigHandle {
     let queue = core.create_queue(queue_config(1)).expect("queue");
-    let source = core.dma.allocate(1).expect("source").object();
-    let destination = core.dma.allocate(1).expect("destination").object();
-    core.dma
+    let source = core.memory.allocate(1).expect("source").object();
+    let destination = core.memory.allocate(1).expect("destination").object();
+    core.memory
         .write_object(source, 0, &[0x5a])
         .expect("source write");
     core.submit_command(
@@ -48,7 +48,7 @@ fn reset_preserves_persistent_state_and_clears_resettable_hardware() {
     let queue = submit_copy(&mut core, 0);
     let destination = pdma_model_contract::semantic::BufferId::new(1);
     assert_eq!(core.step(), Ok(ModelStepStatus::Progressed));
-    let generation = core.dma.generation();
+    let generation = core.memory.generation();
     let trace = core.trace_events();
 
     // When: the sole reset runner advances the device epoch.
@@ -58,8 +58,8 @@ fn reset_preserves_persistent_state_and_clears_resettable_hardware() {
 
     // Then: persistent DMA/trace survive while work, IRQ, and queue identity restart.
     assert_eq!(epoch, DeviceEpoch::new(1));
-    assert_eq!(core.dma.generation(), generation);
-    assert_eq!(core.dma.read_object(destination, 0, 1), Ok(vec![0x5a]));
+    assert_eq!(core.memory.generation(), generation);
+    assert_eq!(core.memory.read_object(destination, 0, 1), Ok(vec![0x5a]));
     assert_eq!(core.trace_events(), trace);
     assert!(core.ring_doorbell(queue).is_err());
     let fresh = core.create_queue(queue_config(1)).expect("fresh queue");
@@ -91,7 +91,7 @@ fn reset_discards_resource_stalled_work_before_execution() {
         .expect("reset");
 
     // Then: discarded work neither executes nor publishes after reset.
-    assert_eq!(core.dma.read_object(destination, 0, 1), Ok(vec![0]));
+    assert_eq!(core.memory.read_object(destination, 0, 1), Ok(vec![0]));
     assert_eq!(core.step(), Ok(ModelStepStatus::Idle));
     assert_eq!(core.irq_snapshot(), None);
     assert!(core.poll_completion(queue).is_err());
@@ -105,10 +105,14 @@ fn reset_discards_pending_retirement_without_late_publication() {
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let queue = core.create_queue(queue_config(2)).expect("queue");
-    let source = core.dma.allocate(1).expect("source").object();
-    let first_destination = core.dma.allocate(1).expect("first destination").object();
-    let second_destination = core.dma.allocate(1).expect("second destination").object();
-    core.dma
+    let source = core.memory.allocate(1).expect("source").object();
+    let first_destination = core.memory.allocate(1).expect("first destination").object();
+    let second_destination = core
+        .memory
+        .allocate(1)
+        .expect("second destination")
+        .object();
+    core.memory
         .write_object(source, 0, &[0xa5])
         .expect("source write");
     for (command, destination) in [first_destination, second_destination]
@@ -139,11 +143,11 @@ fn reset_discards_pending_retirement_without_late_publication() {
 
     // Then: executed DMA effects persist but no late completion or IRQ can appear.
     assert_eq!(
-        core.dma.read_object(first_destination, 0, 1),
+        core.memory.read_object(first_destination, 0, 1),
         Ok(vec![0xa5])
     );
     assert_eq!(
-        core.dma.read_object(second_destination, 0, 1),
+        core.memory.read_object(second_destination, 0, 1),
         Ok(vec![0xa5])
     );
     assert_eq!(core.pending_dma_result(), None);

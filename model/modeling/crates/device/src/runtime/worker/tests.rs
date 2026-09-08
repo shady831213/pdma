@@ -21,9 +21,9 @@ fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
         resources,
     );
     core.enable_tracing();
-    let source = core.dma.allocate(4).expect("source allocation");
-    let target = core.dma.allocate(4).expect("target allocation");
-    core.dma
+    let source = core.memory.allocate(4).expect("source allocation");
+    let target = core.memory.allocate(4).expect("target allocation");
+    core.memory
         .write_object(source.object(), 0, &[1, 3, 5, 7])
         .expect("source bytes");
     let queue = core
@@ -90,7 +90,7 @@ async fn observation(fixture: &AcceptedCopy) -> (usize, Vec<u8>, usize, usize) {
                 state.core.native_steps(),
                 state
                     .core
-                    .dma
+                    .memory
                     .read_object(fixture.target, 0, 4)
                     .expect("target bytes"),
                 state.steps,

@@ -29,7 +29,7 @@ impl DeviceCore {
         let mut context = HardwareContext {
             queues: &mut self.queues,
             runnable: &mut self.runnable,
-            dma: &self.dma,
+            memory: &self.memory,
             irq: &mut self.irq,
             trace: &mut self.trace,
             fetches: &mut self.native_fetches,

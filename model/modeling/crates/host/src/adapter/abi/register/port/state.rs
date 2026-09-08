@@ -1,7 +1,5 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
-use crate::adapter::abi::{
-    PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest, RegisterQueueStatus,
-};
+use crate::adapter::abi::{PdmaMappedRegion, PdmaRegionRequest, RegisterQueueStatus};
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
@@ -18,6 +16,10 @@ pub(super) struct PortState {
     pub(super) epoch: DeviceEpoch,
     pub(super) queue: Option<QueueState>,
     pub(super) regions: Vec<PdmaMappedRegion>,
+    pub(super) pending: Option<super::pending::PendingCommand>,
+    pub(super) activation: Option<QueueConfigHandle>,
+    pub(super) completion: Option<pdma_model_contract::semantic::CompletionRecord>,
+    pub(super) event: Option<pdma_model_contract::semantic::EventRecord>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +35,10 @@ impl PortState {
             epoch,
             queue: None,
             regions: Vec::new(),
+            pending: None,
+            activation: None,
+            completion: None,
+            event: None,
         }
     }
 
@@ -66,6 +72,16 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
     config: QueueConfig,
 ) -> PdmaPortResult<QueueConfigHandle> {
+    let _window = port.queue_window.lock().await;
+    super::pending::resolve(port).await?;
+    if let Some(handle) = port.with_state(|state| state.activation)? {
+        if handle.config() != config {
+            return Err(PortError::SubmissionState.into());
+        }
+        super::submission::refresh(port, handle).await?;
+        port.with_state(|state| state.activation = None)?;
+        return Ok(handle);
+    }
     let epoch = port.with_state(|state| {
         if state.queue.is_some() {
             Err(PortError::SubmissionState)
@@ -75,14 +91,20 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
     })??;
     let lengths = ring_lengths(config)?;
     let alignment = alignment()?;
-    let requests = lengths.map(|length| PdmaRegionRequest::new(length, alignment));
-    let proposal = port
-        .poll_provision(port.access.prepare_regions(&requests))
-        .await?;
-    let [submission, completion, event] = proposal.regions() else {
+    let mut allocated = Vec::with_capacity(3);
+    for length in lengths {
+        let region = port
+            .poll_provision(
+                port.access
+                    .allocate_region(PdmaRegionRequest::new(length, alignment)),
+            )
+            .await?;
+        port.with_state(|state| state.regions.push(region))?;
+        allocated.push(region);
+    }
+    let [submission, completion, event] = allocated.as_slice() else {
         return Err(PortError::SubmissionState.into());
     };
-    let proposed = [*submission, *completion, *event];
     let rings = QueueRingLayouts::new(
         layout::<AbiCommand>(*submission, config.command_depth())?,
         layout::<AbiCompletion>(*completion, config.completion_depth())?,
@@ -94,10 +116,6 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
         config,
         QueueRingObjects::new(submission.object(), completion.object(), event.object()),
     );
-    let bytes = port
-        .poll_batch(port.access.bootstrap_queue(proposal, activation))
-        .await?;
-    let status = super::control::decode_status(bytes.as_bytes(), rings)?;
     let handle = QueueConfigHandle::new(
         activation.queue().epoch(),
         QueueDirectoryEntry::new(
@@ -106,18 +124,17 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
             config,
         ),
     );
-    Ok(port.with_state(|state| {
-        if state.queue.is_some() {
-            return Err(PortError::SubmissionState);
-        }
-        state.regions.extend(proposed);
-        state.queue = Some(QueueState {
-            handle,
-            rings,
-            status,
-        });
-        Ok(handle)
-    })??)
+    super::bootstrap::stage_activation(port, activation, rings).await?;
+    super::control::command_status(
+        port,
+        pdma_model_contract::abi::mmio::QueueCommand::Activate,
+        rings,
+        activation.queue(),
+        super::pending::Effect::Activate { handle, rings },
+    )
+    .await?;
+    port.with_state(|state| state.activation = None)?;
+    Ok(handle)
 }
 
 pub(super) async fn allocate_buffer<A: CanonicalAccess>(

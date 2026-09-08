@@ -122,7 +122,8 @@ async fn assert_reads_preserve_device_observables() -> TestResult {
         QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
         QueueRingObjects::new(submission.object(), completion.object(), event.object()),
     );
-    handle.activate_queue(stage, activation).await?;
+    handle.commit_memory_stage(stage).await?;
+    handle.activate_mapped_queue(activation).await?;
     let before_snapshot = handle.snapshot().await;
     let before_generation = handle.memory_generation().await;
     let before_queue = handle

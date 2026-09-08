@@ -8,4 +8,4 @@ pub use driver::{AsyncDriver, DriverIrqRecord, ManualDriver};
 pub use error::{
     DriverError, DriverResult, PortBackendError, PortBackendKind, PortError, PortResult,
 };
-pub use port::DriverPort;
+pub use port::{DriverPort, SubmissionReceipt};

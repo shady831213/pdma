@@ -4,7 +4,7 @@ use pdma_model_contract::abi::{
     AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
 };
 use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceConfig, RingCursor};
-use pdma_model_device::{AsyncDevice, DmaWrite, PendingDmaResult, SubmissionAcceptance};
+use pdma_model_device::{AsyncDevice, PendingDmaResult};
 
 /// Operation variants covered by the exact descriptor inventory.
 #[derive(Clone, Copy, Debug)]
@@ -110,12 +110,10 @@ pub(in crate::queue) async fn multi_queue_arbitration()
         (vector_queue, vector_slot, vector),
         (copy_queue, copy_slot, copy),
     ] {
+        handle.write_memory(slot, &descriptor).await?;
         handle
-            .accept_submission(SubmissionAcceptance::new(
-                queue,
-                RingCursor::new(0),
-                DmaWrite::new(slot, descriptor.to_vec()),
-                None,
+            .control_queue(QueueControl::PublishSubmissionProducer(
+                QueueCursorUpdate::new(queue, RingCursor::new(1)),
             ))
             .await?;
         handle

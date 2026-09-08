@@ -2,7 +2,6 @@ use super::*;
 use crate::device::DeviceCore;
 use crate::runtime::MmioRegisterEndpoint;
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
-use pdma_model_contract::abi::mmio::MmioAccessError;
 use pdma_model_contract::semantic::ResourceConfig;
 use std::future::Future;
 use std::pin::pin;
@@ -68,60 +67,27 @@ async fn prepared_read_and_write_are_side_effect_free_until_commit() {
 }
 
 #[tokio::test]
-async fn prepared_batch_write_is_typed_consumed_and_has_no_arbitrary_install_hook()
--> Result<(), MmioAccessError> {
-    // Given: a fresh core and the two closed queue batch command variants.
+async fn completed_register_writes_survive_later_rejection_and_unpolled_write()
+-> Result<(), MmioRegisterError> {
+    // Given: a CPU-independent endpoint with separately committed request registers.
     let endpoint = MmioRegisterEndpoint::from_core(DeviceCore::new(
         Arc::new(SharedMemory::new()),
         ResourceConfig::default(),
     ));
-    let bootstrap = queue::QueueRequest {
-        expected_epoch: 1,
-        id: 2,
-        expected_cursor: 0,
-        new_cursor: 0,
-        cfg_software_owner: 3,
-        sq_base: 4,
-        sq_depth: 5,
-        cfg_sq_depth: 5,
-        cq_base: 6,
-        cq_depth: 7,
-        cfg_cq_depth: 7,
-        eq_base: 8,
-        eq_depth: 9,
-        cfg_event_policy: 0,
-        command: 0,
-    };
-    let submission = queue::QueueRequest {
-        expected_epoch: 10,
-        id: 11,
-        expected_cursor: 12,
-        new_cursor: 13,
-        ..bootstrap
-    };
-    let (activate, submission, registers) = endpoint
-        .shared
-        .backend
-        .interact(|state| {
-            let activate = prepare_bootstrap_batch_write(bootstrap, QueueResponseBank::default())?;
-            let activate = activate.commit(&state.core);
-            let submission =
-                prepare_submission_batch_write(submission, QueueResponseBank::default())?;
-            let submission = submission.commit(&state.core);
-            let registers = [
-                (RegisterId::QExpectedEpoch, 10_u64),
-                (RegisterId::QId, 11_u64),
-                (RegisterId::QExpectedCursor, 12_u64),
-                (RegisterId::QNewCursor, 13_u64),
-            ]
-            .map(|(register, expected)| (state.core.registers.read(register), expected));
-            Ok((activate, submission, registers))
-        })
-        .await?;
-    assert_eq!(activate.request, 1_u32.to_le_bytes());
-    assert_eq!(submission.request, 3_u32.to_le_bytes());
-    for (actual, expected) in registers {
-        assert_eq!(actual, expected.to_le_bytes());
+    endpoint.write(0x100, &10_u64.to_le_bytes()).await?;
+    endpoint.write(0x108, &11_u64.to_le_bytes()).await?;
+
+    // When: a later access is invalid and another request write is never polled.
+    let invalid = endpoint.write(0x10c, &12_u64.to_le_bytes()).await;
+    drop(endpoint.write(0x108, &99_u64.to_le_bytes()));
+
+    // Then: the completed register values and only their observation slots persist.
+    assert!(matches!(invalid, Err(MmioRegisterError::Access(_))));
+    assert_eq!(endpoint.shared.register_gate.next_sequence(), Ok(2));
+    for (offset, expected) in [(0x100, 10_u64), (0x108, 11_u64)] {
+        let mut bytes = [0; 8];
+        endpoint.read(offset, &mut bytes).await?;
+        assert_eq!(u64::from_le_bytes(bytes), expected);
     }
     Ok(())
 }

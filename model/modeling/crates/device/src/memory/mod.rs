@@ -37,13 +37,6 @@ struct RegionBacking {
     storage: Option<MemoryRegion>,
 }
 
-pub(crate) struct PreparedPdmaMapping {
-    regions: Vec<RegionBacking>,
-    next_address: u64,
-    next_generation: u64,
-    runtime_regions: Vec<MemoryRegion>,
-}
-
 /// Monotonic checked memory-mapping allocator over injected runtime storage.
 #[derive(Debug)]
 pub struct PdmaMemoryMappings {

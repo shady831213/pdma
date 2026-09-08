@@ -15,7 +15,7 @@ pub(super) fn broadcast(
     let length =
         usize::try_from(command.length.value()).map_err(|_| ModelError::DmaSubmissionState)?;
     let source = resolve::direct(
-        context.dma,
+        context.memory,
         DmaAddress::new(command.source_dma_address),
         u64::from(command.length.value()),
         AbiOperandVisit::BroadcastSource,
@@ -25,7 +25,7 @@ pub(super) fn broadcast(
         Err(fault) => return Ok(Err(fault)),
     };
     let container = resolve::indirect_container(
-        context.dma,
+        context.memory,
         DmaAddress::new(command.destination_list_dma_address),
         u64::from(command.destination_count.value()),
     )?;
@@ -34,7 +34,7 @@ pub(super) fn broadcast(
         Err(fault) => return Ok(Err(fault)),
     };
     let bytes = context
-        .dma
+        .memory
         .read_memory(
             DmaAddress::new(command.destination_list_dma_address),
             extent,
@@ -53,7 +53,7 @@ pub(super) fn broadcast(
             .address();
         let index = u64::try_from(index).map_err(|_| ModelError::DmaSubmissionState)?;
         let destination = resolve::direct(
-            context.dma,
+            context.memory,
             address,
             u64::from(command.length.value()),
             AbiOperandVisit::BroadcastDestination { index },

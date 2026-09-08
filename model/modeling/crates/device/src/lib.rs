@@ -91,14 +91,9 @@ mod device;
 pub use device::DeviceCore;
 pub use device::drive::HardwareStepStatus;
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
-pub use interface::batch::{
-    DmaBatchContext, PdmaBatchError, QueueBootstrapBatch, QueueResponseBytes, SubmissionBatch,
-};
 pub use interface::mmio::MmioRegisterError;
 pub use memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryStage};
-pub use queue::exact::{
-    DmaWrite, PdmaControlError, PendingDmaResult, QueueStatus, SubmissionAcceptance,
-};
+pub use queue::exact::{PdmaControlError, PendingDmaResult, QueueStatus};
 pub use runtime::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
     MmioRegisterEndpoint,

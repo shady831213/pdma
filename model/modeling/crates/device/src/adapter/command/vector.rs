@@ -55,5 +55,5 @@ fn operand(
     length: u32,
     visit: AbiOperandVisit,
 ) -> ModelResult<Result<pdma_model_contract::semantic::DmaRangeStart, AbiFault>> {
-    resolve::direct(context.dma, address, u64::from(length), visit)
+    resolve::direct(context.memory, address, u64::from(length), visit)
 }

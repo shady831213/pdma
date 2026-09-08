@@ -121,18 +121,18 @@ pub(super) fn prepare(case: Case) -> Prepared {
 pub(super) fn prepare_with_resources(case: Case, resources: ResourceConfig) -> Prepared {
     let mut fixture = Fixture::new(resources);
     fixture.core.enable_tracing();
-    let source_a = fixture.core.dma.allocate(8).expect("source A");
-    let source_b = fixture.core.dma.allocate(8).expect("source B");
-    let destination_a = fixture.core.dma.allocate(8).expect("destination A");
-    let destination_b = fixture.core.dma.allocate(8).expect("destination B");
+    let source_a = fixture.core.memory.allocate(8).expect("source A");
+    let source_b = fixture.core.memory.allocate(8).expect("source B");
+    let destination_a = fixture.core.memory.allocate(8).expect("destination A");
+    let destination_b = fixture.core.memory.allocate(8).expect("destination B");
     fixture
         .core
-        .dma
+        .memory
         .write_object(source_a.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
         .expect("source A bytes");
     fixture
         .core
-        .dma
+        .memory
         .write_object(source_b.object(), 0, &[8, 7, 6, 5, 4, 3, 2, 1])
         .expect("source B bytes");
     let queue = fixture
@@ -173,13 +173,13 @@ pub(super) fn prepared_pair() -> Prepared {
     let source = prepared
         .fixture
         .core
-        .dma
+        .memory
         .allocate(8)
         .expect("second source");
     prepared
         .fixture
         .core
-        .dma
+        .memory
         .write_object(source.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
         .expect("second source bytes");
     prepared

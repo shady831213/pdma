@@ -77,10 +77,11 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   poll, so a nested CPU context does not erase its enclosing context.
 - Before every nested poll of a CPU-bound `DriverPort` create, submit, doorbell,
   completion, or event future, validate the owning active CPU. A pending future resumed
-  inactive or on another CPU returns the typed error before its commit point. The
-  canonical `PdmaRegisterPort` and explicit compatibility ports commit create only on
-  `Ok(_)`, submit/doorbell only on `Ok(())`, record removal only on `Ok(Some(_))`, and
-  preserve the corresponding device state when dropped pending.
+  inactive or on another CPU returns the typed error before another hardware access.
+  The canonical register port performs ordered individual accesses: completed memory
+  and MMIO writes survive later failure or cancellation. Device hardware never receives
+  a Future-cancellation signal. Keep unresolved command results and driver bookkeeping
+  in host state; do not refund an accepted submission or lose an already-consumed record.
 - Each software-bearing scenario calls `SoftwareCpu::run_main` once with its complete
   program. One poll is one atomic main segment; only `Poll::Pending` releases the CPU
   before the next poll, while the complete IRQ handler future remains atomic.
@@ -93,7 +94,7 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   five pure device/manual observability exceptions with none. Do not add artificial
   software actors to those exceptions.
 - `PdmaRegisterPort<AsyncDeviceAccess>` is the canonical frontend for new E2E scenarios.
-  Its split runtime memory/register access plus PDMA provisioning, batch and exact-claim
+  Its split runtime memory/register access plus PDMA provisioning and exact-claim
   capabilities add no second executor; explicit semantic/async compatibility ports
   share the same device core, execution and retirement behavior.
 - A successful whole-device reset checked-advances `DeviceEpoch`, preserves committed
@@ -123,8 +124,9 @@ cargo doc --workspace --no-deps --document-private-items
 
 v0.9 is **COMPLETE**: `model/docs/v0_9_model_plan.md` records the historical data ABI and
 the exact 66-register, 4 KiB little-endian MMIO registry, endpoint, host adapter, closed
-ordered batches, reset/IRQ behavior, and generated C constants. Mapped activation and
-ordered batches share prepared commit seams while all frontends retain one
+ordered batches, reset/IRQ behavior, and generated C constants. The active successor
+replaces those cross-memory/MMIO batches with host-owned sequential accesses; mapped
+activation validates already-committed regions. All frontends retain one
 execution/retirement core. v0.8 records the still-binding
 vector-to-handler, CPU-local, cancel-safe accounting, bootstrap, and main/handler
 alternation boundaries; v0.7 is historical.

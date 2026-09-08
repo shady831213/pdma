@@ -39,7 +39,7 @@ pub(super) fn retire(
     let mut context = HardwareContext {
         queues: &mut core.queues,
         runnable: &mut core.runnable,
-        dma: &core.dma,
+        memory: &core.memory,
         irq: &mut core.irq,
         trace: &mut core.trace,
         fetches: &mut core.native_fetches,

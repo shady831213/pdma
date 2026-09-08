@@ -23,7 +23,7 @@ pub struct DeviceCore {
     epoch: DeviceEpoch,
     command_pipeline: command_pipeline::PipelineSlot,
     native_fetches: usize,
-    pub(crate) dma: PdmaMemoryMappings,
+    pub(crate) memory: PdmaMemoryMappings,
     pub(crate) registers: PdmaRegisters,
     queues: QueueBlock,
     runnable: RunnableQueues,
@@ -33,8 +33,6 @@ pub struct DeviceCore {
     irq: PdmaIrqController,
     trace: TraceSink,
     reset_runner_calls: usize,
-    #[cfg(test)]
-    pub(crate) batch_fault: std::cell::Cell<Option<crate::interface::batch::BatchPreparationFault>>,
 }
 
 impl DeviceCore {
@@ -44,7 +42,7 @@ impl DeviceCore {
             epoch: DeviceEpoch::initial(),
             command_pipeline: command_pipeline::PipelineSlot::new(),
             native_fetches: 0,
-            dma: PdmaMemoryMappings::new(memory),
+            memory: PdmaMemoryMappings::new(memory),
             registers: PdmaRegisters::new(),
             queues: QueueBlock::default(),
             runnable: RunnableQueues::default(),
@@ -54,8 +52,6 @@ impl DeviceCore {
             irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
             trace: TraceSink::default(),
             reset_runner_calls: 0,
-            #[cfg(test)]
-            batch_fault: std::cell::Cell::new(None),
         }
     }
 

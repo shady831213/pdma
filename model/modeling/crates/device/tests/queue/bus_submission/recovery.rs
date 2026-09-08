@@ -10,7 +10,7 @@ use pdma_model_contract::semantic::{
 use pdma_model_contract::semantic::{
     QueueControl, QueueCursorUpdate, RingCursor, WholeDeviceReset,
 };
-use pdma_model_device::{DmaWrite, PendingDmaResult, SubmissionAcceptance};
+use pdma_model_device::PendingDmaResult;
 
 pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
@@ -31,11 +31,12 @@ pub(super) async fn reset_discards_pending_dma_retirement() -> TestResult {
     ))?;
     fixture
         .handle
-        .accept_submission(SubmissionAcceptance::new(
-            fixture.queue,
-            RingCursor::new(0),
-            DmaWrite::new(descriptor_address, descriptor.to_vec()),
-            None,
+        .write_memory(descriptor_address, &descriptor)
+        .await?;
+    fixture
+        .handle
+        .control_queue(QueueControl::PublishSubmissionProducer(
+            QueueCursorUpdate::new(fixture.queue, RingCursor::new(1)),
         ))
         .await?;
     fixture
@@ -119,11 +120,12 @@ pub(super) async fn dma_and_semantic_queues_coexist() -> TestResult {
     );
     fixture
         .handle
-        .accept_submission(SubmissionAcceptance::new(
-            fixture.queue,
-            RingCursor::new(0),
-            DmaWrite::new(fixture.submission, encode(vector)?.to_vec()),
-            None,
+        .write_memory(fixture.submission, &encode(vector)?)
+        .await?;
+    fixture
+        .handle
+        .control_queue(QueueControl::PublishSubmissionProducer(
+            QueueCursorUpdate::new(fixture.queue, RingCursor::new(1)),
         ))
         .await?;
     fixture

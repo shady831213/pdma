@@ -42,7 +42,7 @@ impl AsyncDevice {
         core: DeviceCore,
         observer: Arc<dyn RegisterObserver>,
     ) -> (Self, AsyncDeviceWorker) {
-        let memory = core.dma.shared_memory();
+        let memory = core.memory.shared_memory();
         let shared = Arc::new(RunnerShared {
             backend: DeviceInteractionBackend::new(RunnerState::new(core)),
             register_gate: ObservationGate::new(SharedRegisterObserver::new(observer)),

@@ -4,11 +4,8 @@ use pdma_model_contract::semantic::{
     QueueConfigHandle,
 };
 
-impl<A: CanonicalAccess> PdmaRegisterPort<A>
-where
-    A::Proposal: Send,
-{
-    /// Creates a queue without erasing provisioning or batch failures.
+impl<A: CanonicalAccess> PdmaRegisterPort<A> {
+    /// Creates a queue without erasing provisioning or register failures.
     pub async fn try_create_queue(
         &mut self,
         config: QueueConfig,

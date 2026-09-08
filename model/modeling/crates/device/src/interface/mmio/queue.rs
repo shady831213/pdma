@@ -6,7 +6,6 @@ use pdma_model_contract::abi::mmio::{
 
 mod queue_config;
 pub(crate) mod queue_control;
-pub(crate) use queue_control::map_bus as map_bus_error;
 
 #[derive(Clone, Copy)]
 pub(crate) struct QueueRequest {
@@ -16,7 +15,6 @@ pub(crate) struct QueueRequest {
     pub(crate) new_cursor: u64,
     pub(crate) cfg_sq_depth: u32,
     pub(crate) cfg_cq_depth: u32,
-    pub(crate) cfg_event_policy: u32,
     pub(crate) cfg_software_owner: u64,
     pub(crate) sq_base: u64,
     pub(crate) sq_depth: u32,
@@ -37,7 +35,6 @@ pub(crate) fn snapshot_request(registers: &PdmaRegisters) -> QueueRequest {
             new_cursor: invariant(invariant(queue.new_cursor()).value()),
             cfg_sq_depth: narrow_u32(invariant(invariant(queue.cfg_sq_depth()).value())),
             cfg_cq_depth: narrow_u32(invariant(invariant(queue.cfg_cq_depth()).value())),
-            cfg_event_policy: narrow_u32(invariant(invariant(queue.cfg_event_policy()).value())),
             cfg_software_owner: invariant(invariant(queue.cfg_software_owner()).value()),
             sq_base: invariant(invariant(queue.sq_base()).value()),
             sq_depth: narrow_u32(invariant(invariant(queue.sq_depth()).value())),
@@ -48,27 +45,6 @@ pub(crate) fn snapshot_request(registers: &PdmaRegisters) -> QueueRequest {
             command: narrow_u32(invariant(invariant(queue.command()).value())),
         }
     })
-}
-
-pub(crate) fn install_request(root: &mut PdmaMmioMapViewMut<'_>, request: QueueRequest) {
-    let mut queue = invariant(root.queue_mut());
-    invariant(invariant(queue.expected_epoch_mut()).set_value(request.expected_epoch));
-    invariant(invariant(queue.id_mut()).set_value(request.id));
-    invariant(invariant(queue.expected_cursor_mut()).set_value(request.expected_cursor));
-    invariant(invariant(queue.new_cursor_mut()).set_value(request.new_cursor));
-    invariant(invariant(queue.cfg_sq_depth_mut()).set_value(u64::from(request.cfg_sq_depth)));
-    invariant(invariant(queue.cfg_cq_depth_mut()).set_value(u64::from(request.cfg_cq_depth)));
-    invariant(
-        invariant(queue.cfg_event_policy_mut()).set_value(u64::from(request.cfg_event_policy)),
-    );
-    invariant(invariant(queue.cfg_software_owner_mut()).set_value(request.cfg_software_owner));
-    invariant(invariant(queue.sq_base_mut()).set_value(request.sq_base));
-    invariant(invariant(queue.sq_depth_mut()).set_value(u64::from(request.sq_depth)));
-    invariant(invariant(queue.cq_base_mut()).set_value(request.cq_base));
-    invariant(invariant(queue.cq_depth_mut()).set_value(u64::from(request.cq_depth)));
-    invariant(invariant(queue.eq_base_mut()).set_value(request.eq_base));
-    invariant(invariant(queue.eq_depth_mut()).set_value(u64::from(request.eq_depth)));
-    invariant(invariant(queue.command_mut()).set_value(u64::from(request.command)));
 }
 
 pub(crate) fn complete(

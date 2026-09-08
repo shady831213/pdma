@@ -12,6 +12,9 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: CopyRequest,
     ) -> DriverResult<CommandId> {
+        self.accounting
+            .poll_valid(device.recover_queue(self.queue_config))
+            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(reservation.command_id(), CommandOperation::Copy(request));
         self.submit_command_on(device, reservation, command).await
@@ -22,6 +25,9 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: StridedCopyRequest,
     ) -> DriverResult<CommandId> {
+        self.accounting
+            .poll_valid(device.recover_queue(self.queue_config))
+            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(
             reservation.command_id(),
@@ -35,6 +41,9 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: BroadcastCopyRequest,
     ) -> DriverResult<CommandId> {
+        self.accounting
+            .poll_valid(device.recover_queue(self.queue_config))
+            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(
             reservation.command_id(),
@@ -48,6 +57,9 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: VectorAddRequest,
     ) -> DriverResult<CommandId> {
+        self.accounting
+            .poll_valid(device.recover_queue(self.queue_config))
+            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(
             reservation.command_id(),
@@ -64,7 +76,11 @@ impl DriverCore {
     ) -> DriverResult<CommandId> {
         let command_id = reservation.command_id();
         self.accounting
-            .poll_valid(device.submit_command(self.queue_config, command))
+            .poll_valid(device.submit_command_tracked(
+                self.queue_config,
+                command,
+                reservation.receipt(),
+            ))
             .await?;
         // Acceptance transfers rollback ownership from the local reservation.
         reservation.disarm();

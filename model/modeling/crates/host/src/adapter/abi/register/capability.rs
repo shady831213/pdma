@@ -1,15 +1,9 @@
-use super::{
-    PdmaClaimResult, PdmaMappedRegion, PdmaPreparedProposal, PdmaRegionRequest, PdmaSubmissionBatch,
-};
-use pdma_model_contract::abi::mmio::QueueResponseRegistersRaw;
-use pdma_model_contract::semantic::QueueActivation;
+use super::{PdmaClaimResult, PdmaMappedRegion, PdmaRegionRequest};
 use std::error::Error;
 
-/// Host-owned logical PDMA mapping allocator and mutation-free preparer.
+/// Host-owned logical PDMA mapping allocator.
 pub trait PdmaMemoryProvisioning: Clone + Send + Sync {
-    /// Opaque proposal consumed by this capability's closed batches.
-    type Proposal: PdmaPreparedProposal;
-    /// Typed allocation/preparation failure.
+    /// Typed allocation failure.
     type Error: Error + Send + Sync + 'static;
 
     /// Allocates and commits exactly one logical region.
@@ -17,31 +11,6 @@ pub trait PdmaMemoryProvisioning: Clone + Send + Sync {
         &self,
         request: PdmaRegionRequest,
     ) -> impl Future<Output = Result<PdmaMappedRegion, Self::Error>> + Send;
-
-    /// Prepares logical regions without changing mappings, bytes, or generation.
-    fn prepare_regions(
-        &self,
-        requests: &[PdmaRegionRequest],
-    ) -> impl Future<Output = Result<Self::Proposal, Self::Error>> + Send;
-}
-
-/// Two closed all-or-none PDMA batches.
-pub trait PdmaBatchAccess: PdmaMemoryProvisioning {
-    /// Typed batch failure.
-    type BatchError: Error + Send + Sync + 'static;
-
-    /// Commits prepared queue rings and activation as the sole proposal commit.
-    fn bootstrap_queue(
-        &self,
-        proposal: Self::Proposal,
-        activation: QueueActivation,
-    ) -> impl Future<Output = Result<QueueResponseRegistersRaw, Self::BatchError>> + Send;
-
-    /// Commits optional prepared indirect storage, writes and producer publication.
-    fn submit_queue(
-        &self,
-        request: PdmaSubmissionBatch<Self::Proposal>,
-    ) -> impl Future<Output = Result<QueueResponseRegistersRaw, Self::BatchError>> + Send;
 }
 
 /// PDMA-specific readiness plus atomic exact interrupt claim.

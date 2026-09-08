@@ -70,8 +70,7 @@ impl SharedAccounting {
         })??;
         Ok(CommandReservation {
             command_id,
-            pending_rollbacks: Arc::clone(&self.pending_rollbacks),
-            armed: true,
+            receipt: crate::semantic::SubmissionReceipt::new(Arc::clone(&self.pending_rollbacks)),
         })
     }
 
@@ -133,8 +132,7 @@ impl SharedAccounting {
 #[derive(Debug)]
 pub(super) struct CommandReservation {
     command_id: CommandId,
-    pending_rollbacks: Arc<AtomicUsize>,
-    armed: bool,
+    receipt: crate::semantic::SubmissionReceipt,
 }
 
 impl CommandReservation {
@@ -142,16 +140,11 @@ impl CommandReservation {
         self.command_id
     }
 
-    pub(super) fn disarm(mut self) {
-        self.armed = false;
+    pub(super) fn receipt(&self) -> crate::semantic::SubmissionReceipt {
+        self.receipt.clone()
     }
-}
 
-impl Drop for CommandReservation {
-    fn drop(&mut self) {
-        if self.armed {
-            // Pre-acceptance cancellation defers rollback to canonical accounting.
-            self.pending_rollbacks.fetch_add(1, Ordering::Release);
-        }
+    pub(super) fn disarm(self) {
+        self.receipt.accept();
     }
 }

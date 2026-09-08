@@ -30,5 +30,5 @@ pub(crate) fn trace_kinds(
 }
 
 pub(crate) fn read(core: &DeviceCore, region: MappedDmaRegion) -> ModelResult<Vec<u8>> {
-    core.dma.read_object(region.object(), 0, 8)
+    core.memory.read_object(region.object(), 0, 8)
 }

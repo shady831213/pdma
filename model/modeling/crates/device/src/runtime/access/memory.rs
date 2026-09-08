@@ -21,7 +21,7 @@ impl AsyncDeviceHandle {
                     .and_then(|length| {
                         state
                             .core
-                            .dma
+                            .memory
                             .allocate(length)
                             .map_err(|_| crate::ModelError::DmaAllocationExhausted)
                     });
@@ -38,7 +38,7 @@ impl AsyncDeviceHandle {
     ) -> Result<PdmaMemoryStage, PdmaMemoryError> {
         self.shared
             .backend
-            .interact(|state| state.core.dma.stage(lengths))
+            .interact(|state| state.core.memory.stage(lengths))
             .await
     }
 
@@ -50,7 +50,7 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .update(|state| {
-                let result = state.core.dma.commit(proposal);
+                let result = state.core.memory.commit(proposal);
                 (result, true)
             })
             .await
@@ -64,7 +64,7 @@ impl AsyncDeviceHandle {
     ) -> Result<Vec<u8>, PdmaMemoryError> {
         self.shared
             .backend
-            .interact(|state| state.core.dma.read_memory(address, length))
+            .interact(|state| state.core.memory.read_memory(address, length))
             .await
     }
 
@@ -77,7 +77,7 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .update(|state| {
-                let result = state.core.dma.write_memory(address, data);
+                let result = state.core.memory.write_memory(address, data);
                 let changed = result.is_ok();
                 (result, changed)
             })
@@ -88,7 +88,7 @@ impl AsyncDeviceHandle {
     pub async fn region_for_object(&self, object: BufferId) -> Option<MappedDmaRegion> {
         self.shared
             .backend
-            .interact(|state| state.core.dma.region_for_object(object))
+            .interact(|state| state.core.memory.region_for_object(object))
             .await
     }
 
@@ -96,7 +96,7 @@ impl AsyncDeviceHandle {
     pub async fn memory_generation(&self) -> u64 {
         self.shared
             .backend
-            .interact(|state| state.core.dma.generation())
+            .interact(|state| state.core.memory.generation())
             .await
     }
 
@@ -112,7 +112,7 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .update(|state| {
-                let result = state.core.dma.write_object(id, offset, data);
+                let result = state.core.memory.write_object(id, offset, data);
                 (result, true)
             })
             .await
@@ -127,7 +127,7 @@ impl AsyncDeviceHandle {
     ) -> ModelResult<Vec<u8>> {
         self.shared
             .backend
-            .interact(|state| state.core.dma.read_object(id, offset, len))
+            .interact(|state| state.core.memory.read_object(id, offset, len))
             .await
     }
 }

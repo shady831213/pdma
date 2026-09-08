@@ -23,15 +23,15 @@ fn core_with_queue() -> (DeviceCore, QueueConfigHandle) {
 
 fn submit_copy(core: &mut DeviceCore, queue: QueueConfigHandle, command: usize) {
     let source = if command == 0 {
-        let source = core.dma.allocate(4).expect("source").object();
-        core.dma
+        let source = core.memory.allocate(4).expect("source").object();
+        core.memory
             .write_object(source, 0, &[1, 2, 3, 4])
             .expect("source write");
         source
     } else {
         pdma_model_contract::semantic::BufferId::new(0)
     };
-    let destination = core.dma.allocate(4).expect("destination").object();
+    let destination = core.memory.allocate(4).expect("destination").object();
     core.submit_command(
         queue,
         Command::new(

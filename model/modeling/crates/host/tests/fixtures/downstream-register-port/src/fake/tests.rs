@@ -1,6 +1,6 @@
 use super::*;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_host::adapter::abi::{PdmaPreparedProposal, PdmaRegisterPort, PdmaRegisterPortError};
+use pdma_model_host::adapter::abi::{PdmaRegisterPort, PdmaRegisterPortError};
 use pdma_model_host::{DriverPort, PortError};
 use std::future::Future;
 use std::pin::Pin;
@@ -15,33 +15,16 @@ async fn cancellation_and_clone_state_hold_when_scheduled_twenty_five_ways() -> 
         let clone = fake.clone();
         let request = PdmaRegionRequest::new(u64::try_from(index + 1)?, alignment);
 
-        // When: proposal, stale, register-lock, and compound-claim futures are dropped precommit.
-        let before_drop = fake.snapshot();
-        drop(fake.prepare_regions(&[request]).await?);
-        assert_eq!(fake.snapshot(), before_drop);
-        let stale = fake.prepare_regions(&[request]).await?;
+        // When: allocation completes and later register/claim futures are dropped pending.
         clone.allocate_region(request).await?;
-        let before_stale = fake.snapshot();
-        let rings = fake
-            .prepare_regions(&[
-                PdmaRegionRequest::new(128, alignment),
-                PdmaRegionRequest::new(64, alignment),
-                PdmaRegionRequest::new(128, alignment),
-            ])
-            .await?;
-        assert!(
-            fake.bootstrap_queue(stale, activation(rings.regions())?)
-                .await
-                .is_err()
-        );
-        assert_eq!(fake.snapshot(), before_stale);
+        let before_register = fake.snapshot();
         fake.pend_next_register();
         let bytes = [u8::try_from(index)?; 8];
         let pending_clone = clone.clone();
         let mut register = Box::pin(RegisterAccess::write(&pending_clone, 0x100, &bytes));
         assert!(poll_pending(&mut register));
         drop(register);
-        assert_eq!(fake.snapshot(), before_stale);
+        assert_eq!(fake.snapshot(), before_register);
         RegisterAccess::write(&clone, 0x100, &bytes).await?;
         fake.pend_next_claim();
         let before_claim = fake.snapshot();
@@ -184,24 +167,18 @@ async fn canonical_port_preserves_provisioning_source() -> TestResult<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn canonical_port_preserves_batch_register_and_claim_sources() -> TestResult<()> {
+async fn canonical_port_preserves_allocation_register_and_claim_sources() -> TestResult<()> {
     let owner = SoftwareCpu::new();
     owner
         .run_main(async {
-            let batch_fake = FakeAccess::new(message());
-            let mut batch_port = PdmaRegisterPort::new(batch_fake.clone())?;
-            let provisioning =
-                PdmaProvisioningError::Provisioning(PdmaProvisioningCause::StorageExhausted);
-            batch_fake.fail_next_batch(PdmaBatchError::Provisioning(provisioning));
-            let batch = batch_port
+            let allocation_fake = FakeAccess::new(message());
+            let mut allocation_port = PdmaRegisterPort::new(allocation_fake.clone())?;
+            allocation_fake.fail_next_allocation();
+            let error = allocation_port
                 .try_create_queue(queue_config())
                 .await
-                .expect_err("typed queue creation must preserve batch failure");
-            assert!(matches!(batch, PdmaRegisterPortError::Batch(_)));
-            assert_eq!(
-                Error::source(&batch).and_then(|source| source.downcast_ref()),
-                Some(&PdmaBatchError::Provisioning(provisioning))
-            );
+                .expect_err("queue allocation must preserve its failure");
+            assert!(matches!(error, PdmaRegisterPortError::Provisioning(_)));
 
             let fake = FakeAccess::new(message());
             let mut port = PdmaRegisterPort::new(fake.clone())?;

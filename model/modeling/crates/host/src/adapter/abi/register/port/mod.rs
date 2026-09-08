@@ -1,17 +1,18 @@
 mod api;
+mod bootstrap;
 mod control;
 mod descriptor;
 mod driver;
 mod irq;
+mod pending;
 mod registers;
 mod retirement;
 mod state;
 mod submission;
 
 use super::{
-    PdmaBatchAccess, PdmaBatchError, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim,
-    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegisterAccessError, PdmaRegisterPortError,
-    RegisterQueueStatus,
+    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMemoryProvisioning,
+    PdmaProvisioningError, PdmaRegisterAccessError, PdmaRegisterPortError, RegisterQueueStatus,
 };
 use crate::PortError;
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, RegisterAccess};
@@ -22,6 +23,15 @@ use tokio::sync::Mutex;
 type PdmaPortResult<T> = Result<T, PdmaRegisterPortError>;
 
 /// CPU-bound canonical PDMA port over split capabilities.
+///
+/// # Cancel safety
+///
+/// Accesses execute in order; completed allocations, memory writes and register
+/// writes persist when a future is dropped. Clones resolve an issued queue-command
+/// response before issuing another command, without reissuing the original command.
+/// Unresolved issued submissions retain driver credit even if every port is dropped.
+/// Retrying creation with the same configuration recovers an accepted activation;
+/// retirement retries deliver each retained record once. Reset requires a new driver.
 #[derive(Debug, Clone)]
 pub struct PdmaRegisterPort<A> {
     access: A,
@@ -59,6 +69,7 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     }
     /// Reads one queue status without erasing register or response failures.
     pub async fn try_queue_status(&self, queue: EpochQueue) -> PdmaPortResult<RegisterQueueStatus> {
+        let _window = self.queue_window.lock().await;
         let state = self.with_state(|state| {
             state.queue.ok_or_else(|| {
                 PdmaRegisterPortError::from(PortError::UnknownQueue(queue.queue_id()))
@@ -106,13 +117,6 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     {
         self.poll_typed(future).await
     }
-    async fn poll_batch<F, T>(&self, future: F) -> PdmaPortResult<T>
-    where
-        F: Future<Output = Result<T, PdmaBatchError>> + Send,
-        T: Send,
-    {
-        self.poll_typed(future).await
-    }
     async fn poll_register<F, T>(&self, future: F) -> PdmaPortResult<T>
     where
         F: Future<Output = Result<T, PdmaRegisterAccessError>> + Send,
@@ -148,7 +152,6 @@ pub trait CanonicalAccess:
     + MemoryAccess
     + RegisterAccess<Error = PdmaRegisterAccessError>
     + PdmaMemoryProvisioning<Error = PdmaProvisioningError>
-    + PdmaBatchAccess<BatchError = PdmaBatchError>
     + PdmaExactInterruptClaim<Error = PdmaClaimError>
 {
 }
@@ -159,7 +162,6 @@ impl<T> CanonicalAccess for T where
         + MemoryAccess
         + RegisterAccess<Error = PdmaRegisterAccessError>
         + PdmaMemoryProvisioning<Error = PdmaProvisioningError>
-        + PdmaBatchAccess<BatchError = PdmaBatchError>
         + PdmaExactInterruptClaim<Error = PdmaClaimError>
 {
 }

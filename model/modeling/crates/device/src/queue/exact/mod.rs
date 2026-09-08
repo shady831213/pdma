@@ -1,12 +1,9 @@
-#[doc(hidden)]
-pub(crate) mod block;
+mod block;
 mod error;
 mod publication;
 mod request;
-#[doc(hidden)]
-pub(crate) mod ring_state;
-#[doc(hidden)]
-pub(crate) mod state;
+mod ring_state;
+mod state;
 mod status;
 mod submission;
 
@@ -26,52 +23,52 @@ use pdma_model_contract::semantic::{
 };
 
 #[derive(Debug)]
-pub(crate) struct ExactQueueIo {
+pub(super) struct ExactQueueIo {
     active: Option<ActiveQueue>,
     pending_fault: Option<AbiEvent>,
 }
 
 impl ExactQueueIo {
     #[cfg(test)]
-    pub(crate) const fn inactive_for_test() -> Self {
+    pub(super) const fn inactive_for_test() -> Self {
         Self {
             active: None,
             pending_fault: None,
         }
     }
 
-    pub(crate) const fn active(activation: QueueActivation, layouts: QueueRingLayouts) -> Self {
+    pub(super) const fn active(activation: QueueActivation, layouts: QueueRingLayouts) -> Self {
         Self {
             active: Some(ActiveQueue::new(activation, layouts)),
             pending_fault: None,
         }
     }
 
-    pub(crate) const fn ring_state(&self) -> Result<&ActiveQueue, PdmaControlError> {
+    pub(super) const fn ring_state(&self) -> Result<&ActiveQueue, PdmaControlError> {
         match &self.active {
             Some(active) => Ok(active),
             None => Err(PdmaControlError::InvalidQueue),
         }
     }
 
-    pub(crate) const fn ring_state_mut(&mut self) -> Result<&mut ActiveQueue, PdmaControlError> {
+    pub(super) const fn ring_state_mut(&mut self) -> Result<&mut ActiveQueue, PdmaControlError> {
         match &mut self.active {
             Some(active) => Ok(active),
             None => Err(PdmaControlError::InvalidQueue),
         }
     }
 
-    pub(crate) fn status(&self) -> Result<QueueStatus, PdmaControlError> {
+    pub(super) fn status(&self) -> Result<QueueStatus, PdmaControlError> {
         self.ring_state().and_then(|active| active.status())
     }
 
-    pub(crate) const fn pending_result(&self) -> Option<PendingDmaResult> {
+    pub(super) const fn pending_result(&self) -> Option<PendingDmaResult> {
         match self.pending_fault {
             Some(event) => Some(PendingDmaResult::Event(event)),
             None => None,
         }
     }
-    pub(crate) fn probe(
+    pub(super) fn probe(
         &self,
         memory: &PdmaMemoryMappings,
         entry: QueueDirectoryEntry,
@@ -85,7 +82,7 @@ impl ExactQueueIo {
         })
     }
 
-    pub(crate) fn fetch(
+    pub(super) fn fetch(
         &mut self,
         memory: &PdmaMemoryMappings,
         entry: QueueDirectoryEntry,
@@ -109,18 +106,18 @@ impl ExactQueueIo {
         }))
     }
 
-    pub(crate) fn consume(&mut self) -> ModelResult<()> {
+    pub(super) fn consume(&mut self) -> ModelResult<()> {
         let active = self
             .ring_state_mut()
             .map_err(|_| ModelError::DmaSubmissionState)?;
         submission::consume(active).map_err(|_| ModelError::DmaSubmissionState)
     }
 
-    pub(crate) fn has_pending(&self) -> bool {
+    pub(super) fn has_pending(&self) -> bool {
         self.ring_state().is_ok_and(submission::has_pending)
     }
 
-    pub(crate) fn publish_completion(
+    pub(super) fn publish_completion(
         &mut self,
         memory: &PdmaMemoryMappings,
         record: CompletionRecord,
@@ -131,7 +128,7 @@ impl ExactQueueIo {
         publication::completion(memory, active, record)
     }
 
-    pub(crate) const fn stage_execution_fault(
+    pub(super) const fn stage_execution_fault(
         event: pdma_model_contract::semantic::EventRecord,
     ) -> ModelResult<ModelError> {
         Err(ModelError::from_memory_fault(
@@ -140,7 +137,7 @@ impl ExactQueueIo {
         ))
     }
 
-    pub(crate) fn publish_fault(
+    pub(super) fn publish_fault(
         &mut self,
         memory: &PdmaMemoryMappings,
     ) -> super::io::FaultPublication {
@@ -168,17 +165,17 @@ impl ExactQueueIo {
         super::io::FaultPublication::Retry
     }
 
-    pub(crate) fn completion_blocked(&self, _publication_slots: usize) -> bool {
+    pub(super) fn completion_blocked(&self, _publication_slots: usize) -> bool {
         self.ring_state()
             .map_or(true, |active| ring_is_full(active, true))
     }
 
-    pub(crate) fn fault_blocked(&self, _compat_publication_slots: usize) -> bool {
+    pub(super) fn fault_blocked(&self, _compat_publication_slots: usize) -> bool {
         self.ring_state()
             .map_or(true, |active| ring_is_full(active, false))
     }
 
-    pub(crate) fn records_pending(&self, completion: bool) -> ModelResult<bool> {
+    pub(super) fn records_pending(&self, completion: bool) -> ModelResult<bool> {
         let active = self
             .ring_state()
             .map_err(|_| ModelError::DmaSubmissionState)?;

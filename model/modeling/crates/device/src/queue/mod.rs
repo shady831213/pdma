@@ -1,21 +1,16 @@
-#[doc(hidden)]
-pub(crate) mod block;
-#[doc(hidden)]
+mod block;
 pub(crate) mod exact;
-#[doc(hidden)]
 pub(crate) mod io;
-#[doc(hidden)]
-pub(crate) mod ring;
+mod ring;
 pub(crate) mod runnable;
-#[doc(hidden)]
-pub(crate) mod semantic;
+mod semantic;
 
 #[cfg(test)]
 mod tests;
 
 #[derive(Debug, Default)]
 pub(crate) struct QueueBlock {
-    pub(crate) contexts: Vec<PdmaQueue>,
+    contexts: Vec<PdmaQueue>,
 }
 
 use self::io::{NormalizedFetch, PublicationOutcome};
@@ -29,13 +24,13 @@ use pdma_model_contract::semantic::{
 };
 
 #[derive(Debug)]
-pub(crate) struct PdmaQueue {
-    pub(crate) entry: QueueDirectoryEntry,
-    pub(crate) io: QueueIo,
+struct PdmaQueue {
+    entry: QueueDirectoryEntry,
+    io: QueueIo,
 }
 
 impl PdmaQueue {
-    pub(crate) fn semantic(
+    fn semantic(
         queue: QueueId,
         completion: CompletionRingId,
         config: QueueConfig,
@@ -49,7 +44,7 @@ impl PdmaQueue {
         })
     }
 
-    pub(crate) const fn exact(entry: QueueDirectoryEntry, io: ExactQueueIo) -> Self {
+    const fn exact(entry: QueueDirectoryEntry, io: ExactQueueIo) -> Self {
         Self {
             entry,
             io: QueueIo::Exact(io),
@@ -58,31 +53,31 @@ impl PdmaQueue {
 }
 
 #[derive(Debug)]
-pub(crate) enum QueueIo {
+enum QueueIo {
     Semantic(SemanticQueueIo),
     Exact(ExactQueueIo),
 }
 
 impl QueueIo {
-    pub(crate) const fn is_exact(&self) -> bool {
+    const fn is_exact(&self) -> bool {
         matches!(self, Self::Exact(_))
     }
 
-    pub(crate) const fn exact(&self) -> Option<&ExactQueueIo> {
+    const fn exact(&self) -> Option<&ExactQueueIo> {
         match self {
             Self::Semantic(_) => None,
             Self::Exact(io) => Some(io),
         }
     }
 
-    pub(crate) const fn exact_mut(&mut self) -> Option<&mut ExactQueueIo> {
+    const fn exact_mut(&mut self) -> Option<&mut ExactQueueIo> {
         match self {
             Self::Semantic(_) => None,
             Self::Exact(io) => Some(io),
         }
     }
 
-    pub(crate) fn submit_semantic(
+    fn submit_semantic(
         &mut self,
         queue: QueueId,
         command: Command,
@@ -93,28 +88,28 @@ impl QueueIo {
         }
     }
 
-    pub(crate) fn poll_semantic_completion(&mut self) -> Option<CompletionRecord> {
+    fn poll_semantic_completion(&mut self) -> Option<CompletionRecord> {
         match self {
             Self::Semantic(io) => io.poll_completion(),
             Self::Exact(_) => None,
         }
     }
 
-    pub(crate) fn poll_semantic_event(&mut self, queue: QueueId) -> Option<EventRecord> {
+    fn poll_semantic_event(&mut self, queue: QueueId) -> Option<EventRecord> {
         match self {
             Self::Semantic(io) => io.poll_event(queue),
             Self::Exact(_) => None,
         }
     }
 
-    pub(crate) const fn pending_exact_fault(&self) -> Option<exact::PendingDmaResult> {
+    const fn pending_exact_fault(&self) -> Option<exact::PendingDmaResult> {
         match self {
             Self::Semantic(_) => None,
             Self::Exact(io) => io.pending_result(),
         }
     }
 
-    pub(crate) fn probe(
+    fn probe(
         &self,
         memory: &PdmaMemoryMappings,
         entry: QueueDirectoryEntry,
@@ -125,7 +120,7 @@ impl QueueIo {
         }
     }
 
-    pub(crate) fn fetch(
+    fn fetch(
         &mut self,
         memory: &PdmaMemoryMappings,
         entry: QueueDirectoryEntry,
@@ -136,7 +131,7 @@ impl QueueIo {
         }
     }
 
-    pub(crate) fn consume(&mut self) -> ModelResult<()> {
+    fn consume(&mut self) -> ModelResult<()> {
         match self {
             Self::Semantic(io) => {
                 io.consume();
@@ -146,7 +141,7 @@ impl QueueIo {
         }
     }
 
-    pub(crate) fn has_pending(&self) -> bool {
+    fn has_pending(&self) -> bool {
         match self {
             Self::Semantic(io) => io.has_pending(),
             Self::Exact(io) => io.has_pending(),
@@ -154,14 +149,14 @@ impl QueueIo {
     }
 
     #[cfg(test)]
-    pub(crate) const fn semantic_cursors(&self) -> Option<((usize, usize), (usize, usize))> {
+    const fn semantic_cursors(&self) -> Option<((usize, usize), (usize, usize))> {
         match self {
             Self::Semantic(io) => Some(io.cursors()),
             Self::Exact(_) => None,
         }
     }
 
-    pub(crate) fn publish_completion(
+    fn publish_completion(
         &mut self,
         memory: &PdmaMemoryMappings,
         record: CompletionRecord,
@@ -172,38 +167,35 @@ impl QueueIo {
         }
     }
 
-    pub(crate) const fn stage_execution_fault(
-        &mut self,
-        event: EventRecord,
-    ) -> ModelResult<ModelError> {
+    const fn stage_execution_fault(&mut self, event: EventRecord) -> ModelResult<ModelError> {
         match self {
             Self::Semantic(io) => Ok(io.stage_execution_fault(event)),
             Self::Exact(_) => ExactQueueIo::stage_execution_fault(event),
         }
     }
 
-    pub(crate) fn publish_fault(&mut self, memory: &PdmaMemoryMappings) -> io::FaultPublication {
+    fn publish_fault(&mut self, memory: &PdmaMemoryMappings) -> io::FaultPublication {
         match self {
             Self::Semantic(io) => io.publish_fault(),
             Self::Exact(io) => io.publish_fault(memory),
         }
     }
 
-    pub(crate) fn completion_blocked(&self, publication_slots: usize) -> bool {
+    fn completion_blocked(&self, publication_slots: usize) -> bool {
         match self {
             Self::Semantic(io) => io.completion_blocked(publication_slots),
             Self::Exact(io) => io.completion_blocked(publication_slots),
         }
     }
 
-    pub(crate) fn fault_blocked(&self, publication_slots: usize) -> bool {
+    fn fault_blocked(&self, publication_slots: usize) -> bool {
         match self {
             Self::Semantic(io) => io.fault_blocked(publication_slots),
             Self::Exact(io) => io.fault_blocked(publication_slots),
         }
     }
 
-    pub(crate) fn records_pending(&self, completion: bool) -> ModelResult<bool> {
+    fn records_pending(&self, completion: bool) -> ModelResult<bool> {
         match self {
             Self::Semantic(io) => Ok(io.records_pending(completion)),
             Self::Exact(io) => io.records_pending(completion),

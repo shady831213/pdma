@@ -178,21 +178,21 @@ impl QueueBlock {
         self.contexts.clear();
     }
 
-    pub(crate) fn get(&self, id: QueueId) -> ModelResult<&PdmaQueue> {
+    pub(super) fn get(&self, id: QueueId) -> ModelResult<&PdmaQueue> {
         self.contexts
             .iter()
             .find(|queue| queue.entry.queue_id() == id)
             .ok_or(ModelError::UnknownQueue(id))
     }
 
-    pub(crate) fn get_mut(&mut self, id: QueueId) -> ModelResult<&mut PdmaQueue> {
+    pub(super) fn get_mut(&mut self, id: QueueId) -> ModelResult<&mut PdmaQueue> {
         self.contexts
             .iter_mut()
             .find(|queue| queue.entry.queue_id() == id)
             .ok_or(ModelError::UnknownQueue(id))
     }
 
-    pub(crate) fn get_by_completion(&self, id: CompletionRingId) -> ModelResult<&PdmaQueue> {
+    fn get_by_completion(&self, id: CompletionRingId) -> ModelResult<&PdmaQueue> {
         self.contexts
             .iter()
             .find(|queue| queue.entry.completion_ring_id() == id)

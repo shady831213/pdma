@@ -1,7 +1,7 @@
 use crate::{ModelError, ModelResult};
 
 #[derive(Debug)]
-pub(crate) struct NativeRing<T> {
+pub(super) struct NativeRing<T> {
     entries: Vec<Option<T>>,
     head: usize,
     tail: usize,
@@ -9,7 +9,7 @@ pub(crate) struct NativeRing<T> {
 }
 
 impl<T> NativeRing<T> {
-    pub(crate) fn with_capacity(capacity: usize) -> ModelResult<Self> {
+    pub(super) fn with_capacity(capacity: usize) -> ModelResult<Self> {
         if capacity == 0 {
             return Err(ModelError::ZeroCapacity);
         }
@@ -22,24 +22,24 @@ impl<T> NativeRing<T> {
         })
     }
 
-    pub(crate) fn is_full(&self) -> bool {
+    pub(super) fn is_full(&self) -> bool {
         self.len == self.entries.len()
     }
 
-    pub(crate) const fn is_empty(&self) -> bool {
+    pub(super) const fn is_empty(&self) -> bool {
         self.len == 0
     }
 
-    pub(crate) const fn len(&self) -> usize {
+    pub(super) const fn len(&self) -> usize {
         self.len
     }
 
     #[cfg(test)]
-    pub(crate) const fn cursors(&self) -> (usize, usize) {
+    pub(super) const fn cursors(&self) -> (usize, usize) {
         (self.head, self.tail)
     }
 
-    pub(crate) fn push(&mut self, item: T) -> ModelResult<()> {
+    pub(super) fn push(&mut self, item: T) -> ModelResult<()> {
         if self.is_full() {
             return Err(ModelError::RingFull);
         }
@@ -51,14 +51,14 @@ impl<T> NativeRing<T> {
         Ok(())
     }
 
-    pub(crate) fn front(&self) -> Option<&T> {
+    pub(super) fn front(&self) -> Option<&T> {
         if self.is_empty() {
             return None;
         }
         self.entries.get(self.head).and_then(Option::as_ref)
     }
 
-    pub(crate) fn pop(&mut self) -> Option<T> {
+    pub(super) fn pop(&mut self) -> Option<T> {
         if self.is_empty() {
             return None;
         }

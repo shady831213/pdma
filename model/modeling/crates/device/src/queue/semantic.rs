@@ -7,7 +7,7 @@ use pdma_model_contract::semantic::{
 use std::collections::VecDeque;
 
 #[derive(Debug)]
-pub(crate) struct SemanticQueueIo {
+pub(super) struct SemanticQueueIo {
     commands: NativeRing<Command>,
     completions: NativeRing<CompletionRecord>,
     events: VecDeque<EventRecord>,
@@ -15,7 +15,7 @@ pub(crate) struct SemanticQueueIo {
 }
 
 impl SemanticQueueIo {
-    pub(crate) fn new(command_depth: usize, completion_depth: usize) -> ModelResult<Self> {
+    pub(super) fn new(command_depth: usize, completion_depth: usize) -> ModelResult<Self> {
         Ok(Self {
             commands: NativeRing::with_capacity(command_depth)?,
             completions: NativeRing::with_capacity(completion_depth)?,
@@ -24,7 +24,7 @@ impl SemanticQueueIo {
         })
     }
 
-    pub(crate) fn submit(
+    pub(super) fn submit(
         &mut self,
         command: Command,
     ) -> ModelResult<(
@@ -35,18 +35,18 @@ impl SemanticQueueIo {
         self.commands.push(command).map(|()| identity)
     }
 
-    pub(crate) fn poll_completion(&mut self) -> Option<CompletionRecord> {
+    pub(super) fn poll_completion(&mut self) -> Option<CompletionRecord> {
         self.completions.pop()
     }
 
-    pub(crate) fn poll_event(&mut self, queue: QueueId) -> Option<EventRecord> {
+    pub(super) fn poll_event(&mut self, queue: QueueId) -> Option<EventRecord> {
         let index = self
             .events
             .iter()
             .position(|event| event.queue_id() == queue)?;
         self.events.remove(index)
     }
-    pub(crate) fn fetch(&self, entry: QueueDirectoryEntry) -> Option<NormalizedFetch> {
+    pub(super) fn fetch(&self, entry: QueueDirectoryEntry) -> Option<NormalizedFetch> {
         self.commands
             .front()
             .cloned()
@@ -56,7 +56,7 @@ impl SemanticQueueIo {
             })
     }
 
-    pub(crate) fn probe(&self, entry: QueueDirectoryEntry) -> Option<NormalizedFetch> {
+    pub(super) fn probe(&self, entry: QueueDirectoryEntry) -> Option<NormalizedFetch> {
         self.commands
             .front()
             .cloned()
@@ -66,20 +66,20 @@ impl SemanticQueueIo {
             })
     }
 
-    pub(crate) fn consume(&mut self) {
+    pub(super) fn consume(&mut self) {
         let _consumed = self.commands.pop();
     }
 
-    pub(crate) const fn has_pending(&self) -> bool {
+    pub(super) const fn has_pending(&self) -> bool {
         !self.commands.is_empty()
     }
 
     #[cfg(test)]
-    pub(crate) const fn cursors(&self) -> ((usize, usize), (usize, usize)) {
+    pub(super) const fn cursors(&self) -> ((usize, usize), (usize, usize)) {
         (self.commands.cursors(), self.completions.cursors())
     }
 
-    pub(crate) fn publish_completion(&mut self, record: CompletionRecord) -> PublicationOutcome {
+    pub(super) fn publish_completion(&mut self, record: CompletionRecord) -> PublicationOutcome {
         if self.completions.push(record).is_ok() {
             PublicationOutcome::Published
         } else {
@@ -87,13 +87,13 @@ impl SemanticQueueIo {
         }
     }
 
-    pub(crate) const fn stage_execution_fault(&mut self, event: EventRecord) -> crate::ModelError {
+    pub(super) const fn stage_execution_fault(&mut self, event: EventRecord) -> crate::ModelError {
         let source = crate::ModelError::from_memory_fault(event.buffer(), event.error_kind());
         self.pending_fault = Some((event, source));
         source
     }
 
-    pub(crate) fn publish_fault(&mut self) -> super::io::FaultPublication {
+    pub(super) fn publish_fault(&mut self) -> super::io::FaultPublication {
         let Some((event, _)) = self.pending_fault.take() else {
             return super::io::FaultPublication::Retry;
         };
@@ -101,15 +101,15 @@ impl SemanticQueueIo {
         super::io::FaultPublication::Semantic(event)
     }
 
-    pub(crate) fn completion_blocked(&self, publication_slots: usize) -> bool {
+    pub(super) fn completion_blocked(&self, publication_slots: usize) -> bool {
         self.completions.is_full() || self.completions.len() >= publication_slots
     }
 
-    pub(crate) fn fault_blocked(&self, compat_publication_slots: usize) -> bool {
+    pub(super) fn fault_blocked(&self, compat_publication_slots: usize) -> bool {
         self.events.len() >= compat_publication_slots
     }
 
-    pub(crate) fn records_pending(&self, completion: bool) -> bool {
+    pub(super) fn records_pending(&self, completion: bool) -> bool {
         if completion {
             !self.completions.is_empty()
         } else {

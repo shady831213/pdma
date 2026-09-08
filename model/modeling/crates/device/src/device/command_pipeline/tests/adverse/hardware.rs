@@ -40,16 +40,21 @@ pub(super) fn retire(
         queues: &mut core.queues,
         runnable: &mut core.runnable,
         memory: &core.memory,
-        irq: &mut core.irq,
         trace: &mut core.trace,
         fetches: &mut core.native_fetches,
-        resources: core.execution.resources(),
+        resources: core.command_pipeline.execution.resources(),
     };
-    let StepOutcome::Complete(result) = core.retirement.step(&mut context, &mut state) else {
+    let StepOutcome::Complete(result) = core
+        .command_pipeline
+        .retirement
+        .step(&mut context, &mut state)
+    else {
         panic!("retirement should complete");
     };
     assert!(matches!(
-        core.retirement.step(&mut context, &mut state),
+        core.command_pipeline
+            .retirement
+            .step(&mut context, &mut state),
         StepOutcome::Exhausted
     ));
     result

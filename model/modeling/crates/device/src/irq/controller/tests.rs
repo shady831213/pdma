@@ -1,214 +1,190 @@
 use super::PdmaIrqController;
+use crate::queue::QueueBlock;
+use crate::trace::TraceSink;
+use pdma_model_contract::abi::registers::{IrqSourceRegisters, QueueRegisters};
 use pdma_model_contract::semantic::{
-    CompletionRingId, DeviceEpoch, EpochIrqSource, IrqLine, IrqMessage, IrqMessageId,
-    IrqNotification, IrqRoute, IrqSource, IrqVector,
+    CompletionRingId, DeviceEpoch, IrqNotification, IrqSource, QueueId,
 };
 
-const EPOCH: DeviceEpoch = DeviceEpoch::initial();
+fn sources() -> QueueBlock {
+    let mut queues = QueueBlock::default();
+    for index in 0..2 {
+        queues
+            .write_configuration(index, QueueRegisters::SQ_DEPTH.offset(), 2)
+            .expect("queue");
+    }
+    queues
+}
 
-const fn current(source: IrqSource) -> EpochIrqSource {
-    EpochIrqSource::new(EPOCH, source)
+fn enable(queues: &mut QueueBlock, source: IrqSource, message: bool) {
+    let source = queues.irq_source_mut(source).expect("queue source");
+    for (register, value) in [
+        (IrqSourceRegisters::ROUTE_KIND, u64::from(message)),
+        (IrqSourceRegisters::ENABLED, 1),
+        (IrqSourceRegisters::MASKED, 0),
+    ] {
+        source
+            .write_register(
+                IrqSourceRegisters::register(register.id()).expect("register"),
+                value,
+                false,
+            )
+            .expect("write");
+    }
+    source.latch();
+}
+
+fn completion(index: usize) -> IrqSource {
+    IrqSource::Completion(CompletionRingId::new(index))
 }
 
 #[test]
-fn latch_asserts_enabled_unmasked_source() {
-    // Given: an enabled and unmasked completion IRQ source.
-    let line = IrqLine::new(IrqVector::new(0));
-    let source = IrqSource::Completion(CompletionRingId::new(1));
-    let mut controller = PdmaIrqController::new(EPOCH, line);
-    controller.enable(source);
-    controller.unmask(source);
+fn update_selects_lines_before_messages_and_completion_sources_before_events() {
+    // Given: pending messages, an event line and a higher-index completion line.
+    let mut queues = sources();
+    enable(&mut queues, completion(0), true);
+    enable(&mut queues, IrqSource::Event(QueueId::new(0)), false);
+    enable(&mut queues, completion(1), false);
+    let mut controller = PdmaIrqController::new(DeviceEpoch::initial());
 
-    // When: the device latches the source.
-    controller.latch(source);
+    // When: hardware evaluates all source outputs.
+    controller.update(&queues, &mut TraceSink::default());
 
-    // Then: software can observe an asserted pending IRQ for the source.
-    let snapshot = controller
-        .pending_snapshot()
-        .expect("enabled source should latch pending IRQ");
+    // Then: line priority wins, using completion-before-event source order.
+    let snapshot = controller.pending_snapshot(&queues).expect("line");
     assert!(snapshot.asserted());
-    assert_eq!(snapshot.cause().source(), source);
-    assert_eq!(snapshot.cause().line(), line);
-}
-
-#[test]
-fn masked_source_latches_without_asserting_line() {
-    // Given: an enabled but masked completion IRQ source.
-    let line = IrqLine::new(IrqVector::new(0));
-    let source = IrqSource::Completion(CompletionRingId::new(2));
-    let mut controller = PdmaIrqController::new(EPOCH, line);
-    controller.enable(source);
-
-    // When: the device latches the source.
-    controller.latch(source);
-
-    // Then: pending cause is preserved while line assertion is suppressed.
-    let snapshot = controller
-        .pending_snapshot()
-        .expect("masked source should remain pending");
-    assert!(!snapshot.asserted());
-    assert_eq!(snapshot.cause().source(), source);
-}
-
-#[test]
-fn ack_clears_pending_without_changing_mask_state() {
-    // Given: a masked pending IRQ source.
-    let line = IrqLine::new(IrqVector::new(0));
-    let source = IrqSource::Completion(CompletionRingId::new(3));
-    let mut controller = PdmaIrqController::new(EPOCH, line);
-    controller.enable(source);
-    controller.latch(source);
-
-    // When: software acknowledges the source and the device latches it again.
-    controller.ack(source, false);
-    controller.latch(source);
-
-    // Then: the source remains masked after ack and still does not assert.
-    let snapshot = controller
-        .pending_snapshot()
-        .expect("source should latch again after ack");
-    assert!(!snapshot.asserted());
-}
-
-#[test]
-fn disabled_source_does_not_latch() {
-    // Given: a disabled IRQ source.
-    let source = IrqSource::Completion(CompletionRingId::new(4));
-    let mut controller = PdmaIrqController::new(EPOCH, IrqLine::new(IrqVector::new(0)));
-
-    // When: the device attempts to latch the disabled source.
-    controller.latch(source);
-
-    // Then: no pending IRQ is recorded.
-    assert_eq!(controller.pending_snapshot(), None);
-}
-
-#[test]
-fn disabled_pending_source_stays_pending_without_asserting_line() {
-    // Given: an enabled pending source whose line is asserted.
-    let source = IrqSource::Completion(CompletionRingId::new(5));
-    let mut controller = PdmaIrqController::new(EPOCH, IrqLine::new(IrqVector::new(0)));
-    controller.enable(source);
-    controller.unmask(source);
-    controller.latch(source);
-
-    // When: software disables that source before acking it.
-    controller.disable(source);
-
-    // Then: pending cause remains visible but delivery is deasserted.
-    let snapshot = controller
-        .pending_snapshot()
-        .expect("disabled pending source should stay visible");
-    assert!(!snapshot.asserted());
-}
-
-#[test]
-fn remasking_pending_source_deasserts_line() {
-    // Given: an asserted pending source.
-    let source = IrqSource::Completion(CompletionRingId::new(6));
-    let mut controller = PdmaIrqController::new(EPOCH, IrqLine::new(IrqVector::new(0)));
-    controller.enable(source);
-    controller.unmask(source);
-    controller.latch(source);
-
-    // When: software masks that source.
-    controller.mask(source);
-
-    // Then: pending cause remains visible but delivery is suppressed.
-    let snapshot = controller
-        .pending_snapshot()
-        .expect("masked pending source should stay visible");
-    assert!(!snapshot.asserted());
-}
-
-#[test]
-fn asserted_source_takes_priority_over_masked_pending_source() {
-    // Given: a masked lower source and an unmasked higher source are both pending.
-    let masked = IrqSource::Completion(CompletionRingId::new(0));
-    let asserted = IrqSource::Completion(CompletionRingId::new(1));
-    let mut controller = PdmaIrqController::new(EPOCH, IrqLine::new(IrqVector::new(0)));
-    controller.enable(masked);
-    controller.latch(masked);
-    controller.enable(asserted);
-    controller.unmask(asserted);
-    controller.latch(asserted);
-
-    // When: software observes the pending IRQ snapshot.
-    let snapshot = controller
-        .pending_snapshot()
-        .expect("pending sources should produce a snapshot");
-
-    // Then: the asserted source is selected instead of the masked lower source.
-    assert!(snapshot.asserted());
-    assert_eq!(snapshot.cause().source(), asserted);
-}
-
-#[test]
-fn message_route_preserves_each_trigger_without_coalescing() {
-    // Given: an enabled message-signaled completion source.
-    let source = IrqSource::Completion(CompletionRingId::new(7));
-    let vector = IrqVector::new(5);
-    let mut controller = PdmaIrqController::new(EPOCH, IrqLine::new(IrqVector::new(0)));
-    controller
-        .configure_route(source, IrqRoute::Message(vector))
-        .expect("inactive source route is configurable");
-    controller.enable(source);
-    controller.unmask(source);
-
-    // When: the source triggers twice before software handles either message.
-    controller.latch(source);
-    controller.latch(source);
-
-    // Then: two distinct messages are delivered in order and no third remains.
-    let first = controller
-        .take_notification()
-        .expect("first message remains pending");
-    let second = controller
-        .take_notification()
-        .expect("second message remains pending");
+    assert_eq!(snapshot.cause().source(), completion(1));
     assert_eq!(
-        first,
-        IrqNotification::Message(IrqMessage::new(
-            IrqMessageId::new(0),
-            vector,
-            current(source),
-        ))
+        controller.take_notification(&mut queues),
+        Some(IrqNotification::Line(snapshot)),
     );
     assert_eq!(
-        second,
-        IrqNotification::Message(IrqMessage::new(
-            IrqMessageId::new(1),
-            vector,
-            current(source),
-        ))
+        controller.take_notification(&mut queues),
+        Some(IrqNotification::Line(snapshot))
     );
-    assert_eq!(controller.take_notification(), None);
 }
 
 #[test]
-fn masked_message_route_releases_all_triggers_after_unmask() {
-    // Given: an enabled but masked message-signaled completion source.
-    let source = IrqSource::Completion(CompletionRingId::new(8));
-    let mut controller = PdmaIrqController::new(EPOCH, IrqLine::new(IrqVector::new(0)));
-    controller
-        .configure_route(source, IrqRoute::Message(IrqVector::new(6)))
-        .expect("inactive source route is configurable");
-    controller.enable(source);
+fn masked_pending_line_does_not_hide_an_asserted_source() {
+    // Given: a masked lower completion and asserted higher completion.
+    let mut queues = sources();
+    enable(&mut queues, completion(0), false);
+    queues
+        .irq_source_mut(completion(0))
+        .expect("source")
+        .write_register(
+            IrqSourceRegisters::register(IrqSourceRegisters::MASKED.id()).expect("mask register"),
+            1,
+            false,
+        )
+        .expect("mask");
+    enable(&mut queues, completion(1), false);
+    let mut controller = PdmaIrqController::new(DeviceEpoch::initial());
 
-    // When: two triggers arrive while masked and software later unmasks the source.
-    controller.latch(source);
-    controller.latch(source);
-    assert_eq!(controller.take_notification(), None);
-    controller.unmask(source);
+    // When: the hardware aggregates line output.
+    controller.update(&queues, &mut TraceSink::default());
 
-    // Then: both discrete messages remain available for delivery.
-    assert!(matches!(
-        controller.take_notification(),
-        Some(IrqNotification::Message(_))
-    ));
-    assert!(matches!(
-        controller.take_notification(),
-        Some(IrqNotification::Message(_))
-    ));
-    assert_eq!(controller.take_notification(), None);
+    // Then: the asserted source supplies the cause.
+    let snapshot = controller.pending_snapshot(&queues).expect("line");
+    assert!(snapshot.asserted());
+    assert_eq!(snapshot.cause().source(), completion(1));
+}
+
+#[test]
+fn ack_of_selected_line_does_not_consume_or_reselect_another_source() {
+    // Given: two asserted line sources with the first selected.
+    let mut queues = sources();
+    enable(&mut queues, completion(0), false);
+    enable(&mut queues, completion(1), false);
+    let mut controller = PdmaIrqController::new(DeviceEpoch::initial());
+    let mut trace = TraceSink::default();
+    controller.update(&queues, &mut trace);
+
+    // When: ACK clears the selected cause before another hardware update.
+    queues
+        .irq_source_mut(completion(0))
+        .expect("source")
+        .ack(false);
+
+    // Then: no stale line escapes; only a subsequent update selects the other source.
+    assert!(!controller.notification_ready(&queues));
+    assert_eq!(controller.take_notification(&mut queues), None);
+    controller.update(&queues, &mut trace);
+    assert_eq!(
+        controller
+            .pending_snapshot(&queues)
+            .expect("second line")
+            .cause()
+            .source(),
+        completion(1)
+    );
+}
+
+#[test]
+fn repeated_update_preserves_pending_messages_until_taken() {
+    // Given: two pending messages from one queue source.
+    let mut queues = sources();
+    enable(&mut queues, completion(0), true);
+    queues
+        .irq_source_mut(completion(0))
+        .expect("source")
+        .latch();
+    let mut controller = PdmaIrqController::new(DeviceEpoch::initial());
+    let mut trace = TraceSink::default();
+
+    // When: hardware reevaluates repeatedly before each accepted notification.
+    for expected in 0..2 {
+        for _ in 0..3 {
+            controller.update(&queues, &mut trace);
+        }
+        let Some(IrqNotification::Message(message)) = controller.take_notification(&mut queues)
+        else {
+            panic!("message output");
+        };
+        assert_eq!(message.id().raw(), expected);
+        assert_eq!(message.source(), completion(0));
+        assert_eq!(controller.take_notification(&mut queues), None);
+    }
+
+    // Then: no extra notification can be manufactured by further evaluation.
+    controller.update(&queues, &mut trace);
+    assert!(!controller.notification_ready(&queues));
+    assert_eq!(controller.take_notification(&mut queues), None);
+}
+
+#[test]
+fn remasking_selected_message_prevents_consumption_until_unmask_and_update() {
+    // Given: a selected message output.
+    let mut queues = sources();
+    enable(&mut queues, completion(0), true);
+    let mut controller = PdmaIrqController::new(DeviceEpoch::initial());
+    let mut trace = TraceSink::default();
+    controller.update(&queues, &mut trace);
+
+    // When: software masks the source before accepting that output.
+    queues
+        .irq_source_mut(completion(0))
+        .expect("source")
+        .write_register(
+            IrqSourceRegisters::register(IrqSourceRegisters::MASKED.id()).expect("mask register"),
+            1,
+            false,
+        )
+        .expect("mask");
+
+    // Then: the pending message survives, retaining identity after unmask and evaluation.
+    assert!(!controller.notification_ready(&queues));
+    assert_eq!(controller.take_notification(&mut queues), None);
+    queues
+        .irq_source_mut(completion(0))
+        .expect("source")
+        .write_register(
+            IrqSourceRegisters::register(IrqSourceRegisters::MASKED.id()).expect("mask register"),
+            0,
+            false,
+        )
+        .expect("unmask");
+    controller.update(&queues, &mut trace);
+    assert!(matches!(controller.take_notification(&mut queues),
+        Some(IrqNotification::Message(message)) if message.id().raw() == 0));
 }

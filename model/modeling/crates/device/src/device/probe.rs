@@ -58,8 +58,8 @@ impl DeviceCore {
             &self.queues,
             &self.memory,
             &self.runnable,
-            &self.execution,
-            &self.retirement,
+            &self.command_pipeline.execution,
+            &self.command_pipeline.retirement,
         ) {
             RunStateProbe::Idle => DeviceRunState::Idle,
             RunStateProbe::Running => DeviceRunState::Running,

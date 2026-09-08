@@ -99,9 +99,7 @@ pub(super) fn pressure_revisits_only_fault_retirement() {
             TraceEventKind::IrqSourceLatched,
             TraceEventKind::IrqLineAsserted,
             TraceEventKind::IrqDeviceAck,
-            TraceEventKind::IrqLineDeasserted,
             TraceEventKind::IrqSourceLatched,
-            TraceEventKind::IrqLineAsserted,
         ]
     );
     assert!(prepared.fixture.core.irq_snapshot().is_some());

@@ -143,6 +143,7 @@ async fn corrupt_result_and_masked_line_preserve_consumer_and_pending_cause() ->
     .await?;
 
     // Then: the unchanged consumer retains the cause that asserts the line.
+    assert!(fixture.handle.wait_irq_notification_ready().await);
     assert_eq!(fixture.read(QueueRegisters::CQ_CONSUMER.offset()).await?, 0);
     assert!(
         fixture

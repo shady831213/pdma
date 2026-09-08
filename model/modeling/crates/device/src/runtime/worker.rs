@@ -54,9 +54,24 @@ impl Stage<RunnerState> for DeviceService {
             state.worker_publication = Some(state.generation);
             return StepOutcome::Complete(Ok(()));
         }
+        let irq_output = (
+            state.core.irq_snapshot(),
+            state.core.irq_notification_ready(),
+        );
         let outcome = Stage::step(&mut state.core, &mut (), &mut ());
         match outcome {
-            StepOutcome::Progressed => StepOutcome::Progressed,
+            StepOutcome::Progressed => {
+                if irq_output
+                    != (
+                        state.core.irq_snapshot(),
+                        state.core.irq_notification_ready(),
+                    )
+                {
+                    state.generation = state.generation.saturating_add(1);
+                    state.worker_publication = Some(state.generation);
+                }
+                StepOutcome::Progressed
+            }
             StepOutcome::Pending(reason)
             | StepOutcome::Complete(Ok(ModelStepStatus::Stalled(reason))) => {
                 state.stalls = state.stalls.saturating_add(1);

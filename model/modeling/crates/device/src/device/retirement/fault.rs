@@ -3,7 +3,7 @@ use crate::device::flow::ExecutionFault;
 use crate::queue::io::PublicationOutcome;
 use crate::status::AsyncStallReason;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::semantic::{IrqSource, QueueId};
+use pdma_model_contract::semantic::QueueId;
 
 impl RetirementUnit {
     pub(super) fn retire_fault(
@@ -41,7 +41,6 @@ impl RetirementUnit {
                 AsyncStallReason::EventPublicationPressure,
             ));
         }
-        ports.latch(IrqSource::Event(fault.queue));
         ports.retire_command(fault.queue)?;
         Err(source)
     }
@@ -73,7 +72,6 @@ impl RetirementUnit {
         if ports.publish_fault(queue)? == PublicationOutcome::Retry {
             return Ok(RetirementStatus::Stalled(reason));
         }
-        ports.latch(IrqSource::Event(queue));
         self.complete();
         ports.requeue(queue)?;
         source.map_or(Ok(RetirementStatus::Progressed), Err)

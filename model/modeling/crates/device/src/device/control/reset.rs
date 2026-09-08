@@ -1,7 +1,7 @@
 use super::DeviceCore;
 use crate::irq::PdmaIrqController;
 use crate::queue::exact::PdmaControlError;
-use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector};
+use pdma_model_contract::semantic::DeviceEpoch;
 
 impl DeviceCore {
     pub(crate) fn reset(&mut self, epoch: DeviceEpoch) {
@@ -9,8 +9,8 @@ impl DeviceCore {
         self.command_pipeline.clear();
         self.queues.clear();
         self.runnable.reset();
-        self.retirement.reset();
-        self.irq = PdmaIrqController::new(epoch, IrqLine::new(IrqVector::new(0)));
+        self.command_pipeline.retirement.reset();
+        self.irq = PdmaIrqController::new(epoch);
     }
 
     pub(crate) fn reset_runner(

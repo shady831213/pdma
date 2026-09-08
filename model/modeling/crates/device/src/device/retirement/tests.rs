@@ -28,7 +28,6 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
             queues: &mut core.queues,
             runnable: &mut runnable,
             memory: &core.memory,
-            irq: &mut core.irq,
             trace: &mut trace,
             fetches: &mut fetches,
             resources: ResourceConfig::default(),

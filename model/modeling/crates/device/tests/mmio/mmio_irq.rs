@@ -134,9 +134,19 @@ async fn message_readiness_is_non_consuming_and_claim_consumes_exactly_one() -> 
     );
     // When: unmasking exposes messages and repeated readiness checks precede two claims.
     write_u32(&endpoint, i(IrqSourceRegisters::MASKED.offset())?, 0).await?;
+    assert!(
+        handle
+            .wait_irq_notification_ready_at_epoch(DeviceEpoch::initial())
+            .await?
+    );
     assert!(handle.irq_notification_ready().await);
     assert!(handle.irq_notification_ready().await);
     for (id, pending, state) in [(0, 1, 91), (1, 0, 75)] {
+        assert!(
+            handle
+                .wait_irq_notification_ready_at_epoch(DeviceEpoch::initial())
+                .await?
+        );
         let Some(IrqNotification::Message(message)) = handle
             .take_irq_notification_at_epoch(DeviceEpoch::initial())
             .await?

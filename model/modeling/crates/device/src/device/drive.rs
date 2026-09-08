@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{StepOutcome, Then};
+use hardware_interface_pipeline::{AfterEach, Stage, StepOutcome};
 
 use super::DeviceCore;
 use super::context::HardwareContext;
@@ -30,20 +30,11 @@ impl DeviceCore {
             queues: &mut self.queues,
             runnable: &mut self.runnable,
             memory: &self.memory,
-            irq: &mut self.irq,
             trace: &mut self.trace,
             fetches: &mut self.native_fetches,
-            resources: self.execution.resources(),
+            resources: self.command_pipeline.execution.resources(),
         };
-        let mut stages = Then::new(
-            &mut self.issue,
-            Then::new(&mut self.execution, &mut self.retirement),
-        );
-        let outcome = self.command_pipeline.step(&mut context, &mut stages);
-        if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
-            self.command_pipeline.clear();
-        }
-        outcome
+        AfterEach::new(&mut self.command_pipeline, &mut self.irq).step(&mut context, &mut ((), ()))
     }
 
     pub(crate) const fn clear_command_pipeline(&mut self) {

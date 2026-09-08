@@ -20,21 +20,48 @@ enum PipelineState {
 }
 
 #[derive(Debug)]
-pub(super) struct PipelineSlot {
+pub(super) struct CommandPipeline {
     state: Option<PipelineState>,
+    pub(super) issue: IssueUnit,
+    pub(super) execution: ExecutionUnit,
+    pub(super) retirement: RetirementUnit,
 }
 
-impl PipelineSlot {
-    pub(super) const fn new() -> Self {
-        Self { state: None }
+impl CommandPipeline {
+    pub(super) fn new(resources: pdma_model_contract::semantic::ResourceConfig) -> Self {
+        Self {
+            state: None,
+            issue: IssueUnit::default(),
+            execution: ExecutionUnit::new(resources),
+            retirement: RetirementUnit::default(),
+        }
     }
 
-    pub(super) fn step(
+    pub(super) const fn clear(&mut self) {
+        self.state = None;
+    }
+
+    #[cfg(test)]
+    pub(super) const fn is_empty(&self) -> bool {
+        self.state.is_none()
+    }
+}
+
+impl Stage<HardwareContext<'_>> for CommandPipeline {
+    type Input = ();
+    type Output = ModelStepStatus;
+    type Error = ModelError;
+    type Wait = AsyncStallReason;
+    type State = ();
+
+    fn start((): Self::Input) -> Self::State {}
+
+    fn step(
         &mut self,
         context: &mut HardwareContext<'_>,
-        stages: &mut Then<&mut IssueUnit, Then<&mut ExecutionUnit, &mut RetirementUnit>>,
+        (): &mut Self::State,
     ) -> CommandStepOutcome {
-        let retirement_pending = stages.downstream.downstream.pending().is_some();
+        let retirement_pending = self.retirement.pending().is_some();
         if self.state.is_none()
             && !retirement_pending
             && context.runnable.current().is_none()
@@ -50,19 +77,18 @@ impl PipelineSlot {
                 PipelineState::Command(<CommandStages as Stage<HardwareContext<'_>>>::start(()))
             }
         });
-        match state {
-            PipelineState::Command(state) => stages.step(context, state),
-            PipelineState::Retirement(state) => stages.downstream.downstream.step(context, state),
+        let outcome = match state {
+            PipelineState::Command(state) => Then::new(
+                &mut self.issue,
+                Then::new(&mut self.execution, &mut self.retirement),
+            )
+            .step(context, state),
+            PipelineState::Retirement(state) => self.retirement.step(context, state),
+        };
+        if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
+            self.clear();
         }
-    }
-
-    pub(super) const fn clear(&mut self) {
-        self.state = None;
-    }
-
-    #[cfg(test)]
-    pub(super) const fn is_empty(&self) -> bool {
-        self.state.is_none()
+        outcome
     }
 }
 

@@ -193,10 +193,8 @@ fn assert_final_trace(trace: &[TraceEventKind]) {
             TraceEventKind::Stall,
             TraceEventKind::CompletionPolled,
             TraceEventKind::IrqDeviceAck,
-            TraceEventKind::IrqLineDeasserted,
             TraceEventKind::CompletionPublished,
             TraceEventKind::IrqSourceLatched,
-            TraceEventKind::IrqLineAsserted,
             TraceEventKind::CompletionPolled,
         ]
     );
@@ -206,9 +204,7 @@ fn assert_final_trace(trace: &[TraceEventKind]) {
             TraceEventKind::IrqSourceLatched,
             TraceEventKind::IrqLineAsserted,
             TraceEventKind::IrqDeviceAck,
-            TraceEventKind::IrqLineDeasserted,
             TraceEventKind::IrqSourceLatched,
-            TraceEventKind::IrqLineAsserted,
         ]
     );
 }

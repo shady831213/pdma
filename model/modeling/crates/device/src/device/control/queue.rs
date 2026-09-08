@@ -3,7 +3,7 @@ use super::DeviceCore;
 use crate::queue::exact::PendingDmaResult;
 impl DeviceCore {
     pub(crate) fn pending_dma_result(&self) -> Option<PendingDmaResult> {
-        match self.retirement.pending() {
+        match self.command_pipeline.retirement.pending() {
             Some(crate::device::retirement::PendingRetirement::Completion(success)) => {
                 success.completion().ok().map(PendingDmaResult::Completion)
             }

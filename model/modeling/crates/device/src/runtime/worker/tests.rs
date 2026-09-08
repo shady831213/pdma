@@ -3,6 +3,8 @@ use hardware_interface_pipeline::Operation;
 use hardware_interface_runtime::{NoopRegisterObserver, ObservationGate, SharedRegisterObserver};
 use pdma_model_contract::semantic::{ResourceConfig, TraceEventKind};
 
+mod irq;
+
 struct AcceptedCopy {
     shared: RunnerShared,
     target: pdma_model_contract::semantic::BufferId,

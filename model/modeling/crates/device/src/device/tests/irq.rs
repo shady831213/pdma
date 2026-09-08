@@ -14,10 +14,14 @@ struct Fixture {
 }
 
 fn core_with_queue() -> Fixture {
+    core_with_resources(ResourceConfig::default())
+}
+
+fn core_with_resources(resources: ResourceConfig) -> Fixture {
     let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
-    let mut core = DeviceCore::new(provisioning.memory_access(), ResourceConfig::default());
+    let mut core = DeviceCore::new(provisioning.memory_access(), resources);
     let source = provisioning.allocate(&mut core.memory, 4).expect("source");
     core.memory
         .write_object(source.object(), 0, &[1, 2, 3, 4])
@@ -94,4 +98,83 @@ fn line_ack_cannot_create_a_cause_for_a_disabled_source() {
     fixture.irq(IrqSourceRegisters::MASKED.offset(), 0);
     // Then: queued records alone do not synthesize an interrupt cause.
     assert_eq!(fixture.core.irq_snapshot(), None);
+}
+
+#[test]
+fn idle_step_refreshes_irq_output_after_mmio_unmask() {
+    // Given: a completion latched while masked, with no remaining command work.
+    let mut fixture = core_with_queue();
+    fixture.irq(IrqSourceRegisters::ENABLED.offset(), 1);
+    fixture.submit_copy(0);
+    assert_eq!(fixture.core.step(), Ok(ModelStepStatus::Progressed));
+    fixture.irq(IrqSourceRegisters::MASKED.offset(), 0);
+    assert!(!fixture.core.irq_notification_ready());
+
+    // When: an idle hardware step evaluates the changed source.
+    assert_eq!(fixture.core.step(), Ok(ModelStepStatus::Idle));
+
+    // Then: line output is asserted despite no command making progress.
+    assert!(
+        fixture
+            .core
+            .irq_snapshot()
+            .expect("pending cause")
+            .asserted()
+    );
+    assert!(fixture.core.irq_notification_ready());
+}
+
+#[test]
+fn stalled_step_refreshes_irq_output_after_mmio_unmask() {
+    // Given: a masked completion and a second command stalled behind its publication slot.
+    let mut fixture =
+        core_with_resources(ResourceConfig::default().with_completion_publication_slots(1));
+    fixture.irq(IrqSourceRegisters::ENABLED.offset(), 1);
+    fixture.submit_copy(0);
+    assert_eq!(fixture.core.step(), Ok(ModelStepStatus::Progressed));
+    fixture.submit_copy(1);
+    let stalled = Ok(ModelStepStatus::Stalled(
+        crate::AsyncStallReason::CompletionPublicationPressure,
+    ));
+    assert_eq!(fixture.core.step(), stalled);
+    fixture.irq(IrqSourceRegisters::MASKED.offset(), 0);
+    assert!(!fixture.core.irq_notification_ready());
+
+    // When: the retained command remains stalled during another hardware step.
+    assert_eq!(fixture.core.step(), stalled);
+
+    // Then: IRQ evaluation is not short-circuited by the command's pending outcome.
+    assert!(fixture.core.irq_notification_ready());
+    assert!(
+        fixture
+            .core
+            .irq_snapshot()
+            .expect("pending cause")
+            .asserted()
+    );
+}
+
+#[test]
+fn repeated_idle_steps_do_not_consume_or_duplicate_a_message() {
+    // Given: one message-routed completion.
+    let mut fixture = core_with_queue();
+    fixture.irq(IrqSourceRegisters::ROUTE_KIND.offset(), 1);
+    fixture.irq(IrqSourceRegisters::ENABLED.offset(), 1);
+    fixture.irq(IrqSourceRegisters::MASKED.offset(), 0);
+    fixture.submit_copy(0);
+    assert_eq!(fixture.core.step(), Ok(ModelStepStatus::Progressed));
+
+    // When: repeated idle evaluations happen before delivery accepts the message.
+    for _ in 0..3 {
+        assert_eq!(fixture.core.step(), Ok(ModelStepStatus::Idle));
+    }
+
+    // Then: the original identity is delivered once and never regenerated.
+    assert!(matches!(
+        fixture.core.take_irq_notification(),
+        Some(pdma_model_contract::semantic::IrqNotification::Message(message))
+            if message.id().raw() == 0
+    ));
+    assert_eq!(fixture.core.step(), Ok(ModelStepStatus::Idle));
+    assert_eq!(fixture.core.take_irq_notification(), None);
 }

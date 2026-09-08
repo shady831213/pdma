@@ -4,7 +4,6 @@ use crate::queue::io::PublicationOutcome;
 use crate::status::AsyncStallReason;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::AbiCompletion;
-use pdma_model_contract::semantic::IrqSource;
 
 impl SuccessfulExecution {
     pub(in crate::device) fn completion(self) -> ModelResult<AbiCompletion> {
@@ -50,8 +49,6 @@ impl RetirementUnit {
                 AsyncStallReason::CompletionPublicationPressure,
             ));
         }
-        ports.trace.completion_published(completion);
-        ports.latch(IrqSource::Completion(route.completion_ring));
         ports.retire_command(route.queue)?;
         Ok(RetirementStatus::Progressed)
     }
@@ -75,8 +72,6 @@ impl RetirementUnit {
                 AsyncStallReason::CompletionPublicationPressure,
             ));
         }
-        ports.trace.completion_published(completion);
-        ports.latch(IrqSource::Completion(route.completion_ring));
         self.complete();
         ports.requeue(route.queue)?;
         Ok(RetirementStatus::Progressed)

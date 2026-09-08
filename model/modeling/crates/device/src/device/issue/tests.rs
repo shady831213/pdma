@@ -66,15 +66,14 @@ fn issue(
     core: &mut DeviceCore,
     state: &mut <IssueUnit as Stage<HardwareContext<'_>>>::State,
 ) -> StepOutcome<FetchedWork, crate::ModelError, AsyncStallReason> {
-    core.issue.step(
+    core.command_pipeline.issue.step(
         &mut HardwareContext {
             queues: &mut core.queues,
             runnable: &mut core.runnable,
             memory: &core.memory,
-            irq: &mut core.irq,
             trace: &mut core.trace,
             fetches: &mut core.native_fetches,
-            resources: core.execution.resources(),
+            resources: core.command_pipeline.execution.resources(),
         },
         state,
     )
@@ -119,7 +118,7 @@ fn standalone_issue_admits_fitting_copy_past_starved_vector() {
 fn standalone_issue_all_starved_rotates_full_fifo_without_fetch_or_execution() {
     // Given: both queues are starved before Issue starts.
     let (mut core, queues) = fixture();
-    core.execution =
+    core.command_pipeline.execution =
         crate::device::execution::ExecutionUnit::new(ResourceConfig::default().with_read_slots(0));
     let before = core.trace_events().len();
     let mut state = IssueUnit::start(());
@@ -168,7 +167,7 @@ fn repeated_run_state_queries_leave_admission_and_hardware_untouched() {
     assert_eq!(core.trace, trace);
     assert_eq!(core.irq_snapshot(), irq);
     assert!(core.command_pipeline.is_empty());
-    assert!(!core.retirement.is_pending());
+    assert!(!core.command_pipeline.retirement.is_pending());
     assert_eq!(core.runnable.runnable_len(), 2);
     assert_eq!(core.runnable.next(), Some(queues[0]));
     assert_eq!(core.runnable.next(), Some(queues[1]));
@@ -181,7 +180,7 @@ fn repeated_run_state_queries_leave_admission_and_hardware_untouched() {
 fn pending_issue_resumes_same_request_when_copy_resources_return() {
     // Given: one retained Issue request that cannot admit either runnable queue.
     let (mut core, [vector, copy]) = fixture();
-    core.execution =
+    core.command_pipeline.execution =
         crate::device::execution::ExecutionUnit::new(ResourceConfig::default().with_read_slots(0));
     let mut state = IssueUnit::start(());
     assert!(matches!(
@@ -190,7 +189,7 @@ fn pending_issue_resumes_same_request_when_copy_resources_return() {
     ));
 
     // When: one read slot returns and the same Issue request advances.
-    core.execution =
+    core.command_pipeline.execution =
         crate::device::execution::ExecutionUnit::new(ResourceConfig::default().with_read_slots(1));
     let result = issue(&mut core, &mut state);
 

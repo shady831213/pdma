@@ -83,6 +83,15 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
 - Device-local IRQ enable/mask/ack belongs to `pdma-model-device`; generic handler
   registration, CPU execution and dispatch belong to `hardware-interface-runtime`;
   PDMA source/service/trace adaptation belongs to `pdma-model-host`.
+- Each queue owns its completion/event IRQ source registers and pending state. Successful
+  queue publication latches its source; source register writes apply local mask/ACK effects.
+  The command pipeline owns issue/execution/retirement and composes with the IRQ controller
+  through `AfterEach`: aggregation runs at every hardware step, including idle/stall/error,
+  without replacing the command outcome. Only aggregation selects an output source;
+  readiness/take reject a selected source invalidated by mask/ACK. Refresh never consumes
+  messages; accepting one consumes exactly one queue-owned message and wakes the worker.
+  Tests must await hardware readiness after unmask and between message takes, not assume
+  MMIO itself executes the aggregation stage. Line traces reflect step-end output transitions.
 - Software handlers register by `IrqVector` with host IRQ delivery before `run`, never
   with the device. Multiple sources may share one vector; each vector has one persistent
   handler entry, and delivery remains serial and non-reentrant.

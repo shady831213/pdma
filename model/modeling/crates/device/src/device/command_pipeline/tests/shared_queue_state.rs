@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{Operation, PipelineExt, StepOutcome};
+use hardware_interface_pipeline::{AfterEach, Operation, PipelineExt, StepOutcome};
 use pdma_model_contract::abi::AbiCompletion;
 
 use super::support::prepared_pair;
@@ -17,13 +17,16 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
             queues: &mut core.queues,
             runnable: &mut core.runnable,
             memory: &core.memory,
-            irq: &mut core.irq,
             trace: &mut core.trace,
             fetches: &mut core.native_fetches,
-            resources: core.execution.resources(),
+            resources: core.command_pipeline.execution.resources(),
         };
-        let mut operators =
-            IssueUnit::default().then((&mut core.execution).then(&mut core.retirement));
+        let mut operators = AfterEach::new(
+            IssueUnit::default().then(
+                (&mut core.command_pipeline.execution).then(&mut core.command_pipeline.retirement),
+            ),
+            &mut core.irq,
+        );
         let mut operation = Operation::new(());
         assert_eq!(
             operation.step(&mut operators, &mut context),
@@ -57,7 +60,7 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
         ((2, 2), (2, 2))
     );
     assert_eq!(core.runnable.current(), None);
-    assert!(core.irq.line_asserted());
+    assert!(core.irq_snapshot().expect("line source").asserted());
     for destination in prepared.destinations {
         assert_eq!(
             core.memory.read_object(destination.object(), 0, 8),

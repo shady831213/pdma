@@ -45,7 +45,7 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
         Ok(ModelStepStatus::FaultCached)
     );
     assert!(fixture.core.command_pipeline.is_empty());
-    assert!(fixture.core.retirement.is_pending());
+    assert!(fixture.core.command_pipeline.retirement.is_pending());
     assert_eq!(fixture.fetch_count(), 1);
     assert_eq!(
         super::support::cursors(&fixture.core, queue),
@@ -65,7 +65,7 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     );
     assert_eq!(fixture.fetch_count(), 1);
     assert!(fixture.core.command_pipeline.is_empty());
-    assert!(!fixture.core.retirement.is_pending());
+    assert!(!fixture.core.command_pipeline.retirement.is_pending());
 
     // Then: one SQ slot and one event slot advance with no success publication.
     assert_eq!(
@@ -182,20 +182,19 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
             queues: &mut core.queues,
             runnable: &mut core.runnable,
             memory: &core.memory,
-            irq: &mut core.irq,
             trace: &mut core.trace,
             fetches: &mut core.native_fetches,
-            resources: core.execution.resources(),
+            resources: core.command_pipeline.execution.resources(),
         };
         let input = loop {
-            match operation.step(&mut core.execution, &mut context) {
+            match operation.step(&mut core.command_pipeline.execution, &mut context) {
                 StepOutcome::Progressed => {}
                 StepOutcome::Complete(Ok(input)) => break input,
                 other => panic!("unexpected execution outcome: {other:?}"),
             }
         };
         assert!(matches!(
-            operation.step(&mut core.execution, &mut context),
+            operation.step(&mut core.command_pipeline.execution, &mut context),
             StepOutcome::Exhausted
         ));
         input

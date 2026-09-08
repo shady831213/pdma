@@ -1,8 +1,6 @@
 use hardware_interface_runtime::SharedMemoryAccess;
-use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqVector, ResourceConfig};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 
-use crate::device::execution::ExecutionUnit;
-use crate::device::retirement::RetirementUnit;
 use crate::irq::PdmaIrqController;
 use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
@@ -18,14 +16,11 @@ use crate::{ModelError, ModelResult};
 /// generic operation does not reset that hardware; whole-device reset invalidates it.
 pub struct DeviceCore {
     epoch: DeviceEpoch,
-    command_pipeline: command_pipeline::PipelineSlot,
+    command_pipeline: command_pipeline::CommandPipeline,
     native_fetches: usize,
     pub(crate) memory: PdmaMemoryMappings,
     pub(crate) queues: QueueBlock,
     runnable: RunnableQueues,
-    issue: issue::IssueUnit,
-    execution: ExecutionUnit,
-    retirement: RetirementUnit,
     pub(crate) irq: PdmaIrqController,
     trace: TraceSink,
     reset_runner_calls: usize,
@@ -36,15 +31,12 @@ impl DeviceCore {
     pub fn new(memory: impl Into<SharedMemoryAccess>, config: ResourceConfig) -> Self {
         Self {
             epoch: DeviceEpoch::initial(),
-            command_pipeline: command_pipeline::PipelineSlot::new(),
+            command_pipeline: command_pipeline::CommandPipeline::new(config),
             native_fetches: 0,
             memory: PdmaMemoryMappings::new(memory),
             queues: QueueBlock::default(),
             runnable: RunnableQueues::default(),
-            issue: issue::IssueUnit::default(),
-            execution: ExecutionUnit::new(config),
-            retirement: RetirementUnit::default(),
-            irq: PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0))),
+            irq: PdmaIrqController::new(DeviceEpoch::initial()),
             trace: TraceSink::default(),
             reset_runner_calls: 0,
         }
@@ -77,6 +69,7 @@ mod control;
 pub(crate) mod drive;
 mod execution;
 mod flow;
+mod irq;
 mod issue;
 pub(crate) mod mmio;
 mod probe;

@@ -19,8 +19,8 @@ impl DeviceCore {
                 source_index,
                 register,
             } => (
-                self.irq
-                    .read_direct(index, source_index, register.offset(), &self.queues)?,
+                self.queues
+                    .read_irq(index, source_index, register.offset())?,
                 register.width(),
             ),
         };
@@ -41,13 +41,9 @@ impl DeviceCore {
                 index,
                 source_index,
                 register,
-            } => self.irq.write_direct(
-                (index, source_index),
-                register,
-                value,
-                &self.queues,
-                &mut self.trace,
-            ),
+            } => self
+                .queues
+                .write_irq((index, source_index), register, value, &mut self.trace),
         }
     }
 }

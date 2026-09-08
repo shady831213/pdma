@@ -56,7 +56,7 @@ impl QueueBlock {
                 .map_err(|_| PdmaControlError::InvalidTransaction)?;
             self.contexts.push(super::PdmaQueue {
                 registers,
-                io: None,
+                ..super::PdmaQueue::default()
             });
             return Ok(true);
         }

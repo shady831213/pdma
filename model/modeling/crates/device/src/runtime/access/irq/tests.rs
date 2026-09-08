@@ -9,6 +9,8 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
+mod wake;
+
 fn publish_message(core: &mut DeviceCore, provisioning: &mut PdmaMemoryProvisioning) {
     let queue = configure(core, provisioning, 0, [4, 4, 4]);
     let source = provisioning

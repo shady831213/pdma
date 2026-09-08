@@ -1,6 +1,5 @@
 use crate::device::context::HardwareContext;
 use crate::device::flow::ExecutionFault;
-use crate::irq::PdmaIrqController;
 use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
 use crate::queue::io::{FaultPublication, PublicationOutcome};
@@ -8,13 +7,12 @@ use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::AbiCompletion;
-use pdma_model_contract::semantic::{IrqSource, QueueId, ResourceConfig};
+use pdma_model_contract::semantic::{QueueId, ResourceConfig};
 
 pub(crate) struct RetirementPorts<'a> {
     pub(super) queues: &'a mut QueueBlock,
     pub(super) memory: &'a PdmaMemoryMappings,
     pub(super) runnable: &'a mut RunnableQueues,
-    pub(super) irq: &'a mut PdmaIrqController,
     pub(super) trace: &'a mut TraceSink,
     pub(super) resources: ResourceConfig,
 }
@@ -25,7 +23,6 @@ impl<'a> RetirementPorts<'a> {
             queues: context.queues,
             memory: context.memory,
             runnable: context.runnable,
-            irq: context.irq,
             trace: context.trace,
             resources: context.resources,
         }
@@ -52,18 +49,14 @@ impl<'a> RetirementPorts<'a> {
         queue: QueueId,
         record: AbiCompletion,
     ) -> ModelResult<PublicationOutcome> {
-        self.queues.publish_completion(self.memory, queue, record)
+        self.queues
+            .publish_completion(self.memory, queue, record, self.trace)
     }
 
     pub(super) fn publish_fault(&mut self, queue: QueueId) -> ModelResult<PublicationOutcome> {
-        match self.queues.publish_fault(self.memory, queue)? {
+        match self.queues.publish_fault(self.memory, queue, self.trace)? {
             FaultPublication::Retry => Ok(PublicationOutcome::Retry),
-            FaultPublication::Exact(trace) => {
-                if let Some((queue, command)) = trace {
-                    self.trace.dma_event_published(queue, command);
-                }
-                Ok(PublicationOutcome::Published)
-            }
+            FaultPublication::Exact(_) => Ok(PublicationOutcome::Published),
         }
     }
 
@@ -80,17 +73,5 @@ impl<'a> RetirementPorts<'a> {
             .map_or(ModelError::DmaSubmissionState, |buffer| {
                 ModelError::from_memory_fault(buffer, fault.error_kind)
             }))
-    }
-
-    pub(super) fn latch(&mut self, source: IrqSource) {
-        let was_asserted = self.irq.line_asserted();
-        if self.irq.latch(source) {
-            self.trace.irq_source_latched(source);
-        }
-        match (was_asserted, self.irq.line_asserted()) {
-            (false, true) => self.trace.irq_line_asserted(),
-            (true, false) => self.trace.irq_line_deasserted(),
-            (false, false) | (true, true) => {}
-        }
     }
 }

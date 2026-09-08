@@ -1,9 +1,10 @@
 use super::io::{FaultPublication, NormalizedFetch, PublicationOutcome};
 use super::{ExactQueueIo, QueueBlock};
 use crate::memory::PdmaMemoryMappings;
+use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent};
-use pdma_model_contract::semantic::{CompletionRingId, QueueId};
+use pdma_model_contract::semantic::{CompletionRingId, IrqSource, QueueId};
 
 impl QueueBlock {
     pub(crate) fn contains_completion(&self, completion: CompletionRingId) -> bool {
@@ -14,8 +15,26 @@ impl QueueBlock {
         &mut self,
         memory: &PdmaMemoryMappings,
         queue: QueueId,
+        trace: &mut TraceSink,
     ) -> ModelResult<FaultPublication> {
-        Ok(self.get_mut(queue)?.publish_fault(memory))
+        let context = self
+            .contexts
+            .get_mut(queue.raw())
+            .ok_or(ModelError::UnknownQueue(queue))?;
+        let io = context.io.as_mut().ok_or(ModelError::UnknownQueue(queue))?;
+        let outcome = io.publish_fault(memory);
+        match outcome {
+            FaultPublication::Retry => {}
+            FaultPublication::Exact(published) => {
+                if let Some((queue, command)) = published {
+                    trace.dma_event_published(queue, command);
+                }
+                if context.event_irq.latch() {
+                    trace.irq_source_latched(IrqSource::Event(queue));
+                }
+            }
+        }
+        Ok(outcome)
     }
 
     pub(crate) fn publish_completion(
@@ -23,8 +42,26 @@ impl QueueBlock {
         memory: &PdmaMemoryMappings,
         queue: QueueId,
         record: AbiCompletion,
+        trace: &mut TraceSink,
     ) -> ModelResult<PublicationOutcome> {
-        Ok(self.get_mut(queue)?.publish_completion(memory, record))
+        let context = self
+            .contexts
+            .get_mut(queue.raw())
+            .ok_or(ModelError::UnknownQueue(queue))?;
+        let io = context.io.as_mut().ok_or(ModelError::UnknownQueue(queue))?;
+        let outcome = io.publish_completion(memory, record);
+        match outcome {
+            PublicationOutcome::Published => {
+                trace.completion_published(record);
+                if context.completion_irq.latch() {
+                    trace.irq_source_latched(IrqSource::Completion(CompletionRingId::new(
+                        queue.raw(),
+                    )));
+                }
+            }
+            PublicationOutcome::Retry => {}
+        }
+        Ok(outcome)
     }
 
     pub(crate) fn fetch(
@@ -81,19 +118,6 @@ impl QueueBlock {
         publication_slots: usize,
     ) -> ModelResult<bool> {
         Ok(self.get(queue)?.fault_blocked(publication_slots))
-    }
-
-    pub(crate) fn records_pending(&self, queue: QueueId, completion: bool) -> ModelResult<bool> {
-        Ok(self.get(queue)?.records_pending(completion))
-    }
-
-    pub(crate) fn completion_records_pending(
-        &self,
-        completion: CompletionRingId,
-    ) -> ModelResult<bool> {
-        Ok(self
-            .get(QueueId::new(completion.raw()))?
-            .records_pending(true))
     }
 
     pub(crate) fn pending_exact_fault(

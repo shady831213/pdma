@@ -1,9 +1,9 @@
 use pdma_model_contract::semantic::TraceEventKind;
 
-use super::{Case, Drive, Driven};
+use super::{Case, DrivePolicy, Driven};
 use crate::device::command_pipeline::tests::support::trace_kinds;
 
-pub(super) fn print(case: Case, drive: Drive, driven: &Driven) {
+pub(super) fn print(case: Case, drive: DrivePolicy, driven: &Driven) {
     let observation = &driven.observation;
     let irq_transitions: Vec<_> = trace_kinds(&observation.trace)
         .into_iter()

@@ -1,11 +1,10 @@
 use hardware_interface_pipeline::{Stage, StepOutcome, Then, ThenState};
 use pdma_model_contract::semantic::{CommandOperation, ResourceConfig};
 
+use super::ExecutionUnit;
 use super::resources::ResourceDemand;
-use super::{ExecutionOutcome, ExecutionUnit};
 use crate::device::context::HardwareContext;
-use crate::device::issue::FetchedWork;
-use crate::device::retirement::stage::RetirementInput;
+use crate::device::flow::{ExecutionOutcome, FetchedWork, RetirementWork};
 use crate::{AsyncStallReason, ModelError};
 
 #[derive(Debug)]
@@ -17,7 +16,7 @@ pub(super) struct ResourceGate {
 pub(super) struct Datapath;
 
 #[derive(Debug)]
-pub(crate) struct AdmittedWork(FetchedWork);
+pub(in crate::device) struct AdmittedWork(FetchedWork);
 
 impl Stage<HardwareContext<'_>> for ResourceGate {
     type Input = FetchedWork;
@@ -54,7 +53,7 @@ impl Stage<HardwareContext<'_>> for ResourceGate {
 
 impl Stage<HardwareContext<'_>> for Datapath {
     type Input = AdmittedWork;
-    type Output = RetirementInput;
+    type Output = RetirementWork;
     type Error = ModelError;
     type Wait = AsyncStallReason;
     type State = Option<AdmittedWork>;
@@ -72,8 +71,8 @@ impl Stage<HardwareContext<'_>> for Datapath {
             return StepOutcome::Exhausted;
         };
         let result = match work {
-            FetchedWork::Empty(status) => RetirementInput::Empty(status),
-            FetchedWork::FrontendFault(fault) => RetirementInput::FrontendFault(fault),
+            FetchedWork::Empty(status) => RetirementWork::Empty(status),
+            FetchedWork::FrontendFault(fault) => RetirementWork::FrontendFault(fault),
             FetchedWork::Command(command) => {
                 let route = command.route;
                 let outcome: ExecutionOutcome = match command.operation {
@@ -90,7 +89,7 @@ impl Stage<HardwareContext<'_>> for Datapath {
                         ExecutionUnit::execute_vector_add(context.dma, route, request)
                     }
                 };
-                RetirementInput::Executed(outcome)
+                RetirementWork::Executed(outcome)
             }
         };
         StepOutcome::Complete(Ok(result))
@@ -99,7 +98,7 @@ impl Stage<HardwareContext<'_>> for Datapath {
 
 impl Stage<HardwareContext<'_>> for ExecutionUnit {
     type Input = FetchedWork;
-    type Output = RetirementInput;
+    type Output = RetirementWork;
     type Error = ModelError;
     type Wait = AsyncStallReason;
     type State = ThenState<Option<FetchedWork>, Option<AdmittedWork>>;

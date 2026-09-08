@@ -1,8 +1,8 @@
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{Stage, StepOutcome};
 
 use crate::ModelError;
 use crate::device::retirement::RetirementUnit;
-use crate::device::retirement::stage::RetirementInput;
+use crate::device::retirement::stage::RetirementState;
 use crate::device::{DeviceCore, ModelStepStatus, context::HardwareContext};
 
 #[test]
@@ -24,8 +24,8 @@ fn retirement_hardware_accepts_fresh_retry_operations() {
     );
 
     // When: distinct retry operations reuse the same hardware.
-    let first = retire(&mut fixture.core, RetirementInput::Retry);
-    let second = retire(&mut fixture.core, RetirementInput::Retry);
+    let first = retire(&mut fixture.core, RetirementState::Retry);
+    let second = retire(&mut fixture.core, RetirementState::Retry);
 
     // Then: both requests finish and their completed operations are inert.
     assert_eq!(first, Ok(ModelStepStatus::Progressed));
@@ -34,9 +34,8 @@ fn retirement_hardware_accepts_fresh_retry_operations() {
 
 pub(super) fn retire(
     core: &mut DeviceCore,
-    input: RetirementInput,
+    mut state: RetirementState,
 ) -> crate::ModelResult<ModelStepStatus> {
-    let mut operation = Operation::new(input);
     let mut context = HardwareContext {
         queues: &mut core.queues,
         runnable: &mut core.runnable,
@@ -46,11 +45,11 @@ pub(super) fn retire(
         fetches: &mut core.native_fetches,
         resources: core.execution.resources(),
     };
-    let StepOutcome::Complete(result) = operation.step(&mut core.retirement, &mut context) else {
+    let StepOutcome::Complete(result) = core.retirement.step(&mut context, &mut state) else {
         panic!("retirement should complete");
     };
     assert!(matches!(
-        operation.step(&mut core.retirement, &mut context),
+        core.retirement.step(&mut context, &mut state),
         StepOutcome::Exhausted
     ));
     result

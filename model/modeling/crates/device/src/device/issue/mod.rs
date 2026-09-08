@@ -5,15 +5,15 @@ use crate::{AsyncStallReason, ModelError};
 
 mod arbitrate;
 mod fetch;
+#[cfg(test)]
+mod tests;
 
+use super::flow::FetchedWork;
 use arbitrate::{Arbitration, SelectedQueue};
 use fetch::Fetch;
-#[cfg(test)]
-pub(crate) use fetch::FetchedCommand;
-pub(crate) use fetch::FetchedWork;
 
 #[derive(Debug)]
-pub(crate) struct IssueUnit {
+pub(super) struct IssueUnit {
     stages: Then<Arbitration, Fetch>,
 }
 

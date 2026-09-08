@@ -4,7 +4,7 @@ use hardware_interface_pipeline::{
     AsyncExecutor, AsyncInteractionBackend, AsyncRunError, StepOutcome,
 };
 
-use super::{Drive, Driven, finish_observation};
+use super::{DrivePolicy, Driven, finish_observation};
 use crate::device::command_pipeline::tests::support::Prepared;
 
 pub(super) async fn observe(mut prepared: Prepared) -> Driven {
@@ -22,7 +22,7 @@ pub(super) async fn observe(mut prepared: Prepared) -> Driven {
             }
         }
     };
-    finish_observation(prepared, terminal, 0, Drive::Asynchronous)
+    finish_observation(prepared, terminal, 0, DrivePolicy::Asynchronous)
 }
 
 struct DirectBackend;

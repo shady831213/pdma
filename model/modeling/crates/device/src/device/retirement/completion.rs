@@ -1,6 +1,6 @@
 use super::{PendingRetirement, RetirementPorts, RetirementStatus, RetirementUnit};
 use crate::ModelResult;
-use crate::device::execution::SuccessfulExecution;
+use crate::device::flow::SuccessfulExecution;
 use crate::queue::io::PublicationOutcome;
 use crate::status::AsyncStallReason;
 use pdma_model_contract::semantic::{CompletionRecord, CompletionStatus, IrqSource};

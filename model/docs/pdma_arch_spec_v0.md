@@ -149,10 +149,11 @@ private interface helpers directly:
 ```text
 crates/device/src/
 ├── device/            # DeviceCore composition, retained request state, drive, and probes
-│   ├── issue/         # Arbitration and Fetch operators composed as IssueUnit
-│   ├── execution/    # ExecutionUnit and native semantic operations
-│   ├── retirement/   # RetirementUnit, typed ports, publication, and retry state
-│   └── control/      # cross-state queue activation, IRQ and whole-device reset
+│   ├── issue/         # resource admission, Arbitration and Fetch as IssueUnit
+│   ├── execution/     # ExecutionUnit and native semantic operations
+│   ├── retirement/    # RetirementUnit, typed ports, publication, and retry state
+│   ├── flow.rs        # concrete owned values passed between hardware operators
+│   └── control/       # cross-state queue activation, IRQ and whole-device reset
 ├── queue/             # QueueBlock plus semantic or exact ring state
 │   └── runnable.rs    # shared FIFO/deduplication state, not a stage
 ├── memory/            # PdmaMemoryMappings, allocation proposals and checked access
@@ -214,7 +215,7 @@ existing host/device surfaces.
 Every `PdmaQueue` owns its directory entry and one closed `QueueIo` variant.
 `SemanticQueueIo` owns semantic rings; `ExactQueueIo` owns the active exact SQ/CQ/EQ
 layouts, cursors, and pending frontend fault state. Exact and semantic queue variants
-normalize fetches into the same semantic command path and share the same scheduler,
+normalize fetches into the same semantic command path and share the same Issue unit,
 execution unit, retirement unit, IRQ controller, and trace sink. Execution consumes
 contract semantic commands directly and defines no third command model.
 
@@ -232,16 +233,23 @@ state/operator distinction in etha_model: request gathering, frame loading, and 
 storage are operators over the same channel state, while arbitration is a separate
 transform ([pinned reference](https://github.com/shady831213/etha_model/blob/5270f00874a1ad390fbbce6f5395be24a52d0ec9/src/etha/tx_sequencer.rs)).
 
-`IssueUnit` owns `Then<Arbitration, Fetch>`. Arbitration reads and advances runnable
-state, producing a `SelectedQueue` identity. Fetch accesses queue state through context
+`IssueUnit` owns `Then<Arbitration, Fetch>`. Arbitration owns admission: it examines at
+most one pass through the runnable FIFO, rotates resource-starved queues, and selects
+the first eligible queue before fetching anything. When every candidate is starved,
+the full rotation preserves order and emits one stall for that attempt. Status probes
+only observe state; they neither implement this selection policy nor mutate queues or
+trace. Fetch accesses queue state through context
 and produces `FetchedWork`, including command identity, completion routing, and the
 semantic operation or a frontend fault. `ExecutionUnit` owns a nested
 `Then<ResourceGate, Datapath>`:
 resource acceptance produces `AdmittedWork`, and the datapath turns it into
-`RetirementInput`. DMA faults are output data and reach retirement; they do not
+`RetirementWork`. The concrete owned edge values live in `device/flow.rs`, not in
+execution context or service-control enums. DMA faults are output data and reach retirement; they do not
 short-circuit the generic composition. Structural model failures may terminate a request.
+The execution resource gate remains a commit-boundary check for work already fetched
+when resource configuration changes.
 
-The root is one ordinary `Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>` chain.
+Normal command work uses one ordinary `Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>` chain.
 Every operator receives the same `HardwareContext`, a scoped unique view of queue state,
 runnable state, DMA, IRQ, trace, fetch accounting, and an immutable resource snapshot.
 Issue, execution, and retirement operators remain outside that context. Fetch and
@@ -251,10 +259,14 @@ later work directly through its narrow ports before returning success or a domai
 There is no duplicate queue owner, artificial feedback message, or separate manual
 dispatch-to-retirement state machine.
 
-The device retains the chain's derived `ThenState`. A previously cached frontend fault
-uses an explicit nested downstream `Retry` entry so retirement resumes immediately
-without arbitration, refetch, or execution. This retains the existing fault-cache and
-publication-retry boundaries without a second execution path.
+The device retains an explicit command-or-retirement request state. Normal work owns
+the chain's derived state; a retained retirement request directly steps the same
+`RetirementUnit`, without rebuilding nested compositor state or passing a retry command
+through execution. Retirement request state distinguishes data work, retry, and done;
+`Retry` is not an execution output. A frontend fault completes its command request as
+`FaultCached` without publishing an event. Only the next device request starts its
+retirement retry, ahead of any fresh Issue admission. Pending publication retains its
+request state without arbitration, refetch, or repeated DMA.
 
 Each outer turn preserves one architecture-visible interaction: selection and fetch are
 atomic together; the pure resource check and DMA are atomic together; retirement is the

@@ -80,14 +80,15 @@ impl DeviceCore {
     }
 }
 mod command_pipeline;
-pub(crate) mod context;
+mod context;
 mod control;
 #[doc(hidden)]
 pub(crate) mod drive;
-pub(crate) mod execution;
-pub(crate) mod issue;
+mod execution;
+mod flow;
+mod issue;
 mod probe;
-pub(crate) mod retirement;
+mod retirement;
 mod trace;
 
 pub(crate) use drive::ModelStepStatus;

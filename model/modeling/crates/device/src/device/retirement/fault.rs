@@ -1,5 +1,5 @@
 use super::{PendingRetirement, RetirementPorts, RetirementStatus, RetirementUnit};
-use crate::device::execution::ExecutionFault;
+use crate::device::flow::ExecutionFault;
 use crate::queue::io::PublicationOutcome;
 use crate::status::AsyncStallReason;
 use crate::{ModelError, ModelResult};

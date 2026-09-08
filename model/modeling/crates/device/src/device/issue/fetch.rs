@@ -1,25 +1,11 @@
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use pdma_model_contract::semantic::CommandOperation;
 
 use super::arbitrate::SelectedQueue;
 use crate::device::ModelStepStatus;
 use crate::device::context::HardwareContext;
-use crate::device::execution::CommandRoute;
-use crate::queue::io::{NormalizedFault, NormalizedFetch};
+use crate::device::flow::{CommandRoute, FetchedCommand, FetchedWork};
+use crate::queue::io::NormalizedFetch;
 use crate::{AsyncStallReason, ModelError};
-
-#[derive(Debug)]
-pub(crate) struct FetchedCommand {
-    pub(crate) route: CommandRoute,
-    pub(crate) operation: CommandOperation,
-}
-
-#[derive(Debug)]
-pub(crate) enum FetchedWork {
-    Empty(ModelStepStatus),
-    FrontendFault(NormalizedFault),
-    Command(FetchedCommand),
-}
 
 #[derive(Debug)]
 pub(super) struct Fetch;

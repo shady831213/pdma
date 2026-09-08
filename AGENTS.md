@@ -44,7 +44,7 @@ Ignore generated `model/modeling/target/` content.
 | --- | --- | --- |
 | Contract ABI | `crates/contract/src/abi/` | Layout-exact records, registers, MMIO, rings, codecs, and errors. |
 | Contract semantic | `crates/contract/src/semantic/` | Layout-independent commands, identities, queue controls, results, IRQ, resources, and trace vocabulary. |
-| Device composition | `crates/device/src/device/` | Ownership root, issue/execution/retirement operators, retained requests and typed control. |
+| Device composition | `crates/device/src/device/` | Ownership root, Issue admission, data-only flow, execution/retirement operators, retained requests and typed control. |
 | Device queue state | `crates/device/src/queue/` | Shared semantic/exact queues, ring-local transitions and runnable FIFO state. |
 | Device memory | `crates/device/src/memory/` | Reset-persistent mappings and checked access over runtime storage; public `dma` is a compatibility alias. |
 | Device MMIO | `crates/device/src/registers/`, `crates/device/src/interface/` | Generated register image, synchronous MMIO effects and closed atomic batches. |

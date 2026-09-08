@@ -1,8 +1,7 @@
-use hardware_interface_pipeline::{Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{StepOutcome, Then};
 
 use super::DeviceCore;
 use super::context::HardwareContext;
-use super::probe::{RunStateProbe, probe_run_state};
 #[cfg(test)]
 use crate::ModelResult;
 use crate::status::AsyncStallReason;
@@ -25,26 +24,8 @@ pub(crate) use HardwareStepStatus as ModelStepStatus;
 pub(crate) type CommandStepOutcome =
     StepOutcome<ModelStepStatus, crate::ModelError, AsyncStallReason>;
 
-enum Admission {
-    Accepted,
-    Idle,
-    Starved,
-}
-
 impl DeviceCore {
     pub(crate) fn step_pipeline(&mut self) -> CommandStepOutcome {
-        if self.command_pipeline.is_empty() {
-            match self.scan_admission() {
-                Admission::Accepted => {}
-                Admission::Idle => {
-                    self.trace.idle();
-                    return StepOutcome::Complete(Ok(ModelStepStatus::Idle));
-                }
-                Admission::Starved => {
-                    return StepOutcome::Pending(AsyncStallReason::ExecutionResourcePressure);
-                }
-            }
-        }
         let mut context = HardwareContext {
             queues: &mut self.queues,
             runnable: &mut self.runnable,
@@ -54,14 +35,11 @@ impl DeviceCore {
             fetches: &mut self.native_fetches,
             resources: self.execution.resources(),
         };
-        let state = self
-            .command_pipeline
-            .request(self.retirement.pending().is_some());
         let mut stages = Then::new(
             &mut self.issue,
             Then::new(&mut self.execution, &mut self.retirement),
         );
-        let outcome = stages.step(&mut context, state);
+        let outcome = self.command_pipeline.step(&mut context, &mut stages);
         if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
             self.command_pipeline.clear();
         }
@@ -70,51 +48,6 @@ impl DeviceCore {
 
     pub(crate) fn clear_command_pipeline(&mut self) {
         self.command_pipeline.clear();
-    }
-
-    fn scan_admission(&mut self) -> Admission {
-        let candidates = self.runnable.runnable_len();
-        if candidates == 0 {
-            return match probe_run_state(
-                &self.queues,
-                &self.dma,
-                &self.runnable,
-                &self.execution,
-                &self.retirement,
-            ) {
-                RunStateProbe::Idle => Admission::Idle,
-                RunStateProbe::Running | RunStateProbe::Blocked { .. } => Admission::Accepted,
-            };
-        }
-        let mut first_starved = None;
-        for _ in 0..candidates {
-            match probe_run_state(
-                &self.queues,
-                &self.dma,
-                &self.runnable,
-                &self.execution,
-                &self.retirement,
-            ) {
-                RunStateProbe::Blocked {
-                    queue,
-                    reason: AsyncStallReason::ExecutionResourcePressure,
-                } => {
-                    first_starved.get_or_insert(queue);
-                    self.runnable.rotate_current();
-                }
-                RunStateProbe::Idle => return Admission::Idle,
-                RunStateProbe::Running | RunStateProbe::Blocked { .. } => {
-                    return Admission::Accepted;
-                }
-            }
-        }
-        match first_starved {
-            Some(queue) => {
-                self.trace.stall(Some(queue), "ExecutionResourcePressure");
-                Admission::Starved
-            }
-            None => Admission::Accepted,
-        }
     }
 
     #[cfg(test)]

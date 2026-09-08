@@ -40,6 +40,10 @@ fn completed_operation_is_inert_and_device_accepts_another_operation() {
         StepOutcome::Complete(Ok(ModelStepStatus::Idle))
     );
     let trace = core.trace_events();
+    assert_eq!(
+        support::trace_kinds(&trace),
+        [pdma_model_contract::semantic::TraceEventKind::Idle]
+    );
 
     // When: the completed operation is revisited, then the hardware is reused.
     assert_eq!(operation.step(&mut core, &mut ()), StepOutcome::Exhausted);
@@ -52,4 +56,39 @@ fn completed_operation_is_inert_and_device_accepts_another_operation() {
         StepOutcome::Complete(Ok(ModelStepStatus::Idle))
     );
     assert!(core.command_pipeline.is_empty());
+}
+
+#[test]
+fn undoorbelled_submission_keeps_three_interactions_without_idle_trace() {
+    // Given: submitted work exists but its queue has not been made runnable.
+    let mut prepared = support::prepare(support::Case::Copy);
+    prepared.fixture.core.runnable.reset();
+    let trace = prepared.fixture.core.trace_events();
+
+    // When: one root request traverses the empty command path.
+    assert_eq!(
+        prepared.fixture.step(),
+        support::PipelineRunOutcome::Progressed
+    );
+    assert_eq!(
+        prepared.fixture.step(),
+        support::PipelineRunOutcome::Progressed
+    );
+    assert_eq!(
+        prepared.fixture.step(),
+        support::PipelineRunOutcome::Complete(Ok(ModelStepStatus::Idle))
+    );
+
+    // Then: the unsubmitted doorbell causes no fetch, trace, or queue consumption.
+    assert_eq!(prepared.fixture.fetch_count(), 0);
+    assert_eq!(prepared.fixture.core.trace_events(), trace);
+    assert_eq!(
+        prepared
+            .fixture
+            .core
+            .queues
+            .semantic_cursors(prepared.queue.queue_id()),
+        Ok(((0, 1), (0, 0)))
+    );
+    assert!(prepared.fixture.core.command_pipeline.is_empty());
 }

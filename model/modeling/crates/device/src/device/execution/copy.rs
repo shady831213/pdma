@@ -1,5 +1,5 @@
-use super::context::{CommandRoute, ExecutionFault, ExecutionOutcome, success};
 use super::memory::QueueMemoryResolver;
+use super::{CommandRoute, ExecutionFault, ExecutionOutcome, success};
 use crate::memory::PdmaMemoryMappings;
 use pdma_model_contract::semantic::{
     CopyRequest, DmaRangeStart, StridedCopyRequest, TraceOperation,

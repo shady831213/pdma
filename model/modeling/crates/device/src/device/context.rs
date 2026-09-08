@@ -5,12 +5,12 @@ use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
 use pdma_model_contract::semantic::ResourceConfig;
 
-pub(crate) struct HardwareContext<'a> {
-    pub(crate) queues: &'a mut QueueBlock,
-    pub(crate) runnable: &'a mut RunnableQueues,
-    pub(crate) dma: &'a PdmaMemoryMappings,
-    pub(crate) irq: &'a mut PdmaIrqController,
-    pub(crate) trace: &'a mut TraceSink,
-    pub(crate) fetches: &'a mut usize,
-    pub(crate) resources: ResourceConfig,
+pub(super) struct HardwareContext<'a> {
+    pub(super) queues: &'a mut QueueBlock,
+    pub(super) runnable: &'a mut RunnableQueues,
+    pub(super) dma: &'a PdmaMemoryMappings,
+    pub(super) irq: &'a mut PdmaIrqController,
+    pub(super) trace: &'a mut TraceSink,
+    pub(super) fetches: &'a mut usize,
+    pub(super) resources: ResourceConfig,
 }

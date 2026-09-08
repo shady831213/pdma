@@ -48,7 +48,12 @@ Workspace `Cargo.toml`, `clippy.toml`, and `rustfmt.toml` define the lint and fo
   choose whether to `tokio::spawn(worker.run())`, directly await it, or use another
   executor strategy.
 - Explicit manual-drive helpers belong only in manual status/trace and step-budget tests;
-  there is no public `SyncDevice` facade. Normal system scenarios run the async worker.
+  there is no public synchronous device facade. Normal system scenarios run the async worker.
+- `device::issue` owns resource admission and runnable selection; `device::probe` only
+  observes status. Concrete stage edges live in `device::flow` and carry no retry control.
+  The composition root selects normal command work or retained retirement service on
+  the same RetirementUnit. Frontend FaultCached completes one request; publication is
+  retried only by a subsequent request, without fetching or executing again.
 - `AsyncDriver` is CPU-bound: setup requires an active matching `SoftwareCpu`, clones share
   one command-ID/slot accounting state, and it alone services IRQs. `ManualDriver` is the
   explicit CPU-unbound observability facade, constructed with `ManualDriver::setup_on` or

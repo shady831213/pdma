@@ -33,8 +33,8 @@ struct Driven {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Drive {
-    Legacy,
+enum DrivePolicy {
+    CoreDrive,
     Stepped,
     Immediate,
     Asynchronous,
@@ -49,43 +49,46 @@ enum PostTerminal {
 pub(super) async fn drive_policy_parity() {
     // Given: every supported operation and execution-memory fault class.
     for case in Case::ALL {
-        // When: the legacy core and both generic executors drive identical direct cores.
-        let legacy = observe(prepare(case), Drive::Legacy);
-        let stepped = observe(prepare(case), Drive::Stepped);
-        let immediate = observe(prepare(case), Drive::Immediate);
+        // When: the current core drive and both generic executors drive identical direct cores.
+        let core_drive = observe(prepare(case), DrivePolicy::CoreDrive);
+        let stepped = observe(prepare(case), DrivePolicy::Stepped);
+        let immediate = observe(prepare(case), DrivePolicy::Immediate);
         let asynchronous = asynchronous::observe(prepare(case)).await;
 
         // Then: literal bytes, records, IRQ state, trace order, and outcomes agree exactly.
-        assert_eq!(stepped.observation, legacy.observation, "stepped {case:?}");
         assert_eq!(
-            immediate.observation, legacy.observation,
+            stepped.observation, core_drive.observation,
+            "stepped {case:?}"
+        );
+        assert_eq!(
+            immediate.observation, core_drive.observation,
             "immediate {case:?}"
         );
         assert_eq!(
-            asynchronous.observation, legacy.observation,
+            asynchronous.observation, core_drive.observation,
             "asynchronous {case:?}"
         );
-        assert_metrics(&legacy, PostTerminal::LiveCore);
+        assert_metrics(&core_drive, PostTerminal::LiveCore);
         assert_metrics(&stepped, PostTerminal::Exhausted);
         assert_metrics(&immediate, PostTerminal::Exhausted);
         assert_metrics(&asynchronous, PostTerminal::Exhausted);
-        expected::assert_literal(case, &legacy.observation);
-        report::print(case, Drive::Legacy, &legacy);
-        report::print(case, Drive::Stepped, &stepped);
-        report::print(case, Drive::Immediate, &immediate);
-        report::print(case, Drive::Asynchronous, &asynchronous);
+        expected::assert_literal(case, &core_drive.observation);
+        report::print(case, DrivePolicy::CoreDrive, &core_drive);
+        report::print(case, DrivePolicy::Stepped, &stepped);
+        report::print(case, DrivePolicy::Immediate, &immediate);
+        report::print(case, DrivePolicy::Asynchronous, &asynchronous);
     }
 }
 
-fn observe(mut prepared: Prepared, drive: Drive) -> Driven {
+fn observe(mut prepared: Prepared, drive: DrivePolicy) -> Driven {
     let (terminal, pending) = match drive {
-        Drive::Legacy => (prepared.fixture.core.step(), 0),
-        Drive::Stepped => drive_stepped(&mut prepared.fixture),
-        Drive::Immediate => match prepared.fixture.immediate() {
+        DrivePolicy::CoreDrive => (prepared.fixture.core.step(), 0),
+        DrivePolicy::Stepped => drive_stepped(&mut prepared.fixture),
+        DrivePolicy::Immediate => match prepared.fixture.immediate() {
             PipelineRunOutcome::Complete(result) => (result, 0),
             other => panic!("unexpected immediate outcome {other:?}"),
         },
-        Drive::Asynchronous => panic!("async policy has its own driver"),
+        DrivePolicy::Asynchronous => panic!("async policy has its own driver"),
     };
     finish_observation(prepared, terminal, pending, drive)
 }
@@ -94,7 +97,7 @@ fn finish_observation(
     mut prepared: Prepared,
     terminal: ModelResult<ModelStepStatus>,
     pending: usize,
-    drive: Drive,
+    drive: DrivePolicy,
 ) -> Driven {
     let trace = prepared.fixture.core.trace_events();
     let fetches = prepared.fixture.fetch_count();
@@ -134,12 +137,12 @@ fn finish_observation(
         .semantic_cursors(prepared.queue.queue_id());
     let irq_after_poll = prepared.fixture.core.irq_snapshot().is_some();
     let post_terminal = match drive {
-        Drive::Legacy => PostTerminal::LiveCore,
-        Drive::Stepped | Drive::Asynchronous => {
+        DrivePolicy::CoreDrive => PostTerminal::LiveCore,
+        DrivePolicy::Stepped | DrivePolicy::Asynchronous => {
             assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Exhausted);
             PostTerminal::Exhausted
         }
-        Drive::Immediate => {
+        DrivePolicy::Immediate => {
             assert_eq!(prepared.fixture.immediate(), PipelineRunOutcome::Exhausted);
             PostTerminal::Exhausted
         }

@@ -1,19 +1,18 @@
 mod completion;
 mod fault;
-#[doc(hidden)]
-pub(crate) mod ports;
-pub(crate) mod stage;
+mod ports;
+pub(super) mod stage;
 
-pub(crate) use ports::RetirementPorts;
+pub(super) use ports::RetirementPorts;
 
 use crate::ModelResult;
-use crate::device::execution::{RetirableExecution, SuccessfulExecution};
+use crate::device::flow::{RetirableExecution, SuccessfulExecution};
 use crate::queue::io::NormalizedFault;
 use crate::status::AsyncStallReason;
 use pdma_model_contract::semantic::QueueId;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum PendingRetirement {
+pub(super) enum PendingRetirement {
     Completion(SuccessfulExecution),
     Fault {
         queue: QueueId,
@@ -22,28 +21,28 @@ pub(crate) enum PendingRetirement {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RetirementStatus {
+pub(super) enum RetirementStatus {
     Progressed,
     FaultCached,
     Stalled(AsyncStallReason),
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct RetirementUnit {
+pub(super) struct RetirementUnit {
     pending: Option<PendingRetirement>,
 }
 
 impl RetirementUnit {
-    pub(crate) const fn pending(&self) -> Option<PendingRetirement> {
+    pub(super) const fn pending(&self) -> Option<PendingRetirement> {
         self.pending
     }
 
     #[cfg(test)]
-    pub(crate) const fn is_pending(&self) -> bool {
+    pub(super) const fn is_pending(&self) -> bool {
         self.pending.is_some()
     }
 
-    pub(crate) fn retire(
+    pub(super) fn retire(
         &mut self,
         ports: &mut RetirementPorts<'_>,
         outcome: RetirableExecution,
@@ -54,7 +53,7 @@ impl RetirementUnit {
         }
     }
 
-    pub(crate) fn retry(
+    pub(super) fn retry(
         &mut self,
         ports: &mut RetirementPorts<'_>,
     ) -> ModelResult<RetirementStatus> {
@@ -67,7 +66,7 @@ impl RetirementUnit {
         }
     }
 
-    pub(crate) fn cache_frontend_fault(
+    pub(super) fn cache_frontend_fault(
         &mut self,
         ports: &mut RetirementPorts<'_>,
         fault: NormalizedFault,
@@ -80,7 +79,7 @@ impl RetirementUnit {
         Ok(RetirementStatus::FaultCached)
     }
 
-    pub(crate) const fn reset(&mut self) {
+    pub(super) const fn reset(&mut self) {
         self.pending = None;
     }
 

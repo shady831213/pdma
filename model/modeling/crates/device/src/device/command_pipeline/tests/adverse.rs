@@ -3,14 +3,13 @@ use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, RingLayout};
 use pdma_model_contract::semantic::{
     BufferId, CommandId, CommandOperation, CompletionRingId, DeviceEpoch, EventErrorKind,
     EventRecord, EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects,
-    SoftwareOwnerId, TraceEventKind, desc::CopyRequest,
+    ResourceConfig, SoftwareOwnerId, TraceEventKind, desc::CopyRequest,
 };
 
-use super::support::{Case, PipelineRunOutcome, drive_to_complete, prepare, read};
+use super::support::{Case, Fixture, PipelineRunOutcome, drive_to_complete, prepare, read};
 use crate::ModelError;
-use crate::device::execution::CommandRoute;
-use crate::device::issue::{FetchedCommand, FetchedWork};
-use crate::device::retirement::stage::RetirementInput;
+use crate::device::flow::{CommandRoute, FetchedCommand, FetchedWork, RetirementWork};
+use crate::device::retirement::stage::RetirementState;
 use crate::device::{ModelStepStatus, context::HardwareContext};
 use crate::queue::io::NormalizedFault;
 
@@ -21,8 +20,7 @@ use hardware::retire;
 #[test]
 fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     // Given: an exact queue whose captured descriptor has invalid ABI metadata.
-    let mut fixture =
-        super::support::Fixture::new(pdma_model_contract::semantic::ResourceConfig::default());
+    let mut fixture = Fixture::new(ResourceConfig::default());
     fixture.core.enable_tracing();
     let stage = fixture
         .core
@@ -67,11 +65,29 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
         drive_to_complete(&mut fixture),
         Ok(ModelStepStatus::FaultCached)
     );
+    assert!(fixture.core.command_pipeline.is_empty());
+    assert!(fixture.core.retirement.is_pending());
+    assert_eq!(fixture.fetch_count(), 1);
+    let cached = fixture
+        .core
+        .exact_ring(queue)
+        .expect("exact queue")
+        .status()
+        .expect("cached status");
+    assert_eq!(cached.submission().consumer().raw(), 1);
+    assert_eq!(cached.event().producer().raw(), 0);
+    assert_eq!(cached.completion().producer().raw(), 0);
+    let cached_trace = fixture.core.trace_events();
+    assert_eq!(fixture.step(), PipelineRunOutcome::Exhausted);
+    assert_eq!(fixture.core.trace_events(), cached_trace);
     fixture.restart();
     assert_eq!(
         drive_to_complete(&mut fixture),
         Err(ModelError::DmaSubmissionState)
     );
+    assert_eq!(fixture.fetch_count(), 1);
+    assert!(fixture.core.command_pipeline.is_empty());
+    assert!(!fixture.core.retirement.is_pending());
 
     // Then: one SQ slot and one event slot advance with no success publication.
     let status = fixture
@@ -134,7 +150,10 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
     assert_eq!(
         retire(
             &mut prepared.fixture.core,
-            RetirementInput::FrontendFault(NormalizedFault { queue, source }),
+            RetirementState::Work(RetirementWork::FrontendFault(NormalizedFault {
+                queue,
+                source
+            })),
         ),
         Ok(ModelStepStatus::FaultCached)
     );
@@ -142,7 +161,7 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
         prepared.fixture.core.queues.semantic_cursors(queue),
         Ok(((1, 1), (0, 0)))
     );
-    let retired = retire(&mut prepared.fixture.core, RetirementInput::Retry);
+    let retired = retire(&mut prepared.fixture.core, RetirementState::Retry);
 
     // Then: the exact source, one event, and one consumer advance are preserved.
     assert_eq!(retired, Err(source));
@@ -211,7 +230,7 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
         ));
         input
     };
-    let result = retire(core, input);
+    let result = retire(core, RetirementState::Work(input));
 
     // Then: the command consumes once without DMA, completion, event, or IRQ success.
     assert_eq!(

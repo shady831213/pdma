@@ -3,7 +3,7 @@ use pdma_model_contract::semantic::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ResourceDemand {
+pub(in crate::device) struct ResourceDemand {
     internal_descriptors: usize,
     read_slots: usize,
     write_slots: usize,
@@ -11,7 +11,7 @@ pub(super) struct ResourceDemand {
 }
 
 impl ResourceDemand {
-    pub(super) fn for_command(command: &Command) -> Self {
+    pub(in crate::device) fn for_command(command: &Command) -> Self {
         Self::for_operation(command.operation())
     }
 
@@ -61,7 +61,7 @@ impl ResourceDemand {
         }
     }
 
-    pub(super) const fn fits(self, config: ResourceConfig) -> bool {
+    pub(in crate::device) const fn fits(self, config: ResourceConfig) -> bool {
         self.internal_descriptors <= config.internal_descriptors()
             && self.read_slots <= config.read_slots()
             && self.write_slots <= config.write_slots()

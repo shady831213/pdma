@@ -1,4 +1,4 @@
-use crate::device::execution::ExecutionFault;
+use crate::device::flow::ExecutionFault;
 use crate::memory::PdmaMemoryMappings;
 use pdma_model_contract::semantic::{CommandId, DmaRangeStart, MemoryFault, QueueId};
 

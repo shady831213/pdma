@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::IrqVector;
 use pdma_model_host::{
-    adapter::abi::{AsyncDeviceAccess, PdmaInterruptSource},
+    adapter::abi::AsyncDeviceAccess,
     runtime::interrupt::{PdmaIrqDelivery, PdmaIrqService},
 };
 use std::sync::Arc;
@@ -71,7 +71,7 @@ pub fn spawn(config: DeliveryConfig) -> DeliveryActor {
         let delivery = PdmaIrqDelivery::start(
             config.cpu,
             registry.freeze().unwrap_or_else(|_| std::process::abort()),
-            PdmaInterruptSource::new(config.access),
+            config.access,
             Arc::new(NoopInterruptObserver),
         );
         let _ = shutdown_tx.send(delivery.shutdown_handle());

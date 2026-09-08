@@ -1,7 +1,7 @@
 use pdma_model_contract::semantic::{
-    BufferId, Command, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch,
-    QueueConfig, QueueConfigHandle, QueueDirectoryEntry, QueueId,
+    BufferId, CompletionRecord, CompletionRingId, CompletionStatus, DeviceEpoch, QueueId,
 };
+use pdma_model_host::{Command, QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use pdma_model_host::{DriverPort, PortError};
 use std::future::pending;
 
@@ -148,17 +148,9 @@ impl DriverPort for ProbePort {
         Ok(())
     }
 
-    async fn irq_snapshot(&self) -> Option<pdma_model_contract::semantic::IrqSnapshot> {
-        None
-    }
-
-    async fn wait_irq(&self) -> Option<pdma_model_contract::semantic::IrqSnapshot> {
-        None
-    }
-
-    async fn wait_irq_notification(
-        &mut self,
-    ) -> Option<pdma_model_contract::semantic::IrqNotification> {
-        None
+    async fn irq_snapshot(
+        &self,
+    ) -> Result<Option<pdma_model_contract::semantic::IrqSnapshot>, PortError> {
+        Ok(None)
     }
 }

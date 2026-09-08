@@ -1,4 +1,4 @@
-//! Stateless conversion between exact ABI values and semantic behavior.
+//! Stateless decoding from ABI descriptors into device execution operands.
 
 #[doc(hidden)]
 pub(crate) mod command;

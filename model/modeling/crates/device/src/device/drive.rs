@@ -46,7 +46,7 @@ impl DeviceCore {
         outcome
     }
 
-    pub(crate) fn clear_command_pipeline(&mut self) {
+    pub(crate) const fn clear_command_pipeline(&mut self) {
         self.command_pipeline.clear();
     }
 

@@ -1,10 +1,13 @@
 //! Canonical host-core downstream surface tests.
 
-include!("compiler.rs");
+mod compiler;
+use compiler::verify_downstream_compile_surface;
+use std::process::Command;
 mod support;
 
 use hardware_interface_runtime::{CpuContextError, SoftwareCpu};
-use pdma_model_contract::semantic::{CommandId, CompletionRecord, CopyRequest};
+use pdma_model_contract::semantic::{CommandId, CompletionRecord};
+use pdma_model_host::CopyRequest;
 use pdma_model_host::{
     DriverPort,
     runtime::interrupt::InterruptError,

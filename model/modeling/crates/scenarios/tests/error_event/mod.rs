@@ -1,13 +1,14 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::CopyRequest;
 use pdma_model_host::DriverError;
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{EventErrorKind, desc::CopyRequest};
+use pdma_model_contract::semantic::EventErrorKind;
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
-    AsyncDriver, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
-    compat::AsyncDevicePort,
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
 };
 
 mod recovery;
@@ -24,11 +25,8 @@ async fn async_runner_publishes_event_and_no_completion_when_linear_copy_reads_p
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, queue_id, command_id, src, no_completion, no_event) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -95,11 +93,8 @@ async fn async_runner_reclaims_driver_command_slot_when_error_event_is_polled() 
     let worker = tokio::spawn(worker.run());
     let (second_before, snapshot, event, queue_id, submit_after_ok) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4)
                 .await
                 .expect("queue setup is valid");
@@ -158,7 +153,8 @@ async fn async_driver_event_polling_does_not_consume_another_queue_event() {
     let (snapshot, wrong_event, owner_event, owner_queue_id, first_submit_ok, second_submit) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = AsyncDevicePort::new(runner.handle());
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                    .expect("active software CPU");
                 let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
                     .await
                     .expect("queue setup is valid");

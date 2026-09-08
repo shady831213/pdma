@@ -1,6 +1,7 @@
 use crate::device::DeviceCore;
+use crate::queue::exact::PdmaControlError;
 use hardware_interface_runtime::{AccessOrigin, RegisterObservation};
-use pdma_model_contract::abi::mmio::{MmioAccessError, RegisterSpec};
+use pdma_model_contract::abi::registers::{MmioAccessError, RegisterLocation};
 
 pub(crate) struct PreparedRead {
     pub(crate) response: Vec<u8>,
@@ -15,19 +16,15 @@ impl PreparedRead {
 
 #[derive(Clone)]
 pub(crate) struct PreparedWrite {
-    register: RegisterSpec,
+    register: RegisterLocation,
     value: u64,
     pub(super) offset: u32,
     pub(super) request: Vec<u8>,
 }
 
 impl PreparedWrite {
-    pub(crate) fn commit(&self, state: &mut DeviceCore) -> Result<bool, MmioAccessError> {
-        state.write_mmio_register(self.register, self.value).ok_or(
-            MmioAccessError::ReservedOffset {
-                offset: self.offset,
-            },
-        )
+    pub(crate) fn commit(&self, state: &mut DeviceCore) -> Result<bool, PdmaControlError> {
+        state.write_mmio_register(self.register, self.value)
     }
 
     pub(crate) fn observation(&self, sequence: u64, origin: AccessOrigin) -> RegisterObservation {
@@ -37,7 +34,7 @@ impl PreparedWrite {
 
 pub(crate) fn prepare_read(
     state: &DeviceCore,
-    register: RegisterSpec,
+    register: RegisterLocation,
     offset: u32,
 ) -> Result<PreparedRead, MmioAccessError> {
     Ok(PreparedRead {
@@ -49,7 +46,7 @@ pub(crate) fn prepare_read(
 }
 
 pub(crate) fn prepare_write(
-    register: RegisterSpec,
+    register: RegisterLocation,
     value: u64,
     offset: u32,
     request: &[u8],

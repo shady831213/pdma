@@ -6,7 +6,6 @@ use hardware_interface_runtime::{CpuLocal, HandlerRegistry, InterruptLifecycleOb
 use pdma_model_contract::semantic::{IrqNotification, IrqSource};
 use pdma_model_host::{
     DriverError, DriverIrqRecord, PortError,
-    adapter::abi::PdmaInterruptSource,
     runtime::interrupt::{PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
 };
 use std::sync::Arc;
@@ -134,7 +133,7 @@ pub fn spawn_distinct_delivery(config: DistinctDelivery) -> DeliveryActor {
         if registry
             .register(
                 config.vector_a,
-                PdmaIrqService::new(bootstrap.driver.clone(), config.port.clone(), handler_a),
+                PdmaIrqService::new(bootstrap.driver.clone(), bootstrap.port.clone(), handler_a),
             )
             .is_err()
         {
@@ -143,7 +142,7 @@ pub fn spawn_distinct_delivery(config: DistinctDelivery) -> DeliveryActor {
         if registry
             .register(
                 config.vector_b,
-                PdmaIrqService::new(bootstrap.driver, config.port, handler_b),
+                PdmaIrqService::new(bootstrap.driver, bootstrap.port, handler_b),
             )
             .is_err()
         {
@@ -154,7 +153,7 @@ pub fn spawn_distinct_delivery(config: DistinctDelivery) -> DeliveryActor {
         let delivery = PdmaIrqDelivery::start(
             config.cpu,
             registry.freeze().unwrap_or_else(|_| std::process::abort()),
-            PdmaInterruptSource::new(config.access),
+            config.access,
             observer,
         );
         let (join_tx, join_rx) = oneshot::channel();
@@ -190,7 +189,7 @@ pub fn spawn_shared_delivery(config: SharedDelivery) -> DeliveryActor {
         if registry
             .register(
                 config.vector,
-                PdmaIrqService::new(bootstrap.driver, config.port, handler),
+                PdmaIrqService::new(bootstrap.driver, bootstrap.port, handler),
             )
             .is_err()
         {
@@ -201,7 +200,7 @@ pub fn spawn_shared_delivery(config: SharedDelivery) -> DeliveryActor {
         let delivery = PdmaIrqDelivery::start(
             config.cpu,
             registry.freeze().unwrap_or_else(|_| std::process::abort()),
-            PdmaInterruptSource::new(config.access),
+            config.access,
             observer,
         );
         let (join_tx, join_rx) = oneshot::channel();

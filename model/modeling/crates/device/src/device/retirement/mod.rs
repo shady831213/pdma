@@ -30,6 +30,7 @@ pub(super) enum RetirementStatus {
 #[derive(Debug, Default)]
 pub(super) struct RetirementUnit {
     pending: Option<PendingRetirement>,
+    fault_unattempted: bool,
 }
 
 impl RetirementUnit {
@@ -76,11 +77,13 @@ impl RetirementUnit {
             queue: fault.queue,
             source: Some(fault.source),
         });
+        self.fault_unattempted = true;
         Ok(RetirementStatus::FaultCached)
     }
 
     pub(super) const fn reset(&mut self) {
         self.pending = None;
+        self.fault_unattempted = false;
     }
 
     const fn hold(&mut self, pending: PendingRetirement) {
@@ -89,6 +92,7 @@ impl RetirementUnit {
 
     const fn complete(&mut self) {
         self.pending = None;
+        self.fault_unattempted = false;
     }
 }
 

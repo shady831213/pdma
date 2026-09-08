@@ -1,620 +1,275 @@
-# PDMA v0 Architecture Specification
+# PDMA Active Architecture Specification
 
 ## Purpose and Scope
 
-This document records the validated behavioral contract through the COMPLETE v0.9
-historical data ABI and exact 4 KiB numeric MMIO memory-and-bus contract. White-board
-architecture documents are background only. This spec defers anything not exercised by
-the current scenario tests, including cycle timing, callable C APIs, concrete PCIe/MSI-X
-transport, and real operating-system integration.
-
-The intended readers are implementers who will extend the model, port it to a cycle-accurate or RTL context, or write future drivers against a more concrete ABI.
-
-## Validated v0 Model Contract
-
-The v0 model validates the following end-to-end behaviors:
-
-- Typed object identifiers for queues, commands, buffers, and completion rings.
-- Checked device memory with explicit bounds and range-overflow errors.
-- Bounded command, completion, and event rings with full/empty/wrap behavior.
-- Driver queue setup, submission, doorbell, completion polling, and event polling.
-- Device step loop that advances at most one command per `step()` and reports budget exhaustion in `run_until_idle()`.
-- Native operation dispatch and resource-demand derivation from external commands.
-- Linear copy, 2D strided copy, broadcast copy, and byte-wise wrapping vector add.
-- Queue directory and explicit per-queue configuration objects.
-- Deterministic multi-queue arbitration with round-robin starvation avoidance.
-- Recoverable memory-fault events that skip success completions.
-- Resource-credit gating and observable stall annotations.
-- Deterministic trace sink with structured in-memory events and Chrome/Perfetto JSON export.
-- PDMA-local completion/event IRQ sources with Line and Message routes.
-- Host-owned IRQ delivery through a fixed vector-to-handler registry and a CPU token
-  shared with SW main.
-- One complete software-main future whose real async suspension points define interruptible
-  execution boundaries.
-- CPU-bound, closure-scoped single-copy software state shared across repeated
-  main/handler switches.
-- Shared driver accounting with explicit cancellation semantics before and after device
-  command acceptance.
-- ABI-v1 fixed-width little-endian descriptor, completion, event, DMA address, ring, and typed
-  control vocabulary, with a checked-in C11 data header generated from Rust metadata.
-- A system-selected external-memory capability shared by host and device. Runtime owns
-  allocation and backing installation; hardware retains checked mapping metadata only.
-- Whole-device reset with checked epoch advancement, stale-capability rejection before
-  mutation, and fresh bootstrap under the new epoch.
-- One exact 4 KiB little-endian MMIO region with 66 canonical registers, shared decoding,
-  generated C constants, owner-local typed register blocks, canonical codecs, and stable responses.
-- One canonical `PdmaRegisterPort<AsyncDeviceAccess>` whose split memory/register,
-  provisioning and host-owned IRQ coordination capabilities reuse existing typed
-  boundaries.
-
-The contract is deterministic: the same initial state, resource configuration, arbitration policy, and command sequence always produces the same memory contents, completion records, event records, and trace event order.
-
-## Exact MMIO and Ordered Commit Contract
-
-Offsets `0x000..=0xfff` contain exact 4/8-byte little-endian registers. Wrong widths,
-misalignment, cross-register extents, reserved offsets/bits, and permission faults return
-the closed transport error before mutation. The 66-entry registry is the only
-offset/access/reset/mask authority and drives Rust decoding and C11 constants. Global,
-queue, and IRQ families have 4, 9, and 9 commands and share 32 result codes.
-
-Activation validates three exact mappings already committed in device-owned mapping
-state; it allocates no memory. Host software allocates the rings and writes activation
-parameters before issuing ACTIVATE. Submission likewise writes optional indirect data
-and descriptor bytes before publishing the producer. Doorbell capture is a later command,
-preserving bytes-before-producer-before-runnable ordering.
-
-Each memory or register access has its own commit point. Canceling a host Future stops
-the remaining software sequence; it does not undo completed writes or cancel accepted
-hardware work. A rejected access leaves earlier accesses intact. Execution memory faults
-produce error events without success completions. Whole-device reset is the only modeled
-hardware abort; there is no software-cancellation input or cross-memory/MMIO batch
-transaction in the device. This supersedes the historical v0.9 closed-batch mechanism,
-without changing its wire ABI.
-
-`PdmaRegisterPort` owns clone-shared queue selector state. Notification readiness is
-non-consuming. IRQ source commands and `PdmaInterruptSource` share a host coordinator;
-claim writes ICommand and reads result/response registers as individual accesses.
-An issued claim survives software cancellation in host recovery state, without reissuing
-the consuming command. Recovery precedes any coordinated command that could overwrite
-the IRQ response. Reset-invalidated responses produce a typed error, not a notification.
-Host assembly explicitly supplies one `PdmaIrqCoordinator` to all adapters for a device;
-adapter constructors never silently create independent IRQ windows. Fully recovered
-notifications remain host-owned even when later commands replace response registers.
-Their epoch is validated by the existing delivery/service path, not by treating a
-latched register response as a live device epoch.
-The canonical scenario injects one system-owned register observer through
-`AsyncDevice::new_observed`; the synchronous `DeviceCore` owns no observation gate.
-It observes ACTIVATE and producer publication as ordinary Direct register writes,
-while a scenario-local memory decorator records bulk access separately, including the
-descriptor write. Worker and dispatcher shutdown/join finish before the collector snapshot.
-
-The host presents full `RegisterBusAddress` values relative to a checked base. After one
-checked subtraction, the device endpoint uses the canonical decoder and the same
-owner-local typed register values used by hardware effects. Contract defines composable
-GlobalRegisters, QueueRegisters and IrqRegisters, each containing its response block;
-PdmaMmioMap places those three blocks. QueueBlock, PdmaIrqController and DeviceCore hold
-the corresponding generated values directly. Generated layout access descends into the
-selected block without a handwritten leaf dispatch table, storage backend or central
-byte image. The 4 KiB extent describes the bus, not a required allocation.
-Register ownership includes command behavior: the IRQ controller handles its commands
-using explicit queue observations and a trace sink; QueueBlock handles status and cursor
-transitions. Neither owner calls back into DeviceCore. The device coordinates mapped
-queue activation, enqueues captured queues, and implements global status/reset. Command
-handlers consume their generated registers directly rather than duplicating request banks.
-Local addresses follow block alignment and declaration order. In this successor layout,
-queue command/result are at 0x164/0x168; the historical v0.9 addresses are not a constraint.
-
-Schema definitions and resolved layouts belong to `hardware-interface-schema`; shared
-memory, raw registers, CPU-local state, generic interrupt dispatch, and trace storage
-belong to `hardware-interface-runtime`. Contract `semantic` owns conceptual vocabulary,
-while `abi` independently owns exact bytes, registers, and layouts. Neither contract
-namespace embeds or converts the other. Device owns DMA-object projection, mappings,
-semantic-to-exact publication, and execution/retirement. Host owns exact-to-semantic
-retirement plus the canonical register port, PDMA interrupt adapter, driver accounting,
-and the explicit async semantic compatibility adapter. Compatibility does not create a
-second executor or canonical E2E.
-
-The reusable implementation is split into four layers. `hardware-interface-schema`
-owns descriptors, codecs, and borrowed flat/grouped views. `hardware-interface-runtime`
-owns closure-scoped storage backends plus generic memory, register-bus, and observation
-algorithms. `hardware-interface-pipeline` owns static stage composition and immediate,
-single-step, or async interaction drive policies. PDMA owns all device effects: command
-acceptance, DMA, reset, queue, IRQ, execution, retirement, trace, and accounting. The
-generic executors can swap how one persistent stage graph is driven; they do not create
-a second PDMA execution core.
-
-## Software/Driver Responsibility Boundary
-
-The driver model, implemented in `model/modeling/crates/host/src/semantic/driver/`, owns the following responsibilities:
-
-- Allocate device-visible buffers through the active `DriverPort` implementation and
-  fill source data through `write_buffer_on`. The canonical path is
-  `PdmaRegisterPort<AsyncDeviceAccess>`; `compat::AsyncDevicePort` is an explicit
-  semantic compatibility boundary only.
-- Configure a CPU-bound queue with `AsyncDriver::setup_on` or
-  `AsyncDriver::setup_with_config_on`, receiving a `QueueConfigHandle`. The active
-  software CPU is captured before device queue creation and revalidated before every
-  nested create poll. `AsyncDriver` exclusively services IRQs.
-- Use CPU-unbound `ManualDriver` only as the explicit host observability facade,
-  constructed with `ManualDriver::setup_on` or `ManualDriver::setup_with_config_on`; it
-  has no IRQ service and does not require a synchronous device facade.
-- Assign monotonic per-queue command IDs and track free local command slots in one
-  private shared core with one accounting allocation shared by all clones of either
-  driver facade.
-- Build external request structs (`CopyRequest`, `StridedCopyRequest`, `BroadcastCopyRequest`, `VectorAddRequest`) and call the matching `submit_*` helper.
-- Ring the implicit doorbell by submitting through the driver helper.
-- Validate the owning active software CPU before every nested create, submit, doorbell,
-  completion, and event port poll. A pending future resumed inactive or on another CPU
-  returns the typed error before another inner access is polled, without undoing prior accesses.
-- Reclaim one local slot synchronously for each successfully returned completion/event
-  record.
-- Configure device IRQ routes and source controls through the host device port.
-- Demultiplex IRQ sources, drain the relevant completion/event path, then acknowledge the device cause.
-
-The driver does not access the command ring directly, does not execute commands, and
-does not rely on wall-clock timing or cycle counts. A CPU-bound driver rejects
-off-context or wrong-CPU access, including migration between polls of one port future,
-instead of silently falling back to manual state.
-
-Each software-bearing system scenario enters this boundary exactly once through
-`SoftwareCpu::run_main`. Driver setup, device IRQ configuration, buffer access,
-submission, and software polling or waiting form one complete main future rather than a
-sequence of manually scheduled turns.
-
-## Device Responsibility Boundary
-
-The device consumes the contract's two data models: layout-independent values from
-`contract::semantic` and layout-exact vocabulary, layouts, and codecs from
-`contract::abi`. Contract remains the owner of that ABI vocabulary and layout definition;
-the device does not define a second ABI namespace. One synchronous `DeviceCore`
-composition root in `crates/device/src/device/mod.rs` directly owns the device epoch, DMA
-mappings, global registers, queues, runnable-queue state, issue/execution/retirement operators, PDMA-local
-IRQ controller, and trace sink. The active source tree exposes the hardware roles and its
-resource ownership directly:
-
-```text
-crates/device/src/
-├── device/            # DeviceCore composition, retained request state, drive, and probes
-│   ├── issue/         # resource admission, Arbitration and Fetch as IssueUnit
-│   ├── execution/     # ExecutionUnit and native semantic operations
-│   ├── retirement/    # RetirementUnit, typed ports, publication, and retry state
-│   ├── flow.rs        # concrete owned values passed between hardware operators
-│   ├── mmio/          # address routing, global commands and reset response projection
-│   └── control/       # cross-state queue activation, IRQ and whole-device reset
-├── queue/             # QueueBlock, its register window, and semantic/exact ring state
-│   ├── mmio/          # queue request/response projection and command handling
-│   └── runnable.rs    # shared FIFO/deduplication state, not a stage
-├── memory/            # mapping metadata and injected external-memory read/write access
-├── irq/               # IRQ controller, its register window and notification operations
-│   └── mmio/          # IRQ request/response projection and command handling
-├── trace/             # TraceSink state and format export
-├── adapter/           # stateless ABI-command to semantic-command conversion
-├── error.rs           # device error vocabulary, reexported at the crate root
-└── runtime/           # private async actor, backend, worker, waits and runtime state
-    ├── provisioning.rs # external allocation/staging/backing installation policy
-    └── access/        # thin handle/endpoint adapters grouped by public operation
-```
-
-`device::mmio` routes canonical register identities to their hardware owners and composes
-global control. Queue and IRQ owners snapshot their request registers and update their
-response registers. Cross-resource transitions still use the shared device control core.
-Runtime access preparation contains only per-access buffers and observation construction.
-Multi-access bootstrap, submission and IRQ claim sequences belong to host software; there
-is no separate `interface` layer or device compound-claim endpoint.
-
-`queue::exact` owns exact queue requests, status, errors, and ring-local transitions.
-Cross-state activation and publication controls belong to `device::control::queue`.
-It is the device-side owner of exact SQ/CQ/EQ mechanics, while the contract
-continues to own the fixed ABI layouts and codecs. `DeviceCore` directly composes the one
-whole-device reset: after checked epoch advancement it clears resettable queues,
-runnable, retirement, IRQ, and register state while retaining the specified persistent
-DMA mappings/bytes/generation, trace history, resource configuration, and lifecycle
-accounting. Typed reset calls this device operation directly; MMIO reset maps the same
-typed result into its exact response vocabulary.
-
-`runtime` is the private asynchronous facade over the core. It owns the single Tokio lock
-that serializes host calls and worker steps, wake/publication generations, the register
-endpoint and observation gate, and the public async device, handle, and worker facade.
-Its `access` modules forward operations to the core; they do not define another device
-model. The backend centralizes locked updates and notification publication. Operations
-with observers commit under the lock, emit after unlocking, then publish the notification;
-an emission error does not roll back committed state or publish a success notification.
-Each caller retains its explicit notification policy, including legacy error paths.
-The public device API is intentionally only crate-root reexports plus `pub mod memory`;
-`dma` remains an import alias for existing downstream users, not a separate implementation.
-There is no public device `abi` or `runtime` namespace, no public synchronous device
-facade, and no second executor.
-
-Internal component and composition invariants live beside their owners under `src/**/tests`.
-The `crates/device/tests` binaries are behavioral public-surface tests, not source
-structure probes; migration pins supplement the actor, queue, transaction, and MMIO
-suites without exposing private owners. Full host/device, CPU, and interrupt
-stories remain in `crates/scenarios/tests`, whose live inventory is 56 tests. `DeviceCore`
-remains a public construction value so callers can inject a read/write capability and resource
-configuration. Its reusable `Stage<()>` implementation services one singleton device
-request and exposes `HardwareStepStatus`; queue provisioning and control remain on the
-existing host/device surfaces.
-
-Every `PdmaQueue` owns its directory entry and one closed `QueueIo` variant.
-`SemanticQueueIo` owns semantic rings; `ExactQueueIo` owns the active exact SQ/CQ/EQ
-layouts, cursors, and pending frontend fault state. Exact and semantic queue variants
-normalize fetches into the same semantic command path and share the same Issue unit,
-execution unit, retirement unit, IRQ controller, and trace sink. Execution consumes
-contract semantic commands directly and defines no third command model.
-
-The hardware objects do not receive `&mut DeviceCore`. `Stage<C>` describes reusable
-hardware with explicit `Input`, `Output`, and separately owned request `State`.
-`Then<A, B>` owns both hardware operands and requires `A::Output = B::Input`; its
-`ThenState` retains the downstream request after upstream completes. Starting an
-operation creates request state without replacing hardware. `Operation` makes a
-completed or reset request inert, while the same stage accepts subsequent operations.
-
-`QueueBlock` is shared hardware state, like the MMIO register image. Its SQ, CQ, and EQ
-storage is used by multiple operators; the queue itself does not implement `Stage`.
-`RunnableQueues` similarly owns FIFO ordering and deduplication state. This follows the
-state/operator distinction in etha_model: request gathering, frame loading, and response
-storage are operators over the same channel state, while arbitration is a separate
-transform ([pinned reference](https://github.com/shady831213/etha_model/blob/5270f00874a1ad390fbbce6f5395be24a52d0ec9/src/etha/tx_sequencer.rs)).
-
-`IssueUnit` owns `Then<Arbitration, Fetch>`. Arbitration owns admission: it examines at
-most one pass through the runnable FIFO, rotates resource-starved queues, and selects
-the first eligible queue before fetching anything. When every candidate is starved,
-the full rotation preserves order and emits one stall for that attempt. Status probes
-only observe state; they neither implement this selection policy nor mutate queues or
-trace. Fetch accesses queue state through context
-and produces `FetchedWork`, including command identity, completion routing, and the
-semantic operation or a frontend fault. `ExecutionUnit` owns a nested
-`Then<ResourceGate, Datapath>`:
-resource acceptance produces `AdmittedWork`, and the datapath turns it into
-`RetirementWork`. The concrete owned edge values live in `device/flow.rs`, not in
-execution context or service-control enums. DMA faults are output data and reach retirement; they do not
-short-circuit the generic composition. Structural model failures may terminate a request.
-The execution resource gate remains a commit-boundary check for work already fetched
-when resource configuration changes.
-
-Normal command work uses one ordinary `Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>` chain.
-Every operator receives the same `HardwareContext`, a scoped unique view of queue state,
-runnable state, DMA, IRQ, trace, fetch accounting, and an immutable resource snapshot.
-Issue, execution, and retirement operators remain outside that context. Fetch and
-retirement never compete for separate persistent queue loans: each accesses the shared
-state only during its own step. Retirement publishes/consumes queue entries and requeues
-later work directly through its narrow ports before returning success or a domain error.
-There is no duplicate queue owner, artificial feedback message, or separate manual
-dispatch-to-retirement state machine.
-
-The device retains an explicit command-or-retirement request state. Normal work owns
-the chain's derived state; a retained retirement request directly steps the same
-`RetirementUnit`, without rebuilding nested compositor state or passing a retry command
-through execution. Retirement request state distinguishes data work, retry, and done;
-`Retry` is not an execution output. A frontend fault completes its command request as
-`FaultCached` without publishing an event. Only the next device request starts its
-retirement retry, ahead of any fresh Issue admission. Pending publication retains its
-request state without arbitration, refetch, or repeated DMA.
-
-Each outer turn preserves one architecture-visible interaction: selection and fetch are
-atomic together; the pure resource check and DMA are atomic together; retirement is the
-third turn. Composed inner stages use the same step semantics without introducing host
-interleavings, timing, or extra in-flight requests. The device retains composed request
-state across waits, so resumption cannot refetch, repeat DMA, or republish an effect.
-Owned transfer types make these states independent of the temporary borrowed stage views;
-no GAT or higher-kinded encoding is needed for these non-borrowing request edges.
-
-`runtime` is only the async actor shell. Its worker uses the generic `AsyncExecutor`
-with a borrowed `DeviceInteractionBackend`. Command advancement returns `StepOutcome`
-directly, without an intermediate step executor or result translation enum. The private
-`DeviceService` stage drives `DeviceCore` through its `Stage` implementation and adapts
-finite command outcomes to continuous service: accounting,
-idle/stall wake tokens, and shutdown. The executor owns interaction and wait driving.
-The driving future owns no accepted command state. Accepted work stays in `DeviceCore`,
-so whole-device reset clears it synchronously. Device `Input = ()` requests service of
-this singleton hardware; it does not promise independently concurrent operations.
-Dropping an async driving future releases context access and leaves accepted work owned
-by the device; resetting an external generic operation alone does not reset hardware.
-`AsyncDevice` wraps one `DeviceCore` behind the
-single Tokio mutex required to serialize host calls and worker steps. `AsyncDeviceHandle`,
-`RunnerShared`, the register endpoint, observation gate,
-waits, publication generations, and every lock acquisition live only in `runtime`;
-`device::mmio` and owner-local MMIO handlers contain synchronous hardware effects.
-No async lock, observer, or async primitive exists inside the
-hardware objects or execution units, and no guard crosses a device await boundary. There
-is no second synchronous device facade or second execution core. The reusable stage also
-permits deterministic inspection using the same interaction semantics. These layers own the
-following responsibilities:
-
-The interaction lock is the outer linearization boundary. Each register read/write,
-command acceptance, cursor or IRQ transition, and pipeline leaf mutates state inside one
-synchronous closure. Memory backends are entered only beneath that device interaction;
-the reverse lock order is forbidden. A wait token is owned and awaited only after the
-closure releases every guard. Each register access reserves its observation before the
-access commits; successful observation emission completes before the endpoint publishes
-its wake or returns. Host memory writes and later register accesses are independent
-interactions, with no rollback across them.
-
-- Maintain device memory, the queue directory, command rings, completion rings, queue-tagged events, the runnable queue list, resource configuration, IRQ state, and the trace sink.
-- Accept submissions through `submit_command`, emit a trace event, and queue the command on the correct command ring.
-- Capture doorbells through `ring_doorbell` and mark queues runnable.
-- Select the next queue through deterministic runnable-queue ordering.
-- Dispatch the selected external command to its operation-specific native execution path.
-- Check execution resource demand, then run copy, broadcast, or vector-add behavior.
-- Publish success completions to the bound completion ring, or publish memory-fault events to the event ring.
-- Stall deterministically when resources or publication slots are exhausted, and retry pending retirements on later steps.
-- Expose tracing controls and exported JSON without changing behavior when tracing is disabled.
-- Latch IRQ causes only after completion/event publication, assert/deassert Line routes,
-  and preserve every discrete Message trigger.
-
-The device never stores or invokes software handlers. It does not expose wall-clock or
-cycle timing. Its crate-root public semantic and exact-ABI surfaces are adapters around
-synchronous hardware-object methods, not peer pipelines with separate ownership.
-
-### Whole-Device Reset and Epoch Semantics
-
-`WholeDeviceReset` succeeds only when its expected epoch matches the one canonical
-device epoch, then checked-advances it. The bus-control snapshot projects that same
-epoch rather than owning a shadow epoch. Success preserves committed
-`PdmaMemoryMappings` metadata and generation, external bytes and runtime allocation state,
-trace history, resource
-configuration, and lifecycle accounting. It clears device queues, completion/event
-records, runnable work, pending retirement, exact queue/cursor state, and
-PDMA-local IRQ routes, causes, and queued notifications. A fresh bootstrap may reuse
-numeric queue and source IDs, but only with the new `DeviceEpoch`.
-
-Every queue, IRQ source, and notification capability is epoch-bearing. A stale
-capability, stale reset request, or stale notification acknowledgement fails before
-mutation; an epoch-overflow reset also leaves state unchanged. Reset therefore cannot
-publish discarded stalled or pending-retirement work later.
-
-## Queue Directory, Queue Configuration, Command Ring, Completion Ring, and Event Ring Ownership
-
-Queue directory entries (`QueueDirectoryEntry` in `model/modeling/crates/contract/src/semantic/queue.rs`) bind together:
-
-- A `QueueId` assigned by the device.
-- A bound `CompletionRingId`.
-- A `QueueConfig` supplied by the driver, containing command ring depth, completion ring depth, event routing policy, and a software owner ID.
-
-The device owns the storage for all command rings, completion rings, and queue-tagged events. The driver owns the returned `QueueConfigHandle`, which is the only driver-visible token for that queue and completion ring. Local driver slot accounting is a driver-side shadow; the device never tracks how many commands the driver thinks are outstanding.
-
-For event routing, v0 supports only `EventRouting::QueueLocal`. A driver may poll only events whose `queue_id` matches its own queue through `poll_queue_event`.
-
-## Submission, Doorbell/Runnable, Scheduling, Execution, Completion, and Event Flows
-
-### Submission
-
-CPU-bound queue creation, submission, doorbell, completion, and event futures validate
-the owning CPU before every nested port poll. If one first returns `Pending` on its
-owner and is later resumed inactive or on another CPU, the typed CPU error is returned
-before another inner access is polled. Completed accesses remain committed. Manual accounting uses the
-same polling adapter without adding CPU identity restrictions.
-
-The driver builds a request, wraps it in an external command descriptor, and calls
-`submit_*`. Preparation drains deferred rollbacks, consumes the next command ID, and
-reserves one local slot. A shared submission receipt retains that reservation while an
-issued producer command has an unread result. Its final owner queues a deferred slot
-refund only if the command was never issued or was definitively rejected; unknown issued
-outcomes retain the charge even when every port clone is dropped. The command ID remains consumed. Before
-reserving another slot, the driver asks the port to resolve an earlier issued command.
-This allows a canceled, rejected depth-one submission to release its reservation without
-falsely refunding one already accepted by hardware.
-
-The canonical port publishes the producer through an ordinary MMIO command. Reading its
-successful result marks the shared receipt accepted, even if the original submit Future
-was dropped. Doorbell remains a separate operation; recovery never invents a doorbell
-the software did not issue. Doorbell failure or cancellation therefore does not refund
-an accepted submission. When completion/event consumer publication commits, the port
-retains the decoded record until it can return it once to software; the driver reclaims
-the slot synchronously with that return. No accounting borrow spans a port poll or await.
-A `TraceEventKind::CommandSubmitted` event is emitted when hardware accepts the command.
-
-`PdmaRegisterPort` holds one clone-shared queue-operation lock and one pending issued
-queue-command record. Before issuing another queue command it resolves the previous
-result, so cancellation cannot cause its response bank to be overwritten. Recovery
-reads results, not reissues hardware operations. An activated but unreturned queue can
-be returned by a same-config create retry; already-consumed completion/event records are
-delivered once. Unknown response-read outcomes retain host bookkeeping, not a device
-rollback. Reset invalidates old queue capabilities and clears hardware responses; an
-unexecuted/lost pending response is reported as a submission-state error, not success.
-
-The explicit semantic compatibility port can finish one semantic operation in a single
-interaction, but this does not make canonical multi-access host workflows atomic. A
-dropped pending individual raw access has no effect; earlier completed accesses do.
-
-### Doorbell/Runnable
-
-`ring_doorbell` adds the queue to the runnable list if it is not already present. A `TraceEventKind::DoorbellRunnable` event is emitted.
-
-### Scheduling
-
-One native step pops the next runnable queue. If none exists, the device records `TraceEventKind::Idle` and reports `AsyncStepStatus::Idle`. If a queue is selected, the command at the front of its command ring is cloned and a `TraceEventKind::Scheduled` event is emitted before operation dispatch.
-
-### Execution
-
-The device computes resource demand for the command. If resources are insufficient, the queue is re-queued as runnable, a `TraceEventKind::Stall` event is emitted, and `AsyncStepStatus::Stalled(ExecutionResourcePressure)` is reported. Otherwise the operation-specific native path runs.
-
-On success, `TraceEventKind::ExecutionSucceeded` is emitted. On a memory fault, `TraceEventKind::ExecutionFaulted` is emitted and the fault is routed to the event path.
-
-### Completion
-
-A successful command produces one `CompletionRecord` with `CompletionStatus::Success`. If the completion ring is full or publication credits are exhausted, the retirement becomes pending, a stall event is emitted, and the device reports `AsyncStepStatus::Stalled(CompletionPublicationPressure)`. When publication succeeds, `TraceEventKind::CompletionPublished` is emitted. The driver later calls `poll_completion`, which emits `TraceEventKind::CompletionPolled`.
-
-### Event
-
-A memory fault produces one `EventRecord` with an `EventErrorKind`. If event publication credits are exhausted, the retirement becomes pending, a stall event is emitted, and the device reports `AsyncStepStatus::Stalled(EventPublicationPressure)` or `FaultRetirementPendingRetry`. When publication succeeds, `TraceEventKind::EventPublished` is emitted and the original `ModelError` is observed by the worker. The driver polls its queue-local event path, emitting `TraceEventKind::EventPolled`.
-
-## IRQ Delivery Semantics
-
-Completion and queue-local event publication each identify a PDMA-local `IrqSource`.
-Source enable, mask, pending cause, route, and ack state belong to the device. Masking
-preserves pending work. Acknowledging clears a selected Line cause only when its
-completion/event path is empty; a record published after software's final empty poll
-keeps the cause pending.
-
-`IrqRoute::Line` models stateful delivery. An enabled, unmasked pending source asserts
-its line, and device ack or masking recomputes/deasserts it. `IrqRoute::Message` models a
-discrete delivery transaction carrying an `IrqVector`, source, and source-scoped
-monotonic `IrqMessageId`. Each trigger within representable model state is retained
-separately; the model performs no intentional coalescing or moderation. Exact PCIe
-MSI/MSI-X address/data, table/PBA, and transport behavior remain deferred.
-
-Both Line and Message notifications resolve one `IrqVector` at the shared contract
-boundary. Runtime `HandlerRegistry` freezes a non-empty vector-to-handler map before
-`InterruptDispatcher` starts and never places a handler in the device. Host
-`PdmaIrqDelivery` supplies the PDMA source, service, trace, and error adapters around
-that generic dispatcher.
-Different sources may share one vector and persistent handler. Duplicate registration
-returns `DuplicateIrqVector` without replacement. An unregistered vector returns
-`UnregisteredIrqVector` before CPU acquisition, lifecycle tracing, or delivery-summary
-increment.
-
-`SoftwareCpu::run_main` receives one complete main future. One main atomic segment is
-exactly one poll of that future, ending in `Poll::Ready` or `Poll::Pending`; only a real
-`Poll::Pending` releases the CPU for later main reacquisition. Consequently, an
-`.await` whose awaited future is immediately ready does not create an interrupt
-boundary.
-
-The complete handler future owns the same CPU token across all of its polls and
-suspensions. Main and IRQ contexts therefore do not overlap, handlers remain atomic,
-serial, and non-nested across vectors, and the independent device worker may still
-progress. CPU ordering follows the Tokio mutex's FIFO request order: an IRQ precedes
-main reacquisition only after the delivery actor has observed a notification and
-requested the gate first. An unobserved device notification has no CPU priority, and a
-later IRQ request does not overtake an already queued main request; the model makes no
-broader scheduler-priority promise.
-
-`CpuLocal<T>` binds one mutable value to one private `SoftwareCpu` identity. Cloned
-capabilities share that single value without requiring `T: Clone`. The private
-`SoftwareCpuToken` is installed in the single `CURRENT_SOFTWARE_CPU` option only around
-an actual inner main or handler poll; its RAII guard restores any prior token afterward.
-Synchronous `CpuLocal::with` access returns typed inactive, mismatch, or busy errors and
-uses `try_lock`; it exposes no identity, lock, guard, reference escape, or async borrow
-across an await. Cancellation removes the active identity and releases the CPU gate
-through RAII.
-
-Driver IRQ service reads the delivered source, drains completion/event records, then
-acknowledges the device cause. This ordering is idempotent for redundant message
-deliveries, and the device retains a Line cause if a new record appears before ack.
-Shutdown has deterministic priority over a simultaneously ready notification. Delivery
-progress is synchronized by handler-owned channels when a scenario needs it, while the
-actor's final `IrqDeliverySummary` reports only successfully completed handler turns; no
-separate delivery-progress watch API exists. Evidence:
-`crates/device/src/device/tests/irq.rs`, `crates/host/tests/irq_runtime_surface/mod.rs`, and
-`crates/scenarios/tests/irq_delivery/mod.rs`.
-
-IRQ scenarios bootstrap without transferring driver ownership away from main. Main
-performs CPU-bound setup, retains one driver capability, and publishes a clone plus
-source identities over a one-shot channel. Delivery receives that clone outside the
-modeled CPU, constructs and registers the vector handlers, then signals readiness. Main
-waits for readiness before configuring routes, enabling/unmasking sources, or
-submitting. No handler waits for initialization while holding the CPU. The depth-one
-alternation story proves repeated `main -> handler A -> main -> handler B -> main`
-switches and a later submission through main's retained capability.
-
-## Historical Completed Descriptor-Layout ABI Baseline
-
-The following ABI-v1 descriptor, completion, and event record remains the completed
-historical baseline alongside the completed exact MMIO contract.
-
-## ABI-v1 and Command Boundary
-
-The historical v0.9 ABI established raw DMA allocation/read/write, typed control
-transactions, epoch-bearing IRQ notification waiting, atomic queue bootstrap, and
-atomic submission before the separate doorbell commit. Its retired transport adapters
-are preserved by name only in `v0_9_model_plan.md`. The active successor preserves the
-hardware ABI through `PdmaRegisterPort<AsyncDeviceAccess>` over runtime
-`MemoryAccess`/`RegisterAccess`, device-backed `PdmaMemoryProvisioning`, and
-`PdmaExactInterruptClaim`; host workflows now commit one access at a time instead of
-using atomic bootstrap/submission batches. The port validates its captured
-`SoftwareCpu` before every nested CPU-bound poll and never retains a host-state guard
-across an await. `PdmaMappedRegion` carries the host object-to-`MemoryAddress` handoff;
-committed regions remain mapped for the device lifetime. The explicit async semantic
-compatibility port exercises the same core and does not create a second E2E path.
-
-The ABI is fixed-width little-endian data, never Rust layout: v1 descriptors are 64
-bytes, completions 32 bytes, and events 64 bytes. `include/pdma_model_abi.h` is a
-checked-in generated C11 data header, not a callable C API. It is rendered from Rust
-metadata with `cargo run -p pdma-model-contract --bin pdma-abi-header -- --write
-include/pdma_model_abi.h`; gates must run the corresponding `--check` command and reject
-any byte mismatch.
-
-`DmaAddress` is the opaque device-visible address carried by descriptors and rings. It
-does not identify whether a platform uses physical, bus, or translated addressing.
-
-## Conceptual Command Boundary
-
-Semantic commands live in `model/modeling/crates/contract/src/semantic/desc/` and
-represent the conceptual driver-visible descriptor surface. `Command` carries one
-`CommandId` and one `CommandOperation`; `CommandOperation` has `Copy`, `StridedCopy`,
-`BroadcastCopy`, and `VectorAdd` variants holding only their semantic request payloads.
-The selected `QueueConfigHandle` supplies queue identity and completion routing. The
-semantic frontend submits this form directly. The exact frontend decodes ABI-v1 and the
-stateless device adapter resolves its DMA addresses into the same semantic `Command`.
-The shared execution unit matches `CommandOperation` directly and derives operation-specific
-chunks and resource demand internally. ABI-v1 encodes equivalent command data through
-the fixed registry; no device-private command union exists.
-
-## Supported v0 Operations
-
-### Linear Copy
-
-`CopyRequest` in `desc.rs` takes a source buffer, destination buffer, and byte length. The native copy path reads and writes that single range directly. Evidence: `tests/linear_copy.rs`.
-
-### Strided Copy
-
-`StridedCopyRequest` takes source and destination buffers, row count, row bytes, and source/destination strides. The native copy path derives one `NativeCopyChunk` per row. Stride multiplication is checked for overflow and maps to `RangeOverflow`. Evidence: `tests/strided_copy.rs`.
-
-### Broadcast Copy
-
-`BroadcastCopyRequest` takes a source buffer with offset and length plus a list of destination ranges. The native broadcast path iterates the destinations and rereads the source for each one. Execution stops on the first memory fault and publishes a single event; otherwise a single success completion is published. Evidence: `tests/broadcast_copy.rs`.
-
-### Vector Add
-
-`VectorAddRequest` takes two source buffer ranges and one destination range plus a length. The vector-add engine reads both source ranges, performs byte-wise wrapping addition, and writes the result. Evidence: `tests/vector_add.rs`.
-
-## Completion, Event, Memory-Fault, Resource-Credit, and Stall Semantics
-
-### Completion Semantics
-
-A success completion is one `CompletionRecord` per successful command. It carries the queue ID, command ID, and `CompletionStatus::Success`. Completions are published to the completion ring bound at queue creation time.
-
-### Event Semantics
-
-Memory faults publish one `EventRecord` per faulting command. The record carries queue ID, command ID, an `EventErrorKind` (`UnknownBuffer`, `RangeOverflow`, or `OutOfBounds`), and the faulting buffer ID. A successful completion is never published for the same command. Later queued commands remain runnable unless they independently fault.
-
-### Memory-Fault Semantics
-
-The native copy and vector-add paths use checked memory reads and writes. Bounds violations, unknown buffers, and range-overflow errors are mapped to an `EventErrorKind` and published in an `EventRecord`. The original `ModelError` propagates back through the step call so the scenario can observe it.
-
-### Resource-Credit Semantics
-
-`ResourceConfig` defines capacities for internal descriptors, read slots, write slots, compute slots, completion publication slots, and event publication slots. The default configuration is unbounded. `ResourceDemand` derives execution demand directly from `CommandOperation`: an operation with `N` native chunks or destinations demands `N` internal descriptors, `N` read slots, and `N` write slots; a vector add demands one internal descriptor, two read slots, one write slot, and one compute slot. Publication slots gate completion and event ring pushes.
-
-### Stall Semantics
-
-`AsyncStepStatus` reports `Progressed`, `Idle`, or `Stalled(AsyncStallReason)`.
-`AsyncStallReason` distinguishes execution resource pressure, completion publication
-pressure, event publication pressure, and a fault retirement that is still blocked on
-retry. Evidence: `tests/resource_credits.rs` and `tests/stall_annotations.rs`.
-
-## Trace Sink Behavior and Chrome/Perfetto-Compatible Export
-
-The trace sink captures deterministic in-memory events when enabled.
-`AsyncDeviceHandle` exposes `enable_tracing`, `disable_tracing`, `clear_trace`,
-`trace_events`, and `trace_json`.
-
-Hook points cover command submission, doorbell/runnable transitions, scheduling, execution success, execution faults, completion/event publication and polling, IRQ source latch, line assertion/deassertion, message emission, device ack, handler start/completion, stalls, and idle steps. Public trace types include `TraceEvent`, `TraceEventKind`, `TraceOperation`, and `TraceSink`.
-
-The JSON export is a minimal Chrome/Perfetto `Trace Event` JSON object containing a `traceEvents` array of instant events (`"ph":"i"`). The `ts` field is a deterministic sequence ordinal assigned in event-emission order, not a wall-clock timestamp or cycle count. `pid` and `tid` are placeholders. The output is compatible with existing Chrome/Perfetto viewers but does not imply real-time or cycle-level accuracy. Evidence: `tests/trace_sink.rs`.
-
-## Determinism and Validation Strategy
-
-Every validated slice is guarded by narrative scenario tests in `model/modeling/crates/scenarios/tests/`. The validation command set is:
-
-- `cargo fmt --all -- --check`
-- `cargo test --workspace`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo doc --workspace --no-deps --document-private-items`
-
-The 56 scenario tests contain 51 modeled software programs, each with exactly one
-complete `run_main` entry. Five pure device/manual observability tests have no software
-actor and therefore no `run_main` entry:
+This document describes the active deterministic, step-based Rust model. The completed
+v0.9 plan records the historical 66-register, 4 KiB MMIO design; the active successor
+uses direct, dynamically addressed queue and interrupt-source registers with MMIO
+version 2. ABI-v1 descriptor, completion, and event bytes remain unchanged. Historical
+v0.x plans and white-board documents are background, not the current software boundary.
+
+Validated behavior includes linear and strided copy, broadcast copy, wrapping byte-wise
+vector add, multiple queues, deterministic arbitration, bounded rings, checked DMA,
+fault events, resource pressure, trace export, whole-device reset, and host-owned Line
+and Message IRQ delivery. Paths below are relative to `model/modeling`.
+
+## Ownership and Source Map
+
+| Owner | Source | Responsibility |
+| --- | --- | --- |
+| Shared contract | `crates/contract/src/abi/`, `crates/contract/src/semantic/` | Exact wire layouts/codecs, generated registers, identities, DMA/IRQ/resource/trace vocabulary. |
+| Software SDK | `crates/host/src/request/`, `crates/host/src/config/`, `crates/host/src/semantic/driver/` | Requests, queue configuration and software owner metadata, command IDs, credit accounting, and IRQ service. |
+| Software hardware adapter | `crates/host/src/adapter/abi/` | CPU-bound register port, ABI encoding/decoding, allocation handoff, memory/register access, and interrupt output adaptation. |
+| Device | `crates/device/src/` | Hardware register effects, mappings, exact queues, decoded operands, arbitration, execution, retirement, reset, and IRQ state. |
+| Schema | `crates/hardware-interface-schema/` | Runtime-neutral record/register metadata, codecs, composition, lookup, and exports. |
+| Runtime | `crates/hardware-interface-runtime/` | Shared memory, register access/observation, CPU-local state, generic interrupt dispatch, and trace storage. |
+| Pipeline | `crates/hardware-interface-pipeline/` | `Stage`, `Then`, request state, and immediate/single-step/async drive policies. |
+| System harness | `crates/scenarios/tests/` | Explicit software, device-worker, and host-delivery actors plus behavioral assertions. |
+
+The contract contains no backing memory, SDK request/configuration objects, handlers,
+or executor. Host commands are encoded into ABI descriptors before hardware sees them.
+The device adapter structurally decodes descriptors into private `DecodedCommand`,
+`DecodedOperation`, and operand structs in `crates/device/src/operation.rs`. Operands
+retain raw DMA addresses, lengths, strides, and indirect-list address/count; execution
+resolves full data extents in operation order. There is one exact queue path and one
+execution/retirement core. Software owner metadata stays in the host.
+
+## Direct Hardware Register Contract
+
+`crates/contract/src/abi/registers.rs` composes `GlobalRegisters`, `QueueRegisters`,
+`IrqSourceRegisters`, `QueueInstanceRegisters`, and `PdmaRegisterMap`. Generated
+layouts are the authority for exact starts, width, little-endian encoding, permissions,
+reset values, masks, alignment, and geometry. There are no selector, command, result,
+or response banks.
+
+| Placement | Geometry |
+| --- | --- |
+| Global registers | Base 0, extent 60 bytes, alignment 8. |
+| Queue instances | Base 64, stride 192 bytes. |
+| Queue registers within an instance | Base 0, extent 112 bytes. |
+| IRQ sources within an instance | Base 112, stride 40 bytes, count 2: completion then event. |
+
+Use generated placements and `queue_offset`/`irq_offset`, not copied offsets. Address
+arithmetic is checked against the `u32` numeric offset space. Queue instances are
+materialized consecutively by configuration writes; queue count includes staged
+instances. The next instance exposes default queue configuration for bootstrap.
+Instance existence is device policy; repeatable geometry has no fixed queue-count
+cap or 4 KiB aperture.
+
+Queue base/depth registers describe SQ, CQ, and EQ mappings. Writing enable activates
+the queue after the device validates already-committed exact mappings. Allocation
+belongs to runtime provisioning. Active configuration cannot be rewritten. Software
+publishes SQ producer, writes a separate doorbell to capture runnable work, and
+consumes records by advancing CQ/EQ consumers. Hardware owns SQ consumer, captured
+producer, and CQ/EQ producers. Route, enable, mask, ack, and status address each IRQ
+source directly.
+
+`crates/device/src/device/mmio/` routes accesses to the hardware owners. Queue and
+IRQ owners consume generated values directly and do not call back into `DeviceCore`.
+Global discovery projects current device state. Queue storage contains generated
+configuration values and exact ring state, with no semantic ring variant.
+
+The endpoint checks full-address base arithmetic, exact starts, widths, permissions,
+and masks before effects. Each write validates its bound `DeviceEpoch` in the same
+locked interaction as mutation. Non-consuming reads permit discovery across reset;
+writes require explicit rebinding. A stale write cannot mutate a fresh queue at the
+same numeric index.
+
+## Ordered Host Access and Cancellation
+
+`PdmaRegisterPort<AsyncDeviceAccess>` is the canonical software frontend. It captures
+the active `SoftwareCpu` and keeps clone-shared multi-queue state in `CpuLocal`:
+handles, layouts, mappings, and retained consumed records. A shared queue-operation
+lock serializes its software sequences. `AsyncDeviceAccess` supplies `MemoryAccess`,
+`RegisterAccess`, provisioning, and the existing generic `InterruptSource` over one
+device.
+
+Bootstrap allocates rings, writes base/depth registers, then enables the queue.
+Submission writes indirect data and descriptor bytes before publishing SQ producer;
+doorbell is later. Each allocation, memory write, and register write commits
+independently. Dropping a future stops subsequent accesses and leaves completed
+effects intact, including partial allocation/configuration. Hardware receives no
+software-cancellation input and implements no cross-memory/MMIO transaction.
+
+Every nested CPU-bound create, submit, doorbell, completion, and event port poll first
+validates the owning active CPU. Migration to inactive or wrong-CPU execution returns
+a typed error before another hardware access. No accounting or CPU-local borrow spans
+a poll or await.
+
+The driver reserves a slot and consumes a command ID before submission. Its shared
+receipt marks acceptance synchronously when SQ producer publication commits. Rejection
+before acceptance permits deferred slot refund; the command ID remains consumed.
+Doorbell failure/cancellation cannot refund accepted work or invent a missing doorbell.
+
+Polling reads a record before advancing its consumer. After that write commits, the
+port retains the decoded record until returning it once; driver accounting reclaims
+the slot synchronously with that return. Empty polling does not advance a consumer.
+
+Observation order is reserved before mutation and emitted after unlocking.
+`CommittedObservation` distinguishes a write that took effect but whose observation
+failed from a rejected access. Acceptance and retained-record bookkeeping honor that
+distinction. Observation failure does not roll hardware back. Reset requires a newly
+bound port and driver.
+
+## Device Composition and Execution
+
+`DeviceCore` in `crates/device/src/device/mod.rs` owns epoch, checked mapping metadata,
+queues, runnable FIFO, issue/execution/retirement operators, PDMA IRQ state, and trace.
+Bytes live in an injected runtime-owned memory backend. Runtime provisioning owns
+address allocation and backing installation; external mappings must use that same
+backend. `QueueBlock` owns configuration and exact SQ/CQ/EQ state. The host writes
+SQ bytes and hardware writes CQ/EQ bytes in shared memory.
+
+`IssueUnit` owns `Then<Arbitration, Fetch>`. Arbitration considers at most one pass
+through the runnable FIFO, rotates resource-starved queues, and chooses the first
+eligible queue before fetching. A fully starved pass preserves ordering and emits
+one stall. Probes observe without selecting, mutating, or tracing. Fetch decodes an
+exact descriptor into private operands or a structural ABI frontend fault. Payload
+memory validation belongs to execution, not descriptor decoding.
+
+`ExecutionUnit` owns `Then<ResourceGate, Datapath>`; its gate rechecks resource demand
+at the execution commit boundary. Owned edges in `crates/device/src/device/flow.rs`
+carry fetched, admitted, and retirement work. DMA faults travel as data into
+retirement; structural model errors can terminate a request.
+
+Normal work follows `Then<IssueUnit, Then<ExecutionUnit, RetirementUnit>>` over a
+scoped `HardwareContext`. Operators remain outside that context and borrow shared
+hardware state only during interactions. Queue and runnable state are not stages.
+`Stage` separates hardware from request state; `ThenState` retains downstream
+requests, and `Operation` makes completed/reset requests inert without replacing
+hardware.
+
+The device retains a normal composed request or a retirement request using the same
+`RetirementUnit`. A frontend `FaultCached` ends one request; only a later request
+retries publication before fresh issue admission. Publication pressure retains work
+without re-arbitration, refetch, repeated DMA, or duplicated effects. Each outer turn
+permits one architecture-visible interaction: selection/fetch, resource check/DMA, or
+retirement. Public step accounting advances only at the terminal command outcome.
+
+The private runtime serializes host access and worker interactions with one Tokio
+lock. Its worker uses the generic `AsyncExecutor` and `DeviceInteractionBackend`;
+`DeviceService` adapts `Stage<()>` to continuous service, accounting, idle/stall wake
+tokens, and shutdown. Accepted work stays in the core when a driving future is dropped.
+Hardware owners contain no async lock, observer, or host callback. Memory backend
+entry occurs beneath the device interaction, never in reverse lock order; guards are
+released before waiting.
+
+## Operations, Faults, and Resource Pressure
+
+Execution resolves full ranges through `crates/device/src/device/execution/memory.rs`.
+Linear copy reads its source and validates its destination before writing. Strided
+copy validates every row's source/destination before ordered row transfers. Broadcast
+validates the source, reads the indirect list, and validates every destination before
+ordered writes, rereading the source per destination. Vector add reads both sources
+and validates the destination before writing byte-wise wrapping sums. These checks
+preserve operation-specific fault precedence and prevent writes before a detected
+extent fault; a later backend access fault can still leave earlier writes committed.
+
+One successful command retires a hardware `AbiCompletion`. Execution faults carry
+the exact `AbiFault` plus optional semantic memory-fault metadata for model reporting;
+event publication preserves the exact fault even when no mapped host object exists.
+A fault never publishes a success completion for that command. Later queued commands
+remain runnable as required by the scenarios.
+
+`ResourceConfig` defines descriptor, read, write, compute, completion-publication,
+and event-publication capacities. N copy chunks/destinations demand N descriptors,
+reads, and writes; vector add demands one descriptor, two reads, one write, and one
+compute slot. Defaults are unbounded. Publication must satisfy both ring space and
+configured publication capacity: outstanding occupancy consumes publication slots
+until software advances the consumer. A nonzero capacity is not unconditional
+permission to publish into a deeper ring.
+
+`AsyncStepStatus` distinguishes progressed, idle, and stalled work.
+`AsyncStallReason` distinguishes execution, completion-publication,
+event-publication, and fault-retirement retry pressure. Pending publication resumes
+without repeating execution.
+
+## Whole-Device Reset
+
+Reset checks the expected epoch and checked-advances the canonical `DeviceEpoch`.
+Stale reset and epoch overflow leave state unchanged. Success clears queue
+configuration/cursors, runnable work, composed requests, pending retirement, IRQ
+routes/causes, and queued notifications. It preserves committed mapping metadata and
+generation, bytes and allocation state, trace history, resource configuration, and
+lifecycle accounting.
+
+Old queue, IRQ, notification, and register-write capabilities reject before mutation.
+Discovery reads permit explicit bootstrap in the new epoch. Reset clears accepted
+pending work before later completion, success trace, consumer change, or IRQ
+publication; already-committed DMA bytes remain.
+
+## IRQ and CPU Ownership
+
+Device-local source enable, mask, route, pending cause, and acknowledgement are
+hardware state. Masking preserves pending work. Line acknowledgement clears a cause
+only when its completion/event path is empty; publication after software's final empty
+poll keeps the cause pending. Message routing retains each representable trigger with
+its vector, source, and source-scoped monotonic message ID, without intentional
+coalescing or physical MSI/MSI-X table/address/data behavior.
+
+`AsyncDeviceAccess` implements runtime `InterruptSource` directly. Readiness is
+non-consuming; claim consumes hardware notification output with epoch validation.
+The register port controls sources and returns typed snapshot errors; it does not
+duplicate notification wait/claim methods. There is no MMIO claim protocol or host
+IRQ coordinator. `PdmaIrqDelivery` supplies
+PDMA service, trace, and error adaptation to the generic `InterruptDispatcher`.
+The device never stores handlers or invokes software.
+
+The host freezes a non-empty vector registry before delivery starts. Each vector owns
+one persistent handler; multiple sources may share it. Duplicates do not replace
+handlers. Unregistered vectors fail before CPU acquisition, lifecycle tracing, or
+successful-delivery accounting. Shutdown wins over simultaneously ready notification.
+
+Every software-bearing scenario runs one complete main future through
+`SoftwareCpu::run_main`. One main segment is one actual poll; only `Poll::Pending`
+ends a segment before reacquisition. Immediately-ready awaits create no interrupt
+boundary. A complete handler future holds the CPU gate across its polls and awaits.
+Handlers are serial and non-reentrant; main cannot overlap them, while the device
+worker can progress.
+
+CPU ordering is FIFO after a contender requests the gate. Unobserved notifications
+have no priority, and a later IRQ request cannot overtake queued main work.
+`CpuLocal::with` accesses a single CPU-bound value synchronously, exposing no identity,
+guard, or await-spanning borrow. The private token occupies one
+`CURRENT_SOFTWARE_CPU` option around each inner poll; RAII restores its predecessor,
+including nested contexts. Persistent `StatefulIrqHandler` state owns handler-private
+resources across awaits.
+
+`AsyncDriver` setup captures the active CPU; clones share command IDs and accounting.
+It alone services IRQs, draining records before acknowledgement. `ManualDriver`
+remains a focused host observability API with no IRQ service; the canonical port is
+always CPU-bound. System observability exceptions use the raw harness fixture.
+
+IRQ bootstrap retains a driver in main and sends a clone plus port/source
+capabilities to delivery. Delivery registers handlers and signals readiness before
+main configures/enables sources or submits. No handler waits for initialization while
+owning the CPU. The depth-one dual-handler scenario validates shared credit
+reclamation across success/fault/success turns.
+
+## Data ABI, Trace, and Validation
+
+ABI-v1 is fixed-width little-endian data, not Rust layout: descriptors are 64 bytes,
+completions 32 bytes, and events 64 bytes. `DmaAddress` is opaque. The generated
+`include/pdma_model_abi.h` contains data and direct MMIO constants, not callable APIs.
+Never edit it by hand.
+
+Hardware trace records actual transitions. SQ producer advancement emits submission
+events for newly published decodable descriptors; CQ/EQ consumer advancement emits
+record-consumption events. Unchanged cursor writes and empty software polling emit no
+hardware submission/consumption trace. Disabled tracing retains no metadata for later
+emission. Other hooks cover runnable/scheduling, execution, publication, stalls, idle,
+IRQ state, and handler lifecycle. Chrome/Perfetto JSON uses instant events with
+deterministic sequence ordinals, not wall-clock timestamps or cycles.
+
+The canonical E2E is `crates/scenarios/tests/message_irq_linear_copy/mod.rs`, using
+`PdmaRegisterPort<RecordingMemoryAccess>` over `AsyncDeviceAccess`. It observes direct
+enable/producer/consumer/IRQ writes, descriptor memory traffic, main-handler-main,
+vector 64, completion, acknowledgement, and destination bytes `[1, 2, 3, 4]`.
+`crates/scenarios/tests/message_irq_dual_handler/mod.rs` covers separate persistent
+completion/event handlers. Worker and delivery shutdown/join precede collection.
+
+Every software-bearing test has exactly one `run_main`. These five device-only
+observability tests have none and use raw hardware setup where needed:
 
 - `reports_step_budget_exhaustion_when_work_remains`;
 - `async_runner_no_work_reports_idle_status`;
@@ -622,61 +277,23 @@ actor and therefore no `run_main` entry:
 - `async_tracing_preserves_manual_run_until_idle_behavior`;
 - `async_trace_log_records_idle_status_steps`.
 
-Three of those five tests contain four explicit manual-driver setup calls: the manual
-tracing comparison constructs separate baseline and traced drivers. The IRQ mechanism
-binary contains four tests and four `run_main` calls. The standalone
-`message_irq_linear_copy` test adds one complete nominal Message-IRQ path in one file:
-software handler registration, configuration and submission, device completion/IRQ
-emission, host delivery, handler drain/acknowledgment, and resumed-main observation.
-It uses `PdmaRegisterPort<RecordingMemoryAccess>` over
-`AsyncDeviceAccess` as the canonical ABI E2E. Runtime `SoftwareCpu` owns the main/handler
-gate, while `PdmaIrqDelivery` starts the generic dispatcher with PDMA source/service
-adapters. Direct observations carry ACTIVATE, producer publication, queue/IRQ commands
-and the final raw status read. The scenario asserts the
-nine-stage lifecycle through acknowledgement, vector 64, one delivery and device step,
-cursor values, `MainAfterHandler`, and destination `[1, 2, 3, 4]`.
-The persistent stateful-handler adapter keeps await-spanning handler-owned capabilities
-in one registry entry and handler-future boxing at the host type-erasure boundary.
-Cross-context test phase remains `CpuLocal`; the handler does not take and restore its
-driver through a CPU-local option on every IRQ turn.
-The standalone `message_irq_dual_handler` test registers separate completion and event
-handlers. Main and both persistent handlers hold clones of one CPU-bound driver;
-depth-one success/fault/success submissions prove shared credit reclamation across
-repeated main/handler transitions while preserving independent handler call state.
-Scenario bootstrap sends the driver and register-port clones to the delivery actor,
-which constructs PDMA services, freezes the runtime handler registry, starts
-`PdmaIrqDelivery`, and signals readiness before main enables the source. The runtime
-dispatcher task owns the resulting actor loop; the one-time ownership handoff remains
-private to the scenario harness and host adapter.
+The fixture is `crates/scenarios/tests/support/raw_hardware.rs`. Actor construction,
+spawn, shutdown, join, tracing, and final assertions belong to the harness. The sole
+trace-control exception is `async_trace_log_does_not_leak_disabled_submission_metadata`,
+which enables/clears tracing inside its one main future to preserve the interleaving.
+Additional regression scenarios retain the same one-entry/five-exception rule.
 
-Actor construction, spawn, shutdown, join, trace instrumentation/collection, and final
-assertions are scenario-harness responsibilities. The single intentional instrumentation
-interleaving exception is
-`async_trace_log_does_not_leak_disabled_submission_metadata`: trace enable/clear remains
-inside its one main future so the test can order an untraced submission before a traced
-doorbell without inventing a second software entry.
+Run from `model/modeling`:
 
-Each device-worker turn advances at most one architecture-visible hardware interaction. Public `steps`
-accounting changes only when a command reaches its existing terminal progress outcome;
-internal `Progressed` transitions remain unpublished. The worker sleeps after idle or
-stalled observations until a runtime-owned wake generation changes. Reset clears the
-pending pipeline before any discarded stage can publish a completion, cursor, success
-trace, or IRQ; DMA bytes already committed before reset remain. Because the same inputs
-always produce the same runnable ordering, resource decisions, completions, events, IRQ
-notifications, and trace ordinals, the model is deterministic and suitable for regression
-testing.
+```bash
+cargo fmt --all -- --check
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo doc --workspace --no-deps --document-private-items
+cargo run -p pdma-model-contract --bin pdma-abi-header -- --check include/pdma_model_abi.h
+```
 
-## Deferred Items
-
-The following items are explicitly outside the v0 behavioral contract:
-
-- Cycle accuracy, RTL timing, power, or frequency modeling.
-- Callable C API. The ABI-v1 data/MMIO constants header is generated and checked from
-  Rust metadata, but exposes no callable interface.
-- RISC-V scheduler backend through Terminus.
-- High-dimensional transfer operations, gather/scatter, transpose, and reduce trees.
-- Real Linux DMAengine, DPDK DMAdev, or kernel driver integration.
-- Concrete PCIe/MSI-X numeric address/data transport, MSI-X table/PBA behavior, APIC/GIC
-  integration, SR-IOV, FLR, or per-queue reset.
-
-These may be addressed once the v0 mechanisms above are stable and the deferred details are validated with new scenario tests.
+Regenerate with the same header command using `--write` instead of `--check`. Native
+Rust module layout, sub-250 pure-LOC files, checked memory, and one execution/retirement
+core remain binding. Cycle timing, callable C APIs, Terminus, physical PCIe/MSI-X maps,
+SR-IOV, FLR, per-queue reset, and real OS integration remain deferred.

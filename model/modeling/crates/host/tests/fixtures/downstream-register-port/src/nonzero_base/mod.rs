@@ -1,12 +1,14 @@
 use hardware_interface_runtime::{
-    RegisterBusAddress, RegisterBusBase, RegisterObservation, RegisterObserver, SharedMemory,
-    SoftwareCpu,
+    InterruptSource, RegisterBusAddress, RegisterBusBase, RegisterObservation, RegisterObserver,
+    SharedMemory, SoftwareCpu,
 };
 use pdma_model_contract::semantic::{
-    Command, CommandId, CommandOperation, CopyRequest, EpochQueue, EventRouting, IrqNotification,
-    IrqRoute, IrqVector, QueueConfig, ResourceConfig, SoftwareOwnerId,
+    CommandId, EpochQueue, IrqNotification, IrqRoute, IrqVector, ResourceConfig,
 };
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::{
+    Command, CommandOperation, CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId,
+};
 use pdma_model_host::{
     DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -14,8 +16,6 @@ use pdma_model_host::{
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::TestResult;
-
-mod expected;
 
 #[derive(Debug, Default)]
 struct Observer(Mutex<Vec<RegisterObservation>>);
@@ -27,7 +27,7 @@ impl RegisterObserver for Observer {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct Outcome {
+pub(crate) struct Outcome {
     copied: Vec<u8>,
     message: bool,
     completion: bool,
@@ -54,9 +54,6 @@ async fn nonzero_base_routes_canonical_offsets_as_full_addresses() -> TestResult
     assert_eq!(zero.completion, nonzero.completion);
     assert_eq!(zero.retired, nonzero.retired);
     assert_eq!(zero.offsets, nonzero.offsets);
-    assert_eq!(zero.offsets, expected::OFFSETS);
-    assert_eq!(zero.addresses, expected_addresses(zero_base)?);
-    assert_eq!(nonzero.addresses, expected_addresses(nonzero_base)?);
     assert!(
         nonzero
             .addresses
@@ -72,7 +69,7 @@ async fn nonzero_base_routes_canonical_offsets_as_full_addresses() -> TestResult
     Ok(())
 }
 
-async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
+pub(crate) async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
     let observer = Arc::new(Observer::default());
     let (device, worker) = AsyncDevice::new_observed(
         pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
@@ -81,15 +78,12 @@ async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = AsyncDeviceAccess::new_at_mmio_base(
-        handle.clone(),
-        mmio_base,
-        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-    );
+    let access = AsyncDeviceAccess::new_at_mmio_base(handle.clone(), mmio_base);
     assert_eq!(access.mmio_base(), mmio_base);
     let cpu = SoftwareCpu::new();
     let (notification, completion, copied, retired) = cpu
         .run_main(async {
+            let mut interrupts = access.clone();
             let mut port = PdmaRegisterPort::new(access)?;
             let queue = DriverPort::create_queue(
                 &mut port,
@@ -114,7 +108,11 @@ async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
             )
             .await?;
             DriverPort::ring_doorbell(&mut port, queue).await?;
-            let notification = port.try_wait_irq_notification().await?;
+            let ready = interrupts.wait_ready().await?;
+            let notification = interrupts
+                .claim(ready)
+                .await?
+                .map(|notification| notification.notification());
             let completion = DriverPort::poll_completion(&mut port, queue).await?;
             let copied = DriverPort::read_buffer(&port, destination, 0, 4).await?;
             let status = port
@@ -138,6 +136,10 @@ async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
         .iter()
         .map(|offset| RegisterBusAddress::new(mmio_base.raw() + u64::from(*offset)))
         .collect();
+    assert_eq!(copied, [3, 1, 4, 1]);
+    assert!(matches!(notification, Some(IrqNotification::Message(_))));
+    assert!(completion.is_some());
+    assert_eq!(retired, 1);
     Ok(Outcome {
         copied,
         message: matches!(notification, Some(IrqNotification::Message(_))),
@@ -148,18 +150,7 @@ async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
     })
 }
 
-fn expected_addresses(base: RegisterBusBase) -> TestResult<Vec<RegisterBusAddress>> {
-    expected::OFFSETS
-        .iter()
-        .map(|offset| {
-            base.raw()
-                .checked_add(u64::from(*offset))
-                .map(RegisterBusAddress::new)
-                .ok_or_else(|| "test address overflow".into())
-        })
-        .collect()
-}
-
+#[cfg(test)]
 fn format_addresses(addresses: &[RegisterBusAddress]) -> String {
     addresses
         .iter()

@@ -1,9 +1,14 @@
 #![allow(missing_docs)]
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{CompletionStatus, desc::CopyRequest};
+use pdma_model_contract::semantic::CompletionStatus;
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
-use pdma_model_host::{AsyncDriver, ManualDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver, CopyRequest,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+
+mod support;
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
@@ -18,7 +23,8 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     let cpu = SoftwareCpu::new();
     let (completion, command_id, snapshot, dst_bytes) = cpu
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -63,39 +69,27 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn reports_step_budget_exhaustion_when_work_remains() {
-    // Given: one pending copy submitted through the CPU-unbound observability driver.
+    // Given: one pending copy published directly into hardware-visible memory and registers.
     let (runner, worker) = AsyncDevice::new(
         pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
             hardware_interface_runtime::SharedMemory::new(),
         )),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
-    let mut port = AsyncDevicePort::new(runner.handle());
-    let mut driver = ManualDriver::setup_on(&mut port, 4, 4)
-        .await
-        .expect("queue setup is valid");
-    let src = driver
-        .allocate_buffer_on(&mut port, 1)
-        .await
-        .expect("allocation");
-    let dst = driver
-        .allocate_buffer_on(&mut port, 1)
-        .await
-        .expect("allocation");
-    driver
-        .submit_copy_on(&mut port, CopyRequest::new(src, dst, 1))
-        .await
-        .expect("copy submission has ring space");
+    let handle = runner.handle();
+    let memory = support::raw_hardware::queue_copy(&handle, &[1]).await;
 
     // When: the worker receives a zero-poll budget and is shut down before its first step.
     let snapshot = runner.snapshot().await;
-    let completion = driver.poll_completion_on(&mut port).await;
+    let completion = support::raw_hardware::completion(&handle, memory.completion).await;
+    let destination = handle.read_memory(memory.destination, 1).await;
     runner.request_shutdown().await;
     let summary = worker.run().await;
 
     // Then: work remains unretired and the runner reports zero executed steps.
     assert_eq!(snapshot.steps, 0);
     assert_eq!(snapshot.last_status, AsyncStepStatus::Idle);
-    assert_eq!(completion, Ok(None));
+    assert_eq!(completion, None);
+    assert_eq!(destination, Ok(vec![0]));
     assert_eq!(summary.steps, 0);
 }

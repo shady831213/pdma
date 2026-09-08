@@ -2,7 +2,6 @@ use super::ProbeAccess;
 use crate::support::{ProbePort, lock};
 use hardware_interface_runtime::{InterruptHandler, InterruptSource, SoftwareCpu};
 use pdma_model_contract::semantic::{DeviceEpoch, EpochIrqSource, IrqNotification, IrqVector};
-use pdma_model_host::adapter::abi::{PdmaClaimResult, PdmaInterruptSource};
 use pdma_model_host::runtime::interrupt::{PdmaIrqHandler, PdmaIrqService, PdmaIrqServiceError};
 use pdma_model_host::{AsyncDriver, DriverIrqRecord};
 use std::{error::Error, fmt, sync::Arc};
@@ -56,7 +55,7 @@ async fn composite_result(
         capability = EpochIrqSource::new(DeviceEpoch::new(1), capability.source());
     }
     let access = ProbeAccess::one(IrqVector::new(64), capability);
-    let mut source = PdmaInterruptSource::new(access);
+    let mut source = access;
     let ready = source
         .wait_ready()
         .await
@@ -74,22 +73,19 @@ async fn composite_result(
 pub(super) async fn run_adverse() -> crate::support::AdverseFacts {
     let ready_access = ProbeAccess::from_claims([]);
     lock(&ready_access.state).ready_error = true;
-    let ready_error = PdmaInterruptSource::new(ready_access)
-        .wait_ready()
-        .await
-        .is_err();
-    let claim_access = ProbeAccess::from_claims([PdmaClaimResult::Empty]);
+    let ready_error = ready_access.wait_ready().await.is_err();
+    let claim_access = ProbeAccess::from_claims([None]);
     lock(&claim_access.state).claim_error = true;
-    let mut claim_source = PdmaInterruptSource::new(claim_access);
+    let mut claim_source = claim_access;
     let claim_ready = claim_source
         .wait_ready()
         .await
         .unwrap_or_else(|_| std::process::abort());
     let claim_error = claim_source.claim(claim_ready).await.is_err();
 
-    let pending_access = ProbeAccess::from_claims([PdmaClaimResult::Empty]);
+    let pending_access = ProbeAccess::from_claims([None]);
     lock(&pending_access.state).pend_claim = true;
-    let mut pending_source = PdmaInterruptSource::new(pending_access.clone());
+    let mut pending_source = pending_access.clone();
     let pending_ready = pending_source
         .wait_ready()
         .await

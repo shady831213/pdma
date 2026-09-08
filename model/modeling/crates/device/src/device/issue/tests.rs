@@ -1,16 +1,17 @@
+use crate::test_support;
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use pdma_model_contract::semantic::{
-    Command, CommandId, CommandOperation, DeviceRunState, QueueConfigHandle, ResourceConfig,
-    TraceEventKind,
-    desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
+use pdma_model_contract::abi::registers::QueueRegisters;
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues,
+    AbiCommandPayloadVectorAddValues,
 };
+use pdma_model_contract::semantic::{DeviceRunState, QueueId, ResourceConfig, TraceEventKind};
 
 use super::{FetchedWork, IssueUnit};
 use crate::AsyncStallReason;
 use crate::device::{DeviceCore, context::HardwareContext};
 
-fn fixture() -> (DeviceCore, [QueueConfigHandle; 2]) {
+fn fixture() -> (DeviceCore, [QueueId; 2]) {
     let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
@@ -19,37 +20,46 @@ fn fixture() -> (DeviceCore, [QueueConfigHandle; 2]) {
         ResourceConfig::default().with_read_slots(1),
     );
     core.enable_tracing();
-    let config = QueueConfig::new(4, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
-    let vector = core.create_queue(config).expect("vector queue");
-    let copy = core.create_queue(config).expect("copy queue");
-    let source = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("source")
-        .object();
+    let source = provisioning.allocate(&mut core.memory, 4).expect("source");
     let destination = provisioning
         .allocate(&mut core.memory, 4)
-        .expect("destination")
-        .object();
-    for (queue, operation) in [
+        .expect("destination");
+    for (index, payload) in [
         (
-            vector,
-            CommandOperation::VectorAdd(VectorAddRequest::new(
-                VectorBufferRange::new(source, 0),
-                VectorBufferRange::new(source, 0),
-                VectorBufferRange::new(destination, 0),
-                4,
-            )),
+            0,
+            AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
+                source_a_dma_address: source.base().raw(),
+                source_b_dma_address: source.base().raw(),
+                destination_dma_address: destination.base().raw(),
+                length: 4.into(),
+            }),
         ),
         (
-            copy,
-            CommandOperation::Copy(CopyRequest::new(source, destination, 4)),
+            1,
+            AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
+                source_dma_address: source.base().raw(),
+                destination_dma_address: destination.base().raw(),
+                length: 4.into(),
+            }),
         ),
     ] {
-        core.submit_command(queue, Command::new(CommandId::new(7), operation))
-            .expect("submission");
-        core.ring_doorbell(queue).expect("doorbell");
+        let queue = test_support::configure(&mut core, &mut provisioning, index, [4; 3]);
+        test_support::submit(&mut core, queue, AbiCommand::from_payload(7, payload));
+        test_support::doorbell(&mut core, queue);
     }
-    (core, [vector, copy])
+    (core, [QueueId::new(0), QueueId::new(1)])
+}
+
+fn submission_cursors(core: &DeviceCore, queue: QueueId) -> (u64, u64) {
+    let index = u32::try_from(queue.raw()).expect("queue index");
+    (
+        core.queues
+            .read_direct(index, QueueRegisters::SQ_CONSUMER.offset())
+            .expect("consumer"),
+        core.queues
+            .read_direct(index, QueueRegisters::SQ_PRODUCER.offset())
+            .expect("producer"),
+    )
 }
 
 fn issue(
@@ -83,18 +93,12 @@ fn standalone_issue_admits_fitting_copy_past_starved_vector() {
     let StepOutcome::Complete(Ok(FetchedWork::Command(command))) = result else {
         panic!("fitting command must be issued: {result:?}");
     };
-    assert_eq!(command.route.queue, copy.queue_id());
+    assert_eq!(command.route.queue, copy);
     assert_eq!(core.native_fetches, 1);
-    assert_eq!(core.runnable.current(), Some(vector.queue_id()));
+    assert_eq!(core.runnable.current(), Some(vector));
     assert_eq!(core.runnable.runnable_len(), 1);
-    assert_eq!(
-        core.queues.semantic_cursors(vector.queue_id()),
-        Ok(((0, 1), (0, 0)))
-    );
-    assert_eq!(
-        core.queues.semantic_cursors(copy.queue_id()),
-        Ok(((0, 1), (0, 0)))
-    );
+    assert_eq!(submission_cursors(&core, vector), (0, 1));
+    assert_eq!(submission_cursors(&core, copy), (0, 1));
     assert_eq!(
         core.trace_events()
             .iter()
@@ -131,13 +135,10 @@ fn standalone_issue_all_starved_rotates_full_fifo_without_fetch_or_execution() {
     // Then: a full rotation retains FIFO order, and each attempt emits exactly one stall.
     assert_eq!(core.native_fetches, 0);
     assert_eq!(core.runnable.runnable_len(), 2);
-    assert_eq!(core.runnable.next(), Some(queues[0].queue_id()));
-    assert_eq!(core.runnable.next(), Some(queues[1].queue_id()));
+    assert_eq!(core.runnable.next(), Some(queues[0]));
+    assert_eq!(core.runnable.next(), Some(queues[1]));
     for queue in queues {
-        assert_eq!(
-            core.queues.semantic_cursors(queue.queue_id()),
-            Ok(((0, 1), (0, 0)))
-        );
+        assert_eq!(submission_cursors(&core, queue), (0, 1));
     }
     let events = core.trace_events();
     assert_eq!(events.len(), before + 3);
@@ -146,7 +147,7 @@ fn standalone_issue_all_starved_rotates_full_fifo_without_fetch_or_execution() {
             .iter()
             .skip(before)
             .all(|event| event.kind() == TraceEventKind::Stall
-                && event.queue_id() == Some(queues[0].queue_id()))
+                && event.queue_id() == Some(queues[0]))
     );
 }
 
@@ -169,13 +170,10 @@ fn repeated_run_state_queries_leave_admission_and_hardware_untouched() {
     assert!(core.command_pipeline.is_empty());
     assert!(!core.retirement.is_pending());
     assert_eq!(core.runnable.runnable_len(), 2);
-    assert_eq!(core.runnable.next(), Some(queues[0].queue_id()));
-    assert_eq!(core.runnable.next(), Some(queues[1].queue_id()));
+    assert_eq!(core.runnable.next(), Some(queues[0]));
+    assert_eq!(core.runnable.next(), Some(queues[1]));
     for queue in queues {
-        assert_eq!(
-            core.queues.semantic_cursors(queue.queue_id()),
-            Ok(((0, 1), (0, 0)))
-        );
+        assert_eq!(submission_cursors(&core, queue), (0, 1));
     }
 }
 
@@ -200,9 +198,9 @@ fn pending_issue_resumes_same_request_when_copy_resources_return() {
     let StepOutcome::Complete(Ok(FetchedWork::Command(command))) = result else {
         panic!("pending Issue must resume: {result:?}");
     };
-    assert_eq!(command.route.queue, copy.queue_id());
+    assert_eq!(command.route.queue, copy);
     assert_eq!(core.native_fetches, 1);
-    assert_eq!(core.runnable.current(), Some(vector.queue_id()));
+    assert_eq!(core.runnable.current(), Some(vector));
     assert_eq!(core.runnable.runnable_len(), 1);
     assert!(matches!(
         issue(&mut core, &mut state),

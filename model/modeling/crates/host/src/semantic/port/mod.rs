@@ -4,20 +4,13 @@ mod receipt;
 pub use receipt::SubmissionReceipt;
 
 use crate::semantic::PortResult;
+use crate::{Command, QueueConfig, QueueConfigHandle};
 use pdma_model_contract::semantic::{
-    BufferId, Command, CompletionRecord, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
-    IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, CompletionRecord, EpochIrqSource, EventRecord, IrqRoute, IrqSnapshot,
 };
 
 /// Async device-facing operations required by a host driver turn.
 pub trait DriverPort: Send + Sync {
-    /// Resolves previously issued queue commands before reserving another driver slot.
-    fn recover_queue(
-        &mut self,
-        _queue: QueueConfigHandle,
-    ) -> impl Future<Output = PortResult<()>> + Send {
-        async { Ok(()) }
-    }
     /// Provisions one command queue and one bound completion ring.
     fn create_queue(
         &mut self,
@@ -105,9 +98,5 @@ pub trait DriverPort: Send + Sync {
         source: EpochIrqSource,
     ) -> impl Future<Output = PortResult<()>> + Send;
     /// Returns the current pending line IRQ snapshot.
-    fn irq_snapshot(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send;
-    /// Waits until the device has an asserted line IRQ snapshot.
-    fn wait_irq(&self) -> impl Future<Output = Option<IrqSnapshot>> + Send;
-    /// Waits for and consumes one line or message IRQ notification.
-    fn wait_irq_notification(&mut self) -> impl Future<Output = Option<IrqNotification>> + Send;
+    fn irq_snapshot(&self) -> impl Future<Output = PortResult<Option<IrqSnapshot>>> + Send;
 }

@@ -19,9 +19,5 @@ name = "abi_descriptor"
 path = "tests/abi_descriptor/mod.rs"
 
 [[test]]
-name = "abi_mmio"
-path = "tests/abi_mmio/mod.rs"
-
-[[test]]
 name = "abi_schema_parity"
 path = "tests/abi_schema_parity/mod.rs"

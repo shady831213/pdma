@@ -1,10 +1,11 @@
 use crate::ModelError;
-use pdma_model_contract::semantic::{Command, CommandId, CompletionRingId, EventRecord, QueueId};
+use crate::operation::DecodedCommand;
+use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 
 #[derive(Debug, Clone)]
 pub(crate) enum NormalizedFetch {
     Command {
-        command: Command,
+        command: DecodedCommand,
         completion_ring: CompletionRingId,
     },
     Fault(NormalizedFault),
@@ -25,6 +26,5 @@ pub(crate) enum PublicationOutcome {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum FaultPublication {
     Retry,
-    Semantic(EventRecord),
     Exact(Option<(QueueId, CommandId)>),
 }

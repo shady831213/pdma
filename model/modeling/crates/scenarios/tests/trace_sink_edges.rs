@@ -1,12 +1,13 @@
 #![allow(missing_docs)]
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{
-    CommandId, ResourceConfig, TraceEvent, TraceEventKind,
-    desc::{Command, CommandOperation, CopyRequest},
-};
+use pdma_model_contract::semantic::{CommandId, ResourceConfig, TraceEvent, TraceEventKind};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver, DriverPort,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+use pdma_model_host::{Command, CommandOperation, CopyRequest};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
@@ -19,7 +20,6 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
@@ -27,6 +27,8 @@ async fn async_trace_log_does_not_duplicate_success_on_completion_retry() {
     // When: one software main drains the first completion so retry can publish the second.
     let second_command = cpu
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -98,12 +100,13 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
 
     // When: instrumentation stays inside main to preserve submit-disabled doorbell ordering.
     let queue_id = cpu
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
             let driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -151,7 +154,7 @@ async fn async_trace_log_does_not_leak_disabled_submission_metadata() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn async_trace_log_records_unrelated_queue_event_poll_none() {
+async fn async_trace_log_records_only_the_queue_whose_event_consumer_advances() {
     // Given: two traced async drivers where one queue faults and the other remains unrelated.
     let (runner, worker) = AsyncDevice::new(
         pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
@@ -161,7 +164,6 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
@@ -169,6 +171,8 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     // When: one software main polls the unrelated queue before the faulting queue.
     let (wrong_driver_event, owner_event, owner_queue_id, unrelated_queue_id) = cpu
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
             let mut driver_a = AsyncDriver::setup_on(&mut handle, 1, 4)
                 .await
                 .expect("first queue setup is valid");
@@ -210,13 +214,11 @@ async fn async_trace_log_records_unrelated_queue_event_poll_none() {
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
 
-    // Then: the unrelated poll does not consume the event and both poll paths are traced.
+    // Then: only consuming the owning queue's event changes hardware and produces a poll trace.
     assert_eq!(wrong_driver_event, None);
     assert_eq!(owner_event.queue_id(), owner_queue_id);
-    assert!(trace_events.iter().any(|event: &TraceEvent| {
-        event.kind() == TraceEventKind::EventPolled
-            && event.queue_id() == Some(unrelated_queue_id)
-            && event.detail() == "event poll None"
+    assert!(!trace_events.iter().any(|event: &TraceEvent| {
+        event.kind() == TraceEventKind::EventPolled && event.queue_id() == Some(unrelated_queue_id)
     }));
     assert!(trace_events.iter().any(|event: &TraceEvent| {
         event.kind() == TraceEventKind::EventPolled

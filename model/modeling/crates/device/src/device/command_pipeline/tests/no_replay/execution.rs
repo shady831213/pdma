@@ -1,6 +1,4 @@
-use pdma_model_contract::semantic::{
-    CommandId, CompletionRecord, CompletionStatus, ResourceConfig, TraceEventKind,
-};
+use pdma_model_contract::semantic::{ResourceConfig, TraceEventKind};
 
 use super::super::support::{
     Case, PipelineRunOutcome, drive_to_complete, drive_to_pending, prepare_with_resources, read,
@@ -30,15 +28,14 @@ pub(super) fn pressure_revisits_only_execution() {
 
     // Then: fetch/cursor/memory/record/IRQ state did not replay before one execution.
     assert_eq!(prepared.fixture.fetch_count(), 1);
-    let pending_cursors = prepared
-        .fixture
-        .core
-        .queues
-        .semantic_cursors(prepared.queue.queue_id());
+    let pending_cursors = crate::device::command_pipeline::tests::support::cursors(
+        &prepared.fixture.core,
+        prepared.queue,
+    );
     let pending_bytes = read(&prepared.fixture.core, prepared.destinations[0]);
     let pending_irq = prepared.fixture.core.irq_snapshot();
     let pending_trace = trace_kinds(&prepared.fixture.core.trace_events());
-    assert_eq!(pending_cursors, Ok(((0, 1), (0, 0))));
+    assert_eq!(pending_cursors, ((0, 1), (0, 0)));
     assert_eq!(pending_bytes, Ok(vec![0; 8]));
     assert_eq!(pending_irq, None);
     assert_eq!(
@@ -58,31 +55,26 @@ pub(super) fn pressure_revisits_only_execution() {
     assert_eq!(prepared.fixture.fetch_count(), 1);
     let final_bytes = read(&prepared.fixture.core, prepared.destinations[0]);
     assert_eq!(final_bytes, Ok(vec![1, 2, 3, 4, 0, 0, 0, 0]));
-    let completion = prepared
-        .fixture
-        .core
-        .poll_completion(prepared.queue)
-        .expect("completion ring");
+    let completion =
+        crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue);
     assert_eq!(
         completion,
-        Some(CompletionRecord::new(
-            prepared.queue.queue_id(),
-            CommandId::new(7),
-            CompletionStatus::Success,
+        Some(pdma_model_contract::abi::AbiCompletion::success(
+            u64::from(prepared.queue.index),
+            7
         ))
     );
     assert_eq!(
-        prepared.fixture.core.poll_completion(prepared.queue),
-        Ok(None)
+        crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue),
+        None
     );
-    let final_cursors = prepared
-        .fixture
-        .core
-        .queues
-        .semantic_cursors(prepared.queue.queue_id());
+    let final_cursors = crate::device::command_pipeline::tests::support::cursors(
+        &prepared.fixture.core,
+        prepared.queue,
+    );
     let final_irq = prepared.fixture.core.irq_snapshot();
     let final_trace = trace_kinds(&prepared.fixture.core.trace_events());
-    assert_eq!(final_cursors, Ok(((1, 1), (1, 1))));
+    assert_eq!(final_cursors, ((1, 1), (1, 1)));
     assert!(final_irq.is_some());
     assert_eq!(
         final_trace,

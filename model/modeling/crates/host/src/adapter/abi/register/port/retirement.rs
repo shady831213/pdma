@@ -1,13 +1,15 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
+use crate::QueueConfigHandle;
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+use pdma_model_contract::abi::registers::QueueRegisters;
 use pdma_model_contract::abi::{
     AbiCompletion, AbiEvent, AbiEventKind, AbiRingEntry, DmaAddress, RingCursor as AbiRingCursor,
     RingLayout,
 };
 use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord,
-    QueueConfigHandle, QueueId, RingCursor,
+    BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord, QueueId,
+    RingCursor,
 };
 
 pub(super) async fn completion<A: CanonicalAccess>(
@@ -15,9 +17,8 @@ pub(super) async fn completion<A: CanonicalAccess>(
     handle: QueueConfigHandle,
 ) -> PdmaPortResult<Option<CompletionRecord>> {
     let _window = port.queue_window.lock().await;
-    super::pending::recover(port).await?;
     let queue = super::submission::refresh(port, handle).await?;
-    if let Some(record) = port.with_state(|state| state.completion.take())? {
+    if let Some(record) = port.with_state(|state| state.completion.remove(&handle.queue_id()))? {
         return Ok(Some(record));
     }
     let cursors = queue.status.completion();
@@ -40,16 +41,17 @@ pub(super) async fn completion<A: CanonicalAccess>(
         .consumer()
         .checked_increment(1)
         .map_err(|_| PortError::SubmissionState)?;
-    commit_consumer(
+    let result = super::registers::write(
         port,
-        handle,
-        cursors.consumer(),
-        next,
-        pdma_model_contract::abi::mmio::QueueCommand::PublishCqConsumer,
-        super::pending::Effect::Completion(record),
+        super::registers::queue_offset(handle.queue_id(), QueueRegisters::CQ_CONSUMER.offset())?,
+        next.raw(),
     )
-    .await?;
-    port.with_state(|state| state.completion.take())
+    .await;
+    if super::registers::committed(&result) {
+        port.with_state(|state| state.completion.insert(handle.queue_id(), record))?;
+    }
+    result?;
+    port.with_state(|state| state.completion.remove(&handle.queue_id()))
 }
 
 fn semantic_completion(decoded: AbiCompletion) -> PortResult<CompletionRecord> {
@@ -71,9 +73,8 @@ pub(super) async fn event<A: CanonicalAccess>(
     handle: QueueConfigHandle,
 ) -> PdmaPortResult<Option<EventRecord>> {
     let _window = port.queue_window.lock().await;
-    super::pending::recover(port).await?;
     let queue = super::submission::refresh(port, handle).await?;
-    if let Some(record) = port.with_state(|state| state.event.take())? {
+    if let Some(record) = port.with_state(|state| state.event.remove(&handle.queue_id()))? {
         return Ok(Some(record));
     }
     let cursors = queue.status.event();
@@ -96,49 +97,17 @@ pub(super) async fn event<A: CanonicalAccess>(
         .consumer()
         .checked_increment(1)
         .map_err(|_| PortError::SubmissionState)?;
-    commit_consumer(
+    let result = super::registers::write(
         port,
-        handle,
-        cursors.consumer(),
-        next,
-        pdma_model_contract::abi::mmio::QueueCommand::PublishEqConsumer,
-        super::pending::Effect::Event(record),
+        super::registers::queue_offset(handle.queue_id(), QueueRegisters::EQ_CONSUMER.offset())?,
+        next.raw(),
     )
-    .await?;
-    port.with_state(|state| state.event.take())
-}
-
-async fn commit_consumer<A: CanonicalAccess>(
-    port: &PdmaRegisterPort<A>,
-    handle: QueueConfigHandle,
-    expected: RingCursor,
-    proposed: RingCursor,
-    command: pdma_model_contract::abi::mmio::QueueCommand,
-    effect: super::pending::Effect,
-) -> PdmaPortResult<()> {
-    let queue = port.with_state(|state| state.queue(handle))??;
-    let observed = if command == pdma_model_contract::abi::mmio::QueueCommand::PublishCqConsumer {
-        queue.status.completion().consumer()
-    } else {
-        queue.status.event().consumer()
-    };
-    if observed != expected {
-        return Err(PortError::SubmissionState.into());
+    .await;
+    if super::registers::committed(&result) {
+        port.with_state(|state| state.event.insert(handle.queue_id(), record))?;
     }
-    let status = super::control::update_cursor(
-        port,
-        pdma_model_contract::semantic::QueueCursorUpdate::new(queue.status.queue(), proposed),
-        queue.rings,
-        command,
-        expected,
-        effect,
-    )
-    .await?;
-    port.with_state(|state| {
-        let current = state.queue(handle)?;
-        state.queue = Some(super::state::QueueState { status, ..current });
-        Ok(())
-    })?
+    result?;
+    port.with_state(|state| state.event.remove(&handle.queue_id()))
 }
 
 fn slot_address<R: AbiRingEntry>(

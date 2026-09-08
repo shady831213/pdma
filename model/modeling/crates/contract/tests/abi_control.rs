@@ -1,14 +1,10 @@
-//! Independent ABI-layout and semantic queue-control proofs.
+//! Independent ABI-layout and queue-cursor proofs.
 
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCompletion, AbiControlError, AbiDiscovery, AbiEvent, AbiLimits,
-    DiscoveryRequest, DmaAddress, DmaRegion, RingCursor as AbiRingCursor, RingLayout,
-    RingState as AbiRingState,
+    AbiCommand, AbiCompletion, AbiControlError, AbiEvent, DmaAddress, DmaRegion,
+    RingCursor as AbiRingCursor, RingLayout, RingState as AbiRingState,
 };
-use pdma_model_contract::semantic::{
-    BufferId, DeviceEpoch, EventRouting, QueueActivation, QueueConfig, QueueControl, QueueId,
-    QueueRingObjects, RingCursor, RingCursors, SemanticError, SoftwareOwnerId,
-};
+use pdma_model_contract::semantic::{DeviceEpoch, RingCursor, RingCursors, SemanticError};
 
 const fn region(
     base: u64,
@@ -18,7 +14,7 @@ const fn region(
 }
 
 #[test]
-fn abi_layout_and_semantic_control_have_independent_owners() {
+fn abi_layout_and_queue_cursors_have_independent_owners() {
     // Given: exact ABI ring extents and separate semantic DMA-object assignments.
     let submission = RingLayout::<AbiCommand>::try_new(
         region(0x1_0000, 192).expect("test region has a representable extent"),
@@ -35,15 +31,12 @@ fn abi_layout_and_semantic_control_have_independent_owners() {
         2,
     )
     .expect("two events fit exactly");
-    let config = QueueConfig::new(3, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(9));
-    let objects = QueueRingObjects::new(BufferId::new(1), BufferId::new(2), BufferId::new(3));
-    let activation = QueueActivation::new(DeviceEpoch::initial(), QueueId::new(4), config, objects);
     let cursors = RingCursors::try_new(3, RingCursor::new(9), RingCursor::new(6))
         .expect("distance equal to depth retains the final slot");
     let abi_state = AbiRingState::try_new(submission, AbiRingCursor::new(9), AbiRingCursor::new(6))
         .expect("ABI cursors retain exactly one full ring");
 
-    // When: semantic cursors advance and one typed queue control is created.
+    // When: semantic cursors advance and the ring producer advances.
     let drained = cursors
         .update_consumer(RingCursor::new(9))
         .expect("forward consumer publication is valid");
@@ -51,8 +44,6 @@ fn abi_layout_and_semantic_control_have_independent_owners() {
     let produced = drained
         .update_producer(wrapped)
         .expect("forward producer publication is valid");
-    let control =
-        QueueControl::publish_submission_producer(DeviceEpoch::initial(), QueueId::new(4), wrapped);
 
     // Then: ABI byte geometry and semantic identity/state remain independently exact.
     assert_eq!(
@@ -72,13 +63,6 @@ fn abi_layout_and_semantic_control_have_independent_owners() {
     assert_eq!(abi_state.consumer(), AbiRingCursor::new(6));
     assert_eq!(drained.available(), 3);
     assert_eq!(produced.producer(), wrapped);
-    assert_eq!(activation.rings(), objects);
-    assert_eq!(activation.config(), config);
-    assert!(matches!(
-        control,
-        QueueControl::PublishSubmissionProducer(update)
-            if update.queue() == activation.queue() && update.cursor() == wrapped
-    ));
 }
 
 #[test]
@@ -210,23 +194,5 @@ fn malformed_abi_cursors_report_abi_owned_errors() {
                 increment: 1,
             }),
         ]
-    );
-}
-
-#[test]
-fn discovery_and_limits_remain_exact_abi_values() {
-    // Given/When: ABI discovery accepts the complete v1 feature mask.
-    let request = DiscoveryRequest::try_new(1, 0xff);
-    let discovery = AbiDiscovery::v1();
-    let limits = AbiLimits::v1();
-
-    // Then: numeric ABI negotiation and limits remain unchanged.
-    assert!(request.is_ok());
-    assert_eq!(discovery.version(), 1);
-    assert_eq!(discovery.features().bits(), 0xff);
-    assert_eq!(limits.max_ring_depth(), u32::MAX);
-    assert_eq!(
-        DiscoveryRequest::try_new(1, 1_u64 << 63),
-        Err(AbiControlError::UnknownFeatureBits { bits: 1_u64 << 63 })
     );
 }

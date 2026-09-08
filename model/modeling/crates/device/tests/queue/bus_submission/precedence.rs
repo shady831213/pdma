@@ -1,4 +1,4 @@
-use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
+use super::common::{TestResult, allocate, encode, fixture, published_event, run_descriptor};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiEventAccess, AbiEventKind,
     AbiEventStage, DmaAddress, MAX_TRANSFER_BYTES,
@@ -55,7 +55,7 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
     assert_eq!(result.consumer, RingCursor::new(1));
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(
-        pending_event(&result)?.fault().tuple(),
+        published_event(&result)?.fault().tuple(),
         (
             kind,
             slot.raw(),
@@ -68,7 +68,6 @@ pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
     );
     assert_eq!(result.steps, 0);
     assert_eq!(result.native_steps, 1);
-    assert!(!result.irq_pending);
     Ok(())
 }
 
@@ -145,7 +144,7 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
         ),
     };
     assert_eq!(
-        pending_event(&result)?.fault().tuple(),
+        published_event(&result)?.fault().tuple(),
         (
             expected.0,
             expected.1,
@@ -160,6 +159,5 @@ pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 0);
     assert_eq!(result.native_steps, 1);
-    assert!(!result.irq_pending);
     Ok(())
 }

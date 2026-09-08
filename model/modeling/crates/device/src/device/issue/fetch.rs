@@ -52,18 +52,16 @@ fn fetch_selected(
         } => {
             let route = CommandRoute::new(
                 queue,
-                command.command_id(),
+                command.id,
                 completion_ring,
                 context.queues.contains_completion(completion_ring),
             );
-            context.trace.scheduled(
-                queue,
-                command.operation().trace_operation(),
-                command.command_id(),
-            );
+            context
+                .trace
+                .scheduled(queue, command.operation.trace_operation(), command.id);
             FetchedWork::Command(FetchedCommand {
                 route,
-                operation: command.into_operation(),
+                operation: command.operation,
             })
         }
     })

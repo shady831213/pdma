@@ -1,15 +1,18 @@
 #![allow(missing_docs)]
 
+use pdma_model_host::CopyRequest;
 use pdma_model_host::DriverError;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     CompletionStatus, TraceEvent, TraceEventKind,
-    desc::CopyRequest,
     ids::{CommandId, QueueId},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_default_policy_retires_runnable_queues_in_submission_order() {
@@ -22,12 +25,13 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
     let (queue_a, queue_b, command_a, command_b, completion_a, completion_b, copied_a, copied_b) =
         SoftwareCpu::new()
             .run_main(async {
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                    .expect("active software CPU");
                 let mut driver_a = AsyncDriver::setup_on(&mut handle, 2, 2)
                     .await
                     .expect("queue A setup is valid");
@@ -118,7 +122,6 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
     let (runner, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
     let (
@@ -134,12 +137,10 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
         repeated_copy,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut peer = AsyncDriver::setup_on(&mut handle, 1, 2)
-                .await
-                .expect("peer queue setup is valid");
-            let mut repeated = AsyncDriver::setup_on(&mut handle, 2, 3)
-                .await
-                .expect("repeated queue setup is valid");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
+            let mut peer = AsyncDriver::setup_on(&mut handle, 1, 2).await?;
+            let mut repeated = AsyncDriver::setup_on(&mut handle, 2, 3).await?;
             let peer_src = peer.allocate_buffer_on(&mut handle, 1).await?;
             let peer_dst = peer.allocate_buffer_on(&mut handle, 1).await?;
             let repeated_src = repeated.allocate_buffer_on(&mut handle, 2).await?;

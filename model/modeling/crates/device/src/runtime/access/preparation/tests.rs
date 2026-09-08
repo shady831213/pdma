@@ -1,8 +1,7 @@
 use super::*;
 use crate::MmioRegisterError;
-use crate::device::DeviceCore;
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
-use pdma_model_contract::abi::mmio::{QueueResponseBank, register_at};
+use pdma_model_contract::abi::registers::{QueueRegisters, locate as register_at, queue_offset};
 use pdma_model_contract::semantic::ResourceConfig;
 use std::future::Future;
 use std::pin::pin;
@@ -59,16 +58,37 @@ async fn prepared_read_and_write_are_side_effect_free_until_commit() {
         .shared
         .backend
         .interact(|state| {
-            let register = register_at(0x108).expect("queue ID register");
-            let before = state.core.read_register(register).expect("queue ID bytes");
-            let read = prepare_read(&state.core, register, 0x108).expect("prepared read");
-            let write = prepare_write(register, 7, 0x108, &7_u64.to_le_bytes());
+            let register =
+                register_at(queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"))
+                    .expect("queue base register");
+            let before = state
+                .core
+                .read_register(register)
+                .expect("queue base bytes");
+            let read = prepare_read(
+                &state.core,
+                register,
+                queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+            )
+            .expect("prepared read");
+            let write = prepare_write(
+                register,
+                7,
+                queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+                &7_u64.to_le_bytes(),
+            );
             assert_eq!(
-                state.core.read_register(register).expect("queue ID bytes"),
+                state
+                    .core
+                    .read_register(register)
+                    .expect("queue base bytes"),
                 before
             );
             write.commit(&mut state.core).expect("committed write");
-            let after = state.core.read_register(register).expect("queue ID bytes");
+            let after = state
+                .core
+                .read_register(register)
+                .expect("queue base bytes");
             (before, read.response, after)
         })
         .await;
@@ -88,82 +108,42 @@ async fn completed_register_writes_survive_later_rejection_and_unpolled_write()
     .0
     .handle()
     .register_endpoint();
-    endpoint.write(0x100, &10_u64.to_le_bytes()).await?;
-    endpoint.write(0x108, &11_u64.to_le_bytes()).await?;
+    endpoint
+        .write(
+            queue_offset(0, QueueRegisters::CQ_BASE.offset()).expect("CQ base"),
+            &10_u64.to_le_bytes(),
+        )
+        .await?;
+    endpoint
+        .write(
+            queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+            &11_u64.to_le_bytes(),
+        )
+        .await?;
 
     // When: a later access is invalid and another request write is never polled.
     let invalid = endpoint.write(0x10c, &12_u64.to_le_bytes()).await;
-    drop(endpoint.write(0x108, &99_u64.to_le_bytes()));
+    drop(endpoint.write(
+        queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+        &99_u64.to_le_bytes(),
+    ));
 
     // Then: the completed register values and only their observation slots persist.
     assert!(matches!(invalid, Err(MmioRegisterError::Access(_))));
     assert_eq!(endpoint.shared.register_gate.next_sequence(), Ok(2));
-    for (offset, expected) in [(0x100, 10_u64), (0x108, 11_u64)] {
+    for (offset, expected) in [
+        (
+            queue_offset(0, QueueRegisters::CQ_BASE.offset()).expect("CQ base"),
+            10_u64,
+        ),
+        (
+            queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+            11_u64,
+        ),
+    ] {
         let mut bytes = [0; 8];
         endpoint.read(offset, &mut bytes).await?;
         assert_eq!(u64::from_le_bytes(bytes), expected);
     }
     Ok(())
-}
-
-#[test]
-fn queue_completion_empties_response_with_result_details_in_one_owner_transition() {
-    // Given: a queue response bank with every lane distinct from the empty value.
-    let mut state = DeviceCore::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
-    let response = QueueResponseBank {
-        epoch: 1.into(),
-        queue_id: 2.into(),
-        sq_producer: 3.into(),
-        sq_captured: 4.into(),
-        sq_consumer: 5.into(),
-        cq_producer: 6.into(),
-        cq_consumer: 7.into(),
-        eq_producer: 8.into(),
-        eq_consumer: 9.into(),
-    };
-
-    state.queues.complete(
-        pdma_model_contract::abi::mmio::MmioResultDetails {
-            result: pdma_model_contract::abi::mmio::MmioResult::InvalidTransaction,
-            details: [10, 11, 12],
-        },
-        pdma_model_contract::abi::mmio::ResponseUpdate::Replace(response),
-    );
-
-    // When: one typed owner transition explicitly empties the prior response.
-    state.queues.complete(
-        pdma_model_contract::abi::mmio::MmioResultDetails {
-            result: pdma_model_contract::abi::mmio::MmioResult::Empty,
-            details: [13, 14, 15],
-        },
-        pdma_model_contract::abi::mmio::ResponseUpdate::Empty,
-    );
-
-    // Then: the result/detail tuple and all nine response lanes change atomically as typed data.
-    assert_eq!(
-        [
-            0x168, 0x170, 0x178, 0x180, 0x188, 0x190, 0x198, 0x1a0, 0x1a8, 0x1b0, 0x1b8, 0x1c0,
-            0x1c8,
-        ]
-        .map(|offset| {
-            state
-                .read_register(register_at(offset).expect("queue completion register"))
-                .expect("queue completion bytes")
-        }),
-        [
-            2_u32.to_le_bytes().to_vec(),
-            13_u64.to_le_bytes().to_vec(),
-            14_u64.to_le_bytes().to_vec(),
-            15_u64.to_le_bytes().to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-            [0_u8; 8].to_vec(),
-        ]
-    );
 }

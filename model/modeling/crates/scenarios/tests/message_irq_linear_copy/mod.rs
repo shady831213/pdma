@@ -4,7 +4,8 @@ pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::EpochQueue;
-use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
+use pdma_model_contract::semantic::{IrqRoute, IrqVector};
+use pdma_model_host::CopyRequest;
 use pdma_model_host::{
     AsyncDriver, DriverPort, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
     runtime::interrupt::InterruptError,
@@ -24,10 +25,7 @@ async fn message_irq_linear_copy_runs_main_handler_main_end_to_end()
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     start_trace(&handle).await;
-    let access = RecordingMemoryAccess::new(AsyncDeviceAccess::new(
-        handle.clone(),
-        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-    ));
+    let access = RecordingMemoryAccess::new(AsyncDeviceAccess::new(handle.clone()));
     let cpu = Arc::new(SoftwareCpu::new());
     let phase = cpu.local(SoftwarePhase::MainBeforeSubmit);
     let vector = IrqVector::new(64);

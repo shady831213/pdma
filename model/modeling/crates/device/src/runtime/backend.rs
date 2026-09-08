@@ -108,11 +108,11 @@ impl DeviceInteractionBackend {
                 Ok((value, notify.then_some(state.generation)))
             })
             .await?;
-        let result = complete(value)?;
+        let result = complete(value);
         if let Some(generation) = publication {
             self.publish(generation);
         }
-        Ok(result)
+        result
     }
 
     #[cfg(test)]

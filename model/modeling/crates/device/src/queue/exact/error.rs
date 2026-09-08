@@ -3,7 +3,7 @@ use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::semantic::{DeviceEpoch, SemanticError};
 use std::fmt;
 
-/// Typed queue-control transaction failure.
+/// Typed direct-register effect or queue transition failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PdmaControlError {
     /// DMA staging or access validation failed.
@@ -21,7 +21,7 @@ pub enum PdmaControlError {
     },
     /// The queue identity does not name the next or active queue.
     InvalidQueue,
-    /// A staged region, write, or queue layout does not match the transaction.
+    /// A register effect or queue transition violates the current hardware state.
     InvalidTransaction,
 }
 
@@ -38,7 +38,7 @@ impl fmt::Display for PdmaControlError {
                 )
             }
             Self::InvalidQueue => formatter.write_str("invalid queue identity"),
-            Self::InvalidTransaction => formatter.write_str("invalid atomic queue transaction"),
+            Self::InvalidTransaction => formatter.write_str("invalid queue transition"),
         }
     }
 }

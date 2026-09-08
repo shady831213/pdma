@@ -16,7 +16,6 @@ use pdma_model_contract::abi::{
     DESCRIPTOR_SIZE, DescriptorDecodeError, DescriptorViolationKind, DmaAddress,
     INDIRECT_ENTRY_ALIGNMENT,
 };
-use pdma_model_contract::semantic::{BufferId, CopyRequest, DmaRangeStart, StridedCopyRequest};
 
 #[test]
 fn every_v1_descriptor_matches_golden_bytes() {
@@ -29,21 +28,6 @@ fn every_v1_descriptor_matches_golden_bytes() {
         vectors::VECTOR_ADD,
     ];
     let entry = BroadcastDestinationEntry::from_address(DmaAddress::new(0x0123_4567_89ab_cdef));
-    let old_copy = CopyRequest::new(BufferId::new(1), BufferId::new(2), 5);
-    let copy = CopyRequest::with_starts(
-        DmaRangeStart::new(BufferId::new(1), 7),
-        DmaRangeStart::new(BufferId::new(2), 11),
-        5,
-    );
-    let old_strided = StridedCopyRequest::new(BufferId::new(3), BufferId::new(4), 2, 3, 5, 7);
-    let strided = StridedCopyRequest::with_starts(
-        DmaRangeStart::new(BufferId::new(3), 13),
-        DmaRangeStart::new(BufferId::new(4), 17),
-        2,
-        3,
-        5,
-        7,
-    );
 
     // When: commands and an indirect destination cross both codec directions.
     let encoded = commands.map(support::encode);
@@ -54,7 +38,7 @@ fn every_v1_descriptor_matches_golden_bytes() {
     let entry_result = entry.encode(&mut entry_bytes);
     let decoded_entry = BroadcastDestinationEntry::decode(&vectors::DESTINATION_ENTRY);
 
-    // Then: byte offsets, LE order, indirect extent, round trips, and semantic starts are exact.
+    // Then: byte offsets, LE order, indirect extent, round trips, are exact.
     assert_eq!(encoded, expected.map(Ok));
     assert_eq!(entry_result, Ok(()));
     assert_eq!(entry_bytes, vectors::DESTINATION_ENTRY);
@@ -70,28 +54,6 @@ fn every_v1_descriptor_matches_golden_bytes() {
             | AbiCommandPayloadValues::VectorAdd(_) => 0,
         },
         24
-    );
-    assert_eq!(
-        (old_copy.src_start().offset(), old_copy.dst_start().offset()),
-        (0, 0)
-    );
-    assert_eq!(
-        (copy.src_start().offset(), copy.dst_start().offset()),
-        (7, 11)
-    );
-    assert_eq!(
-        (
-            old_strided.src_start().map(DmaRangeStart::offset),
-            old_strided.dst_start().map(DmaRangeStart::offset)
-        ),
-        (Some(0), Some(0))
-    );
-    assert_eq!(
-        (
-            strided.src_start().map(DmaRangeStart::offset),
-            strided.dst_start().map(DmaRangeStart::offset)
-        ),
-        (Some(13), Some(17))
     );
     let [copy_bytes, _, broadcast_bytes, _] = expected;
     println!("copy={copy_bytes:02x?} broadcast={broadcast_bytes:02x?} entry={entry_bytes:02x?}");

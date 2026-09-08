@@ -3,11 +3,12 @@ use super::{
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{CopyRequest, IrqLine, IrqRoute, IrqVector};
+use pdma_model_contract::semantic::{IrqLine, IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::CopyRequest;
 use pdma_model_host::{
-    AsyncDriver, DriverError, DriverPort, DriverResult, adapter::abi::AsyncDeviceAccess,
-    compat::AsyncDevicePort,
+    AsyncDriver, DriverError, DriverPort, DriverResult,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
 };
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -23,11 +24,7 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     );
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(
-        port.clone(),
-        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-    );
-    let compat_port = AsyncDevicePort::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
     let cpu = Arc::new(SoftwareCpu::new());
@@ -39,8 +36,7 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     let (milestones_tx, _milestones_rx) = mpsc::channel(4);
     let (done_tx, mut done_rx) = mpsc::channel(2);
     let delivery = spawn_shared_delivery(SharedDelivery {
-        access,
-        port: compat_port.clone(),
+        access: access.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -55,15 +51,17 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
     });
 
     // When: complete software setup publishes a clone, waits for registration, then submits once.
-    let mut main_port = compat_port;
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
+            let mut main_port =
+                PdmaRegisterPort::new(access).map_err(pdma_model_host::PortError::from)?;
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
             let completion_capability = driver.completion_irq_source();
             let completion_source = completion_capability.source();
             let event_source = driver.event_irq_source().source();
             bootstrap_tx
                 .send(DriverBootstrap {
+                    port: main_port.clone(),
                     driver: driver.clone(),
                     completion_source,
                     event_source,
@@ -92,7 +90,7 @@ async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() ->
             done_rx.recv().await.expect("line handler completes");
             Ok::<_, DriverError>((
                 main_port.read_buffer(dst, 0, 4).await?,
-                main_port.irq_snapshot().await,
+                main_port.irq_snapshot().await?,
             ))
         })
         .await

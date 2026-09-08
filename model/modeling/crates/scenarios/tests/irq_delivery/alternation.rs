@@ -6,7 +6,7 @@ use super::{
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{IrqVector, TraceEventKind};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{DriverResult, adapter::abi::AsyncDeviceAccess, compat::AsyncDevicePort};
+use pdma_model_host::{DriverResult, adapter::abi::AsyncDeviceAccess};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
@@ -22,11 +22,7 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
     );
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(
-        port.clone(),
-        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-    );
-    let compat_port = AsyncDevicePort::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
     let cpu = Arc::new(SoftwareCpu::new());
@@ -41,8 +37,7 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
     let (b_done_tx, b_done_rx) = mpsc::channel(4);
     let (a_release_tx, a_release_rx) = mpsc::channel(4);
     let delivery = spawn_distinct_delivery(DistinctDelivery {
-        access,
-        port: compat_port.clone(),
+        access: access.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -65,7 +60,7 @@ async fn distinct_vectors_repeat_main_handler_alternation_with_shared_depth_one_
 
     // When: main submits completion and event work in two consecutive A/B rounds.
     let main = spawn_main(MainProgram {
-        port: compat_port,
+        access,
         cpu: cpu.clone(),
         depth: depth.clone(),
         bootstrap: bootstrap_tx,

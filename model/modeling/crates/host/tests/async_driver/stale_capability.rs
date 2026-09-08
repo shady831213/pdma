@@ -1,76 +1,81 @@
-use pdma_model_contract::semantic::{
-    Command, CommandId, CommandOperation, DeviceEpoch, QueueConfigHandle,
-    desc::CopyRequest,
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
+use hardware_interface_runtime::{RegisterAccess, SharedMemory, SoftwareCpu};
+use pdma_model_contract::{
+    abi::registers::GlobalRegisters,
+    semantic::{CommandId, DeviceEpoch, ResourceConfig},
 };
-use pdma_model_device::AsyncDevice;
-use pdma_model_host::{DriverPort, PortError, compat::AsyncDevicePort};
+use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_host::{
+    Command, CommandOperation, CopyRequest, DriverPort, PortError,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]
 async fn stale_queue_and_result_capabilities_commit_nothing() {
-    // Given: one live queue and a same-ID capability from a later epoch.
-    let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
+    // Given: a queue capability retained across whole-device reset.
+    let (device, _worker) = AsyncDevice::new(
+        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        ResourceConfig::default(),
     );
     let handle = device.handle();
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            2,
-            2,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await
-        .expect("queue");
-    let stale_epoch = queue.epoch().next().expect("epoch advances");
-    let stale_queue = QueueConfigHandle::new(stale_epoch, queue.directory_entry());
-    let source = handle.allocate_buffer(1).await.expect("source");
-    let destination = handle.allocate_buffer(1).await.expect("destination");
-    let command = Command::new(
-        CommandId::new(0),
-        CommandOperation::Copy(CopyRequest::new(source, destination, 1)),
-    );
-    handle.enable_tracing().await;
-    let before_submit = handle.trace_events().await;
-    let mut port = AsyncDevicePort::new(handle.clone());
+    SoftwareCpu::new()
+        .run_main(async {
+            let access = AsyncDeviceAccess::new(handle.clone());
+            let mut old = PdmaRegisterPort::new(access.clone()).expect("port");
+            let queue = old
+                .create_queue(super::register_flow::config())
+                .await
+                .expect("queue");
+            let src = old.allocate_buffer(1).await.expect("source");
+            let dst = old.allocate_buffer(1).await.expect("destination");
+            old.write_buffer(src, 0, &[7]).await.expect("source bytes");
+            RegisterAccess::write(
+                &access,
+                u32::try_from(GlobalRegisters::RESET.offset()).expect("reset offset"),
+                &1_u32.to_le_bytes(),
+            )
+            .await
+            .expect("reset");
+            let epoch = DeviceEpoch::initial().next().expect("next epoch");
+            let command = Command::new(
+                CommandId::new(0),
+                CommandOperation::Copy(CopyRequest::new(src, dst, 1)),
+            );
+            let before = handle.memory_generation().await;
 
-    // When: stale capabilities reach submission, doorbell, and destructive result polls.
-    let stale_submit = DriverPort::submit_command(&mut port, stale_queue, command.clone()).await;
-    let stale_doorbell = DriverPort::ring_doorbell(&mut port, stale_queue).await;
-    let stale_completion = DriverPort::poll_completion(&mut port, stale_queue).await;
-    let stale_event = DriverPort::poll_queue_event(&mut port, stale_queue).await;
+            // When: old capabilities attempt queue, IRQ, and result operations.
+            let results = [
+                old.submit_command(queue, command).await,
+                old.ring_doorbell(queue).await,
+                old.poll_completion(queue).await.map(|_| ()),
+                old.poll_queue_event(queue).await.map(|_| ()),
+                old.enable_irq_source(queue.completion_irq_source()).await,
+            ];
 
-    // Then: typed epoch failures precede all trace, queue, and result mutation.
-    for result in [
-        stale_submit,
-        stale_doorbell,
-        stale_completion.map(|_| ()),
-        stale_event.map(|_| ()),
-    ] {
-        assert_eq!(
-            result,
-            Err(PortError::StaleEpoch {
-                expected: DeviceEpoch::initial(),
-                actual: stale_epoch,
-            })
-        );
-    }
-    assert_eq!(handle.trace_events().await, before_submit);
-    DriverPort::submit_command(&mut port, queue, command)
-        .await
-        .expect("current submission");
-    DriverPort::ring_doorbell(&mut port, queue)
-        .await
-        .expect("current doorbell");
-    let worker = tokio::spawn(worker.run());
-    device.wait_for_progress_after(0).await;
-    let current = DriverPort::poll_completion(&mut port, queue)
-        .await
-        .expect("current result");
-    device.request_shutdown().await;
-    worker.await.expect("worker joins");
-    assert!(current.is_some());
+            // Then: typed epoch errors precede mutation and explicit bootstrap creates a fresh queue.
+            for result in results {
+                assert_eq!(
+                    result,
+                    Err(PortError::StaleEpoch {
+                        expected: epoch,
+                        actual: DeviceEpoch::initial()
+                    })
+                );
+            }
+            assert_eq!(handle.memory_generation().await, before);
+            assert_eq!(
+                handle
+                    .read_buffer(src, 0, 1)
+                    .await
+                    .expect("persistent bytes"),
+                [7]
+            );
+            let mut fresh = PdmaRegisterPort::new_at(access, epoch).expect("new epoch port");
+            let recreated = fresh
+                .create_queue(super::register_flow::config())
+                .await
+                .expect("new queue");
+            assert_eq!(recreated.epoch(), epoch);
+        })
+        .await;
 }

@@ -6,22 +6,6 @@ pub mod source;
 pub(super) use port::ProbePort;
 pub(super) use source::ProbeAccess;
 
-mod compiler_proof {
-    include!("../host_core_surface/compiler.rs");
-
-    pub(super) fn manual_irq_methods() -> Result<usize, String> {
-        verify_downstream_compile_surface().and_then(|surface| {
-            if surface.device_types == 0 {
-                Ok(surface.manual_irq_methods)
-            } else {
-                Err(String::from(
-                    "device-layer types leaked into the host surface",
-                ))
-            }
-        })
-    }
-}
-
 use pdma_model_contract::semantic::IrqNotification;
 use pdma_model_host::DriverIrqRecord;
 use pdma_model_host::runtime::interrupt::PdmaIrqHandler;
@@ -119,13 +103,6 @@ impl AdverseFacts {
 
 pub(super) async fn run_adverse() -> AdverseFacts {
     source::run_adverse().await
-}
-
-pub(super) fn manual_irq_methods() -> usize {
-    compiler_proof::manual_irq_methods().unwrap_or_else(|error| {
-        eprintln!("{error}");
-        std::process::abort();
-    })
 }
 
 pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {

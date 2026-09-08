@@ -8,12 +8,8 @@ pub enum PortBackendKind {
     Provisioning,
     /// One register access failed.
     Register,
-    /// Interrupt readiness or claim failed.
-    Claim,
     /// Checked memory access failed.
     Memory,
-    /// A backend response could not be decoded.
-    Response,
 }
 
 /// Opaque backend cause exposed without coupling the semantic API to a transport.

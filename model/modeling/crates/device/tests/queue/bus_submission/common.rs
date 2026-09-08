@@ -1,27 +1,30 @@
-use pdma_model_contract::abi::{AbiCommand, AbiEvent, DmaAddress};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, RingCursor};
-use pdma_model_contract::semantic::{
-    EventRouting, QueueActivation, QueueConfig, QueueControl, QueueCursorUpdate, QueueId,
-    QueueRingObjects, ResourceConfig, SoftwareOwnerId,
-};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, MappedDmaRegion, PendingDmaResult};
+use crate::queue::hardware::{self, read, write};
+use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
+use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, DmaAddress};
+use pdma_model_contract::semantic::{ResourceConfig, RingCursor};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, MappedDmaRegion};
 
-pub(in crate::queue) type TestResult<T = ()> =
-    Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
+pub(in crate::queue) type TestResult<T = ()> = hardware::TestResult<T>;
 
 pub(in crate::queue) struct Fixture {
     pub(in crate::queue) handle: AsyncDeviceHandle,
-    pub(in crate::queue) queue: EpochQueue,
     pub(in crate::queue) submission: DmaAddress,
+    completion: DmaAddress,
+    event: DmaAddress,
     pub(in crate::queue) worker: tokio::task::JoinHandle<pdma_model_device::AsyncRunSummary>,
+}
+
+#[derive(Debug, PartialEq)]
+pub(in crate::queue) enum Record {
+    Completion(AbiCompletion),
+    Event(AbiEvent),
 }
 
 pub(in crate::queue) struct RunResult {
     pub(in crate::queue) consumer: RingCursor,
-    pub(in crate::queue) pending: Option<PendingDmaResult>,
+    pub(in crate::queue) record: Option<Record>,
     pub(in crate::queue) destinations: Vec<Vec<u8>>,
     pub(in crate::queue) steps: usize,
-    pub(in crate::queue) irq_pending: bool,
     pub(in crate::queue) traces: Vec<pdma_model_contract::semantic::TraceEvent>,
     pub(in crate::queue) native_steps: usize,
 }
@@ -34,53 +37,21 @@ pub(in crate::queue) async fn fixture(resources: ResourceConfig) -> TestResult<F
         resources,
     );
     let handle = runner.handle();
-    let (queue, submission) = activate(&handle, QueueId::new(0)).await?;
+    let [submission, completion, event] = hardware::activate(&handle, 0, [2, 2, 2]).await?;
     Ok(Fixture {
         handle,
-        queue,
         submission,
+        completion,
+        event,
         worker: tokio::spawn(worker.run()),
     })
-}
-
-pub(in crate::queue) async fn activate(
-    handle: &AsyncDeviceHandle,
-    queue_id: QueueId,
-) -> TestResult<(EpochQueue, DmaAddress)> {
-    activate_on(handle, DeviceEpoch::initial(), queue_id).await
-}
-
-pub(in crate::queue) async fn activate_on(
-    handle: &AsyncDeviceHandle,
-    epoch: DeviceEpoch,
-    queue_id: QueueId,
-) -> TestResult<(EpochQueue, DmaAddress)> {
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let [submission, completion, event] = stage.regions() else {
-        return Err("ring stage shape".into());
-    };
-    let (submission, completion, event) = (*submission, *completion, *event);
-    let config = QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
-    let activation = QueueActivation::new(
-        epoch,
-        queue_id,
-        config,
-        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
-    );
-    handle.commit_memory_stage(stage).await?;
-    handle.activate_mapped_queue(activation).await?;
-    Ok((activation.queue(), submission.base()))
 }
 
 pub(in crate::queue) async fn allocate(
     handle: &AsyncDeviceHandle,
     length: usize,
 ) -> TestResult<MappedDmaRegion> {
-    let object = handle.allocate_buffer(length).await?;
-    handle
-        .region_for_object(object)
-        .await
-        .ok_or_else(|| "committed DMA region missing".into())
+    Ok(handle.allocate_memory_region(length).await?)
 }
 
 pub(in crate::queue) async fn run_descriptor(
@@ -91,76 +62,82 @@ pub(in crate::queue) async fn run_descriptor(
     fixture.handle.enable_tracing().await;
     fixture
         .handle
-        .control_queue(QueueControl::PublishCompletionProducer(
-            QueueCursorUpdate::new(fixture.queue, RingCursor::new(2)),
-        ))
-        .await?;
-    fixture
-        .handle
-        .control_queue(QueueControl::PublishEventProducer(QueueCursorUpdate::new(
-            fixture.queue,
-            RingCursor::new(2),
-        )))
-        .await?;
-    fixture
-        .handle
         .write_memory(fixture.submission, &bytes)
         .await?;
-    fixture
-        .handle
-        .control_queue(QueueControl::PublishSubmissionProducer(
-            QueueCursorUpdate::new(fixture.queue, RingCursor::new(1)),
-        ))
-        .await?;
-    fixture
-        .handle
-        .control_queue(QueueControl::CaptureSubmissionProducer(
-            QueueCursorUpdate::new(fixture.queue, RingCursor::new(1)),
-        ))
-        .await?;
-    fixture.handle.wait_for_stall_after(0).await;
-    fixture.handle.write_memory(fixture.submission, &[]).await?;
-    fixture.handle.wait_for_stall_after(1).await;
-    let status = fixture
-        .handle
-        .control_queue(QueueControl::ReadStatus(fixture.queue))
-        .await?;
-    let pending = fixture.handle.pending_dma_result().await;
-    let snapshot = fixture.handle.snapshot().await;
-    let irq_pending = fixture.handle.irq_snapshot().await.is_some();
-    let traces = fixture.handle.trace_events().await;
-    let native_steps = fixture.handle.native_steps().await;
-    let mut bytes = Vec::new();
+    let endpoint = fixture.handle.register_endpoint();
+    write(
+        &endpoint,
+        queue_offset(0, QueueRegisters::SQ_PRODUCER.offset())?,
+        1,
+    )
+    .await?;
+    write(
+        &endpoint,
+        queue_offset(0, QueueRegisters::DOORBELL.offset())?,
+        1,
+    )
+    .await?;
+    let mut snapshot = fixture.handle.snapshot().await;
+    while snapshot.steps + snapshot.errors + snapshot.stalls == 0 {
+        snapshot = fixture.handle.wait_for_change_after(snapshot).await;
+    }
+    let consumer = read(
+        &endpoint,
+        queue_offset(0, QueueRegisters::SQ_CONSUMER.offset())?,
+    )
+    .await?;
+    let completion = read(
+        &endpoint,
+        queue_offset(0, QueueRegisters::CQ_PRODUCER.offset())?,
+    )
+    .await?;
+    let event = read(
+        &endpoint,
+        queue_offset(0, QueueRegisters::EQ_PRODUCER.offset())?,
+    )
+    .await?;
+    let record = match (completion, event) {
+        (1, 0) => Some(Record::Completion(AbiCompletion::decode(
+            &fixture.handle.read_memory(fixture.completion, 32).await?,
+        )?)),
+        (0, 1) => Some(Record::Event(AbiEvent::decode(
+            &fixture.handle.read_memory(fixture.event, 64).await?,
+        )?)),
+        (0, 0) => None,
+        _ => return Err("unexpected retirement counts".into()),
+    };
+    let mut output = Vec::new();
     for region in destinations {
-        bytes.push(
+        output.push(
             fixture
                 .handle
                 .read_memory(region.base(), region.length())
                 .await?,
         );
     }
+    let traces = fixture.handle.trace_events().await;
+    let native_steps = fixture.handle.native_steps().await;
     fixture.handle.request_shutdown().await;
     fixture.worker.await?;
     Ok(RunResult {
-        consumer: status.submission().consumer(),
-        pending,
-        destinations: bytes,
+        consumer: RingCursor::new(consumer),
+        record,
+        destinations: output,
         steps: snapshot.steps,
-        irq_pending,
         traces,
         native_steps,
     })
 }
 
 pub(in crate::queue) fn encode(command: AbiCommand) -> TestResult<[u8; 64]> {
-    let mut bytes = [0_u8; 64];
+    let mut bytes = [0; 64];
     command.encode(&mut bytes)?;
     Ok(bytes)
 }
 
-pub(in crate::queue) fn pending_event(result: &RunResult) -> TestResult<AbiEvent> {
-    match result.pending {
-        Some(PendingDmaResult::Event(event)) => Ok(event),
-        Some(PendingDmaResult::Completion(_)) | None => Err("expected pending DMA event".into()),
+pub(in crate::queue) fn published_event(result: &RunResult) -> TestResult<AbiEvent> {
+    match result.record {
+        Some(Record::Event(event)) => Ok(event),
+        Some(Record::Completion(_)) | None => Err("expected published DMA event".into()),
     }
 }

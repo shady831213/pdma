@@ -1,11 +1,14 @@
 use pdma_model_contract::semantic::{
-    BufferId, Command, CompletionRecord, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
-    IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, CompletionRecord, EpochIrqSource, EventRecord, IrqRoute, IrqSnapshot,
 };
 use pdma_model_device::AsyncDeviceHandle;
-use pdma_model_host::{DriverPort, PortError, PortResult, compat::AsyncDevicePort};
+use pdma_model_host::{Command, QueueConfig, QueueConfigHandle};
+use pdma_model_host::{
+    DriverPort, PortError, PortResult,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicU8, AtomicUsize, Ordering},
 };
 use tokio::sync::Notify;
@@ -72,16 +75,32 @@ struct PortControl {
 
 #[derive(Debug, Clone)]
 pub struct BlockingPort {
-    inner: AsyncDevicePort,
+    handle: AsyncDeviceHandle,
+    port: Arc<Mutex<Option<PdmaRegisterPort<AsyncDeviceAccess>>>>,
     control: Arc<PortControl>,
 }
 
 impl BlockingPort {
     pub fn new(inner: AsyncDeviceHandle) -> Self {
         Self {
-            inner: AsyncDevicePort::new(inner),
+            handle: inner,
+            port: Arc::new(Mutex::new(None)),
             control: Arc::new(PortControl::default()),
         }
+    }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture mutex poisoning or missing initialization must fail the integration test"
+    )]
+    fn inner(&self) -> PortResult<PdmaRegisterPort<AsyncDeviceAccess>> {
+        let mut port = self.port.lock().expect("fixture port");
+        if port.is_none() {
+            *port = Some(PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                self.handle.clone(),
+            ))?);
+        }
+        Ok(port.as_ref().expect("initialized port").clone())
     }
 
     pub fn create_calls(&self) -> usize {
@@ -181,21 +200,21 @@ impl DriverPort for BlockingPort {
     async fn create_queue(&mut self, config: QueueConfig) -> PortResult<QueueConfigHandle> {
         self.control.create.enter().await?;
         self.control.create.record_inner_call();
-        self.inner.create_queue(config).await
+        self.inner()?.create_queue(config).await
     }
 
     async fn allocate_buffer(&mut self, len: usize) -> PortResult<BufferId> {
         self.control.allocation.enter().await?;
         self.control.allocation.record_inner_call();
-        self.inner.allocate_buffer(len).await
+        self.inner()?.allocate_buffer(len).await
     }
 
     async fn write_buffer(&mut self, id: BufferId, offset: usize, data: &[u8]) -> PortResult<()> {
-        self.inner.write_buffer(id, offset, data).await
+        self.inner()?.write_buffer(id, offset, data).await
     }
 
     async fn read_buffer(&self, id: BufferId, offset: usize, len: usize) -> PortResult<Vec<u8>> {
-        self.inner.read_buffer(id, offset, len).await
+        self.inner()?.read_buffer(id, offset, len).await
     }
 
     async fn submit_command(
@@ -205,13 +224,13 @@ impl DriverPort for BlockingPort {
     ) -> PortResult<()> {
         self.control.submit.enter().await?;
         self.control.submit.record_inner_call();
-        self.inner.submit_command(queue, command).await
+        self.inner()?.submit_command(queue, command).await
     }
 
     async fn ring_doorbell(&mut self, queue: QueueConfigHandle) -> PortResult<()> {
         self.control.doorbell.enter().await?;
         self.control.doorbell.record_inner_call();
-        self.inner.ring_doorbell(queue).await
+        self.inner()?.ring_doorbell(queue).await
     }
 
     async fn poll_completion(
@@ -220,7 +239,7 @@ impl DriverPort for BlockingPort {
     ) -> PortResult<Option<CompletionRecord>> {
         self.control.completion.enter().await?;
         self.control.completion.record_inner_call();
-        self.inner.poll_completion(queue).await
+        self.inner()?.poll_completion(queue).await
     }
 
     async fn poll_queue_event(
@@ -229,7 +248,7 @@ impl DriverPort for BlockingPort {
     ) -> PortResult<Option<EventRecord>> {
         self.control.event.enter().await?;
         self.control.event.record_inner_call();
-        self.inner.poll_queue_event(queue).await
+        self.inner()?.poll_queue_event(queue).await
     }
 
     async fn configure_irq_route(
@@ -237,38 +256,30 @@ impl DriverPort for BlockingPort {
         source: EpochIrqSource,
         route: IrqRoute,
     ) -> PortResult<()> {
-        self.inner.configure_irq_route(source, route).await
+        self.inner()?.configure_irq_route(source, route).await
     }
 
     async fn enable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        self.inner.enable_irq_source(source).await
+        self.inner()?.enable_irq_source(source).await
     }
 
     async fn disable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        self.inner.disable_irq_source(source).await
+        self.inner()?.disable_irq_source(source).await
     }
 
     async fn mask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        self.inner.mask_irq_source(source).await
+        self.inner()?.mask_irq_source(source).await
     }
 
     async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        self.inner.unmask_irq_source(source).await
+        self.inner()?.unmask_irq_source(source).await
     }
 
     async fn ack_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        self.inner.ack_irq_source(source).await
+        self.inner()?.ack_irq_source(source).await
     }
 
-    async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        self.inner.irq_snapshot().await
-    }
-
-    async fn wait_irq(&self) -> Option<IrqSnapshot> {
-        self.inner.wait_irq().await
-    }
-
-    async fn wait_irq_notification(&mut self) -> Option<IrqNotification> {
-        self.inner.wait_irq_notification().await
+    async fn irq_snapshot(&self) -> PortResult<Option<IrqSnapshot>> {
+        self.inner()?.irq_snapshot().await
     }
 }

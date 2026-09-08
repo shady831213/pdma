@@ -1,6 +1,7 @@
 use super::support::{RecordingObserver, TestResult, contend_core};
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, WholeDeviceReset};
+use pdma_model_contract::abi::registers::GlobalRegisters;
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 use pdma_model_device::{AsyncDevice, MmioRegisterEndpoint};
 use std::sync::Arc;
 
@@ -72,18 +73,22 @@ async fn endpoint_reset_preserves_history_and_advances_sequence() -> TestResult 
     endpoint.read(0, &mut before).await?;
 
     // When: reset advances the epoch and a later access commits through the same endpoint.
-    let epoch = handle
-        .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
+    endpoint
+        .write(
+            u32::try_from(GlobalRegisters::RESET.offset())?,
+            &1_u32.to_le_bytes(),
+        )
         .await?;
+    let epoch = DeviceEpoch::new(1);
     let mut after = [0_u8; 4];
     endpoint.read(0, &mut after).await?;
 
     // Then: reset retained old history and the later sequence is strictly greater and unique.
     let observations = observer.snapshot();
     assert_eq!(epoch, DeviceEpoch::new(1));
-    assert_eq!(observations.len(), 2);
+    assert_eq!(observations.len(), 3);
     assert_eq!(observations.first().map(|item| item.sequence), Some(0));
-    assert_eq!(observations.last().map(|item| item.sequence), Some(1));
+    assert_eq!(observations.last().map(|item| item.sequence), Some(2));
     assert_ne!(
         observations.first().map(|item| item.sequence),
         observations.last().map(|item| item.sequence)

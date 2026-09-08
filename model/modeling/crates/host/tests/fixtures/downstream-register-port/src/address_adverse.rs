@@ -2,7 +2,7 @@ use hardware_interface_runtime::{
     AddressedRegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError,
     RegisterObservation, RegisterObserver,
 };
-use pdma_model_contract::{abi::mmio::MmioAccessError, semantic::ResourceConfig};
+use pdma_model_contract::{abi::registers::MmioAccessError, semantic::ResourceConfig};
 use pdma_model_device::AsyncDevice;
 use std::sync::{Arc, Mutex, MutexGuard};
 

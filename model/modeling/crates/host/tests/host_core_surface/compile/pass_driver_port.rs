@@ -1,13 +1,13 @@
-use pdma_model_contract::semantic::{BufferId, CompletionRecord, EpochIrqSource, EventRecord, Command, IrqNotification, IrqRoute, IrqSnapshot, QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::{
+    BufferId, CompletionRecord, EpochIrqSource, EventRecord, IrqRoute, IrqSnapshot,
+};
+use pdma_model_host::{Command, QueueConfig, QueueConfigHandle};
 use pdma_model_host::{DriverPort, PortError};
 
 struct DownstreamPort;
 
 impl DriverPort for DownstreamPort {
-    async fn create_queue(
-        &mut self,
-        _config: QueueConfig,
-    ) -> Result<QueueConfigHandle, PortError> {
+    async fn create_queue(&mut self, _config: QueueConfig) -> Result<QueueConfigHandle, PortError> {
         Err(PortError::SubmissionState)
     }
 
@@ -87,16 +87,8 @@ impl DriverPort for DownstreamPort {
         Ok(())
     }
 
-    async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        None
-    }
-
-    async fn wait_irq(&self) -> Option<IrqSnapshot> {
-        None
-    }
-
-    async fn wait_irq_notification(&mut self) -> Option<IrqNotification> {
-        None
+    async fn irq_snapshot(&self) -> Result<Option<IrqSnapshot>, PortError> {
+        Ok(None)
     }
 }
 

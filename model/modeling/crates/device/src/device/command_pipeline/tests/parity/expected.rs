@@ -1,7 +1,5 @@
-use pdma_model_contract::semantic::{
-    BufferId, CommandId, CompletionRecord, CompletionStatus, EventErrorKind, EventRecord,
-    FaultAddress, MemoryFault, TraceEventKind,
-};
+use pdma_model_contract::abi::{AbiCompletion, AbiEventAccess, AbiEventKind, AbiEventStage};
+use pdma_model_contract::semantic::{BufferId, TraceEventKind};
 
 use super::Observation;
 use crate::ModelError;
@@ -9,23 +7,11 @@ use crate::device::ModelStepStatus;
 use crate::device::command_pipeline::tests::support::{Case, trace_kinds};
 
 pub(super) fn assert_literal(case: Case, observation: &Observation) {
-    let queue = observation
-        .completion
-        .map(CompletionRecord::queue_id)
-        .or_else(|| observation.event.map(EventRecord::queue_id));
     assert_eq!(observation.destinations, expected_bytes(case));
     match case {
         Case::Copy | Case::Strided | Case::Broadcast | Case::VectorAdd => {
-            let queue = queue.expect("success queue");
             assert_eq!(observation.terminal, Ok(ModelStepStatus::Progressed));
-            assert_eq!(
-                observation.completion,
-                Some(CompletionRecord::new(
-                    queue,
-                    CommandId::new(7),
-                    CompletionStatus::Success,
-                ))
-            );
+            assert_eq!(observation.completion, Some(AbiCompletion::success(0, 7)));
             assert_eq!(observation.event, None);
             assert!(observation.irq_before_poll);
             assert!(observation.irq_after_poll);
@@ -43,17 +29,26 @@ pub(super) fn assert_literal(case: Case, observation: &Observation) {
             );
         }
         Case::UnknownBuffer | Case::RangeOverflow | Case::OutOfBounds => {
-            let queue = queue.expect("fault queue");
-            let (error, fault) = expected_fault(case);
+            let (error, kind, locator) = expected_fault(case);
             assert_eq!(observation.terminal, Err(error));
             assert_eq!(observation.completion, None);
+            let event = observation.event.expect("fault event");
+            assert_eq!(event.origin_queue_id, 0);
+            assert_eq!(event.command_id, 7);
+            assert_eq!(event.fault().kind(), kind);
+            assert_eq!(event.fault_locator, locator);
+            let details = match case {
+                Case::UnknownBuffer => (4, 0),
+                Case::RangeOverflow => (2, 0),
+                Case::OutOfBounds => (8, 0x1_0009),
+                Case::Copy | Case::Strided | Case::Broadcast | Case::VectorAdd => {
+                    panic!("success case has no fault details")
+                }
+            };
+            assert_eq!((event.detail0, event.detail1), details);
             assert_eq!(
-                observation.event,
-                Some(EventRecord::from_memory_fault(
-                    queue,
-                    CommandId::new(7),
-                    fault,
-                ))
+                (event.stage, event.access, event.index),
+                (AbiEventStage::Source, AbiEventAccess::Read, 0)
             );
             assert!(!observation.irq_before_poll);
             assert!(!observation.irq_after_poll);
@@ -81,15 +76,17 @@ fn expected_bytes(case: Case) -> [Vec<u8>; 2] {
     }
 }
 
-fn expected_fault(case: Case) -> (ModelError, MemoryFault) {
+fn expected_fault(case: Case) -> (ModelError, AbiEventKind, u64) {
     match case {
         Case::UnknownBuffer => (
-            ModelError::UnknownBuffer(BufferId::new(999)),
-            MemoryFault::new(BufferId::new(999), EventErrorKind::UnknownBuffer),
+            ModelError::DmaSubmissionState,
+            AbiEventKind::UnmappedDmaAddress,
+            0xdead_0000,
         ),
         Case::RangeOverflow => (
-            ModelError::RangeOverflow,
-            MemoryFault::new(BufferId::new(0), EventErrorKind::RangeOverflow),
+            ModelError::DmaSubmissionState,
+            AbiEventKind::RangeOverflow,
+            u64::MAX,
         ),
         Case::OutOfBounds => (
             ModelError::OutOfBounds {
@@ -97,14 +94,9 @@ fn expected_fault(case: Case) -> (ModelError, MemoryFault) {
                 len: 8,
                 end: 9,
             },
-            MemoryFault::with_address(
-                BufferId::new(0),
-                EventErrorKind::OutOfBounds { len: 8, end: 9 },
-                FaultAddress::new(0x1_0008),
-            ),
+            AbiEventKind::OutOfBounds,
+            0x1_0008,
         ),
-        Case::Copy | Case::Strided | Case::Broadcast | Case::VectorAdd => {
-            panic!("success case has no fault")
-        }
+        Case::Copy | Case::Strided | Case::Broadcast | Case::VectorAdd => panic!("success case"),
     }
 }

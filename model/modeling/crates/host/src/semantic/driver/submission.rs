@@ -1,10 +1,11 @@
 use super::{AsyncDriver, ManualDriver, core::DriverCore};
 use crate::DriverPort;
 use crate::DriverResult;
-use pdma_model_contract::semantic::{
-    BroadcastCopyRequest, Command, CommandId, CommandOperation, CopyRequest, StridedCopyRequest,
+use crate::{
+    BroadcastCopyRequest, Command, CommandOperation, CopyRequest, StridedCopyRequest,
     VectorAddRequest,
 };
+use pdma_model_contract::semantic::CommandId;
 
 impl DriverCore {
     async fn submit_copy_on(
@@ -12,9 +13,6 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: CopyRequest,
     ) -> DriverResult<CommandId> {
-        self.accounting
-            .poll_valid(device.recover_queue(self.queue_config))
-            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(reservation.command_id(), CommandOperation::Copy(request));
         self.submit_command_on(device, reservation, command).await
@@ -25,9 +23,6 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: StridedCopyRequest,
     ) -> DriverResult<CommandId> {
-        self.accounting
-            .poll_valid(device.recover_queue(self.queue_config))
-            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(
             reservation.command_id(),
@@ -41,9 +36,6 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: BroadcastCopyRequest,
     ) -> DriverResult<CommandId> {
-        self.accounting
-            .poll_valid(device.recover_queue(self.queue_config))
-            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(
             reservation.command_id(),
@@ -57,9 +49,6 @@ impl DriverCore {
         device: &mut impl DriverPort,
         request: VectorAddRequest,
     ) -> DriverResult<CommandId> {
-        self.accounting
-            .poll_valid(device.recover_queue(self.queue_config))
-            .await?;
         let reservation = self.accounting.prepare()?;
         let command = Command::new(
             reservation.command_id(),

@@ -2,17 +2,20 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SoftwareCpu,
 };
 use pdma_model_contract::{
-    abi::{AbiCommand, mmio::QueueCommand},
-    semantic::{Command, CommandId, CommandOperation, CopyRequest, EpochQueue, ResourceConfig},
+    abi::{
+        AbiCommand,
+        registers::{QueueRegisters, queue_offset},
+    },
+    semantic::{CommandId, EpochQueue, ResourceConfig},
 };
 use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
 use pdma_model_host::{
-    DriverPort,
-    adapter::abi::{AsyncDeviceAccess, PdmaIrqCoordinator, PdmaRegisterPort},
+    Command, CommandOperation, CopyRequest, DriverPort,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
 };
 use std::sync::Arc;
 
-use super::super::pending_commands::support::{GatedAccess, drop_pending};
+use super::super::register_access::{GatedAccess, drop_pending};
 use super::config;
 
 #[tokio::test(flavor = "current_thread")]
@@ -24,10 +27,7 @@ async fn canceled_publication_preserves_descriptor_bytes_without_accepting_work(
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = GatedAccess::new(AsyncDeviceAccess::new(
-        handle.clone(),
-        PdmaIrqCoordinator::default(),
-    ));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(handle.clone()));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -44,15 +44,21 @@ async fn canceled_publication_preserves_descriptor_bytes_without_accepting_work(
                     CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
                 )
             };
-            access.arm_before(QueueCommand::PublishSqProducer.code());
+            access.arm_write(
+                queue_offset(0, QueueRegisters::SQ_PRODUCER.offset()).expect("producer"),
+            );
             // When: the future is dropped after writing its descriptor but before publication.
             drop_pending(port.submit_command(handle, command(91))).await;
             assert!(access.is_blocked());
             // Then: bytes persist, producer stays zero, and a fresh submission completes once.
             let mut base = [0; 8];
-            RegisterAccess::read(&access, 0x138, &mut base)
-                .await
-                .expect("SQ base");
+            RegisterAccess::read(
+                &access,
+                queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+                &mut base,
+            )
+            .await
+            .expect("SQ base");
             let mut bytes = [0; 64];
             MemoryAccess::read(
                 &access,
@@ -108,7 +114,7 @@ async fn full_queue_rejection_preserves_previously_published_descriptor() {
         ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let access = AsyncDeviceAccess::new(device.handle(), PdmaIrqCoordinator::default());
+    let access = AsyncDeviceAccess::new(device.handle());
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -131,9 +137,13 @@ async fn full_queue_rejection_preserves_previously_published_descriptor() {
             assert!(port.submit_command(queue, command(33)).await.is_err());
             // Then: the first published slot retains its original descriptor.
             let mut base = [0; 8];
-            RegisterAccess::read(&access, 0x138, &mut base)
-                .await
-                .expect("SQ base");
+            RegisterAccess::read(
+                &access,
+                queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("SQ base"),
+                &mut base,
+            )
+            .await
+            .expect("SQ base");
             let mut bytes = [0; 64];
             MemoryAccess::read(
                 &access,

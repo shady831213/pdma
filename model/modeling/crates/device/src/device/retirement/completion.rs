@@ -1,9 +1,20 @@
 use super::{PendingRetirement, RetirementPorts, RetirementStatus, RetirementUnit};
-use crate::ModelResult;
 use crate::device::flow::SuccessfulExecution;
 use crate::queue::io::PublicationOutcome;
 use crate::status::AsyncStallReason;
-use pdma_model_contract::semantic::{CompletionRecord, CompletionStatus, IrqSource};
+use crate::{ModelError, ModelResult};
+use pdma_model_contract::abi::AbiCompletion;
+use pdma_model_contract::semantic::IrqSource;
+
+impl SuccessfulExecution {
+    pub(in crate::device) fn completion(self) -> ModelResult<AbiCompletion> {
+        let queue =
+            u64::try_from(self.route.queue.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
+        let command =
+            u64::try_from(self.route.command.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
+        Ok(AbiCompletion::success(queue, command))
+    }
+}
 
 impl RetirementUnit {
     pub(super) fn retire_success(
@@ -12,8 +23,7 @@ impl RetirementUnit {
         success: SuccessfulExecution,
     ) -> ModelResult<RetirementStatus> {
         let route = success.route;
-        let completion =
-            CompletionRecord::new(route.queue, route.command, CompletionStatus::Success);
+        let completion = success.completion()?;
         ports
             .trace
             .execution_succeeded(route.queue, success.operation, route.command);
@@ -52,8 +62,7 @@ impl RetirementUnit {
         pending: SuccessfulExecution,
     ) -> ModelResult<RetirementStatus> {
         let route = pending.route;
-        let completion =
-            CompletionRecord::new(route.queue, route.command, CompletionStatus::Success);
+        let completion = pending.completion()?;
         if ports
             .queues
             .completion_blocked(route.queue, ports.resources.completion_publication_slots())?

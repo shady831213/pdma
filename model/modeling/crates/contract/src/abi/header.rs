@@ -9,7 +9,7 @@ use hardware_interface_schema::{
 
 use super::{
     AbiCommand, AbiCompletion, AbiEvent, IndirectDestinationEntrySchema,
-    mmio::{PdmaMmioMap, PdmaMmioMapRegisterId},
+    registers::{PdmaRegisterMap, PdmaRegisterMapRegisterId},
 };
 
 mod constants;
@@ -25,7 +25,7 @@ pub struct PdmaCHeaderExporter;
 #[derive(Debug)]
 pub struct PdmaHeaderSchemas {
     records: [ResolvedRecord; 4],
-    mmio: ResolvedRegisterMap<PdmaMmioMapRegisterId>,
+    mmio: ResolvedRegisterMap<PdmaRegisterMapRegisterId>,
 }
 
 /// Failure while resolving canonical ABI schemas for header rendering.
@@ -35,7 +35,7 @@ pub struct HeaderRenderError(HeaderSchemaError);
 #[derive(Debug)]
 enum HeaderSchemaError {
     Record(RecordGraphError),
-    Map(RegisterMapError<PdmaMmioMapRegisterId>),
+    Map(RegisterMapError<PdmaRegisterMapRegisterId>),
 }
 
 impl fmt::Display for HeaderRenderError {
@@ -85,7 +85,7 @@ impl PdmaHeaderSchemas {
                 resolve_record(AbiEvent::SPEC)?,
                 resolve_record(IndirectDestinationEntrySchema::SPEC)?,
             ],
-            mmio: PdmaMmioMap::resolve()
+            mmio: PdmaRegisterMap::resolve()
                 .map_err(|error| HeaderRenderError(HeaderSchemaError::Map(error)))?,
         })
     }

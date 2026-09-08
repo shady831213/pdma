@@ -1,10 +1,12 @@
 use super::{HandlerError, setup};
 use crate::support::{ProbeAccess, ProbePort};
-use hardware_interface_runtime::{HandlerRegistry, NoopInterruptObserver, SoftwareCpu};
+use hardware_interface_runtime::{
+    HandlerRegistry, InterruptSource, NoopInterruptObserver, SoftwareCpu,
+};
 use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use pdma_model_host::DriverIrqRecord;
 use pdma_model_host::adapter::abi::{
-    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaInterruptSource,
+    PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSourceError,
 };
 use pdma_model_host::runtime::interrupt::{PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService};
 use std::sync::Arc;
@@ -32,15 +34,20 @@ impl Drop for DropAccess {
     }
 }
 
-impl PdmaExactInterruptClaim for DropAccess {
-    type Error = PdmaClaimError;
+impl InterruptSource for DropAccess {
+    type Error = PdmaInterruptSourceError;
+    type Notification = PdmaInterruptNotification;
+    type Ready = PdmaInterruptReady;
 
-    async fn wait_interrupt_ready(&self) -> Result<bool, Self::Error> {
-        self.inner.wait_interrupt_ready().await
+    async fn wait_ready(&self) -> Result<Self::Ready, Self::Error> {
+        self.inner.wait_ready().await
     }
 
-    async fn claim_interrupt_exact(&self) -> Result<PdmaClaimResult, Self::Error> {
-        self.inner.claim_interrupt_exact().await
+    async fn claim(
+        &mut self,
+        ready: Self::Ready,
+    ) -> Result<Option<Self::Notification>, Self::Error> {
+        self.inner.claim(ready).await
     }
 }
 
@@ -110,10 +117,10 @@ pub(super) async fn drop_while_waiting_for_cpu() -> bool {
     let task = PdmaIrqDelivery::start(
         Arc::clone(&cpu),
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(DropAccess {
+        DropAccess {
             inner: access.clone(),
             dropped: Some(source_drop_tx),
-        }),
+        },
         Arc::new(NoopInterruptObserver),
     );
     while access.snapshot().notifications == 0 {
@@ -157,10 +164,10 @@ pub(super) async fn drop_while_handler_is_pending() -> bool {
     let task = PdmaIrqDelivery::start(
         Arc::clone(&cpu),
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(DropAccess {
+        DropAccess {
             inner: access,
             dropped: Some(source_drop_tx),
-        }),
+        },
         Arc::new(NoopInterruptObserver),
     );
     let entered = entered_rx.await.is_ok();

@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-/// Shared acceptance receipt retained while a transport resolves an issued command.
+/// Shared command-credit receipt accepted by a successful producer write.
 #[derive(Debug, Clone)]
 pub struct SubmissionReceipt(Arc<ReceiptState>);
 
@@ -23,17 +23,7 @@ impl SubmissionReceipt {
 
     /// Records definitive device acceptance, preserving the reserved command credit.
     pub fn accept(&self) {
-        self.issued();
-    }
-
-    /// Retains credit after command issuance, including while its result is unknown.
-    pub fn issued(&self) {
         self.0.refundable.store(false, Ordering::Release);
-    }
-
-    /// Allows a refund only after definitive command rejection, never a lost response or reset.
-    pub fn reject(&self) {
-        self.0.refundable.store(true, Ordering::Release);
     }
 }
 
@@ -50,31 +40,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn refunds_once_when_an_issued_submission_is_definitively_rejected() {
-        // Given: the driver and issued transport command share a reservation.
+    fn refunds_once_when_the_last_unaccepted_receipt_is_dropped() {
+        // Given: the driver and its port share an unaccepted reservation.
         let refunds = Arc::new(AtomicUsize::new(0));
         let driver = SubmissionReceipt::new(Arc::clone(&refunds));
-        let transport = driver.clone();
-        transport.issued();
-        // When: cancellation drops the driver before the transport resolves rejection.
+        let port = driver.clone();
+        // When: cancellation drops both receipt owners before producer publication.
         drop(driver);
         assert_eq!(refunds.load(Ordering::Acquire), 0);
-        transport.reject();
-        drop(transport);
+        drop(port);
         // Then: the shared accounting receives exactly one refund.
         assert_eq!(refunds.load(Ordering::Acquire), 1);
     }
 
     #[test]
-    fn preserves_credit_when_acceptance_is_resolved_after_driver_cancellation() {
-        // Given: an issued command still owns the canceled driver's reservation.
+    fn preserves_credit_when_a_shared_receipt_accepts_producer_publication() {
+        // Given: the port still owns the cancelled driver's reservation.
         let refunds = Arc::new(AtomicUsize::new(0));
         let driver = SubmissionReceipt::new(Arc::clone(&refunds));
-        let transport = driver.clone();
+        let port = driver.clone();
         drop(driver);
-        // When: the transport observes definitive acceptance.
-        transport.accept();
-        drop(transport);
+        assert_eq!(refunds.load(Ordering::Acquire), 0);
+        // When: the producer write accepts the command before the final receipt is dropped.
+        port.accept();
+        drop(port);
         // Then: completion retirement remains the sole source of returned credit.
         assert_eq!(refunds.load(Ordering::Acquire), 0);
     }

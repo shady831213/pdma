@@ -4,10 +4,12 @@ use pdma_model_host::{DriverError, PortError};
 
 mod allocation;
 mod cancellation;
-pub mod pending_commands;
-mod pending_receipt;
 mod poll_preflight;
+mod register_access;
 mod register_flow;
+mod register_observation;
+mod register_records;
+mod register_repoll;
 mod repoll_guard;
 mod semantics;
 mod stale_capability;
@@ -16,13 +18,12 @@ pub mod support;
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     DeviceEpoch,
-    desc::CopyRequest,
     ids::{CommandId, CompletionRingId},
     irq::IrqSource,
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, DriverPort, compat::AsyncDevicePort};
+use pdma_model_host::{AsyncDriver, DriverPort};
+use pdma_model_host::{CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId};
 
 #[tokio::test(flavor = "current_thread")]
 async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
@@ -67,7 +68,7 @@ async fn cloned_drivers_share_depth_one_command_credit() {
         )),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
-    let mut port = AsyncDevicePort::new(device.handle());
+    let mut port = support::BlockingPort::new(device.handle());
 
     // When: one capability consumes the only slot and the other submits.
     let (first, second) = cpu
@@ -108,7 +109,7 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut handle = AsyncDevicePort::new(runner.handle());
+    let mut handle = support::BlockingPort::new(runner.handle());
     let (first, second) = SoftwareCpu::new()
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4).await?;
@@ -149,26 +150,30 @@ async fn irq_controls_are_available_through_async_device_port() {
         )),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
-    let queue = device
-        .handle()
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await
-        .expect("queue setup is valid");
-    let valid_source = queue.completion_irq_source();
     let unknown_source = IrqSource::Completion(CompletionRingId::new(99));
     let unknown_capability =
         pdma_model_contract::semantic::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
+    let (enable_result, unmask_result, invalid_result) = SoftwareCpu::new()
+        .run_main(async {
+            let mut port = support::BlockingPort::new(device.handle());
+            let queue = port
+                .create_queue(QueueConfig::new(
+                    4,
+                    4,
+                    EventRouting::QueueLocal,
+                    SoftwareOwnerId::new(0),
+                ))
+                .await
+                .expect("queue setup is valid");
+            let valid_source = queue.completion_irq_source();
 
-    // When: host code controls IRQ state through the AsyncDevicePort abstraction.
-    let mut port = AsyncDevicePort::new(device.handle());
-    let enable_result = DriverPort::enable_irq_source(&mut port, valid_source).await;
-    let unmask_result = DriverPort::unmask_irq_source(&mut port, valid_source).await;
-    let invalid_result = DriverPort::enable_irq_source(&mut port, unknown_capability).await;
+            // When: host code controls IRQ state through the support::BlockingPort abstraction.
+            let enable_result = DriverPort::enable_irq_source(&mut port, valid_source).await;
+            let unmask_result = DriverPort::unmask_irq_source(&mut port, valid_source).await;
+            let invalid_result = DriverPort::enable_irq_source(&mut port, unknown_capability).await;
+            (enable_result, unmask_result, invalid_result)
+        })
+        .await;
 
     // Then: valid controls succeed and unknown controls fail without creating state.
     assert_eq!(enable_result, Ok(()));

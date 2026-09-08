@@ -1,46 +1,48 @@
 #![allow(missing_docs)]
 
-mod support;
+pub(super) mod support;
 
-use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_device::AsyncDevice;
-use support::{
-    RESULT, TestResult, create_queue, read_u32, read_u64, response, select_completion, submit_copy,
-    write_u32, write_u64,
-};
+use pdma_model_contract::abi::AbiCompletion;
+use pdma_model_contract::abi::registers::{GlobalRegisters, IrqSourceRegisters, QueueRegisters};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, irq::IrqNotification};
+use pdma_model_device::{MmioRegisterError, PdmaControlError};
+use support::*;
 
-#[tokio::test(flavor = "current_thread")]
-async fn source_commands_return_complete_post_command_state() -> TestResult {
-    // Given: one valid completion source with an untouched response bank.
-    let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
+#[tokio::test]
+async fn source_registers_expose_complete_post_transition_state() -> TestResult {
+    // Given: an activated completion source with default routing and mask.
+    let (device, _worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let queue = create_queue(&handle, 1).await?;
-    select_completion(&handle, queue).await?;
-
-    // When: all seven source commands run through the raw selector window.
-    write_u32(&handle, 0x220, 7).await?;
-    assert_eq!(response(&handle).await?, [0, 0, 0, 5, 0, 0, 0, 0, 0]);
-    write_u32(&handle, 0x214, 1).await?;
-    write_u64(&handle, 0x218, 33).await?;
-    let commands_and_states = [(1, 5), (2, 7), (4, 7), (5, 3), (3, 1), (6, 1)];
-    for (command, state) in commands_and_states {
-        write_u32(&handle, 0x220, command).await?;
-        let bank = response(&handle).await?;
-        assert_eq!(read_u32(&handle, RESULT).await?, 1);
-        assert_eq!(bank, [0, 0, 0, state, 1, 0, 33, 0, 0]);
-    }
-
-    // Then: the typed observation agrees and notification-only fields stayed zero.
+    create_queue(&handle, 1).await?;
+    let endpoint = handle.register_endpoint();
     assert_eq!(
-        handle
-            .observe_irq_source(queue.completion_irq_source())
-            .await?,
-        IrqSourceStatus::try_from(1).map_err(|_| "assigned state")?
+        read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
+        5
+    );
+    write_u32(&endpoint, i(IrqSourceRegisters::ROUTE_KIND.offset())?, 1).await?;
+    write_u64(&endpoint, i(IrqSourceRegisters::ROUTE_VECTOR.offset())?, 33).await?;
+    // When: enable, mask, unmask, disable and ack use individual source registers.
+    for (offset, value, expected) in [
+        (IrqSourceRegisters::ENABLED.offset(), 1, 7),
+        (IrqSourceRegisters::MASKED.offset(), 1, 7),
+        (IrqSourceRegisters::MASKED.offset(), 0, 3),
+        (IrqSourceRegisters::ENABLED.offset(), 0, 1),
+        (IrqSourceRegisters::ACK.offset(), 1, 1),
+    ] {
+        write_u32(&endpoint, i(offset)?, value).await?;
+        assert_eq!(
+            read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
+            expected
+        );
+    }
+    // Then: source routing remains intact with no pending messages.
+    assert_eq!(
+        read_u64(&endpoint, i(IrqSourceRegisters::ROUTE_VECTOR.offset())?).await?,
+        33
+    );
+    assert_eq!(
+        read_u64(&endpoint, i(IrqSourceRegisters::PENDING_MESSAGES.offset())?).await?,
+        0
     );
     Ok(())
 }
@@ -48,43 +50,61 @@ async fn source_commands_return_complete_post_command_state() -> TestResult {
 #[tokio::test(flavor = "current_thread")]
 async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> TestResult {
     // Given: one published completion on an enabled unmasked Line source.
-    let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let worker = tokio::spawn(worker.run());
+    let (device, worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let queue = create_queue(&handle, 1).await?;
-    select_completion(&handle, queue).await?;
-    write_u32(&handle, 0x220, 2).await?;
-    write_u32(&handle, 0x220, 5).await?;
-    submit_copy(&handle, queue, 0).await?;
-    handle.ring_doorbell(queue).await?;
+    let [submission, completion, _] = create_queue(&handle, 1).await?;
+    let endpoint = handle.register_endpoint();
+    enable(&endpoint).await?;
+    submit_copy(&handle, submission.base(), 0).await?;
+    write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await?;
+    let worker = tokio::spawn(worker.run());
     device.wait_for_progress_after(0).await;
-
-    // When: readiness, two snapshots, a claim, and ACK-before-drain observe the cause.
-    assert!(handle.irq_notification_ready().await);
-    for command in [8, 8, 9, 6] {
-        write_u32(&handle, 0x220, command).await?;
-        assert_eq!(read_u32(&handle, RESULT).await?, 1);
-        let bank = response(&handle).await?;
-        if command == 6 {
-            assert_eq!(bank, [0, 0, 0, 123, 0, 0, 0, 0, 0]);
-        } else {
-            assert_eq!(bank, [0, 0, 0, 123, 0, 1, 0, 0, 0]);
-        }
+    // When: repeated snapshots, claims and ACK-before-drain observe the same cause.
+    for _ in 0..2 {
+        assert!(
+            handle
+                .irq_snapshot()
+                .await
+                .ok_or("line snapshot")?
+                .asserted()
+        );
+        assert!(matches!(
+            handle
+                .take_irq_notification_at_epoch(DeviceEpoch::initial())
+                .await?,
+            Some(IrqNotification::Line(_))
+        ));
+        write_u32(&endpoint, i(IrqSourceRegisters::ACK.offset())?, 1).await?;
+        assert_eq!(
+            read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
+            123
+        );
     }
-
-    // Then: only draining the record followed by ACK clears readiness and EMPTY zero-fills.
-    handle.poll_completion(queue).await?.ok_or("completion")?;
-    write_u32(&handle, 0x220, 6).await?;
-    assert_eq!(response(&handle).await?, [0, 0, 0, 3, 0, 0, 0, 0, 0]);
+    // Then: draining the DMA record and acknowledging clears the cause and readiness.
+    assert!(
+        AbiCompletion::decode(
+            &handle
+                .read_memory(
+                    completion.base(),
+                    u64::try_from(AbiCompletion::RECORD_SIZE)?
+                )
+                .await?
+        )
+        .is_ok()
+    );
+    write_u64(&endpoint, q(QueueRegisters::CQ_CONSUMER.offset())?, 1).await?;
+    write_u32(&endpoint, i(IrqSourceRegisters::ACK.offset())?, 1).await?;
+    assert_eq!(
+        read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
+        3
+    );
     assert!(!handle.irq_notification_ready().await);
-    write_u32(&handle, 0x220, 8).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 2);
-    assert_eq!(response(&handle).await?, [0; 9]);
+    assert_eq!(
+        handle
+            .take_irq_notification_at_epoch(DeviceEpoch::initial())
+            .await?,
+        None
+    );
     device.request_shutdown().await;
     worker.await?;
     Ok(())
@@ -92,111 +112,103 @@ async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> 
 
 #[tokio::test(flavor = "current_thread")]
 async fn message_readiness_is_non_consuming_and_claim_consumes_exactly_one() -> TestResult {
-    // Given: two completions on a Message source that was masked during publication.
-    let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let worker = tokio::spawn(worker.run());
+    // Given: two completions on a Message source masked during publication.
+    let (device, worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let queue = create_queue(&handle, 2).await?;
-    select_completion(&handle, queue).await?;
-    write_u32(&handle, 0x214, 1).await?;
-    write_u64(&handle, 0x218, 41).await?;
-    write_u32(&handle, 0x220, 1).await?;
-    write_u32(&handle, 0x220, 2).await?;
-    submit_copy(&handle, queue, 0).await?;
-    submit_copy(&handle, queue, 1).await?;
-    handle.ring_doorbell(queue).await?;
+    let [submission, _, _] = create_queue(&handle, 2).await?;
+    let endpoint = handle.register_endpoint();
+    write_u32(&endpoint, i(IrqSourceRegisters::ROUTE_KIND.offset())?, 1).await?;
+    write_u64(&endpoint, i(IrqSourceRegisters::ROUTE_VECTOR.offset())?, 41).await?;
+    write_u32(&endpoint, i(IrqSourceRegisters::ENABLED.offset())?, 1).await?;
+    for slot in 0..2 {
+        submit_copy(&handle, submission.base(), slot).await?;
+    }
+    write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 2).await?;
+    let worker = tokio::spawn(worker.run());
     device.wait_for_progress_after(1).await;
-
-    // When: masked claim is EMPTY, unmasking makes repeated readiness checks true, then claims run.
-    assert!(!handle.irq_notification_ready().await);
-    write_u32(&handle, 0x220, 9).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 2);
-    assert_eq!(response(&handle).await?, [0; 9]);
-    write_u32(&handle, 0x220, 5).await?;
+    assert_eq!(
+        handle
+            .take_irq_notification_at_epoch(DeviceEpoch::initial())
+            .await?,
+        None
+    );
+    // When: unmasking exposes messages and repeated readiness checks precede two claims.
+    write_u32(&endpoint, i(IrqSourceRegisters::MASKED.offset())?, 0).await?;
     assert!(handle.irq_notification_ready().await);
     assert!(handle.irq_notification_ready().await);
-    write_u32(&handle, 0x220, 9).await?;
-    assert_eq!(response(&handle).await?, [0, 0, 0, 91, 1, 2, 41, 0, 1]);
-    write_u32(&handle, 0x220, 9).await?;
-    assert_eq!(response(&handle).await?, [0, 0, 0, 75, 1, 2, 41, 1, 0]);
-
-    // Then: a race-losing third claim is EMPTY and shutdown does not manufacture a notification.
+    for (id, pending, state) in [(0, 1, 91), (1, 0, 75)] {
+        let Some(IrqNotification::Message(message)) = handle
+            .take_irq_notification_at_epoch(DeviceEpoch::initial())
+            .await?
+        else {
+            return Err("message notification required".into());
+        };
+        assert_eq!(message.id().raw(), id);
+        assert_eq!(message.vector().raw(), 41);
+        assert_eq!(message.source_capability().epoch(), DeviceEpoch::initial());
+        assert_eq!(
+            read_u64(&endpoint, i(IrqSourceRegisters::PENDING_MESSAGES.offset())?).await?,
+            pending
+        );
+        assert_eq!(
+            read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
+            state
+        );
+    }
+    // Then: the losing claim is empty, including after shutdown.
     assert!(!handle.irq_notification_ready().await);
-    write_u32(&handle, 0x220, 9).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 2);
-    assert_eq!(response(&handle).await?, [0; 9]);
+    assert_eq!(
+        handle
+            .take_irq_notification_at_epoch(DeviceEpoch::initial())
+            .await?,
+        None
+    );
     device.request_shutdown().await;
-    write_u32(&handle, 0x220, 9).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 2);
+    assert_eq!(
+        handle
+            .take_irq_notification_at_epoch(DeviceEpoch::initial())
+            .await?,
+        None
+    );
     worker.await?;
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn malformed_stale_and_invalid_source_commands_preserve_response_and_state() -> TestResult {
-    // Given: one successful observation retained as the response baseline.
-    let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
+#[tokio::test]
+async fn malformed_stale_and_active_route_writes_preserve_source_state() -> TestResult {
+    // Given: an enabled completion source.
+    let (device, _worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let queue = create_queue(&handle, 1).await?;
-    select_completion(&handle, queue).await?;
-    write_u32(&handle, 0x220, 7).await?;
-    let baseline = response(&handle).await?;
-
-    // When: unknown, stale, and invalid-source commands are issued.
-    write_u32(&handle, 0x220, 99).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 0x11b);
-    assert_eq!(read_u64(&handle, 0x228).await?, 99);
-    assert_eq!(response(&handle).await?, baseline);
-    write_u64(&handle, 0x200, 1).await?;
-    write_u32(&handle, 0x220, 2).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 0x102);
+    create_queue(&handle, 1).await?;
+    let endpoint = handle.register_endpoint();
+    enable(&endpoint).await?;
+    let before = handle.snapshot().await;
+    // When: invalid route values or reconfiguration of an enabled source are attempted.
+    assert!(matches!(
+        write_u32(&endpoint, i(IrqSourceRegisters::ROUTE_KIND.offset())?, 2).await,
+        Err(MmioRegisterError::Access(_))
+    ));
+    assert!(matches!(
+        write_u32(&endpoint, i(IrqSourceRegisters::ROUTE_KIND.offset())?, 1).await,
+        Err(MmioRegisterError::Control(
+            PdmaControlError::InvalidTransaction
+        ))
+    ));
+    // Then: neither failure changes the source or lifecycle.
+    assert_eq!(handle.snapshot().await, before);
     assert_eq!(
-        (
-            read_u64(&handle, 0x228).await?,
-            read_u64(&handle, 0x230).await?
-        ),
-        (0, 1)
+        read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
+        3
     );
-    assert_eq!(response(&handle).await?, baseline);
-    write_u64(&handle, 0x200, 0).await?;
-    write_u64(&handle, 0x208, 99).await?;
-    write_u32(&handle, 0x220, 2).await?;
-
-    // Then: invalid identity is exact and the real source remains disabled and unchanged.
-    assert_eq!(read_u32(&handle, RESULT).await?, 0x104);
-    assert_eq!(
-        (
-            read_u64(&handle, 0x228).await?,
-            read_u64(&handle, 0x230).await?
-        ),
-        (0, 99)
-    );
-    assert_eq!(response(&handle).await?, baseline);
-    assert_eq!(
-        handle
-            .observe_irq_source(queue.completion_irq_source())
-            .await?,
-        IrqSourceStatus::try_from(5).map_err(|_| "assigned state")?
-    );
-    select_completion(&handle, queue).await?;
-    write_u32(&handle, 0x220, 2).await?;
-    let enabled = response(&handle).await?;
-    write_u32(&handle, 0x220, 1).await?;
-    assert_eq!(read_u32(&handle, RESULT).await?, 0x105);
-    assert_eq!(response(&handle).await?, enabled);
-    let malformed = handle.write_mmio(0x210, &2_u32.to_le_bytes()).await;
-    assert!(malformed.is_err());
-    assert_eq!(read_u32(&handle, RESULT).await?, 0x105);
-    assert_eq!(response(&handle).await?, enabled);
+    write_u32(
+        &endpoint,
+        u32::try_from(GlobalRegisters::RESET.offset())?,
+        1,
+    )
+    .await?;
+    assert!(matches!(
+        write_u32(&endpoint, i(IrqSourceRegisters::ACK.offset())?, 1).await,
+        Err(MmioRegisterError::StaleEpoch { .. })
+    ));
     Ok(())
 }

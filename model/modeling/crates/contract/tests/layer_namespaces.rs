@@ -8,8 +8,8 @@ use pdma_model_contract::semantic::{self, BufferId};
 
 #[test]
 fn semantic_and_abi_are_independent_and_conversion_is_owner_defined() {
-    // Given: one semantic request and one unrelated exact ABI command.
-    let semantic = semantic::CopyRequest::new(BufferId::new(3), BufferId::new(5), 8);
+    // Given: one hardware buffer identity and one unrelated exact ABI command.
+    let source = BufferId::new(3);
     let abi = AbiCommand::from_payload(
         11,
         AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
@@ -22,14 +22,14 @@ fn semantic_and_abi_are_independent_and_conversion_is_owner_defined() {
     // When: the exact command is encoded and one ID uses its owning checked conversions.
     let mut bytes = [0_u8; 64];
     let encoded_record = abi.encode(&mut bytes);
-    let encoded_id = u64::try_from(semantic.src().raw());
+    let encoded_id = u64::try_from(source.raw());
     let decoded_id = encoded_id.map(|id| usize::try_from(id).map(BufferId::new));
 
     // Then: each layer has a real value and composition preserves identity.
     assert_eq!(encoded_record, Ok(()));
     assert_eq!(bytes.len(), 64);
     assert_eq!(encoded_id, Ok(3));
-    assert_eq!(decoded_id, Ok(Ok(semantic.src())));
+    assert_eq!(decoded_id, Ok(Ok(source)));
 }
 
 #[test]

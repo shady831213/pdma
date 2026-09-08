@@ -1,5 +1,5 @@
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
-use pdma_model_contract::semantic::{BufferId, IrqNotification};
+use pdma_model_contract::semantic::BufferId;
 
 /// One logical PDMA mapping request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,18 +90,4 @@ impl PdmaMappedRegion {
     pub const fn storage(self) -> Option<MemoryRegion> {
         self.storage
     }
-}
-
-/// Result of one host-owned sequential notification claim.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PdmaClaimResult {
-    /// Readiness ended because the source shut down.
-    Shutdown,
-    /// Readiness raced with another claimant and the command returned Empty.
-    Empty,
-    /// One complete notification was consumed and captured.
-    Notification {
-        /// Claimed semantic notification.
-        notification: IrqNotification,
-    },
 }

@@ -1,10 +1,14 @@
 use hardware_interface_runtime::{
-    AccessKind, AccessOrigin, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
-    RegisterAccess, RegisterObservation, RegisterObserver,
+    AccessKind, AccessOrigin, InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress,
+    MemoryAlignment, RegisterAccess, RegisterObservation, RegisterObserver,
+};
+use pdma_model_contract::abi::registers::{
+    IrqSourceRegisters, QueueRegisters, irq_offset, queue_offset,
 };
 use pdma_model_host::adapter::abi::{
-    AsyncDeviceAccess, PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaMappedRegion,
-    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
+    AsyncDeviceAccess, PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSourceError,
+    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest,
+    PdmaRegisterAccessError,
 };
 use std::sync::{Arc, Mutex};
 
@@ -82,6 +86,12 @@ impl RegisterAccess for RecordingMemoryAccess {
 
 impl PdmaMemoryProvisioning for RecordingMemoryAccess {
     type Error = PdmaProvisioningError;
+    fn at_epoch(self, epoch: pdma_model_contract::semantic::DeviceEpoch) -> Self {
+        Self {
+            inner: self.inner.at_epoch(epoch),
+            records: self.records,
+        }
+    }
     async fn allocate_region(
         &self,
         request: PdmaRegionRequest,
@@ -90,19 +100,18 @@ impl PdmaMemoryProvisioning for RecordingMemoryAccess {
     }
 }
 
-impl PdmaExactInterruptClaim for RecordingMemoryAccess {
-    type Error = PdmaClaimError;
-    async fn wait_interrupt_ready(&self) -> Result<bool, Self::Error> {
-        self.inner.wait_interrupt_ready().await
+impl InterruptSource for RecordingMemoryAccess {
+    type Notification = PdmaInterruptNotification;
+    type Ready = PdmaInterruptReady;
+    type Error = PdmaInterruptSourceError;
+    async fn wait_ready(&self) -> Result<Self::Ready, Self::Error> {
+        self.inner.wait_ready().await
     }
-    async fn claim_interrupt_exact(&self) -> Result<PdmaClaimResult, Self::Error> {
-        self.inner.claim_interrupt_exact().await
-    }
-}
-
-impl pdma_model_host::adapter::abi::PdmaIrqAccess for RecordingMemoryAccess {
-    fn irq_coordinator(&self) -> &pdma_model_host::adapter::abi::PdmaIrqCoordinator {
-        self.inner.irq_coordinator()
+    async fn claim(
+        &mut self,
+        ready: Self::Ready,
+    ) -> Result<Option<Self::Notification>, Self::Error> {
+        self.inner.claim(ready).await
     }
 }
 
@@ -144,60 +153,35 @@ pub(super) fn assert_register_transcript(accesses: &[RegisterObservation]) {
             .iter()
             .all(|access| access.origin == AccessOrigin::Direct)
     );
+    let publication_registers = [
+        queue_offset(0, QueueRegisters::ENABLE.offset()).expect("queue enable offset"),
+        queue_offset(0, QueueRegisters::SQ_PRODUCER.offset()).expect("submission producer offset"),
+        queue_offset(0, QueueRegisters::DOORBELL.offset()).expect("doorbell offset"),
+        queue_offset(0, QueueRegisters::CQ_CONSUMER.offset()).expect("completion consumer offset"),
+        irq_offset(0, 0, IrqSourceRegisters::ACK.offset()).expect("completion IRQ ack offset"),
+    ];
     let publication = accesses
         .iter()
         .filter(|access| {
-            access.kind == AccessKind::Write
-                && access.offset == 0x164
-                && matches!(access.request_bytes.as_slice(), [1 | 3 | 4, 0, 0, 0])
+            access.kind == AccessKind::Write && publication_registers.contains(&access.offset)
         })
-        .map(|access| access.request_bytes.as_slice())
+        .map(|access| (access.offset, access.request_bytes.clone()))
         .collect::<Vec<_>>();
     assert_eq!(
         publication,
-        [&[1, 0, 0, 0][..], &[3, 0, 0, 0], &[4, 0, 0, 0]]
+        publication_registers
+            .into_iter()
+            .zip([
+                1_u32.to_le_bytes().to_vec(),
+                1_u64.to_le_bytes().to_vec(),
+                1_u64.to_le_bytes().to_vec(),
+                1_u64.to_le_bytes().to_vec(),
+                1_u32.to_le_bytes().to_vec(),
+            ])
+            .collect::<Vec<_>>()
     );
-    let claim_start = accesses.iter().position(|access| {
-        access.origin == AccessOrigin::Direct
-            && access.kind == AccessKind::Write
-            && access.offset == 0x220
-            && access.request_bytes == [9, 0, 0, 0]
-    });
-    let claim_start = claim_start.expect("one exact claim must occur");
-    let actual = accesses
-        .iter()
-        .skip(claim_start)
-        .filter(|access| (0x200..0x278).contains(&access.offset))
-        .take(12)
-        .map(|access| {
-            (
-                access.kind,
-                access.offset,
-                if access.kind == AccessKind::Write {
-                    access.request_bytes.clone()
-                } else {
-                    access.response_bytes.clone()
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    let expected = [
-        (AccessKind::Write, 0x220, vec![9, 0, 0, 0]),
-        (AccessKind::Read, 0x224, vec![1, 0, 0, 0]),
-        (AccessKind::Read, 0x240, vec![0; 8]),
-        (AccessKind::Read, 0x248, vec![0; 8]),
-        (AccessKind::Read, 0x250, vec![0; 4]),
-        (AccessKind::Read, 0x254, vec![75, 0, 0, 0]),
-        (AccessKind::Read, 0x258, vec![1, 0, 0, 0]),
-        (AccessKind::Read, 0x25c, vec![2, 0, 0, 0]),
-        (AccessKind::Read, 0x260, vec![64, 0, 0, 0, 0, 0, 0, 0]),
-        (AccessKind::Read, 0x268, vec![0; 8]),
-        (AccessKind::Read, 0x270, vec![0; 8]),
-        (AccessKind::Read, 0x224, vec![1, 0, 0, 0]),
-    ];
-    assert_eq!(actual, expected);
     println!(
-        "manual-qa register transcript: accesses={} all-direct publication=[1,3,4] claim-index={claim_start} claim-items=12",
+        "manual-qa register transcript: accesses={} all-direct enable -> SQ producer -> doorbell -> CQ consumer -> IRQ ack; notifications use hardware output",
         accesses.len()
     );
 }

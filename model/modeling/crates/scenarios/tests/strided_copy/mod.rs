@@ -3,9 +3,13 @@
 mod retry;
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{CompletionStatus, desc::StridedCopyRequest};
+use pdma_model_contract::semantic::CompletionStatus;
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::StridedCopyRequest;
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_retries_strided_completion_without_reexecuting_memory_copy() {
@@ -24,7 +28,8 @@ async fn async_runner_copies_rows_end_to_end_when_strides_include_padding() {
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, queue_id, dst_bytes, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -104,7 +109,8 @@ async fn async_runner_reports_out_of_bounds_when_strided_row_exceeds_source_buff
     let worker = tokio::spawn(worker.run());
     let (snapshot, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -150,7 +156,8 @@ async fn async_runner_keeps_queue_runnable_when_failed_strided_copy_has_later_wo
     let (error_snapshot, progress_snapshot, completion, good_command, good_dst_bytes) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = AsyncDevicePort::new(runner.handle());
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                    .expect("active software CPU");
                 let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                     .await
                     .expect("queue setup is valid");

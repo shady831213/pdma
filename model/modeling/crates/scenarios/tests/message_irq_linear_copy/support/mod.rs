@@ -8,13 +8,12 @@ use hardware_interface_runtime::{
     CpuLocal, HandlerRegistry, InterruptShutdown, InterruptSummary, NoopInterruptObserver,
     RegisterObservation, SoftwareCpu,
 };
-use pdma_model_contract::semantic::{
-    CommandId, IrqNotification, IrqSource, IrqVector, QueueConfigHandle, TraceEvent,
-};
+use pdma_model_contract::semantic::{CommandId, IrqNotification, IrqSource, IrqVector, TraceEvent};
 use pdma_model_device::{AsyncDevice, AsyncDeviceWorker};
+use pdma_model_host::QueueConfigHandle;
 use pdma_model_host::{
     AsyncDriver, DriverIrqRecord,
-    adapter::abi::{PdmaInterruptSource, PdmaRegisterPort, RegisterQueueStatus},
+    adapter::abi::{PdmaRegisterPort, RegisterQueueStatus},
     runtime::interrupt::{PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService},
 };
 use std::sync::Arc;
@@ -108,7 +107,7 @@ pub fn spawn_delivery(config: DeliveryConfig) -> DeliveryActor {
         let delivery = PdmaIrqDelivery::start(
             config.cpu,
             registry.freeze().unwrap_or_else(|_| std::process::abort()),
-            PdmaInterruptSource::new(config.access),
+            config.access,
             Arc::new(NoopInterruptObserver),
         );
         let _ = shutdown_tx.send(delivery.shutdown_handle());

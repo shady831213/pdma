@@ -1,8 +1,9 @@
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest};
+use pdma_model_contract::semantic::CommandId;
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::CopyRequest;
 use pdma_model_host::DriverError;
-use pdma_model_host::{AsyncDriver, ManualDriver, compat::AsyncDevicePort};
+use pdma_model_host::{AsyncDriver, ManualDriver};
 
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
@@ -14,7 +15,7 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut port = AsyncDevicePort::new(device.handle());
+    let mut port = super::support::BlockingPort::new(device.handle());
 
     // When: software pops the completion and immediately submits another command.
     let (completion, next) = SoftwareCpu::new()
@@ -55,7 +56,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut port = AsyncDevicePort::new(device.handle());
+    let mut port = super::support::BlockingPort::new(device.handle());
 
     // When: software pops the event and immediately submits another command.
     let (event, next) = SoftwareCpu::new()
@@ -66,7 +67,7 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
                 .await
                 .expect("allocation");
             driver
-                .submit_copy_on(&mut port, CopyRequest::new(BufferId::new(99), dst, 4))
+                .submit_copy_on(&mut port, CopyRequest::new(dst, dst, 5))
                 .await?;
             let _snapshot = device.wait_for_error_after(0).await;
             let event = driver.poll_event_on(&mut port).await?;
@@ -98,34 +99,37 @@ async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut port = AsyncDevicePort::new(device.handle());
-    let (mut first, mut second, src, dst, submitted, full) = {
-        let mut first = ManualDriver::setup_on(&mut port, 1, 1)
-            .await
-            .expect("manual setup is valid");
-        let mut second = first.clone();
-        let src = first
-            .allocate_buffer_on(&mut port, 4)
-            .await
-            .expect("allocation");
-        let dst = first
-            .allocate_buffer_on(&mut port, 4)
-            .await
-            .expect("allocation");
+    let mut port = super::support::BlockingPort::new(device.handle());
+    let cpu = SoftwareCpu::new();
+    let (mut first, mut second, src, dst, submitted, full) = cpu
+        .run_main(async {
+            let mut first = ManualDriver::setup_on(&mut port, 1, 1)
+                .await
+                .expect("manual setup is valid");
+            let mut second = first.clone();
+            let src = first
+                .allocate_buffer_on(&mut port, 4)
+                .await
+                .expect("allocation");
+            let dst = first
+                .allocate_buffer_on(&mut port, 4)
+                .await
+                .expect("allocation");
 
-        // When: one clone consumes and the peer observes full.
-        let submitted = first
-            .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
-            .await;
-        let full = second
-            .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
-            .await;
-        (first, second, src, dst, submitted, full)
-    };
+            // When: one clone consumes and the peer observes full.
+            let submitted = first
+                .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
+                .await;
+            let full = second
+                .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
+                .await;
+            (first, second, src, dst, submitted, full)
+        })
+        .await;
     device.wait_for_progress_after(0).await;
-    let completion = second.poll_completion_on(&mut port).await;
-    let retried = first
-        .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
+    let completion = cpu.run_main(second.poll_completion_on(&mut port)).await;
+    let retried = cpu
+        .run_main(first.submit_copy_on(&mut port, CopyRequest::new(src, dst, 4)))
         .await;
     device.request_shutdown().await;
     worker.await.expect("worker joins cleanly");

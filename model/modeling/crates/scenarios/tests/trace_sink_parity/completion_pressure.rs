@@ -1,11 +1,14 @@
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
     ResourceConfig, TraceEvent, TraceEventKind,
-    desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
     ids::{CommandId, QueueId},
 };
 use pdma_model_device::{AsyncDevice, AsyncStallReason, AsyncStepStatus};
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+use pdma_model_host::{CopyRequest, VectorAddRequest, VectorBufferRange};
 
 #[allow(clippy::redundant_pub_crate)]
 pub(super) struct CompletionPressureTrace {
@@ -25,12 +28,12 @@ pub(super) async fn completion_pressure_trace() -> CompletionPressureTrace {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let handle = AsyncDevicePort::new(raw_handle.clone());
+    let access = AsyncDeviceAccess::new(raw_handle.clone());
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
 
     let (second_command, resource_command, resource_queue) =
-        exercise_completion_pressure(&runner, handle).await;
+        exercise_completion_pressure(&runner, access).await;
     let events = raw_handle.trace_events().await;
     runner.request_shutdown().await;
     let _summary = worker.await.expect("runner joins cleanly");
@@ -45,10 +48,11 @@ pub(super) async fn completion_pressure_trace() -> CompletionPressureTrace {
 #[allow(clippy::expect_used)]
 async fn exercise_completion_pressure(
     runner: &AsyncDevice,
-    mut handle: AsyncDevicePort,
+    access: AsyncDeviceAccess,
 ) -> (CommandId, CommandId, QueueId) {
     SoftwareCpu::new()
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(access).expect("active software CPU");
             let mut vector_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

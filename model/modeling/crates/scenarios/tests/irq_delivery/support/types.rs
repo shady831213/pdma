@@ -1,7 +1,8 @@
 use hardware_interface_runtime::{CpuLocal, InterruptShutdown, InterruptSummary, SoftwareCpu};
 use pdma_model_contract::semantic::{IrqSource, IrqVector};
 use pdma_model_host::{
-    AsyncDriver, adapter::abi::AsyncDeviceAccess, compat::AsyncDevicePort,
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
     runtime::interrupt::PdmaInterruptTrace,
 };
 use std::sync::Arc;
@@ -46,6 +47,7 @@ pub struct HandlerObservation {
 
 #[derive(Debug)]
 pub struct DriverBootstrap {
+    pub port: PdmaRegisterPort<AsyncDeviceAccess>,
     pub driver: AsyncDriver,
     pub completion_source: IrqSource,
     pub event_source: IrqSource,
@@ -86,7 +88,6 @@ pub struct DeliveryActor {
 #[derive(Debug)]
 pub struct DistinctDelivery {
     pub access: AsyncDeviceAccess,
-    pub port: AsyncDevicePort,
     pub cpu: Arc<SoftwareCpu>,
     pub bootstrap: oneshot::Receiver<DriverBootstrap>,
     pub ready: oneshot::Sender<()>,
@@ -100,7 +101,6 @@ pub struct DistinctDelivery {
 #[derive(Debug)]
 pub struct SharedDelivery {
     pub access: AsyncDeviceAccess,
-    pub port: AsyncDevicePort,
     pub cpu: Arc<SoftwareCpu>,
     pub bootstrap: oneshot::Receiver<DriverBootstrap>,
     pub ready: oneshot::Sender<()>,

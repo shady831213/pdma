@@ -1,14 +1,12 @@
 #![allow(missing_docs)]
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{
-    CompletionStatus, EventErrorKind,
-    desc::{VectorAddRequest, VectorBufferRange},
-};
+use pdma_model_contract::semantic::{CompletionStatus, EventErrorKind};
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
 };
+use pdma_model_host::{VectorAddRequest, VectorBufferRange};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() {
@@ -22,11 +20,8 @@ async fn async_runner_adds_bytes_with_wraparound_and_publishes_one_completion() 
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, no_completion, dst_bytes) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -120,11 +115,8 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_source_b
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, event, src_b, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -192,11 +184,8 @@ async fn async_runner_publishes_event_and_no_completion_when_vector_add_destinat
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, event, dst, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

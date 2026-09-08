@@ -1,6 +1,7 @@
 use hardware_interface_runtime::CpuContextError;
 use hardware_interface_runtime::{MemoryAccessError, ObservationGateError};
-use pdma_model_contract::abi::mmio::{MmioAccessError, ResponseCodecError};
+use pdma_model_contract::abi::registers::MmioAccessError;
+use pdma_model_contract::semantic::DeviceEpoch;
 use std::{error::Error, fmt};
 
 /// Underlying host-owned provisioning cause.
@@ -56,12 +57,29 @@ impl Error for PdmaProvisioningError {
 }
 
 /// Host projection of one raw register endpoint failure.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PdmaRegisterAccessError {
     /// The exact generated register map rejected the access.
     Access(MmioAccessError),
     /// Ordered observation emission failed.
     Observation(ObservationGateError),
+    /// Hardware accepted the write before its observer failed.
+    CommittedObservation(ObservationGateError),
+    /// Hardware control rejected the write before changing state.
+    Control(crate::PortError),
+    /// The endpoint belongs to an earlier reset epoch.
+    StaleEpoch {
+        /// Current device epoch.
+        expected: DeviceEpoch,
+        /// Endpoint's bound epoch.
+        actual: DeviceEpoch,
+    },
+}
+impl PdmaRegisterAccessError {
+    /// Reports whether the rejected observation follows a committed hardware write.
+    pub const fn is_committed(&self) -> bool {
+        matches!(self, Self::CommittedObservation(_))
+    }
 }
 impl fmt::Display for PdmaRegisterAccessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -72,46 +90,9 @@ impl Error for PdmaRegisterAccessError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Access(source) => Some(source),
-            Self::Observation(source) => Some(source),
-        }
-    }
-}
-
-/// Host projection of readiness or sequential claim failure.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PdmaClaimError {
-    /// The exact claim access was structurally invalid.
-    Access(MmioAccessError),
-    /// Ordered claim observation emission failed.
-    Observation(ObservationGateError),
-    /// The result register rejected the command or contained an unknown code.
-    CommandResult {
-        #[doc = "Untruncated result-register value."]
-        code: u64,
-    },
-    /// The response bank cannot represent a notification.
-    MalformedResponse,
-}
-impl fmt::Display for PdmaClaimError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PDMA exact interrupt claim failed: {self:?}")
-    }
-}
-impl Error for PdmaClaimError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Access(source) => Some(source),
-            Self::Observation(source) => Some(source),
-            Self::CommandResult { .. } | Self::MalformedResponse => None,
-        }
-    }
-}
-
-impl From<PdmaRegisterAccessError> for PdmaClaimError {
-    fn from(source: PdmaRegisterAccessError) -> Self {
-        match source {
-            PdmaRegisterAccessError::Access(source) => Self::Access(source),
-            PdmaRegisterAccessError::Observation(source) => Self::Observation(source),
+            Self::Control(source) => Some(source),
+            Self::Observation(source) | Self::CommittedObservation(source) => Some(source),
+            Self::StaleEpoch { .. } => None,
         }
     }
 }
@@ -127,12 +108,8 @@ pub enum PdmaRegisterPortError {
     Provisioning(PdmaProvisioningError),
     /// One generated register access failed.
     Register(PdmaRegisterAccessError),
-    /// Interrupt readiness or claim failed.
-    Claim(PdmaClaimError),
     /// Checked DMA memory access failed.
     Memory(MemoryAccessError),
-    /// A generated response view rejected bytes or a value.
-    Response(ResponseCodecError),
 }
 
 impl fmt::Display for PdmaRegisterPortError {
@@ -148,9 +125,7 @@ impl Error for PdmaRegisterPortError {
             Self::Semantic(source) => Some(source),
             Self::Provisioning(source) => Some(source),
             Self::Register(source) => Some(source),
-            Self::Claim(source) => Some(source),
             Self::Memory(source) => Some(source),
-            Self::Response(source) => Some(source),
         }
     }
 }
@@ -175,22 +150,11 @@ impl From<PdmaRegisterAccessError> for PdmaRegisterPortError {
         Self::Register(source)
     }
 }
-impl From<PdmaClaimError> for PdmaRegisterPortError {
-    fn from(source: PdmaClaimError) -> Self {
-        Self::Claim(source)
-    }
-}
 impl From<MemoryAccessError> for PdmaRegisterPortError {
     fn from(source: MemoryAccessError) -> Self {
         Self::Memory(source)
     }
 }
-impl From<ResponseCodecError> for PdmaRegisterPortError {
-    fn from(source: ResponseCodecError) -> Self {
-        Self::Response(source)
-    }
-}
-
 impl From<PdmaRegisterPortError> for crate::semantic::PortError {
     fn from(source: PdmaRegisterPortError) -> Self {
         use crate::semantic::{PortBackendError, PortBackendKind};
@@ -198,20 +162,36 @@ impl From<PdmaRegisterPortError> for crate::semantic::PortError {
         match source {
             PdmaRegisterPortError::Cpu(source) => Self::Cpu(source),
             PdmaRegisterPortError::Semantic(source) => source,
-            PdmaRegisterPortError::Provisioning(source) => {
-                Self::Backend(PortBackendError::new(PortBackendKind::Provisioning, source))
-            }
-            PdmaRegisterPortError::Register(source) => {
-                Self::Backend(PortBackendError::new(PortBackendKind::Register, source))
-            }
-            PdmaRegisterPortError::Claim(source) => {
-                Self::Backend(PortBackendError::new(PortBackendKind::Claim, source))
-            }
+            PdmaRegisterPortError::Provisioning(source) => match source {
+                PdmaProvisioningError::Provisioning(
+                    PdmaProvisioningCause::AddressExhausted
+                    | PdmaProvisioningCause::StorageExhausted,
+                )
+                | PdmaProvisioningError::LengthOutOfRange => Self::AllocationExhausted,
+                source @ (PdmaProvisioningError::Provisioning(
+                    PdmaProvisioningCause::Unmapped
+                    | PdmaProvisioningCause::CrossesRegion
+                    | PdmaProvisioningCause::OverlappingRegion
+                    | PdmaProvisioningCause::InvalidRegion,
+                )
+                | PdmaProvisioningError::Access(_)
+                | PdmaProvisioningError::InvalidProjection) => {
+                    Self::Backend(PortBackendError::new(PortBackendKind::Provisioning, source))
+                }
+            },
+            PdmaRegisterPortError::Register(source) => match source {
+                PdmaRegisterAccessError::Control(source) => source,
+                PdmaRegisterAccessError::StaleEpoch { expected, actual } => {
+                    Self::StaleEpoch { expected, actual }
+                }
+                source @ (PdmaRegisterAccessError::Access(_)
+                | PdmaRegisterAccessError::Observation(_)
+                | PdmaRegisterAccessError::CommittedObservation(_)) => {
+                    Self::Backend(PortBackendError::new(PortBackendKind::Register, source))
+                }
+            },
             PdmaRegisterPortError::Memory(source) => {
                 Self::Backend(PortBackendError::new(PortBackendKind::Memory, source))
-            }
-            PdmaRegisterPortError::Response(source) => {
-                Self::Backend(PortBackendError::new(PortBackendKind::Response, source))
             }
         }
     }

@@ -1,15 +1,15 @@
 use super::super::{DeviceCore, ModelStepStatus};
 use crate::AsyncStallReason;
-use pdma_model_contract::semantic::{
-    BufferId, Command, CommandId, CommandOperation, CompletionStatus, QueueConfigHandle,
-    ResourceConfig, TraceEventKind,
-    desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
+use crate::test_support::{TestQueue, configure, copy, doorbell, poll_completion, submit};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues, AbiCompletionStatus,
+    U32WordValues,
 };
+use pdma_model_contract::semantic::{BufferId, CommandId, ResourceConfig, TraceEventKind};
 
 struct Fixture {
     core: DeviceCore,
-    copy_queue: QueueConfigHandle,
+    copy_queue: TestQueue,
     second_destination: BufferId,
 }
 
@@ -19,73 +19,60 @@ fn fixture() -> Fixture {
     ));
     let mut core = DeviceCore::new(
         provisioning.memory_access(),
-        ResourceConfig::default()
-            .with_read_slots(1)
-            .with_completion_publication_slots(1),
+        ResourceConfig::default().with_read_slots(1),
     );
     core.enable_tracing();
-    let config = QueueConfig::new(4, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(0));
-    let copy_queue = core.create_queue(config).expect("copy queue");
-    let vector_queue = core.create_queue(config).expect("vector queue");
-    let source = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("source")
-        .object();
+    let copy_queue = configure(&mut core, &mut provisioning, 0, [4, 1, 4]);
+    let vector_queue = configure(&mut core, &mut provisioning, 1, [4, 4, 4]);
+    let source = provisioning.allocate(&mut core.memory, 4).expect("source");
     let first_destination = provisioning
         .allocate(&mut core.memory, 4)
-        .expect("first destination")
-        .object();
+        .expect("destination");
     let second_destination = provisioning
         .allocate(&mut core.memory, 4)
-        .expect("second destination")
-        .object();
-    let vector_left = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("vector left")
-        .object();
-    let vector_right = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("vector right")
-        .object();
+        .expect("destination");
+    let vector_left = provisioning.allocate(&mut core.memory, 4).expect("left");
+    let vector_right = provisioning.allocate(&mut core.memory, 4).expect("right");
     let vector_destination = provisioning
         .allocate(&mut core.memory, 4)
-        .expect("vector destination")
-        .object();
+        .expect("vector destination");
     core.memory
-        .write_object(source, 0, &[2, 4, 6, 8])
-        .expect("source write");
-    for (command, destination) in [first_destination, second_destination]
+        .write_object(source.object(), 0, &[2, 4, 6, 8])
+        .expect("source bytes");
+    for (id, destination) in [first_destination, second_destination]
         .into_iter()
         .enumerate()
     {
-        core.submit_command(
+        submit(
+            &mut core,
             copy_queue,
-            Command::new(
-                CommandId::new(command),
-                CommandOperation::Copy(CopyRequest::new(source, destination, 4)),
-            ),
-        )
-        .expect("copy submission");
-    }
-    core.submit_command(
-        vector_queue,
-        Command::new(
-            CommandId::new(2),
-            CommandOperation::VectorAdd(VectorAddRequest::new(
-                VectorBufferRange::new(vector_left, 0),
-                VectorBufferRange::new(vector_right, 0),
-                VectorBufferRange::new(vector_destination, 0),
+            copy(
+                u64::try_from(id).expect("id"),
+                source.base().raw(),
+                destination.base().raw(),
                 4,
-            )),
+            ),
+        );
+    }
+    submit(
+        &mut core,
+        vector_queue,
+        AbiCommand::from_payload(
+            2,
+            AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
+                source_a_dma_address: vector_left.base().raw(),
+                source_b_dma_address: vector_right.base().raw(),
+                destination_dma_address: vector_destination.base().raw(),
+                length: U32WordValues { value: 4 },
+            }),
         ),
-    )
-    .expect("vector submission");
-    core.ring_doorbell(copy_queue).expect("copy doorbell");
-    core.ring_doorbell(vector_queue).expect("vector doorbell");
+    );
+    doorbell(&mut core, copy_queue);
+    doorbell(&mut core, vector_queue);
     Fixture {
         core,
         copy_queue,
-        second_destination,
+        second_destination: second_destination.object(),
     }
 }
 
@@ -102,9 +89,9 @@ fn admission_skips_starved_work_without_replaying_accepted_retirement() {
     let first_copy = core.step();
     let publication_stall = core.step();
     let pending_retry = core.step();
-    let first_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let first_completion = poll_completion(&mut core, copy_queue);
     let retried = core.step();
-    let second_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let second_completion = poll_completion(&mut core, copy_queue);
     let resource_stall = core.step();
     let repeated_resource_stall = core.step();
 
@@ -126,12 +113,16 @@ fn admission_skips_starved_work_without_replaying_accepted_retirement() {
     );
     assert_eq!(repeated_resource_stall, resource_stall);
     assert_eq!(
-        first_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
+        first_completion
+            .map(|record| CommandId::new(usize::try_from(record.command_id).expect("id"))),
         Some(CommandId::new(0))
     );
     assert_eq!(
-        second_completion.map(|record| (record.command_id(), record.status())),
-        Some((CommandId::new(1), CompletionStatus::Success))
+        second_completion.map(|record| (
+            CommandId::new(usize::try_from(record.command_id).expect("id")),
+            record.status
+        )),
+        Some((CommandId::new(1), AbiCompletionStatus::Success))
     );
     assert_eq!(
         core.memory.read_object(second_destination, 0, 4),
@@ -173,9 +164,9 @@ fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
     let first_copy = core.step();
     let completion_stall = core.step();
     let retry_before_poll = core.step();
-    let first_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let first_completion = poll_completion(&mut core, copy_queue);
     let retry_after_poll = core.step();
-    let second_completion = core.poll_completion(copy_queue).expect("completion ring");
+    let second_completion = poll_completion(&mut core, copy_queue);
     let resource_stall = core.step();
     let repeated_resource_stall = core.step();
 
@@ -190,11 +181,13 @@ fn retirement_retry_does_not_reexecute_or_consume_resource_stalled_work() {
     assert_eq!(retry_before_poll, completion_stall);
     assert_eq!(retry_after_poll, Ok(ModelStepStatus::Progressed));
     assert_eq!(
-        first_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
+        first_completion
+            .map(|record| CommandId::new(usize::try_from(record.command_id).expect("id"))),
         Some(CommandId::new(0))
     );
     assert_eq!(
-        second_completion.map(pdma_model_contract::semantic::CompletionRecord::command_id),
+        second_completion
+            .map(|record| CommandId::new(usize::try_from(record.command_id).expect("id"))),
         Some(CommandId::new(1))
     );
     assert_eq!(

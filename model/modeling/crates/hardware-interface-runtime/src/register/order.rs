@@ -233,6 +233,22 @@ impl ObservationOrder {
         Ok(())
     }
 
+    pub(super) fn cancel_latest(
+        &mut self,
+        reservation: &mut ObservationReservationReceipt,
+    ) -> Result<(), ObservationOrderError> {
+        self.ensure_open()?;
+        if !reservation.active
+            || u128::from(reservation.start) + reservation.count as u128 != self.next_reservation
+        {
+            self.fault(GateFault::InvalidEmission);
+            return Err(self.fault_error());
+        }
+        self.next_reservation = u128::from(reservation.start);
+        reservation.active = false;
+        Ok(())
+    }
+
     /// Permanently faults an active reservation that its owner abandons.
     pub fn abandon(
         &mut self,

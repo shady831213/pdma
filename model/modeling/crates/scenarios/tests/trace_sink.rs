@@ -2,10 +2,14 @@
 
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{
-    CompletionStatus, ResourceConfig, TraceEvent, TraceEventKind, TraceOperation, desc::CopyRequest,
+    CompletionStatus, ResourceConfig, TraceEvent, TraceEventKind, TraceOperation,
 };
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::CopyRequest;
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_complete_copy_lifecycle() {
@@ -18,7 +22,6 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
@@ -26,6 +29,8 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
     // When: one complete software main submits a copy, waits, and polls the completion.
     let (command_id, completion, copied) = cpu
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -115,7 +120,6 @@ async fn async_trace_log_records_error_event_without_success_completion() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
@@ -123,6 +127,8 @@ async fn async_trace_log_records_error_event_without_success_completion() {
     // When: one complete software main submits the fault and polls its event path.
     let (command_id, event, completion) = cpu
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -191,13 +197,14 @@ async fn async_trace_log_records_stall_annotations_for_status_waits() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
 
     // When: one complete software main submits the copy and waits for its first stall.
     cpu.run_main(async {
+        let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+            .expect("active software CPU");
         let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
             .await
             .expect("queue setup is valid");

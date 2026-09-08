@@ -1,91 +1,36 @@
-use super::common::{TestResult, activate, allocate, encode};
-use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues};
-use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceConfig, RingCursor};
-use pdma_model_device::{AsyncDevice, PendingDmaResult};
+use super::common::TestResult;
+use crate::queue::bus_retirement::support::{Fixture, allocate_pair};
+use pdma_model_contract::abi::AbiCompletion;
+use pdma_model_contract::abi::registers::QueueRegisters;
+use pdma_model_contract::semantic::ResourceConfig;
 
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        ResourceConfig::default(),
-    );
-    let handle = runner.handle();
-    let (queue, submission) =
-        activate(&handle, pdma_model_contract::semantic::QueueId::new(0)).await?;
-    let source = allocate(&handle, 4).await?;
-    let destination = allocate(&handle, 4).await?;
-    handle.write_memory(source.base(), &[4, 3, 2, 1]).await?;
+    // Given: descriptor memory and producer publication alone do not capture work.
+    let mut fixture = Fixture::new(ResourceConfig::default()).await?;
+    let pair = allocate_pair(&fixture.handle).await?;
+    fixture.copy(0, pair).await?;
+    assert_eq!(fixture.read(QueueRegisters::SQ_CAPTURED.offset()).await?, 0);
+    assert_eq!(fixture.handle.native_steps().await, 0);
+    fixture.cursor(QueueRegisters::DOORBELL.offset(), 1).await?;
+    let worker = fixture.start()?;
+    fixture.handle.wait_for_progress_after(0).await;
+    fixture
+        .cursor(QueueRegisters::CQ_CONSUMER.offset(), 1)
+        .await?;
+    fixture.handle.write_memory(pair[0], &[4, 3, 2, 1]).await?;
 
-    let mut poisoned = [0_u8; 64];
-    poisoned[0..2].copy_from_slice(&2_u16.to_le_bytes());
-    handle.write_memory(submission, &poisoned).await?;
-    handle
-        .control_queue(QueueControl::PublishSubmissionProducer(
-            QueueCursorUpdate::new(queue, RingCursor::new(1)),
-        ))
-        .await?;
-    assert_eq!(handle.snapshot().await.steps, 0);
-    assert_eq!(handle.pending_dma_result().await, None);
+    // When: a second descriptor occupies a nonzero SQ slot and is captured.
+    fixture.copy(1, pair).await?;
+    assert_eq!(fixture.read(QueueRegisters::SQ_CAPTURED.offset()).await?, 1);
+    fixture.cursor(QueueRegisters::DOORBELL.offset(), 2).await?;
+    fixture.handle.wait_for_progress_after(1).await;
 
-    handle
-        .control_queue(QueueControl::PublishSubmissionConsumer(
-            QueueCursorUpdate::new(queue, RingCursor::new(1)),
-        ))
-        .await?;
-    let second_slot = submission.checked_add(64)?;
-    let command = encode(AbiCommand::from_payload(
-        50,
-        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-            source_dma_address: source.base().raw(),
-            destination_dma_address: destination.base().raw(),
-            length: 4.into(),
-        }),
-    ))?;
-    handle.write_memory(second_slot, &command).await?;
-    handle
-        .control_queue(QueueControl::PublishSubmissionProducer(
-            QueueCursorUpdate::new(queue, RingCursor::new(2)),
-        ))
-        .await?;
-    let ring = handle.read_memory(submission, 128).await?;
-    assert_eq!(ring.get(0..64), Some(poisoned.as_slice()));
-    assert_eq!(ring.get(64..128), Some(command.as_slice()));
-
-    handle
-        .control_queue(QueueControl::CaptureSubmissionProducer(
-            QueueCursorUpdate::new(queue, RingCursor::new(2)),
-        ))
-        .await?;
-    handle
-        .control_queue(QueueControl::PublishCompletionProducer(
-            QueueCursorUpdate::new(queue, RingCursor::new(2)),
-        ))
-        .await?;
-    let worker = tokio::spawn(worker.run());
-    handle.wait_for_stall_after(0).await;
-    let status = handle
-        .control_queue(QueueControl::ReadStatus(queue))
-        .await?;
-    assert_eq!(status.submission().consumer(), RingCursor::new(2));
-    assert_eq!(
-        handle.pending_dma_result().await,
-        Some(PendingDmaResult::Completion(
-            pdma_model_contract::semantic::CompletionRecord::new(
-                queue.queue_id(),
-                pdma_model_contract::semantic::CommandId::new(50),
-                pdma_model_contract::semantic::CompletionStatus::Success,
-            )
-        ))
-    );
-    assert_eq!(
-        handle
-            .read_memory(destination.base(), destination.length())
-            .await?,
-        [4, 3, 2, 1]
-    );
-    assert_eq!(handle.irq_snapshot().await, None);
-    handle.request_shutdown().await;
+    // Then: the second slot executes and its exact completion wraps the result ring.
+    assert_eq!(fixture.read(QueueRegisters::SQ_CONSUMER.offset()).await?, 2);
+    assert_eq!(fixture.handle.read_memory(pair[1], 4).await?, [4, 3, 2, 1]);
+    let record = AbiCompletion::decode(&fixture.handle.read_memory(fixture.rings[1], 32).await?)?;
+    assert_eq!(record.command_id(), 11);
+    fixture.handle.request_shutdown().await;
     worker.await?;
     Ok(())
 }

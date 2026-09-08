@@ -10,11 +10,6 @@ pub enum AbiControlError {
         /// Requested ABI version.
         requested: u16,
     },
-    /// A control request contains feature bits not assigned by ABI v1.
-    UnknownFeatureBits {
-        /// Unassigned bits after masking known features.
-        bits: u64,
-    },
     /// A queue-ring depth is zero or exceeds the ABI-v1 limit.
     InvalidRingDepth {
         /// Supplied depth.
@@ -73,27 +68,6 @@ pub enum AbiControlError {
         /// Requested increment.
         increment: u64,
     },
-    /// A queue ring depth differs from its queue configuration.
-    QueueDepthMismatch {
-        /// Ring role.
-        ring: &'static str,
-        /// Configured depth.
-        expected: usize,
-        /// Explicit activation depth.
-        actual: u32,
-    },
-    /// Queue-local event depth differs from completion depth.
-    EventDepthMismatch {
-        /// Derived completion depth.
-        expected: usize,
-        /// Explicit event depth.
-        actual: u32,
-    },
-    /// A typed status response contains an unassigned state value.
-    UnknownStatusValue {
-        /// Unassigned value.
-        value: u16,
-    },
 }
 
 impl fmt::Display for AbiControlError {
@@ -101,12 +75,6 @@ impl fmt::Display for AbiControlError {
         match self {
             Self::UnsupportedVersion { requested } => {
                 write!(f, "ABI version {requested} is not supported")
-            }
-            Self::UnknownFeatureBits { bits } => {
-                write!(
-                    f,
-                    "control request contains unknown ABI feature bits {bits:#x}"
-                )
             }
             Self::InvalidRingDepth { depth, maximum } => {
                 write!(f, "ring depth {depth} is outside 1..={maximum}")
@@ -136,20 +104,6 @@ impl fmt::Display for AbiControlError {
             }
             Self::CursorIncrementOverflow { cursor, increment } => {
                 write!(f, "cursor {cursor} cannot advance by {increment}")
-            }
-            Self::QueueDepthMismatch {
-                ring,
-                expected,
-                actual,
-            } => write!(
-                f,
-                "{ring} ring depth must be configured as {expected}, not {actual}"
-            ),
-            Self::EventDepthMismatch { expected, actual } => {
-                write!(f, "event ring depth must be {expected}, not {actual}")
-            }
-            Self::UnknownStatusValue { value } => {
-                write!(f, "device status value {value} is not assigned by ABI v1")
             }
         }
     }

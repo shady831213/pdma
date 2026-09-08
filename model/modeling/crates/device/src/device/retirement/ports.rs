@@ -1,4 +1,5 @@
 use crate::device::context::HardwareContext;
+use crate::device::flow::ExecutionFault;
 use crate::irq::PdmaIrqController;
 use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
@@ -6,9 +7,8 @@ use crate::queue::io::{FaultPublication, PublicationOutcome};
 use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::semantic::{
-    CompletionRecord, EventRecord, IrqSource, MemoryFault, QueueId, ResourceConfig,
-};
+use pdma_model_contract::abi::AbiCompletion;
+use pdma_model_contract::semantic::{IrqSource, QueueId, ResourceConfig};
 
 pub(crate) struct RetirementPorts<'a> {
     pub(super) queues: &'a mut QueueBlock,
@@ -50,7 +50,7 @@ impl<'a> RetirementPorts<'a> {
     pub(super) fn publish_completion(
         &mut self,
         queue: QueueId,
-        record: CompletionRecord,
+        record: AbiCompletion,
     ) -> ModelResult<PublicationOutcome> {
         self.queues.publish_completion(self.memory, queue, record)
     }
@@ -58,10 +58,6 @@ impl<'a> RetirementPorts<'a> {
     pub(super) fn publish_fault(&mut self, queue: QueueId) -> ModelResult<PublicationOutcome> {
         match self.queues.publish_fault(self.memory, queue)? {
             FaultPublication::Retry => Ok(PublicationOutcome::Retry),
-            FaultPublication::Semantic(event) => {
-                self.trace.event_published(event);
-                Ok(PublicationOutcome::Published)
-            }
             FaultPublication::Exact(trace) => {
                 if let Some((queue, command)) = trace {
                     self.trace.dma_event_published(queue, command);
@@ -71,12 +67,19 @@ impl<'a> RetirementPorts<'a> {
         }
     }
 
-    pub(super) fn stage_fault(
-        &mut self,
-        queue: QueueId,
-        event: EventRecord,
-    ) -> ModelResult<ModelError> {
-        self.queues.stage_execution_fault(queue, event)
+    pub(super) fn stage_fault(&mut self, fault: ExecutionFault) -> ModelResult<ModelError> {
+        let queue = u64::try_from(fault.queue.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
+        let command =
+            u64::try_from(fault.command.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
+        self.queues.stage_execution_fault(
+            fault.queue,
+            pdma_model_contract::abi::AbiEvent::new(queue, command, fault.exact),
+        )?;
+        Ok(fault
+            .buffer
+            .map_or(ModelError::DmaSubmissionState, |buffer| {
+                ModelError::from_memory_fault(buffer, fault.error_kind)
+            }))
     }
 
     pub(super) fn latch(&mut self, source: IrqSource) {
@@ -89,9 +92,5 @@ impl<'a> RetirementPorts<'a> {
             (true, false) => self.trace.irq_line_deasserted(),
             (false, false) | (true, true) => {}
         }
-    }
-
-    pub(super) const fn model_error(fault: MemoryFault) -> ModelError {
-        ModelError::from_memory_fault(fault.buffer(), fault.error_kind())
     }
 }

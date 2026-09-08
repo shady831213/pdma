@@ -1,8 +1,9 @@
+use hardware_interface_runtime::RegisterAccess;
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
-use pdma_model_contract::semantic::{
-    Command, CommandId, CopyRequest, EventRouting, IrqRoute, IrqVector, QueueConfig,
-    SoftwareOwnerId,
+use pdma_model_contract::abi::registers::{
+    IrqSourceRegisters, QueueRegisters, irq_offset, queue_offset,
 };
+use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, DmaAddress};
 use pdma_model_device::AsyncDeviceHandle;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
@@ -102,73 +103,86 @@ async fn wait_until_core_contended(handle: &AsyncDeviceHandle) -> TestResult {
     Err("public memory read never acquired the core lock".into())
 }
 
-/// Creates and enables one message-routed completion source.
-pub(super) async fn create_message(
-    handle: &AsyncDeviceHandle,
-) -> TestResult<pdma_model_contract::semantic::QueueConfigHandle> {
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            2,
-            2,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await?;
-    let source = queue.completion_irq_source();
-    handle
-        .configure_irq_route(source, IrqRoute::Message(IrqVector::new(41)))
-        .await?;
-    handle.enable_irq_source(source).await?;
-    handle.unmask_irq_source(source).await?;
-    Ok(queue)
-}
-
-/// Submits one copy that produces a completion message.
-pub(super) async fn submit_copy(
-    handle: &AsyncDeviceHandle,
-    queue: pdma_model_contract::semantic::QueueConfigHandle,
-) -> TestResult {
-    let source = handle.allocate_buffer(1).await?;
-    let destination = handle.allocate_buffer(1).await?;
-    handle
-        .submit_command(
-            queue,
-            Command::new(
-                CommandId::new(0),
-                pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(
-                    source,
-                    destination,
-                    1,
-                )),
-            ),
+pub(super) async fn create_message(handle: &AsyncDeviceHandle) -> TestResult<DmaAddress> {
+    let endpoint = handle.register_endpoint();
+    let mut bases = Vec::new();
+    for size in [
+        AbiCommand::RECORD_SIZE,
+        AbiCompletion::RECORD_SIZE,
+        AbiEvent::RECORD_SIZE,
+    ] {
+        bases.push(handle.allocate_memory_region(size).await?.base());
+    }
+    for (local, base) in [
+        QueueRegisters::SQ_BASE.offset(),
+        QueueRegisters::CQ_BASE.offset(),
+        QueueRegisters::EQ_BASE.offset(),
+    ]
+    .into_iter()
+    .zip(&bases)
+    {
+        endpoint
+            .write(queue_offset(0, local)?, &base.raw().to_le_bytes())
+            .await?;
+    }
+    for local in [
+        QueueRegisters::SQ_DEPTH.offset(),
+        QueueRegisters::CQ_DEPTH.offset(),
+        QueueRegisters::EQ_DEPTH.offset(),
+        QueueRegisters::ENABLE.offset(),
+    ] {
+        endpoint
+            .write(queue_offset(0, local)?, &1_u32.to_le_bytes())
+            .await?;
+    }
+    endpoint
+        .write(
+            irq_offset(0, 0, IrqSourceRegisters::ROUTE_VECTOR.offset())?,
+            &41_u64.to_le_bytes(),
         )
         .await?;
+    for (local, value) in [
+        (IrqSourceRegisters::ROUTE_KIND.offset(), 1_u32),
+        (IrqSourceRegisters::ENABLED.offset(), 1),
+        (IrqSourceRegisters::MASKED.offset(), 0),
+    ] {
+        endpoint
+            .write(irq_offset(0, 0, local)?, &value.to_le_bytes())
+            .await?;
+    }
+    Ok(*bases.first().ok_or("submission base")?)
+}
+
+pub(super) async fn submit_copy(handle: &AsyncDeviceHandle, submission: DmaAddress) -> TestResult {
+    use pdma_model_contract::abi::{AbiCommandPayloadCopyValues, AbiCommandPayloadValues};
+    let source = handle.allocate_memory_region(1).await?;
+    let destination = handle.allocate_memory_region(1).await?;
+    let descriptor = AbiCommand::from_payload(
+        0,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
+            source_dma_address: source.base().raw(),
+            destination_dma_address: destination.base().raw(),
+            length: 1.into(),
+        }),
+    );
+    let mut bytes = vec![0; AbiCommand::RECORD_SIZE];
+    descriptor.encode(&mut bytes)?;
+    handle.write_memory(submission, &bytes).await?;
+    for local in [
+        QueueRegisters::SQ_PRODUCER.offset(),
+        QueueRegisters::DOORBELL.offset(),
+    ] {
+        handle
+            .register_endpoint()
+            .write(queue_offset(0, local)?, &1_u64.to_le_bytes())
+            .await?;
+    }
     Ok(())
 }
 
-pub(super) async fn claim(endpoint: &pdma_model_device::MmioRegisterEndpoint) -> TestResult<bool> {
-    use hardware_interface_runtime::RegisterAccess;
-    endpoint.write(0x220, &[9, 0, 0, 0]).await?;
-    let mut result = [0; 4];
-    endpoint.read(0x224, &mut result).await?;
-    match u32::from_le_bytes(result) {
-        1 => {
-            for (offset, width) in [
-                (0x240, 8),
-                (0x248, 8),
-                (0x250, 4),
-                (0x254, 4),
-                (0x258, 4),
-                (0x25c, 4),
-                (0x260, 8),
-                (0x268, 8),
-                (0x270, 8),
-            ] {
-                endpoint.read(offset, &mut vec![0; width]).await?;
-            }
-            Ok(true)
-        }
-        2 => Ok(false),
-        result => Err(format!("unexpected claim result: {result}").into()),
-    }
+pub(super) async fn claim(handle: &AsyncDeviceHandle) -> TestResult<bool> {
+    Ok(handle
+        .take_irq_notification_at_epoch(pdma_model_contract::semantic::DeviceEpoch::initial())
+        .await?
+        .is_some())
 }

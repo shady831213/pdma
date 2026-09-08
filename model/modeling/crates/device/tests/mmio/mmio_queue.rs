@@ -1,244 +1,148 @@
-#![allow(missing_docs, clippy::redundant_pub_crate)]
-
-mod support;
+#![allow(missing_docs)]
 
 mod activation_rejections;
+pub(super) mod support;
 
-use pdma_model_contract::abi::AbiEvent;
-use pdma_model_contract::abi::mmio::MmioResult;
-use pdma_model_contract::semantic::WholeDeviceReset;
-use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
-use pdma_model_device::AsyncDevice;
-use support::{
-    RawActivation, activate_raw, issue_queue_command, program_activation, read_response, read_u32,
-    read_u64,
-};
-
-type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
+use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::abi::registers::{GlobalRegisters, QueueRegisters};
+use pdma_model_contract::abi::{AbiControlError, AbiEvent};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
+use pdma_model_device::{MmioRegisterError, PdmaControlError};
+use support::*;
 
 #[tokio::test]
 async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors() -> TestResult {
-    // Given: exact committed depth-two SQ/CQ/EQ mappings and programmed raw registers.
-    let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
+    // Given: exact committed depth-two SQ/CQ/EQ mappings.
+    let (device, _worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let committed = handle.commit_memory_stage(stage).await?;
-
-    // When: ACTIVATE is issued solely through the raw queue register window.
-    activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &committed).await?;
-
-    // Then: the complete response bank reports the queue and seven zero cursor shadows.
-    assert_eq!(read_u32(&handle, 0x168).await?, MmioResult::Ok.code());
-    assert_eq!(read_u64(&handle, 0x188).await?, 0);
-    assert_eq!(read_u64(&handle, 0x190).await?, 0);
-    for offset in (0x198..=0x1c8).step_by(8) {
-        assert_eq!(read_u64(&handle, offset).await?, 0);
-    }
+    // When: the queue is enabled through its direct configuration registers.
+    let _regions = create_queue(&handle, 2).await?;
+    // Then: the live cursor registers start at zero.
+    let endpoint = handle.register_endpoint();
+    assert_eq!(
+        read_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?).await?,
+        1
+    );
+    assert_eq!(cursors(&endpoint).await?, [0; 7]);
     Ok(())
 }
 
 #[tokio::test]
-async fn raw_activation_rejects_wrong_mapping_id_and_stale_epoch_without_mutation() -> TestResult {
-    // Given: exact mappings paired with misaligned, wrong-ID, and stale activation registers.
-    let (wrong_device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let wrong = wrong_device.handle();
-    let wrong_stage = wrong.stage_memory_regions(&[128, 64, 128]).await?;
-    let wrong_regions = wrong.commit_memory_stage(wrong_stage).await?;
-    let [wrong_submission, wrong_completion, wrong_event] = wrong_regions.as_slice() else {
-        return Err("three committed queue regions required".into());
-    };
-    program_activation(
-        &wrong,
-        RawActivation::depth_two(
-            DeviceEpoch::initial(),
-            QueueId::new(0),
-            [*wrong_submission, *wrong_completion, *wrong_event],
+async fn stale_activation_rejects_and_fresh_epoch_reuses_committed_mappings() -> TestResult {
+    // Given: an enabled queue and committed mappings retained across reset.
+    let (device, _worker) = device(ResourceConfig::default());
+    let handle = device.handle();
+    let regions = create_queue(&handle, 2).await?;
+    let stale = handle.register_endpoint();
+    write_u32(&stale, u32::try_from(GlobalRegisters::RESET.offset())?, 1).await?;
+    let fresh = stale.at_epoch(DeviceEpoch::new(1));
+    program_activation(&fresh, &regions, 2).await?;
+    let before = handle.snapshot().await;
+    // When: an old endpoint attempts activation and producer publication.
+    for (offset, bytes) in [
+        (
+            q(QueueRegisters::ENABLE.offset())?,
+            1_u32.to_le_bytes().to_vec(),
         ),
-    )
-    .await?;
-
-    // When: a programmed SQ base violates the canonical submission alignment.
-    support::write_u64(
-        &wrong,
-        0x138,
-        wrong_submission.base().raw().saturating_add(1),
-    )
-    .await?;
-    issue_queue_command(&wrong, 1).await?;
+        (
+            q(QueueRegisters::SQ_PRODUCER.offset())?,
+            1_u64.to_le_bytes().to_vec(),
+        ),
+    ] {
+        assert_eq!(
+            stale.write(offset, &bytes).await,
+            Err(MmioRegisterError::StaleEpoch {
+                expected: DeviceEpoch::new(1),
+                actual: DeviceEpoch::initial(),
+            })
+        );
+    }
+    // Then: stale writes leave the queue inactive, and explicit rebinding can enable it.
+    assert_eq!(handle.snapshot().await, before);
     assert_eq!(
-        read_u32(&wrong, 0x168).await?,
-        MmioResult::MisalignedRing.code()
+        read_u32(&fresh, q(QueueRegisters::ENABLE.offset())?).await?,
+        0
     );
-
-    // Then: every rejection preserves the next ID and reset-persistent mappings for valid reuse.
-    activate_raw(
-        &wrong,
-        DeviceEpoch::initial(),
-        QueueId::new(1),
-        &wrong_regions,
-    )
-    .await?;
-    assert_eq!(
-        read_u32(&wrong, 0x168).await?,
-        MmioResult::InvalidQueue.code()
-    );
-    activate_raw(
-        &wrong,
-        DeviceEpoch::initial(),
-        QueueId::new(0),
-        &wrong_regions,
-    )
-    .await?;
-    assert_eq!(read_u32(&wrong, 0x168).await?, MmioResult::Ok.code());
-
-    let current = wrong
-        .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
-        .await?;
-    activate_raw(
-        &wrong,
-        DeviceEpoch::initial(),
-        QueueId::new(0),
-        &wrong_regions,
-    )
-    .await?;
-    assert_eq!(
-        read_u32(&wrong, 0x168).await?,
-        MmioResult::StaleEpoch.code()
-    );
-    support::write_u64(&wrong, 0x118, 1).await?;
-    issue_queue_command(&wrong, 3).await?;
-    assert_eq!(
-        read_u32(&wrong, 0x168).await?,
-        MmioResult::StaleEpoch.code()
-    );
-    activate_raw(&wrong, current, QueueId::new(0), &wrong_regions).await?;
-    assert_eq!(read_u32(&wrong, 0x168).await?, MmioResult::Ok.code());
+    write_u32(&fresh, q(QueueRegisters::ENABLE.offset())?, 1).await?;
+    assert_eq!(cursors(&fresh).await?, [0; 7]);
     Ok(())
 }
 
 #[tokio::test]
-async fn raw_status_and_cursor_commands_update_all_seven_shadows_atomically() -> TestResult {
-    // Given: one mapped active depth-two queue with every cursor at zero.
-    let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
+async fn direct_producer_rejects_regression_and_excess_distance_without_mutation() -> TestResult {
+    // Given: one active depth-two queue with producer one.
+    let (device, _worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let regions = handle.commit_memory_stage(stage).await?;
-    activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &regions).await?;
-    support::write_u64(&handle, 0x118, 1).await?;
-
-    // When: all seven cursor commands advance their selected shadow from zero to one.
-    for command in 3..=9 {
-        issue_queue_command(&handle, command).await?;
-        assert_eq!(read_u32(&handle, 0x168).await?, MmioResult::Ok.code());
+    let _regions = create_queue(&handle, 2).await?;
+    let endpoint = handle.register_endpoint();
+    let producer = q(QueueRegisters::SQ_PRODUCER.offset())?;
+    write_u64(&endpoint, producer, 1).await?;
+    let before = cursors(&endpoint).await?;
+    // When: the producer regresses or advances beyond capacity.
+    for value in [0, u64::MAX] {
+        assert!(matches!(
+            write_u64(&endpoint, producer, value).await,
+            Err(MmioRegisterError::Control(PdmaControlError::Abi(_)))
+        ));
     }
-    issue_queue_command(&handle, 2).await?;
-
-    // Then: one raw status snapshot contains the same epoch, ID, and seven cursor values.
-    let snapshot = read_response(&handle).await?;
-    assert_eq!(snapshot, [0, 0, 1, 1, 1, 1, 1, 1, 1]);
-    println!("{{\"seven_cursor_status\":{snapshot:?}}}");
-
-    let preserved = read_response(&handle).await?;
-    support::write_u64(&handle, 0x110, 0).await?;
-    support::write_u64(&handle, 0x118, 2).await?;
-    issue_queue_command(&handle, 7).await?;
-    assert_eq!(
-        read_u32(&handle, 0x168).await?,
-        MmioResult::InvalidTransaction.code()
-    );
-    assert_eq!(read_response(&handle).await?, preserved);
-
-    support::write_u64(&handle, 0x110, 1).await?;
-    support::write_u64(&handle, 0x118, 0).await?;
-    issue_queue_command(&handle, 7).await?;
-    assert_eq!(
-        read_u32(&handle, 0x168).await?,
-        MmioResult::CursorUpdateRegression.code()
-    );
-    assert_eq!(read_response(&handle).await?, preserved);
-
-    support::write_u64(&handle, 0x110, 1).await?;
-    support::write_u64(&handle, 0x118, 0).await?;
-    issue_queue_command(&handle, 3).await?;
-    assert_eq!(
-        read_u32(&handle, 0x168).await?,
-        MmioResult::CursorUpdateRegression.code()
-    );
-    assert_eq!(read_u64(&handle, 0x180).await?, 0);
-    assert_eq!(read_response(&handle).await?, preserved);
-
-    support::write_u64(&handle, 0x110, 1).await?;
-    support::write_u64(&handle, 0x118, u64::MAX).await?;
-    issue_queue_command(&handle, 3).await?;
-    assert_eq!(
-        read_u32(&handle, 0x168).await?,
-        MmioResult::CursorDistanceExceeded.code()
-    );
-    assert_eq!(read_response(&handle).await?, preserved);
+    // Then: only the accepted producer is visible and hardware-owned cursors are read-only.
+    assert_eq!(cursors(&endpoint).await?, before);
+    for offset in [
+        QueueRegisters::SQ_CAPTURED.offset(),
+        QueueRegisters::SQ_CONSUMER.offset(),
+        QueueRegisters::CQ_PRODUCER.offset(),
+        QueueRegisters::EQ_PRODUCER.offset(),
+    ] {
+        assert!(matches!(
+            write_u64(&endpoint, q(offset)?, 1).await,
+            Err(MmioRegisterError::Access(_))
+        ));
+    }
+    assert_eq!(cursors(&endpoint).await?, [1, 0, 0, 0, 0, 0, 0]);
     Ok(())
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_event() -> TestResult
 {
-    // Given: an active queue whose first committed descriptor slot contains malformed bytes.
-    let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
+    // Given: an active queue containing a malformed descriptor.
+    let (device, worker) = device(ResourceConfig::default());
     let handle = device.handle();
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let regions = handle.commit_memory_stage(stage).await?;
-    let [submission, _, event] = regions.as_slice() else {
-        return Err("three committed queue regions required".into());
-    };
-    activate_raw(&handle, DeviceEpoch::initial(), QueueId::new(0), &regions).await?;
+    let [submission, _, event] = create_queue(&handle, 2).await?;
+    let endpoint = handle.register_endpoint();
     handle.write_memory(submission.base(), &[0; 64]).await?;
-
-    // When: doorbell-before-publication rejects, publication succeeds, then capture succeeds.
-    support::write_u64(&handle, 0x118, 1).await?;
-    issue_queue_command(&handle, 4).await?;
+    // When: doorbell-before-publication rejects, then publication and capture succeed.
     assert_eq!(
-        read_u32(&handle, 0x168).await?,
-        MmioResult::InvalidTransaction.code()
+        write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await,
+        Err(MmioRegisterError::Control(
+            PdmaControlError::InvalidTransaction
+        ))
     );
-    issue_queue_command(&handle, 2).await?;
-    assert_eq!(read_response(&handle).await?[2..5], [0, 0, 0]);
-    issue_queue_command(&handle, 3).await?;
-    assert_eq!(read_response(&handle).await?[2..5], [1, 0, 0]);
-    assert_eq!(handle.pending_dma_result().await, None);
-    support::write_u64(&handle, 0x110, 0).await?;
-    issue_queue_command(&handle, 4).await?;
+    assert_eq!(cursors(&endpoint).await?, [0; 7]);
+    write_u64(&endpoint, q(QueueRegisters::SQ_PRODUCER.offset())?, 1).await?;
+    assert_eq!(cursors(&endpoint).await?, [1, 0, 0, 0, 0, 0, 0]);
+    write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await?;
     let worker = tokio::spawn(worker.run());
     let snapshot = handle.wait_for_error_after(0).await;
+    // Then: one SQ slot is consumed and a fault event, with no completion, is published.
     assert_eq!((snapshot.steps, snapshot.errors), (0, 1));
-
-    // Then: the existing retirement core consumes one SQ slot and publishes one fault event.
-    issue_queue_command(&handle, 2).await?;
-    let retired = read_response(&handle).await?;
-    assert_eq!(retired[2..5], [1, 1, 1]);
-    assert_eq!(retired[7], 1);
-    println!("{{\"malformed_retirement\":{retired:?}}}");
-    let bytes = handle.read_memory(event.base(), 64).await?;
-    assert!(AbiEvent::decode(&bytes).is_ok());
-    handle.request_shutdown().await;
+    assert_eq!(cursors(&endpoint).await?, [1, 1, 1, 0, 0, 1, 0]);
+    assert!(
+        AbiEvent::decode(
+            &handle
+                .read_memory(event.base(), u64::try_from(AbiEvent::RECORD_SIZE)?)
+                .await?
+        )
+        .is_ok()
+    );
+    write_u64(&endpoint, q(QueueRegisters::EQ_CONSUMER.offset())?, 1).await?;
+    assert!(matches!(
+        write_u64(&endpoint, q(QueueRegisters::EQ_CONSUMER.offset())?, 0).await,
+        Err(MmioRegisterError::Control(PdmaControlError::Abi(
+            AbiControlError::CursorUpdateRegression { .. }
+        )))
+    ));
+    device.request_shutdown().await;
     worker.await?;
     Ok(())
 }

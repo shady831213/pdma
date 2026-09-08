@@ -10,8 +10,8 @@ pub(super) async fn run() -> support::TestResult {
     handle.allocate_memory_region(1).await?;
     let generation = handle.memory_generation().await;
     let (active, observer) = support::observed_handle();
-    let (queue, submission, _) = support::bootstrap(&active).await?;
-    let status = support::queue_status(&active, queue).await?;
+    let submission = support::bootstrap(&active).await?;
+    let status = support::cursors(&active).await?;
     let before = active.snapshot().await;
     let observations = observer.snapshot().len();
     let endpoint = active.register_endpoint();
@@ -28,7 +28,10 @@ pub(super) async fn run() -> support::TestResult {
     assert!(endpoint.write(0, &[0; 4]).await.is_err());
     assert!(
         endpoint
-            .write(0x008, &u32::MAX.to_le_bytes())
+            .write(
+                u32::try_from(GlobalRegisters::RESET.offset())?,
+                &u32::MAX.to_le_bytes()
+            )
             .await
             .is_err()
     );
@@ -41,14 +44,10 @@ pub(super) async fn run() -> support::TestResult {
     assert_eq!(handle.memory_generation().await, generation);
     assert_eq!(active.snapshot().await, before);
     assert_eq!(observer.snapshot().len(), observations);
-    assert_eq!(support::queue_status(&active, queue).await?, status);
+    assert_eq!(support::cursors(&active).await?, status);
     assert_eq!(
         active.read_memory(submission.base(), 128).await?,
         vec![0; 128]
-    );
-    let mut short = [0_u8; 71];
-    assert!(
-        pdma_model_contract::abi::mmio::QueueResponseRegistersViewMut::new(&mut short).is_err()
     );
     capacity_and_overlap().await?;
     Ok(())

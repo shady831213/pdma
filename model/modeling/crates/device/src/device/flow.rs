@@ -1,13 +1,14 @@
 use super::ModelStepStatus;
+use crate::operation::DecodedOperation;
 use crate::queue::io::NormalizedFault;
 use pdma_model_contract::semantic::{
-    CommandId, CommandOperation, CompletionRingId, MemoryFault, QueueId, TraceOperation,
+    BufferId, CommandId, CompletionRingId, EventErrorKind, QueueId, TraceOperation,
 };
 
 #[derive(Debug)]
 pub(super) struct FetchedCommand {
     pub(super) route: CommandRoute,
-    pub(super) operation: CommandOperation,
+    pub(super) operation: DecodedOperation,
 }
 
 #[derive(Debug)]
@@ -62,7 +63,9 @@ pub(super) struct SuccessfulExecution {
 pub(super) struct ExecutionFault {
     pub(super) queue: QueueId,
     pub(super) command: CommandId,
-    pub(super) fault: MemoryFault,
+    pub(super) buffer: Option<BufferId>,
+    pub(super) error_kind: EventErrorKind,
+    pub(super) exact: pdma_model_contract::abi::AbiFault,
 }
 
 #[derive(Debug, Clone, Copy)]

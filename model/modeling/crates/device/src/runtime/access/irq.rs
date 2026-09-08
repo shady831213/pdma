@@ -1,13 +1,65 @@
 //! Async device IRQ control surface.
 
 use crate::ModelResult;
-use crate::irq::mmio::support::observe_irq_source;
 use crate::runtime::{AsyncDeviceHandle, DeviceWait};
-use pdma_model_contract::abi::mmio::IrqSourceStatus;
-use pdma_model_contract::semantic::EpochIrqSource;
-use pdma_model_contract::semantic::irq::{IrqNotification, IrqRoute, IrqSnapshot};
+use pdma_model_contract::semantic::DeviceEpoch;
+use pdma_model_contract::semantic::irq::{IrqNotification, IrqSnapshot};
+
+#[cfg(test)]
+mod tests;
 
 impl AsyncDeviceHandle {
+    /// Takes one available hardware IRQ output after validating its owning epoch.
+    ///
+    /// Empty output returns immediately; dropping while awaiting the backend lock consumes nothing.
+    pub async fn take_irq_notification_at_epoch(
+        &self,
+        epoch: DeviceEpoch,
+    ) -> ModelResult<Option<IrqNotification>> {
+        self.shared
+            .backend
+            .commit(
+                |state| {
+                    state.core.validate_epoch(epoch)?;
+                    let notification = state.core.take_irq_notification();
+                    Ok((notification, notification.is_some()))
+                },
+                Ok,
+            )
+            .await
+    }
+
+    /// Waits without consumption, rejecting reset epochs before inspecting readiness.
+    pub async fn wait_irq_notification_ready_at_epoch(
+        &self,
+        epoch: DeviceEpoch,
+    ) -> ModelResult<bool> {
+        loop {
+            let (ready, shutdown, generation) = self
+                .shared
+                .backend
+                .interact(|state| -> ModelResult<_> {
+                    state.core.validate_epoch(epoch)?;
+                    Ok((
+                        state.core.irq_notification_ready(),
+                        state.shutdown_requested,
+                        state.generation,
+                    ))
+                })
+                .await?;
+            if shutdown {
+                return Ok(false);
+            }
+            if ready {
+                return Ok(true);
+            }
+            self.shared
+                .backend
+                .wait_for_change(DeviceWait::generation(generation))
+                .await;
+        }
+    }
+
     /// Reports notification readiness without consuming a line assertion or message.
     pub async fn irq_notification_ready(&self) -> bool {
         self.shared
@@ -45,56 +97,6 @@ impl AsyncDeviceHandle {
         }
     }
 
-    /// Returns the complete non-consuming state bits for one IRQ source.
-    pub async fn observe_irq_source(&self, source: EpochIrqSource) -> ModelResult<IrqSourceStatus> {
-        self.shared
-            .backend
-            .interact(|state| {
-                observe_irq_source(&state.core.irq, &state.core.queues, source)
-                    .map(|view| view.status)
-            })
-            .await
-    }
-    /// Configures the delivery route of an inactive PDMA-local IRQ source.
-    pub async fn configure_irq_route(
-        &self,
-        source: EpochIrqSource,
-        route: IrqRoute,
-    ) -> ModelResult<()> {
-        self.with_device(|device| device.configure_irq_route(source, route))
-            .await
-    }
-
-    /// Enables a PDMA-local IRQ source.
-    pub async fn enable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        self.with_device(|device| device.enable_irq_source(source))
-            .await
-    }
-
-    /// Disables a PDMA-local IRQ source.
-    pub async fn disable_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        self.with_device(|device| device.disable_irq_source(source))
-            .await
-    }
-
-    /// Masks a PDMA-local IRQ source without clearing pending state.
-    pub async fn mask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        self.with_device(|device| device.mask_irq_source(source))
-            .await
-    }
-
-    /// Unmasks a PDMA-local IRQ source.
-    pub async fn unmask_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        self.with_device(|device| device.unmask_irq_source(source))
-            .await
-    }
-
-    /// Acknowledges a source, retaining a Line cause while source records remain.
-    pub async fn ack_irq_source(&self, source: EpochIrqSource) -> ModelResult<()> {
-        self.with_device(|device| device.ack_irq_source(source))
-            .await
-    }
-
     /// Returns the current pending IRQ snapshot, if any.
     pub async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
         self.shared
@@ -125,35 +127,6 @@ impl AsyncDeviceHandle {
                 .await;
             if let Some(snapshot) = snapshot {
                 return Some(snapshot);
-            }
-            if shutdown {
-                return None;
-            }
-            self.shared
-                .backend
-                .wait_for_change(DeviceWait::generation(generation))
-                .await;
-        }
-    }
-
-    /// Waits for one line or message IRQ notification.
-    pub async fn wait_irq_notification(&self) -> Option<IrqNotification> {
-        loop {
-            let (notification, shutdown, generation) = self
-                .shared
-                .backend
-                .interact(|state| {
-                    if let Some(notification) = state.core.take_irq_notification() {
-                        return (Some(notification), false, state.generation);
-                    }
-                    if state.shutdown_requested {
-                        return (None, true, state.generation);
-                    }
-                    (None, false, state.generation)
-                })
-                .await;
-            if let Some(notification) = notification {
-                return Some(notification);
             }
             if shutdown {
                 return None;

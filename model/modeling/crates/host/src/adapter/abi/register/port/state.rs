@@ -1,25 +1,24 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::adapter::abi::{PdmaMappedRegion, PdmaRegionRequest, RegisterQueueStatus};
 use crate::{PortError, PortResult};
+use crate::{QueueConfig, QueueConfigHandle, QueueDirectoryEntry};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCompletion, AbiEvent, AbiRingEntry, DmaAddress, DmaRegion, QueueRingLayouts,
     RingLayout,
 };
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRingId, DeviceEpoch, QueueActivation, QueueConfig, QueueConfigHandle,
-    QueueDirectoryEntry, QueueId, QueueRingObjects,
+    BufferId, CompletionRingId, DeviceEpoch, EpochQueue, QueueId, RingCursor, RingCursors,
 };
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub(super) struct PortState {
     pub(super) epoch: DeviceEpoch,
-    pub(super) queue: Option<QueueState>,
+    pub(super) queues: BTreeMap<QueueId, QueueState>,
     pub(super) regions: Vec<PdmaMappedRegion>,
-    pub(super) pending: Option<super::pending::PendingCommand>,
-    pub(super) activation: Option<QueueConfigHandle>,
-    pub(super) completion: Option<pdma_model_contract::semantic::CompletionRecord>,
-    pub(super) event: Option<pdma_model_contract::semantic::EventRecord>,
+    pub(super) completion: BTreeMap<QueueId, pdma_model_contract::semantic::CompletionRecord>,
+    pub(super) event: BTreeMap<QueueId, pdma_model_contract::semantic::EventRecord>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -33,28 +32,27 @@ impl PortState {
     pub(super) const fn new(epoch: DeviceEpoch) -> Self {
         Self {
             epoch,
-            queue: None,
+            queues: BTreeMap::new(),
             regions: Vec::new(),
-            pending: None,
-            activation: None,
-            completion: None,
-            event: None,
+            completion: BTreeMap::new(),
+            event: BTreeMap::new(),
         }
     }
 
     pub(super) fn queue(&self, handle: QueueConfigHandle) -> PortResult<QueueState> {
+        if handle.epoch() != self.epoch {
+            return Err(PortError::StaleEpoch {
+                expected: self.epoch,
+                actual: handle.epoch(),
+            });
+        }
         let queue = self
-            .queue
+            .queues
+            .get(&handle.queue_id())
+            .copied()
             .ok_or_else(|| PortError::UnknownQueue(handle.queue_id()))?;
         if queue.handle != handle {
-            return Err(if queue.handle.epoch() == handle.epoch() {
-                PortError::UnknownQueue(handle.queue_id())
-            } else {
-                PortError::StaleEpoch {
-                    expected: queue.handle.epoch(),
-                    actual: handle.epoch(),
-                }
-            });
+            return Err(PortError::UnknownQueue(handle.queue_id()));
         }
         Ok(queue)
     }
@@ -73,22 +71,13 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
     config: QueueConfig,
 ) -> PdmaPortResult<QueueConfigHandle> {
     let _window = port.queue_window.lock().await;
-    super::pending::resolve(port).await?;
-    if let Some(handle) = port.with_state(|state| state.activation)? {
-        if handle.config() != config {
-            return Err(PortError::SubmissionState.into());
-        }
-        super::submission::refresh(port, handle).await?;
-        port.with_state(|state| state.activation = None)?;
-        return Ok(handle);
-    }
-    let epoch = port.with_state(|state| {
-        if state.queue.is_some() {
-            Err(PortError::SubmissionState)
-        } else {
-            Ok(state.epoch)
-        }
-    })??;
+    let epoch = port.with_state(|state| state.epoch)?;
+    let count_offset =
+        u32::try_from(pdma_model_contract::abi::registers::GlobalRegisters::QUEUE_COUNT.offset())
+            .map_err(|_| PortError::SubmissionState)?;
+    let index = usize::try_from(super::registers::read(port, count_offset).await?)
+        .map_err(|_| PortError::SubmissionState)?;
+    let queue_id = QueueId::new(index);
     let lengths = ring_lengths(config)?;
     let alignment = alignment()?;
     let mut allocated = Vec::with_capacity(3);
@@ -110,31 +99,46 @@ pub(super) async fn create_queue<A: CanonicalAccess>(
         layout::<AbiCompletion>(*completion, config.completion_depth())?,
         layout::<AbiEvent>(*event, config.event_depth())?,
     );
-    let activation = QueueActivation::new(
-        epoch,
-        QueueId::new(0),
-        config,
-        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
-    );
     let handle = QueueConfigHandle::new(
-        activation.queue().epoch(),
-        QueueDirectoryEntry::new(
-            activation.queue().queue_id(),
-            CompletionRingId::new(activation.queue().queue_id().raw()),
-            config,
-        ),
+        epoch,
+        QueueDirectoryEntry::new(queue_id, CompletionRingId::new(queue_id.raw()), config),
     );
-    super::bootstrap::stage_activation(port, activation, rings).await?;
-    super::control::command_status(
+    super::bootstrap::stage_activation(port, queue_id, rings).await?;
+    let status = RegisterQueueStatus::new(
+        EpochQueue::new(epoch, queue_id),
+        empty_cursors(rings.submission().depth())?,
+        RingCursor::new(0),
+        empty_cursors(rings.completion().depth())?,
+        empty_cursors(rings.event().depth())?,
+    );
+    let result = super::registers::write(
         port,
-        pdma_model_contract::abi::mmio::QueueCommand::Activate,
-        rings,
-        activation.queue(),
-        super::pending::Effect::Activate { handle, rings },
+        super::registers::queue_offset(
+            queue_id,
+            pdma_model_contract::abi::registers::QueueRegisters::ENABLE.offset(),
+        )?,
+        1,
     )
-    .await?;
-    port.with_state(|state| state.activation = None)?;
+    .await;
+    if super::registers::committed(&result) {
+        port.with_state(|state| {
+            state.queues.insert(
+                queue_id,
+                QueueState {
+                    handle,
+                    rings,
+                    status,
+                },
+            )
+        })?;
+    }
+    result?;
     Ok(handle)
+}
+
+fn empty_cursors(depth: u32) -> PortResult<RingCursors> {
+    RingCursors::try_new(depth, RingCursor::new(0), RingCursor::new(0))
+        .map_err(|_| PortError::SubmissionState)
 }
 
 pub(super) async fn allocate_buffer<A: CanonicalAccess>(

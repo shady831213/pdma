@@ -1,75 +1,57 @@
-use pdma_model_contract::semantic::queue::{EventRouting, QueueConfig, SoftwareOwnerId};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochIrqSource};
-use pdma_model_device::{AsyncDevice, ModelError};
+use super::Fixture;
+use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::{
+    abi::registers::{GlobalRegisters, IrqSourceRegisters, irq_offset},
+    semantic::{DeviceEpoch, ResourceConfig},
+};
+use pdma_model_device::{MmioRegisterError, ModelError};
 
 #[tokio::test(flavor = "current_thread")]
-async fn stale_irq_capability_commits_nothing() {
-    // Given: one real IRQ source and a same-source capability from a later device epoch.
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let worker = tokio::spawn(worker.run());
-    let handle = runner.handle();
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            1,
-            1,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await
-        .expect("queue setup is valid");
-    let source = queue.completion_irq_source();
-    handle
-        .enable_irq_source(source)
-        .await
-        .expect("current IRQ capability enables");
-    let stale_epoch = DeviceEpoch::initial()
-        .next()
-        .expect("initial epoch can advance");
-    let stale = EpochIrqSource::new(stale_epoch, source.source());
-    handle.enable_tracing().await;
-    let before = handle.trace_events().await;
-    let snapshot_before = handle.irq_snapshot().await;
-
-    // When: every stale IRQ control reaches its device commit boundary.
-    let configure = handle
-        .configure_irq_route(
-            stale,
-            pdma_model_contract::semantic::IrqRoute::Message(
-                pdma_model_contract::semantic::IrqVector::new(7),
-            ),
+async fn stale_irq_endpoint_and_notification_capability_commit_nothing() {
+    // Given: an endpoint whose owning epoch has been reset.
+    let (fixture, _worker) = Fixture::new(ResourceConfig::default()).await;
+    fixture.enable_irq(0).await;
+    let initial = DeviceEpoch::initial();
+    fixture
+        .endpoint
+        .write(
+            u32::try_from(GlobalRegisters::RESET.offset()).expect("reset address"),
+            &1_u32.to_le_bytes(),
         )
-        .await;
-    let enable = handle.enable_irq_source(stale).await;
-    let disable = handle.disable_irq_source(stale).await;
-    let mask = handle.mask_irq_source(stale).await;
-    let unmask = handle.unmask_irq_source(stale).await;
-    let ack = handle.ack_irq_source(stale).await;
+        .await
+        .expect("reset");
+    let current = initial.next().expect("epoch");
+    let before = fixture.handle.trace_events().await;
 
-    // Then: every control fails before trace, cause, message, or ack state changes.
-    let expected = Err(ModelError::StaleDeviceEpoch {
-        expected: DeviceEpoch::initial(),
-        actual: stale_epoch,
-    });
-    assert_ne!(source, stale);
-    assert_eq!(configure, expected);
-    assert_eq!(enable, expected);
-    assert_eq!(disable, expected);
-    assert_eq!(mask, expected);
-    assert_eq!(unmask, expected);
-    assert_eq!(ack, expected);
-    assert_eq!(handle.trace_events().await, before);
-    assert_eq!(handle.irq_snapshot().await, snapshot_before);
-    println!(
-        "IRQ epochs current={} stale={} controls={configure:?}/{enable:?}/{disable:?}/{mask:?}/\
-         {unmask:?}/{ack:?} trace_unchanged=true snapshot_unchanged=true",
-        source.epoch().raw(),
-        stale_epoch.raw(),
+    // When: stale writes and notification consumption reach the device boundary.
+    for local in [
+        IrqSourceRegisters::ROUTE_KIND.offset(),
+        IrqSourceRegisters::ENABLED.offset(),
+        IrqSourceRegisters::MASKED.offset(),
+        IrqSourceRegisters::ACK.offset(),
+    ] {
+        let result = fixture
+            .endpoint
+            .write(irq_offset(0, 0, local).expect("IRQ"), &1_u32.to_le_bytes())
+            .await;
+        assert_eq!(
+            result,
+            Err(MmioRegisterError::StaleEpoch {
+                expected: current,
+                actual: initial
+            })
+        );
+    }
+    let notification = fixture.handle.take_irq_notification_at_epoch(initial).await;
+
+    // Then: epoch rejection leaves trace and notification state unchanged.
+    assert_eq!(
+        notification,
+        Err(ModelError::StaleDeviceEpoch {
+            expected: current,
+            actual: initial
+        })
     );
-    runner.request_shutdown().await;
-    worker.await.expect("runner joins cleanly");
+    assert_eq!(fixture.handle.trace_events().await, before);
+    assert!(!fixture.handle.irq_notification_ready().await);
 }

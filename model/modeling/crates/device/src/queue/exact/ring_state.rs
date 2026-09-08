@@ -4,24 +4,8 @@ use super::PdmaControlError;
 use pdma_model_contract::abi::{
     AbiCommand, RingCursor as AbiRingCursor, RingLayout, RingState as AbiRingState,
 };
-use pdma_model_contract::semantic::{RingCursor as SemanticRingCursor, RingCursors};
 
 pub(crate) type RingState<R> = AbiRingState<R>;
-
-pub(crate) const fn exact_cursor(cursor: SemanticRingCursor) -> AbiRingCursor {
-    AbiRingCursor::new(cursor.raw())
-}
-
-pub(super) fn semantic_cursors<R: pdma_model_contract::abi::AbiRingEntry>(
-    state: AbiRingState<R>,
-) -> Result<RingCursors, PdmaControlError> {
-    RingCursors::try_new(
-        state.layout().depth(),
-        SemanticRingCursor::new(state.producer().raw()),
-        SemanticRingCursor::new(state.consumer().raw()),
-    )
-    .map_err(PdmaControlError::from)
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SubmissionRingState {

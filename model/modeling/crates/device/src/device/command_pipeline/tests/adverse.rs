@@ -1,20 +1,14 @@
 use hardware_interface_pipeline::{Operation, StepOutcome};
-use pdma_model_contract::abi::{
-    AbiCommand, AbiCompletion, AbiEvent, AbiEventKind, RingCursor, RingLayout,
-};
-use pdma_model_contract::semantic::{
-    BufferId, CommandId, CommandOperation, CompletionRingId, DeviceEpoch, EventErrorKind,
-    EventRecord, EventRouting, QueueActivation, QueueConfig, QueueId, QueueRingObjects,
-    ResourceConfig, SoftwareOwnerId, TraceEventKind, desc::CopyRequest,
-};
+use pdma_model_contract::abi::{AbiCommand, AbiEventKind, RingCursor};
+use pdma_model_contract::semantic::{CommandId, CompletionRingId, ResourceConfig, TraceEventKind};
 
 use super::support::{Case, Fixture, PipelineRunOutcome, drive_to_complete, prepare, read};
 use crate::ModelError;
 use crate::device::flow::{CommandRoute, FetchedCommand, FetchedWork, RetirementWork};
 use crate::device::retirement::stage::RetirementState;
 use crate::device::{ModelStepStatus, context::HardwareContext};
+use crate::operation::{CopyOperands, DecodedOperation};
 use crate::queue::io::NormalizedFault;
-use crate::queue::{QueueBlock, exact::QueueStatus};
 
 mod hardware;
 
@@ -25,52 +19,25 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     // Given: an exact queue whose captured descriptor has invalid ABI metadata.
     let mut fixture = Fixture::new(ResourceConfig::default());
     fixture.core.enable_tracing();
-    let stage = fixture
-        .provisioning
-        .stage(
-            &fixture.core.memory,
-            &[
-                RingLayout::<AbiCommand>::checked_extent(2).expect("command extent"),
-                RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
-                RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
-            ],
-        )
-        .expect("ring stage");
-    let &[submission, completion, event] = stage.regions() else {
-        panic!("three exact queue rings");
-    };
-    let activation = QueueActivation::new(
-        DeviceEpoch::initial(),
-        QueueId::new(0),
-        QueueConfig::new(2, 1, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
-        QueueRingObjects::new(submission.object(), completion.object(), event.object()),
-    );
-    fixture
-        .provisioning
-        .commit(&mut fixture.core.memory, stage)
-        .expect("ring mappings");
-    fixture
-        .core
-        .activate_mapped_exact_queue(activation)
-        .expect("queue activation");
+    let queue =
+        crate::test_support::configure(&mut fixture.core, &mut fixture.provisioning, 0, [2, 1, 1]);
+    let address = queue
+        .layouts
+        .submission()
+        .entry_address(RingCursor::new(0))
+        .expect("SQ slot");
     fixture
         .core
         .memory
-        .write_memory(submission.base(), &[0; AbiCommand::RECORD_SIZE])
-        .expect("malformed descriptor");
-    let queue = activation.queue().queue_id();
-    let active = fixture
-        .core
-        .queues
-        .exact_ring_mut(queue)
-        .expect("exact queue");
-    active
-        .publish_submission_producer(RingCursor::new(1))
-        .expect("publish producer");
-    active
-        .capture_submission_producer(RingCursor::new(1))
-        .expect("capture producer");
-    fixture.core.runnable.enqueue(queue);
+        .write_memory(address, &[0; AbiCommand::RECORD_SIZE])
+        .expect("invalid descriptor");
+    crate::test_support::write_queue(
+        &mut fixture.core,
+        queue,
+        pdma_model_contract::abi::registers::QueueRegisters::SQ_PRODUCER.offset(),
+        1,
+    );
+    crate::test_support::doorbell(&mut fixture.core, queue);
 
     // When: fetch normalizes the descriptor violation and retirement publishes it.
     assert_eq!(
@@ -80,10 +47,14 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     assert!(fixture.core.command_pipeline.is_empty());
     assert!(fixture.core.retirement.is_pending());
     assert_eq!(fixture.fetch_count(), 1);
-    let cached = exact_status(&fixture.core.queues, queue);
-    assert_eq!(cached.submission().consumer().raw(), 1);
-    assert_eq!(cached.event().producer().raw(), 0);
-    assert_eq!(cached.completion().producer().raw(), 0);
+    assert_eq!(
+        super::support::cursors(&fixture.core, queue),
+        ((1, 1), (0, 0))
+    );
+    assert_eq!(
+        crate::test_support::poll_event(&mut fixture.core, queue),
+        None
+    );
     let cached_trace = fixture.core.trace_events();
     assert_eq!(fixture.step(), PipelineRunOutcome::Exhausted);
     assert_eq!(fixture.core.trace_events(), cached_trace);
@@ -97,38 +68,22 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     assert!(!fixture.core.retirement.is_pending());
 
     // Then: one SQ slot and one event slot advance with no success publication.
-    let status = exact_status(&fixture.core.queues, queue);
     assert_eq!(
-        (
-            status.submission().producer().raw(),
-            status.submission().consumer().raw(),
-            status.captured_submission_producer().raw(),
-            status.completion().producer().raw(),
-            status.event().producer().raw(),
-        ),
-        (1, 1, 1, 0, 1)
+        super::support::cursors(&fixture.core, queue),
+        ((1, 1), (0, 0))
     );
-    let published = fixture
-        .core
-        .memory
-        .read_memory(event.base(), AbiEvent::RECORD_SIZE as u64)
-        .expect("event bytes");
-    let event = AbiEvent::decode(&published).expect("canonical event");
+    let event = crate::test_support::poll_event(&mut fixture.core, queue).expect("fault event");
     assert_eq!(event.fault().kind(), AbiEventKind::InvalidVersion);
     assert_eq!(fixture.core.irq_snapshot(), None);
     assert_eq!(
         super::support::trace_kinds(&fixture.core.trace_events()),
-        [TraceEventKind::EventPublished]
+        [
+            TraceEventKind::DoorbellRunnable,
+            TraceEventKind::EventPublished,
+            TraceEventKind::EventPolled
+        ]
     );
     assert_eq!(fixture.step(), PipelineRunOutcome::Exhausted);
-}
-
-fn exact_status(queues: &QueueBlock, queue: QueueId) -> QueueStatus {
-    queues
-        .exact_ring(queue)
-        .expect("exact queue")
-        .status()
-        .expect("queue status")
 }
 
 #[test]
@@ -136,51 +91,57 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
     // Given: normalized frontend failure state already staged by the queue frontend.
     let mut prepared = prepare(Case::Copy);
     let queue = prepared.queue.queue_id();
-    let source = ModelError::UnknownBuffer(BufferId::new(88));
-    let event = EventRecord::new(
-        queue,
-        CommandId::new(7),
-        EventErrorKind::UnknownBuffer,
-        BufferId::new(88),
-    );
-    assert_eq!(
-        prepared
-            .fixture
-            .core
-            .queues
-            .stage_execution_fault(queue, event),
-        Ok(source)
-    );
-    // When: the retirement owner caches the frontend failure, then retries it.
+    let address = prepared
+        .queue
+        .layouts
+        .submission()
+        .entry_address(RingCursor::new(0))
+        .expect("descriptor");
+    prepared
+        .fixture
+        .core
+        .memory
+        .write_memory(address, &0_u16.to_le_bytes())
+        .expect("invalid version");
+    let source = ModelError::DmaSubmissionState;
+    let fetched = prepared
+        .fixture
+        .core
+        .queues
+        .fetch(&prepared.fixture.core.memory, queue)
+        .expect("fetch");
+    assert!(matches!(
+        fetched,
+        Some(crate::queue::io::NormalizedFetch::Fault(_))
+    ));
     assert_eq!(
         retire(
             &mut prepared.fixture.core,
             RetirementState::Work(RetirementWork::FrontendFault(NormalizedFault {
                 queue,
                 source
-            })),
+            }))
         ),
         Ok(ModelStepStatus::FaultCached)
     );
     assert_eq!(
-        prepared.fixture.core.queues.semantic_cursors(queue),
-        Ok(((1, 1), (0, 0)))
+        super::support::cursors(&prepared.fixture.core, prepared.queue),
+        ((1, 1), (0, 0))
     );
     let retired = retire(&mut prepared.fixture.core, RetirementState::Retry);
-
-    // Then: the exact source, one event, and one consumer advance are preserved.
     assert_eq!(retired, Err(source));
+    let event =
+        crate::test_support::poll_event(&mut prepared.fixture.core, prepared.queue).expect("event");
+    assert_eq!(event.command_id, 7);
+    assert_eq!(event.fault().kind(), AbiEventKind::InvalidVersion);
+    assert_eq!(event.fault_locator, address.raw());
     assert_eq!(
-        prepared.fixture.core.poll_queue_event(prepared.queue),
-        Ok(Some(event))
+        crate::test_support::poll_event(&mut prepared.fixture.core, prepared.queue),
+        None
     );
     assert_eq!(
-        prepared.fixture.core.poll_queue_event(prepared.queue),
-        Ok(None)
-    );
-    assert_eq!(
-        prepared.fixture.core.queues.semantic_cursors(queue),
-        Ok(((1, 1), (0, 0)))
+        super::support::cursors(&prepared.fixture.core, prepared.queue),
+        ((1, 1), (0, 0))
     );
 }
 
@@ -207,11 +168,11 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
     );
     let mut operation = Operation::new(FetchedWork::Command(FetchedCommand {
         route,
-        operation: CommandOperation::Copy(CopyRequest::new(
-            source.object(),
-            prepared.destinations[0].object(),
-            4,
-        )),
+        operation: DecodedOperation::Copy(CopyOperands {
+            source: source.base(),
+            destination: prepared.destinations[0].base(),
+            length: 4,
+        }),
     }));
 
     // When: execution validates the route and enters invalid-completion retirement.
@@ -251,20 +212,19 @@ fn invalid_completion_retires_without_dma_or_success_publication() {
         Ok(vec![0; 8])
     );
     assert_eq!(
-        prepared.fixture.core.poll_completion(prepared.queue),
-        Ok(None)
+        crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue),
+        None
     );
     assert_eq!(
-        prepared.fixture.core.poll_queue_event(prepared.queue),
-        Ok(None)
+        crate::test_support::poll_event(&mut prepared.fixture.core, prepared.queue),
+        None
     );
     assert_eq!(prepared.fixture.core.irq_snapshot(), None);
     assert_eq!(
-        prepared
-            .fixture
-            .core
-            .queues
-            .semantic_cursors(prepared.queue.queue_id()),
-        Ok(((1, 1), (0, 0)))
+        crate::device::command_pipeline::tests::support::cursors(
+            &prepared.fixture.core,
+            prepared.queue
+        ),
+        ((1, 1), (0, 0))
     );
 }

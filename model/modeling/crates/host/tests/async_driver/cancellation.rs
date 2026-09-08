@@ -1,8 +1,9 @@
 use super::support::BlockingPort;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{CommandId, CopyRequest};
+use pdma_model_contract::semantic::CommandId;
 use pdma_model_device::AsyncDevice;
 use pdma_model_host::AsyncDriver;
+use pdma_model_host::CopyRequest;
 use pdma_model_host::DriverError;
 use pdma_model_host::DriverResult;
 use tokio::sync::oneshot;

@@ -1,8 +1,8 @@
 mod irq;
 
 use crate::trace::event;
-use pdma_model_contract::semantic::completion::CompletionRecord;
-use pdma_model_contract::semantic::event::EventRecord;
+use pdma_model_contract::abi::AbiCompletion;
+use pdma_model_contract::semantic::event::EventErrorKind;
 use pdma_model_contract::semantic::ids::{CommandId, QueueId};
 use pdma_model_contract::semantic::trace::{TraceEvent, TraceEventKind, TraceOperation};
 
@@ -16,6 +16,10 @@ pub(crate) struct TraceSink {
 }
 
 impl TraceSink {
+    pub(crate) const fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     /// Enables event capture.
     pub(crate) const fn enable(&mut self) {
         self.enabled = true;
@@ -102,43 +106,44 @@ impl TraceSink {
         );
     }
 
-    pub(crate) fn execution_faulted(&mut self, record: EventRecord) {
+    pub(crate) fn execution_faulted(
+        &mut self,
+        queue: QueueId,
+        command: CommandId,
+        error: EventErrorKind,
+    ) {
         self.push(
             TraceEventKind::ExecutionFaulted,
-            self.operation_for(record.queue_id(), record.command_id()),
-            Some(record.queue_id()),
-            Some(record.command_id()),
-            event::event_detail(record),
+            self.operation_for(queue, command),
+            Some(queue),
+            Some(command),
+            event::event_detail(error),
         );
     }
 
-    pub(crate) fn completion_published(&mut self, record: CompletionRecord) {
+    pub(crate) fn completion_published(&mut self, record: AbiCompletion) {
+        let Some((queue, command)) = completion_ids(record) else {
+            return;
+        };
         self.push(
             TraceEventKind::CompletionPublished,
             None,
-            Some(record.queue_id()),
-            Some(record.command_id()),
+            Some(queue),
+            Some(command),
             event::completion_detail(record),
         );
     }
 
-    pub(crate) fn completion_polled(&mut self, record: CompletionRecord) {
+    pub(crate) fn completion_polled(&mut self, record: AbiCompletion) {
+        let Some((queue, command)) = completion_ids(record) else {
+            return;
+        };
         self.push(
             TraceEventKind::CompletionPolled,
             None,
-            Some(record.queue_id()),
-            Some(record.command_id()),
+            Some(queue),
+            Some(command),
             "completion poll Some",
-        );
-    }
-
-    pub(crate) fn event_published(&mut self, record: EventRecord) {
-        self.push(
-            TraceEventKind::EventPublished,
-            None,
-            Some(record.queue_id()),
-            Some(record.command_id()),
-            event::event_detail(record),
         );
     }
 
@@ -152,23 +157,14 @@ impl TraceSink {
         );
     }
 
-    pub(crate) fn event_poll(&mut self, queue_id: QueueId, record: Option<EventRecord>) {
-        match record {
-            Some(event) => self.push(
-                TraceEventKind::EventPolled,
-                None,
-                Some(event.queue_id()),
-                Some(event.command_id()),
-                "event poll Some",
-            ),
-            None => self.push(
-                TraceEventKind::EventPolled,
-                None,
-                Some(queue_id),
-                None,
-                "event poll None",
-            ),
-        }
+    pub(crate) fn dma_event_polled(&mut self, queue: QueueId, command: CommandId) {
+        self.push(
+            TraceEventKind::EventPolled,
+            None,
+            Some(queue),
+            Some(command),
+            "event poll Some",
+        );
     }
 
     pub(crate) fn stall(&mut self, queue_id: Option<QueueId>, detail: &'static str) {
@@ -237,4 +233,11 @@ impl TraceSink {
             self.next_sequence = self.next_sequence.saturating_add(1);
         }
     }
+}
+
+fn completion_ids(record: AbiCompletion) -> Option<(QueueId, CommandId)> {
+    Some((
+        QueueId::new(usize::try_from(record.origin_queue_id).ok()?),
+        CommandId::new(usize::try_from(record.command_id).ok()?),
+    ))
 }

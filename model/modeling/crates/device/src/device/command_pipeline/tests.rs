@@ -83,12 +83,11 @@ fn undoorbelled_submission_keeps_three_interactions_without_idle_trace() {
     assert_eq!(prepared.fixture.fetch_count(), 0);
     assert_eq!(prepared.fixture.core.trace_events(), trace);
     assert_eq!(
-        prepared
-            .fixture
-            .core
-            .queues
-            .semantic_cursors(prepared.queue.queue_id()),
-        Ok(((0, 1), (0, 0)))
+        crate::device::command_pipeline::tests::support::cursors(
+            &prepared.fixture.core,
+            prepared.queue
+        ),
+        ((0, 1), (0, 0))
     );
     assert!(prepared.fixture.core.command_pipeline.is_empty());
 }

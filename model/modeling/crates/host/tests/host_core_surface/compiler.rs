@@ -7,9 +7,13 @@ use std::{
 
 static NEXT_COMPILE: AtomicU64 = AtomicU64::new(0);
 
-struct CompileSurfaceObservables {
-    manual_irq_methods: usize,
-    device_types: usize,
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "the compile fixture exposes observations only to its parent test module"
+)]
+pub(super) struct CompileSurfaceObservables {
+    pub(super) manual_irq_methods: usize,
+    pub(super) device_types: usize,
 }
 
 struct CompileDirectory(PathBuf);
@@ -32,7 +36,11 @@ impl Drop for CompileDirectory {
     }
 }
 
-fn verify_downstream_compile_surface() -> Result<CompileSurfaceObservables, String> {
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "the private compile helper is called only by its parent test module"
+)]
+pub(super) fn verify_downstream_compile_surface() -> Result<CompileSurfaceObservables, String> {
     let output = CompileDirectory::create()?;
     create_compile_crate(&output.0)?;
     let pass = compile_fixture(

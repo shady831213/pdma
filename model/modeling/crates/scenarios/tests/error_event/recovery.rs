@@ -1,12 +1,10 @@
 use hardware_interface_runtime::{SharedMemory, SoftwareCpu};
-use pdma_model_contract::semantic::{
-    CompletionStatus, EventErrorKind,
-    desc::{CopyRequest, StridedCopyRequest},
-};
+use pdma_model_contract::semantic::{CompletionStatus, EventErrorKind};
 use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
 use pdma_model_host::{
     AsyncDriver, adapter::abi::AsyncDeviceAccess, adapter::abi::PdmaRegisterPort,
 };
+use pdma_model_host::{CopyRequest, StridedCopyRequest};
 use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]
@@ -19,11 +17,8 @@ async fn async_runner_publishes_many_memory_fault_events_without_masking_origina
     let worker = tokio::spawn(worker.run());
     let (snapshot, error_kinds, no_event) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 66, 66)
                 .await
                 .expect("queue setup is valid");
@@ -90,11 +85,8 @@ async fn async_runner_publishes_one_event_and_later_command_still_completes_afte
         no_event,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
-                runner.handle(),
-                pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-            ))
-            .expect("active CPU creates register port");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active CPU creates register port");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

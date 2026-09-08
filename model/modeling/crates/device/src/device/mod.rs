@@ -9,7 +9,6 @@ use crate::queue::QueueBlock;
 use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::abi::mmio::GlobalRegistersValues;
 
 #[derive(Debug)]
 /// Synchronous ownership root for PDMA hardware state consumed by the async runtime.
@@ -22,7 +21,6 @@ pub struct DeviceCore {
     command_pipeline: command_pipeline::PipelineSlot,
     native_fetches: usize,
     pub(crate) memory: PdmaMemoryMappings,
-    pub(crate) global_registers: GlobalRegistersValues,
     pub(crate) queues: QueueBlock,
     runnable: RunnableQueues,
     issue: issue::IssueUnit,
@@ -41,7 +39,6 @@ impl DeviceCore {
             command_pipeline: command_pipeline::PipelineSlot::new(),
             native_fetches: 0,
             memory: PdmaMemoryMappings::new(memory),
-            global_registers: GlobalRegistersValues::default(),
             queues: QueueBlock::default(),
             runnable: RunnableQueues::default(),
             issue: issue::IssueUnit::default(),
@@ -53,7 +50,7 @@ impl DeviceCore {
         }
     }
 
-    pub(super) const fn epoch(&self) -> DeviceEpoch {
+    pub(crate) const fn epoch(&self) -> DeviceEpoch {
         self.epoch
     }
 

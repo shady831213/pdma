@@ -4,6 +4,8 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+mod cancellation;
+
 #[derive(Debug, Default)]
 struct Recorder(Mutex<Vec<RegisterObservation>>);
 

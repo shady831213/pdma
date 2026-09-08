@@ -3,7 +3,7 @@ use crate::device::flow::ExecutionFault;
 use crate::queue::io::PublicationOutcome;
 use crate::status::AsyncStallReason;
 use crate::{ModelError, ModelResult};
-use pdma_model_contract::semantic::{EventRecord, IrqSource, QueueId};
+use pdma_model_contract::semantic::{IrqSource, QueueId};
 
 impl RetirementUnit {
     pub(super) fn retire_fault(
@@ -11,9 +11,10 @@ impl RetirementUnit {
         ports: &mut RetirementPorts<'_>,
         fault: ExecutionFault,
     ) -> ModelResult<RetirementStatus> {
-        let event = EventRecord::from_memory_fault(fault.queue, fault.command, fault.fault);
-        ports.trace.execution_faulted(event);
-        let source = ports.stage_fault(fault.queue, event)?;
+        ports
+            .trace
+            .execution_faulted(fault.queue, fault.command, fault.error_kind);
+        let source = ports.stage_fault(fault)?;
         if ports
             .queues
             .fault_blocked(fault.queue, ports.resources.event_publication_slots())?
@@ -42,7 +43,7 @@ impl RetirementUnit {
         }
         ports.latch(IrqSource::Event(fault.queue));
         ports.retire_command(fault.queue)?;
-        Err(RetirementPorts::model_error(fault.fault))
+        Err(source)
     }
 
     pub(super) fn retry_fault(
@@ -51,21 +52,26 @@ impl RetirementUnit {
         queue: QueueId,
         source: Option<ModelError>,
     ) -> ModelResult<RetirementStatus> {
+        let (reason, detail) = if std::mem::take(&mut self.fault_unattempted) {
+            (
+                AsyncStallReason::EventPublicationPressure,
+                "EventPublicationPressure",
+            )
+        } else {
+            (
+                AsyncStallReason::FaultRetirementPendingRetry,
+                "FaultRetirementPendingRetry",
+            )
+        };
         if ports
             .queues
             .fault_blocked(queue, ports.resources.event_publication_slots())?
         {
-            ports
-                .trace
-                .stall(Some(queue), "FaultRetirementPendingRetry");
-            return Ok(RetirementStatus::Stalled(
-                AsyncStallReason::FaultRetirementPendingRetry,
-            ));
+            ports.trace.stall(Some(queue), detail);
+            return Ok(RetirementStatus::Stalled(reason));
         }
         if ports.publish_fault(queue)? == PublicationOutcome::Retry {
-            return Ok(RetirementStatus::Stalled(
-                AsyncStallReason::FaultRetirementPendingRetry,
-            ));
+            return Ok(RetirementStatus::Stalled(reason));
         }
         ports.latch(IrqSource::Event(queue));
         self.complete();

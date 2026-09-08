@@ -1,58 +1,41 @@
-mod broadcast;
-mod copy;
-mod resolve;
-mod vector;
+use crate::operation::{
+    BroadcastOperands, CopyOperands, DecodedCommand, DecodedOperation, StridedOperands,
+    VectorOperands,
+};
+use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, DmaAddress};
+use pdma_model_contract::semantic::CommandId;
 
-use crate::ModelResult;
-use crate::memory::PdmaMemoryMappings;
-use pdma_model_contract::abi::{AbiCommand, AbiCommandPayloadValues, AbiEvent, AbiFault};
-use pdma_model_contract::semantic::{Command, CommandId, CommandOperation};
-
-#[derive(Clone, Copy)]
-pub(crate) struct ExactCommandContext {
-    queue: u64,
-    exact_command: u64,
-    command: CommandId,
-}
-
-impl ExactCommandContext {
-    pub(crate) const fn new(queue: u64, exact_command: u64, command: CommandId) -> Self {
-        Self {
-            queue,
-            exact_command,
-            command,
+pub(crate) const fn decode(command: AbiCommand, id: CommandId) -> DecodedCommand {
+    let operation = match command.payload() {
+        AbiCommandPayloadValues::Copy(value) => DecodedOperation::Copy(CopyOperands {
+            source: DmaAddress::new(value.source_dma_address),
+            destination: DmaAddress::new(value.destination_dma_address),
+            length: value.length.value(),
+        }),
+        AbiCommandPayloadValues::StridedCopy(value) => {
+            DecodedOperation::StridedCopy(StridedOperands {
+                source: DmaAddress::new(value.source_dma_address),
+                destination: DmaAddress::new(value.destination_dma_address),
+                rows: value.rows.value(),
+                row_bytes: value.row_bytes.value(),
+                source_stride: value.source_stride.value(),
+                destination_stride: value.destination_stride.value(),
+            })
         }
-    }
-
-    pub(crate) fn resolve(
-        self,
-        memory: &PdmaMemoryMappings,
-        command: AbiCommand,
-    ) -> ModelResult<Result<Command, AbiEvent>> {
-        let resolution = ResolutionContext {
-            memory,
-            command: self.command,
-        };
-        let result: Result<Command, AbiFault> = match command.payload() {
-            AbiCommandPayloadValues::Copy(values) => copy::copy(resolution, values),
-            AbiCommandPayloadValues::StridedCopy(values) => copy::strided(resolution, values),
-            AbiCommandPayloadValues::BroadcastCopy(values) => {
-                broadcast::broadcast(resolution, values)
-            }
-            AbiCommandPayloadValues::VectorAdd(values) => vector::vector(resolution, values),
-        }?;
-        Ok(result.map_err(|fault| AbiEvent::new(self.queue, self.exact_command, fault)))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ResolutionContext<'a> {
-    memory: &'a PdmaMemoryMappings,
-    command: CommandId,
-}
-
-impl ResolutionContext<'_> {
-    const fn complete(self, operation: CommandOperation) -> Command {
-        Command::new(self.command, operation)
-    }
+        AbiCommandPayloadValues::BroadcastCopy(value) => {
+            DecodedOperation::BroadcastCopy(BroadcastOperands {
+                source: DmaAddress::new(value.source_dma_address),
+                destination_list: DmaAddress::new(value.destination_list_dma_address),
+                destination_count: value.destination_count.value(),
+                length: value.length.value(),
+            })
+        }
+        AbiCommandPayloadValues::VectorAdd(value) => DecodedOperation::VectorAdd(VectorOperands {
+            source_a: DmaAddress::new(value.source_a_dma_address),
+            source_b: DmaAddress::new(value.source_b_dma_address),
+            destination: DmaAddress::new(value.destination_dma_address),
+            length: value.length.value(),
+        }),
+    };
+    DecodedCommand { id, operation }
 }

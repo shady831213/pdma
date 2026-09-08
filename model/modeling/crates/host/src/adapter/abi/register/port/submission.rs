@@ -1,8 +1,7 @@
-use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
-use crate::{PortError, PortResult};
+use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, registers};
+use crate::{Command, PortError, QueueConfigHandle};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::abi::RingCursor as AbiRingCursor;
-use pdma_model_contract::semantic::{Command, QueueConfigHandle};
+use pdma_model_contract::abi::{RingCursor as AbiRingCursor, registers::QueueRegisters};
 
 pub(super) async fn submit<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
@@ -20,7 +19,7 @@ pub(super) async fn submit<A: CanonicalAccess>(
         .status
         .submission()
         .update_producer(next)
-        .map_err(|_| PortError::SubmissionState)?;
+        .map_err(|_| PortError::RingFull)?;
     let abi = super::descriptor::encode_command(port, command).await?;
     let layout = queue.rings.submission();
     let mut descriptor = vec![0_u8; usize::from(layout.entry_size())];
@@ -36,20 +35,18 @@ pub(super) async fn submit<A: CanonicalAccess>(
         MemoryAlignment::ONE,
         &descriptor,
     )?;
-    let status = super::control::update_cursor(
+    let result = registers::write(
         port,
-        pdma_model_contract::semantic::QueueCursorUpdate::new(queue.status.queue(), next),
-        queue.rings,
-        pdma_model_contract::abi::mmio::QueueCommand::PublishSqProducer,
-        producer,
-        super::pending::Effect::Submit(receipt),
+        registers::queue_offset(handle.queue_id(), QueueRegisters::SQ_PRODUCER.offset())?,
+        next.raw(),
     )
-    .await?;
-    Ok(port.with_state(|state| -> PortResult<()> {
-        let active = state.queue(handle)?;
-        state.queue = Some(super::state::QueueState { status, ..active });
-        Ok(())
-    })??)
+    .await;
+    if registers::committed(&result) {
+        if let Some(receipt) = receipt {
+            receipt.accept();
+        }
+    }
+    result
 }
 
 pub(super) async fn doorbell<A: CanonicalAccess>(
@@ -58,22 +55,12 @@ pub(super) async fn doorbell<A: CanonicalAccess>(
 ) -> PdmaPortResult<()> {
     let _window = port.queue_window.lock().await;
     let queue = refresh(port, handle).await?;
-    let current = queue.status.captured_submission_producer();
-    let proposed = queue.status.submission().producer();
-    let status = super::control::update_cursor(
+    registers::write(
         port,
-        pdma_model_contract::semantic::QueueCursorUpdate::new(queue.status.queue(), proposed),
-        queue.rings,
-        pdma_model_contract::abi::mmio::QueueCommand::CaptureSqProducer,
-        current,
-        super::pending::Effect::Status,
+        registers::queue_offset(handle.queue_id(), QueueRegisters::DOORBELL.offset())?,
+        queue.status.submission().producer().raw(),
     )
-    .await?;
-    Ok(port.with_state(|state| -> PortResult<()> {
-        let active = state.queue(handle)?;
-        state.queue = Some(super::state::QueueState { status, ..active });
-        Ok(())
-    })??)
+    .await
 }
 
 pub(super) async fn refresh<A: CanonicalAccess>(
@@ -85,7 +72,7 @@ pub(super) async fn refresh<A: CanonicalAccess>(
     port.with_state(|state| {
         let current = state.queue(handle)?;
         let refreshed = super::state::QueueState { status, ..current };
-        state.queue = Some(refreshed);
+        state.queues.insert(handle.queue_id(), refreshed);
         Ok(refreshed)
     })?
 }

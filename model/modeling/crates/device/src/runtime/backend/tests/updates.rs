@@ -62,11 +62,15 @@ async fn commit_finishes_outside_lock_before_publication() {
                 state.errors += 1;
                 Ok::<_, &'static str>(((), true))
             },
-            |()| Err::<(), _>("observer failed"),
+            |()| {
+                assert!(backend.state.try_lock().is_ok());
+                assert!(!changes.has_changed().expect("no early failure publication"));
+                Err::<(), _>("observer failed")
+            },
         )
         .await;
 
-    // Then: committed state remains, but failure does not publish a successful wake.
+    // Then: the observer error preserves committed state and publishes its wake after emission.
     assert_eq!(rejected, Err("observer failed"));
     assert_eq!(
         backend
@@ -74,7 +78,12 @@ async fn commit_finishes_outside_lock_before_publication() {
             .await,
         (2, 2)
     );
-    assert!(!changes.has_changed().expect("no failure publication"));
+    assert!(
+        changes
+            .has_changed()
+            .expect("committed failure publication")
+    );
+    assert_eq!(*changes.borrow_and_update(), 2);
 }
 
 #[tokio::test]

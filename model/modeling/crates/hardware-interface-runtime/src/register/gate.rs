@@ -35,6 +35,13 @@ impl ObservationGate {
 pub struct ObservationReservation(BlockingObservationReservation);
 
 impl ObservationReservation {
+    /// Cancels an unused reservation only when no later range has been reserved.
+    ///
+    /// Callers must serialize reservation and cancellation; misuse faults the gate.
+    pub fn cancel_latest(self) -> Result<(), ObservationGateError> {
+        self.0.cancel_latest()
+    }
+
     /// Returns the first reserved sequence.
     pub const fn start_sequence(&self) -> u64 {
         self.0.start_sequence()

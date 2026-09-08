@@ -1,8 +1,6 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort, state};
-use pdma_model_contract::semantic::{
-    BufferId, EpochIrqSource, IrqNotification, IrqRoute, IrqSnapshot, QueueConfig,
-    QueueConfigHandle,
-};
+use crate::{QueueConfig, QueueConfigHandle};
+use pdma_model_contract::semantic::{BufferId, EpochIrqSource, IrqRoute};
 
 impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     /// Creates a queue without erasing provisioning or register failures.
@@ -24,22 +22,6 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
         source: EpochIrqSource,
         route: IrqRoute,
     ) -> PdmaPortResult<()> {
-        super::irq::source_command(
-            self,
-            source,
-            Some(route),
-            pdma_model_contract::abi::mmio::IrqCommand::ConfigureRoute,
-        )
-        .await
-    }
-
-    /// Reads a line snapshot without erasing generated-response failures.
-    pub async fn try_irq_snapshot(&self) -> PdmaPortResult<Option<IrqSnapshot>> {
-        super::irq::snapshot(self).await
-    }
-
-    /// Claims a notification without erasing readiness or claim failures.
-    pub async fn try_wait_irq_notification(&mut self) -> PdmaPortResult<Option<IrqNotification>> {
-        self.claim_notification().await
+        super::irq::configure(self, source, route).await
     }
 }

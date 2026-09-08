@@ -1,8 +1,9 @@
 use super::support::BlockingPort;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest, QueueId};
+use pdma_model_contract::semantic::{CommandId, QueueId};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
 use pdma_model_host::AsyncDriver;
+use pdma_model_host::CopyRequest;
 use pdma_model_host::DriverError;
 use pdma_model_host::DriverResult;
 use std::{
@@ -200,7 +201,7 @@ async fn event_repoll(context: InvalidContext) -> DriverResult<()> {
     let control = port.clone();
     let owner = SoftwareCpu::new();
     let (mut driver, request) = setup_copy(&owner, &mut port).await?;
-    let bad = CopyRequest::new(BufferId::new(usize::MAX), request.dst(), request.len());
+    let bad = CopyRequest::new(request.src(), request.dst(), request.len() + 1);
     owner
         .run_main(driver.submit_copy_on(&mut port, bad))
         .await?;

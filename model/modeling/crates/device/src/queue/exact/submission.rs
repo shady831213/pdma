@@ -1,17 +1,18 @@
 use super::ActiveQueue;
 use super::PdmaControlError;
-use crate::adapter::command::ExactCommandContext;
+use crate::adapter::command::decode;
 use crate::memory::PdmaMemoryMappings;
+use crate::operation::DecodedCommand;
 use crate::queue::io::{NormalizedFault, NormalizedFetch};
 use crate::{ModelError, ModelResult};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandView, AbiEvent, AbiEventKind, DescriptorDecodeError, DmaAddress,
 };
-use pdma_model_contract::semantic::{BufferId, Command, CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::semantic::{BufferId, CommandId, CompletionRingId, QueueId};
 
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
-    Command(Command),
+    Command(DecodedCommand),
     Fault(QueueId, AbiEvent),
 }
 
@@ -34,14 +35,7 @@ pub(super) fn fetch(
     let exact_queue_id =
         u64::try_from(queue_id.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
     match AbiCommand::decode(&bytes) {
-        Ok(command) => ExactCommandContext::new(exact_queue_id, exact_command_id, command_id)
-            .resolve(memory, command)
-            .map(|result| {
-                Some(result.map_or_else(
-                    |event| ExactFetch::Fault(queue_id, event),
-                    ExactFetch::Command,
-                ))
-            }),
+        Ok(command) => Ok(Some(ExactFetch::Command(decode(command, command_id)))),
         Err(DescriptorDecodeError::Violation(violation)) => Ok(Some(ExactFetch::Fault(
             queue_id,
             AbiEvent::new(

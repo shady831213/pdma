@@ -1,93 +1,128 @@
 use super::*;
+use pdma_model_device::PdmaMemoryError;
+
+#[tokio::test]
+async fn skipped_queue_identity_rejects_without_allocating_a_slot() -> TestResult {
+    // Given: an untouched hardware queue collection.
+    let (device, _worker) = device(ResourceConfig::default());
+    let handle = device.handle();
+    let endpoint = handle.register_endpoint();
+    let before = handle.snapshot().await;
+    // When: configuration skips the next available queue identity.
+    let offset =
+        pdma_model_contract::abi::registers::queue_offset(1, QueueRegisters::SQ_BASE.offset())?;
+    assert_eq!(
+        write_u64(&endpoint, offset, 0x1000).await,
+        Err(MmioRegisterError::Control(PdmaControlError::InvalidQueue))
+    );
+    // Then: no slot is allocated and queue zero remains available for exact activation.
+    assert_eq!(handle.snapshot().await, before);
+    assert_eq!(
+        read_u32(
+            &endpoint,
+            u32::try_from(GlobalRegisters::QUEUE_COUNT.offset())?
+        )
+        .await?,
+        0
+    );
+    create_queue(&handle, 2).await?;
+    assert_eq!(cursors(&endpoint).await?, [0; 7]);
+    Ok(())
+}
 
 #[tokio::test]
 async fn raw_activation_rejects_uncommitted_partial_and_wrong_extent_mappings_without_mutation()
 -> TestResult {
-    // Given: uncommitted, partially committed, and wrong-extent mapping sets.
-    let (uncommitted_device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let uncommitted = uncommitted_device.handle();
-    let proposed = uncommitted.stage_memory_regions(&[128, 64, 128]).await?;
-    let [sq, cq, eq] = proposed.regions() else {
-        return Err("three proposed regions required".into());
-    };
-    program_activation(
-        &uncommitted,
-        RawActivation::depth_two(DeviceEpoch::initial(), QueueId::new(0), [*sq, *cq, *eq]),
-    )
-    .await?;
-
-    // When: repeated ACTIVATE commands target DMA that has not been committed.
+    // Given: mappings staged but not committed to hardware.
+    let (device, _worker) = device(ResourceConfig::default());
+    let handle = device.handle();
+    let endpoint = handle.register_endpoint();
+    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
+    program_activation(&endpoint, stage.regions(), 2).await?;
+    let before = handle.snapshot().await;
+    // When: enabling repeatedly encounters uncommitted DMA.
     for _ in 0..2 {
-        issue_queue_command(&uncommitted, 1).await?;
-        assert_eq!(
-            read_u32(&uncommitted, 0x168).await?,
-            MmioResult::DmaUnmapped.code()
-        );
+        assert!(matches!(
+            write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await,
+            Err(MmioRegisterError::Control(PdmaControlError::Dma(
+                PdmaMemoryError::InvalidRegion
+            )))
+        ));
     }
+    // Then: rejection preserves state, and committing the same mappings permits activation.
+    assert_eq!(handle.snapshot().await, before);
+    assert_eq!(handle.memory_generation().await, 0);
+    handle.commit_memory_stage(stage).await?;
+    write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await?;
+    assert_eq!(cursors(&endpoint).await?, [0; 7]);
+    Ok(())
+}
 
-    // Then: the allocator and queue identity remain reusable by one exact mapped activation.
-    assert_eq!(uncommitted.memory_generation().await, 0);
-    let committed = uncommitted.commit_memory_stage(proposed).await?;
-    activate_raw(
-        &uncommitted,
-        DeviceEpoch::initial(),
-        QueueId::new(0),
-        &committed,
-    )
-    .await?;
-    assert_eq!(read_u32(&uncommitted, 0x168).await?, MmioResult::Ok.code());
-
-    let (partial_device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let partial = partial_device.handle();
-    let submission_mapping = partial.allocate_memory_region(128).await?;
-    let pending = partial.stage_memory_regions(&[64, 128]).await?;
-    let [completion_proposal, event_proposal] = pending.regions() else {
-        return Err("two proposed result regions required".into());
+#[tokio::test]
+async fn partial_mapping_rejection_preserves_inactive_queue() -> TestResult {
+    // Given: a committed SQ and uncommitted CQ/EQ.
+    let (device, _worker) = device(ResourceConfig::default());
+    let handle = device.handle();
+    let endpoint = handle.register_endpoint();
+    let submission = handle.allocate_memory_region(128).await?;
+    let stage = handle.stage_memory_regions(&[64, 128]).await?;
+    let [completion, event] = stage.regions() else {
+        return Err("two regions".into());
     };
-    program_activation(
-        &partial,
-        RawActivation::depth_two(
-            DeviceEpoch::initial(),
-            QueueId::new(0),
-            [submission_mapping, *completion_proposal, *event_proposal],
-        ),
-    )
-    .await?;
-    issue_queue_command(&partial, 1).await?;
+    program_activation(&endpoint, &[submission, *completion, *event], 2).await?;
+    let generation = handle.memory_generation().await;
+    // When: enabling encounters incomplete committed mappings.
+    assert!(matches!(
+        write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await,
+        Err(MmioRegisterError::Control(PdmaControlError::Dma(
+            PdmaMemoryError::InvalidRegion
+        )))
+    ));
+    // Then: no partial activation or memory mutation occurs.
     assert_eq!(
-        read_u32(&partial, 0x168).await?,
-        MmioResult::DmaUnmapped.code()
+        read_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?).await?,
+        0
     );
+    assert_eq!(handle.memory_generation().await, generation);
+    Ok(())
+}
 
-    let (extent_device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
-    let extent = extent_device.handle();
-    let wrong_extent = extent.stage_memory_regions(&[127, 64, 128]).await?;
-    let wrong_extent = extent.commit_memory_stage(wrong_extent).await?;
-    activate_raw(
-        &extent,
-        DeviceEpoch::initial(),
-        QueueId::new(0),
-        &wrong_extent,
+#[tokio::test]
+async fn wrong_extent_and_misaligned_base_reject_before_activation() -> TestResult {
+    // Given: a committed SQ shorter than its configured depth-two extent.
+    let (device, _worker) = device(ResourceConfig::default());
+    let handle = device.handle();
+    let endpoint = handle.register_endpoint();
+    let stage = handle.stage_memory_regions(&[127, 64, 128]).await?;
+    let regions = handle.commit_memory_stage(stage).await?;
+    program_activation(&endpoint, &regions, 2).await?;
+    // When: activation sees a wrong extent, then a misaligned SQ address.
+    assert!(matches!(
+        write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await,
+        Err(MmioRegisterError::Control(PdmaControlError::Abi(
+            AbiControlError::RingExtentMismatch {
+                expected: 128,
+                actual: 127
+            }
+        )))
+    ));
+    write_u64(
+        &endpoint,
+        q(QueueRegisters::SQ_BASE.offset())?,
+        regions.first().ok_or("submission region")?.base().raw() + 1,
     )
     .await?;
+    assert!(matches!(
+        write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await,
+        Err(MmioRegisterError::Control(PdmaControlError::Dma(
+            PdmaMemoryError::InvalidRegion
+        )))
+    ));
+    // Then: both invalid configurations leave all cursor state inactive.
     assert_eq!(
-        read_u32(&extent, 0x168).await?,
-        MmioResult::RingExtentMismatch.code()
+        read_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?).await?,
+        0
     );
+    assert_eq!(cursors(&endpoint).await?, [0; 7]);
     Ok(())
 }

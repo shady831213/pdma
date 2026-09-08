@@ -5,27 +5,23 @@ pub(super) mod common;
 mod faults;
 pub(super) mod operations;
 mod precedence;
-mod recovery;
 
 use boundaries::capture_and_nonzero_slot;
 use faults::{BroadcastFaultCase, assert_broadcast_fault, malformed_and_resource_stall};
-use operations::{OperationCase, execute_operation, multi_queue_arbitration, zero_row_strided};
+use operations::{OperationCase, execute_operation, zero_row_strided};
 use precedence::{DirectFaultCase, HeaderFaultCase, assert_direct_fault, assert_header_fault};
-use recovery::{dma_and_semantic_queues_coexist, reset_discards_pending_dma_retirement};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 #[tokio::test(flavor = "current_thread")]
-async fn all_operations_fetch_from_dma_and_match_semantic_core() -> TestResult {
+async fn all_operations_fetch_from_dma_and_publish_exact_records() -> TestResult {
     // Given: one accepted DMA descriptor for each existing operation.
     // When: each captured producer is fetched through the DMA queue frontend.
-    // Then: the shared semantic engine produces the exact destination bytes and retirement.
+    // Then: the execution core produces exact destination bytes and DMA retirement records.
     for operation in OperationCase::ALL {
         execute_operation(operation).await?;
     }
     capture_and_nonzero_slot().await?;
-    multi_queue_arbitration().await?;
-    dma_and_semantic_queues_coexist().await?;
     zero_row_strided().await?;
     Ok(())
 }
@@ -34,9 +30,8 @@ async fn all_operations_fetch_from_dma_and_match_semantic_core() -> TestResult {
 async fn malformed_descriptor_list_and_resource_pressure_preserve_commit_points() -> TestResult {
     // Given: published malformed descriptor/list bytes and a valid resource-starved command.
     // When: the worker fetches each captured producer.
-    // Then: malformed slots consume once while resource pressure consumes and writes nothing.
-    malformed_and_resource_stall().await?;
-    reset_discards_pending_dma_retirement().await
+    // Then: malformed slots consume once while resource pressure leaves cursors and bytes intact.
+    malformed_and_resource_stall().await
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -1,159 +1,75 @@
-use super::TestResult;
+use crate::queue::hardware::{self, TestResult, read, write};
+use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
-    DmaAddress, RingLayout,
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, DmaAddress,
 };
-use pdma_model_contract::semantic::{
-    CompletionRingId, EpochIrqSource, EventRouting, IrqSource, QueueActivation, QueueConfig,
-    QueueControl, QueueCursorUpdate, QueueId, QueueRingObjects, RingCursor, SoftwareOwnerId,
-};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker};
+use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, MmioRegisterEndpoint};
 
 pub(in crate::queue) struct Fixture {
     pub(in crate::queue) handle: AsyncDeviceHandle,
+    pub(in crate::queue) endpoint: MmioRegisterEndpoint,
     worker: Option<AsyncDeviceWorker>,
-    pub(in crate::queue) queue: EpochQueue,
-    pub(in crate::queue) submission: DmaAddress,
-    pub(in crate::queue) completion: DmaAddress,
-    pub(in crate::queue) event: DmaAddress,
+    pub(in crate::queue) rings: [DmaAddress; 3],
 }
-
 impl Fixture {
-    pub(in crate::queue) async fn new(epoch: DeviceEpoch, result_depth: u64) -> TestResult<Self> {
-        let (runner, worker) = AsyncDevice::new(
+    pub(in crate::queue) async fn new(resources: ResourceConfig) -> TestResult<Self> {
+        let (device, worker) = AsyncDevice::new(
             pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
                 hardware_interface_runtime::SharedMemory::new(),
             )),
-            pdma_model_contract::semantic::ResourceConfig::default(),
+            resources,
         );
-        let handle = runner.handle();
-        let command_depth = 4;
-        let stage = handle
-            .stage_memory_regions(&[
-                RingLayout::<AbiCommand>::checked_extent(command_depth)?,
-                RingLayout::<AbiCompletion>::checked_extent(result_depth)?,
-                RingLayout::<AbiEvent>::checked_extent(result_depth)?,
-            ])
-            .await?;
-        let [submission, completion, event] = stage.regions() else {
-            return Err("ring stage shape".into());
-        };
-        let (submission, completion, event) = (*submission, *completion, *event);
-        let config = QueueConfig::new(
-            usize::try_from(command_depth)?,
-            usize::try_from(result_depth)?,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        );
-        let activation = QueueActivation::new(
-            epoch,
-            QueueId::new(0),
-            config,
-            QueueRingObjects::new(submission.object(), completion.object(), event.object()),
-        );
-        handle.commit_memory_stage(stage).await?;
-        handle.activate_mapped_queue(activation).await?;
+        let handle = device.handle();
+        let rings = hardware::activate(&handle, 0, [4, 1, 1]).await?;
+        let endpoint = handle.register_endpoint();
+        handle.enable_tracing().await;
         Ok(Self {
             handle,
+            endpoint,
             worker: Some(worker),
-            queue: activation.queue(),
-            submission: submission.base(),
-            completion: completion.base(),
-            event: event.base(),
+            rings,
         })
     }
-
-    pub(in crate::queue) const fn completion_source(&self) -> EpochIrqSource {
-        EpochIrqSource::new(
-            self.queue.epoch(),
-            IrqSource::Completion(CompletionRingId::new(self.queue.queue_id().raw())),
-        )
-    }
-
     pub(in crate::queue) fn start(
         &mut self,
     ) -> TestResult<tokio::task::JoinHandle<pdma_model_device::AsyncRunSummary>> {
-        let worker = self.worker.take().ok_or("worker already started")?;
-        Ok(tokio::spawn(worker.run()))
+        Ok(tokio::spawn(
+            self.worker.take().ok_or("worker already started")?.run(),
+        ))
     }
-
-    pub(in crate::queue) async fn submit_copy(
-        &self,
-        producer: u64,
-        command: u64,
-        source: DmaAddress,
-        destination: DmaAddress,
-    ) -> TestResult {
+    pub(in crate::queue) async fn copy(&self, slot: u64, addresses: [DmaAddress; 2]) -> TestResult {
         let descriptor = AbiCommand::from_payload(
-            command,
+            slot + 10,
             AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-                source_dma_address: source.raw(),
-                destination_dma_address: destination.raw(),
+                source_dma_address: addresses[0].raw(),
+                destination_dma_address: addresses[1].raw(),
                 length: 4.into(),
             }),
         );
-        let mut bytes = [0_u8; 64];
+        let mut bytes = [0; 64];
         descriptor.encode(&mut bytes)?;
-        let address = self.submission.checked_add(producer * 64)?;
-        self.handle.write_memory(address, &bytes).await?;
-        self.handle
-            .control_queue(QueueControl::PublishSubmissionProducer(
-                QueueCursorUpdate::new(self.queue, RingCursor::new(producer + 1)),
-            ))
-            .await?;
-        Ok(())
+        self.bytes(slot, &bytes).await
     }
-
-    pub(super) async fn submit_bytes(&self, producer: u64, bytes: [u8; 64]) -> TestResult {
-        let address = self.submission.checked_add(producer * 64)?;
-        self.handle.write_memory(address, &bytes).await?;
+    pub(in crate::queue) async fn bytes(&self, slot: u64, bytes: &[u8]) -> TestResult {
         self.handle
-            .control_queue(QueueControl::PublishSubmissionProducer(
-                QueueCursorUpdate::new(self.queue, RingCursor::new(producer + 1)),
-            ))
+            .write_memory(self.rings[0].checked_add(slot * 64)?, bytes)
             .await?;
-        Ok(())
+        self.cursor(QueueRegisters::SQ_PRODUCER.offset(), slot + 1)
+            .await
     }
-
-    pub(in crate::queue) async fn capture(&self, producer: u64) -> TestResult {
-        self.handle
-            .control_queue(QueueControl::CaptureSubmissionProducer(
-                QueueCursorUpdate::new(self.queue, RingCursor::new(producer)),
-            ))
-            .await?;
-        Ok(())
+    pub(in crate::queue) async fn cursor(&self, offset: usize, value: u64) -> TestResult {
+        write(&self.endpoint, queue_offset(0, offset)?, value).await
     }
-
-    pub(in crate::queue) async fn status(&self) -> TestResult<pdma_model_device::QueueStatus> {
-        Ok(self
-            .handle
-            .control_queue(QueueControl::ReadStatus(self.queue))
-            .await?)
-    }
-
-    pub(in crate::queue) async fn consume_completion(&self, consumer: u64) -> TestResult {
-        self.handle
-            .control_queue(QueueControl::PublishCompletionConsumer(
-                QueueCursorUpdate::new(self.queue, RingCursor::new(consumer)),
-            ))
-            .await?;
-        Ok(())
+    pub(in crate::queue) async fn read(&self, offset: usize) -> TestResult<u64> {
+        read(&self.endpoint, queue_offset(0, offset)?).await
     }
 }
-
 pub(in crate::queue) async fn allocate_pair(
     handle: &AsyncDeviceHandle,
-) -> TestResult<(
-    pdma_model_device::MappedDmaRegion,
-    pdma_model_device::MappedDmaRegion,
-)> {
-    let stage = handle.stage_memory_regions(&[4, 4]).await?;
-    let [source, destination] = stage.regions() else {
-        return Err("operand stage shape".into());
-    };
-    let pair = (*source, *destination);
-    handle.commit_memory_stage(stage).await?;
-    handle.write_memory(pair.0.base(), &[1, 3, 5, 7]).await?;
-    Ok(pair)
+) -> TestResult<[DmaAddress; 2]> {
+    let source = handle.allocate_memory_region(4).await?;
+    let destination = handle.allocate_memory_region(4).await?;
+    handle.write_memory(source.base(), &[1, 3, 5, 7]).await?;
+    Ok([source.base(), destination.base()])
 }

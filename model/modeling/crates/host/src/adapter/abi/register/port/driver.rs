@@ -1,17 +1,13 @@
 use super::{CanonicalAccess, PdmaRegisterPort, irq, retirement, state, submission};
 use crate::{DriverPort, PortError, PortResult};
 use pdma_model_contract::semantic::{
-    BufferId, Command, CompletionRecord, EpochIrqSource, EventRecord, IrqNotification, IrqRoute,
-    IrqSnapshot, QueueConfig, QueueConfigHandle,
+    BufferId, CompletionRecord, EpochIrqSource, EventRecord, IrqRoute, IrqSnapshot,
 };
 
+use crate::{Command, QueueConfig, QueueConfigHandle};
+use pdma_model_contract::abi::registers::IrqSourceRegisters;
+
 impl<A: CanonicalAccess> DriverPort for PdmaRegisterPort<A> {
-    async fn recover_queue(&mut self, queue: QueueConfigHandle) -> PortResult<()> {
-        let _window = self.queue_window.lock().await;
-        self.with_state(|state| state.queue(queue))
-            .map_err(PortError::from)??;
-        super::pending::recover(self).await.map_err(PortError::from)
-    }
     async fn create_queue(&mut self, config: QueueConfig) -> PortResult<QueueConfigHandle> {
         state::create_queue(self, config)
             .await
@@ -71,77 +67,36 @@ impl<A: CanonicalAccess> DriverPort for PdmaRegisterPort<A> {
         source: EpochIrqSource,
         route: IrqRoute,
     ) -> PortResult<()> {
-        irq_command(
-            self,
-            source,
-            Some(route),
-            pdma_model_contract::abi::mmio::IrqCommand::ConfigureRoute,
-        )
-        .await
+        irq::configure(self, source, route)
+            .await
+            .map_err(PortError::from)
     }
     async fn enable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        irq_command(
-            self,
-            source,
-            None,
-            pdma_model_contract::abi::mmio::IrqCommand::Enable,
-        )
-        .await
+        irq::write_source(self, source, (IrqSourceRegisters::ENABLED.offset(), 1))
+            .await
+            .map_err(PortError::from)
     }
     async fn disable_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        irq_command(
-            self,
-            source,
-            None,
-            pdma_model_contract::abi::mmio::IrqCommand::Disable,
-        )
-        .await
+        irq::write_source(self, source, (IrqSourceRegisters::ENABLED.offset(), 0))
+            .await
+            .map_err(PortError::from)
     }
     async fn mask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        irq_command(
-            self,
-            source,
-            None,
-            pdma_model_contract::abi::mmio::IrqCommand::Mask,
-        )
-        .await
+        irq::write_source(self, source, (IrqSourceRegisters::MASKED.offset(), 1))
+            .await
+            .map_err(PortError::from)
     }
     async fn unmask_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        irq_command(
-            self,
-            source,
-            None,
-            pdma_model_contract::abi::mmio::IrqCommand::Unmask,
-        )
-        .await
+        irq::write_source(self, source, (IrqSourceRegisters::MASKED.offset(), 0))
+            .await
+            .map_err(PortError::from)
     }
     async fn ack_irq_source(&mut self, source: EpochIrqSource) -> PortResult<()> {
-        irq_command(
-            self,
-            source,
-            None,
-            pdma_model_contract::abi::mmio::IrqCommand::Acknowledge,
-        )
-        .await
+        irq::write_source(self, source, (IrqSourceRegisters::ACK.offset(), 1))
+            .await
+            .map_err(PortError::from)
     }
-    async fn irq_snapshot(&self) -> Option<IrqSnapshot> {
-        irq::snapshot(self).await.ok().flatten()
+    async fn irq_snapshot(&self) -> PortResult<Option<IrqSnapshot>> {
+        irq::snapshot(self).await.map_err(PortError::from)
     }
-    async fn wait_irq(&self) -> Option<IrqSnapshot> {
-        irq::wait_line(self).await.ok().flatten()
-    }
-    async fn wait_irq_notification(&mut self) -> Option<IrqNotification> {
-        self.claim_notification().await.ok().flatten()
-    }
-}
-
-async fn irq_command<A: CanonicalAccess>(
-    port: &PdmaRegisterPort<A>,
-    source: EpochIrqSource,
-    route: Option<IrqRoute>,
-    command: pdma_model_contract::abi::mmio::IrqCommand,
-) -> PortResult<()> {
-    irq::source_command(port, source, route, command)
-        .await
-        .map_err(PortError::from)
 }

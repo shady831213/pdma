@@ -1,7 +1,4 @@
-use pdma_model_contract::semantic::{
-    CommandId, CompletionRecord, CompletionStatus, EpochIrqSource, IrqSource, TraceEvent,
-    TraceEventKind,
-};
+use pdma_model_contract::semantic::{EpochIrqSource, IrqSource, TraceEvent, TraceEventKind};
 
 use super::super::support::{
     PipelineRunOutcome, Prepared, drive_to_complete, drive_to_pending, prepared_pair, trace_kinds,
@@ -14,7 +11,7 @@ pub(super) fn pressure_revisits_only_retirement() {
     // Given: two copies and a one-record completion publication budget.
     let mut prepared = prepared_pair();
     let source = EpochIrqSource::new(
-        prepared.queue.epoch(),
+        pdma_model_contract::semantic::DeviceEpoch::initial(),
         IrqSource::Completion(prepared.queue.completion_ring_id()),
     );
     assert_eq!(
@@ -22,12 +19,11 @@ pub(super) fn pressure_revisits_only_retirement() {
         Ok(ModelStepStatus::Progressed)
     );
     assert_eq!(
-        prepared
-            .fixture
-            .core
-            .queues
-            .semantic_cursors(prepared.queue.queue_id()),
-        Ok(((1, 2), (0, 1)))
+        crate::device::command_pipeline::tests::support::cursors(
+            &prepared.fixture.core,
+            prepared.queue
+        ),
+        ((1, 2), (0, 1))
     );
     prepared.fixture.restart();
 
@@ -39,11 +35,10 @@ pub(super) fn pressure_revisits_only_retirement() {
     );
     let pending_trace = prepared.fixture.core.trace_events();
     let pending_irq = prepared.fixture.core.irq_snapshot();
-    let pending_cursors = prepared
-        .fixture
-        .core
-        .queues
-        .semantic_cursors(prepared.queue.queue_id());
+    let pending_cursors = crate::device::command_pipeline::tests::support::cursors(
+        &prepared.fixture.core,
+        prepared.queue,
+    );
     assert_eq!(prepared.fixture.step(), PipelineRunOutcome::Pending(wait));
 
     // Then: repeated Pending changes only the downstream stall trace.
@@ -56,6 +51,7 @@ pub(super) fn pressure_revisits_only_retirement() {
             TraceEventKind::CommandSubmitted,
             TraceEventKind::DoorbellRunnable,
             TraceEventKind::CommandSubmitted,
+            TraceEventKind::DoorbellRunnable,
             TraceEventKind::Scheduled,
             TraceEventKind::ExecutionSucceeded,
             TraceEventKind::CompletionPublished,
@@ -84,16 +80,15 @@ fn assert_pending_unchanged(
     prepared: &Prepared,
     pending_trace: &[TraceEvent],
     pending_irq: Option<pdma_model_contract::semantic::IrqSnapshot>,
-    pending_cursors: crate::ModelResult<((usize, usize), (usize, usize))>,
+    pending_cursors: ((usize, usize), (usize, usize)),
 ) {
     assert_eq!(prepared.fixture.fetch_count(), 2);
-    assert_eq!(pending_cursors, Ok(((2, 2), (0, 1))));
+    assert_eq!(pending_cursors, ((2, 2), (0, 1)));
     assert_eq!(
-        prepared
-            .fixture
-            .core
-            .queues
-            .semantic_cursors(prepared.queue.queue_id()),
+        crate::device::command_pipeline::tests::support::cursors(
+            &prepared.fixture.core,
+            prepared.queue
+        ),
         pending_cursors
     );
     assert_eq!(prepared.fixture.core.irq_snapshot(), pending_irq);
@@ -115,44 +110,30 @@ fn assert_pending_unchanged(
 }
 
 fn release_and_assert(prepared: &mut Prepared, source: EpochIrqSource) {
-    let first = prepared
-        .fixture
-        .core
-        .poll_completion(prepared.queue)
-        .expect("first completion")
+    let first = crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue)
         .expect("first record");
     assert_eq!(
         first,
-        CompletionRecord::new(
-            prepared.queue.queue_id(),
-            CommandId::new(7),
-            CompletionStatus::Success,
-        )
+        pdma_model_contract::abi::AbiCompletion::success(u64::from(prepared.queue.index), 7)
     );
-    prepared
-        .fixture
-        .core
-        .ack_irq_source(source)
-        .expect("ack first IRQ");
+    crate::test_support::irq_write(
+        &mut prepared.fixture.core,
+        prepared.queue,
+        0,
+        pdma_model_contract::abi::registers::IrqSourceRegisters::ACK.offset(),
+        1,
+    );
     let terminal = drive_to_complete(&mut prepared.fixture);
     assert_eq!(terminal, Ok(ModelStepStatus::Progressed));
-    let second = prepared
-        .fixture
-        .core
-        .poll_completion(prepared.queue)
-        .expect("second completion")
+    let second = crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue)
         .expect("second record");
     assert_eq!(
         second,
-        CompletionRecord::new(
-            prepared.queue.queue_id(),
-            CommandId::new(99),
-            CompletionStatus::Success,
-        )
+        pdma_model_contract::abi::AbiCompletion::success(u64::from(prepared.queue.index), 99)
     );
     assert_eq!(
-        prepared.fixture.core.poll_completion(prepared.queue),
-        Ok(None)
+        crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue),
+        None
     );
     assert_eq!(prepared.fixture.fetch_count(), 2);
     assert_eq!(
@@ -176,14 +157,13 @@ fn release_and_assert(prepared: &mut Prepared, source: EpochIrqSource) {
         ),
         2
     );
-    let final_cursors = prepared
-        .fixture
-        .core
-        .queues
-        .semantic_cursors(prepared.queue.queue_id());
+    let final_cursors = crate::device::command_pipeline::tests::support::cursors(
+        &prepared.fixture.core,
+        prepared.queue,
+    );
     let final_irq = prepared.fixture.core.irq_snapshot();
     let final_trace = trace_kinds(&prepared.fixture.core.trace_events());
-    assert_eq!(final_cursors, Ok(((2, 2), (2, 2))));
+    assert_eq!(final_cursors, ((2, 2), (2, 2)));
     assert_eq!(final_irq, Some(expected_irq(source)));
     assert_final_trace(&final_trace);
     let post_terminal = prepared.fixture.step();
@@ -201,6 +181,7 @@ fn assert_final_trace(trace: &[TraceEventKind]) {
             TraceEventKind::CommandSubmitted,
             TraceEventKind::DoorbellRunnable,
             TraceEventKind::CommandSubmitted,
+            TraceEventKind::DoorbellRunnable,
             TraceEventKind::Scheduled,
             TraceEventKind::ExecutionSucceeded,
             TraceEventKind::CompletionPublished,

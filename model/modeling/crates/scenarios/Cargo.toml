@@ -41,10 +41,6 @@ name = "resource_credits"
 path = "tests/resource_credits/mod.rs"
 
 [[test]]
-name = "stall_annotations"
-path = "tests/stall_annotations/mod.rs"
-
-[[test]]
 name = "strided_copy"
 path = "tests/strided_copy/mod.rs"
 

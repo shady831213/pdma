@@ -1,151 +1,131 @@
-use crate::ModelError;
 use crate::irq::PdmaIrqController;
 use crate::queue::QueueBlock;
+use crate::queue::exact::PdmaControlError;
 use crate::trace::TraceSink;
-use pdma_model_contract::abi::mmio::{
-    IrqCommand, IrqResponseBank, MmioResult, MmioResultDetails, ResponseUpdate,
-    apply_response_update,
+use hardware_interface_schema::RegisterLayout;
+use hardware_interface_schema::register::RegisterSpec;
+use pdma_model_contract::abi::registers::{
+    IrqSourceRegisters, IrqSourceRegistersRegisterId, IrqSourceRegistersValues, IrqStateBit,
 };
-use support::{
-    IrqSourceView, decode_route, decode_source, encode_route, encode_source, map_mmio_error,
-    observe_irq_source, usize_to_u64,
+use pdma_model_contract::semantic::{
+    CompletionRingId, IrqLine, IrqRoute, IrqSource, IrqVector, QueueId,
 };
-
-mod notification;
-#[cfg(test)]
-mod owner_commands;
-#[doc(hidden)]
-pub(crate) mod support;
-#[cfg(test)]
-mod tests;
 
 impl PdmaIrqController {
-    pub(crate) fn execute_mmio(&mut self, queues: &QueueBlock, trace: &mut TraceSink) -> bool {
-        let raw_command = self.registers.command.raw();
-        let outcome = IrqCommand::try_from(raw_command)
-            .map_err(|_| details(MmioResult::UnknownCommand, [u64::from(raw_command), 0, 0]))
-            .and_then(|command| self.execute_request(command, queues, trace));
-        let (result, update, changed) = match outcome {
-            Ok(CommandOutcome {
-                response: Some(response),
-                changed,
-            }) => (
-                details(MmioResult::Ok, [0; 3]),
-                ResponseUpdate::Replace(response),
-                changed,
-            ),
-            Ok(CommandOutcome {
-                response: None,
-                changed,
-            }) => (
-                details(MmioResult::Empty, [0; 3]),
-                ResponseUpdate::Empty,
-                changed,
-            ),
-            Err(result) => (result, ResponseUpdate::Preserve, false),
+    pub(crate) fn read_direct(
+        &self,
+        index: u32,
+        source_index: u32,
+        offset: usize,
+        queues: &QueueBlock,
+    ) -> Option<u64> {
+        let source = source(index, source_index, queues).ok()?;
+        IrqSourceRegisters::read_register(&self.direct_values(source, queues), offset)
+    }
+
+    fn direct_values(&self, source: IrqSource, queues: &QueueBlock) -> IrqSourceRegistersValues {
+        let observed = self.observe(source);
+        let (kind, vector) = match observed.route {
+            IrqRoute::Line(line) => (0, line.vector()),
+            IrqRoute::Message(vector) => (1, vector),
         };
-        self.complete(result, update);
-        changed
+        let mut status = IrqStateBit::Present.mask();
+        for (set, bit) in [
+            (observed.enabled(), IrqStateBit::Enabled),
+            (observed.masked(), IrqStateBit::Masked),
+            (observed.cause_pending(), IrqStateBit::CausePending),
+            (observed.deliverable(), IrqStateBit::Deliverable),
+            (observed.line_asserted(), IrqStateBit::LineAsserted),
+            (
+                Self::records_pending(source, queues).unwrap_or(false),
+                IrqStateBit::RecordsPending,
+            ),
+        ] {
+            if set {
+                status |= bit.mask();
+            }
+        }
+        IrqSourceRegistersValues {
+            route_kind: kind.into(),
+            route_vector: u64::try_from(vector.raw()).unwrap_or(u64::MAX).into(),
+            enabled: u32::from(observed.enabled()).into(),
+            masked: u32::from(observed.masked()).into(),
+            status: status.into(),
+            pending_messages: u64::try_from(observed.pending_messages)
+                .unwrap_or(u64::MAX)
+                .into(),
+            ..IrqSourceRegistersValues::default()
+        }
     }
-}
 
-impl PdmaIrqController {
-    fn complete(&mut self, result: MmioResultDetails, update: ResponseUpdate<IrqResponseBank>) {
-        let registers = &mut self.registers;
-        registers.response = apply_response_update(registers.response, update);
-        registers.result = result.result.code().into();
-        let [detail0, detail1, detail2] = result.details;
-        registers.detail0 = detail0.into();
-        registers.detail1 = detail1.into();
-        registers.detail2 = detail2.into();
-    }
-}
-
-struct CommandOutcome {
-    response: Option<IrqResponseBank>,
-    changed: bool,
-}
-
-impl PdmaIrqController {
-    fn execute_request(
+    pub(crate) fn write_direct(
         &mut self,
-        command: IrqCommand,
+        indices: (u32, u32),
+        register: RegisterSpec<IrqSourceRegistersRegisterId>,
+        value: u64,
         queues: &QueueBlock,
         trace: &mut TraceSink,
-    ) -> Result<CommandOutcome, MmioResultDetails> {
-        match command {
-            IrqCommand::SnapshotLine => return notification::snapshot_line(self, queues),
-            IrqCommand::ClaimNotification => return notification::claim(self, queues, trace),
-            IrqCommand::ConfigureRoute
-            | IrqCommand::Enable
-            | IrqCommand::Disable
-            | IrqCommand::Mask
-            | IrqCommand::Unmask
-            | IrqCommand::Acknowledge
-            | IrqCommand::ObserveSource => {}
-        }
-        let source_kind = self.registers.source_kind.raw();
-        let source_id = self.registers.source_id.raw();
-        let source = decode_source(self.registers.expected_epoch.raw(), source_kind, source_id)
-            .ok_or_else(|| {
-                details(
-                    MmioResult::InvalidIrqSource,
-                    [u64::from(source_kind), source_id, 0],
-                )
-            })?;
-        let before = observe_irq_source(self, queues, source).ok();
-        let result = match command {
-            IrqCommand::ConfigureRoute => decode_route(
-                self.registers.route_kind.raw(),
-                self.registers.route_vector.raw(),
-            )
-            .ok_or(ModelError::DmaSubmissionState)
-            .and_then(|route| self.configure_source_route(source, route, queues)),
-            IrqCommand::Enable => self.enable_source(source, queues, trace),
-            IrqCommand::Disable => self.disable_source(source, queues, trace),
-            IrqCommand::Mask => self.mask_source(source, queues, trace),
-            IrqCommand::Unmask => self.unmask_source(source, queues, trace),
-            IrqCommand::Acknowledge => self.ack_source(source, queues, trace),
-            IrqCommand::ObserveSource => Ok(()),
-            IrqCommand::SnapshotLine | IrqCommand::ClaimNotification => {
-                Err(ModelError::DmaSubmissionState)
+    ) -> Result<bool, PdmaControlError> {
+        use IrqSourceRegistersRegisterId as Id;
+        let source = source(indices.0, indices.1, queues)?;
+        let before = self.direct_values(source, queues);
+        let mut values = before;
+        IrqSourceRegisters::write_register(&mut values, register.offset(), value)
+            .ok_or(PdmaControlError::InvalidTransaction)?;
+        let was_asserted = self.line_asserted();
+        match register.id() {
+            Id::RouteKind | Id::RouteVector => {
+                let vector = IrqVector::new(
+                    usize::try_from(values.route_vector.raw())
+                        .map_err(|_| PdmaControlError::InvalidTransaction)?,
+                );
+                let route = match values.route_kind.raw() {
+                    0 => IrqRoute::Line(IrqLine::new(vector)),
+                    1 => IrqRoute::Message(vector),
+                    _ => return Err(PdmaControlError::InvalidTransaction),
+                };
+                self.configure_route(source, route)
+                    .map_err(|_| PdmaControlError::InvalidTransaction)?;
             }
-        };
-        result.map_err(|error| map_mmio_error(error, command, source))?;
-        let view = observe_irq_source(self, queues, source)
-            .map_err(|error| map_mmio_error(error, command, source))?;
-        Ok(CommandOutcome {
-            response: Some(source_response(view)),
-            changed: before.is_some_and(|previous| previous != view),
-        })
+            Id::Enabled => match value {
+                0 => self.disable(source),
+                1 => self.enable(source),
+                _ => return Err(PdmaControlError::InvalidTransaction),
+            },
+            Id::Masked => match value {
+                0 => self.unmask(source),
+                1 => self.mask(source),
+                _ => return Err(PdmaControlError::InvalidTransaction),
+            },
+            Id::Ack => {
+                if value != 1 {
+                    return Err(PdmaControlError::InvalidTransaction);
+                }
+                self.ack(
+                    source,
+                    Self::records_pending(source, queues).unwrap_or(false),
+                );
+                trace.irq_device_ack(source);
+            }
+            Id::Status | Id::PendingMessages => return Err(PdmaControlError::InvalidTransaction),
+        }
+        self.trace_line_transition(was_asserted, trace);
+        Ok(before != self.direct_values(source, queues))
     }
 }
 
-const fn details(result: MmioResult, details: [u64; 3]) -> MmioResultDetails {
-    MmioResultDetails { result, details }
-}
-
-fn source_response(view: IrqSourceView) -> IrqResponseBank {
-    let (source_kind, source_id) = encode_source(view.source.source());
-    let (route_kind, vector) = encode_route(view.route);
-    IrqResponseBank {
-        epoch: view.source.epoch().raw().into(),
-        source_id: source_id.into(),
-        source_kind: source_kind.into(),
-        state: view.status.bits().into(),
-        route_kind: route_kind.into(),
-        notification_kind: 0.into(),
-        vector: vector.into(),
-        message_id: 0.into(),
-        pending_messages: usize_to_u64(view.pending_messages).into(),
+fn source(
+    index: u32,
+    source_index: u32,
+    queues: &QueueBlock,
+) -> Result<IrqSource, PdmaControlError> {
+    if index >= queues.queue_count() {
+        return Err(PdmaControlError::InvalidQueue);
     }
-}
-
-fn line_response(view: IrqSourceView, vector: usize) -> IrqResponseBank {
-    IrqResponseBank {
-        notification_kind: 1.into(),
-        vector: usize_to_u64(vector).into(),
-        pending_messages: 0.into(),
-        ..source_response(view)
+    let index = usize::try_from(index).map_err(|_| PdmaControlError::InvalidQueue)?;
+    match source_index {
+        0 => Ok(IrqSource::Completion(CompletionRingId::new(index))),
+        1 => Ok(IrqSource::Event(QueueId::new(index))),
+        _ => Err(PdmaControlError::InvalidQueue),
     }
 }

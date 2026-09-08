@@ -2,22 +2,14 @@ use super::{ActiveQueue, RingState};
 use crate::memory::PdmaMemoryMappings;
 use crate::queue::io::PublicationOutcome;
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiRingEntry};
-use pdma_model_contract::semantic::CompletionRecord;
 
 pub(super) fn completion(
     memory: &PdmaMemoryMappings,
     active: &mut ActiveQueue,
-    record: CompletionRecord,
+    record: AbiCompletion,
 ) -> PublicationOutcome {
-    let Ok(queue_id) = u64::try_from(record.queue_id().raw()) else {
-        return PublicationOutcome::Retry;
-    };
-    let Ok(command_id) = u64::try_from(record.command_id().raw()) else {
-        return PublicationOutcome::Retry;
-    };
-    let exact = AbiCompletion::success(queue_id, command_id);
     let mut bytes = [0_u8; AbiCompletion::RECORD_SIZE];
-    if exact.encode(&mut bytes).is_err() {
+    if record.encode(&mut bytes).is_err() {
         return PublicationOutcome::Retry;
     }
     publish(memory, &mut active.completion, &bytes)

@@ -1,5 +1,6 @@
 use super::*;
-use pdma_model_contract::semantic::{DeviceEpoch, WholeDeviceReset};
+use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::abi::registers::GlobalRegisters;
 use pdma_model_device::{DeviceCore, PdmaMemoryError, PdmaMemoryMappings};
 
 #[test]
@@ -53,7 +54,11 @@ async fn reset_preserves_external_mapping_generation_and_bytes()
 
     // When the device advances to its next reset epoch.
     handle
-        .reset(WholeDeviceReset::new(DeviceEpoch::initial()))
+        .register_endpoint()
+        .write(
+            u32::try_from(GlobalRegisters::RESET.offset())?,
+            &1_u32.to_le_bytes(),
+        )
         .await?;
 
     // Then external bytes and logical metadata retain their committed state.
@@ -89,56 +94,5 @@ fn invalid_external_registration_keeps_existing_metadata_and_bytes()
     assert_eq!(mappings.generation(), 1);
     assert_eq!(mappings.mapped_region_count(), 1);
     assert_eq!(*external.0.lock().expect("external bytes"), [7; 128]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn backend_read_fault_publishes_event_without_success_completion()
--> Result<(), Box<dyn std::error::Error>> {
-    // Given valid logical mappings whose source bytes are unavailable in the external backend.
-    let external = Arc::new(ExternalBytes(Mutex::new([7; 128])));
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::external(external.clone().into()),
-        ResourceConfig::default(),
-    );
-    let handle = device.handle();
-    let source = MappedDmaRegion::try_new(BufferId::new(0), DmaAddress::new(0x9000), 4)?;
-    let destination = MappedDmaRegion::try_new(BufferId::new(1), DmaAddress::new(0x8040), 4)?;
-    handle
-        .register_memory_regions(&[source, destination])
-        .await?;
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await?;
-    let worker = tokio::spawn(worker.run());
-
-    // When the device attempts to copy from the unavailable address.
-    handle
-        .submit_command(
-            queue,
-            Command::new(
-                CommandId::new(0),
-                CommandOperation::Copy(CopyRequest::new(source.object(), destination.object(), 4)),
-            ),
-        )
-        .await?;
-    handle.ring_doorbell(queue).await?;
-    device.wait_for_error_after(0).await;
-
-    // Then it publishes the source fault and leaves destination bytes without a success record.
-    let event = handle
-        .poll_queue_event(queue)
-        .await?
-        .expect("backend fault event");
-    assert_eq!(event.buffer(), source.object());
-    assert_eq!(handle.poll_completion(queue).await?, None);
-    assert_eq!(*external.0.lock().expect("external bytes"), [7; 128]);
-    device.request_shutdown().await;
-    worker.await?;
     Ok(())
 }

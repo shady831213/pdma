@@ -5,13 +5,12 @@ pub mod delivery;
 
 use hardware_interface_runtime::SoftwareCpu;
 
-use pdma_model_contract::semantic::{
-    CommandId, CopyRequest, IrqNotification, IrqRoute, IrqSource, IrqVector,
-};
+use pdma_model_contract::semantic::{CommandId, IrqNotification, IrqRoute, IrqSource, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::CopyRequest;
 use pdma_model_host::{
     AsyncDriver, DriverError, DriverIrqRecord, DriverPort, DriverResult, PortError,
-    adapter::abi::{AsyncDeviceAccess, PdmaIrqCoordinator, PdmaRegisterPort},
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
     runtime::interrupt::PdmaIrqHandler,
 };
 use std::sync::Arc;
@@ -88,7 +87,7 @@ async fn message_irq_two_handlers_share_driver_accounting()
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let raw_port = device.handle();
-    let access = AsyncDeviceAccess::new(raw_port, PdmaIrqCoordinator::default());
+    let access = AsyncDeviceAccess::new(raw_port);
     let main_access = access.clone();
     let cpu = Arc::new(SoftwareCpu::new());
     let completion_vector = IrqVector::new(65);

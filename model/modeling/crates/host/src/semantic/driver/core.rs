@@ -1,9 +1,9 @@
 use super::accounting::SharedAccounting;
 use crate::DriverPort;
 use crate::DriverResult;
+use crate::{EventRouting, QueueConfig, QueueConfigHandle};
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, CompletionRingId, EventRecord, EventRouting, QueueConfig,
-    QueueConfigHandle, QueueId,
+    BufferId, CompletionRecord, CompletionRingId, EventRecord, QueueId,
 };
 
 #[derive(Debug, Clone)]

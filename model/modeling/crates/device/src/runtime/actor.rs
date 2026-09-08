@@ -4,8 +4,7 @@ use super::PdmaMemoryProvisioning;
 use super::backend::DeviceInteractionBackend;
 use super::state::{RunnerState, summary};
 use super::{
-    AsyncRunSummary, DeviceCore, MmioRegisterEndpoint, ModelResult, PendingDmaResult, RunnerShared,
-    run_worker,
+    AsyncRunSummary, DeviceCore, MmioRegisterEndpoint, PendingDmaResult, RunnerShared, run_worker,
 };
 use crate::memory::PdmaMemoryError;
 use hardware_interface_runtime::{
@@ -19,6 +18,7 @@ use std::sync::Arc;
 pub struct AsyncDeviceHandle {
     pub(crate) shared: Arc<RunnerShared>,
     pub(crate) memory: hardware_interface_runtime::SharedMemoryAccess,
+    register_epoch: pdma_model_contract::semantic::DeviceEpoch,
 }
 
 /// Host-facing async hardware runner state.
@@ -76,6 +76,7 @@ impl AsyncDevice {
         observer: Arc<dyn RegisterObserver>,
     ) -> (Self, AsyncDeviceWorker) {
         let memory = provisioning.memory_access();
+        let register_epoch = core.epoch();
         let shared = Arc::new(RunnerShared {
             backend: DeviceInteractionBackend::new(RunnerState::new(core, provisioning)),
             register_gate: ObservationGate::new(SharedRegisterObserver::new(observer)),
@@ -85,7 +86,11 @@ impl AsyncDevice {
         };
         (
             Self {
-                handle: AsyncDeviceHandle { shared, memory },
+                handle: AsyncDeviceHandle {
+                    shared,
+                    memory,
+                    register_epoch,
+                },
             },
             worker,
         )
@@ -113,7 +118,7 @@ impl AsyncDeviceWorker {
 impl AsyncDeviceHandle {
     /// Returns the clone-shared exact register endpoint owned by this device core.
     pub fn register_endpoint(&self) -> MmioRegisterEndpoint {
-        MmioRegisterEndpoint::new(Arc::clone(&self.shared))
+        MmioRegisterEndpoint::new(Arc::clone(&self.shared), self.register_epoch)
     }
 
     /// Returns committed invocations of the sole reset runner.
@@ -182,16 +187,6 @@ impl AsyncDeviceHandle {
         self.shared
             .backend
             .interact(|state| state.core.trace_json())
-            .await
-    }
-
-    pub(crate) async fn with_device<T: Send>(
-        &self,
-        f: impl FnOnce(&mut DeviceCore) -> ModelResult<T> + Send,
-    ) -> ModelResult<T> {
-        self.shared
-            .backend
-            .update(|state| (f(&mut state.core), true))
             .await
     }
 

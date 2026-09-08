@@ -6,7 +6,8 @@ use hardware_interface_runtime::{
     AccessOrigin, NoopRegisterObserver, ObservationGate, RegisterAccess, RegisterBusAddress,
     RegisterBusBase, RegisterBusOffset, RegisterBusWidth, SharedRegisterObserver,
 };
-use pdma_model_contract::abi::mmio::{decode_read, decode_write};
+use pdma_model_contract::abi::registers::{decode_read, decode_write};
+use pdma_model_contract::semantic::DeviceEpoch;
 use std::sync::Arc;
 
 /// Cloneable exact register endpoint over one device core.
@@ -14,18 +15,23 @@ use std::sync::Arc;
 pub struct MmioRegisterEndpoint {
     pub(crate) shared: Arc<RunnerShared>,
     mmio_base: RegisterBusBase,
+    epoch: DeviceEpoch,
 }
 
 impl MmioRegisterEndpoint {
     /// Consumes a core into a standalone exact register endpoint.
     pub fn from_core(core: DeviceCore) -> Self {
+        let epoch = core.epoch();
         let provisioning = PdmaMemoryProvisioning::external(core.memory.memory_access());
-        Self::new(Arc::new(RunnerShared {
-            backend: DeviceInteractionBackend::new(RunnerState::new(core, provisioning)),
-            register_gate: ObservationGate::new(SharedRegisterObserver::new(Arc::new(
-                NoopRegisterObserver,
-            ))),
-        }))
+        Self::new(
+            Arc::new(RunnerShared {
+                backend: DeviceInteractionBackend::new(RunnerState::new(core, provisioning)),
+                register_gate: ObservationGate::new(SharedRegisterObserver::new(Arc::new(
+                    NoopRegisterObserver,
+                ))),
+            }),
+            epoch,
+        )
     }
 
     /// Consumes a core into an exact register endpoint at `mmio_base`.
@@ -33,10 +39,11 @@ impl MmioRegisterEndpoint {
         Self::from_core(core).at_mmio_base(mmio_base)
     }
 
-    pub(crate) const fn new(shared: Arc<RunnerShared>) -> Self {
+    pub(crate) const fn new(shared: Arc<RunnerShared>, epoch: DeviceEpoch) -> Self {
         Self {
             shared,
             mmio_base: RegisterBusBase::new(0),
+            epoch,
         }
     }
 
@@ -46,7 +53,23 @@ impl MmioRegisterEndpoint {
         Self {
             shared: Arc::clone(&self.shared),
             mmio_base,
+            epoch: self.epoch,
         }
+    }
+
+    /// Binds a clone to an explicitly discovered epoch without changing other clones.
+    #[must_use]
+    pub fn at_epoch(&self, epoch: DeviceEpoch) -> Self {
+        Self {
+            shared: Arc::clone(&self.shared),
+            mmio_base: self.mmio_base,
+            epoch,
+        }
+    }
+
+    /// Returns the epoch required for writes; non-consuming reads permit rediscovery.
+    pub const fn epoch(&self) -> DeviceEpoch {
+        self.epoch
     }
 
     /// Returns this endpoint's configured full-address base.
@@ -60,7 +83,7 @@ impl MmioRegisterEndpoint {
             .checked_add(u64::from(offset))
             .map(RegisterBusAddress::new)
             .ok_or(MmioRegisterError::Access(
-                pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset { offset },
+                pdma_model_contract::abi::registers::MmioAccessError::UnmappedOffset { offset },
             ))
     }
 
@@ -74,7 +97,7 @@ impl MmioRegisterEndpoint {
             .map(RegisterBusOffset::raw)
             .map_err(|_| {
                 MmioRegisterError::Access(
-                    pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset {
+                    pdma_model_contract::abi::registers::MmioAccessError::UnmappedOffset {
                         offset: fallback,
                     },
                 )
@@ -112,18 +135,37 @@ impl RegisterAccess for MmioRegisterEndpoint {
             .backend
             .commit(
                 |state| -> Result<_, MmioRegisterError> {
+                    let expected = state.core.epoch();
+                    if self.epoch != expected {
+                        return Err(MmioRegisterError::StaleEpoch {
+                            expected,
+                            actual: self.epoch,
+                        });
+                    }
                     let prepared = prepare_write(register, value, offset, request);
                     let reservation = self.shared.register_gate.reserve(1)?;
-                    let changed = prepared.commit(&mut state.core)?;
+                    let changed = match prepared.commit(&mut state.core) {
+                        Ok(changed) => changed,
+                        Err(error) => {
+                            // This per-core gate can only reserve while the same backend lock is held.
+                            reservation.cancel_latest()?;
+                            return Err(error.into());
+                        }
+                    };
                     Ok(((prepared, reservation), changed))
                 },
                 |(prepared, reservation)| {
                     let observed =
                         prepared.observation(reservation.start_sequence(), AccessOrigin::Direct);
-                    reservation.emit(vec![observed])?;
+                    reservation
+                        .emit(vec![observed])
+                        .map_err(MmioRegisterError::CommittedObservation)?;
                     Ok(())
                 },
             )
             .await
     }
 }
+
+#[cfg(test)]
+mod tests;

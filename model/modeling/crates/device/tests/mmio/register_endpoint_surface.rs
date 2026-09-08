@@ -8,9 +8,7 @@ mod support;
 mod surface;
 
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::abi::mmio::{
-    IrqRegisters, MmioAccessError, PdmaMmioMap, QueueResponseRegistersRaw, register_at,
-};
+use pdma_model_contract::abi::registers::{IrqSourceRegisters, MmioAccessError, irq_offset};
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, MmioRegisterError};
 use std::sync::Arc;
@@ -26,8 +24,8 @@ async fn register_endpoint_adverse() -> support::TestResult {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResult {
-    // Given: one pending message and an observer with a stable pre-claim transcript.
+async fn malformed_ack_width_is_typed_and_non_mutating() -> support::TestResult {
+    // Given: one pending message and an observer with a stable pre-access transcript.
     let observer = Arc::new(support::RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
     let (device, worker) = AsyncDevice::new_observed(
@@ -40,22 +38,18 @@ async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResul
     let endpoint = handle.register_endpoint();
     let queue = support::create_message(&handle).await?;
     support::submit_copy(&handle, queue).await?;
-    handle.ring_doorbell(queue).await?;
     device.wait_for_progress_after(0).await;
     let before_state = handle.snapshot().await;
     let before_observations = observer.snapshot();
-    let register = register_at(PdmaMmioMap::IRQ.offset() + IrqRegisters::COMMAND.offset())
-        .ok_or("missing claim register")?;
-    let offset = u32::try_from(register.offset())?;
+    let offset = irq_offset(0, 0, IrqSourceRegisters::ACK.offset())?;
 
-    // When: the 4-byte claim command is presented with a supported but wrong 8-byte width.
+    // When: the 4-byte acknowledgement register receives a wrong 8-byte write.
     let error = endpoint
         .write(offset, &0_u64.to_le_bytes())
         .await
-        .expect_err("malformed claim width must fail");
+        .expect_err("malformed acknowledgement width must fail");
 
-    // Then: the typed width error precedes notification consumption and observation emission.
-    assert_eq!(QueueResponseRegistersRaw::ZERO.as_bytes().len(), 72);
+    // Then: typed width rejection leaves notification readiness and observations intact.
     assert!(matches!(
         error,
         MmioRegisterError::Access(MmioAccessError::WrongWidth {
@@ -66,7 +60,7 @@ async fn malformed_claim_width_is_typed_and_non_mutating() -> support::TestResul
     ));
     assert_eq!(handle.snapshot().await, before_state);
     assert_eq!(observer.snapshot(), before_observations);
-    assert!(support::claim(&endpoint).await?);
+    assert!(support::claim(&handle).await?);
     device.request_shutdown().await;
     worker.await?;
     Ok(())

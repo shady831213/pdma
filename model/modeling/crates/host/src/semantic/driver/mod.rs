@@ -9,10 +9,10 @@ mod submission;
 
 pub use irq::DriverIrqRecord;
 
+use crate::{EventRouting, QueueConfig, QueueConfigHandle, SoftwareOwnerId};
 use core::DriverCore;
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRecord, CompletionRingId, EpochIrqSource, EventRecord, EventRouting,
-    QueueConfig, QueueConfigHandle, QueueId, SoftwareOwnerId,
+    BufferId, CompletionRecord, CompletionRingId, EpochIrqSource, EventRecord, QueueId,
 };
 
 use crate::DriverPort;

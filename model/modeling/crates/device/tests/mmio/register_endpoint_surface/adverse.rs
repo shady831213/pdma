@@ -1,17 +1,14 @@
 use super::support::{RecordingObserver, TestResult, contend_core, create_message, submit_copy};
 use hardware_interface_runtime::{RegisterAccess, RegisterBusBase};
-use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
+use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 use pdma_model_device::AsyncDevice;
 use std::future::Future;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
-/// Drives malformed and cancellation endpoint paths.
-///
-/// # Panics
-/// Panics when an asserted endpoint invariant is violated.
 pub(super) async fn run() -> TestResult {
-    // Given: one live endpoint with snapshots and a real pending message available to claim.
+    // Given: one observed endpoint and a real pending message.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
     let (device, worker) = AsyncDevice::new_observed(
@@ -24,88 +21,49 @@ pub(super) async fn run() -> TestResult {
     let endpoint = handle
         .register_endpoint()
         .at_mmio_base(RegisterBusBase::new(0x1_0000_0000));
-    let queue = create_message(&handle).await?;
-    submit_copy(&handle, queue).await?;
-    handle.ring_doorbell(queue).await?;
+    let submission = create_message(&handle).await?;
+    submit_copy(&handle, submission).await?;
     device.wait_for_progress_after(0).await;
-
-    // When: malformed operations, precommit cancellation, one claim, and empty revalidation run.
     let before_state = handle.snapshot().await;
-    let before_failures = observer.snapshot().len();
-    let mut byte = [0_u8; 1];
-    let width = endpoint.read(0, &mut byte).await.is_err();
-    let mut aligned = [0_u8; 4];
-    let alignment = endpoint.read(6, &mut aligned).await.is_err();
-    let interior = endpoint.read(12, &mut aligned).await.is_err();
-    let permission = endpoint.write(0, &[0; 4]).await.is_err();
-    let mask = endpoint
-        .write(0x008, &u32::MAX.to_le_bytes())
-        .await
-        .is_err();
-    let failed_observations = observer.snapshot().len() - before_failures;
-    let state_unchanged = handle.snapshot().await == before_state;
-    let held = contend_core(&handle, memory.clone()).await?;
-    let before_cancel = observer.snapshot().len();
-    let mut cancelled_response = [0_u8; 4];
-    {
-        let mut cancelled = Box::pin(endpoint.read(0, &mut cancelled_response));
-        let waker = Waker::noop();
-        let mut context = Context::from_waker(waker);
-        assert!(matches!(
-            cancelled.as_mut().poll(&mut context),
-            Poll::Pending
-        ));
-    }
-    let cancelled_observations = observer.snapshot().len() - before_cancel;
-    held.release()?;
-    let held = contend_core(&handle, memory).await?;
-    let before_claim_cancel = observer.snapshot();
-    let before_claim_sequences = before_claim_cancel
-        .iter()
-        .map(|item| item.sequence)
-        .collect::<Vec<_>>();
-    {
-        let mut cancelled_claim = Box::pin(endpoint.write(0x220, &[9, 0, 0, 0]));
-        let waker = Waker::noop();
-        let mut context = Context::from_waker(waker);
-        assert!(matches!(
-            cancelled_claim.as_mut().poll(&mut context),
-            Poll::Pending
-        ));
-    }
-    let after_claim_cancel = observer.snapshot();
-    let after_claim_sequences = after_claim_cancel
-        .iter()
-        .map(|item| item.sequence)
-        .collect::<Vec<_>>();
-    assert_eq!(after_claim_cancel.len(), before_claim_cancel.len());
-    assert_eq!(after_claim_sequences, before_claim_sequences);
-    held.release()?;
-    let claimed = super::support::claim(&endpoint).await?;
-    let cancelled_consumed = !claimed;
-    let before_empty = observer.snapshot().len();
-    let empty = super::support::claim(&endpoint).await?;
-    let empty_items = observer.snapshot().len() - before_empty;
-    let epoch_bytes = handle.read_mmio(0x050, 8).await?;
-    let epoch = <[u8; 8]>::try_from(epoch_bytes)
-        .map(u64::from_le_bytes)
-        .is_ok_and(|current| current == queue.epoch().raw());
+    let before_failures = observer.snapshot();
 
-    // Then: failures and cancellation are silent while empty emits only command and result.
+    // When: malformed accesses and operations cancelled while waiting for the core occur.
+    assert!(endpoint.read(0, &mut [0_u8; 1]).await.is_err());
+    assert!(endpoint.read(6, &mut [0_u8; 4]).await.is_err());
+    assert!(endpoint.read(12, &mut [0_u8; 4]).await.is_err());
+    assert!(endpoint.write(0, &[0; 4]).await.is_err());
     assert!(
-        [width, alignment, interior, permission, mask, epoch]
-            .into_iter()
-            .all(core::convert::identity)
+        endpoint
+            .write(
+                queue_offset(0, QueueRegisters::ENABLE.offset())?,
+                &u32::MAX.to_le_bytes()
+            )
+            .await
+            .is_err()
     );
-    assert_eq!(failed_observations, 0);
-    assert_eq!(cancelled_observations, 0);
-    assert!(!cancelled_consumed);
-    assert_eq!(empty_items, 2);
-    assert!(!empty);
-    assert!(state_unchanged);
-    println!(
-        "errors=width,alignment,interior,permission,mask,epoch;failed_observations=0;cancelled_observations=0;cancelled_consumed=false;empty_items={empty_items};empty_consumed={empty};empty_result=Empty;state_unchanged=true",
-    );
+    assert_eq!(observer.snapshot(), before_failures);
+    assert_eq!(handle.snapshot().await, before_state);
+    let held = contend_core(&handle, memory).await?;
+    let before_cancel = observer.snapshot();
+    let mut response = [0; 4];
+    {
+        let mut read = Box::pin(endpoint.read(0, &mut response));
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(matches!(read.as_mut().poll(&mut context), Poll::Pending));
+    }
+    {
+        let mut claim = Box::pin(handle.take_irq_notification_at_epoch(DeviceEpoch::initial()));
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(matches!(claim.as_mut().poll(&mut context), Poll::Pending));
+    }
+    assert_eq!(observer.snapshot(), before_cancel);
+    held.release()?;
+
+    // Then: cancellation consumes no message; the available output is returned exactly once.
+    assert!(super::support::claim(&handle).await?);
+    assert!(!super::support::claim(&handle).await?);
+    assert_eq!(observer.snapshot(), before_cancel);
+    println!("malformed_observations=0;cancelled_observations=0;message_consumed_once=true");
     device.request_shutdown().await;
     worker.await?;
     Ok(())

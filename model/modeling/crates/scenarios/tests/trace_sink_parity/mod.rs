@@ -4,12 +4,13 @@ mod completion_pressure;
 
 use completion_pressure::completion_pressure_trace;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{
-    TraceEvent, TraceEventKind,
-    desc::{CopyRequest, VectorAddRequest, VectorBufferRange},
-};
+use pdma_model_contract::semantic::{TraceEvent, TraceEventKind};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+use pdma_model_host::{CopyRequest, VectorAddRequest, VectorBufferRange};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
@@ -99,7 +100,6 @@ async fn async_trace_log_records_queue_only_doorbells() {
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let mut handle = AsyncDevicePort::new(raw_handle.clone());
     let cpu = SoftwareCpu::new();
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
@@ -107,6 +107,8 @@ async fn async_trace_log_records_queue_only_doorbells() {
     // When: one software main submits command id zero on both queues.
     let (copy_command, vector_command, vector_queue_id) = cpu
         .run_main(async {
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
+                .expect("active software CPU");
             let mut copy_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("copy queue setup is valid");

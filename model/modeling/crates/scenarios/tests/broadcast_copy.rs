@@ -1,12 +1,13 @@
 #![allow(missing_docs)]
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{
-    CompletionStatus, EventErrorKind,
-    desc::{BroadcastCopyRequest, BroadcastDestinationRange},
-};
+use pdma_model_contract::semantic::{CompletionStatus, EventErrorKind};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+use pdma_model_host::{BroadcastCopyRequest, BroadcastDestinationRange};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_publishes_one_completion()
@@ -22,7 +23,8 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
     let (snapshot, completion, command_id, no_completion, left_bytes, right_bytes) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = AsyncDevicePort::new(runner.handle());
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                    .expect("active software CPU");
                 let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                     .await
                     .expect("queue setup is valid");
@@ -103,7 +105,8 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
     let worker = tokio::spawn(worker.run());
     let (snapshot, event, command_id, bad_dst, no_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                 .await
                 .expect("queue setup is valid");
@@ -177,7 +180,8 @@ async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, src_bytes, dst_bytes) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                 .await
                 .expect("queue setup is valid");

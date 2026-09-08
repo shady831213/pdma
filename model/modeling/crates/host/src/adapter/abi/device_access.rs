@@ -1,51 +1,56 @@
 mod mapping;
+#[cfg(test)]
+mod tests;
 
 use self::mapping::{
     map_model_allocation, map_register, project_region, read_lock, validate_alignment, write_lock,
 };
 use crate::adapter::abi::{
-    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaIrqAccess, PdmaIrqCoordinator,
-    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest,
-    PdmaRegisterAccessError,
+    PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSourceError, PdmaMappedRegion,
+    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
 };
 use hardware_interface_runtime::{
-    AddressedRegisterAccess, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment,
-    RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError, SharedMemoryAccess,
+    AddressedRegisterAccess, InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress,
+    MemoryAlignment, RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError,
+    SharedMemoryAccess,
 };
+use pdma_model_contract::semantic::DeviceEpoch;
 use pdma_model_device::AsyncDeviceHandle;
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
 
 /// One-core concrete canonical access adapter.
-/// Adapters for one backend must receive clones of the same host IRQ coordinator.
 #[derive(Clone, Debug)]
 pub struct AsyncDeviceAccess {
     handle: AsyncDeviceHandle,
     memory: SharedMemoryAccess,
     mmio_base: RegisterBusBase,
     zero_bases: Arc<RwLock<BTreeSet<MemoryAddress>>>,
-    irq: PdmaIrqCoordinator,
+    epoch: DeviceEpoch,
 }
 
 impl AsyncDeviceAccess {
     /// Derives every capability from one existing asynchronous device handle.
-    pub fn new(handle: AsyncDeviceHandle, irq: PdmaIrqCoordinator) -> Self {
-        Self::new_at_mmio_base(handle, RegisterBusBase::new(0), irq)
+    pub fn new(handle: AsyncDeviceHandle) -> Self {
+        Self::new_at_mmio_base(handle, RegisterBusBase::new(0))
     }
 
     /// Derives every capability with register traffic rooted at `mmio_base`.
-    pub fn new_at_mmio_base(
-        handle: AsyncDeviceHandle,
-        mmio_base: RegisterBusBase,
-        irq: PdmaIrqCoordinator,
-    ) -> Self {
+    pub fn new_at_mmio_base(handle: AsyncDeviceHandle, mmio_base: RegisterBusBase) -> Self {
         Self {
             memory: handle.memory_access(),
             handle,
             mmio_base,
             zero_bases: Arc::new(RwLock::new(BTreeSet::new())),
-            irq,
+            epoch: DeviceEpoch::initial(),
         }
+    }
+
+    /// Binds subsequent hardware accesses to the supplied reset epoch.
+    #[must_use]
+    pub const fn at_epoch(mut self, epoch: DeviceEpoch) -> Self {
+        self.epoch = epoch;
+        self
     }
 
     /// Returns the full-address base used for register traffic.
@@ -59,7 +64,7 @@ impl AsyncDeviceAccess {
             .checked_add(u64::from(offset))
             .map(RegisterBusAddress::new)
             .ok_or(PdmaRegisterAccessError::Access(
-                pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset { offset },
+                pdma_model_contract::abi::registers::MmioAccessError::UnmappedOffset { offset },
             ))
     }
 
@@ -109,7 +114,11 @@ impl RegisterAccess for AsyncDeviceAccess {
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         let address = self.register_address(offset)?;
-        let endpoint = self.handle.register_endpoint().at_mmio_base(self.mmio_base);
+        let endpoint = self
+            .handle
+            .register_endpoint()
+            .at_mmio_base(self.mmio_base)
+            .at_epoch(self.epoch);
         endpoint
             .read_addressed(self.mmio_base, address, response)
             .await
@@ -118,7 +127,11 @@ impl RegisterAccess for AsyncDeviceAccess {
 
     async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Self::Error> {
         let address = self.register_address(offset)?;
-        let endpoint = self.handle.register_endpoint().at_mmio_base(self.mmio_base);
+        let endpoint = self
+            .handle
+            .register_endpoint()
+            .at_mmio_base(self.mmio_base)
+            .at_epoch(self.epoch);
         endpoint
             .write_addressed(self.mmio_base, address, request)
             .await
@@ -126,7 +139,7 @@ impl RegisterAccess for AsyncDeviceAccess {
     }
 }
 
-const fn map_addressed_register(
+fn map_addressed_register(
     error: RegisterBusError<pdma_model_device::MmioRegisterError>,
     fallback: u32,
 ) -> PdmaRegisterAccessError {
@@ -134,7 +147,7 @@ const fn map_addressed_register(
         RegisterBusError::Endpoint { source, .. } => map_register(source),
         RegisterBusError::AddressBelowBase { .. } | RegisterBusError::OffsetOutOfRange { .. } => {
             PdmaRegisterAccessError::Access(
-                pdma_model_contract::abi::mmio::MmioAccessError::UnmappedOffset {
+                pdma_model_contract::abi::registers::MmioAccessError::UnmappedOffset {
                     offset: fallback,
                 },
             )
@@ -144,6 +157,10 @@ const fn map_addressed_register(
 
 impl PdmaMemoryProvisioning for AsyncDeviceAccess {
     type Error = PdmaProvisioningError;
+
+    fn at_epoch(self, epoch: DeviceEpoch) -> Self {
+        Self::at_epoch(self, epoch)
+    }
 
     async fn allocate_region(
         &self,
@@ -164,24 +181,34 @@ impl PdmaMemoryProvisioning for AsyncDeviceAccess {
     }
 }
 
-impl PdmaExactInterruptClaim for AsyncDeviceAccess {
-    type Error = PdmaClaimError;
+impl InterruptSource for AsyncDeviceAccess {
+    type Notification = PdmaInterruptNotification;
+    type Ready = PdmaInterruptReady;
+    type Error = PdmaInterruptSourceError;
 
-    async fn wait_interrupt_ready(&self) -> Result<bool, Self::Error> {
-        self.irq
-            .wait_ready(self, self.handle.wait_irq_notification_ready())
+    async fn wait_ready(&self) -> Result<Self::Ready, Self::Error> {
+        self.handle
+            .wait_irq_notification_ready_at_epoch(self.epoch)
             .await
+            .map_err(mapping::map_interrupt)?
+            .then_some(PdmaInterruptReady::new(self.epoch))
+            .ok_or(PdmaInterruptSourceError::Closed)
     }
 
-    async fn claim_interrupt_exact(&self) -> Result<PdmaClaimResult, Self::Error> {
-        self.irq
-            .claim(self, self.handle.wait_irq_notification_ready())
+    async fn claim(
+        &mut self,
+        ready: Self::Ready,
+    ) -> Result<Option<Self::Notification>, Self::Error> {
+        if ready.epoch() != self.epoch {
+            return Err(PdmaInterruptSourceError::StaleEpoch {
+                expected: self.epoch,
+                actual: ready.epoch(),
+            });
+        }
+        self.handle
+            .take_irq_notification_at_epoch(self.epoch)
             .await
-    }
-}
-
-impl PdmaIrqAccess for AsyncDeviceAccess {
-    fn irq_coordinator(&self) -> &PdmaIrqCoordinator {
-        &self.irq
+            .map(|notification| notification.map(PdmaInterruptNotification::new))
+            .map_err(mapping::map_interrupt)
     }
 }

@@ -1,20 +1,36 @@
-use super::{PdmaClaimResult, PdmaExactInterruptClaim};
 use crate::runtime::interrupt::PdmaNotificationEnvelope;
-use hardware_interface_runtime::{InterruptEnvelope, InterruptSource};
-use pdma_model_contract::semantic::{IrqNotification, IrqVector};
+use hardware_interface_runtime::InterruptEnvelope;
+use pdma_model_contract::semantic::{DeviceEpoch, IrqNotification, IrqVector};
 use std::{error::Error, fmt};
 
 /// Affine proof that a PDMA interrupt source reported readiness.
-#[derive(Debug)]
-pub struct PdmaInterruptReady(());
+#[derive(Debug, PartialEq, Eq)]
+pub struct PdmaInterruptReady(DeviceEpoch);
 
-/// One notification decoded from the host's retained individual register reads.
+impl PdmaInterruptReady {
+    /// Captures the device epoch of a non-consuming readiness observation.
+    pub const fn new(epoch: DeviceEpoch) -> Self {
+        Self(epoch)
+    }
+
+    /// Returns the epoch observed before consuming the interrupt output.
+    pub const fn epoch(&self) -> DeviceEpoch {
+        self.0
+    }
+}
+
+/// One notification consumed from the hardware interrupt output.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PdmaInterruptNotification {
     notification: IrqNotification,
 }
 
 impl PdmaInterruptNotification {
+    /// Wraps one notification consumed from a hardware interrupt output.
+    pub const fn new(notification: IrqNotification) -> Self {
+        Self { notification }
+    }
+
     /// Returns the semantic notification captured by the exact claim.
     pub const fn notification(&self) -> IrqNotification {
         self.notification
@@ -35,78 +51,33 @@ impl PdmaNotificationEnvelope for PdmaInterruptNotification {
     }
 }
 
-/// Terminal failure from the PDMA readiness or exact-claim adapter.
-#[derive(Debug)]
-pub enum PdmaInterruptSourceError<E> {
+/// Failure from observing or consuming the PDMA hardware interrupt output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PdmaInterruptSourceError {
     /// The device interrupt source closed.
     Closed,
-    /// The canonical exact-claim capability failed.
-    Access(E),
+    /// Readiness or consumption belongs to another reset epoch.
+    StaleEpoch {
+        /// Required device epoch.
+        expected: DeviceEpoch,
+        /// Supplied capability epoch.
+        actual: DeviceEpoch,
+    },
+    /// Hardware rejected its interrupt output state.
+    InvalidState,
 }
 
-impl<E> fmt::Display for PdmaInterruptSourceError<E> {
+impl fmt::Display for PdmaInterruptSourceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Closed => formatter.write_str("PDMA interrupt source closed"),
-            Self::Access(_) => formatter.write_str("PDMA interrupt source access failed"),
+            Self::StaleEpoch { expected, actual } => write!(
+                formatter,
+                "stale interrupt epoch: expected {expected:?}, actual {actual:?}"
+            ),
+            Self::InvalidState => formatter.write_str("PDMA interrupt output state is invalid"),
         }
     }
 }
 
-impl<E: Error + 'static> Error for PdmaInterruptSourceError<E> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Closed => None,
-            Self::Access(source) => Some(source),
-        }
-    }
-}
-
-/// PDMA adapter for the generic two-phase runtime interrupt source.
-#[derive(Clone, Debug)]
-pub struct PdmaInterruptSource<A> {
-    access: A,
-}
-
-impl<A> PdmaInterruptSource<A> {
-    /// Creates a source over the one canonical exact-claim capability.
-    pub const fn new(access: A) -> Self {
-        Self { access }
-    }
-}
-
-impl<A> InterruptSource for PdmaInterruptSource<A>
-where
-    A: PdmaExactInterruptClaim + Send + 'static,
-{
-    type Notification = PdmaInterruptNotification;
-    type Ready = PdmaInterruptReady;
-    type Error = PdmaInterruptSourceError<A::Error>;
-
-    async fn wait_ready(&self) -> Result<Self::Ready, Self::Error> {
-        self.access
-            .wait_interrupt_ready()
-            .await
-            .map_err(PdmaInterruptSourceError::Access)?
-            .then_some(PdmaInterruptReady(()))
-            .ok_or(PdmaInterruptSourceError::Closed)
-    }
-
-    async fn claim(
-        &mut self,
-        _ready: Self::Ready,
-    ) -> Result<Option<Self::Notification>, Self::Error> {
-        match self
-            .access
-            .claim_interrupt_exact()
-            .await
-            .map_err(PdmaInterruptSourceError::Access)?
-        {
-            PdmaClaimResult::Notification { notification } => {
-                Ok(Some(PdmaInterruptNotification { notification }))
-            }
-            PdmaClaimResult::Empty => Ok(None),
-            PdmaClaimResult::Shutdown => Err(PdmaInterruptSourceError::Closed),
-        }
-    }
-}
+impl Error for PdmaInterruptSourceError {}

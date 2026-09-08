@@ -56,7 +56,7 @@ impl PipelineSlot {
         }
     }
 
-    pub(super) fn clear(&mut self) {
+    pub(super) const fn clear(&mut self) {
         self.state = None;
     }
 

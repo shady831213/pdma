@@ -3,11 +3,14 @@
 mod adverse;
 
 use super::lock;
-use pdma_model_contract::abi::mmio::MmioAccessError;
+use hardware_interface_runtime::InterruptSource;
 use pdma_model_contract::semantic::{
-    EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqVector, QueueConfigHandle,
+    EpochIrqSource, IrqMessage, IrqMessageId, IrqNotification, IrqVector,
 };
-use pdma_model_host::adapter::abi::{PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim};
+use pdma_model_host::QueueConfigHandle;
+use pdma_model_host::adapter::abi::{
+    PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSourceError,
+};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -21,7 +24,7 @@ pub struct ProbeAccess {
 
 #[derive(Debug)]
 struct State {
-    claims: VecDeque<PdmaClaimResult>,
+    claims: VecDeque<Option<PdmaInterruptNotification>>,
     ready_error: bool,
     claim_error: bool,
     pend_claim: bool,
@@ -41,18 +44,18 @@ pub struct SourceSnapshot {
 impl ProbeAccess {
     pub(crate) fn success(vector: IrqVector, queue: QueueConfigHandle) -> Self {
         Self::from_claims([
-            notification(vector, queue.completion_irq_source(), 0),
-            PdmaClaimResult::Empty,
-            notification(vector, queue.event_irq_source(), 1),
-            notification(vector, queue.completion_irq_source(), 2),
+            Some(notification(vector, queue.completion_irq_source(), 0)),
+            None,
+            Some(notification(vector, queue.event_irq_source(), 1)),
+            Some(notification(vector, queue.completion_irq_source(), 2)),
         ])
     }
 
     fn one(vector: IrqVector, source: EpochIrqSource) -> Self {
-        Self::from_claims([notification(vector, source, 0)])
+        Self::from_claims([Some(notification(vector, source, 0))])
     }
 
-    fn from_claims(claims: impl IntoIterator<Item = PdmaClaimResult>) -> Self {
+    fn from_claims(claims: impl IntoIterator<Item = Option<PdmaInterruptNotification>>) -> Self {
         Self {
             state: Arc::new(Mutex::new(State {
                 claims: claims.into_iter().collect(),
@@ -74,20 +77,27 @@ impl ProbeAccess {
     }
 }
 
-impl PdmaExactInterruptClaim for ProbeAccess {
-    type Error = PdmaClaimError;
+impl InterruptSource for ProbeAccess {
+    type Error = PdmaInterruptSourceError;
+    type Notification = PdmaInterruptNotification;
+    type Ready = PdmaInterruptReady;
 
-    async fn wait_interrupt_ready(&self) -> Result<bool, Self::Error> {
+    async fn wait_ready(&self) -> Result<Self::Ready, Self::Error> {
         if lock(&self.state).ready_error {
             return Err(probe_error());
         }
         while lock(&self.state).claims.is_empty() {
             tokio::task::yield_now().await;
         }
-        Ok(true)
+        Ok(PdmaInterruptReady::new(
+            pdma_model_contract::semantic::DeviceEpoch::initial(),
+        ))
     }
 
-    async fn claim_interrupt_exact(&self) -> Result<PdmaClaimResult, Self::Error> {
+    async fn claim(
+        &mut self,
+        _ready: Self::Ready,
+    ) -> Result<Option<Self::Notification>, Self::Error> {
         if lock(&self.state).pend_claim {
             tokio::task::yield_now().await;
         }
@@ -95,37 +105,34 @@ impl PdmaExactInterruptClaim for ProbeAccess {
         if state.claim_error {
             return Err(probe_error());
         }
-        let result = state.claims.pop_front().unwrap_or(PdmaClaimResult::Empty);
+        let result = state.claims.pop_front().flatten();
         match &result {
-            PdmaClaimResult::Notification { .. } => {
+            Some(_) => {
                 state.notifications = state.notifications.saturating_add(1);
             }
-            PdmaClaimResult::Empty => {
+            None => {
                 state.empty = state.empty.saturating_add(1);
             }
-            PdmaClaimResult::Shutdown => {}
         }
         drop(state);
         Ok(result)
     }
 }
 
-const fn notification(vector: IrqVector, source: EpochIrqSource, id: usize) -> PdmaClaimResult {
-    PdmaClaimResult::Notification {
-        notification: IrqNotification::Message(IrqMessage::new(
-            IrqMessageId::new(id),
-            vector,
-            source,
-        )),
-    }
+const fn notification(
+    vector: IrqVector,
+    source: EpochIrqSource,
+    id: usize,
+) -> PdmaInterruptNotification {
+    PdmaInterruptNotification::new(IrqNotification::Message(IrqMessage::new(
+        IrqMessageId::new(id),
+        vector,
+        source,
+    )))
 }
 
-const fn probe_error() -> PdmaClaimError {
-    PdmaClaimError::Access(MmioAccessError::WrongWidth {
-        offset: 0x220,
-        expected: 4,
-        actual: 8,
-    })
+const fn probe_error() -> PdmaInterruptSourceError {
+    PdmaInterruptSourceError::InvalidState
 }
 
 pub(super) async fn run_adverse() -> super::AdverseFacts {

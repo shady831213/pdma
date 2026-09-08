@@ -1,10 +1,9 @@
-use super::common::{TestResult, activate, allocate, encode, fixture, run_descriptor};
+use super::common::{Record, TestResult, allocate, encode, fixture, run_descriptor};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadCopyValues,
     AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
 };
-use pdma_model_contract::semantic::{QueueControl, QueueCursorUpdate, ResourceConfig, RingCursor};
-use pdma_model_device::{AsyncDevice, PendingDmaResult};
+use pdma_model_contract::semantic::{ResourceConfig, RingCursor};
 
 /// Operation variants covered by the exact descriptor inventory.
 #[derive(Clone, Copy, Debug)]
@@ -54,117 +53,16 @@ pub async fn execute_operation(case: OperationCase) -> TestResult {
     .await?;
     let descriptor = encode(command)?;
     let result = run_descriptor(fixture, descriptor, &[destination_a, destination_b]).await?;
-    assert!(matches!(
-        result.pending,
-        Some(PendingDmaResult::Completion(_))
-    ));
+    assert!(matches!(result.record, Some(Record::Completion(_))));
     assert_eq!(
         result.consumer,
         pdma_model_contract::semantic::RingCursor::new(1)
     );
     assert_eq!(result.destinations, [expected_a, expected_b]);
     assert!(!result.traces.is_empty());
-    assert_eq!(result.steps, 0);
+    assert_eq!(result.steps, 1);
     assert_eq!(result.native_steps, 1);
-    assert!(!result.irq_pending);
     Ok(())
-}
-
-pub(in crate::queue) async fn multi_queue_arbitration()
--> TestResult<Vec<pdma_model_contract::semantic::QueueId>> {
-    let resources = ResourceConfig::default().with_compute_slots(0);
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        resources,
-    );
-    let handle = runner.handle();
-    handle.enable_tracing().await;
-    let (vector_queue, vector_slot) =
-        activate(&handle, pdma_model_contract::semantic::QueueId::new(0)).await?;
-    let (copy_queue, copy_slot) =
-        activate(&handle, pdma_model_contract::semantic::QueueId::new(1)).await?;
-    let source_a = allocate(&handle, 4).await?;
-    let source_b = allocate(&handle, 4).await?;
-    let vector_destination = allocate(&handle, 4).await?;
-    let copy_destination = allocate(&handle, 4).await?;
-    handle.write_memory(source_a.base(), &[1, 2, 3, 4]).await?;
-    handle.write_memory(source_b.base(), &[4, 3, 2, 1]).await?;
-    let vector = encode(AbiCommand::from_payload(
-        40,
-        AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
-            source_a_dma_address: source_a.base().raw(),
-            source_b_dma_address: source_b.base().raw(),
-            destination_dma_address: vector_destination.base().raw(),
-            length: 4.into(),
-        }),
-    ))?;
-    let copy = encode(AbiCommand::from_payload(
-        41,
-        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-            source_dma_address: source_a.base().raw(),
-            destination_dma_address: copy_destination.base().raw(),
-            length: 4.into(),
-        }),
-    ))?;
-    for (queue, slot, descriptor) in [
-        (vector_queue, vector_slot, vector),
-        (copy_queue, copy_slot, copy),
-    ] {
-        handle.write_memory(slot, &descriptor).await?;
-        handle
-            .control_queue(QueueControl::PublishSubmissionProducer(
-                QueueCursorUpdate::new(queue, RingCursor::new(1)),
-            ))
-            .await?;
-        handle
-            .control_queue(QueueControl::CaptureSubmissionProducer(
-                QueueCursorUpdate::new(queue, RingCursor::new(1)),
-            ))
-            .await?;
-    }
-    let worker = tokio::spawn(worker.run());
-    let _first_stall = handle.wait_for_stall_after(0).await;
-    handle.write_memory(source_a.base(), &[1, 2, 3, 4]).await?;
-    let _second_stall = handle.wait_for_stall_after(1).await;
-    let vector_status = handle
-        .control_queue(QueueControl::ReadStatus(vector_queue))
-        .await?;
-    let copy_status = handle
-        .control_queue(QueueControl::ReadStatus(copy_queue))
-        .await?;
-    let snapshot = handle.snapshot().await;
-    assert_eq!(vector_status.submission().consumer(), RingCursor::new(0));
-    assert_eq!(copy_status.submission().consumer(), RingCursor::new(1));
-    assert_eq!(
-        (snapshot.steps, snapshot.stalls, snapshot.errors),
-        (1, 2, 0)
-    );
-    assert_eq!(handle.native_steps().await, 1);
-    assert_eq!(
-        handle
-            .read_memory(copy_destination.base(), copy_destination.length())
-            .await?,
-        [1, 2, 3, 4]
-    );
-    assert_eq!(
-        handle
-            .read_memory(vector_destination.base(), vector_destination.length())
-            .await?,
-        [0; 4]
-    );
-    let order = handle
-        .trace_events()
-        .await
-        .into_iter()
-        .filter(|event| event.kind() == pdma_model_contract::semantic::TraceEventKind::Scheduled)
-        .filter_map(|event| event.queue_id())
-        .collect();
-    assert_eq!(order, [copy_queue.queue_id()]);
-    handle.request_shutdown().await;
-    worker.await?;
-    Ok(order)
 }
 
 pub(in crate::queue) async fn zero_row_strided() -> TestResult {
@@ -181,10 +79,7 @@ pub(in crate::queue) async fn zero_row_strided() -> TestResult {
         }),
     ))?;
     let result = run_descriptor(fixture, descriptor, &[]).await?;
-    assert!(matches!(
-        result.pending,
-        Some(PendingDmaResult::Completion(_))
-    ));
+    assert!(matches!(result.record, Some(Record::Completion(_))));
     assert_eq!(result.consumer, RingCursor::new(1));
     assert_eq!(result.native_steps, 1);
     Ok(())

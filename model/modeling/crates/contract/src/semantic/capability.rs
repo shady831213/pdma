@@ -1,6 +1,6 @@
 //! Epoch-qualified semantic device capabilities.
 
-use crate::semantic::{IrqRoute, IrqSource, QueueId, SemanticError, SemanticResult};
+use crate::semantic::{IrqSource, QueueId, SemanticError, SemanticResult};
 
 /// Device generation attached to resettable capabilities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -79,49 +79,6 @@ impl EpochIrqSource {
     }
 }
 
-/// Epoch-qualified route assignment for one PDMA-local source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EpochIrqRoute {
-    source: EpochIrqSource,
-    route: IrqRoute,
-}
-
-impl EpochIrqRoute {
-    /// Creates a route assignment from typed source and route values.
-    pub const fn new(source: EpochIrqSource, route: IrqRoute) -> Self {
-        Self { source, route }
-    }
-
-    /// Epoch-qualified source.
-    pub const fn source(self) -> EpochIrqSource {
-        self.source
-    }
-
-    /// Host delivery route.
-    pub const fn route(self) -> IrqRoute {
-        self.route
-    }
-}
-
-/// Typed PDMA-local IRQ route, control, and observation operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IrqControl {
-    /// Assign a route while the source is inactive.
-    ConfigureRoute(EpochIrqRoute),
-    /// Enable a source.
-    Enable(EpochIrqSource),
-    /// Disable a source.
-    Disable(EpochIrqSource),
-    /// Mask delivery without clearing pending state.
-    Mask(EpochIrqSource),
-    /// Unmask delivery.
-    Unmask(EpochIrqSource),
-    /// Acknowledge a source.
-    Acknowledge(EpochIrqSource),
-    /// Observe pending state for a source.
-    Observe(EpochIrqSource),
-}
-
 /// Device execution state returned by typed status discovery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceRunState {
@@ -154,23 +111,5 @@ impl DeviceStatus {
     /// Snapshot execution state.
     pub const fn run_state(self) -> DeviceRunState {
         self.run_state
-    }
-}
-
-/// Whole-device reset request guarded by an expected generation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WholeDeviceReset {
-    expected_epoch: DeviceEpoch,
-}
-
-impl WholeDeviceReset {
-    /// Creates an epoch-guarded reset request.
-    pub const fn new(expected_epoch: DeviceEpoch) -> Self {
-        Self { expected_epoch }
-    }
-
-    /// Generation that must still be current before reset mutation.
-    pub const fn expected_epoch(self) -> DeviceEpoch {
-        self.expected_epoch
     }
 }

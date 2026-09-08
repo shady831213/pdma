@@ -1,6 +1,5 @@
-use pdma_model_contract::semantic::{
-    BroadcastCopyRequest, Command, CommandOperation, ResourceConfig, StridedCopyRequest,
-};
+use crate::operation::{BroadcastOperands, DecodedCommand, DecodedOperation, StridedOperands};
+use pdma_model_contract::semantic::ResourceConfig;
 
 #[derive(Debug, Clone, Copy)]
 pub(in crate::device) struct ResourceDemand {
@@ -11,16 +10,16 @@ pub(in crate::device) struct ResourceDemand {
 }
 
 impl ResourceDemand {
-    pub(in crate::device) fn for_command(command: &Command) -> Self {
-        Self::for_operation(command.operation())
+    pub(in crate::device) fn for_command(command: &DecodedCommand) -> Self {
+        Self::for_operation(&command.operation)
     }
 
-    pub(super) fn for_operation(operation: &CommandOperation) -> Self {
+    pub(super) fn for_operation(operation: &DecodedOperation) -> Self {
         match operation {
-            CommandOperation::Copy(_) => Self::copy(),
-            CommandOperation::StridedCopy(operation) => Self::strided(*operation),
-            CommandOperation::BroadcastCopy(operation) => Self::broadcast(operation),
-            CommandOperation::VectorAdd(_) => Self::vector_add(),
+            DecodedOperation::Copy(_) => Self::copy(),
+            DecodedOperation::StridedCopy(operation) => Self::strided(operation),
+            DecodedOperation::BroadcastCopy(operation) => Self::broadcast(operation),
+            DecodedOperation::VectorAdd(_) => Self::vector_add(),
         }
     }
 
@@ -33,17 +32,18 @@ impl ResourceDemand {
         }
     }
 
-    pub(super) const fn strided(operation: StridedCopyRequest) -> Self {
+    pub(super) fn strided(operation: &StridedOperands) -> Self {
+        let rows = usize::try_from(operation.rows).unwrap_or(usize::MAX);
         Self {
-            internal_descriptors: operation.rows(),
-            read_slots: operation.rows(),
-            write_slots: operation.rows(),
+            internal_descriptors: rows,
+            read_slots: rows,
+            write_slots: rows,
             compute_slots: 0,
         }
     }
 
-    pub(super) fn broadcast(operation: &BroadcastCopyRequest) -> Self {
-        let destinations = operation.destinations().len();
+    pub(super) fn broadcast(operation: &BroadcastOperands) -> Self {
+        let destinations = usize::try_from(operation.destination_count).unwrap_or(usize::MAX);
         Self {
             internal_descriptors: destinations,
             read_slots: destinations,

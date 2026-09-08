@@ -1,85 +1,76 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
+use crate::PortError;
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::abi::mmio::{PdmaMmioMap, ResponseCodecError, register_at};
+use pdma_model_contract::abi::registers::{GlobalRegisters, RegisterLocation, locate};
+use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
 
-pub(super) const fn queue_offset(local: usize) -> usize {
-    PdmaMmioMap::QUEUE.offset() + local
-}
-
-pub(super) const fn irq_offset(local: usize) -> usize {
-    PdmaMmioMap::IRQ.offset() + local
+pub(super) fn queue_offset(queue: QueueId, local: usize) -> PdmaPortResult<u32> {
+    let index = u32::try_from(queue.raw()).map_err(|_| PortError::SubmissionState)?;
+    pdma_model_contract::abi::registers::queue_offset(index, local)
+        .map_err(|_| PortError::SubmissionState.into())
 }
 
 pub(super) async fn write<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    address: usize,
+    address: u32,
     value: u64,
 ) -> PdmaPortResult<()> {
-    let register = register(address)?;
-    let mut bytes = vec![0; register.width()];
-    register
-        .definition()
-        .view_mut(&mut bytes)
-        .map_err(ResponseCodecError::from)?
-        .set_value(value)
-        .map_err(ResponseCodecError::from)?;
-    port.poll_register(RegisterAccess::write(
-        &port.access,
-        offset(register.offset())?,
-        &bytes,
-    ))
-    .await
+    let bytes = value.to_le_bytes();
+    let request = bytes
+        .get(..width(address)?)
+        .ok_or(PortError::SubmissionState)?;
+    port.poll_register(RegisterAccess::write(&port.access, address, request))
+        .await
 }
 
 pub(super) async fn read<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
-    address: usize,
+    address: u32,
 ) -> PdmaPortResult<u64> {
-    let register = register(address)?;
-    let mut bytes = vec![0; register.width()];
-    port.poll_register(RegisterAccess::read(
-        &port.access,
-        offset(register.offset())?,
-        &mut bytes,
-    ))
-    .await?;
-    register
-        .definition()
-        .view(&bytes)
-        .map_err(ResponseCodecError::from)?
-        .value()
-        .map_err(ResponseCodecError::from)
-        .map_err(Into::into)
-}
-
-pub(super) async fn read_bank<A: CanonicalAccess>(
-    port: &PdmaRegisterPort<A>,
-    offsets: impl Iterator<Item = usize> + Send,
-) -> PdmaPortResult<Vec<u8>> {
-    let registers = offsets.map(register).collect::<PdmaPortResult<Vec<_>>>()?;
-    let capacity = registers.iter().map(|register| register.width()).sum();
-    let mut bank = Vec::with_capacity(capacity);
-    for register in registers {
-        let mut bytes = vec![0; register.width()];
+    let mut bytes = [0; 8];
+    let response = bytes
+        .get_mut(..width(address)?)
+        .ok_or(PortError::SubmissionState)?;
+    port.poll_register(RegisterAccess::read(&port.access, address, response))
+        .await?;
+    let value = u64::from_le_bytes(bytes);
+    let epoch_offset =
+        u32::try_from(GlobalRegisters::EPOCH.offset()).map_err(|_| PortError::SubmissionState)?;
+    let observed = if address == epoch_offset {
+        DeviceEpoch::new(value)
+    } else {
+        let mut epoch_bytes = [0; 8];
         port.poll_register(RegisterAccess::read(
             &port.access,
-            offset(register.offset())?,
-            &mut bytes,
+            epoch_offset,
+            &mut epoch_bytes,
         ))
         .await?;
-        bank.extend_from_slice(&bytes);
+        DeviceEpoch::new(u64::from_le_bytes(epoch_bytes))
+    };
+    let bound = port.with_state(|state| state.epoch)?;
+    if observed != bound {
+        return Err(PortError::StaleEpoch {
+            expected: observed,
+            actual: bound,
+        }
+        .into());
     }
-    Ok(bank)
+    Ok(value)
 }
 
-fn register(address: usize) -> PdmaPortResult<pdma_model_contract::abi::mmio::RegisterSpec> {
-    register_at(address)
-        .ok_or(crate::PortError::SubmissionState)
-        .map_err(Into::into)
+pub(super) const fn committed(result: &PdmaPortResult<()>) -> bool {
+    match result {
+        Ok(()) => true,
+        Err(super::PdmaRegisterPortError::Register(error)) => error.is_committed(),
+        Err(_) => false,
+    }
 }
 
-fn offset(value: usize) -> PdmaPortResult<u32> {
-    u32::try_from(value)
-        .map_err(|_| crate::PortError::SubmissionState)
-        .map_err(Into::into)
+fn width(address: u32) -> PdmaPortResult<usize> {
+    match locate(address).ok_or(PortError::SubmissionState)? {
+        RegisterLocation::Global { register } => Ok(register.width()),
+        RegisterLocation::Queue { register, .. } => Ok(register.width()),
+        RegisterLocation::Irq { register, .. } => Ok(register.width()),
+    }
 }

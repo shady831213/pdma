@@ -4,20 +4,18 @@ mod control;
 mod descriptor;
 mod driver;
 mod irq;
-mod pending;
 mod registers;
 mod retirement;
 mod state;
 mod submission;
 
 use super::{
-    PdmaClaimError, PdmaClaimResult, PdmaExactInterruptClaim, PdmaIrqAccess,
     PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegisterAccessError, PdmaRegisterPortError,
     RegisterQueueStatus,
 };
 use crate::PortError;
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, RegisterAccess};
-use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue, IrqNotification};
+use pdma_model_contract::semantic::{DeviceEpoch, EpochQueue};
 use std::{future::Future, future::poll_fn, sync::Arc, task::Poll};
 use tokio::sync::Mutex;
 
@@ -28,11 +26,9 @@ type PdmaPortResult<T> = Result<T, PdmaRegisterPortError>;
 /// # Cancel safety
 ///
 /// Accesses execute in order; completed allocations, memory writes and register
-/// writes persist when a future is dropped. Clones resolve an issued queue-command
-/// response before issuing another command, without reissuing the original command.
-/// Unresolved issued submissions retain driver credit even if every port is dropped.
-/// Retrying creation with the same configuration recovers an accepted activation;
-/// retirement retries deliver each retained record once. Reset requires a new driver.
+/// writes persist when a future is dropped. Producer publication accepts driver credit
+/// synchronously. Retirement retains a consumed record before another await.
+/// Queue allocation and configuration may survive cancellation. Reset requires a new driver.
 #[derive(Debug, Clone)]
 pub struct PdmaRegisterPort<A> {
     access: A,
@@ -52,7 +48,7 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     /// Captures the active CPU while preserving its typed failure.
     pub fn try_new_at(access: A, epoch: DeviceEpoch) -> PdmaPortResult<Self> {
         Ok(Self {
-            access,
+            access: access.at_epoch(epoch),
             state: CpuLocal::capture_active(state::PortState::new(epoch))
                 .map_err(PdmaRegisterPortError::from)?,
             queue_window: Arc::new(Mutex::new(())),
@@ -62,15 +58,21 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     pub const fn access(&self) -> &A {
         &self.access
     }
-    /// Reads one queue status through this port's clone-shared selector state.
+    /// Reads one queue's directly addressed hardware cursors.
     pub async fn queue_status(&self, queue: EpochQueue) -> PdmaPortResult<RegisterQueueStatus> {
         self.try_queue_status(queue).await
     }
-    /// Reads one queue status without erasing register or response failures.
+    /// Reads queue status while preserving typed register failures.
     pub async fn try_queue_status(&self, queue: EpochQueue) -> PdmaPortResult<RegisterQueueStatus> {
         let _window = self.queue_window.lock().await;
         let state = self.with_state(|state| {
-            state.queue.ok_or_else(|| {
+            if queue.epoch() != state.epoch {
+                return Err(PdmaRegisterPortError::from(PortError::StaleEpoch {
+                    expected: state.epoch,
+                    actual: queue.epoch(),
+                }));
+            }
+            state.queues.get(&queue.queue_id()).copied().ok_or_else(|| {
                 PdmaRegisterPortError::from(PortError::UnknownQueue(queue.queue_id()))
             })
         })??;
@@ -123,24 +125,6 @@ impl<A: CanonicalAccess> PdmaRegisterPort<A> {
     {
         self.poll_typed(future).await
     }
-    async fn poll_claim<F, T>(&self, future: F) -> PdmaPortResult<T>
-    where
-        F: Future<Output = Result<T, PdmaClaimError>> + Send,
-        T: Send,
-    {
-        self.poll_typed(future).await
-    }
-    async fn claim_notification(&self) -> PdmaPortResult<Option<IrqNotification>> {
-        loop {
-            match self.poll_claim(self.access.claim_interrupt_exact()).await? {
-                PdmaClaimResult::Notification { notification, .. } => {
-                    return Ok(Some(notification));
-                }
-                PdmaClaimResult::Empty => {}
-                PdmaClaimResult::Shutdown => return Ok(None),
-            }
-        }
-    }
 }
 
 /// Complete canonical capability bound accepted by [`PdmaRegisterPort`].
@@ -151,8 +135,6 @@ pub trait CanonicalAccess:
     + MemoryAccess
     + RegisterAccess<Error = PdmaRegisterAccessError>
     + PdmaMemoryProvisioning<Error = PdmaProvisioningError>
-    + PdmaExactInterruptClaim<Error = PdmaClaimError>
-    + PdmaIrqAccess
 {
 }
 impl<T> CanonicalAccess for T where
@@ -162,7 +144,5 @@ impl<T> CanonicalAccess for T where
         + MemoryAccess
         + RegisterAccess<Error = PdmaRegisterAccessError>
         + PdmaMemoryProvisioning<Error = PdmaProvisioningError>
-        + PdmaExactInterruptClaim<Error = PdmaClaimError>
-        + PdmaIrqAccess
 {
 }

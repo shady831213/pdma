@@ -1,114 +1,152 @@
-use pdma_model_contract::semantic::{DeviceEpoch, QueueId};
-use pdma_model_device::AsyncDeviceHandle;
-use pdma_model_device::MappedDmaRegion;
+use hardware_interface_runtime::{RegisterAccess, SharedMemory};
+use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
+use pdma_model_contract::abi::{
+    AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
+    DmaAddress, RingLayout,
+};
+use pdma_model_contract::semantic::ResourceConfig;
+use pdma_model_device::{
+    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, MappedDmaRegion, MmioRegisterEndpoint,
+    MmioRegisterError, PdmaMemoryProvisioning,
+};
+use std::sync::Arc;
 
-pub(super) async fn write_u32(
-    handle: &AsyncDeviceHandle,
+pub(in crate::mmio) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+pub(in crate::mmio) fn device(config: ResourceConfig) -> (AsyncDevice, AsyncDeviceWorker) {
+    AsyncDevice::new(
+        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        config,
+    )
+}
+
+pub(in crate::mmio) async fn write_u32(
+    endpoint: &MmioRegisterEndpoint,
     offset: u32,
     value: u32,
-) -> Result<(), pdma_model_contract::abi::mmio::MmioAccessError> {
-    handle.write_mmio(offset, &value.to_le_bytes()).await
+) -> Result<(), MmioRegisterError> {
+    endpoint.write(offset, &value.to_le_bytes()).await
 }
 
-pub(super) async fn write_u64(
-    handle: &AsyncDeviceHandle,
+pub(in crate::mmio) async fn write_u64(
+    endpoint: &MmioRegisterEndpoint,
     offset: u32,
     value: u64,
-) -> Result<(), pdma_model_contract::abi::mmio::MmioAccessError> {
-    handle.write_mmio(offset, &value.to_le_bytes()).await
+) -> Result<(), MmioRegisterError> {
+    endpoint.write(offset, &value.to_le_bytes()).await
 }
 
-pub(super) async fn read_u32(
-    handle: &AsyncDeviceHandle,
+pub(in crate::mmio) async fn read_u32(
+    endpoint: &MmioRegisterEndpoint,
     offset: u32,
-) -> Result<u32, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let bytes = handle.read_mmio(offset, 4).await?;
-    let array: [u8; 4] = bytes.try_into().map_err(|_| "four MMIO bytes required")?;
-    Ok(u32::from_le_bytes(array))
+) -> TestResult<u32> {
+    let mut bytes = [0; 4];
+    endpoint.read(offset, &mut bytes).await?;
+    Ok(u32::from_le_bytes(bytes))
 }
 
-pub(super) async fn read_u64(
-    handle: &AsyncDeviceHandle,
+pub(in crate::mmio) async fn read_u64(
+    endpoint: &MmioRegisterEndpoint,
     offset: u32,
-) -> Result<u64, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let bytes = handle.read_mmio(offset, 8).await?;
-    let array: [u8; 8] = bytes.try_into().map_err(|_| "eight MMIO bytes required")?;
-    Ok(u64::from_le_bytes(array))
+) -> TestResult<u64> {
+    let mut bytes = [0; 8];
+    endpoint.read(offset, &mut bytes).await?;
+    Ok(u64::from_le_bytes(bytes))
 }
 
-pub(super) async fn activate_raw(
-    handle: &AsyncDeviceHandle,
-    epoch: DeviceEpoch,
-    queue_id: QueueId,
+pub(in crate::mmio) fn q(offset: usize) -> TestResult<u32> {
+    Ok(queue_offset(0, offset)?)
+}
+
+pub(in crate::mmio) async fn program_activation(
+    endpoint: &MmioRegisterEndpoint,
     regions: &[MappedDmaRegion],
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    depth: u32,
+) -> TestResult {
     let [submission, completion, event] = regions else {
-        return Err("three committed queue regions required".into());
+        return Err("three queue regions required".into());
     };
-    program_activation(
-        handle,
-        RawActivation::depth_two(epoch, queue_id, [*submission, *completion, *event]),
+    for (offset, value) in [
+        (QueueRegisters::SQ_BASE.offset(), submission.base().raw()),
+        (QueueRegisters::CQ_BASE.offset(), completion.base().raw()),
+        (QueueRegisters::EQ_BASE.offset(), event.base().raw()),
+    ] {
+        write_u64(endpoint, q(offset)?, value).await?;
+    }
+    for offset in [
+        QueueRegisters::SQ_DEPTH.offset(),
+        QueueRegisters::CQ_DEPTH.offset(),
+        QueueRegisters::EQ_DEPTH.offset(),
+    ] {
+        write_u32(endpoint, q(offset)?, depth).await?;
+    }
+    Ok(())
+}
+
+pub(in crate::mmio) async fn create_queue(
+    handle: &AsyncDeviceHandle,
+    depth: u32,
+) -> TestResult<[MappedDmaRegion; 3]> {
+    let stage = handle
+        .stage_memory_regions(&[
+            RingLayout::<AbiCommand>::checked_extent(u64::from(depth))?,
+            RingLayout::<AbiCompletion>::checked_extent(u64::from(depth))?,
+            RingLayout::<AbiEvent>::checked_extent(u64::from(depth))?,
+        ])
+        .await?;
+    let regions = handle.commit_memory_stage(stage).await?;
+    let regions: [MappedDmaRegion; 3] = regions.try_into().map_err(|_| "three rings")?;
+    let endpoint = handle.register_endpoint();
+    program_activation(&endpoint, &regions, depth).await?;
+    write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await?;
+    Ok(regions)
+}
+
+pub(in crate::mmio) async fn submit_copy(
+    handle: &AsyncDeviceHandle,
+    submission: DmaAddress,
+    slot: u64,
+) -> TestResult<MappedDmaRegion> {
+    let source = handle.allocate_memory_region(4).await?;
+    let destination = handle.allocate_memory_region(4).await?;
+    handle.write_memory(source.base(), &[1, 2, 3, 4]).await?;
+    let descriptor = AbiCommand::from_payload(
+        slot,
+        AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
+            source_dma_address: source.base().raw(),
+            destination_dma_address: destination.base().raw(),
+            length: 4.into(),
+        }),
+    );
+    let mut bytes = [0; AbiCommand::RECORD_SIZE];
+    descriptor.encode(&mut bytes)?;
+    handle
+        .write_memory(
+            submission.checked_add(slot * u64::try_from(AbiCommand::RECORD_SIZE)?)?,
+            &bytes,
+        )
+        .await?;
+    write_u64(
+        &handle.register_endpoint(),
+        q(QueueRegisters::SQ_PRODUCER.offset())?,
+        slot + 1,
     )
     .await?;
-    issue_queue_command(handle, 1).await
+    Ok(destination)
 }
 
-#[derive(Clone, Copy)]
-pub(super) struct RawActivation {
-    epoch: DeviceEpoch,
-    queue_id: QueueId,
-    regions: [MappedDmaRegion; 3],
-}
-
-impl RawActivation {
-    pub(super) const fn depth_two(
-        epoch: DeviceEpoch,
-        queue_id: QueueId,
-        regions: [MappedDmaRegion; 3],
-    ) -> Self {
-        Self {
-            epoch,
-            queue_id,
-            regions,
-        }
+pub(in crate::mmio) async fn cursors(endpoint: &MmioRegisterEndpoint) -> TestResult<[u64; 7]> {
+    let mut values = [0; 7];
+    for (value, offset) in values.iter_mut().zip([
+        QueueRegisters::SQ_PRODUCER.offset(),
+        QueueRegisters::SQ_CAPTURED.offset(),
+        QueueRegisters::SQ_CONSUMER.offset(),
+        QueueRegisters::CQ_PRODUCER.offset(),
+        QueueRegisters::CQ_CONSUMER.offset(),
+        QueueRegisters::EQ_PRODUCER.offset(),
+        QueueRegisters::EQ_CONSUMER.offset(),
+    ]) {
+        *value = read_u64(endpoint, q(offset)?).await?;
     }
-}
-
-pub(super) async fn program_activation(
-    handle: &AsyncDeviceHandle,
-    raw: RawActivation,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let [submission, completion, event] = raw.regions;
-    for (offset, value) in [
-        (0x100, raw.epoch.raw()),
-        (0x108, u64::try_from(raw.queue_id.raw())?),
-        (0x130, 7),
-        (0x138, submission.base().raw()),
-        (0x148, completion.base().raw()),
-        (0x158, event.base().raw()),
-    ] {
-        write_u64(handle, offset, value).await?;
-    }
-    for (offset, value) in [(0x120, 2), (0x124, 2), (0x140, 2), (0x150, 2), (0x160, 2)] {
-        write_u32(handle, offset, value).await?;
-    }
-    Ok(())
-}
-
-pub(super) async fn issue_queue_command(
-    handle: &AsyncDeviceHandle,
-    command: u32,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    write_u32(handle, 0x164, command).await?;
-    Ok(())
-}
-
-pub(super) async fn read_response(
-    handle: &AsyncDeviceHandle,
-) -> Result<[u64; 9], Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let mut response = [0; 9];
-    for (slot, offset) in response.iter_mut().zip((0x188..=0x1c8).step_by(8)) {
-        *slot = read_u64(handle, offset).await?;
-    }
-    Ok(response)
+    Ok(values)
 }

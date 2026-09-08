@@ -1,14 +1,17 @@
 #![allow(missing_docs)]
 
 use pdma_model_host::DriverError;
+use pdma_model_host::{
+    CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId, StridedCopyRequest,
+};
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{
-    EventRouting, QueueConfig, QueueId, SoftwareOwnerId,
-    desc::{CopyRequest, StridedCopyRequest},
-};
+use pdma_model_contract::semantic::QueueId;
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
@@ -24,7 +27,8 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
     let config_b = QueueConfig::new(4, 5, EventRouting::QueueLocal, SoftwareOwnerId::new(20));
     let (handle_a, handle_b, owner_ten_entry, owner_twenty_entry) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
 
             // When: async drivers create both queues through the port-backed setup API.
             let driver_a = AsyncDriver::setup_with_config_on(&mut handle, config_a)
@@ -66,7 +70,8 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
     let worker = tokio::spawn(worker.run());
     let (command_id, second_submit, queue_handle) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_with_config_on(
                 &mut handle,
                 QueueConfig::new(1, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
@@ -125,7 +130,8 @@ async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
         other_second_submit,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver_a = AsyncDriver::setup_with_config_on(
                 &mut handle,
                 QueueConfig::new(1, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(1)),

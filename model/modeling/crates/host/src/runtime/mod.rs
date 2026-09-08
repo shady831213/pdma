@@ -3,5 +3,3 @@
 #[cfg(test)]
 mod cpu;
 pub mod interrupt;
-#[cfg(test)]
-mod irq_delivery;

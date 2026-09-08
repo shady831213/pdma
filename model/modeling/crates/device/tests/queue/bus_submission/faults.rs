@@ -1,4 +1,4 @@
-use super::common::{TestResult, allocate, encode, fixture, pending_event, run_descriptor};
+use super::common::{TestResult, allocate, encode, fixture, published_event, run_descriptor};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiEventAccess, AbiEventKind,
     AbiEventStage, DmaAddress, MAX_INDIRECT_DESTINATIONS,
@@ -47,9 +47,8 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 0);
     assert_eq!(result.native_steps, 1);
-    assert!(!result.irq_pending);
     assert_eq!(
-        pending_event(&result)?.fault().tuple(),
+        published_event(&result)?.fault().tuple(),
         (
             AbiEventKind::InvalidReserved,
             slot.raw(),
@@ -82,11 +81,10 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     )
     .await?;
     assert_eq!(result.consumer, RingCursor::new(0));
-    assert_eq!(result.pending, None);
+    assert_eq!(result.record, None);
     assert_eq!(result.destinations, [vec![0; 4]]);
     assert_eq!(result.steps, 0);
     assert_eq!(result.native_steps, 0);
-    assert!(!result.irq_pending);
     Ok(())
 }
 
@@ -114,7 +112,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
     let result = run_descriptor(fixture, bytes, &[]).await?;
     let expected = expected_tuple(case, list_base, list);
     assert_eq!(result.consumer, RingCursor::new(1));
-    assert_eq!(pending_event(&result)?.fault().tuple(), expected);
+    assert_eq!(published_event(&result)?.fault().tuple(), expected);
     Ok(())
 }
 

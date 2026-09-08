@@ -3,15 +3,16 @@
 mod vector_read;
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{
-    CompletionStatus, ResourceConfig,
-    desc::{
-        BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, VectorAddRequest,
-        VectorBufferRange,
-    },
-};
+use pdma_model_contract::semantic::{CompletionStatus, ResourceConfig};
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, compat::AsyncDevicePort};
+use pdma_model_host::{
+    AsyncDriver,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
+use pdma_model_host::{
+    BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, VectorAddRequest,
+    VectorBufferRange,
+};
 
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_vector_add_stalls_with_one_read_slot() {
@@ -30,7 +31,8 @@ async fn async_runner_copy_stalls_without_read_slots() {
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -86,7 +88,8 @@ async fn async_runner_copy_completes_with_one_read_slot() {
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion, copied) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -143,7 +146,8 @@ async fn async_runner_broadcast_stalls_with_insufficient_write_and_descriptor_cr
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -214,7 +218,8 @@ async fn async_runner_vector_add_stalls_without_compute_slots() {
     let worker = tokio::spawn(worker.run());
     let (command_id, snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = AsyncDevicePort::new(runner.handle());
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

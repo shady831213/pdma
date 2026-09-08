@@ -1,5 +1,7 @@
 //! Command execution and deterministic device stepping.
 
+#[cfg(test)]
+mod backend_tests;
 mod broadcast;
 mod copy;
 mod memory;
@@ -7,12 +9,12 @@ pub(super) mod resources;
 pub(super) mod stage;
 mod vector_add;
 
-use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_contract::semantic::{
-    BroadcastCopyRequest, Command, CopyRequest, StridedCopyRequest, VectorAddRequest,
+use crate::operation::{
+    BroadcastOperands, CopyOperands, DecodedCommand, StridedOperands, VectorOperands,
 };
+use pdma_model_contract::semantic::ResourceConfig;
 
-use super::flow::{CommandRoute, ExecutionFault, ExecutionOutcome, SuccessfulExecution};
+use super::flow::{CommandRoute, ExecutionOutcome, SuccessfulExecution};
 
 const fn success(
     route: CommandRoute,
@@ -40,14 +42,14 @@ impl ExecutionUnit {
         self.stages.upstream.config
     }
 
-    pub(super) fn can_execute(&self, command: &Command) -> bool {
+    pub(super) fn can_execute(&self, command: &DecodedCommand) -> bool {
         resources::ResourceDemand::for_command(command).fits(self.resources())
     }
 
     pub(super) fn execute_copy(
         memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
-        request: CopyRequest,
+        request: CopyOperands,
     ) -> ExecutionOutcome {
         copy::execute(memory, route, request)
     }
@@ -55,7 +57,7 @@ impl ExecutionUnit {
     pub(super) fn execute_strided(
         memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
-        request: StridedCopyRequest,
+        request: StridedOperands,
     ) -> ExecutionOutcome {
         copy::execute_strided(memory, route, request)
     }
@@ -63,7 +65,7 @@ impl ExecutionUnit {
     pub(super) fn execute_broadcast(
         memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
-        request: &BroadcastCopyRequest,
+        request: &BroadcastOperands,
     ) -> ExecutionOutcome {
         broadcast::execute(memory, route, request)
     }
@@ -71,7 +73,7 @@ impl ExecutionUnit {
     pub(super) fn execute_vector_add(
         memory: &crate::memory::PdmaMemoryMappings,
         route: CommandRoute,
-        request: VectorAddRequest,
+        request: VectorOperands,
     ) -> ExecutionOutcome {
         vector_add::execute(memory, route, request)
     }

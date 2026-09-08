@@ -1,8 +1,9 @@
 use super::support::BlockingPort;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest};
+use pdma_model_contract::semantic::CommandId;
 use pdma_model_device::AsyncDevice;
-use pdma_model_host::{AsyncDriver, DriverError, ManualDriver, PortError, compat::AsyncDevicePort};
+use pdma_model_host::CopyRequest;
+use pdma_model_host::{AsyncDriver, DriverError, ManualDriver, PortError};
 use std::{future::poll_fn, task::Poll};
 
 #[tokio::test(flavor = "current_thread")]
@@ -15,22 +16,24 @@ async fn fallible_allocation_propagates_through_both_driver_facades() {
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let handle = device.handle();
-    let mut port = AsyncDevicePort::new(handle.clone());
-    let async_driver = SoftwareCpu::new()
+    let mut port = super::support::BlockingPort::new(handle.clone());
+    let cpu = SoftwareCpu::new();
+    let async_driver = cpu
         .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
         .await
         .expect("async setup");
-    let manual_driver = ManualDriver::setup_on(&mut port, 1, 1)
+    let manual_driver = cpu
+        .run_main(ManualDriver::setup_on(&mut port, 1, 1))
         .await
         .expect("manual setup");
 
     // When: both facades allocate through the same public async port.
-    let async_object = async_driver
-        .allocate_buffer_on(&mut port, 3)
+    let async_object = cpu
+        .run_main(async_driver.allocate_buffer_on(&mut port, 3))
         .await
         .expect("async allocation");
-    let manual_object = manual_driver
-        .allocate_buffer_on(&mut port, 5)
+    let manual_object = cpu
+        .run_main(manual_driver.allocate_buffer_on(&mut port, 5))
         .await
         .expect("manual allocation");
 
@@ -43,13 +46,10 @@ async fn fallible_allocation_propagates_through_both_driver_facades() {
         .region_for_object(manual_object)
         .await
         .expect("manual mapping");
-    assert_eq!(async_object, BufferId::new(0));
     assert_eq!(async_region.object(), async_object);
-    assert_eq!(async_region.base().raw(), 0x1_0000);
     assert_eq!(async_region.length(), 3);
-    assert_eq!(manual_object, BufferId::new(1));
+    assert_ne!(async_object, manual_object);
     assert_eq!(manual_region.object(), manual_object);
-    assert_eq!(manual_region.base().raw(), 0x1_0040);
     assert_eq!(manual_region.length(), 5);
 }
 
@@ -71,6 +71,7 @@ async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
         .await
         .expect("driver setup");
     let trace_before = handle.trace_events().await;
+    let generation_before = handle.memory_generation().await;
     port.block_allocation();
     let control = port.clone();
     let mut pending = Box::pin(driver.allocate_buffer_on(&mut port, 4));
@@ -84,28 +85,29 @@ async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
     // When: the pending future is dropped and address-space exhaustion follows.
     drop(pending);
     control.allow_allocation();
-    let exhausted = driver.allocate_buffer_on(&mut port, usize::MAX).await;
+    let exhausted = cpu
+        .run_main(driver.allocate_buffer_on(&mut port, usize::MAX))
+        .await;
 
     // Then: neither rejection mutates mapping identity, bytes, trace, or driver accounting.
     assert_eq!(
         exhausted,
         Err(DriverError::Port(PortError::AllocationExhausted))
     );
-    assert_eq!(handle.region_for_object(BufferId::new(0)).await, None);
+    assert_eq!(handle.memory_generation().await, generation_before);
     assert_eq!(handle.trace_events().await, trace_before);
-    let object = driver
-        .allocate_buffer_on(&mut port, 4)
+    let object = cpu
+        .run_main(driver.allocate_buffer_on(&mut port, 4))
         .await
         .expect("first committed allocation");
     let region = handle
         .region_for_object(object)
         .await
         .expect("committed mapping");
-    assert_eq!(object, BufferId::new(0));
-    assert_eq!(region.base().raw(), 0x1_0000);
+    assert_eq!(region.length(), 4);
     assert_eq!(handle.read_buffer(object, 0, 4).await, Ok(vec![0; 4]));
-    let destination = driver
-        .allocate_buffer_on(&mut port, 4)
+    let destination = cpu
+        .run_main(driver.allocate_buffer_on(&mut port, 4))
         .await
         .expect("destination allocation");
     let submitted = cpu

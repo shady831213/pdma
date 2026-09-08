@@ -2,18 +2,16 @@
 
 mod address;
 mod codec;
-mod control;
 mod descriptor;
 mod error;
 mod fault;
 pub mod header;
 mod metadata;
-pub mod mmio;
 pub mod record;
+pub mod registers;
 mod ring;
 
 pub use address::{DmaAddress, DmaRegion};
-pub use control::{AbiDiscovery, AbiLimits, DiscoveryRequest};
 pub use descriptor::{
     AbiCommand, AbiCommandHeader, AbiCommandHeaderFlagsRaw, AbiCommandHeaderFlagsValues,
     AbiCommandHeaderOpcode, AbiCommandHeaderOpcodeRaw, AbiCommandHeaderRaw, AbiCommandHeaderView,

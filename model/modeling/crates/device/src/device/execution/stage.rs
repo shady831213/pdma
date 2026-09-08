@@ -1,5 +1,6 @@
+use crate::operation::DecodedOperation;
 use hardware_interface_pipeline::{Stage, StepOutcome, Then, ThenState};
-use pdma_model_contract::semantic::{CommandOperation, ResourceConfig};
+use pdma_model_contract::semantic::ResourceConfig;
 
 use super::ExecutionUnit;
 use super::resources::ResourceDemand;
@@ -76,16 +77,16 @@ impl Stage<HardwareContext<'_>> for Datapath {
             FetchedWork::Command(command) => {
                 let route = command.route;
                 let outcome: ExecutionOutcome = match command.operation {
-                    CommandOperation::Copy(request) => {
+                    DecodedOperation::Copy(request) => {
                         ExecutionUnit::execute_copy(context.memory, route, request)
                     }
-                    CommandOperation::StridedCopy(request) => {
+                    DecodedOperation::StridedCopy(request) => {
                         ExecutionUnit::execute_strided(context.memory, route, request)
                     }
-                    CommandOperation::BroadcastCopy(request) => {
+                    DecodedOperation::BroadcastCopy(request) => {
                         ExecutionUnit::execute_broadcast(context.memory, route, &request)
                     }
-                    CommandOperation::VectorAdd(request) => {
+                    DecodedOperation::VectorAdd(request) => {
                         ExecutionUnit::execute_vector_add(context.memory, route, request)
                     }
                 };

@@ -4,7 +4,6 @@ use pdma_model_device::dma::MappedDmaRegion;
 use pdma_model_host::{
     DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
-    compat::AsyncDevicePort,
     runtime::interrupt::PdmaIrqDelivery,
 };
 
@@ -15,7 +14,6 @@ fn traits<T: DriverPort, M: MemoryAccess>() {
 fn main() {
     let _ = std::mem::size_of::<Option<AsyncDeviceAccess>>();
     let _ = std::mem::size_of::<Option<PdmaRegisterPort<AsyncDeviceAccess>>>();
-    let _ = std::mem::size_of::<Option<AsyncDevicePort>>();
     let _ = std::mem::size_of::<PdmaIrqDelivery>();
     let _ = std::mem::size_of::<Option<CpuLocal<u8>>>();
     let _ = SoftwareCpu::new;

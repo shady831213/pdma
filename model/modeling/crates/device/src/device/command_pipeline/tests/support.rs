@@ -1,25 +1,20 @@
 use std::num::NonZeroUsize;
 
+use crate::test_support::{self, TestQueue};
 use hardware_interface_pipeline::{
     ImmediateExecutor, Operation, RunError, RunOutcome, StepExecutor,
 };
-use pdma_model_contract::semantic::{
-    BufferId, Command, CommandId, CommandOperation, EpochIrqSource, IrqSource, QueueConfigHandle,
-    ResourceConfig,
-    desc::{
-        BroadcastCopyRequest, BroadcastDestinationRange, CopyRequest, StridedCopyRequest,
-        VectorAddRequest, VectorBufferRange,
-    },
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
-};
+use pdma_model_contract::abi::registers::IrqSourceRegisters;
+use pdma_model_contract::semantic::ResourceConfig;
 
 use crate::device::{DeviceCore, ModelStepStatus};
 use crate::runtime::PdmaMemoryProvisioning;
 use crate::{AsyncStallReason, MappedDmaRegion, ModelError};
 
+mod descriptor;
 mod observation;
 
-pub(super) use observation::{drive_to_complete, drive_to_pending, read, trace_kinds};
+pub(super) use observation::{cursors, drive_to_complete, drive_to_pending, read, trace_kinds};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Case {
@@ -62,7 +57,7 @@ pub(super) struct Fixture {
 
 pub(super) struct Prepared {
     pub(super) fixture: Fixture,
-    pub(super) queue: QueueConfigHandle,
+    pub(super) queue: TestQueue,
     pub(super) destinations: [MappedDmaRegion; 2],
 }
 
@@ -150,29 +145,28 @@ pub(super) fn prepare_with_resources(case: Case, resources: ResourceConfig) -> P
         .memory
         .write_object(source_b.object(), 0, &[8, 7, 6, 5, 4, 3, 2, 1])
         .expect("source B bytes");
-    let queue = fixture
-        .core
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .expect("queue");
-    fixture
-        .core
-        .submit_command(
-            queue,
-            command(case, source_a, source_b, destination_a, destination_b),
-        )
-        .expect("submission");
-    fixture.core.ring_doorbell(queue).expect("doorbell");
-    let source = EpochIrqSource::new(
-        queue.epoch(),
-        IrqSource::Completion(queue.completion_ring_id()),
+    let queue = test_support::configure(&mut fixture.core, &mut fixture.provisioning, 0, [4, 1, 1]);
+    let command = descriptor::command(
+        &mut fixture,
+        case,
+        [source_a, source_b, destination_a, destination_b],
     );
-    fixture.core.enable_irq_source(source).expect("enable IRQ");
-    fixture.core.unmask_irq_source(source).expect("unmask IRQ");
+    test_support::submit(&mut fixture.core, queue, command);
+    test_support::doorbell(&mut fixture.core, queue);
+    test_support::irq_write(
+        &mut fixture.core,
+        queue,
+        0,
+        IrqSourceRegisters::ENABLED.offset(),
+        1,
+    );
+    test_support::irq_write(
+        &mut fixture.core,
+        queue,
+        0,
+        IrqSourceRegisters::MASKED.offset(),
+        0,
+    );
     Prepared {
         fixture,
         queue,
@@ -196,65 +190,16 @@ pub(super) fn prepared_pair() -> Prepared {
         .memory
         .write_object(source.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
         .expect("second source bytes");
-    prepared
-        .fixture
-        .core
-        .submit_command(
-            prepared.queue,
-            Command::new(
-                CommandId::new(99),
-                CommandOperation::Copy(CopyRequest::new(
-                    source.object(),
-                    prepared.destinations[1].object(),
-                    4,
-                )),
-            ),
-        )
-        .expect("second submission");
-    prepared
-}
-
-fn command(
-    case: Case,
-    a: MappedDmaRegion,
-    b: MappedDmaRegion,
-    x: MappedDmaRegion,
-    y: MappedDmaRegion,
-) -> Command {
-    let operation = match case {
-        Case::Copy => CommandOperation::Copy(CopyRequest::new(a.object(), x.object(), 4)),
-        Case::Strided => CommandOperation::StridedCopy(StridedCopyRequest::new(
-            a.object(),
-            x.object(),
-            2,
-            2,
-            3,
-            3,
-        )),
-        Case::Broadcast => CommandOperation::BroadcastCopy(BroadcastCopyRequest::new(
-            a.object(),
-            1,
-            3,
-            vec![
-                BroadcastDestinationRange::new(x.object(), 0),
-                BroadcastDestinationRange::new(y.object(), 2),
-            ],
-        )),
-        Case::VectorAdd => CommandOperation::VectorAdd(VectorAddRequest::new(
-            VectorBufferRange::new(a.object(), 0),
-            VectorBufferRange::new(b.object(), 0),
-            VectorBufferRange::new(x.object(), 0),
+    test_support::submit(
+        &mut prepared.fixture.core,
+        prepared.queue,
+        test_support::copy(
+            99,
+            source.base().raw(),
+            prepared.destinations[1].base().raw(),
             4,
-        )),
-        Case::UnknownBuffer => {
-            CommandOperation::Copy(CopyRequest::new(BufferId::new(999), x.object(), 4))
-        }
-        Case::RangeOverflow => CommandOperation::Copy(CopyRequest::with_starts(
-            pdma_model_contract::semantic::DmaRangeStart::new(a.object(), usize::MAX),
-            pdma_model_contract::semantic::DmaRangeStart::new(x.object(), 0),
-            2,
-        )),
-        Case::OutOfBounds => CommandOperation::Copy(CopyRequest::new(a.object(), x.object(), 9)),
-    };
-    Command::new(CommandId::new(7), operation)
+        ),
+    );
+    test_support::doorbell(&mut prepared.fixture.core, prepared.queue);
+    prepared
 }

@@ -1,7 +1,8 @@
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{BufferId, CommandId, CopyRequest, TraceEventKind};
+use pdma_model_contract::semantic::{CommandId, TraceEventKind};
 use pdma_model_device::{AsyncDevice, AsyncDeviceWorker};
-use pdma_model_host::{AsyncDriver, DriverError, DriverResult, compat::AsyncDevicePort};
+use pdma_model_host::CopyRequest;
+use pdma_model_host::{AsyncDriver, DriverError, DriverResult};
 
 #[derive(Clone, Copy)]
 enum InvalidContext {
@@ -27,7 +28,7 @@ struct PollFixture {
     driver: AsyncDriver,
     device: AsyncDevice,
     worker: tokio::task::JoinHandle<pdma_model_device::AsyncRunSummary>,
-    port: AsyncDevicePort,
+    port: super::support::BlockingPort,
     retry: CopyRequest,
 }
 
@@ -96,7 +97,7 @@ async fn completion_fixture() -> DriverResult<PollFixture> {
     let (device, worker) = new_device();
     let handle = device.handle();
     handle.enable_tracing().await;
-    let mut port = AsyncDevicePort::new(handle.clone());
+    let mut port = super::support::BlockingPort::new(handle.clone());
     let (driver, retry) = owner
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;
@@ -125,16 +126,13 @@ async fn event_fixture() -> DriverResult<PollFixture> {
     let (device, worker) = new_device();
     let handle = device.handle();
     handle.enable_tracing().await;
-    let mut port = AsyncDevicePort::new(handle.clone());
+    let mut port = super::support::BlockingPort::new(handle.clone());
     let (driver, retry) = owner
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;
             let dst = driver.allocate_buffer_on(&mut port, 4).await?;
             driver
-                .submit_copy_on(
-                    &mut port,
-                    CopyRequest::new(BufferId::new(usize::MAX), dst, 4),
-                )
+                .submit_copy_on(&mut port, CopyRequest::new(dst, dst, 5))
                 .await?;
             Ok::<_, DriverError>((driver, CopyRequest::new(dst, dst, 4)))
         })

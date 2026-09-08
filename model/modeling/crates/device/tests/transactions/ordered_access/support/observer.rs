@@ -61,7 +61,11 @@ impl GatedObserver {
 
 impl hardware_interface_runtime::RegisterObserver for GatedObserver {
     fn observe(&self, observation: hardware_interface_runtime::RegisterObservation) {
-        let command = observation.offset == 0x164;
+        let command = observation.kind == hardware_interface_runtime::AccessKind::Write
+            && pdma_model_contract::abi::registers::queue_offset(
+                0,
+                pdma_model_contract::abi::registers::QueueRegisters::ENABLE.offset(),
+            ) == Ok(observation.offset);
         self.observations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

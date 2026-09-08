@@ -13,7 +13,8 @@ pub(super) async fn run_strided_completion_retry_scenario() {
     let (stalled_snapshot, second_snapshot, second_completion, second_command, second_dst_bytes) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = AsyncDevicePort::new(runner.handle());
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
+                    .expect("active software CPU");
                 let mut driver = AsyncDriver::setup_on(&mut handle, 4, 1)
                     .await
                     .expect("queue setup is valid");

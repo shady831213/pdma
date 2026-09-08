@@ -57,6 +57,11 @@ mod error;
 mod irq;
 #[expect(
     clippy::redundant_pub_crate,
+    reason = "decoded operands are shared across private hardware units"
+)]
+mod operation;
+#[expect(
+    clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
 mod queue;
@@ -78,11 +83,18 @@ mod trace;
 )]
 mod device;
 
+#[cfg(test)]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "test-only helpers are shared across private hardware test modules"
+)]
+mod test_support;
+
 pub use device::DeviceCore;
 pub use device::drive::HardwareStepStatus;
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
 pub use memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings};
-pub use queue::exact::{PdmaControlError, PendingDmaResult, QueueStatus};
+pub use queue::exact::{PdmaControlError, PendingDmaResult};
 pub use runtime::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
     MmioRegisterEndpoint, MmioRegisterError,

@@ -1,22 +1,37 @@
 use super::memory::QueueMemoryResolver;
 use super::{CommandRoute, ExecutionOutcome, success};
 use crate::memory::PdmaMemoryMappings;
-use pdma_model_contract::semantic::{DmaRangeStart, TraceOperation, VectorAddRequest};
+use crate::operation::VectorOperands;
+use pdma_model_contract::abi::{AbiEventAccess, AbiEventStage, AbiFaultSite};
+use pdma_model_contract::semantic::TraceOperation;
 
 pub(super) fn execute(
     memory: &PdmaMemoryMappings,
     route: CommandRoute,
-    request: VectorAddRequest,
+    request: VectorOperands,
 ) -> ExecutionOutcome {
     let resolver = QueueMemoryResolver::new(route.queue, route.command);
-    let source_a = DmaRangeStart::new(request.src_a(), request.src_a_offset());
-    let source_b = DmaRangeStart::new(request.src_b(), request.src_b_offset());
-    let destination = DmaRangeStart::new(request.dst(), request.dst_offset());
-    let src_a = match resolver.read(memory, source_a, request.len()) {
+    let source_a = request.source_a;
+    let source_b = request.source_b;
+    let destination = request.destination;
+    let first_source_site = AbiFaultSite::new(AbiEventStage::Source, AbiEventAccess::Read, 0);
+    let second_source_site = AbiFaultSite::new(AbiEventStage::Source, AbiEventAccess::Read, 1);
+    let destination_site = AbiFaultSite::new(AbiEventStage::Destination, AbiEventAccess::Write, 0);
+    let src_a = match resolver.read(
+        memory,
+        source_a,
+        u64::from(request.length),
+        first_source_site,
+    ) {
         Ok(bytes) => bytes,
         Err(fault) => return ExecutionOutcome::Fault(fault),
     };
-    let src_b = match resolver.read(memory, source_b, request.len()) {
+    let src_b = match resolver.read(
+        memory,
+        source_b,
+        u64::from(request.length),
+        second_source_site,
+    ) {
         Ok(bytes) => bytes,
         Err(fault) => return ExecutionOutcome::Fault(fault),
     };
@@ -25,13 +40,18 @@ pub(super) fn execute(
         .zip(src_b.iter())
         .map(|(left, right)| left.wrapping_add(*right))
         .collect::<Vec<_>>();
-    if let Err(fault) = resolver.validate(memory, destination, request.len()) {
+    if let Err(fault) = resolver.validate(
+        memory,
+        destination,
+        u64::from(request.length),
+        destination_site,
+    ) {
         return ExecutionOutcome::Fault(fault);
     }
     if !route.completion_is_valid() {
         return ExecutionOutcome::InvalidCompletion(route);
     }
-    if let Err(fault) = resolver.write(memory, destination, &sum) {
+    if let Err(fault) = resolver.write(memory, destination, &sum, destination_site) {
         return ExecutionOutcome::Fault(fault);
     }
     success(route, TraceOperation::VectorAdd)

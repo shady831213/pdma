@@ -1,4 +1,5 @@
-use pdma_model_contract::semantic::{CompletionRecord, EventRecord, TraceEvent, TraceEventKind};
+use pdma_model_contract::abi::{AbiCompletion, AbiEvent};
+use pdma_model_contract::semantic::{TraceEvent, TraceEventKind};
 
 use super::support::{Case, Fixture, PipelineRunOutcome, Prepared, prepare, read};
 use crate::device::ModelStepStatus;
@@ -8,14 +9,14 @@ mod asynchronous;
 mod expected;
 mod report;
 
-type CursorState = Result<((usize, usize), (usize, usize)), ModelError>;
+type CursorState = ((usize, usize), (usize, usize));
 
 #[derive(Debug, PartialEq, Eq)]
 struct Observation {
     terminal: Result<ModelStepStatus, ModelError>,
     destinations: [Vec<u8>; 2],
-    completion: Option<CompletionRecord>,
-    event: Option<EventRecord>,
+    completion: Option<AbiCompletion>,
+    event: Option<AbiEvent>,
     cursors_before_poll: CursorState,
     cursors_after_poll: CursorState,
     irq_before_poll: bool,
@@ -110,31 +111,22 @@ fn finish_observation(
             )
         })
         .count();
-    let cursors_before_poll = prepared
-        .fixture
-        .core
-        .queues
-        .semantic_cursors(prepared.queue.queue_id());
+    let cursors_before_poll = crate::device::command_pipeline::tests::support::cursors(
+        &prepared.fixture.core,
+        prepared.queue,
+    );
     let irq_before_poll = prepared.fixture.core.irq_snapshot().is_some();
     let destinations = [
         read(&prepared.fixture.core, prepared.destinations[0]).expect("destination A"),
         read(&prepared.fixture.core, prepared.destinations[1]).expect("destination B"),
     ];
-    let completion = prepared
-        .fixture
-        .core
-        .poll_completion(prepared.queue)
-        .expect("completion");
-    let event = prepared
-        .fixture
-        .core
-        .poll_queue_event(prepared.queue)
-        .expect("event");
-    let cursors_after_poll = prepared
-        .fixture
-        .core
-        .queues
-        .semantic_cursors(prepared.queue.queue_id());
+    let completion =
+        crate::test_support::poll_completion(&mut prepared.fixture.core, prepared.queue);
+    let event = crate::test_support::poll_event(&mut prepared.fixture.core, prepared.queue);
+    let cursors_after_poll = crate::device::command_pipeline::tests::support::cursors(
+        &prepared.fixture.core,
+        prepared.queue,
+    );
     let irq_after_poll = prepared.fixture.core.irq_snapshot().is_some();
     let post_terminal = match drive {
         DrivePolicy::CoreDrive => PostTerminal::LiveCore,

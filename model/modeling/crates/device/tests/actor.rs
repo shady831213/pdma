@@ -5,4 +5,5 @@ mod actor {
     mod irq;
     mod irq_message;
     mod runner;
+    mod support;
 }

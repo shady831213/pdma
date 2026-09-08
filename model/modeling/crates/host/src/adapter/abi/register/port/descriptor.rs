@@ -1,5 +1,6 @@
 use super::{CanonicalAccess, PdmaPortResult, PdmaRegisterPort};
 use crate::adapter::abi::PdmaRegionRequest;
+use crate::{BroadcastCopyRequest, Command, CommandOperation};
 use crate::{PortError, PortResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::abi::{
@@ -7,9 +8,7 @@ use pdma_model_contract::abi::{
     AbiCommandPayloadStridedCopyValues, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues,
     BroadcastDestinationEntry, U32WordValues,
 };
-use pdma_model_contract::semantic::{
-    BroadcastCopyRequest, BufferId, Command, CommandId, CommandOperation, DmaRangeStart,
-};
+use pdma_model_contract::semantic::{BufferId, CommandId, DmaRangeStart};
 
 pub(super) async fn encode_command<A: CanonicalAccess>(
     port: &PdmaRegisterPort<A>,
@@ -102,8 +101,16 @@ fn operand<A: CanonicalAccess>(
     id: BufferId,
     offset: usize,
 ) -> PdmaPortResult<pdma_model_contract::abi::DmaAddress> {
-    let address = super::state::checked_range(port, id, offset, 0)?;
-    Ok(super::state::dma_address(address))
+    let base = port.with_state(|state| state.region(id).map(|region| region.base().raw()))?;
+    let base = match base {
+        Ok(base) => base,
+        Err(PortError::UnknownBuffer(_)) => 0,
+        Err(error) => return Err(error.into()),
+    };
+    let offset = u64::try_from(offset).map_err(|_| PortError::RangeOverflow)?;
+    Ok(pdma_model_contract::abi::DmaAddress::new(
+        base.wrapping_add(offset),
+    ))
 }
 
 fn optional_operand<A: CanonicalAccess>(

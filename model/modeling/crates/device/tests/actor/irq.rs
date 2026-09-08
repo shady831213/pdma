@@ -1,220 +1,116 @@
-#![allow(missing_docs)]
-
-use pdma_model_device::ModelError;
-
-use pdma_model_contract::semantic::{
-    DeviceEpoch, EpochIrqSource, ResourceConfig,
-    desc::{Command, CopyRequest},
-    ids::{CommandId, CompletionRingId, QueueId},
-    irq::IrqSource,
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
+use super::support::Fixture;
+use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::{
+    abi::registers::{IrqSourceRegisters, QueueRegisters, irq_offset},
+    semantic::ResourceConfig,
 };
-use pdma_model_device::AsyncDevice;
 
 mod stale;
 
 #[tokio::test(flavor = "current_thread")]
 async fn completion_irq_latches_only_after_publication_retry_succeeds() {
-    // Given: two copies behind one completion publication slot and an enabled completion IRQ.
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        ResourceConfig::default().with_completion_publication_slots(1),
-    );
-    let worker = tokio::spawn(worker.run());
-    let handle = runner.handle();
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await
-        .expect("queue setup is valid");
-    let source = queue.completion_irq_source();
-    handle
-        .enable_irq_source(source)
-        .await
-        .expect("completion IRQ source exists");
-    handle
-        .unmask_irq_source(source)
-        .await
-        .expect("completion IRQ source exists");
-    let src = handle.allocate_buffer(4).await.expect("allocation");
-    let first_dst = handle.allocate_buffer(4).await.expect("allocation");
-    let second_dst = handle.allocate_buffer(4).await.expect("allocation");
-    handle
-        .write_buffer(src, 0, &[1, 3, 5, 7])
-        .await
-        .expect("source write is in bounds");
-    for (command_id, dst) in [first_dst, second_dst].into_iter().enumerate() {
-        let command = Command::new(
-            CommandId::new(command_id),
-            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 4)),
-        );
-        handle
-            .submit_command(queue, command)
-            .await
-            .expect("copy submission has ring space");
+    // Given: two copies sharing one completion credit and a line IRQ.
+    let (fixture, worker) =
+        Fixture::new(ResourceConfig::default().with_completion_publication_slots(1)).await;
+    fixture.enable_irq(0).await;
+    for slot in 0..2 {
+        fixture.copy(slot, fixture.payload(4)).await;
     }
-
-    // When: the first completion publishes, the second stalls, and software acks before draining.
-    handle.ring_doorbell(queue).await.expect("doorbell rings");
-    let first_snapshot = runner.wait_for_progress_after(0).await;
-    tokio::task::yield_now().await;
-    let stalled_snapshot = runner.snapshot().await;
-    let first_irq = handle
-        .irq_snapshot()
-        .await
-        .expect("first published completion asserts IRQ");
-    handle
-        .ack_irq_source(source)
-        .await
-        .expect("completion IRQ source exists");
-    let retained_irq = handle.irq_snapshot().await;
-    let first_completion = handle
-        .poll_completion(queue)
-        .await
-        .expect("completion ring exists")
-        .expect("first completion was published");
-    let retry_snapshot = runner.wait_for_progress_after(1).await;
-    let retry_irq = handle
-        .irq_snapshot()
-        .await
-        .expect("retry publication asserts IRQ");
-    runner.request_shutdown().await;
-    let summary = worker.await.expect("runner joins cleanly");
-
-    // Then: early ack preserves the record-backed cause and retry publication stays asserted.
-    assert_eq!(first_snapshot.steps, 1);
-    assert!(stalled_snapshot.stalls >= 1);
-    assert!(first_irq.asserted());
-    assert_eq!(first_irq.cause().source(), source.source());
-    assert!(retained_irq.is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted));
-    assert_eq!(first_completion.command_id(), CommandId::new(0));
-    assert_eq!(retry_snapshot.steps, 2);
-    assert!(retry_irq.asserted());
-    assert_eq!(retry_irq.cause().source(), source.source());
-    assert_eq!(summary.steps, 2);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn invalid_irq_source_control_returns_error_without_creating_state() {
-    // Given: a device with one queue and invalid IRQ source identities.
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    );
     let worker = tokio::spawn(worker.run());
-    let handle = runner.handle();
-    handle
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
+
+    // When: an early ack precedes freeing the credit for the retained result.
+    fixture.publish(2).await;
+    let first = fixture.device.wait_for_progress_after(0).await;
+    tokio::task::yield_now().await;
+    let stalled = fixture.device.snapshot().await;
+    let first_irq = fixture.handle.irq_snapshot().await.expect("first IRQ");
+    fixture
+        .endpoint
+        .write(
+            irq_offset(0, 0, IrqSourceRegisters::ACK.offset()).expect("ack"),
+            &1_u32.to_le_bytes(),
+        )
         .await
-        .expect("queue setup is valid");
-    let unknown_completion = IrqSource::Completion(CompletionRingId::new(99));
-    let unknown_event = IrqSource::Event(QueueId::new(99));
-    let unknown_completion_cap = EpochIrqSource::new(DeviceEpoch::initial(), unknown_completion);
-    let unknown_event_cap = EpochIrqSource::new(DeviceEpoch::initial(), unknown_event);
+        .expect("ack");
+    let retained = fixture.handle.irq_snapshot().await;
+    fixture
+        .write_queue(QueueRegisters::CQ_CONSUMER.offset(), &1_u64.to_le_bytes())
+        .await;
+    let retry = fixture.device.wait_for_progress_after(1).await;
+    let retry_irq = fixture.handle.irq_snapshot().await.expect("retry IRQ");
+    fixture.device.request_shutdown().await;
+    let summary = worker.await.expect("join");
 
-    // When: software controls unknown IRQ sources.
-    let completion_result = handle.enable_irq_source(unknown_completion_cap).await;
-    let event_result = handle.mask_irq_source(unknown_event_cap).await;
-
-    // Then: both controls fail and no pending IRQ state is created.
-    assert_eq!(
-        completion_result,
-        Err(ModelError::UnknownIrqSource(unknown_completion))
-    );
-    assert_eq!(
-        event_result,
-        Err(ModelError::UnknownIrqSource(unknown_event))
-    );
-    assert_eq!(handle.irq_snapshot().await, None);
-    runner.request_shutdown().await;
-    worker.await.expect("runner joins cleanly");
+    // Then: record-backed assertion survives early ack and retry counts once.
+    assert_eq!((first.steps, retry.steps, summary.steps), (1, 2, 2));
+    assert!(stalled.stalls >= 1);
+    assert!(first_irq.asserted());
+    assert!(retained.is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted));
+    assert!(retry_irq.asserted());
+    assert_eq!(retry_irq.cause().source(), first_irq.cause().source());
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn event_irq_latches_only_after_publication_retry_succeeds() {
-    // Given: two faulty copies behind one event publication slot and an enabled event IRQ.
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        ResourceConfig::default().with_event_publication_slots(1),
-    );
-    let worker = tokio::spawn(worker.run());
-    let handle = runner.handle();
-    let queue = handle
-        .create_queue(QueueConfig::new(
-            4,
-            4,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .await
-        .expect("queue setup is valid");
-    let source = queue.event_irq_source();
-    handle
-        .enable_irq_source(source)
-        .await
-        .expect("event IRQ source exists");
-    handle
-        .unmask_irq_source(source)
-        .await
-        .expect("event IRQ source exists");
-    let src = handle.allocate_buffer(4).await.expect("allocation");
-    let dst = handle.allocate_buffer(4).await.expect("allocation");
-    for command_id in 0..2 {
-        let command = Command::new(
-            CommandId::new(command_id),
-            pdma_model_contract::semantic::CommandOperation::Copy(CopyRequest::new(src, dst, 8)),
-        );
-        handle
-            .submit_command(queue, command)
-            .await
-            .expect("faulting copy submission has ring space");
+    // Given: two invalid copies sharing one event publication credit.
+    let (fixture, worker) =
+        Fixture::new(ResourceConfig::default().with_event_publication_slots(1)).await;
+    fixture.enable_irq(1).await;
+    for slot in 0..2 {
+        fixture.copy(slot, fixture.payload(9)).await;
     }
+    let worker = tokio::spawn(worker.run());
 
-    // When: the first event publishes, the second stalls, and software acks before draining.
-    handle.ring_doorbell(queue).await.expect("doorbell rings");
-    let first_error = runner.wait_for_error_after(0).await;
+    // When: software acknowledges before releasing event credit.
+    fixture.publish(2).await;
+    let first = fixture.device.wait_for_error_after(0).await;
     tokio::task::yield_now().await;
-    let stalled_snapshot = runner.snapshot().await;
-    let first_irq = handle.wait_irq().await.expect("first event asserts IRQ");
-    handle
-        .ack_irq_source(source)
+    let stalled = fixture.device.snapshot().await;
+    let first_irq = fixture.handle.wait_irq().await.expect("event IRQ");
+    fixture
+        .endpoint
+        .write(
+            irq_offset(0, 1, IrqSourceRegisters::ACK.offset()).expect("ack"),
+            &1_u32.to_le_bytes(),
+        )
         .await
-        .expect("event IRQ source exists");
-    let retained_irq = handle.irq_snapshot().await;
-    let first_event = handle
-        .poll_queue_event(queue)
-        .await
-        .expect("queue exists")
-        .expect("first event was published");
-    let retry_error = runner.wait_for_error_after(1).await;
-    let retry_irq = handle.wait_irq().await.expect("retry event asserts IRQ");
-    runner.request_shutdown().await;
-    let summary = worker.await.expect("runner joins cleanly");
+        .expect("ack");
+    let retained = fixture.handle.irq_snapshot().await;
+    fixture
+        .write_queue(QueueRegisters::EQ_CONSUMER.offset(), &1_u64.to_le_bytes())
+        .await;
+    let retry = fixture.device.wait_for_error_after(1).await;
+    let retry_irq = fixture.handle.wait_irq().await.expect("retry IRQ");
+    fixture.device.request_shutdown().await;
+    let summary = worker.await.expect("join");
 
-    // Then: early ack preserves the record-backed cause and retry publication stays asserted.
-    assert_eq!(first_error.errors, 1);
-    assert!(stalled_snapshot.stalls >= 1);
+    // Then: both faults publish, preserve assertion and never publish success.
+    assert_eq!((first.errors, retry.errors, summary.errors), (1, 2, 2));
+    assert!(stalled.stalls >= 1);
     assert!(first_irq.asserted());
-    assert_eq!(first_irq.cause().source(), source.source());
-    assert!(retained_irq.is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted));
-    assert_eq!(first_event.command_id(), CommandId::new(0));
-    assert_eq!(retry_error.errors, 2);
+    assert!(retained.is_some_and(pdma_model_contract::semantic::IrqSnapshot::asserted));
     assert!(retry_irq.asserted());
-    assert_eq!(retry_irq.cause().source(), source.source());
-    assert_eq!(summary.errors, 2);
+    assert_eq!(
+        fixture.cursor(QueueRegisters::CQ_PRODUCER.offset()).await,
+        0
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn absent_irq_source_write_fails_without_creating_a_notification() {
+    // Given: only queue zero exists.
+    let (fixture, _worker) = Fixture::new(ResourceConfig::default()).await;
+
+    // When: a direct write addresses an absent queue's IRQ source.
+    let result = fixture
+        .endpoint
+        .write(
+            irq_offset(99, 0, IrqSourceRegisters::ENABLED.offset()).expect("address"),
+            &1_u32.to_le_bytes(),
+        )
+        .await;
+
+    // Then: the rejected access creates no notification.
+    assert!(result.is_err());
+    assert!(!fixture.handle.irq_notification_ready().await);
 }

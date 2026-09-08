@@ -1,45 +1,21 @@
 use super::{PendingRetirement, RetirementStatus, RetirementUnit};
 use crate::ModelError;
 use crate::device::context::HardwareContext;
-use crate::irq::PdmaIrqController;
-use crate::memory::PdmaMemoryMappings;
-use crate::queue::QueueBlock;
 use crate::queue::io::NormalizedFault;
 use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
-use pdma_model_contract::semantic::{
-    Command, CommandId, CommandOperation, DeviceEpoch, IrqLine, IrqVector, QueueId, ResourceConfig,
-    desc::CopyRequest,
-    queue::{EventRouting, QueueConfig, SoftwareOwnerId},
-};
+use pdma_model_contract::semantic::{QueueId, ResourceConfig};
 
 #[test]
 fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
-    // Given: one semantic queue containing a normalized command.
-    let mut queues = QueueBlock::default();
-    let queue = queues
-        .create_semantic(
-            DeviceEpoch::initial(),
-            QueueConfig::new(2, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(0)),
-        )
-        .expect("queue");
-    queues
-        .submit_semantic(
-            queue.queue_id(),
-            Command::new(
-                CommandId::new(0),
-                CommandOperation::Copy(CopyRequest::new(
-                    pdma_model_contract::semantic::BufferId::new(0),
-                    pdma_model_contract::semantic::BufferId::new(1),
-                    1,
-                )),
-            ),
-        )
-        .expect("submission");
-    let memory = PdmaMemoryMappings::new(std::sync::Arc::new(
+    // Given: one exact queue with a published and captured descriptor.
+    let mut provisioning = crate::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
-    let mut irq = PdmaIrqController::new(DeviceEpoch::initial(), IrqLine::new(IrqVector::new(0)));
+    let mut core = crate::DeviceCore::new(provisioning.memory_access(), ResourceConfig::default());
+    let queue = crate::test_support::configure(&mut core, &mut provisioning, 0, [2, 2, 2]);
+    crate::test_support::submit(&mut core, queue, crate::test_support::copy(0, 0, 0, 1));
+    crate::test_support::doorbell(&mut core, queue);
     let mut trace = TraceSink::default();
     let mut runnable = RunnableQueues::default();
     let mut fetches = 0;
@@ -49,10 +25,10 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
     // When: a frontend fault is cached for retirement.
     let status = {
         let mut context = HardwareContext {
-            queues: &mut queues,
+            queues: &mut core.queues,
             runnable: &mut runnable,
-            memory: &memory,
-            irq: &mut irq,
+            memory: &core.memory,
+            irq: &mut core.irq,
             trace: &mut trace,
             fetches: &mut fetches,
             resources: ResourceConfig::default(),
@@ -69,7 +45,7 @@ fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
 
     // Then: the command is consumed and its typed source remains pending.
     assert_eq!(status, Ok(RetirementStatus::FaultCached));
-    assert_eq!(queues.has_pending(queue.queue_id()), Ok(false));
+    assert_eq!(core.queues.has_pending(queue.queue_id()), Ok(false));
     assert!(matches!(
         unit.pending(),
         Some(PendingRetirement::Fault {

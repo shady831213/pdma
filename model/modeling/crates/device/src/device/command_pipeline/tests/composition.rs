@@ -3,7 +3,6 @@ use std::num::NonZeroUsize;
 use hardware_interface_pipeline::{
     ImmediateExecutor, Operation, PipelineExt, RunOutcome, Stage, StepOutcome,
 };
-use pdma_model_contract::semantic::{CommandId, CompletionRecord, CompletionStatus};
 
 use super::support::{Case, prepare, read};
 use crate::{AsyncStallReason, HardwareStepStatus, ModelError};
@@ -70,14 +69,16 @@ fn device_composes_with_downstream_observer_and_reuses_hardware() {
         Ok(vec![1, 2, 3, 4, 0, 0, 0, 0])
     );
     assert_eq!(
-        hardware.upstream.poll_completion(prepared.queue),
-        Ok(Some(CompletionRecord::new(
-            prepared.queue.queue_id(),
-            CommandId::new(7),
-            CompletionStatus::Success,
-        )))
+        crate::test_support::poll_completion(&mut hardware.upstream, prepared.queue),
+        Some(pdma_model_contract::abi::AbiCompletion::success(
+            u64::from(prepared.queue.index),
+            7
+        ))
     );
-    assert_eq!(hardware.upstream.poll_completion(prepared.queue), Ok(None));
+    assert_eq!(
+        crate::test_support::poll_completion(&mut hardware.upstream, prepared.queue),
+        None
+    );
     assert_eq!(hardware.upstream.native_steps(), 1);
     assert_eq!(
         hardware.downstream.statuses,

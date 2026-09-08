@@ -6,11 +6,12 @@ use super::{
     support::{DriverBootstrap, HandlerChannels, SharedDelivery, spawn_shared_delivery},
 };
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
+use pdma_model_contract::semantic::{IrqRoute, IrqVector};
 use pdma_model_device::AsyncDevice;
+use pdma_model_host::CopyRequest;
 use pdma_model_host::{
-    AsyncDriver, DriverError, DriverPort, DriverResult, adapter::abi::AsyncDeviceAccess,
-    compat::AsyncDevicePort,
+    AsyncDriver, DriverError, DriverPort, DriverResult,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
 };
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -21,11 +22,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(
-        port.clone(),
-        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-    );
-    let compat_port = AsyncDevicePort::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone());
     let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
     let vector = IrqVector::new(51);
@@ -35,8 +32,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
     let (milestones_tx, _milestones_rx) = mpsc::channel(8);
     let (done_tx, mut done_rx) = mpsc::channel(4);
     let delivery = spawn_shared_delivery(SharedDelivery {
-        access,
-        port: compat_port.clone(),
+        access: access.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -51,10 +47,11 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
     });
 
     // When: retained main submits one success and one fault through depth-one accounting.
-    let mut main_port = compat_port;
     let main_depth = depth.clone();
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
+            let mut main_port =
+                PdmaRegisterPort::new(access).map_err(pdma_model_host::PortError::from)?;
             let mut driver = AsyncDriver::setup_on(&mut main_port, 1, 4).await?;
             let completion_capability = driver.completion_irq_source();
             let event_capability = driver.event_irq_source();
@@ -62,6 +59,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
             let event_source = event_capability.source();
             bootstrap_tx
                 .send(DriverBootstrap {
+                    port: main_port.clone(),
                     driver: driver.clone(),
                     completion_source,
                     event_source,
@@ -96,7 +94,7 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
             done_rx.recv().await.expect("event handler turn ends");
             Ok::<_, DriverError>((
                 main_depth.with(|depth| *depth)?,
-                main_port.irq_snapshot().await,
+                main_port.irq_snapshot().await?,
                 main_port.read_buffer(dst, 0, 4).await?,
             ))
         })
@@ -130,11 +128,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
     let (device, worker) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(
-        port.clone(),
-        pdma_model_host::adapter::abi::PdmaIrqCoordinator::default(),
-    );
-    let compat_port = AsyncDevicePort::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
     let cpu = Arc::new(SoftwareCpu::new());
@@ -148,8 +142,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
     let (milestones_tx, _milestones_rx) = mpsc::channel(8);
     let (done_tx, mut done_rx) = mpsc::channel(4);
     let delivery = spawn_shared_delivery(SharedDelivery {
-        access,
-        port: compat_port.clone(),
+        access: access.clone(),
         cpu: cpu.clone(),
         bootstrap: bootstrap_rx,
         ready: ready_tx,
@@ -164,15 +157,17 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
     });
 
     // When: main publishes both faults while masked, then exposes both pending messages.
-    let mut main_port = compat_port;
     let main = tokio::spawn(async move {
         cpu.run_main(async move {
+            let mut main_port =
+                PdmaRegisterPort::new(access).map_err(pdma_model_host::PortError::from)?;
             let mut driver = AsyncDriver::setup_on(&mut main_port, 2, 4).await?;
             let completion_source = driver.completion_irq_source().source();
             let event_capability = driver.event_irq_source();
             let event_source = event_capability.source();
             bootstrap_tx
                 .send(DriverBootstrap {
+                    port: main_port.clone(),
                     driver: driver.clone(),
                     completion_source,
                     event_source,
@@ -203,7 +198,7 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
             main_port.unmask_irq_source(event_capability).await?;
             done_rx.recv().await.expect("first message is serviced");
             done_rx.recv().await.expect("redundant message is serviced");
-            Ok::<_, DriverError>(main_port.irq_snapshot().await)
+            Ok::<_, DriverError>(main_port.irq_snapshot().await?)
         })
         .await
     });

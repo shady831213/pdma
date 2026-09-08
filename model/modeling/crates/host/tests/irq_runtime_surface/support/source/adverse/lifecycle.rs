@@ -5,7 +5,6 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::semantic::{IrqNotification, IrqVector};
 use pdma_model_host::DriverIrqRecord;
-use pdma_model_host::adapter::abi::PdmaInterruptSource;
 use pdma_model_host::runtime::interrupt::{
     PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqHandler, PdmaIrqService,
 };
@@ -49,7 +48,7 @@ pub(super) async fn unregistered() -> bool {
     let task = PdmaIrqDelivery::start(
         cpu,
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(access.clone()),
+        access.clone(),
         Arc::new(NoopInterruptObserver),
     );
     while access.snapshot().notifications == 0 {
@@ -69,7 +68,7 @@ pub(super) async fn shutdown_bias() -> bool {
     let task = InterruptDispatcher::start(
         cpu,
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(access.clone()),
+        access.clone(),
         Arc::new(NoopInterruptObserver),
     );
     task.shutdown_handle().request_shutdown();
@@ -99,7 +98,7 @@ pub(super) async fn accepted_cpu_wait() -> bool {
     let task = PdmaIrqDelivery::start(
         cpu,
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(access.clone()),
+        access.clone(),
         Arc::new(NoopInterruptObserver),
     );
     while access.snapshot().notifications == 0 {
@@ -132,7 +131,7 @@ pub(super) async fn pending_handler() -> bool {
     let task = PdmaIrqDelivery::start(
         cpu,
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(access),
+        access,
         Arc::new(NoopInterruptObserver),
     );
     let entered = entered_rx.await.is_ok();
@@ -155,7 +154,7 @@ pub(super) async fn observer_error() -> bool {
     let task = PdmaIrqDelivery::start(
         cpu,
         registry.freeze().unwrap_or_else(|_| std::process::abort()),
-        PdmaInterruptSource::new(access.clone()),
+        access.clone(),
         trace.clone(),
     );
     while access.snapshot().notifications == 0 {

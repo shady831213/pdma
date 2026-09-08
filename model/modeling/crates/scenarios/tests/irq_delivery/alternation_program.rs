@@ -1,7 +1,11 @@
 use super::support::{DriverBootstrap, HandlerIdentity, Milestone};
 use hardware_interface_runtime::{CpuLocal, SoftwareCpu};
-use pdma_model_contract::semantic::{CopyRequest, IrqRoute, IrqVector};
-use pdma_model_host::{AsyncDriver, DriverPort, DriverResult, compat::AsyncDevicePort};
+use pdma_model_contract::semantic::{IrqRoute, IrqVector};
+use pdma_model_host::CopyRequest;
+use pdma_model_host::{
+    AsyncDriver, DriverPort, DriverResult,
+    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+};
 use std::sync::Arc;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -18,7 +22,7 @@ pub struct MainOutcome {
 
 #[derive(Debug)]
 pub struct MainProgram {
-    pub port: AsyncDevicePort,
+    pub access: AsyncDeviceAccess,
     pub cpu: Arc<SoftwareCpu>,
     pub depth: CpuLocal<usize>,
     pub bootstrap: oneshot::Sender<DriverBootstrap>,
@@ -39,7 +43,9 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
         program
             .cpu
             .run_main(async move {
-                let mut driver = AsyncDriver::setup_on(&mut program.port, 1, 4).await?;
+                let mut port = PdmaRegisterPort::new(program.access)
+                    .map_err(pdma_model_host::PortError::from)?;
+                let mut driver = AsyncDriver::setup_on(&mut port, 1, 4).await?;
                 let completion_capability = driver.completion_irq_source();
                 let event_capability = driver.event_irq_source();
                 let completion_source = completion_capability.source();
@@ -48,6 +54,7 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
                     program
                         .bootstrap
                         .send(DriverBootstrap {
+                            port: port.clone(),
                             driver: driver.clone(),
                             completion_source,
                             event_source,
@@ -60,17 +67,15 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
                     (completion_capability, program.vector_a),
                     (event_capability, program.vector_b),
                 ] {
-                    program
-                        .port
-                        .configure_irq_route(source, IrqRoute::Message(vector))
+                    port.configure_irq_route(source, IrqRoute::Message(vector))
                         .await?;
-                    program.port.enable_irq_source(source).await?;
-                    program.port.unmask_irq_source(source).await?;
+                    port.enable_irq_source(source).await?;
+                    port.unmask_irq_source(source).await?;
                 }
-                let src = driver.allocate_buffer_on(&mut program.port, 4).await?;
-                let dst = driver.allocate_buffer_on(&mut program.port, 4).await?;
+                let src = driver.allocate_buffer_on(&mut port, 4).await?;
+                let dst = driver.allocate_buffer_on(&mut port, 4).await?;
                 driver
-                    .write_buffer_on(&mut program.port, src, &[9, 8, 7, 6])
+                    .write_buffer_on(&mut port, src, &[9, 8, 7, 6])
                     .await?;
                 for round in 1..=2 {
                     assert!(
@@ -82,7 +87,7 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
                         "milestone channel stays open"
                     );
                     driver
-                        .submit_copy_on(&mut program.port, CopyRequest::new(src, dst, 4))
+                        .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
                         .await?;
                     assert!(program.a_done.recv().await.is_some(), "handler A completes");
                     assert!(
@@ -94,7 +99,7 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
                         "milestone channel stays open"
                     );
                     driver
-                        .submit_copy_on(&mut program.port, CopyRequest::new(src, dst, 8))
+                        .submit_copy_on(&mut port, CopyRequest::new(src, dst, 8))
                         .await?;
                     assert!(program.b_done.recv().await.is_some(), "handler B completes");
                     assert!(
@@ -115,7 +120,7 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
                     "milestone channel stays open"
                 );
                 let retained_submit = driver
-                    .submit_copy_on(&mut program.port, CopyRequest::new(src, dst, 4))
+                    .submit_copy_on(&mut port, CopyRequest::new(src, dst, 4))
                     .await
                     .is_ok();
                 assert!(
@@ -125,8 +130,8 @@ pub fn spawn_main(mut program: MainProgram) -> JoinHandle<DriverResult<MainOutco
                 Ok(MainOutcome {
                     retained_submit,
                     final_depth: program.depth.with(|depth| *depth)?,
-                    irq_cleared: program.port.irq_snapshot().await.is_none(),
-                    copied: program.port.read_buffer(dst, 0, 4).await?,
+                    irq_cleared: port.irq_snapshot().await?.is_none(),
+                    copied: port.read_buffer(dst, 0, 4).await?,
                 })
             })
             .await

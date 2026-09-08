@@ -1,11 +1,11 @@
 //! Runtime-backed PDMA interrupt delivery surface.
 
+mod canonical_delivery;
 pub mod support;
 
 use hardware_interface_runtime::{HandlerRegistry, InterruptLifecycleObserver, SoftwareCpu};
 use pdma_model_contract::semantic::{IrqVector, TraceEventKind};
 use pdma_model_host::AsyncDriver;
-use pdma_model_host::adapter::abi::PdmaInterruptSource;
 use pdma_model_host::runtime::interrupt::{PdmaInterruptTrace, PdmaIrqDelivery, PdmaIrqService};
 use std::sync::Arc;
 use support::{Facts, PersistentHandler, ProbeAccess, ProbePort, lock};
@@ -29,12 +29,7 @@ async fn task23_irq_runtime_surface() {
     let registry = registry.freeze().unwrap_or_else(|_| std::process::abort());
     let trace = Arc::new(PdmaInterruptTrace::default());
     let observer: Arc<dyn InterruptLifecycleObserver<_>> = trace.clone();
-    let task = PdmaIrqDelivery::start(
-        Arc::clone(&cpu),
-        registry,
-        PdmaInterruptSource::new(access.clone()),
-        observer,
-    );
+    let task = PdmaIrqDelivery::start(Arc::clone(&cpu), registry, access.clone(), observer);
     while lock(&facts).turns != 3 {
         tokio::task::yield_now().await;
     }
@@ -78,14 +73,12 @@ async fn task23_irq_runtime_surface() {
     let residual_tasks = usize::from(
         !adverse.accepted_cpu_wait_completed() || !adverse.pending_handler_completed() || !joined,
     );
-    let manual_irq_methods = support::manual_irq_methods();
     assert_eq!(residual_tasks, 0);
-    assert_eq!(manual_irq_methods, 0);
     println!(
         "claims={claims};empty={empty};handlers={handlers};completions={completions};events={events};acks={acks};observer={observer};persistent_turns={persistent_turns};cpu_released={cpu_released};joined={joined}"
     );
     println!(
-        "stale_before_drain={};unregistered={};ready_error={};claim_error={};shutdown_bias={};precommit_cancelled={};accepted_cpu_wait_completed={};pending_handler_completed={};drain_error_no_ack={};handler_error_no_ack={};ack_error={};residual_tasks={residual_tasks};manual_irq_methods={manual_irq_methods}",
+        "stale_before_drain={};unregistered={};ready_error={};claim_error={};shutdown_bias={};precommit_cancelled={};accepted_cpu_wait_completed={};pending_handler_completed={};drain_error_no_ack={};handler_error_no_ack={};ack_error={};residual_tasks={residual_tasks}",
         adverse.stale_before_drain(),
         adverse.unregistered(),
         adverse.ready_error(),

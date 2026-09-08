@@ -1,10 +1,7 @@
 use super::*;
 use hardware_interface_pipeline::Operation;
 use hardware_interface_runtime::{NoopRegisterObserver, ObservationGate, SharedRegisterObserver};
-use pdma_model_contract::semantic::{
-    Command, CommandId, CommandOperation, DeviceEpoch, QueueConfig, ResourceConfig,
-    SoftwareOwnerId, TraceEventKind, WholeDeviceReset, desc::CopyRequest, queue::EventRouting,
-};
+use pdma_model_contract::semantic::{ResourceConfig, TraceEventKind};
 
 struct AcceptedCopy {
     shared: RunnerShared,
@@ -30,23 +27,13 @@ fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
     core.memory
         .write_object(source.object(), 0, &[1, 3, 5, 7])
         .expect("source bytes");
-    let queue = core
-        .create_queue(QueueConfig::new(
-            2,
-            2,
-            EventRouting::QueueLocal,
-            SoftwareOwnerId::new(0),
-        ))
-        .expect("queue");
-    core.submit_command(
+    let queue = crate::test_support::configure(&mut core, &mut provisioning, 0, [2, 2, 2]);
+    crate::test_support::submit(
+        &mut core,
         queue,
-        Command::new(
-            CommandId::new(9),
-            CommandOperation::Copy(CopyRequest::new(source.object(), target.object(), 4)),
-        ),
-    )
-    .expect("submission");
-    core.ring_doorbell(queue).expect("doorbell");
+        crate::test_support::copy(9, source.base().raw(), target.base().raw(), 4),
+    );
+    crate::test_support::doorbell(&mut core, queue);
     AcceptedCopy {
         shared: RunnerShared {
             backend: crate::runtime::backend::DeviceInteractionBackend::new(RunnerState::new(
@@ -175,7 +162,17 @@ async fn reset_and_shutdown_discard_retained_stages_without_late_effects() {
             .interact(|state| {
                 state
                     .core
-                    .reset_runner(WholeDeviceReset::new(DeviceEpoch::initial()))
+                    .write_mmio_register(
+                        pdma_model_contract::abi::registers::locate(
+                            u32::try_from(
+                                pdma_model_contract::abi::registers::GlobalRegisters::RESET
+                                    .offset(),
+                            )
+                            .expect("reset offset"),
+                        )
+                        .expect("reset register"),
+                        1,
+                    )
                     .expect("reset");
                 state.shutdown_requested = true;
             })

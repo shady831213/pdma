@@ -98,4 +98,36 @@ pub trait MemoryAccess {
         alignment: MemoryAlignment,
         source: &[u8],
     ) -> Result<(), MemoryAccessError>;
+
+    /// Reads into a default-constructed byte buffer and returns its owner.
+    ///
+    /// The buffer's slice length determines the access extent. This does not
+    /// decode values, infer alignment, or reinterpret Rust object layout.
+    fn read_typed<T>(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+    ) -> Result<T, MemoryAccessError>
+    where
+        Self: Sized,
+        T: Default + AsMut<[u8]>,
+    {
+        let mut value = T::default();
+        self.read(address, alignment, value.as_mut())?;
+        Ok(value)
+    }
+
+    /// Writes a value's exposed bytes without encoding or reinterpreting it.
+    fn write_typed<T>(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        value: &T,
+    ) -> Result<(), MemoryAccessError>
+    where
+        Self: Sized,
+        T: AsRef<[u8]> + ?Sized,
+    {
+        self.write(address, alignment, value.as_ref())
+    }
 }

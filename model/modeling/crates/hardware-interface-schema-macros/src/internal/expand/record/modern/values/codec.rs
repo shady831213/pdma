@@ -25,6 +25,12 @@ pub(super) fn expand(
         impl ::core::default::Default for #raw {
             fn default() -> Self { Self::ZERO }
         }
+        impl ::core::convert::AsRef<[u8]> for #raw {
+            fn as_ref(&self) -> &[u8] { &self.0 }
+        }
+        impl ::core::convert::AsMut<[u8]> for #raw {
+            fn as_mut(&mut self) -> &mut [u8] { &mut self.0 }
+        }
         impl ::core::convert::From<[u8; #marker::RECORD_SIZE]> for #raw {
             fn from(bytes: [u8; #marker::RECORD_SIZE]) -> Self { Self::new(bytes) }
         }

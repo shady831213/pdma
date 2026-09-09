@@ -18,6 +18,14 @@ allocating backing. It preserves overflow, alignment, lookup, and region-crossin
 error order, including mapped zero-length endpoints. `SharedMemoryAccess` exposes
 this check together with reads and writes, without storage-management authority.
 
+`MemoryAccess::read_typed<T>` reads into `T::default()` through `AsMut<[u8]>`;
+`write_typed` writes through `AsRef<[u8]>`. These default methods use only the byte
+backend and preserve its error semantics. Slice length determines access length,
+and the caller supplies alignment. They do not encode/decode records or reinterpret
+native Rust layouts. Arrays and owned raw-byte types can use them without adding
+backend methods. `Self: Sized` keeps the byte trait object-compatible; the existing
+`SharedMemoryAccess` wrapper inherits typed access over its erased backend.
+
 `SharedMemoryAllocator` provides a clone-shared monotonic address cursor over a
 caller-supplied `SharedMemory`. Nonzero allocations install zeroed backing before
 advancing the cursor; failures preserve the cursor and storage. Zero-sized allocations

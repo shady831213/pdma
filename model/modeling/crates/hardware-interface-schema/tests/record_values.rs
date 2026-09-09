@@ -2,6 +2,22 @@
 
 use hardware_interface_schema::{SchemaCodecError, record_schema};
 
+#[test]
+fn raw_record_exposes_bytes_without_decoding_them() {
+    // Given: the semantic enum rejects zero, but raw bytes remain unrestricted.
+    let mut raw = ComposableErrorChildRaw::default();
+    // When
+    let bytes: &mut [u8] = raw.as_mut();
+    bytes.copy_from_slice(&[0xff]);
+    let bytes: &[u8] = raw.as_ref();
+    // Then
+    assert_eq!(bytes, &[0xff]);
+    assert!(matches!(
+        ComposableErrorChild::from_bytes(bytes),
+        Err(SchemaCodecError::UnknownTag { observed: 255, .. })
+    ));
+}
+
 record_schema! {
     pub record FlatRecord {
         alignment: 8,

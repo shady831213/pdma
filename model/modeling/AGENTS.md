@@ -8,8 +8,10 @@ removed from master after backing up the complete source snapshot:
 `backup/pdma-before-rebuild-20260909` at
 `51707fe1d38e261a188e1d0ac14243c0caf58127`.
 
-No replacement PDMA implementation exists yet. Old interfaces, numeric register
-layouts, and ABI compatibility are not requirements for the rebuild.
+The replacement now implements one channel with command and response rings,
+0..=256-byte DMA copy, sticky channel faults, and level IRQ delivery. See README.md
+and the runnable `minimal_channel` host example. Old interfaces, numeric register
+layouts, and ABI compatibility are not requirements for this model.
 
 ## Active building blocks
 
@@ -26,7 +28,7 @@ replacement model; do not introduce parallel composition or dispatch mechanisms.
 ## Historical references
 
 `crates/scenarios` is preserved unchanged but excluded from workspace membership
-because its PDMA dependencies have been removed. It is not part of current test
+because its old PDMA APIs no longer exist. It is not part of current test
 acceptance and cannot run standalone in this cleanup snapshot.
 Reintroduce scenarios deliberately as the new model gains real behavior.
 
@@ -40,10 +42,13 @@ shapes into the rebuild.
 
 ## Implementation constraints
 
-- The first replacement slice is one command queue, simple DMA copy, and IRQ delivery.
+- The first replacement slice is one channel, command/response rings, DMA copy, and IRQ delivery.
   Do not implement further slices without a user request.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.
+- The shared `Ring` trait's entry geometry and pointer rules belong to contract. Host/device
+  keep side-specific memory/MMIO access and publish pointers only after successful
+  entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.
 - Keep the model deterministic and step-based. No cycle timing or extra executors.
 - Software handlers remain outside the hardware. Preserve CPU-local and handler
   execution guarantees supplied by the runtime.

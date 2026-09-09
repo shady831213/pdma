@@ -1,0 +1,18 @@
+[package]
+name = "pdma-model-device"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Minimal staged single-channel DMA hardware"
+
+[dependencies]
+pdma-model-contract = { path = "../contract" }
+hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
+hardware-interface-runtime = { path = "../hardware-interface-runtime" }
+hardware-interface-schema = { path = "../hardware-interface-schema" }
+
+[lints]
+workspace = true

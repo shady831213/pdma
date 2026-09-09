@@ -1,5 +1,8 @@
 [workspace]
 members = [
+    "crates/contract",
+    "crates/device",
+    "crates/host",
     "crates/hardware-interface-pipeline",
     "crates/hardware-interface-runtime",
     "crates/hardware-interface-schema",

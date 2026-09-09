@@ -9,14 +9,14 @@ the retired sync model, is preserved on:
 - Branch: `backup/pdma-before-rebuild-20260909`
 - Commit: `51707fe1d38e261a188e1d0ac14243c0caf58127`
 
-`master` intentionally has no `contract`, `device`, `host`, or `model/retired` tree.
-Do not restore those implementations or compatibility interfaces without a user request.
-This cleanup does not implement the replacement model.
+The replacement `contract`, `device`, and `host` implement a minimal single channel.
+The old implementations and `model/retired` remain only on the backup branch.
+Do not restore their compatibility interfaces without a user request.
 
 ## Scope and retained material
 
 Active work is under `model/modeling`; read its `AGENTS.md`.
-Its Cargo workspace contains four reusable building blocks:
+Its Cargo workspace contains the three minimal PDMA crates and four reusable building blocks:
 
 - `hardware-interface-pipeline`
 - `hardware-interface-runtime`
@@ -24,13 +24,13 @@ Its Cargo workspace contains four reusable building blocks:
 - `hardware-interface-schema-macros`
 
 The original `crates/scenarios` sources are retained as historical behavior references
-but excluded from the active Cargo workspace. They depend on the removed PDMA crates.
+but excluded from the active Cargo workspace. They depend on obsolete PDMA APIs.
 The version plans, `model/docs/pdma_arch_spec_v0.md`, and generated PDMA header describe
 the old implementation, not the replacement's required architecture or ABI.
 `docs/white_boards/**` remains exploratory background.
 
-The next requested implementation starts with one command queue, simple DMA copy,
-and interrupt delivery using existing building blocks. Do not expand that scope or
+The current implementation has one channel with command/response rings, bounded DMA
+copy, and interrupt delivery using existing building blocks. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.
 
 ## Working rules

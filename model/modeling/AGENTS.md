@@ -32,9 +32,10 @@ because its old PDMA APIs no longer exist. It is not part of current test
 acceptance and cannot run standalone in this cleanup snapshot.
 Reintroduce scenarios deliberately as the new model gains real behavior.
 
-`include/pdma_model_abi.h` remains an unchanged historical generated artifact.
-Its Rust generator lives on the backup branch. Do not hand-edit that header or
-treat it as the replacement's ABI.
+`include/pdma_model_abi.h` is generated from the current contract schemas by
+`pdma-abi-header` with the optional `export-c-header` feature. Regenerate and check
+it using the commands in `include/README.md`; never edit it by hand. The old ABI
+header is preserved on the backup branch, not in the active include directory.
 
 The documents under `model/docs`, including the previous architecture specification,
 describe the backed-up implementation. They must not force old software interface
@@ -73,5 +74,5 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo doc --workspace --all-features --no-deps --document-private-items
 ```
 
-The all-features pass exercises the generic C exporter. It stays default-off;
-the removed PDMA contract no longer enables it through feature unification.
+The all-features pass exercises the generic C exporter and the current contract's
+header CLI, consistency check, and strict C11 consumer. Export remains default-off.

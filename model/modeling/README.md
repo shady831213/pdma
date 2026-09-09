@@ -20,6 +20,7 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/contract/src/record.rs` | Generated command/response wire records. |
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
 | `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |
+| `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/device/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
 | `crates/device/src/channel/mmio.rs` | Generated block routing and software-write effects. |
 | `crates/device/src/stages.rs` | The complete hardware composition. |
@@ -106,8 +107,9 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
 
 This is not the predecessor's ABI. There is no event ring, scheduler, multi-channel
 arbitration, resource credit policy, old semantic API, custom future, or additional
-executor. Historical scenarios and the old generated C header are retained only as
-reference, outside acceptance for this slice.
+executor. Historical scenarios remain outside acceptance for this slice. The old
+C header has been replaced by the current generated contract; see
+[`include/README.md`](include/README.md) for generation and consistency checking.
 
 ## Validation
 

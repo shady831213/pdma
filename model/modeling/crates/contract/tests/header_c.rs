@@ -1,0 +1,161 @@
+//! Strict C11 acceptance of the generated current PDMA contract.
+
+#![cfg(feature = "export-c-header")]
+
+use std::{
+    error::Error,
+    fs, io,
+    path::PathBuf,
+    process::{Command as ProcessCommand, Output},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+use hardware_interface_schema::Documentation;
+use pdma_model_contract::{Command, DeviceRegisters, Response, ResponseStatus};
+
+type TestResult = Result<(), Box<dyn Error>>;
+
+#[test]
+fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
+    // Given: the current record and MMIO schemas used by the device.
+    let records = [Command::SPEC.resolve()?, Response::SPEC.resolve()?];
+    let registers = DeviceRegisters::resolve()?;
+
+    // When: the public generator emits its complete header.
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header")).output()?;
+
+    // Then: schema descriptions survive in the C artifact, including multiline status details.
+    assert_success("header generator", &output);
+    let header = std::str::from_utf8(&output.stdout)?;
+    for record in records {
+        assert_descriptions(header, record.documentation());
+        for member in record.members() {
+            assert_descriptions(header, member.documentation());
+        }
+    }
+    assert_descriptions(header, registers.documentation());
+    for placement in registers.placements() {
+        assert_descriptions(header, placement.documentation());
+    }
+    for register in registers.registers() {
+        assert_descriptions(header, register.documentation());
+        for field in register.definition().fields() {
+            assert_descriptions(header, field.documentation());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
+    // Given: a generated header and a C consumer using actual exported accessors.
+    let temp = TempDirectory::new()?;
+    let header = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header")).output()?;
+    assert_success("header generator", &header);
+    fs::write(temp.0.join("pdma_model_abi.h"), header.stdout)?;
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/header_c/consumer.c");
+    let binary = temp.0.join("consumer");
+    let compile = ProcessCommand::new("cc")
+        .args([
+            "-std=c11",
+            "-pedantic-errors",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+        ])
+        .arg("-I")
+        .arg(&temp.0)
+        .arg(&fixture)
+        .arg("-o")
+        .arg(&binary)
+        .output()?;
+    assert_success("strict C11 compilation", &compile);
+
+    // When: the compiled consumer encodes records and reports the exported register offsets.
+    let output = ProcessCommand::new(&binary).output()?;
+
+    // Then: C and Rust both match independently specified little-endian bytes and MMIO addresses.
+    assert_success("C consumer", &output);
+    let command_bytes = [
+        7, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
+        0, 0,
+    ];
+    let response_bytes = [7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let offsets = [0_u8, 8, 12, 16, 24, 32, 36, 40, 44, 48, 52];
+    let command = Command {
+        id: 7,
+        source: 0x100,
+        destination: 0x200,
+        length: 8,
+    };
+    let response = Response {
+        id: 7,
+        status: ResponseStatus::Success,
+    };
+    assert_eq!(command.to_bytes()?, command_bytes);
+    assert_eq!(response.to_bytes()?, response_bytes);
+    let resolved = DeviceRegisters::resolve()?;
+    let rust_offsets = resolved
+        .registers()
+        .iter()
+        .map(hardware_interface_schema::ResolvedRegister::offset)
+        .collect::<Vec<_>>();
+    assert_eq!(rust_offsets, offsets.map(usize::from));
+    let expected = [
+        command_bytes.as_slice(),
+        response_bytes.as_slice(),
+        offsets.as_slice(),
+    ]
+    .concat();
+    assert_eq!(output.stdout, expected);
+    Ok(())
+}
+
+fn assert_descriptions(header: &str, documentation: Documentation) {
+    for text in [documentation.short_description, documentation.description]
+        .into_iter()
+        .flatten()
+    {
+        for line in text.lines() {
+            assert!(
+                header.contains(line),
+                "missing schema documentation: {line}"
+            );
+        }
+    }
+}
+
+fn assert_success(label: &str, output: &Output) {
+    assert!(
+        output.status.success(),
+        "{label} failed with {}:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+struct TempDirectory(PathBuf);
+
+impl TempDirectory {
+    fn new() -> io::Result<Self> {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "pdma-contract-header-c-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&path)?;
+        Ok(Self(path))
+    }
+}
+
+impl Drop for TempDirectory {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_dir_all(&self.0) {
+            eprintln!(
+                "failed to clean C header test directory {}: {error}",
+                self.0.display()
+            );
+        }
+    }
+}

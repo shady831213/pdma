@@ -1,9 +1,23 @@
-# Historical PDMA header
+# Current PDMA contract header
 
-`pdma_model_abi.h` is retained unchanged from the pre-rebuild implementation.
-Its generating contract crate is preserved on `backup/pdma-before-rebuild-20260909`
-at `51707fe1d38e261a188e1d0ac14243c0caf58127`.
+`pdma_model_abi.h` is generated from the current contract's `Command`, `Response`
+and `DeviceRegisters` schemas. It contains record sizes and byte accessors, MMIO
+offsets and access/reset metadata, and schema descriptions as C comments. It is
+a C11 data contract, not a callable device API or the predecessor's ABI.
 
-The generator is intentionally absent from master during the rebuild. This file
-is a historical reference, not the replacement model's required ABI. Do not edit
-the generated header by hand.
+Run from `model/modeling`:
+
+```sh
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --write include/pdma_model_abi.h
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --check include/pdma_model_abi.h
+```
+
+With no arguments the generator writes to stdout. `--help` lists the options.
+The optional `export-c-header` feature composes the existing schema exporters;
+normal host/device builds do not enable it. Do not edit the header by hand.
+
+Initialize record byte arrays to zero before storing fields so reserved padding
+matches the Rust wire encoding. The generated field accessors do not initialize
+padding or perform device I/O.
+
+The obsolete header remains recoverable on `backup/pdma-before-rebuild-20260909`.

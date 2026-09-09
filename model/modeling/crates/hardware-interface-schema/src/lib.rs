@@ -6,6 +6,7 @@ extern crate self as hardware_interface_schema;
 pub mod bits;
 /// Scalar encoding and decoding functions plus their typed errors.
 pub mod codec;
+mod documentation;
 /// Byte-order vocabulary for scalar codecs and record fields.
 pub mod endian;
 /// Format-neutral artifact and exporter extension boundary.
@@ -26,6 +27,7 @@ pub use codec::{
     Decode, Encode, SchemaCodecError, SchemaCoordinate, SchemaLocation, SchemaMemberIdentity,
     read_scalar, write_scalar,
 };
+pub use documentation::Documentation;
 pub use endian::Endian;
 pub use hardware_interface_schema_macros::{
     bits_schema, record_schema, register_map, register_schema,
@@ -47,8 +49,8 @@ pub use register_map::{
     OrderedRegisterMapSpec, RegisterAccessGroup, RegisterAccessLeaf, RegisterAccessPath,
     RegisterCollection, RegisterLayoutGeometry, RegisterLocation, RegisterMapError,
     RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError, RepeatedRegisterBank,
-    ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap, append_register_leaf,
-    finish_ordered_register_map,
+    ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap, ResolvedRegisterMapPlacement,
+    append_register_leaf, finish_ordered_register_map,
 };
 pub use scalar::{Scalar, ScalarKind};
 

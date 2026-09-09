@@ -15,6 +15,7 @@ impl RegisterLayoutGeometry {
 /// One ordered child-layout placement in a generated register map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterMapPlacement<I> {
+    documentation: crate::Documentation,
     id: I,
     name: &'static str,
     offset: usize,
@@ -41,8 +42,21 @@ impl<I: Copy> RegisterMapPlacement<I> {
             count,
             stride,
             alignment: geometry.alignment,
+            documentation: crate::Documentation::EMPTY,
             extent: geometry.extent,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: crate::Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation of this node.
+    pub const fn documentation(self) -> crate::Documentation {
+        self.documentation
     }
 
     /// Returns the generated placement identity.
@@ -84,6 +98,7 @@ impl<I: Copy> RegisterMapPlacement<I> {
 /// Ordered root metadata generated for one register map.
 #[derive(Debug, Clone, Copy)]
 pub struct OrderedRegisterMapSpec<I: 'static> {
+    documentation: crate::Documentation,
     name: &'static str,
     alignment: usize,
     extent: usize,
@@ -103,7 +118,20 @@ impl<I: Copy> OrderedRegisterMapSpec<I> {
             alignment,
             extent,
             placements,
+            documentation: crate::Documentation::EMPTY,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: crate::Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation of this node.
+    pub const fn documentation(self) -> crate::Documentation {
+        self.documentation
     }
 
     /// Returns the map name.
@@ -130,6 +158,10 @@ impl<I: Copy> OrderedRegisterMapSpec<I> {
 #[doc(hidden)]
 #[derive(Debug)]
 pub struct RegisterCollection<'a, I: 'static> {
+    #[doc(hidden)]
+    pub placements: &'a mut Vec<super::ResolvedRegisterMapPlacement<I>>,
+    #[doc(hidden)]
+    pub documentation: crate::Documentation,
     #[doc(hidden)]
     pub id: I,
     #[doc(hidden)]
@@ -158,7 +190,8 @@ pub fn append_register_leaf<I: Copy + 'static>(
         collection.offset,
         definition,
     )
-    .with_declaration_index(index);
+    .with_declaration_index(index)
+    .with_documentation(collection.documentation);
     if let Ok(numeric_id) = u16::try_from(index) {
         register = register.with_numeric_id(numeric_id);
     }

@@ -21,6 +21,7 @@ pub(super) fn expand(
     let view_mut_name = context.view_mut_name;
     let extent = context.extent;
     let visibility = &decl.visibility;
+    let rust_docs = decl.documentation.rust_docs();
     let members = value_members(decl, context, geometry);
     let scalar_access = scalar_access::expand(context, geometry);
     let fields = members.fields;
@@ -37,6 +38,7 @@ pub(super) fn expand(
         facade,
     );
     quote! {
+        #rust_docs
         #[doc = "Owned typed values for the generated register map."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #values_name { #(#fields),* }
@@ -71,6 +73,7 @@ pub(super) fn expand(
             fn default() -> Self { Self::DEFAULT }
         }
         impl #facade::RegisterLayout for #marker {
+            const DOCUMENTATION: #facade::Documentation = Self::DOCUMENTATION;
             type Value = #values_name;
             type View<'a> = #view_name<'a>;
             type ViewMut<'a> = #view_mut_name<'a>;
@@ -85,7 +88,13 @@ pub(super) fn expand(
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { #view_name::new(bytes) }
             fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> { #view_mut_name::new(bytes) }
             fn append_registers<I: Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
-                #marker::__append_registers(collection.id, collection.path, collection.offset, collection.declaration_index, collection.repeated, collection.output);
+                collection.placements.push(#facade::ResolvedRegisterMapPlacement::new(
+                    collection.path.clone(),
+                    #facade::RegisterMapPlacement::new(collection.id, collection.name, collection.offset, 1, 0,
+                        #facade::RegisterLayoutGeometry::new(Self::ALIGNMENT, Self::EXTENT))
+                        .with_documentation(collection.documentation.with_fallback(Self::DOCUMENTATION)),
+                ));
+                #marker::__append_registers(collection);
             }
         }
         impl #facade::RegisterMapLayout for #marker {
@@ -127,9 +136,11 @@ fn value_members(
         let symbol = &item.symbol;
         let definition = &item.definition;
         let placement = &item.placement;
+        let rust_docs = &item.rust_docs;
         let count = item.count;
         if count == 1 {
             fields.push(quote!(
+                #rust_docs
                 #[doc = "Owned decoded child-layout value."]
                 #field_visibility #symbol: <#definition as #facade::RegisterLayout>::Value
             ));
@@ -152,6 +163,7 @@ fn value_members(
             }));
         } else {
             fields.push(quote!(
+                #rust_docs
                 #[doc = "Owned decoded repeated child-layout values."]
                 #field_visibility #symbol: [<#definition as #facade::RegisterLayout>::Value; #count]
             ));

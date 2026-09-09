@@ -1,6 +1,7 @@
 use proc_macro2::TokenStream;
 
 pub(super) struct Geometry {
+    pub(super) rust_docs: TokenStream,
     pub(super) symbol: syn::Ident,
     pub(super) definition: syn::Path,
     pub(super) placement: syn::Ident,

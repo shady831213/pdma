@@ -2,6 +2,7 @@ mod access;
 mod error;
 mod layout;
 mod ordered;
+mod placement;
 mod resolve;
 mod resolved;
 mod validation;
@@ -13,11 +14,13 @@ pub use ordered::{
     OrderedRegisterMapSpec, RegisterCollection, RegisterLayoutGeometry, RegisterMapPlacement,
     append_register_leaf, finish_ordered_register_map,
 };
+pub use placement::ResolvedRegisterMapPlacement;
 pub use resolved::{ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap};
 
 /// One immutable repeated register-bank declaration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RepeatedRegisterBank<I: 'static, F: 'static = u16> {
+    documentation: crate::Documentation,
     name: &'static str,
     base: usize,
     count: usize,
@@ -36,11 +39,24 @@ impl<I: Copy, F: Copy> RepeatedRegisterBank<I, F> {
     ) -> Self {
         Self {
             name,
+            documentation: crate::Documentation::EMPTY,
             base,
             count,
             stride,
             registers,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: crate::Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation of this node.
+    pub const fn documentation(self) -> crate::Documentation {
+        self.documentation
     }
 
     /// Returns the bank name.
@@ -95,6 +111,7 @@ pub enum RegisterLocation<I: 'static, F: 'static = u16> {
 /// An immutable named map extent, fixed placements, and repeated banks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterMapSpec<I: 'static, F: 'static = u16> {
+    documentation: crate::Documentation,
     name: &'static str,
     size: usize,
     registers: &'static [RegisterSpec<I, F>],
@@ -124,8 +141,21 @@ impl<I: Copy + 'static, F: Copy + 'static> RegisterMapSpec<I, F> {
             size,
             registers,
             register_groups: &[],
+            documentation: crate::Documentation::EMPTY,
             banks,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: crate::Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation of this node.
+    pub const fn documentation(self) -> crate::Documentation {
+        self.documentation
     }
 
     /// Adds independently declared fixed-register groups.

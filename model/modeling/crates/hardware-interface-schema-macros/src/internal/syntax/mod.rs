@@ -1,4 +1,8 @@
 mod bits;
+mod documentation;
+pub(in crate::internal) use documentation::Documentation;
+#[cfg(test)]
+mod description_tests;
 mod map_ordered;
 mod record;
 mod register;

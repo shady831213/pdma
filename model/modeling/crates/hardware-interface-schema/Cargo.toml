@@ -21,6 +21,10 @@ export-c-header = []
 [lints]
 workspace = true
 
+[[example]]
+name = "documented_schema"
+required-features = ["export-c-header"]
+
 [[test]]
 name = "c_header"
 path = "tests/c_header/mod.rs"

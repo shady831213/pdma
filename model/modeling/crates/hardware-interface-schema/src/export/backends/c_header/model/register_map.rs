@@ -1,11 +1,12 @@
 use crate::{
+    BitsFieldSpec, Documentation,
     register::{Access, RegisterSpec, ResetKind},
     register_map::{ResolvedRegisterBank, ResolvedRegisterMap},
 };
 
 /// One keyed register row consumed by C-header renderers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RegisterCHeaderModel<I, F = u16> {
+pub struct RegisterCHeaderModel<I, F: 'static = u16> {
     id: I,
     name: &'static str,
     offset: usize,
@@ -14,7 +15,8 @@ pub struct RegisterCHeaderModel<I, F = u16> {
     reset_kind: ResetKind,
     reset_value: u64,
     writable_mask: u64,
-    field_id: core::marker::PhantomData<fn() -> F>,
+    fields: &'static [BitsFieldSpec<F>],
+    documentation: Documentation,
 }
 
 impl<I: Copy, F: Copy> RegisterCHeaderModel<I, F> {
@@ -28,7 +30,8 @@ impl<I: Copy, F: Copy> RegisterCHeaderModel<I, F> {
             reset_kind: register.reset_kind(),
             reset_value: register.reset_value(),
             writable_mask: register.writable_mask(),
-            field_id: core::marker::PhantomData,
+            fields: register.definition().fields(),
+            documentation: register.documentation(),
         }
     }
 
@@ -71,16 +74,27 @@ impl<I: Copy, F: Copy> RegisterCHeaderModel<I, F> {
     pub const fn writable_mask(self) -> u64 {
         self.writable_mask
     }
+
+    /// Returns the register's effective description text.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
+    }
+
+    /// Returns the declared bit fields and their descriptions.
+    pub const fn fields(self) -> &'static [BitsFieldSpec<F>] {
+        self.fields
+    }
 }
 
 /// One complete repeated register-bank model.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisterCHeaderBank<I, F = u16> {
+pub struct RegisterCHeaderBank<I, F: 'static = u16> {
     name: &'static str,
     base: usize,
     count: usize,
     stride: usize,
     registers: Vec<RegisterCHeaderModel<I, F>>,
+    documentation: Documentation,
 }
 
 impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
@@ -90,6 +104,7 @@ impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
             base: bank.base(),
             count: bank.count(),
             stride: bank.stride(),
+            documentation: bank.documentation(),
             registers: bank
                 .registers()
                 .iter()
@@ -123,14 +138,21 @@ impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
     pub fn registers(&self) -> &[RegisterCHeaderModel<I, F>] {
         &self.registers
     }
+
+    /// Returns the bank's description text.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
 }
 
 /// Complete ordered typed model for one register-map C fragment.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisterMapCHeaderModel<I, F = u16> {
+pub struct RegisterMapCHeaderModel<I, F: 'static = u16> {
     size: usize,
     fixed: Vec<RegisterCHeaderModel<I, F>>,
     banks: Vec<RegisterCHeaderBank<I, F>>,
+    documentation: Documentation,
+    groups: Vec<(String, Documentation)>,
 }
 
 impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeaderModel<I, F> {
@@ -140,14 +162,24 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
         let fixed = schema
             .registers()
             .iter()
-            .filter(|register| register.instance().is_none())
+            .filter(|register| {
+                register.instance().is_none()
+                    || !schema.banks().iter().any(|bank| {
+                        bank.expanded_registers()
+                            .iter()
+                            .any(|member| member.path() == register.path())
+                    })
+            })
             .map(|register| {
-                RegisterCHeaderModel::from_resolved(RegisterSpec::place(
-                    register.id(),
-                    register.name(),
-                    register.offset(),
-                    register.definition(),
-                ))
+                RegisterCHeaderModel::from_resolved(
+                    RegisterSpec::place(
+                        register.id(),
+                        register.name(),
+                        register.offset(),
+                        register.definition(),
+                    )
+                    .with_documentation(register.documentation()),
+                )
             })
             .collect();
         let banks = schema
@@ -159,6 +191,12 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
             size: schema.size(),
             fixed,
             banks,
+            documentation: schema.documentation(),
+            groups: schema
+                .placements()
+                .iter()
+                .map(|placement| (placement.path().into(), placement.documentation()))
+                .collect(),
         }
     }
 
@@ -175,5 +213,15 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
     /// Returns all repeated bank models in canonical order.
     pub fn banks(&self) -> &[RegisterCHeaderBank<I, F>] {
         &self.banks
+    }
+
+    /// Returns the root map's description text.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
+    /// Returns nested map paths and their instance descriptions.
+    pub fn groups(&self) -> &[(String, Documentation)] {
+        &self.groups
     }
 }

@@ -4,7 +4,7 @@ use syn::{
 };
 
 use super::ScalarType;
-use crate::internal::syntax::{key, keyword, usize_lit};
+use crate::internal::syntax::{Documentation, key, keyword, usize_lit};
 
 mod bits;
 mod enumeration;
@@ -17,6 +17,7 @@ pub(in crate::internal) use union::{
 };
 
 pub(in crate::internal) struct ModernRecordDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) alignment: Option<(usize, proc_macro2::Span)>,
@@ -25,6 +26,7 @@ pub(in crate::internal) struct ModernRecordDecl {
 }
 
 pub(in crate::internal) struct ModernFieldDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) ty: ModernTypeDecl,
 }
@@ -43,6 +45,7 @@ pub(in crate::internal) enum ModernTypeDecl {
 
 impl Parse for ModernRecordDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let visibility = input.parse()?;
         keyword(input, "record")?;
         let name = input.parse()?;
@@ -62,6 +65,7 @@ impl Parse for ModernRecordDecl {
         let _ = body.parse::<Token![,]>();
         if body.is_empty() {
             Ok(Self {
+                documentation,
                 visibility,
                 name,
                 alignment,
@@ -76,10 +80,15 @@ impl Parse for ModernRecordDecl {
 
 impl Parse for ModernFieldDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let name = input.parse()?;
         input.parse::<Token![:]>()?;
         let ty = ModernTypeDecl::parse(input)?;
-        Ok(Self { name, ty })
+        Ok(Self {
+            documentation,
+            name,
+            ty,
+        })
     }
 }
 

@@ -14,6 +14,7 @@ pub(super) fn expand(
     facade: &TokenStream,
 ) -> syn::Result<TokenStream> {
     let marker = &decl.name;
+    let rust_docs = decl.documentation.rust_docs();
     let visibility = &decl.visibility;
     let values_name = marker;
     let raw_name = format_ident!("{marker}Raw");
@@ -24,8 +25,10 @@ pub(super) fn expand(
         .filter_map(|field| value_declaration(marker, field, visibility, facade));
     let accessors = plan.fields.iter().filter_map(|field| {
         let name = &field.decl.name;
+        let rust_docs = field.decl.documentation.rust_docs();
         field_type(marker, field, facade).map(|ty| {
             quote! {
+                #rust_docs
                 #[doc = "Returns one generated record field."]
                 pub const fn #name(self) -> #ty { self.#name }
             }
@@ -54,6 +57,7 @@ pub(super) fn expand(
     let codec = codec::expand(visibility, marker, values_name, &raw_name, facade);
     Ok(quote! {
         #(#constant_assertions)*
+        #rust_docs
         #[doc = "Generated owned semantic record value."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #values_name { #(#declarations,)* }
@@ -166,8 +170,10 @@ fn value_declaration(
     facade: &TokenStream,
 ) -> Option<TokenStream> {
     let name = &field.decl.name;
-    field_type(marker, field, facade)
-        .map(|ty| quote!(#[doc = "Generated semantic record field."] #visibility #name: #ty))
+    let rust_docs = field.decl.documentation.rust_docs();
+    field_type(marker, field, facade).map(
+        |ty| quote!(#rust_docs #[doc = "Generated semantic record field."] #visibility #name: #ty),
+    )
 }
 
 fn field_type(

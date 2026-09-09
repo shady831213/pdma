@@ -1,3 +1,5 @@
+use crate::Documentation;
+
 use super::RecordSpec;
 
 #[derive(Debug, Clone, Copy)]
@@ -9,6 +11,7 @@ enum RecordReference<I: 'static> {
 /// One fixed or repeated sibling-local nested record placement.
 #[derive(Debug, Clone, Copy)]
 pub struct RecordPlacement<I: 'static = u16> {
+    documentation: Documentation,
     id: I,
     name: &'static str,
     offset: usize,
@@ -56,6 +59,7 @@ impl<I: Copy> RecordPlacement<I> {
             stride: 0,
             definition: RecordReference::Deferred(definition),
             declaration_index: None,
+            documentation: Documentation::EMPTY,
         }
     }
 
@@ -74,8 +78,16 @@ impl<I: Copy> RecordPlacement<I> {
             count,
             stride,
             definition: RecordReference::Direct(definition),
+            documentation: Documentation::EMPTY,
             declaration_index: None,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
     }
 
     /// Selects an explicit combined sibling declaration index.
@@ -123,5 +135,12 @@ impl<I: Copy> RecordPlacement<I> {
             Some(index) => index,
             None => fallback,
         }
+    }
+}
+impl<I: Copy + Eq + core::fmt::Debug> RecordPlacement<I> {
+    /// Returns placement documentation with referenced record fallback.
+    pub fn documentation(self) -> Documentation {
+        self.documentation
+            .with_fallback(self.definition().documentation())
     }
 }

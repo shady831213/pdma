@@ -59,6 +59,7 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
             type View<'a> = #view_name<'a>;
             type ViewMut<'a> = #view_mut_name<'a>;
             const NAME: &'static str = #marker_name;
+            const DOCUMENTATION: #facade::Documentation = Self::DOCUMENTATION;
             const ALIGNMENT: usize = Self::RECORD_ALIGNMENT;
             const EXTENT: usize = Self::RECORD_SIZE;
             const ZERO: Self::Value = #values_name::ZERO;

@@ -7,6 +7,7 @@ use super::SchemaContext;
 
 pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
     let facade = &context.facade;
+    let rust_docs = context.decl.documentation.rust_docs();
     let visibility = &context.decl.visibility;
     let marker = &context.decl.name;
     let values = &context.values;
@@ -17,7 +18,8 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
     let declarations = context.decl.fields.iter().map(|field| {
         let name = &field.name;
         let ty = super::super::semantic_type(field);
-        quote!(#[doc = "Generated typed bit field."] #visibility #name: #ty)
+        let rust_docs = field.documentation.rust_docs();
+        quote!(#rust_docs #[doc = "Generated typed bit field."] #visibility #name: #ty)
     });
     let constructor_parameters = context.decl.fields.iter().map(|field| {
         let name = &field.name;
@@ -28,7 +30,9 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
     let accessors = context.decl.fields.iter().map(|field| {
         let name = &field.name;
         let ty = super::super::semantic_type(field);
+        let rust_docs = field.documentation.rust_docs();
         quote! {
+            #rust_docs
             #[doc = "Returns one generated bit-field value."]
             pub const fn #name(self) -> #ty { self.#name }
         }
@@ -70,6 +74,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
         impl ::core::convert::From<#raw_name> for #raw_type {
             fn from(value: #raw_name) -> Self { value.value() }
         }
+        #rust_docs
         #[doc = "Owned typed value for one reusable bits schema."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #values { #(#declarations,)* }

@@ -37,6 +37,7 @@ pub(super) fn leaf_collectors(
                 quote!(declaration_index)
             };
             let output = if root { quote!(&mut registers) } else { quote!(output) };
+            let placements = if root { quote!(&mut placements) } else { quote!(placements) };
             (0..geometry.count)
                 .map(move |instance| {
                     let child_path = if geometry.count == 1 {
@@ -51,6 +52,8 @@ pub(super) fn leaf_collectors(
                     };
                     quote! {
                         <#definition as #facade::RegisterLayout>::append_registers(#facade::RegisterCollection {
+                            documentation: #marker::#placement_constant.documentation(),
+                            placements: #placements,
                             id: #id,
                             name: #register_name,
                             path: #child_path,

@@ -1,0 +1,5 @@
+error: duplicate documentation attribute
+ --> tests/ui/fail/description_duplicate.rs:5:7
+  |
+5 |     #[description = "Second"]
+  |       ^^^^^^^^^^^

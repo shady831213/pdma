@@ -5,6 +5,8 @@ use super::{SchemaContext, values::narrow_raw};
 
 pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
     let facade = &context.facade;
+    let documentation = context.decl.documentation.metadata(facade);
+    let rust_docs = context.decl.documentation.rust_docs();
     let visibility = &context.decl.visibility;
     let marker = &context.decl.name;
     let marker_name = marker.to_string();
@@ -28,10 +30,13 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
         }
     });
     Ok(quote! {
+        #rust_docs
         #[doc = "Marker and metadata namespace for one reusable bits schema."]
         #[derive(Clone, Copy, Debug)]
         #visibility struct #marker;
         impl #marker {
+            #[doc = "Declared schema documentation."]
+            pub const DOCUMENTATION: #facade::Documentation = #documentation;
             #[doc = "Stable identity for reserved bits outside declared members."]
             pub const RESERVED_IDENTITY: #facade::SchemaMemberIdentity =
                 #facade::SchemaMemberIdentity::new(#marker_name, "reserved");
@@ -50,6 +55,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
             type Storage = #raw_type;
             type FieldId = #field_id;
             const NAME: &'static str = #marker_name;
+            const DOCUMENTATION: #facade::Documentation = Self::DOCUMENTATION;
             const BIT_WIDTH: usize = #bit_width;
             const EXTENT: usize = #extent;
             const DECLARED_MASK: u64 = #declared_mask;
@@ -105,11 +111,12 @@ fn specs(context: &SchemaContext<'_>) -> syn::Result<Vec<TokenStream>> {
                 syn::Error::new(field.name.span(), "bits schema field ID exceeds u16")
             })?;
             let name = field.name.to_string();
+            let documentation = field.documentation.metadata(facade);
             let lsb = field.start.0;
             let width = super::super::width(field);
             Ok(quote!(#facade::BitsFieldSpec::place(
                 #id, #name, #lsb, #facade::BitsFieldDefinition::new(#width),
-            ).with_declaration_index(#index)))
+            ).with_declaration_index(#index).with_documentation(#documentation)))
         })
         .collect()
 }

@@ -32,6 +32,8 @@ pub(super) fn resolve<I: Copy + Eq + fmt::Debug + 'static, F: Copy + Eq + fmt::D
     validate_overlaps(map, &resolved)?;
     validate_paths(map, &resolved)?;
     Ok(ResolvedRegisterMap {
+        placements: Vec::new(),
+        documentation: map.documentation(),
         root: map.name(),
         size: map.size(),
         banks: resolved_banks(map, &declarations, &resolved),

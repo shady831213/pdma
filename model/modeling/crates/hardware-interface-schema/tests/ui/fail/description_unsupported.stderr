@@ -1,0 +1,5 @@
+error: unsupported schema attribute; expected short_description or description
+ --> tests/ui/fail/description_unsupported.rs:4:7
+  |
+4 |     #[derive(Clone)]
+  |       ^^^^^^

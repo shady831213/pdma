@@ -4,9 +4,10 @@ use syn::{
     spanned::Spanned,
 };
 
-use super::{key, keyword, usize_lit};
+use super::{Documentation, key, keyword, usize_lit};
 
 pub(in crate::internal) struct OrderedMapDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) alignment: (usize, proc_macro2::Span),
@@ -22,6 +23,7 @@ pub(in crate::internal) struct AccessPathDecl {
 }
 
 pub(in crate::internal) struct OrderedPlacementDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) symbol: Ident,
     pub(in crate::internal) definition: Path,
@@ -32,6 +34,7 @@ pub(in crate::internal) struct OrderedPlacementDecl {
 
 impl Parse for OrderedMapDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let visibility = input.parse()?;
         keyword(input, "map")?;
         let name = input.parse()?;
@@ -72,6 +75,7 @@ impl Parse for OrderedMapDecl {
             Some(entries)
         };
         Ok(Self {
+            documentation,
             visibility,
             name,
             alignment,
@@ -104,6 +108,7 @@ impl Parse for AccessPathDecl {
 
 impl Parse for OrderedPlacementDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let visibility = input.parse()?;
         let symbol = input.parse()?;
         input.parse::<Token![:]>()?;
@@ -134,6 +139,7 @@ impl Parse for OrderedPlacementDecl {
             }
         }
         Ok(Self {
+            documentation,
             visibility,
             symbol,
             definition,

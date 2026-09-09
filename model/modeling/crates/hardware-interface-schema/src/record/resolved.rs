@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use crate::SchemaCodecError;
+use crate::{Documentation, SchemaCodecError};
 
 use super::{FieldDefinition, RecordSpec};
 
@@ -28,6 +28,7 @@ pub enum ResolvedMemberKind<I: 'static = u16> {
 /// One member with a deterministic root-qualified path and absolute range.
 #[derive(Debug, Clone)]
 pub struct ResolvedMember<I: 'static = u16> {
+    pub(super) documentation: Documentation,
     pub(super) path: String,
     pub(super) absolute_offset: usize,
     pub(super) width: usize,
@@ -36,6 +37,11 @@ pub struct ResolvedMember<I: 'static = u16> {
 }
 
 impl<I: Copy> ResolvedMember<I> {
+    /// Returns effective documentation of this placed member.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
     /// Returns the root-qualified rendered path.
     pub fn path(&self) -> &str {
         &self.path
@@ -80,6 +86,7 @@ impl<I: Copy> ResolvedMember<I> {
 /// Fully validated record graph in deterministic depth-first order.
 #[derive(Debug, Clone)]
 pub struct ResolvedRecord<I: 'static = u16> {
+    pub(super) documentation: Documentation,
     pub(super) root: &'static str,
     pub(super) size: usize,
     pub(super) alignment: usize,
@@ -87,6 +94,11 @@ pub struct ResolvedRecord<I: 'static = u16> {
 }
 
 impl<I: Copy> ResolvedRecord<I> {
+    /// Returns the root definition documentation.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
     /// Returns the root definition name.
     pub const fn root(&self) -> &'static str {
         self.root

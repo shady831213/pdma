@@ -10,6 +10,7 @@ use crate::{
 
 use super::{
     C_MEDIA_TYPE, CHeaderExportError, FragmentConfig,
+    documentation::push_documentation,
     model::{RegisterCHeaderBank, RegisterCHeaderModel, RegisterMapCHeaderModel},
 };
 use names::{BankNames, map_names};
@@ -68,7 +69,11 @@ fn render<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug>(
     prefix: &str,
 ) -> String {
     let mut output = String::new();
+    push_documentation(&mut output, "", model.documentation());
     push_map_constants(&mut output, prefix, model.size());
+    for (path, documentation) in model.groups() {
+        push_documentation(&mut output, path, *documentation);
+    }
     let names = map_names(model);
     for ((register, name), offset) in model
         .fixed()
@@ -117,6 +122,10 @@ fn push_register<I: Copy, F: Copy>(
         name,
         offset,
     } = names;
+    push_documentation(output, "", register.documentation());
+    for field in register.fields() {
+        push_documentation(output, field.name(), field.documentation());
+    }
     if let Some((offset_name, offset)) = offset {
         let _ = writeln!(output, "#define {offset_name} UINT64_C({offset})");
     }
@@ -156,6 +165,7 @@ fn push_bank<I: Copy, F: Copy>(
     names: &BankNames,
 ) {
     let bank_name = format!("{prefix}_{}", names.name);
+    push_documentation(output, "", bank.documentation());
     let _ = writeln!(output, "#define {bank_name}_BASE UINT64_C({})", bank.base());
     let _ = writeln!(
         output,

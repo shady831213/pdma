@@ -1,4 +1,4 @@
-use crate::Endian;
+use crate::{Documentation, Endian};
 
 use super::{RegisterDefinition, RegisterValidationError};
 
@@ -27,6 +27,7 @@ pub enum ResetKind {
 /// One map placement carrying identity, name, absolute or bank-relative offset, and definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterSpec<I: 'static, F: 'static = u16> {
+    documentation: Documentation,
     id: I,
     numeric_id: Option<u16>,
     name: &'static str,
@@ -58,11 +59,25 @@ impl<I: Copy, F: Copy> RegisterSpec<I, F> {
         Self {
             id,
             numeric_id: None,
+            documentation: Documentation::EMPTY,
             name,
             offset,
             definition,
             declaration_index: None,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation with any referenced definition as fallback.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
+            .with_fallback(self.definition.documentation())
     }
 
     /// Attaches the explicit numeric identity from a schema declaration.

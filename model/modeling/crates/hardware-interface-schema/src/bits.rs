@@ -1,17 +1,36 @@
 use core::ops::Range;
 
-use crate::{Endian, RegisterValueError, SchemaCodecError, SchemaLocation, SchemaMemberIdentity};
+use crate::{
+    Documentation, Endian, RegisterValueError, SchemaCodecError, SchemaLocation,
+    SchemaMemberIdentity,
+};
 
 /// Reusable bit-field shape without identity, name, or bit offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitsFieldDefinition {
     bit_width: usize,
+    documentation: Documentation,
 }
 
 impl BitsFieldDefinition {
     /// Creates a field definition with the declared number of bits.
     pub const fn new(bit_width: usize) -> Self {
-        Self { bit_width }
+        Self {
+            bit_width,
+            documentation: Documentation::EMPTY,
+        }
+    }
+
+    /// Attaches definition documentation.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns definition documentation.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
     }
 
     /// Returns the declared number of bits.
@@ -23,6 +42,7 @@ impl BitsFieldDefinition {
 /// One sibling-local placement in a reusable bits schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BitsFieldSpec<I: 'static = u16> {
+    documentation: Documentation,
     id: I,
     name: &'static str,
     lsb: usize,
@@ -40,6 +60,7 @@ impl<I: Copy> BitsFieldSpec<I> {
     ) -> Self {
         Self {
             id,
+            documentation: Documentation::EMPTY,
             name,
             lsb,
             definition,
@@ -52,6 +73,19 @@ impl<I: Copy> BitsFieldSpec<I> {
     pub const fn with_declaration_index(mut self, index: usize) -> Self {
         self.declaration_index = Some(index);
         self
+    }
+
+    /// Attaches placement documentation, overriding the referenced definition.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns placement documentation with definition fallback.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
+            .with_fallback(self.definition.documentation())
     }
 
     /// Returns the sibling identity.
@@ -162,6 +196,8 @@ pub trait BitsLayout {
 
     /// Stable schema name.
     const NAME: &'static str;
+    /// Documentation of the reusable bits layout.
+    const DOCUMENTATION: Documentation = Documentation::EMPTY;
     /// Highest exclusive declared bit endpoint.
     const BIT_WIDTH: usize;
     /// Smallest supported scalar byte extent containing every field.

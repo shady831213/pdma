@@ -1,4 +1,6 @@
-use crate::{RegisterCollection, RegisterDefinition, SchemaCodecError, SchemaCoordinate};
+use crate::{
+    Documentation, RegisterCollection, RegisterDefinition, SchemaCodecError, SchemaCoordinate,
+};
 
 /// Shared byte-layout contract implemented by generated records.
 pub trait RecordLayout {
@@ -15,6 +17,8 @@ pub trait RecordLayout {
 
     /// Stable layout name.
     const NAME: &'static str;
+    /// Documentation of the reusable record layout.
+    const DOCUMENTATION: Documentation = Documentation::EMPTY;
     /// Required byte alignment for this record.
     const ALIGNMENT: usize;
     /// Encoded byte extent of this record.
@@ -47,6 +51,8 @@ pub trait RegisterLayout {
 
     /// Stable layout name.
     const NAME: &'static str;
+    /// Documentation of the reusable register or map layout.
+    const DOCUMENTATION: Documentation = Documentation::EMPTY;
     /// Required byte alignment when this layout is placed in another map.
     const ALIGNMENT: usize;
     /// Encoded byte extent of this layout.

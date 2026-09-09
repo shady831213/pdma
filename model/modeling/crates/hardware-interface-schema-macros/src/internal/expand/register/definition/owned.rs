@@ -3,6 +3,7 @@ use quote::quote;
 
 #[derive(Clone, Copy)]
 pub(super) struct Context<'a> {
+    pub(super) rust_docs: &'a TokenStream,
     pub(super) visibility: &'a syn::Visibility,
     pub(super) values: &'a syn::Ident,
     pub(super) raw: &'a syn::Ident,
@@ -18,6 +19,7 @@ pub(super) struct Context<'a> {
 
 pub(super) fn expand(context: Context<'_>) -> TokenStream {
     let Context {
+        rust_docs,
         visibility,
         values,
         raw,
@@ -31,6 +33,7 @@ pub(super) fn expand(context: Context<'_>) -> TokenStream {
         facade,
     } = context;
     quote! {
+        #rust_docs
         #[doc = "Owned full-width semantic value for the generated register."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #values(#scalar);
@@ -54,6 +57,7 @@ pub(super) fn expand(context: Context<'_>) -> TokenStream {
         impl ::core::convert::From<#values> for #scalar {
             fn from(value: #values) -> Self { value.raw() }
         }
+        #rust_docs
         #[doc = "Owned typed raw bytes for the generated register."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility struct #raw([u8; #width]);

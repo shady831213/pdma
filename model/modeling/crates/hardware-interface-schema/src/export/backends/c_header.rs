@@ -6,6 +6,7 @@
 //! files, include guards, and integration. See the crate-level optional-C11 example for
 //! the feature declaration and executable `RecordCHeaderExporter` workflow.
 
+mod documentation;
 mod error;
 mod model;
 mod naming;

@@ -7,6 +7,7 @@ use crate::{
 
 use super::{
     C_MEDIA_TYPE, CHeaderExportError, FragmentConfig,
+    documentation::push_documentation,
     model::{RecordCHeaderField, RecordCHeaderModel},
     naming::{c_identifier, disambiguate_identifiers},
 };
@@ -51,6 +52,7 @@ impl Exporter<ResolvedRecord> for RecordCHeaderExporter {
 
 fn render(model: &RecordCHeaderModel, prefix: &str) -> String {
     let mut output = String::new();
+    push_documentation(&mut output, "", model.documentation());
     let _ = writeln!(output, "#define {prefix}_SIZE UINT64_C({})", model.size());
     let _ = writeln!(
         output,
@@ -59,6 +61,9 @@ fn render(model: &RecordCHeaderModel, prefix: &str) -> String {
     );
     let _ = writeln!(output, "#define {prefix}_ENDIAN_LITTLE UINT32_C(0)");
     let _ = writeln!(output, "#define {prefix}_ENDIAN_BIG UINT32_C(1)");
+    for (path, documentation) in model.records() {
+        push_documentation(&mut output, path, *documentation);
+    }
     let names = disambiguate_identifiers(
         model
             .fields()
@@ -74,6 +79,10 @@ fn render(model: &RecordCHeaderModel, prefix: &str) -> String {
 }
 
 fn push_field(output: &mut String, prefix: &str, field_name: &str, field: &RecordCHeaderField) {
+    push_documentation(output, "", field.documentation());
+    for bit in field.bits() {
+        push_documentation(output, bit.name(), bit.documentation());
+    }
     let metadata = format!("{prefix}_{field_name}");
     let names = FieldNames {
         prefix,

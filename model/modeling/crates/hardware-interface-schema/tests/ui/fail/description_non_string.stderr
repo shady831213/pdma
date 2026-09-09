@@ -1,0 +1,5 @@
+error: documentation attribute must be a string literal
+ --> tests/ui/fail/description_non_string.rs:6:41
+  |
+6 |         fields: { #[short_description = 42] enabled: 0..1 },
+  |                                         ^^

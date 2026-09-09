@@ -1,10 +1,12 @@
 use core::ops::Range;
 
-use crate::{Endian, ScalarKind};
+use crate::{BitsFieldSpec, Documentation, Endian, ScalarKind};
 
 /// Reusable scalar shape without placement identity or offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldDefinition {
+    bits: &'static [BitsFieldSpec],
+    documentation: Documentation,
     width: usize,
     scalar: ScalarKind,
     endian: Endian,
@@ -15,9 +17,35 @@ impl FieldDefinition {
     pub const fn new(scalar: ScalarKind) -> Self {
         Self {
             width: scalar.width(),
+            bits: &[],
+            documentation: Documentation::EMPTY,
             scalar,
             endian: Endian::Little,
         }
+    }
+
+    /// Attaches definition documentation.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns definition documentation.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
+    }
+
+    /// Attaches the declared bit members embedded in this scalar.
+    #[must_use]
+    pub const fn with_bits(mut self, bits: &'static [BitsFieldSpec]) -> Self {
+        self.bits = bits;
+        self
+    }
+
+    /// Returns embedded bit members in declaration order.
+    pub const fn bits(self) -> &'static [BitsFieldSpec] {
+        self.bits
     }
 
     /// Selects the scalar byte order.
@@ -53,6 +81,7 @@ impl FieldDefinition {
 /// One sibling-local scalar placement in a record definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldSpec<I: 'static = u16> {
+    documentation: Documentation,
     id: I,
     name: &'static str,
     offset: usize,
@@ -77,11 +106,37 @@ impl<I: Copy> FieldSpec<I> {
     ) -> Self {
         Self {
             id,
+            documentation: Documentation::EMPTY,
             name,
             offset,
             definition,
             declaration_index: None,
         }
+    }
+
+    /// Attaches placement documentation.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns placement documentation with definition fallback.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
+            .with_fallback(self.definition.documentation())
+    }
+
+    /// Attaches the declared bit members embedded in this scalar.
+    #[must_use]
+    pub const fn with_bits(mut self, bits: &'static [BitsFieldSpec]) -> Self {
+        self.definition = self.definition.with_bits(bits);
+        self
+    }
+
+    /// Returns embedded bit members in declaration order.
+    pub const fn bits(self) -> &'static [BitsFieldSpec] {
+        self.definition.bits()
     }
 
     /// Selects an explicit combined sibling declaration index.

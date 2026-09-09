@@ -1,4 +1,4 @@
-use crate::Endian;
+use crate::{Documentation, Endian};
 
 use super::{
     Access, RegisterDefinitionError, RegisterFieldSpec, RegisterValueError, RegisterValueView,
@@ -8,6 +8,7 @@ use super::{
 /// Named, offset-free whole-register definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterDefinition<I: 'static = u16> {
+    documentation: Documentation,
     name: &'static str,
     width: usize,
     alignment: usize,
@@ -24,6 +25,7 @@ impl<I: Copy> RegisterDefinition<I> {
     pub const fn new(name: &'static str, width: usize, endian: Endian) -> Self {
         Self {
             name,
+            documentation: Documentation::EMPTY,
             width,
             alignment: width,
             endian,
@@ -33,6 +35,18 @@ impl<I: Copy> RegisterDefinition<I> {
             writable_mask: 0,
             fields: &[],
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation with any referenced definition as fallback.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
     }
 
     /// Replaces the required byte alignment for placements of this definition.

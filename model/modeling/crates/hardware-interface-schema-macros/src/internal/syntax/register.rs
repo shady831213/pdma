@@ -3,9 +3,10 @@ use syn::{
     parse::{Parse, ParseStream},
 };
 
-use super::{BitFieldDecl, key, keyword, u64_lit, usize_lit};
+use super::{BitFieldDecl, Documentation, key, keyword, u64_lit, usize_lit};
 
 pub(in crate::internal) struct RegisterDefinitionDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) width: (usize, proc_macro2::Span),
@@ -36,6 +37,7 @@ pub(in crate::internal) struct ResetValue {
 
 impl Parse for RegisterDefinitionDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let visibility = input.parse()?;
         keyword(input, "register")?;
         let name = input.parse()?;
@@ -79,6 +81,7 @@ impl Parse for RegisterDefinitionDecl {
         };
         let _ = body.parse::<Token![,]>();
         Ok(Self {
+            documentation,
             visibility,
             name,
             width,

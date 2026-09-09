@@ -5,6 +5,9 @@
 #[allow(missing_docs)]
 pub mod support;
 
+mod descriptions;
+mod ordered_descriptions;
+
 use support::{
     COLLISION_C_MAIN, HAPPY_C_MAIN, NESTED_C_MAIN, PREFIX_C_MAIN, TestResult, compile_fragments,
     render,

@@ -110,6 +110,8 @@ fn expand_inline(
     for (index, field) in declared.iter().enumerate() {
         let method = &field.name;
         let name = method.to_string();
+        let documentation = field.documentation.metadata(facade);
+        let rust_docs = field.documentation.rust_docs();
         let identity = format_ident!("{}_IDENTITY", name.to_ascii_uppercase());
         let id = u16::try_from(index.saturating_add(1))
             .map_err(|_| syn::Error::new(method.span(), "register field ID exceeds u16"))?;
@@ -122,14 +124,14 @@ fn expand_inline(
         });
         let semantic_type = crate::internal::expand::bits::semantic_type(field);
         variants.push(super::super::variant(&name));
-        fields.push(quote!(#facade::BitsFieldSpec::place(#id, #name, #lsb, #facade::BitsFieldDefinition::new(#bit_width)).with_declaration_index(#index)));
+        fields.push(quote!(#facade::BitsFieldSpec::place(#id, #name, #lsb, #facade::BitsFieldDefinition::new(#bit_width)).with_declaration_index(#index).with_documentation(#documentation)));
         let raw = quote!(raw);
         let decoded = crate::internal::expand::bits::decode_local(field, &raw);
-        getters.push(quote!(#[doc = "Reads the named register field."] pub fn #method(&self) -> ::core::result::Result<#semantic_type, #facade::RegisterCodecError> { let raw = #marker::SPEC.view(self.bytes)?.field_by_name(#name)?; Ok(#decoded) }));
+        getters.push(quote!(#rust_docs #[doc = "Reads the named register field."] pub fn #method(&self) -> ::core::result::Result<#semantic_type, #facade::RegisterCodecError> { let raw = #marker::SPEC.view(self.bytes)?.field_by_name(#name)?; Ok(#decoded) }));
         let setter = format_ident!("set_{}", method);
         let value = quote!(value);
         let encoded = crate::internal::expand::bits::encode_local(&value);
-        setters.push(quote!(#[doc = "Writes the named register field."] pub fn #setter(&mut self, value: #semantic_type) -> ::core::result::Result<(), #facade::RegisterCodecError> { #marker::SPEC.view_mut(self.bytes)?.set_field_by_name(#name, #encoded).map_err(|error| error.rebased(self.base)) }));
+        setters.push(quote!(#rust_docs #[doc = "Writes the named register field."] pub fn #setter(&mut self, value: #semantic_type) -> ::core::result::Result<(), #facade::RegisterCodecError> { #marker::SPEC.view_mut(self.bytes)?.set_field_by_name(#name, #encoded).map_err(|error| error.rebased(self.base)) }));
         let full = quote!(u64::from(self.0));
         let decoded_value = crate::internal::expand::bits::decode(field, &full);
         let with_method = format_ident!("with_{}", method);
@@ -141,8 +143,10 @@ fn expand_inline(
             &quote!(combined),
         );
         value_methods.push(quote! {
+            #rust_docs
             #[doc = "Reads the named register field from the owned value."]
             pub fn #method(self) -> #semantic_type { #decoded_value }
+            #rust_docs
             #[doc = "Replaces the named field while preserving every other register bit."]
             pub fn #with_method(self, value: #semantic_type) -> ::core::result::Result<Self, #facade::RegisterCodecError> {
                 let observed = u64::from(value);

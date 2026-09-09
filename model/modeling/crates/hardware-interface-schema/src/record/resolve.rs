@@ -36,6 +36,7 @@ pub(super) fn resolve<I: Copy + Eq + fmt::Debug>(
     validate_overlaps(root.name(), &candidates)?;
     validate_paths(root.name(), &candidates)?;
     Ok(ResolvedRecord {
+        documentation: root.documentation(),
         root: root.name(),
         size: root.size(),
         alignment: root.alignment(),
@@ -69,6 +70,7 @@ fn collect_members<I: Copy + Eq + fmt::Debug>(
                     })?;
                 candidates.push(Candidate {
                     member: ResolvedMember {
+                        documentation: field.documentation(),
                         path: format!("{path}.{}", field.name()),
                         absolute_offset,
                         width: field.width(),
@@ -150,6 +152,7 @@ fn collect_placement<I: Copy + Eq + fmt::Debug>(
         })?;
         candidates.push(Candidate {
             member: ResolvedMember {
+                documentation: placement.documentation(),
                 path: member_path.clone(),
                 absolute_offset,
                 width: definition.size(),

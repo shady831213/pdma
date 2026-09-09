@@ -43,6 +43,49 @@ publication endpoint.
 
 ## Declare and inspect a schema
 
+### Descriptions
+
+Inside declaration macros, `#[short_description = "..."]` and
+`#[description = "..."]` attach optional text to schema definitions and members:
+
+```rust
+hardware_interface_schema::record_schema! {
+    pub record CopyRequest {
+        endian: Little,
+        fields: {
+            #[short_description = "Transfer length"]
+            #[description = "Number of bytes to copy.\nZero performs no transfer."]
+            length: u32,
+        },
+    }
+}
+```
+
+The same attributes describe register fields, reusable bits, and register-map
+placements. The outer schema macro consumes these attributes; they are not separate
+attribute macros. Both accept string literals, including raw and multiline strings.
+Duplicate attributes and non-string values are errors.
+
+Descriptions live in existing schema metadata as `Documentation`. A placement may
+override its reused definition's text; each omitted item falls back independently.
+An explicit empty string overrides rather than inherits. Parent map descriptions do
+not become descriptions of child registers. Descriptions never change layout,
+encoded bytes, access permissions, or reset values.
+
+Generated Rust documentation and the optional C exporter use these descriptions.
+Metadata preserves the source text; the C renderer neutralizes comment delimiters,
+trigraphs and line splicing when writing comments. An undocumented declaration keeps
+its existing C output. Other documentation tools can read the same metadata without
+parsing Rust source or generated comments.
+
+Run the complete example to generate a described record and register header:
+
+```bash
+cargo run -p hardware-interface-schema --features export-c-header --example documented_schema
+```
+
+### Layout and values
+
 `record_schema!` declares record-level `endian`, optional `alignment`, and ordered
 fields whose aligned offsets and final size are generated.
 Its field types are scalars, nested records, `enum(storage)`, `bits(storage)` with

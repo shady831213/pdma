@@ -25,6 +25,8 @@ pub(super) fn placement_geometry(
 ) -> PlacementTokens {
     let symbol = &placement.symbol;
     let definition = &placement.definition;
+    let documentation = placement.documentation.metadata(facade);
+    let rust_docs = placement.documentation.rust_docs();
     let item_variant = variant(&symbol.to_string());
     let constant = format_ident!("{}", symbol.to_string().to_uppercase());
     let identity_name = format_ident!("{}_IDENTITY", constant);
@@ -49,13 +51,13 @@ pub(super) fn placement_geometry(
     );
     let id = quote!(#id_name::#item_variant);
     let name = symbol.to_string();
-    let spec = quote!(#facade::RegisterMapPlacement::new(#id, #name, Self::#offset_name, #count, Self::#stride_name, #facade::RegisterLayoutGeometry::new(<#definition as #facade::RegisterLayout>::ALIGNMENT, <#definition as #facade::RegisterLayout>::EXTENT)));
+    let spec = quote!(#facade::RegisterMapPlacement::new(#id, #name, Self::#offset_name, #count, Self::#stride_name, #facade::RegisterLayoutGeometry::new(<#definition as #facade::RegisterLayout>::ALIGNMENT, <#definition as #facade::RegisterLayout>::EXTENT)).with_documentation((#documentation).with_fallback(<#definition as #facade::RegisterLayout>::DOCUMENTATION)));
     let internals = vec![
         quote!(const #offset_name: usize = #offset;),
         quote!(const #stride_name: usize = #stride;),
         quote!(const #end_name: usize = match #facade::checked_placement_end(Self::#offset_name, #count, Self::#stride_name, <#definition as #facade::RegisterLayout>::EXTENT) { Some(value) => value, None => 0 };),
         quote!(const #high_water_name: usize = if #cursor > Self::#end_name { #cursor } else { Self::#end_name };),
-        quote!(#[doc = "Generated ordered child placement."] pub const #constant: #facade::RegisterMapPlacement<#id_name> = #spec;),
+        quote!(#rust_docs #[doc = "Generated ordered child placement."] pub const #constant: #facade::RegisterMapPlacement<#id_name> = #spec;),
         quote!(#[doc = "Stable generated placement member identity."] pub const #identity_name: #facade::SchemaMemberIdentity = #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);),
     ];
     let alignment_mask =
@@ -109,6 +111,7 @@ pub(super) fn placement_geometry(
         spec,
         high_water: quote!(#marker::#high_water_name),
         geometry: Geometry {
+            rust_docs,
             symbol: placement.symbol.clone(),
             definition: placement.definition.clone(),
             placement: constant,

@@ -2,9 +2,10 @@ use syn::{
     Ident, Result, Token, Visibility, braced, parenthesized, parse::Parse, parse::ParseStream,
 };
 
-use super::{ScalarType, keyword, usize_lit};
+use super::{Documentation, ScalarType, keyword, usize_lit};
 
 pub(in crate::internal) struct BitsSchemaDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) storage: ScalarType,
@@ -12,6 +13,7 @@ pub(in crate::internal) struct BitsSchemaDecl {
 }
 
 pub(in crate::internal) struct BitFieldDecl {
+    pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) start: (usize, proc_macro2::Span),
     pub(in crate::internal) end: (usize, proc_macro2::Span),
@@ -19,17 +21,24 @@ pub(in crate::internal) struct BitFieldDecl {
 
 impl Parse for BitFieldDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let name = input.parse()?;
         input.parse::<Token![:]>()?;
         let start = usize_lit(input)?;
         input.parse::<Token![..]>()?;
         let end = usize_lit(input)?;
-        Ok(Self { name, start, end })
+        Ok(Self {
+            documentation,
+            name,
+            start,
+            end,
+        })
     }
 }
 
 impl Parse for BitsSchemaDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let documentation = Documentation::parse(input)?;
         let visibility = input.parse()?;
         keyword(input, "bits")?;
         let name = input.parse()?;
@@ -43,6 +52,7 @@ impl Parse for BitsSchemaDecl {
             .into_iter()
             .collect();
         Ok(Self {
+            documentation,
             visibility,
             name,
             storage,

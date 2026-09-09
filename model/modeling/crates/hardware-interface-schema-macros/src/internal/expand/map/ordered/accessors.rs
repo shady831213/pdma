@@ -20,6 +20,7 @@ pub(super) fn leaf_getters(
     let mutable_method = format_ident!("{}_mut", method);
     let definition = &item.definition;
     let placement = &item.placement;
+    let rust_docs = &item.rust_docs;
     let count = item.count;
     let (parameters, check, instance) = if count == 1 {
         (quote!(), quote!(), quote!(0usize))
@@ -32,6 +33,7 @@ pub(super) fn leaf_getters(
     };
     GetterPair {
         immutable: quote! {
+            #rust_docs
             #[doc = "Returns one checked immutable child-layout view."]
             pub fn #method(&self, #parameters) -> ::core::result::Result<<#definition as #facade::RegisterLayout>::View<'_>, #facade::SchemaCodecError> {
                 #check
@@ -43,6 +45,7 @@ pub(super) fn leaf_getters(
             }
         },
         mutable: quote! {
+            #rust_docs
             #[doc = "Returns one checked mutable child-layout view."]
             pub fn #mutable_method(&mut self, #parameters) -> ::core::result::Result<<#definition as #facade::RegisterLayout>::ViewMut<'_>, #facade::SchemaCodecError> {
                 #check

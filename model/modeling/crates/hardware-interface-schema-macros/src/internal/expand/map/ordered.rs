@@ -103,6 +103,8 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
         .collect();
 
     Ok(emit(Emission {
+        documentation: decl.documentation.metadata(&facade),
+        rust_docs: decl.documentation.rust_docs(),
         visibility,
         id_name: &id_name,
         documented_variants,

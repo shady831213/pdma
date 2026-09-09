@@ -13,6 +13,8 @@ mod owned;
 pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> {
     validate::register::check_definition(decl)?;
     let facade = crate_path::facade()?;
+    let documentation = decl.documentation.metadata(&facade);
+    let rust_docs = decl.documentation.rust_docs();
     let visibility = &decl.visibility;
     let marker = &decl.name;
     let marker_name = marker.to_string();
@@ -44,6 +46,7 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
         quote!((#reset_scalar).to_be_bytes())
     };
     let owned = owned::expand(owned::Context {
+        rust_docs: &rust_docs,
         visibility,
         values: &values_name,
         raw: &raw_name,
@@ -59,14 +62,16 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
     Ok(quote! {
         #id_declaration
         #assertions
+        #rust_docs
         #[doc = "Marker and metadata namespace for the generated register."] #[derive(Clone, Copy, Debug)] #visibility struct #marker;
         impl #marker {
+            #[doc = "Declared schema documentation."] pub const DOCUMENTATION: #facade::Documentation = #documentation;
             #[doc = "Required byte alignment for placements of this register."] pub const ALIGNMENT: usize = #alignment;
             #[doc = "Encoded byte extent of this register."] pub const EXTENT: usize = #width;
             #[doc = "Declared reset value."] pub const RESET_VALUE: u64 = #reset_value;
             #[doc = "Declared writable mask."] pub const WRITABLE_MASK: u64 = #mask;
             #field_identities
-            #[doc = "Complete offset-free register definition."] pub const SPEC: #facade::RegisterDefinition<#id_type> = #facade::RegisterDefinition::<#id_type>::new(#marker_name, #width, #facade::Endian::#endian).with_alignment(#alignment).with_access(#facade::Access::#access).with_reset(#facade::ResetKind::#reset_kind, #reset_value).with_writable_mask(#mask).with_fields(#field_specs);
+            #[doc = "Complete offset-free register definition."] pub const SPEC: #facade::RegisterDefinition<#id_type> = #facade::RegisterDefinition::<#id_type>::new(#marker_name, #width, #facade::Endian::#endian).with_alignment(#alignment).with_access(#facade::Access::#access).with_reset(#facade::ResetKind::#reset_kind, #reset_value).with_writable_mask(#mask).with_fields(#field_specs).with_documentation(Self::DOCUMENTATION);
         }
         #owned
         #[doc = "Checked immutable byte view for the generated register."] #[derive(Debug)] #visibility struct #view_name<'a> { bytes: &'a [u8], base: #facade::SchemaCoordinate }
@@ -78,6 +83,7 @@ pub(super) fn expand(decl: &RegisterDefinitionDecl) -> syn::Result<TokenStream> 
             type View<'a> = #view_name<'a>;
             type ViewMut<'a> = #view_mut_name<'a>;
             const NAME: &'static str = #marker_name;
+            const DOCUMENTATION: #facade::Documentation = Self::DOCUMENTATION;
             const ALIGNMENT: usize = #alignment;
             const EXTENT: usize = #width;
             const ZERO: Self::Value = #values_name::ZERO;

@@ -1,8 +1,11 @@
+use crate::Documentation;
+
 use super::{FieldSpec, RecordGraphError, RecordPlacement, RecordValidationError, ResolvedRecord};
 
 /// Named, offset-free fixed-record definition.
 #[derive(Debug, Clone, Copy)]
 pub struct RecordSpec<I: 'static = u16> {
+    documentation: Documentation,
     name: &'static str,
     size: usize,
     alignment: usize,
@@ -21,11 +24,24 @@ impl<I: Copy + Eq + core::fmt::Debug> RecordSpec<I> {
     ) -> Self {
         Self {
             name,
+            documentation: Documentation::EMPTY,
             size,
             alignment,
             fields,
             records,
         }
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation with any referenced definition as fallback.
+    pub const fn documentation(self) -> Documentation {
+        self.documentation
     }
 
     /// Returns the definition name.

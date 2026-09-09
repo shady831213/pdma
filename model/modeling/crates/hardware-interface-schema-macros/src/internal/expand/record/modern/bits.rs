@@ -18,12 +18,13 @@ pub(super) fn expand(
     let raw_maximum = decl.storage.maximum();
     let declarations = decl.fields.iter().map(|field| {
         let field_name = &field.name;
+        let rust_docs = field.documentation.rust_docs();
         let width = crate::internal::expand::bits::width(field);
         if width == 1 {
-            quote!(#[doc = "Generated one-bit boolean field."] #visibility #field_name: bool)
+            quote!(#rust_docs #[doc = "Generated one-bit boolean field."] #visibility #field_name: bool)
         } else {
             let ty = crate::internal::expand::bits::semantic_type(field);
-            quote!(#[doc = "Generated packed integer field."] #visibility #field_name: #ty)
+            quote!(#rust_docs #[doc = "Generated packed integer field."] #visibility #field_name: #ty)
         }
     });
     let zero_fields = decl.fields.iter().map(|field| {

@@ -26,6 +26,7 @@ pub(in crate::register_map) fn resolved_banks<
                 .collect::<Vec<_>>();
             members.sort_by_key(|member| member.index);
             ResolvedRegisterBank {
+                documentation: bank.documentation(),
                 path: join(map.name(), bank.name()),
                 name: bank.name(),
                 declaration_index: members.first().map_or(0, |member| member.index),

@@ -1,4 +1,4 @@
-use crate::{Endian, ResolvedMemberKind, ResolvedRecord, ScalarKind};
+use crate::{BitsFieldSpec, Documentation, Endian, ResolvedMemberKind, ResolvedRecord, ScalarKind};
 
 /// One resolved scalar row consumed by C-header renderers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,9 +10,21 @@ pub struct RecordCHeaderField {
     width: usize,
     scalar: ScalarKind,
     endian: Endian,
+    documentation: Documentation,
+    bits: &'static [BitsFieldSpec],
 }
 
 impl RecordCHeaderField {
+    /// Returns the member's description text.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
+    /// Returns the embedded bit fields, when present.
+    pub const fn bits(&self) -> &'static [BitsFieldSpec] {
+        self.bits
+    }
+
     /// Returns the stable field identity.
     pub const fn id(&self) -> u16 {
         self.id
@@ -55,6 +67,8 @@ pub struct RecordCHeaderModel {
     size: usize,
     alignment: usize,
     fields: Vec<RecordCHeaderField>,
+    documentation: Documentation,
+    records: Vec<(String, Documentation)>,
 }
 
 impl RecordCHeaderModel {
@@ -73,6 +87,8 @@ impl RecordCHeaderModel {
                     width: definition.width(),
                     scalar: definition.scalar(),
                     endian: definition.endian(),
+                    documentation: member.documentation(),
+                    bits: definition.bits(),
                 }),
                 ResolvedMemberKind::Record { .. } => None,
             })
@@ -81,6 +97,17 @@ impl RecordCHeaderModel {
             size: schema.size(),
             alignment: schema.alignment(),
             fields,
+            documentation: schema.documentation(),
+            records: schema
+                .members()
+                .iter()
+                .filter_map(|member| match member.kind() {
+                    ResolvedMemberKind::Record { .. } => {
+                        Some((member.path().into(), member.documentation()))
+                    }
+                    ResolvedMemberKind::Field { .. } => None,
+                })
+                .collect(),
         }
     }
 
@@ -97,6 +124,16 @@ impl RecordCHeaderModel {
     /// Returns scalar fields in resolved declaration order.
     pub fn fields(&self) -> &[RecordCHeaderField] {
         &self.fields
+    }
+
+    /// Returns the root record's description text.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
+    /// Returns nested record paths and their instance descriptions.
+    pub fn records(&self) -> &[(String, Documentation)] {
+        &self.records
     }
 }
 

@@ -3,7 +3,10 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl};
 
-use super::{layout::RecordPlan, layout::union_geometry, scalar};
+use super::{layout::RecordPlan, layout::union_geometry};
+
+mod field;
+use field::fill_field;
 
 pub(super) fn expand(
     decl: &ModernRecordDecl,
@@ -11,6 +14,7 @@ pub(super) fn expand(
     facade: &TokenStream,
 ) -> TokenStream {
     let marker = &decl.name;
+    let documentation = decl.documentation.metadata(facade);
     let marker_name = marker.to_string();
     let alignment = &plan.alignment;
     let extent = &plan.extent;
@@ -51,6 +55,8 @@ pub(super) fn expand(
     });
     quote! {
         impl #marker {
+            #[doc = "Declared schema documentation."]
+            pub const DOCUMENTATION: #facade::Documentation = #documentation;
             #(#offsets)*
             #(#word_offsets)*
             #[doc = "Number of direct scalar storage fields."]
@@ -77,7 +83,7 @@ pub(super) fn expand(
                 Self::RECORD_ALIGNMENT,
                 &Self::FIELDS,
                 &Self::RECORDS,
-            );
+            ).with_documentation(Self::DOCUMENTATION);
         }
         const _: () = assert!(#marker::FIELD_COUNT <= 65_535, "record has too many generated fields");
         const _: () = assert!(#marker::RECORD_SIZE != usize::MAX, "record inferred layout overflows usize");
@@ -102,6 +108,7 @@ fn metadata_parts(
     for (declaration_index, field) in plan.fields.iter().enumerate() {
         let name = field.decl.name.to_string();
         let offset = &field.offset_name;
+        let documentation = field.decl.documentation.metadata(facade);
         if let ModernTypeDecl::Record(path) = &field.decl.ty {
             let id_index = next_id;
             next_id += 1;
@@ -109,17 +116,53 @@ fn metadata_parts(
                 let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
                 #facade::RecordPlacement::new(id, #name, #marker::#offset, &#path::SPEC)
                     .with_declaration_index(#declaration_index)
+                    .with_documentation((#documentation).with_fallback(<#path as #facade::RecordLayout>::DOCUMENTATION))
             }));
             continue;
         }
-        fillers.push(fill_field(
+        let filler = fill_field(
             marker,
             field,
             facade,
             &decl.endian,
             declaration_index,
             next_id,
-        ));
+        );
+        let documentation = match &field.decl.ty {
+            ModernTypeDecl::BitsReference(path) => {
+                quote!((#documentation).with_fallback(<#path as #facade::BitsLayout>::DOCUMENTATION))
+            }
+            _ => documentation,
+        };
+        let bits = match &field.decl.ty {
+            ModernTypeDecl::BitsReference(path) => quote!(<#path as #facade::BitsLayout>::FIELDS),
+            ModernTypeDecl::Bits(bits) => {
+                let specs = bits.fields.iter().enumerate().map(|(index, bit)| {
+                    let name = bit.name.to_string();
+                    let lsb = bit.start.0;
+                    let width = crate::internal::expand::bits::width(bit);
+                    let documentation = bit.documentation.metadata(facade);
+                    quote!(#facade::BitsFieldSpec::place(
+                        match #facade::inferred_field_id(#index) { Some(id) => id, None => 0 },
+                        #name, #lsb, #facade::BitsFieldDefinition::new(#width),
+                    ).with_declaration_index(#index).with_documentation(#documentation))
+                });
+                quote!({
+                    const BITS: &[#facade::BitsFieldSpec] = &[#(#specs),*];
+                    BITS
+                })
+            }
+            _ => quote!(&[]),
+        };
+        fillers.push(quote!({
+            let first_output = output_index;
+            #filler
+            let mut documented = first_output;
+            while documented < output_index {
+                fields[documented] = fields[documented].with_documentation(#documentation).with_bits(#bits);
+                documented += 1;
+            }
+        }));
         next_id += match &field.decl.ty {
             ModernTypeDecl::Union(union) => {
                 union_geometry(union, facade).map_or(0, |geometry| geometry.slots)
@@ -132,116 +175,6 @@ fn metadata_parts(
         fillers,
         placements,
     }
-}
-
-fn fill_field(
-    marker: &syn::Ident,
-    field: &super::layout::PlacedField<'_>,
-    facade: &TokenStream,
-    endian: &syn::Ident,
-    declaration_index: usize,
-    id_index: usize,
-) -> TokenStream {
-    let name = field.decl.name.to_string();
-    let offset = &field.offset_name;
-    match &field.decl.ty {
-        ModernTypeDecl::Scalar { scalar, .. } => fill_scalar(ScalarFill {
-            marker,
-            name: &name,
-            offset,
-            scalar_type: *scalar,
-            facade,
-            endian,
-            declaration_index,
-            id_index,
-        }),
-        ModernTypeDecl::Enum(decl) => fill_scalar(ScalarFill {
-            marker,
-            name: &name,
-            offset,
-            scalar_type: decl.storage,
-            facade,
-            endian,
-            declaration_index,
-            id_index,
-        }),
-        ModernTypeDecl::Bits(decl) => fill_scalar(ScalarFill {
-            marker,
-            name: &name,
-            offset,
-            scalar_type: decl.storage,
-            facade,
-            endian,
-            declaration_index,
-            id_index,
-        }),
-        ModernTypeDecl::BitsReference(path) => quote!({
-            let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
-            fields[output_index] = #facade::FieldSpec::new(
-                id,
-                #name,
-                #marker::#offset,
-                <#path as #facade::BitsLayout>::SCALAR_KIND,
-            )
-                .with_endian(#facade::Endian::#endian)
-                .with_declaration_index(#declaration_index);
-            output_index += 1;
-        }),
-        ModernTypeDecl::Record(_) => TokenStream::new(),
-        ModernTypeDecl::Union(union) => {
-            let Some(geometry) = union_geometry(union, facade) else {
-                return TokenStream::new();
-            };
-            let kind = &geometry.storage.kind;
-            let width = &geometry.storage.width;
-            let slots = (0..geometry.slots).map(|index| {
-                let slot_id = id_index + index;
-                let slot_name = format!("word{index}");
-                let relative = quote!((#index).saturating_mul(#width));
-                quote!({
-                    let id = match #facade::inferred_field_id(#slot_id) { Some(id) => id, None => 0 };
-                    fields[output_index] = #facade::FieldSpec::new(id, #slot_name, #marker::#offset.saturating_add(#relative), #kind)
-                        .with_endian(#facade::Endian::#endian)
-                        .with_declaration_index(#declaration_index);
-                    output_index += 1;
-                })
-            });
-            quote!(#(#slots)*)
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ScalarFill<'a> {
-    marker: &'a syn::Ident,
-    name: &'a str,
-    offset: &'a syn::Ident,
-    scalar_type: crate::internal::syntax::ScalarType,
-    facade: &'a TokenStream,
-    endian: &'a syn::Ident,
-    declaration_index: usize,
-    id_index: usize,
-}
-
-fn fill_scalar(input: ScalarFill<'_>) -> TokenStream {
-    let ScalarFill {
-        marker,
-        name,
-        offset,
-        scalar_type,
-        facade,
-        endian,
-        declaration_index,
-        id_index,
-    } = input;
-    let kind = scalar::kind(scalar_type);
-    quote!({
-        let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
-        fields[output_index] = #facade::FieldSpec::new(id, #name, #marker::#offset, #facade::ScalarKind::#kind)
-            .with_endian(#facade::Endian::#endian)
-            .with_declaration_index(#declaration_index);
-        output_index += 1;
-    })
 }
 
 fn union_geometry_for(

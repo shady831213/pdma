@@ -18,18 +18,24 @@ pub(super) fn expand(
     let values = marker;
     let view = format_ident!("{marker}View");
     let view_mut = format_ident!("{marker}ViewMut");
-    let immutable_getters = plan
-        .fields
-        .iter()
-        .flat_map(|field| getters(marker, field, facade, &decl.endian));
-    let mutable_getters = plan
-        .fields
-        .iter()
-        .flat_map(|field| getters(marker, field, facade, &decl.endian));
-    let setters = plan
-        .fields
-        .iter()
-        .flat_map(|field| setters(marker, field, facade, &decl.endian));
+    let immutable_getters = plan.fields.iter().flat_map(|field| {
+        let rust_docs = field.decl.documentation.rust_docs();
+        getters(marker, field, facade, &decl.endian)
+            .into_iter()
+            .map(move |item| quote!(#rust_docs #item))
+    });
+    let mutable_getters = plan.fields.iter().flat_map(|field| {
+        let rust_docs = field.decl.documentation.rust_docs();
+        getters(marker, field, facade, &decl.endian)
+            .into_iter()
+            .map(move |item| quote!(#rust_docs #item))
+    });
+    let setters = plan.fields.iter().flat_map(|field| {
+        let rust_docs = field.decl.documentation.rust_docs();
+        setters(marker, field, facade, &decl.endian)
+            .into_iter()
+            .map(move |item| quote!(#rust_docs #item))
+    });
     quote! {
         #[doc = "Checked immutable view over one inferred record."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]

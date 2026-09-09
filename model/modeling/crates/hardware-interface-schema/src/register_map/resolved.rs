@@ -1,8 +1,11 @@
+use super::ResolvedRegisterMapPlacement;
+use crate::Documentation;
 use crate::register::{RegisterDefinition, RegisterSpec};
 
 /// One resolved repeated-bank declaration and its ordered template members.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRegisterBank<I: 'static = u16, F: 'static = u16> {
+    pub(super) documentation: Documentation,
     pub(super) path: String,
     pub(super) name: &'static str,
     pub(super) declaration_index: usize,
@@ -14,6 +17,11 @@ pub struct ResolvedRegisterBank<I: 'static = u16, F: 'static = u16> {
 }
 
 impl<I: Copy, F: Copy> ResolvedRegisterBank<I, F> {
+    /// Returns the bank documentation.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
     /// Returns the root-qualified bank path.
     pub fn path(&self) -> &str {
         &self.path
@@ -67,6 +75,11 @@ pub struct ResolvedRegister<I: 'static = u16, F: 'static = u16> {
 }
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegister<I, F> {
+    /// Returns placement documentation with definition fallback.
+    pub const fn documentation(&self) -> Documentation {
+        self.register.documentation()
+    }
+
     pub(crate) fn ordered(
         path: String,
         offset: usize,
@@ -131,6 +144,8 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegister<I, F> {
 /// Fully validated register map in deterministic declaration and instance order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRegisterMap<I: 'static = u16, F: 'static = u16> {
+    pub(super) placements: Vec<ResolvedRegisterMapPlacement<I>>,
+    pub(super) documentation: Documentation,
     pub(super) root: &'static str,
     pub(super) size: usize,
     pub(super) registers: Vec<ResolvedRegister<I, F>>,
@@ -138,6 +153,30 @@ pub struct ResolvedRegisterMap<I: 'static = u16, F: 'static = u16> {
 }
 
 impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
+    /// Attaches nested map instances in depth-first declaration order.
+    #[must_use]
+    pub fn with_placements(mut self, placements: Vec<ResolvedRegisterMapPlacement<I>>) -> Self {
+        self.placements = placements;
+        self
+    }
+
+    /// Returns nested map instances in depth-first declaration order.
+    pub fn placements(&self) -> &[ResolvedRegisterMapPlacement<I>] {
+        &self.placements
+    }
+
+    /// Attaches documentation to this node.
+    #[must_use]
+    pub const fn with_documentation(mut self, documentation: Documentation) -> Self {
+        self.documentation = documentation;
+        self
+    }
+
+    /// Returns documentation of this node.
+    pub const fn documentation(&self) -> Documentation {
+        self.documentation
+    }
+
     pub(crate) const fn ordered(
         root: &'static str,
         size: usize,
@@ -148,6 +187,8 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
             size,
             registers,
             banks: Vec::new(),
+            placements: Vec::new(),
+            documentation: Documentation::EMPTY,
         }
     }
 

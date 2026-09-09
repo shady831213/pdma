@@ -90,10 +90,10 @@ async fn racing_register_accesses_reserve_global_commit_order() -> support::Test
     Ok(())
 }
 
-#[tokio::test]
-async fn memory_writer_serializes_with_standalone_mapping_commit() -> support::TestResult {
-    // Given/When: a runtime writer holds the store while standalone mapping commits.
-    let serialized = adverse::writer::run().await?;
+#[test]
+fn memory_writer_serializes_with_runtime_allocation() -> support::TestResult {
+    // Given/When: a runtime writer holds the store while runtime allocation commits.
+    let serialized = adverse::writer::run()?;
     // Then: both memory-only commits survive before queue activation.
     assert!(serialized);
     Ok(())

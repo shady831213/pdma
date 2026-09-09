@@ -2,7 +2,7 @@ mod irq;
 
 use crate::trace::event;
 use pdma_model_contract::abi::AbiCompletion;
-use pdma_model_contract::semantic::event::EventErrorKind;
+use pdma_model_contract::abi::AbiEventKind;
 use pdma_model_contract::semantic::ids::{CommandId, QueueId};
 use pdma_model_contract::semantic::trace::{TraceEvent, TraceEventKind, TraceOperation};
 
@@ -110,7 +110,7 @@ impl TraceSink {
         &mut self,
         queue: QueueId,
         command: CommandId,
-        error: EventErrorKind,
+        error: AbiEventKind,
     ) {
         self.push(
             TraceEventKind::ExecutionFaulted,

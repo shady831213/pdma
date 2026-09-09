@@ -10,6 +10,7 @@ use pdma_model_contract::abi::{
     registers::{QueueRegisters, queue_offset},
 };
 use pdma_model_device::{AsyncDeviceHandle, MmioRegisterEndpoint};
+use pdma_model_host::adapter::abi::{PdmaHostMemory, PdmaRegionRequest};
 
 #[derive(Debug)]
 pub(crate) struct CopyMemory {
@@ -17,32 +18,31 @@ pub(crate) struct CopyMemory {
     pub(crate) destination: DmaAddress,
 }
 
-pub(crate) async fn queue_copy(handle: &AsyncDeviceHandle, source: &[u8]) -> CopyMemory {
-    let sq = handle
-        .allocate_memory_region(4 * AbiCommand::RECORD_SIZE)
-        .await
-        .expect("submission ring allocation");
-    let cq = handle
-        .allocate_memory_region(4 * AbiCompletion::RECORD_SIZE)
-        .await
-        .expect("completion ring allocation");
-    let eq = handle
-        .allocate_memory_region(4 * AbiEvent::RECORD_SIZE)
-        .await
-        .expect("event ring allocation");
-    let src = handle
-        .allocate_memory_region(source.len())
-        .await
-        .expect("source allocation");
-    let dst = handle
-        .allocate_memory_region(source.len())
-        .await
-        .expect("destination allocation");
+pub(crate) async fn queue_copy(
+    handle: &AsyncDeviceHandle,
+    memory: &PdmaHostMemory,
+    source: &[u8],
+) -> CopyMemory {
+    let alignment = hardware_interface_runtime::MemoryAlignment::try_new(64).expect("alignment");
+    let allocate = |length: usize| {
+        let region = memory
+            .allocate_region(PdmaRegionRequest::new(
+                u64::try_from(length).expect("length"),
+                alignment,
+            ))
+            .expect("fixture allocation");
+        DmaAddress::new(region.base().raw())
+    };
+    let sq = allocate(4 * AbiCommand::RECORD_SIZE);
+    let cq = allocate(4 * AbiCompletion::RECORD_SIZE);
+    let eq = allocate(4 * AbiEvent::RECORD_SIZE);
+    let src = allocate(source.len());
+    let dst = allocate(source.len());
     let endpoint = handle.register_endpoint();
     for (offset, address) in [
-        (QueueRegisters::SQ_BASE.offset(), sq.base()),
-        (QueueRegisters::CQ_BASE.offset(), cq.base()),
-        (QueueRegisters::EQ_BASE.offset(), eq.base()),
+        (QueueRegisters::SQ_BASE.offset(), sq),
+        (QueueRegisters::CQ_BASE.offset(), cq),
+        (QueueRegisters::EQ_BASE.offset(), eq),
     ] {
         write_queue(&endpoint, offset, &address.raw().to_le_bytes()).await;
     }
@@ -60,14 +60,14 @@ pub(crate) async fn queue_copy(handle: &AsyncDeviceHandle, source: &[u8]) -> Cop
     )
     .await;
     handle
-        .write_memory(src.base(), source)
+        .write_memory(src, source)
         .await
         .expect("source write");
     let command = AbiCommand::from_payload(
         0,
         AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-            source_dma_address: src.base().raw(),
-            destination_dma_address: dst.base().raw(),
+            source_dma_address: src.raw(),
+            destination_dma_address: dst.raw(),
             length: U32WordValues::new(u32::try_from(source.len()).expect("copy length fits ABI")),
         }),
     );
@@ -75,10 +75,7 @@ pub(crate) async fn queue_copy(handle: &AsyncDeviceHandle, source: &[u8]) -> Cop
     command
         .encode(&mut bytes)
         .expect("copy descriptor encoding");
-    handle
-        .write_memory(sq.base(), &bytes)
-        .await
-        .expect("SQ write");
+    handle.write_memory(sq, &bytes).await.expect("SQ write");
     for offset in [
         QueueRegisters::SQ_PRODUCER.offset(),
         QueueRegisters::DOORBELL.offset(),
@@ -86,8 +83,8 @@ pub(crate) async fn queue_copy(handle: &AsyncDeviceHandle, source: &[u8]) -> Cop
         write_queue(&endpoint, offset, &1_u64.to_le_bytes()).await;
     }
     CopyMemory {
-        completion: cq.base(),
-        destination: dst.base(),
+        completion: cq,
+        destination: dst,
     }
 }
 

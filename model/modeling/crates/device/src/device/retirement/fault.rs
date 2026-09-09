@@ -13,7 +13,7 @@ impl RetirementUnit {
     ) -> ModelResult<RetirementStatus> {
         ports
             .trace
-            .execution_faulted(fault.queue, fault.command, fault.error_kind);
+            .execution_faulted(fault.queue, fault.command, fault.exact.kind());
         let source = ports.stage_fault(fault)?;
         if ports
             .queues

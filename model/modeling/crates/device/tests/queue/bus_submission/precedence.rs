@@ -39,8 +39,8 @@ impl DirectFaultCase {
 
 pub(super) async fn assert_header_fault(case: HeaderFaultCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
-    let source = allocate(&fixture.handle, 4).await?;
-    let destination = allocate(&fixture.handle, 4).await?;
+    let source = allocate(&fixture.memory, 4)?;
+    let destination = allocate(&fixture.memory, 4)?;
     let mut bytes = encode(AbiCommand::from_payload(
         31,
         AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
@@ -113,8 +113,8 @@ fn mutate_header(case: HeaderFaultCase, bytes: &mut [u8; 64]) -> (AbiEventKind, 
 
 pub(super) async fn assert_direct_fault(case: DirectFaultCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
-    let mapped = allocate(&fixture.handle, 4).await?;
-    let destination = allocate(&fixture.handle, 4).await?;
+    let mapped = allocate(&fixture.memory, 4)?;
+    let destination = allocate(&fixture.memory, 4)?;
     let source = match case {
         DirectFaultCase::Overflow => DmaAddress::new(u64::MAX - 1),
         DirectFaultCase::Unmapped => DmaAddress::new(8),

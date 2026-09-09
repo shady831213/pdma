@@ -16,10 +16,11 @@ use pdma_model_host::{
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
     // Given: two explicit async queue configurations with different software owners.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -27,8 +28,9 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
     let config_b = QueueConfig::new(4, 5, EventRouting::QueueLocal, SoftwareOwnerId::new(20));
     let (handle_a, handle_b, owner_ten_entry, owner_twenty_entry) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
 
             // When: async drivers create both queues through the port-backed setup API.
             let driver_a = AsyncDriver::setup_with_config_on(&mut handle, config_a)
@@ -61,17 +63,19 @@ async fn async_driver_creates_distinct_queue_handles_from_explicit_configs() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
     // Given: an async driver created from an explicit one-slot queue config.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let (command_id, second_submit, queue_handle) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_with_config_on(
                 &mut handle,
                 QueueConfig::new(1, 2, EventRouting::QueueLocal, SoftwareOwnerId::new(7)),
@@ -113,10 +117,11 @@ async fn async_driver_enforces_command_depth_from_explicit_queue_config() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
     // Given: two async drivers with explicit queue-local event routing.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -130,8 +135,9 @@ async fn async_driver_uses_config_handle_for_queue_local_event_polling() {
         other_second_submit,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver_a = AsyncDriver::setup_with_config_on(
                 &mut handle,
                 QueueConfig::new(1, 4, EventRouting::QueueLocal, SoftwareOwnerId::new(1)),

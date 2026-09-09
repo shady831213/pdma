@@ -1,9 +1,8 @@
 use super::*;
 
-pub(in crate::transactions) async fn run() -> support::TestResult<bool> {
-    // Given: one writer holds the real memory transaction ahead of a standalone mapping commit.
+pub(in crate::transactions) fn run() -> support::TestResult<bool> {
+    // Given: one writer holds the real memory transaction ahead of runtime allocation.
     let (handle, _, memory) = support::observed_handle_with_memory();
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
     let region = MemoryRegion::try_new(
         MemoryAddress::new(0x5_0000),
         64,
@@ -26,12 +25,9 @@ pub(in crate::transactions) async fn run() -> support::TestResult<bool> {
         })
     });
     entered_rx.recv()?;
-    let mapping_handle = handle.clone();
     let mapping = std::thread::spawn(move || -> support::TestResult {
         mapping_started_tx.send(())?;
-        tokio::runtime::Builder::new_current_thread()
-            .build()?
-            .block_on(mapping_handle.commit_memory_stage(stage))?;
+        handle.allocate(128)?;
         mapping_done_tx.send(())?;
         Ok(())
     });
@@ -47,9 +43,12 @@ pub(in crate::transactions) async fn run() -> support::TestResult<bool> {
     mapping_done_rx.recv()?;
 
     // Then: both commits survive in serial revision order with no stale inner install.
-    let serialized = memory.revision().raw() == 2
-        && memory.regions().len() == 4
-        && memory.regions().contains(&region);
+    let allocated = MemoryRegion::try_new(
+        MemoryAddress::new(0x1_0000),
+        128,
+        MemoryAlignment::try_new(64)?,
+    )?;
+    let serialized = memory.revision().raw() == 2 && memory.regions() == vec![allocated, region];
     assert!(serialized);
     Ok(serialized)
 }

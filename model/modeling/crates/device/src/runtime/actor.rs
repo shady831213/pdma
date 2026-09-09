@@ -1,14 +1,13 @@
 //! Tokio actor facade over one shared device core.
 
-use super::PdmaMemoryProvisioning;
 use super::backend::DeviceInteractionBackend;
 use super::state::{RunnerState, summary};
 use super::{
     AsyncRunSummary, DeviceCore, MmioRegisterEndpoint, PendingDmaResult, RunnerShared, run_worker,
 };
-use crate::memory::PdmaMemoryError;
 use hardware_interface_runtime::{
-    NoopRegisterObserver, ObservationGate, RegisterObserver, SharedRegisterObserver,
+    NoopRegisterObserver, ObservationGate, RegisterObserver, SharedMemoryAccess,
+    SharedRegisterObserver,
 };
 use pdma_model_contract::semantic::trace::TraceEvent;
 use std::sync::Arc;
@@ -35,50 +34,37 @@ pub struct AsyncDeviceWorker {
 
 impl AsyncDevice {
     /// Consumes one device core into the asynchronous facade and worker.
-    pub fn from_core(
-        core: DeviceCore,
-        provisioning: PdmaMemoryProvisioning,
-    ) -> Result<(Self, AsyncDeviceWorker), PdmaMemoryError> {
-        Self::from_core_observed(core, provisioning, Arc::new(NoopRegisterObserver))
+    pub fn from_core(core: DeviceCore) -> (Self, AsyncDeviceWorker) {
+        Self::from_core_observed(core, Arc::new(NoopRegisterObserver))
     }
 
     /// Constructs a core and runtime from one explicitly selected memory backend.
     pub fn new(
-        provisioning: PdmaMemoryProvisioning,
+        memory: impl Into<SharedMemoryAccess>,
         config: pdma_model_contract::semantic::ResourceConfig,
     ) -> (Self, AsyncDeviceWorker) {
-        Self::new_observed(provisioning, config, Arc::new(NoopRegisterObserver))
+        Self::new_observed(memory, config, Arc::new(NoopRegisterObserver))
     }
 
     /// Constructs a core and observed runtime from one selected memory backend.
     pub fn new_observed(
-        provisioning: PdmaMemoryProvisioning,
+        memory: impl Into<SharedMemoryAccess>,
         config: pdma_model_contract::semantic::ResourceConfig,
         observer: Arc<dyn RegisterObserver>,
     ) -> (Self, AsyncDeviceWorker) {
-        let core = DeviceCore::new(provisioning.memory_access(), config);
-        Self::assemble(core, provisioning, observer)
+        let core = DeviceCore::new(memory, config);
+        Self::from_core_observed(core, observer)
     }
 
     /// Consumes one device core with an ordered register observer.
     pub fn from_core_observed(
         core: DeviceCore,
-        provisioning: PdmaMemoryProvisioning,
-        observer: Arc<dyn RegisterObserver>,
-    ) -> Result<(Self, AsyncDeviceWorker), PdmaMemoryError> {
-        provisioning.validate_binding(&core.memory)?;
-        Ok(Self::assemble(core, provisioning, observer))
-    }
-
-    fn assemble(
-        core: DeviceCore,
-        provisioning: PdmaMemoryProvisioning,
         observer: Arc<dyn RegisterObserver>,
     ) -> (Self, AsyncDeviceWorker) {
-        let memory = provisioning.memory_access();
+        let memory = core.memory.clone();
         let register_epoch = core.epoch();
         let shared = Arc::new(RunnerShared {
-            backend: DeviceInteractionBackend::new(RunnerState::new(core, provisioning)),
+            backend: DeviceInteractionBackend::new(RunnerState::new(core)),
             register_gate: ObservationGate::new(SharedRegisterObserver::new(observer)),
         });
         let worker = AsyncDeviceWorker {

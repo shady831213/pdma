@@ -1,7 +1,7 @@
 use super::support::BlockingPort;
 use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::semantic::{CommandId, QueueId};
-use pdma_model_device::{AsyncDevice, AsyncStepStatus};
+use pdma_model_device::AsyncStepStatus;
 use pdma_model_host::AsyncDriver;
 use pdma_model_host::CopyRequest;
 use pdma_model_host::DriverError;
@@ -11,6 +11,9 @@ use std::{
     pin::Pin,
     task::Poll,
 };
+
+mod fixtures;
+use fixtures::{fresh_device, setup_copy};
 
 #[derive(Clone, Copy)]
 enum InvalidContext {
@@ -46,32 +49,10 @@ async fn poll_pending_on<F: Future>(cpu: &SoftwareCpu, mut future: Pin<&mut F>) 
     .await;
 }
 
-async fn setup_copy(
-    cpu: &SoftwareCpu,
-    port: &mut BlockingPort,
-) -> DriverResult<(AsyncDriver, CopyRequest)> {
-    cpu.run_main(async {
-        let driver = AsyncDriver::setup_on(port, 1, 1).await?;
-        let src = driver.allocate_buffer_on(port, 4).await?;
-        let dst = driver.allocate_buffer_on(port, 4).await?;
-        Ok((driver, CopyRequest::new(src, dst, 4)))
-    })
-    .await
-}
-
-fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
-    AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        pdma_model_contract::semantic::ResourceConfig::default(),
-    )
-}
-
 async fn create_repoll(context: InvalidContext) {
     // Given: CPU-bound setup first-polled to Pending by its owner.
-    let (device, _worker) = fresh_device();
-    let mut port = BlockingPort::new(device.handle());
+    let (device, _worker, memory) = fresh_device();
+    let mut port = BlockingPort::new(device.handle(), memory.clone());
     let control = port.clone();
     control.block_create();
     let owner = SoftwareCpu::new();
@@ -93,8 +74,8 @@ async fn create_repoll(context: InvalidContext) {
 
 async fn submit_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one reserved command blocked before device acceptance.
-    let (device, _worker) = fresh_device();
-    let mut port = BlockingPort::new(device.handle());
+    let (device, _worker, memory) = fresh_device();
+    let mut port = BlockingPort::new(device.handle(), memory.clone());
     let control = port.clone();
     let owner = SoftwareCpu::new();
     let (mut driver, request) = setup_copy(&owner, &mut port).await?;
@@ -120,8 +101,8 @@ async fn submit_repoll(context: InvalidContext) -> DriverResult<()> {
 
 async fn doorbell_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one command accepted before its doorbell blocks.
-    let (device, _worker) = fresh_device();
-    let mut port = BlockingPort::new(device.handle());
+    let (device, _worker, memory) = fresh_device();
+    let mut port = BlockingPort::new(device.handle(), memory.clone());
     let control = port.clone();
     let owner = SoftwareCpu::new();
     let (mut driver, request) = setup_copy(&owner, &mut port).await?;
@@ -148,9 +129,9 @@ async fn doorbell_repoll(context: InvalidContext) -> DriverResult<()> {
 
 async fn completion_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one completion blocked after its driver's entry validation.
-    let (device, worker) = fresh_device();
+    let (device, worker, memory) = fresh_device();
     let worker = tokio::spawn(worker.run());
-    let mut port = BlockingPort::new(device.handle());
+    let mut port = BlockingPort::new(device.handle(), memory.clone());
     let control = port.clone();
     let owner = SoftwareCpu::new();
     let (mut driver, request) = setup_copy(&owner, &mut port).await?;
@@ -195,9 +176,9 @@ async fn completion_repoll(context: InvalidContext) -> DriverResult<()> {
 
 async fn event_repoll(context: InvalidContext) -> DriverResult<()> {
     // Given: one fault event blocked after its driver's entry validation.
-    let (device, worker) = fresh_device();
+    let (device, worker, memory) = fresh_device();
     let worker = tokio::spawn(worker.run());
-    let mut port = BlockingPort::new(device.handle());
+    let mut port = BlockingPort::new(device.handle(), memory.clone());
     let control = port.clone();
     let owner = SoftwareCpu::new();
     let (mut driver, request) = setup_copy(&owner, &mut port).await?;

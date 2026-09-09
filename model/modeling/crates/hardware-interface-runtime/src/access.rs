@@ -72,6 +72,17 @@ impl Error for MemoryAccessError {}
 
 /// Synchronous checked bulk access to a modeled byte store.
 pub trait MemoryAccess {
+    /// Checks a complete extent without reading, writing, allocating, or changing storage.
+    ///
+    /// Errors follow overflow, alignment, lookup, then region-crossing order.
+    /// A zero-length extent accepts installed region endpoints, but not unmapped gaps.
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError>;
+
     /// Reads one contiguous slice into caller-owned storage.
     fn read(
         &self,

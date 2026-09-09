@@ -17,10 +17,11 @@ use pdma_model_host::{
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_no_work_reports_idle_status() {
     // Given: a queue-port async runner with no queued work.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -38,17 +39,19 @@ async fn async_runner_no_work_reports_idle_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_successful_copy_reports_progressed_status() {
     // Given: an async copy on a queue-port async runner with default resources.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let snapshot = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -84,17 +87,19 @@ async fn async_runner_successful_copy_reports_progressed_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_resource_stall_reports_execution_reason() {
     // Given: an async copy on a device with no read slots.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         ResourceConfig::default().with_read_slots(0),
     );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -136,17 +141,19 @@ async fn async_runner_resource_stall_reports_execution_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_completion_publication_stall_reports_reason() {
     // Given: two async copies behind a one-slot completion publication path.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         ResourceConfig::default().with_completion_publication_slots(1),
     );
     let worker = tokio::spawn(worker.run());
     let (snapshot, first_completion) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -210,17 +217,19 @@ async fn async_runner_completion_publication_stall_reports_reason() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_fault_publication_retry_reports_distinct_reasons() {
     // Given: a faulting async copy behind a one-deep event publication path.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         ResourceConfig::default().with_event_publication_slots(0),
     );
     let worker = tokio::spawn(worker.run());
     let (first_snapshot, second_snapshot, event) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");

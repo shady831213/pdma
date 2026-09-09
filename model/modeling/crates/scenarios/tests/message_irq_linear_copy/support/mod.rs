@@ -76,11 +76,12 @@ pub struct DeliveryActor {
     pub task: JoinHandle<InterruptSummary>,
 }
 
-pub fn fresh_device(observer: Arc<RecordingRegisterObserver>) -> (AsyncDevice, AsyncDeviceWorker) {
+pub fn fresh_device(
+    memory: &pdma_model_host::adapter::abi::PdmaHostMemory,
+    observer: Arc<RecordingRegisterObserver>,
+) -> (AsyncDevice, AsyncDeviceWorker) {
     AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
         observer,
     )

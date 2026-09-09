@@ -8,25 +8,29 @@ mod support;
 #[tokio::test(flavor = "current_thread")]
 async fn async_tracing_preserves_manual_run_until_idle_behavior() {
     // Given: the same copy published into separate baseline and traced hardware queues.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (baseline_runner, baseline_worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let baseline_handle = baseline_runner.handle();
-    let baseline_memory = support::raw_hardware::queue_copy(&baseline_handle, &[4, 3, 2, 1]).await;
+    let baseline_memory =
+        support::raw_hardware::queue_copy(&baseline_handle, &host_memory, &[4, 3, 2, 1]).await;
 
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (traced_runner, traced_worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let traced_handle = traced_runner.handle();
     traced_handle.enable_tracing().await;
     traced_handle.clear_trace().await;
-    let traced_memory = support::raw_hardware::queue_copy(&traced_handle, &[4, 3, 2, 1]).await;
+    let traced_memory =
+        support::raw_hardware::queue_copy(&traced_handle, &host_memory, &[4, 3, 2, 1]).await;
 
     // When: both actor workers execute and retire their queued copies.
     let baseline_worker = tokio::spawn(baseline_worker.run());

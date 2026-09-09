@@ -2,7 +2,6 @@ use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 
 use crate::irq::PdmaIrqController;
-use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
 use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
@@ -18,7 +17,7 @@ pub struct DeviceCore {
     epoch: DeviceEpoch,
     command_pipeline: command_pipeline::CommandPipeline,
     native_fetches: usize,
-    pub(crate) memory: PdmaMemoryMappings,
+    pub(crate) memory: SharedMemoryAccess,
     pub(crate) queues: QueueBlock,
     runnable: RunnableQueues,
     pub(crate) irq: PdmaIrqController,
@@ -33,7 +32,7 @@ impl DeviceCore {
             epoch: DeviceEpoch::initial(),
             command_pipeline: command_pipeline::CommandPipeline::new(config),
             native_fetches: 0,
-            memory: PdmaMemoryMappings::new(memory),
+            memory: memory.into(),
             queues: QueueBlock::default(),
             runnable: RunnableQueues::default(),
             irq: PdmaIrqController::new(DeviceEpoch::initial()),

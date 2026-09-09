@@ -1,4 +1,6 @@
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAllocator,
+};
 use pdma_model_contract::abi::registers::{QueueRegisters, RegisterLocation, locate, queue_offset};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
@@ -8,8 +10,11 @@ use pdma_model_contract::semantic::{ResourceConfig, TraceEvent, TraceEventKind};
 use pdma_model_device::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncStepStatus, MmioRegisterEndpoint,
 };
+use std::sync::Arc;
 
 pub(crate) struct Fixture {
+    pub(crate) memory: Arc<SharedMemory>,
+    pub(crate) allocator: SharedMemoryAllocator,
     pub(crate) handle: AsyncDeviceHandle,
     pub(crate) endpoint: MmioRegisterEndpoint,
     worker: Option<AsyncDeviceWorker>,
@@ -18,32 +23,30 @@ pub(crate) struct Fixture {
 
 impl Fixture {
     pub(crate) async fn new(resources: ResourceConfig) -> Self {
-        let (device, worker) = AsyncDevice::new(
-            pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-                hardware_interface_runtime::SharedMemory::new(),
-            )),
-            resources,
-        );
+        let memory = Arc::new(SharedMemory::new());
+        let allocator = SharedMemoryAllocator::new(Arc::clone(&memory), MemoryAddress::new(0x1000));
+        let (device, worker) = AsyncDevice::new(Arc::clone(&memory), resources);
         let handle = device.handle();
-        let stage = handle
-            .stage_memory_regions(&[
-                RingLayout::<AbiCommand>::checked_extent(4).expect("command extent"),
-                RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
-                RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
-            ])
-            .await
-            .expect("ring stage");
         let rings = [
-            stage.regions().first().expect("submission region").base(),
-            stage.regions().get(1).expect("completion region").base(),
-            stage.regions().last().expect("event region").base(),
-        ];
-        handle
-            .commit_memory_stage(stage)
-            .await
-            .expect("ring mappings");
+            RingLayout::<AbiCommand>::checked_extent(4).expect("command extent"),
+            RingLayout::<AbiCompletion>::checked_extent(1).expect("completion extent"),
+            RingLayout::<AbiEvent>::checked_extent(1).expect("event extent"),
+        ]
+        .map(|length| {
+            DmaAddress::new(
+                allocator
+                    .allocate(
+                        length,
+                        MemoryAlignment::try_new(64).expect("ring alignment"),
+                    )
+                    .expect("ring allocation")
+                    .raw(),
+            )
+        });
         let endpoint = handle.register_endpoint();
         let fixture = Self {
+            memory,
+            allocator,
             handle,
             endpoint,
             worker: Some(worker),
@@ -183,23 +186,15 @@ pub(crate) async fn register_read(endpoint: &MmioRegisterEndpoint, offset: u32) 
     u64::from_le_bytes(bytes)
 }
 
-pub(crate) async fn operands(
-    handle: &AsyncDeviceHandle,
-) -> [pdma_model_device::MappedDmaRegion; 3] {
-    let stage = handle
-        .stage_memory_regions(&[4; 3])
-        .await
-        .expect("operand stage");
-    let result = [
-        *stage.regions().first().expect("source region"),
-        *stage.regions().get(1).expect("first target region"),
-        *stage.regions().last().expect("second target region"),
-    ];
-    handle
-        .commit_memory_stage(stage)
-        .await
-        .expect("operand commit");
-    result
+pub(crate) fn operands(allocator: &SharedMemoryAllocator) -> [DmaAddress; 3] {
+    [4; 3].map(|length| {
+        DmaAddress::new(
+            allocator
+                .allocate(length, MemoryAlignment::ONE)
+                .expect("operand allocation")
+                .raw(),
+        )
+    })
 }
 
 pub(crate) async fn write(handle: &AsyncDeviceHandle, address: DmaAddress, bytes: &[u8]) {

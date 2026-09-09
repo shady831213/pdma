@@ -1,12 +1,15 @@
+use crate::queue::hardware::Allocation;
 use crate::queue::hardware::{self, read, write};
+use hardware_interface_runtime::SharedMemoryAllocator;
 use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
 use pdma_model_contract::abi::{AbiCommand, AbiCompletion, AbiEvent, DmaAddress};
 use pdma_model_contract::semantic::{ResourceConfig, RingCursor};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, MappedDmaRegion};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 
 pub(in crate::queue) type TestResult<T = ()> = hardware::TestResult<T>;
 
 pub(in crate::queue) struct Fixture {
+    pub(in crate::queue) memory: SharedMemoryAllocator,
     pub(in crate::queue) handle: AsyncDeviceHandle,
     pub(in crate::queue) submission: DmaAddress,
     completion: DmaAddress,
@@ -30,15 +33,13 @@ pub(in crate::queue) struct RunResult {
 }
 
 pub(in crate::queue) async fn fixture(resources: ResourceConfig) -> TestResult<Fixture> {
-    let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        resources,
-    );
+    let memory = hardware::allocator();
+    let (runner, worker) = AsyncDevice::new(memory.memory_access(), resources);
     let handle = runner.handle();
-    let [submission, completion, event] = hardware::activate(&handle, 0, [2, 2, 2]).await?;
+    let [submission, completion, event] =
+        hardware::activate(&handle, &memory, 0, [2, 2, 2]).await?;
     Ok(Fixture {
+        memory,
         handle,
         submission,
         completion,
@@ -47,17 +48,17 @@ pub(in crate::queue) async fn fixture(resources: ResourceConfig) -> TestResult<F
     })
 }
 
-pub(in crate::queue) async fn allocate(
-    handle: &AsyncDeviceHandle,
-    length: usize,
-) -> TestResult<MappedDmaRegion> {
-    Ok(handle.allocate_memory_region(length).await?)
+pub(in crate::queue) fn allocate(
+    memory: &SharedMemoryAllocator,
+    length: u64,
+) -> TestResult<Allocation> {
+    hardware::allocate(memory, length)
 }
 
 pub(in crate::queue) async fn run_descriptor(
     fixture: Fixture,
     bytes: [u8; 64],
-    destinations: &[MappedDmaRegion],
+    destinations: &[Allocation],
 ) -> TestResult<RunResult> {
     fixture.handle.enable_tracing().await;
     fixture

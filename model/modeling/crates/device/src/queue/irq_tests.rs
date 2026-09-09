@@ -1,18 +1,20 @@
 use super::QueueBlock;
 use super::io::PublicationOutcome;
+use crate::DeviceCore;
 use crate::test_support::{TestQueue, configure, irq_write, poll_completion};
-use crate::{DeviceCore, PdmaMemoryProvisioning};
+use hardware_interface_runtime::SharedMemoryAllocator;
 use pdma_model_contract::abi::AbiCompletion;
 use pdma_model_contract::abi::registers::{IrqSourceRegisters, IrqStateBit, QueueRegisters};
 use pdma_model_contract::semantic::{CompletionRingId, IrqSource, QueueId, ResourceConfig};
 
 fn fixture(enabled: bool) -> (DeviceCore, TestQueue, TestQueue) {
-    let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
-    let mut core = DeviceCore::new(provisioning.memory_access(), ResourceConfig::default());
-    let queue = configure(&mut core, &mut provisioning, 0, [2, 1, 1]);
-    let second = configure(&mut core, &mut provisioning, 1, [2, 1, 1]);
+    let allocator = SharedMemoryAllocator::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = DeviceCore::new(allocator.memory_access(), ResourceConfig::default());
+    let queue = configure(&mut core, &allocator, 0, [2, 1, 1]);
+    let second = configure(&mut core, &allocator, 1, [2, 1, 1]);
     irq_write(
         &mut core,
         queue,

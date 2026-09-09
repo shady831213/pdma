@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{RegisterAccess, SharedMemory, SoftwareCpu};
 use pdma_model_contract::abi::registers::GlobalRegisters;
 use pdma_model_contract::semantic::{DeviceEpoch, IrqLine, IrqRoute, IrqVector, ResourceConfig};
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, CopyRequest, DriverPort, PortError,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -11,15 +11,15 @@ use std::sync::Arc;
 #[tokio::test(flavor = "current_thread")]
 async fn masked_pending_line_remains_visible_without_assertion() {
     // Given: a completion source is enabled and masked on a line route.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
     SoftwareCpu::new()
         .run_main(async {
             let mut port =
-                PdmaRegisterPort::new(AsyncDeviceAccess::new(device.handle())).expect("port");
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(device.handle(), memory.clone()))
+                    .expect("port");
             let mut driver = AsyncDriver::setup_on(&mut port, 1, 1)
                 .await
                 .expect("driver");
@@ -58,13 +58,12 @@ async fn masked_pending_line_remains_visible_without_assertion() {
 #[tokio::test(flavor = "current_thread")]
 async fn empty_snapshot_distinguishes_no_irq_from_stale_epoch() {
     // Given: an empty device and a valid host snapshot capability.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, _worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     SoftwareCpu::new()
         .run_main(async {
-            let access = AsyncDeviceAccess::new(device.handle());
+            let access = AsyncDeviceAccess::new(device.handle(), memory.clone());
             let port = PdmaRegisterPort::new(access.clone()).expect("port");
             assert_eq!(port.irq_snapshot().await, Ok(None));
 

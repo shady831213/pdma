@@ -1,10 +1,10 @@
 use super::{ActiveQueue, RingState};
-use crate::memory::PdmaMemoryMappings;
 use crate::queue::io::PublicationOutcome;
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, AbiRingEntry};
 
 pub(super) fn completion(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     active: &mut ActiveQueue,
     record: AbiCompletion,
 ) -> PublicationOutcome {
@@ -16,7 +16,7 @@ pub(super) fn completion(
 }
 
 pub(super) fn event(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     active: &mut ActiveQueue,
     event: AbiEvent,
 ) -> PublicationOutcome {
@@ -28,7 +28,7 @@ pub(super) fn event(
 }
 
 fn publish<R: AbiRingEntry>(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     ring: &mut RingState<R>,
     bytes: &[u8],
 ) -> PublicationOutcome {
@@ -44,7 +44,7 @@ fn publish<R: AbiRingEntry>(
     let Ok(address) = ring.entry_address(ring.producer()) else {
         return PublicationOutcome::Retry;
     };
-    if memory.write_memory(address, bytes).is_err() {
+    if crate::memory::write(memory, address, bytes).is_err() {
         return PublicationOutcome::Retry;
     }
     *ring = updated;

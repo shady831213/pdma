@@ -1,8 +1,8 @@
 use super::io::{FaultPublication, NormalizedFetch, PublicationOutcome};
 use super::{ExactQueueIo, QueueBlock};
-use crate::memory::PdmaMemoryMappings;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent};
 use pdma_model_contract::semantic::{CompletionRingId, IrqSource, QueueId};
 
@@ -13,7 +13,7 @@ impl QueueBlock {
 
     pub(crate) fn publish_fault(
         &mut self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         queue: QueueId,
         trace: &mut TraceSink,
     ) -> ModelResult<FaultPublication> {
@@ -39,7 +39,7 @@ impl QueueBlock {
 
     pub(crate) fn publish_completion(
         &mut self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         queue: QueueId,
         record: AbiCompletion,
         trace: &mut TraceSink,
@@ -66,7 +66,7 @@ impl QueueBlock {
 
     pub(crate) fn fetch(
         &mut self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         queue: QueueId,
     ) -> ModelResult<Option<NormalizedFetch>> {
         self.get_mut(queue)?.fetch(memory, queue)
@@ -74,7 +74,7 @@ impl QueueBlock {
 
     pub(crate) fn probe(
         &self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         queue: QueueId,
     ) -> ModelResult<Option<NormalizedFetch>> {
         self.get(queue)?.probe(memory, queue)

@@ -76,14 +76,19 @@ struct PortControl {
 #[derive(Debug, Clone)]
 pub struct BlockingPort {
     handle: AsyncDeviceHandle,
+    memory: pdma_model_host::adapter::abi::PdmaHostMemory,
     port: Arc<Mutex<Option<PdmaRegisterPort<AsyncDeviceAccess>>>>,
     control: Arc<PortControl>,
 }
 
 impl BlockingPort {
-    pub fn new(inner: AsyncDeviceHandle) -> Self {
+    pub fn new(
+        inner: AsyncDeviceHandle,
+        memory: pdma_model_host::adapter::abi::PdmaHostMemory,
+    ) -> Self {
         Self {
             handle: inner,
+            memory,
             port: Arc::new(Mutex::new(None)),
             control: Arc::new(PortControl::default()),
         }
@@ -98,6 +103,7 @@ impl BlockingPort {
         if port.is_none() {
             *port = Some(PdmaRegisterPort::new(AsyncDeviceAccess::new(
                 self.handle.clone(),
+                self.memory.clone(),
             ))?);
         }
         Ok(port.as_ref().expect("initialized port").clone())

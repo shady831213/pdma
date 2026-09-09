@@ -1,42 +1,32 @@
-use hardware_interface_runtime::SharedMemory;
-use pdma_model_device::{
-    MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings, PdmaMemoryProvisioning, PdmaMemoryStage,
+#![allow(clippy::expect_used, reason = "checked test fixture operations")]
+
+use hardware_interface_runtime::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAllocator,
 };
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
-pub(super) struct ProvisionedMemory {
-    mappings: PdmaMemoryMappings,
-    provisioning: PdmaMemoryProvisioning,
+pub(super) fn fixture() -> (Arc<SharedMemory>, SharedMemoryAllocator) {
+    let memory = Arc::new(SharedMemory::new());
+    let allocator = SharedMemoryAllocator::new(Arc::clone(&memory), MemoryAddress::new(0x1_0000));
+    (memory, allocator)
 }
 
-impl ProvisionedMemory {
-    pub(super) fn new(memory: Arc<SharedMemory>) -> Self {
-        let provisioning = PdmaMemoryProvisioning::shared(memory);
-        Self {
-            mappings: PdmaMemoryMappings::new(provisioning.memory_access()),
-            provisioning,
-        }
-    }
-
-    pub(super) fn allocate(&mut self, length: u64) -> Result<MappedDmaRegion, PdmaMemoryError> {
-        self.provisioning.allocate(&mut self.mappings, length)
-    }
-
-    pub(super) fn stage(&self, lengths: &[u64]) -> Result<PdmaMemoryStage, PdmaMemoryError> {
-        self.provisioning.stage(&self.mappings, lengths)
-    }
-
-    pub(super) fn commit(
-        &mut self,
-        stage: PdmaMemoryStage,
-    ) -> Result<Vec<MappedDmaRegion>, PdmaMemoryError> {
-        self.provisioning.commit(&mut self.mappings, stage)
-    }
+pub(super) fn alignment() -> MemoryAlignment {
+    MemoryAlignment::try_new(64).expect("alignment")
 }
 
-impl Deref for ProvisionedMemory {
-    type Target = PdmaMemoryMappings;
-    fn deref(&self) -> &Self::Target {
-        &self.mappings
-    }
+pub(super) fn region(base: u64, length: u64) -> MemoryRegion {
+    MemoryRegion::try_new(MemoryAddress::new(base), length, alignment()).expect("region")
+}
+
+pub(super) fn read(memory: &SharedMemory, address: MemoryAddress, length: usize) -> Vec<u8> {
+    let mut bytes = vec![0; length];
+    memory
+        .read(
+            address,
+            MemoryAlignment::try_new(1).expect("byte alignment"),
+            &mut bytes,
+        )
+        .expect("read");
+    bytes
 }

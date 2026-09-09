@@ -8,8 +8,8 @@ use pdma_model_contract::abi::registers::IrqSourceRegisters;
 use pdma_model_contract::semantic::ResourceConfig;
 
 use crate::device::{DeviceCore, ModelStepStatus};
-use crate::runtime::PdmaMemoryProvisioning;
-use crate::{AsyncStallReason, MappedDmaRegion, ModelError};
+use crate::{AsyncStallReason, ModelError};
+use pdma_model_contract::abi::DmaRegion;
 
 mod descriptor;
 mod observation;
@@ -51,24 +51,25 @@ pub(super) enum PipelineRunOutcome {
 #[derive(Debug)]
 pub(super) struct Fixture {
     pub(super) core: DeviceCore,
-    pub(super) provisioning: PdmaMemoryProvisioning,
+    pub(super) allocator: hardware_interface_runtime::SharedMemoryAllocator,
     pub(super) operation: Operation<DeviceCore, ()>,
 }
 
 pub(super) struct Prepared {
     pub(super) fixture: Fixture,
     pub(super) queue: TestQueue,
-    pub(super) destinations: [MappedDmaRegion; 2],
+    pub(super) destinations: [DmaRegion; 2],
 }
 
 impl Fixture {
     pub(super) fn new(resources: ResourceConfig) -> Self {
-        let provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        ));
+        let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+            std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+            hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+        );
         Self {
-            core: DeviceCore::new(provisioning.memory_access(), resources),
-            provisioning,
+            core: DeviceCore::new(allocator.memory_access(), resources),
+            allocator,
             operation: Operation::new(()),
         }
     }
@@ -120,35 +121,25 @@ pub(super) fn prepare(case: Case) -> Prepared {
 pub(super) fn prepare_with_resources(case: Case, resources: ResourceConfig) -> Prepared {
     let mut fixture = Fixture::new(resources);
     fixture.core.enable_tracing();
-    let source_a = fixture
-        .provisioning
-        .allocate(&mut fixture.core.memory, 8)
-        .expect("source A");
-    let source_b = fixture
-        .provisioning
-        .allocate(&mut fixture.core.memory, 8)
-        .expect("source B");
-    let destination_a = fixture
-        .provisioning
-        .allocate(&mut fixture.core.memory, 8)
-        .expect("destination A");
-    let destination_b = fixture
-        .provisioning
-        .allocate(&mut fixture.core.memory, 8)
-        .expect("destination B");
-    fixture
-        .core
-        .memory
-        .write_object(source_a.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
-        .expect("source A bytes");
-    fixture
-        .core
-        .memory
-        .write_object(source_b.object(), 0, &[8, 7, 6, 5, 4, 3, 2, 1])
-        .expect("source B bytes");
-    let queue = test_support::configure(&mut fixture.core, &mut fixture.provisioning, 0, [4, 1, 1]);
+    let source_a = crate::test_support::allocate(&fixture.allocator, 8);
+    let source_b = crate::test_support::allocate(&fixture.allocator, 8);
+    let destination_a = crate::test_support::allocate(&fixture.allocator, 8);
+    let destination_b = crate::test_support::allocate(&fixture.allocator, 8);
+    crate::memory::write(
+        &fixture.core.memory,
+        source_a.base(),
+        &[1, 2, 3, 4, 5, 6, 7, 8],
+    )
+    .expect("source A bytes");
+    crate::memory::write(
+        &fixture.core.memory,
+        source_b.base(),
+        &[8, 7, 6, 5, 4, 3, 2, 1],
+    )
+    .expect("source B bytes");
+    let queue = test_support::configure(&mut fixture.core, &fixture.allocator, 0, [4, 1, 1]);
     let command = descriptor::command(
-        &mut fixture,
+        &fixture,
         case,
         [source_a, source_b, destination_a, destination_b],
     );
@@ -180,17 +171,13 @@ pub(super) fn prepared_pair() -> Prepared {
         Case::Copy,
         ResourceConfig::default().with_completion_publication_slots(1),
     );
-    let source = prepared
-        .fixture
-        .provisioning
-        .allocate(&mut prepared.fixture.core.memory, 8)
-        .expect("second source");
-    prepared
-        .fixture
-        .core
-        .memory
-        .write_object(source.object(), 0, &[1, 2, 3, 4, 5, 6, 7, 8])
-        .expect("second source bytes");
+    let source = crate::test_support::allocate(&prepared.fixture.allocator, 8);
+    crate::memory::write(
+        &prepared.fixture.core.memory,
+        source.base(),
+        &[1, 2, 3, 4, 5, 6, 7, 8],
+    )
+    .expect("second source bytes");
     test_support::submit(
         &mut prepared.fixture.core,
         prepared.queue,

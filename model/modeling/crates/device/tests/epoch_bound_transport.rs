@@ -3,16 +3,14 @@
 use hardware_interface_runtime::{RegisterAccess, RegisterBusBase, SharedMemory};
 use pdma_model_contract::abi::registers::{GlobalRegisters, QueueRegisters, queue_offset};
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
-use pdma_model_device::{AsyncDevice, MmioRegisterError, PdmaMemoryProvisioning};
+use pdma_model_device::{AsyncDevice, MmioRegisterError};
 use std::sync::Arc;
 
 #[tokio::test]
 async fn old_binding_rejects_writes_while_direct_epoch_discovery_allows_recovery() {
     // Given: an addressed endpoint retained across a committed whole-device reset.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let (device, _worker) =
+        AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
     let stale = device
         .handle()
         .register_endpoint()
@@ -64,10 +62,8 @@ async fn old_binding_rejects_writes_while_direct_epoch_discovery_allows_recovery
 #[tokio::test]
 async fn rejected_hardware_transition_preserves_gate_for_next_valid_write() {
     // Given: a queue without the DMA configuration required to enable it.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let (device, _worker) =
+        AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
     let endpoint = device.handle().register_endpoint();
 
     // When: enable rejects and a later independent configuration write is valid.

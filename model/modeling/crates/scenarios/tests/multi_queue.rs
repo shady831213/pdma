@@ -17,10 +17,11 @@ use pdma_model_host::{
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_default_policy_retires_runnable_queues_in_submission_order() {
     // Given: two async queues with one runnable copy each, submitted in queue order.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -30,8 +31,11 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
     let (queue_a, queue_b, command_a, command_b, completion_a, completion_b, copied_a, copied_b) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
-                    .expect("active software CPU");
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                    raw_handle.clone(),
+                    host_memory.clone(),
+                ))
+                .expect("active software CPU");
                 let mut driver_a = AsyncDriver::setup_on(&mut handle, 2, 2)
                     .await
                     .expect("queue A setup is valid");
@@ -119,7 +123,7 @@ async fn async_runner_default_policy_retires_runnable_queues_in_submission_order
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable() {
     // Given: one peer queue and one repeated-work queue are both runnable.
-    let (runner, worker) = fresh_device();
+    let (runner, worker, host_memory) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
     raw_handle.enable_tracing().await;
@@ -137,8 +141,11 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
         repeated_copy,
     ) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
-                .expect("active software CPU");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                raw_handle.clone(),
+                host_memory.clone(),
+            ))
+            .expect("active software CPU");
             let mut peer = AsyncDriver::setup_on(&mut handle, 1, 2).await?;
             let mut repeated = AsyncDriver::setup_on(&mut handle, 2, 3).await?;
             let peer_src = peer.allocate_buffer_on(&mut handle, 1).await?;
@@ -224,13 +231,19 @@ async fn async_runner_round_robin_does_not_repeat_queue_while_peer_is_runnable()
     assert_eq!(second_completion.command_id(), repeated_second);
 }
 
-fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
-    AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+fn fresh_device() -> (
+    AsyncDevice,
+    pdma_model_device::AsyncDeviceWorker,
+    pdma_model_host::adapter::abi::PdmaHostMemory,
+) {
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let (device, worker) = AsyncDevice::new(
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    )
+    );
+    (device, worker, memory)
 }
 
 async fn wait_for_steps(runner: &AsyncDevice, steps: usize) {

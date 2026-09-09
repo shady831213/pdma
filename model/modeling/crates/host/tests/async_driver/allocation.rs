@@ -9,14 +9,14 @@ use std::{future::poll_fn, task::Poll};
 #[tokio::test(flavor = "current_thread")]
 async fn fallible_allocation_propagates_through_both_driver_facades() {
     // Given: CPU-bound and manual drivers on separate queues of one async device.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let handle = device.handle();
-    let mut port = super::support::BlockingPort::new(handle.clone());
+    let mut port = super::support::BlockingPort::new(handle.clone(), memory.clone());
     let cpu = SoftwareCpu::new();
     let async_driver = cpu
         .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
@@ -38,40 +38,48 @@ async fn fallible_allocation_propagates_through_both_driver_facades() {
         .expect("manual allocation");
 
     // Then: each semantic ID correlates with one exact committed DMA mapping.
-    let async_region = handle
-        .region_for_object(async_object)
-        .await
-        .expect("async mapping");
-    let manual_region = handle
-        .region_for_object(manual_object)
-        .await
-        .expect("manual mapping");
-    assert_eq!(async_region.object(), async_object);
-    assert_eq!(async_region.length(), 3);
     assert_ne!(async_object, manual_object);
-    assert_eq!(manual_region.object(), manual_object);
-    assert_eq!(manual_region.length(), 5);
+    assert_eq!(
+        cpu.run_main(async_driver.read_buffer_on(&port, async_object, 3))
+            .await,
+        Ok(vec![0; 3])
+    );
+    assert_eq!(
+        cpu.run_main(manual_driver.read_buffer_on(&port, manual_object, 5))
+            .await,
+        Ok(vec![0; 5])
+    );
+    assert_eq!(
+        storage
+            .regions()
+            .iter()
+            .rev()
+            .take(2)
+            .map(|region| region.length())
+            .collect::<Vec<_>>(),
+        [5, 3]
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
     // Given: an async driver whose allocation port can suspend before device mutation.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let handle = device.handle();
     handle.enable_tracing().await;
-    let mut port = BlockingPort::new(handle.clone());
+    let mut port = BlockingPort::new(handle.clone(), memory.clone());
     let cpu = SoftwareCpu::new();
     let mut driver = cpu
         .run_main(AsyncDriver::setup_on(&mut port, 1, 1))
         .await
         .expect("driver setup");
     let trace_before = handle.trace_events().await;
-    let generation_before = handle.memory_generation().await;
+    let generation_before = storage.revision();
     port.block_allocation();
     let control = port.clone();
     let mut pending = Box::pin(driver.allocate_buffer_on(&mut port, 4));
@@ -94,18 +102,16 @@ async fn cancelled_or_exhausted_allocation_commits_no_mapping() {
         exhausted,
         Err(DriverError::Port(PortError::AllocationExhausted))
     );
-    assert_eq!(handle.memory_generation().await, generation_before);
+    assert_eq!(storage.revision(), generation_before);
     assert_eq!(handle.trace_events().await, trace_before);
     let object = cpu
         .run_main(driver.allocate_buffer_on(&mut port, 4))
         .await
         .expect("first committed allocation");
-    let region = handle
-        .region_for_object(object)
-        .await
-        .expect("committed mapping");
-    assert_eq!(region.length(), 4);
-    assert_eq!(handle.read_buffer(object, 0, 4).await, Ok(vec![0; 4]));
+    assert_eq!(
+        cpu.run_main(driver.read_buffer_on(&port, object, 4)).await,
+        Ok(vec![0; 4])
+    );
     let destination = cpu
         .run_main(driver.allocate_buffer_on(&mut port, 4))
         .await

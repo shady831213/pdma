@@ -1,25 +1,31 @@
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAllocator,
+};
 use pdma_model_contract::{abi::registers::GlobalRegisters, semantic::ResourceConfig};
 use pdma_model_device::{AsyncDevice, AsyncStepStatus};
+use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]
 async fn interaction_backend_routes_memory_register_reset_and_worker_progress() {
     // Given: a matched actor backend with committed memory.
-    let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
-        ResourceConfig::default(),
-    );
+    let memory = Arc::new(SharedMemory::new());
+    let allocator = SharedMemoryAllocator::new(Arc::clone(&memory), MemoryAddress::new(0x1000));
+    let (device, worker) = AsyncDevice::new(memory, ResourceConfig::default());
     let handle = device.handle();
     let initial = device.snapshot().await;
-    let region = handle.allocate_memory_region(8).await.expect("allocation");
+    let address = pdma_model_contract::abi::DmaAddress::new(
+        allocator
+            .allocate(8, MemoryAlignment::ONE)
+            .expect("allocation")
+            .raw(),
+    );
     handle
-        .write_memory(region.base(), &[1, 2, 3, 4, 5, 6, 7, 8])
+        .write_memory(address, &[1, 2, 3, 4, 5, 6, 7, 8])
         .await
         .expect("write");
-    let staged = handle.stage_memory_regions(&[4]).await.expect("stage");
-    handle.commit_memory_stage(staged).await.expect("commit");
+    allocator
+        .allocate(4, MemoryAlignment::ONE)
+        .expect("second allocation");
     let endpoint = handle.register_endpoint();
 
     // When: a direct reset is followed by an idle worker turn.
@@ -50,7 +56,7 @@ async fn interaction_backend_routes_memory_register_reset_and_worker_progress() 
     assert!(reset.generation() > initial.generation());
     assert!(idle.generation() > reset.generation());
     assert_eq!(
-        handle.read_memory(region.base(), 8).await.expect("memory"),
+        handle.read_memory(address, 8).await.expect("memory"),
         [1, 2, 3, 4, 5, 6, 7, 8]
     );
     assert_eq!(

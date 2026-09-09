@@ -11,7 +11,7 @@ use pdma_model_device::MmioRegisterError;
 #[tokio::test]
 async fn global_registers_expose_canonical_discovery_and_limits_without_mutation() -> TestResult {
     // Given: a fresh device with canonical data ABI discovery and limits.
-    let (device, _worker) = device(ResourceConfig::default());
+    let (device, _worker, _allocator) = device(ResourceConfig::default());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
     let before = handle.snapshot().await;

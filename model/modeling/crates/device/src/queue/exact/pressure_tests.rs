@@ -1,22 +1,22 @@
 use crate::device::ModelStepStatus;
 use crate::test_support::{TestQueue, configure, copy, doorbell, read_queue, submit};
-use crate::{AsyncStallReason, DeviceCore, PdmaMemoryProvisioning};
+use crate::{AsyncStallReason, DeviceCore};
 use hardware_interface_runtime::SharedMemory;
+use hardware_interface_runtime::SharedMemoryAllocator;
 use pdma_model_contract::abi::registers::QueueRegisters;
 use pdma_model_contract::semantic::ResourceConfig;
 use std::sync::Arc;
 
 fn fixture(resources: ResourceConfig, faulting: bool) -> (DeviceCore, TestQueue) {
-    let mut provisioning = PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new()));
-    let mut core = DeviceCore::new(provisioning.memory_access(), resources);
-    let queue = configure(&mut core, &mut provisioning, 0, [4, 4, 4]);
-    let source = provisioning.allocate(&mut core.memory, 4).expect("source");
-    let destination = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("destination");
-    core.memory
-        .write_memory(source.base(), &[1, 2, 3, 4])
-        .expect("source bytes");
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = DeviceCore::new(allocator.memory_access(), resources);
+    let queue = configure(&mut core, &allocator, 0, [4, 4, 4]);
+    let source = crate::test_support::allocate(&allocator, 4);
+    let destination = crate::test_support::allocate(&allocator, 4);
+    crate::memory::write(&core.memory, source.base(), &[1, 2, 3, 4]).expect("source bytes");
     let source_address = if faulting {
         u64::MAX - 4
     } else {

@@ -1,9 +1,8 @@
 use hardware_interface_runtime::{CpuLocal, MemoryAccess, SoftwareCpu};
 use pdma_model_contract::{abi::DmaAddress, semantic::BufferId};
-use pdma_model_device::dma::MappedDmaRegion;
 use pdma_model_host::{
     DriverPort,
-    adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
+    adapter::abi::{AsyncDeviceAccess, PdmaHostMemory, PdmaMappedRegion, PdmaRegisterPort},
     runtime::interrupt::PdmaIrqDelivery,
 };
 
@@ -19,7 +18,6 @@ fn main() {
     let _ = SoftwareCpu::new;
     let _ = DmaAddress::new(0);
     let _ = BufferId::new(0);
-    let _ = std::mem::size_of::<MappedDmaRegion>();
-    let mapping: Option<pdma_model_device::memory::MappedDmaRegion> = None;
-    let _: Option<MappedDmaRegion> = mapping;
+    let _ = std::mem::size_of::<PdmaMappedRegion>();
+    let _ = std::mem::size_of::<PdmaHostMemory>();
 }

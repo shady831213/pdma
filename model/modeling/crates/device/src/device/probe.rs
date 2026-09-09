@@ -1,11 +1,11 @@
 use super::DeviceCore;
 use crate::device::execution::ExecutionUnit;
 use crate::device::retirement::{PendingRetirement, RetirementUnit};
-use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
 use crate::queue::io::NormalizedFetch;
 use crate::queue::runnable::RunnableQueues;
 use crate::status::AsyncStallReason;
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::semantic::{DeviceRunState, DeviceStatus, QueueId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,7 +20,7 @@ pub(super) enum RunStateProbe {
 
 pub(super) fn probe_run_state(
     queues: &QueueBlock,
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     runnable: &RunnableQueues,
     execution: &ExecutionUnit,
     retirement: &RetirementUnit,

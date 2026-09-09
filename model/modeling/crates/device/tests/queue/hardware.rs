@@ -1,9 +1,50 @@
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAllocator,
+};
 use pdma_model_contract::abi::DmaAddress;
 use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
 use pdma_model_device::{AsyncDeviceHandle, MmioRegisterEndpoint};
+use std::sync::Arc;
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+pub(super) fn allocator() -> SharedMemoryAllocator {
+    SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct Allocation {
+    base: DmaAddress,
+    length: u64,
+}
+
+impl Allocation {
+    pub(super) const fn base(self) -> DmaAddress {
+        self.base
+    }
+    pub(super) const fn length(self) -> u64 {
+        self.length
+    }
+}
+
+pub(super) fn allocate(memory: &SharedMemoryAllocator, length: u64) -> TestResult<Allocation> {
+    let base = memory.allocate(length, MemoryAlignment::try_new(64)?)?;
+    Ok(Allocation {
+        base: DmaAddress::new(base.raw()),
+        length,
+    })
+}
+
+pub(super) fn rings(
+    memory: &SharedMemoryAllocator,
+    depths: [u64; 3],
+) -> TestResult<[DmaAddress; 3]> {
+    Ok([
+        allocate(memory, depths[0] * 64)?.base(),
+        allocate(memory, depths[1] * 32)?.base(),
+        allocate(memory, depths[2] * 64)?.base(),
+    ])
+}
 
 pub(super) async fn write(endpoint: &MmioRegisterEndpoint, offset: u32, value: u64) -> TestResult {
     let register =
@@ -76,17 +117,11 @@ pub(super) async fn configure(
 
 pub(super) async fn activate(
     handle: &AsyncDeviceHandle,
+    memory: &SharedMemoryAllocator,
     index: u32,
     depths: [u64; 3],
 ) -> TestResult<[DmaAddress; 3]> {
-    let stage = handle
-        .stage_memory_regions(&[depths[0] * 64, depths[1] * 32, depths[2] * 64])
-        .await?;
-    let [submission, completion, event] = stage.regions() else {
-        return Err("three rings".into());
-    };
-    let addresses = [submission.base(), completion.base(), event.base()];
-    handle.commit_memory_stage(stage).await?;
+    let addresses = rings(memory, depths)?;
     let endpoint = handle.register_endpoint();
     configure(
         &endpoint,

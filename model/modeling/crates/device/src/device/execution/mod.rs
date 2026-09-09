@@ -47,7 +47,7 @@ impl ExecutionUnit {
     }
 
     pub(super) fn execute_copy(
-        memory: &crate::memory::PdmaMemoryMappings,
+        memory: &hardware_interface_runtime::SharedMemoryAccess,
         route: CommandRoute,
         request: CopyOperands,
     ) -> ExecutionOutcome {
@@ -55,7 +55,7 @@ impl ExecutionUnit {
     }
 
     pub(super) fn execute_strided(
-        memory: &crate::memory::PdmaMemoryMappings,
+        memory: &hardware_interface_runtime::SharedMemoryAccess,
         route: CommandRoute,
         request: StridedOperands,
     ) -> ExecutionOutcome {
@@ -63,7 +63,7 @@ impl ExecutionUnit {
     }
 
     pub(super) fn execute_broadcast(
-        memory: &crate::memory::PdmaMemoryMappings,
+        memory: &hardware_interface_runtime::SharedMemoryAccess,
         route: CommandRoute,
         request: &BroadcastOperands,
     ) -> ExecutionOutcome {
@@ -71,7 +71,7 @@ impl ExecutionUnit {
     }
 
     pub(super) fn execute_vector_add(
-        memory: &crate::memory::PdmaMemoryMappings,
+        memory: &hardware_interface_runtime::SharedMemoryAccess,
         route: CommandRoute,
         request: VectorOperands,
     ) -> ExecutionOutcome {

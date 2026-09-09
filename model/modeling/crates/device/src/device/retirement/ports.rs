@@ -1,17 +1,17 @@
 use crate::device::context::HardwareContext;
 use crate::device::flow::ExecutionFault;
-use crate::memory::PdmaMemoryMappings;
 use crate::queue::QueueBlock;
 use crate::queue::io::{FaultPublication, PublicationOutcome};
 use crate::queue::runnable::RunnableQueues;
 use crate::trace::TraceSink;
 use crate::{ModelError, ModelResult};
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::AbiCompletion;
 use pdma_model_contract::semantic::{QueueId, ResourceConfig};
 
 pub(crate) struct RetirementPorts<'a> {
     pub(super) queues: &'a mut QueueBlock,
-    pub(super) memory: &'a PdmaMemoryMappings,
+    pub(super) memory: &'a SharedMemoryAccess,
     pub(super) runnable: &'a mut RunnableQueues,
     pub(super) trace: &'a mut TraceSink,
     pub(super) resources: ResourceConfig,
@@ -68,10 +68,6 @@ impl<'a> RetirementPorts<'a> {
             fault.queue,
             pdma_model_contract::abi::AbiEvent::new(queue, command, fault.exact),
         )?;
-        Ok(fault
-            .buffer
-            .map_or(ModelError::DmaSubmissionState, |buffer| {
-                ModelError::from_memory_fault(buffer, fault.error_kind)
-            }))
+        Ok(ModelError::MemoryFault(fault.exact))
     }
 }

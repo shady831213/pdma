@@ -1,45 +1,9 @@
 use crate::PortError;
-use crate::adapter::abi::{
-    PdmaInterruptSourceError, PdmaMappedRegion, PdmaProvisioningCause, PdmaProvisioningError,
-    PdmaRegisterAccessError,
-};
+use crate::adapter::abi::{PdmaInterruptSourceError, PdmaRegisterAccessError};
 use crate::semantic::{PortBackendError, PortBackendKind};
-use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::semantic::SemanticError;
-use pdma_model_device::MappedDmaRegion;
+use pdma_model_device::PdmaControlError;
 use pdma_model_device::{DeviceError, MmioRegisterError};
-use pdma_model_device::{PdmaControlError, PdmaMemoryError};
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-
-pub(super) fn validate_alignment(alignment: MemoryAlignment) -> Result<(), PdmaProvisioningError> {
-    let required =
-        MemoryAlignment::try_new(64).map_err(|_| PdmaProvisioningError::InvalidProjection)?;
-    if alignment == required {
-        Ok(())
-    } else {
-        Err(PdmaProvisioningError::InvalidProjection)
-    }
-}
-
-pub(super) fn project_region(
-    region: MappedDmaRegion,
-    alignment: MemoryAlignment,
-) -> Result<PdmaMappedRegion, PdmaProvisioningError> {
-    let base = MemoryAddress::new(region.base().raw());
-    let storage = if region.is_empty() {
-        None
-    } else {
-        Some(
-            MemoryRegion::try_new(base, region.length(), alignment)
-                .map_err(|_| PdmaProvisioningError::InvalidProjection)?,
-        )
-    };
-    PdmaMappedRegion::try_new(region.object(), base, region.length(), alignment, storage)
-}
-
-pub(super) const fn map_model_allocation(_: DeviceError) -> PdmaProvisioningError {
-    PdmaProvisioningError::Provisioning(PdmaProvisioningCause::AddressExhausted)
-}
 
 pub(super) fn map_register(error: MmioRegisterError) -> PdmaRegisterAccessError {
     match error {
@@ -75,18 +39,8 @@ fn map_control(error: PdmaControlError) -> PortError {
             | SemanticError::CursorIncrementOverflow { .. }
             | SemanticError::DeviceEpochOverflow { .. }),
         ) => PortError::Backend(PortBackendError::new(PortBackendKind::Register, error)),
-        PdmaControlError::Dma(error) => {
-            let cause = match error {
-                PdmaMemoryError::AddressExhausted => PdmaProvisioningCause::AddressExhausted,
-                PdmaMemoryError::StorageExhausted => PdmaProvisioningCause::StorageExhausted,
-                PdmaMemoryError::OverlappingRegion => PdmaProvisioningCause::OverlappingRegion,
-                PdmaMemoryError::InvalidRegion | PdmaMemoryError::StaleStage { .. } => {
-                    PdmaProvisioningCause::InvalidRegion
-                }
-                PdmaMemoryError::Unmapped => PdmaProvisioningCause::Unmapped,
-                PdmaMemoryError::CrossesRegion => PdmaProvisioningCause::CrossesRegion,
-            };
-            PortError::Backend(PortBackendError::new(PortBackendKind::Provisioning, cause))
+        PdmaControlError::Memory(error) => {
+            PortError::Backend(PortBackendError::new(PortBackendKind::Memory, error))
         }
     }
 }
@@ -98,28 +52,12 @@ pub(super) const fn map_interrupt(error: DeviceError) -> PdmaInterruptSourceErro
         }
         DeviceError::ZeroCapacity
         | DeviceError::RingFull
-        | DeviceError::UnknownBuffer(_)
         | DeviceError::UnknownQueue(_)
         | DeviceError::UnknownCompletionRing(_)
         | DeviceError::UnknownIrqSource(_)
         | DeviceError::IrqSourceActive(_)
+        | DeviceError::MemoryFault(_)
         | DeviceError::RangeOverflow
-        | DeviceError::OutOfBounds { .. }
-        | DeviceError::DmaAllocationExhausted
         | DeviceError::DmaSubmissionState => PdmaInterruptSourceError::InvalidState,
-    }
-}
-
-pub(super) fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
-    match lock.read() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    }
-}
-
-pub(super) fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
-    match lock.write() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
     }
 }

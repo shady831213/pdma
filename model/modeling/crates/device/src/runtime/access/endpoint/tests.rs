@@ -9,10 +9,8 @@ use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 #[tokio::test]
 async fn stale_endpoint_write_rejects_before_reservation_or_mutation() {
     // Given: a bound endpoint retained across whole-device reset.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let (device, _worker) =
+        AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
     let handle = device.handle();
     let stale = handle.register_endpoint();
     handle
@@ -85,7 +83,7 @@ impl RegisterObserver for PanickingObserver {
 async fn observer_emission_failure_reports_committed_write_and_publishes_wake() {
     // Given: a real device whose observer fails after a successful register write.
     let (device, _worker) = AsyncDevice::new_observed(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        Arc::new(SharedMemory::new()),
         ResourceConfig::default(),
         Arc::new(PanickingObserver),
     );
@@ -124,10 +122,8 @@ async fn observer_emission_failure_reports_committed_write_and_publishes_wake() 
 #[tokio::test]
 async fn observer_reservation_failure_rejects_before_write() {
     // Given: an observer gate faulted by a dropped reservation before a write.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let (device, _worker) =
+        AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
     let endpoint = device.handle().register_endpoint();
     drop(
         endpoint
@@ -165,12 +161,15 @@ async fn observer_reservation_failure_rejects_before_write() {
 #[tokio::test]
 async fn constructor_binds_consumed_core_epoch() {
     // Given: a core already reset before being consumed by either runtime constructor.
-    let provisioning = PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new()));
-    let mut core = DeviceCore::new(provisioning.memory_access(), ResourceConfig::default());
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = DeviceCore::new(allocator.memory_access(), ResourceConfig::default());
     let epoch = core.reset_runner(DeviceEpoch::initial()).expect("reset");
 
     // When: the existing core becomes an async runtime.
-    let (device, _worker) = AsyncDevice::from_core(core, provisioning).expect("matching backing");
+    let (device, _worker) = AsyncDevice::from_core(core);
     let endpoint = device.handle().register_endpoint();
 
     // Then: the endpoint is immediately usable in the consumed core's current epoch.

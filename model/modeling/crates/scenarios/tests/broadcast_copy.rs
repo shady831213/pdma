@@ -13,18 +13,22 @@ use pdma_model_host::{BroadcastCopyRequest, BroadcastDestinationRange};
 async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_publishes_one_completion()
  {
     // Given: async runner handle, AsyncDriver, one source range, and two destination ranges.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, no_completion, left_bytes, right_bytes) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                    .expect("active software CPU");
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                    runner.handle(),
+                    host_memory.clone(),
+                ))
+                .expect("active software CPU");
                 let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                     .await
                     .expect("queue setup is valid");
@@ -96,17 +100,19 @@ async fn async_runner_broadcasts_one_source_range_to_multiple_destinations_and_p
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_publishes_event_and_no_completion_when_broadcast_destination_write_fails() {
     // Given: async runner handle, AsyncDriver, one valid destination, and one too-small destination.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let (snapshot, event, command_id, bad_dst, no_completion) = SoftwareCpu::new()
+    let (snapshot, event, command_id, bad_dst, no_completion, destinations) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                 .await
                 .expect("queue setup is valid");
@@ -126,6 +132,14 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
                 .write_buffer_on(&mut handle, src, &[9, 8, 7, 6])
                 .await
                 .expect("source write is in bounds");
+            driver
+                .write_buffer_on(&mut handle, valid_dst, &[0x55; 4])
+                .await
+                .expect("first sentinel");
+            driver
+                .write_buffer_on(&mut handle, bad_dst, &[0x66; 2])
+                .await
+                .expect("second sentinel");
 
             // When: a broadcast command writes past the second destination.
             let command_id = driver
@@ -150,7 +164,18 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
                 .expect("event ring exists")
                 .expect("broadcast fault event was published");
             let no_completion = driver.poll_completion_on(&mut handle).await;
-            (snapshot, event, command_id, bad_dst, no_completion)
+            let destinations = (
+                driver.read_buffer_on(&handle, valid_dst, 4).await,
+                driver.read_buffer_on(&handle, bad_dst, 2).await,
+            );
+            (
+                snapshot,
+                event,
+                command_id,
+                bad_dst,
+                no_completion,
+                destinations,
+            )
         })
         .await;
     runner.request_shutdown().await;
@@ -160,6 +185,7 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
     assert_eq!(snapshot.errors, 1);
     assert_eq!(event.command_id(), command_id);
     assert_eq!(event.buffer(), bad_dst);
+    assert_eq!(destinations, (Ok(vec![0x55; 4]), Ok(vec![0x66; 2])));
     assert_eq!(
         event.error_kind(),
         EventErrorKind::OutOfBounds { len: 2, end: 4 }
@@ -171,17 +197,19 @@ async fn async_runner_publishes_event_and_no_completion_when_broadcast_destinati
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_rereads_broadcast_source_for_each_destination_when_ranges_overlap() {
     // Given: a broadcast whose first destination overlaps and mutates the source range.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let (snapshot, completion, command_id, src_bytes, dst_bytes) = SoftwareCpu::new()
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 2, 4)
                 .await
                 .expect("queue setup is valid");

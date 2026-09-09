@@ -1,4 +1,6 @@
-use hardware_interface_runtime::{RegisterAccess, SharedMemory};
+use hardware_interface_runtime::{
+    MemoryAddress, RegisterAccess, SharedMemory, SharedMemoryAllocator,
+};
 use pdma_model_contract::abi::registers::{QueueRegisters, queue_offset};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
@@ -6,18 +8,19 @@ use pdma_model_contract::abi::{
 };
 use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{
-    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, MappedDmaRegion, MmioRegisterEndpoint,
-    MmioRegisterError, PdmaMemoryProvisioning,
+    AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, MmioRegisterEndpoint, MmioRegisterError,
 };
 use std::sync::Arc;
 
 pub(in crate::mmio) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-pub(in crate::mmio) fn device(config: ResourceConfig) -> (AsyncDevice, AsyncDeviceWorker) {
-    AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        config,
-    )
+pub(in crate::mmio) fn device(
+    config: ResourceConfig,
+) -> (AsyncDevice, AsyncDeviceWorker, SharedMemoryAllocator) {
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
+    let (device, worker) = AsyncDevice::new(allocator.memory_access(), config);
+    (device, worker, allocator)
 }
 
 pub(in crate::mmio) async fn write_u32(
@@ -60,16 +63,16 @@ pub(in crate::mmio) fn q(offset: usize) -> TestResult<u32> {
 
 pub(in crate::mmio) async fn program_activation(
     endpoint: &MmioRegisterEndpoint,
-    regions: &[MappedDmaRegion],
+    regions: &[DmaAddress],
     depth: u32,
 ) -> TestResult {
     let [submission, completion, event] = regions else {
         return Err("three queue regions required".into());
     };
     for (offset, value) in [
-        (QueueRegisters::SQ_BASE.offset(), submission.base().raw()),
-        (QueueRegisters::CQ_BASE.offset(), completion.base().raw()),
-        (QueueRegisters::EQ_BASE.offset(), event.base().raw()),
+        (QueueRegisters::SQ_BASE.offset(), submission.raw()),
+        (QueueRegisters::CQ_BASE.offset(), completion.raw()),
+        (QueueRegisters::EQ_BASE.offset(), event.raw()),
     ] {
         write_u64(endpoint, q(offset)?, value).await?;
     }
@@ -85,17 +88,22 @@ pub(in crate::mmio) async fn program_activation(
 
 pub(in crate::mmio) async fn create_queue(
     handle: &AsyncDeviceHandle,
+    allocator: &SharedMemoryAllocator,
     depth: u32,
-) -> TestResult<[MappedDmaRegion; 3]> {
-    let stage = handle
-        .stage_memory_regions(&[
-            RingLayout::<AbiCommand>::checked_extent(u64::from(depth))?,
-            RingLayout::<AbiCompletion>::checked_extent(u64::from(depth))?,
-            RingLayout::<AbiEvent>::checked_extent(u64::from(depth))?,
-        ])
-        .await?;
-    let regions = handle.commit_memory_stage(stage).await?;
-    let regions: [MappedDmaRegion; 3] = regions.try_into().map_err(|_| "three rings")?;
+) -> TestResult<[DmaAddress; 3]> {
+    let alignment = hardware_interface_runtime::MemoryAlignment::try_new(64)?;
+    let regions = [
+        RingLayout::<AbiCommand>::checked_extent(u64::from(depth))?,
+        RingLayout::<AbiCompletion>::checked_extent(u64::from(depth))?,
+        RingLayout::<AbiEvent>::checked_extent(u64::from(depth))?,
+    ]
+    .map(|length| {
+        allocator
+            .allocate(length, alignment)
+            .map(|address| DmaAddress::new(address.raw()))
+    });
+    let [submission, completion, event] = regions;
+    let regions = [submission?, completion?, event?];
     let endpoint = handle.register_endpoint();
     program_activation(&endpoint, &regions, depth).await?;
     write_u32(&endpoint, q(QueueRegisters::ENABLE.offset())?, 1).await?;
@@ -104,17 +112,25 @@ pub(in crate::mmio) async fn create_queue(
 
 pub(in crate::mmio) async fn submit_copy(
     handle: &AsyncDeviceHandle,
-    submission: DmaAddress,
-    slot: u64,
-) -> TestResult<MappedDmaRegion> {
-    let source = handle.allocate_memory_region(4).await?;
-    let destination = handle.allocate_memory_region(4).await?;
-    handle.write_memory(source.base(), &[1, 2, 3, 4]).await?;
+    allocator: &SharedMemoryAllocator,
+    (submission, slot): (DmaAddress, u64),
+) -> TestResult<DmaAddress> {
+    let source = DmaAddress::new(
+        allocator
+            .allocate(4, hardware_interface_runtime::MemoryAlignment::try_new(64)?)?
+            .raw(),
+    );
+    let destination = DmaAddress::new(
+        allocator
+            .allocate(4, hardware_interface_runtime::MemoryAlignment::try_new(64)?)?
+            .raw(),
+    );
+    handle.write_memory(source, &[1, 2, 3, 4]).await?;
     let descriptor = AbiCommand::from_payload(
         slot,
         AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-            source_dma_address: source.base().raw(),
-            destination_dma_address: destination.base().raw(),
+            source_dma_address: source.raw(),
+            destination_dma_address: destination.raw(),
             length: 4.into(),
         }),
     );

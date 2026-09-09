@@ -2,15 +2,16 @@ use super::super::{DeviceCore, ModelStepStatus};
 use crate::test_support::{
     TestQueue, configure, copy, doorbell, irq_write, poll_completion, submit,
 };
-use crate::{MappedDmaRegion, PdmaMemoryProvisioning};
+use hardware_interface_runtime::SharedMemoryAllocator;
+use pdma_model_contract::abi::DmaRegion;
 use pdma_model_contract::abi::registers::IrqSourceRegisters;
 use pdma_model_contract::semantic::ResourceConfig;
 
 struct Fixture {
     core: DeviceCore,
-    provisioning: PdmaMemoryProvisioning,
+    allocator: SharedMemoryAllocator,
     queue: TestQueue,
-    source: MappedDmaRegion,
+    source: DmaRegion,
 }
 
 fn core_with_queue() -> Fixture {
@@ -18,18 +19,17 @@ fn core_with_queue() -> Fixture {
 }
 
 fn core_with_resources(resources: ResourceConfig) -> Fixture {
-    let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
-    let mut core = DeviceCore::new(provisioning.memory_access(), resources);
-    let source = provisioning.allocate(&mut core.memory, 4).expect("source");
-    core.memory
-        .write_object(source.object(), 0, &[1, 2, 3, 4])
-        .expect("source bytes");
-    let queue = configure(&mut core, &mut provisioning, 0, [4, 4, 4]);
+    let allocator = SharedMemoryAllocator::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = DeviceCore::new(allocator.memory_access(), resources);
+    let source = crate::test_support::allocate(&allocator, 4);
+    crate::memory::write(&core.memory, source.base(), &[1, 2, 3, 4]).expect("source bytes");
+    let queue = configure(&mut core, &allocator, 0, [4, 4, 4]);
     Fixture {
         core,
-        provisioning,
+        allocator,
         queue,
         source,
     }
@@ -37,10 +37,7 @@ fn core_with_resources(resources: ResourceConfig) -> Fixture {
 
 impl Fixture {
     fn submit_copy(&mut self, command: u64) {
-        let destination = self
-            .provisioning
-            .allocate(&mut self.core.memory, 4)
-            .expect("destination");
+        let destination = crate::test_support::allocate(&self.allocator, 4);
         submit(
             &mut self.core,
             self.queue,

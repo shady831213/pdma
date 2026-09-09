@@ -30,10 +30,10 @@ impl OperationCase {
 /// Panics when the observed exact result violates the pinned operation contract.
 pub async fn execute_operation(case: OperationCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
-    let source_a = allocate(&fixture.handle, 8).await?;
-    let source_b = allocate(&fixture.handle, 8).await?;
-    let destination_a = allocate(&fixture.handle, 8).await?;
-    let destination_b = allocate(&fixture.handle, 8).await?;
+    let source_a = allocate(&fixture.memory, 8)?;
+    let source_b = allocate(&fixture.memory, 8)?;
+    let destination_a = allocate(&fixture.memory, 8)?;
+    let destination_b = allocate(&fixture.memory, 8)?;
     fixture
         .handle
         .write_memory(source_a.base(), &[1, 2, 3, 4, 5, 6, 7, 8])
@@ -44,7 +44,7 @@ pub async fn execute_operation(case: OperationCase) -> TestResult {
         .await?;
     let (command, expected_a, expected_b) = command(
         case,
-        &fixture.handle,
+        &fixture,
         source_a,
         source_b,
         destination_a,
@@ -87,11 +87,11 @@ pub(in crate::queue) async fn zero_row_strided() -> TestResult {
 
 pub(in crate::queue) async fn command(
     case: OperationCase,
-    handle: &pdma_model_device::AsyncDeviceHandle,
-    source_a: pdma_model_device::MappedDmaRegion,
-    source_b: pdma_model_device::MappedDmaRegion,
-    destination_a: pdma_model_device::MappedDmaRegion,
-    destination_b: pdma_model_device::MappedDmaRegion,
+    fixture: &super::common::Fixture,
+    source_a: crate::queue::hardware::Allocation,
+    source_b: crate::queue::hardware::Allocation,
+    destination_a: crate::queue::hardware::Allocation,
+    destination_b: crate::queue::hardware::Allocation,
 ) -> TestResult<(AbiCommand, Vec<u8>, Vec<u8>)> {
     match case {
         OperationCase::Copy => Ok((
@@ -122,11 +122,11 @@ pub(in crate::queue) async fn command(
             vec![0; 8],
         )),
         OperationCase::Broadcast => {
-            let list = allocate(handle, 16).await?;
+            let list = allocate(&fixture.memory, 16)?;
             let mut entries = [0_u8; 16];
             entries[0..8].copy_from_slice(&destination_a.base().raw().to_le_bytes());
             entries[8..16].copy_from_slice(&destination_b.base().raw().to_le_bytes());
-            handle.write_memory(list.base(), &entries).await?;
+            fixture.handle.write_memory(list.base(), &entries).await?;
             Ok((
                 AbiCommand::from_payload(
                     12,

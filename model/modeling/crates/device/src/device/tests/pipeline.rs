@@ -5,40 +5,33 @@ use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues, AbiCompletionStatus,
     U32WordValues,
 };
-use pdma_model_contract::semantic::{BufferId, CommandId, ResourceConfig, TraceEventKind};
+use pdma_model_contract::semantic::{CommandId, ResourceConfig, TraceEventKind};
 
 struct Fixture {
     core: DeviceCore,
     copy_queue: TestQueue,
-    second_destination: BufferId,
+    second_destination: pdma_model_contract::abi::DmaAddress,
 }
 
 fn fixture() -> Fixture {
-    let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
     let mut core = DeviceCore::new(
-        provisioning.memory_access(),
+        allocator.memory_access(),
         ResourceConfig::default().with_read_slots(1),
     );
     core.enable_tracing();
-    let copy_queue = configure(&mut core, &mut provisioning, 0, [4, 1, 4]);
-    let vector_queue = configure(&mut core, &mut provisioning, 1, [4, 4, 4]);
-    let source = provisioning.allocate(&mut core.memory, 4).expect("source");
-    let first_destination = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("destination");
-    let second_destination = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("destination");
-    let vector_left = provisioning.allocate(&mut core.memory, 4).expect("left");
-    let vector_right = provisioning.allocate(&mut core.memory, 4).expect("right");
-    let vector_destination = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("vector destination");
-    core.memory
-        .write_object(source.object(), 0, &[2, 4, 6, 8])
-        .expect("source bytes");
+    let copy_queue = configure(&mut core, &allocator, 0, [4, 1, 4]);
+    let vector_queue = configure(&mut core, &allocator, 1, [4, 4, 4]);
+    let source = crate::test_support::allocate(&allocator, 4);
+    let first_destination = crate::test_support::allocate(&allocator, 4);
+    let second_destination = crate::test_support::allocate(&allocator, 4);
+    let vector_left = crate::test_support::allocate(&allocator, 4);
+    let vector_right = crate::test_support::allocate(&allocator, 4);
+    let vector_destination = crate::test_support::allocate(&allocator, 4);
+    crate::memory::write(&core.memory, source.base(), &[2, 4, 6, 8]).expect("source bytes");
     for (id, destination) in [first_destination, second_destination]
         .into_iter()
         .enumerate()
@@ -72,7 +65,7 @@ fn fixture() -> Fixture {
     Fixture {
         core,
         copy_queue,
-        second_destination: second_destination.object(),
+        second_destination: second_destination.base(),
     }
 }
 
@@ -125,7 +118,7 @@ fn admission_skips_starved_work_without_replaying_accepted_retirement() {
         Some((CommandId::new(1), AbiCompletionStatus::Success))
     );
     assert_eq!(
-        core.memory.read_object(second_destination, 0, 4),
+        crate::memory::read(&core.memory, second_destination, 4),
         Ok(vec![2, 4, 6, 8])
     );
     let events = core.trace_events();

@@ -71,14 +71,16 @@ async fn nonzero_base_routes_canonical_offsets_as_full_addresses() -> TestResult
 
 pub(crate) async fn run_case(mmio_base: RegisterBusBase) -> TestResult<Outcome> {
     let observer = Arc::new(Observer::default());
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
+        memory.memory_access(),
         ResourceConfig::default(),
         observer.clone(),
     );
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = AsyncDeviceAccess::new_at_mmio_base(handle.clone(), mmio_base);
+    let access = AsyncDeviceAccess::new_at_mmio_base(handle.clone(), memory.clone(), mmio_base);
     assert_eq!(access.mmio_base(), mmio_base);
     let cpu = SoftwareCpu::new();
     let (notification, completion, copied, retired) = cpu

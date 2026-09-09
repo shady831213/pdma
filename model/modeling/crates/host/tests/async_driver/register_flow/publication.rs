@@ -8,7 +8,7 @@ use pdma_model_contract::{
     },
     semantic::{CommandId, EpochQueue, ResourceConfig},
 };
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     Command, CommandOperation, CopyRequest, DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -21,13 +21,12 @@ use super::config;
 #[tokio::test(flavor = "current_thread")]
 async fn canceled_publication_preserves_descriptor_bytes_without_accepting_work() {
     // Given: software prepares a real copy while producer publication is suspended.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
-    let access = GatedAccess::new(AsyncDeviceAccess::new(handle.clone()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(handle.clone(), memory.clone()));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -109,12 +108,11 @@ async fn canceled_publication_preserves_descriptor_bytes_without_accepting_work(
 #[tokio::test(flavor = "current_thread")]
 async fn full_queue_rejection_preserves_previously_published_descriptor() {
     // Given: two accepted descriptors occupy every slot before doorbell capture.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
-    let access = AsyncDeviceAccess::new(device.handle());
+    let access = AsyncDeviceAccess::new(device.handle(), memory.clone());
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

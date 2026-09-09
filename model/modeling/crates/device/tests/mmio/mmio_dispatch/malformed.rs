@@ -1,23 +1,32 @@
-use hardware_interface_runtime::{RegisterAccess, SharedMemory};
+use hardware_interface_runtime::{
+    MemoryAddress, RegisterAccess, SharedMemory, SharedMemoryAllocator,
+};
 use pdma_model_contract::abi::registers::{
     GlobalRegisters, MmioAccessError, QueueRegisters, queue_offset,
 };
 use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_device::{AsyncDevice, MmioRegisterError, PdmaMemoryProvisioning};
+use pdma_model_device::{AsyncDevice, MmioRegisterError};
 use std::sync::Arc;
 
 #[tokio::test]
 async fn malformed_reads_preserve_all_observable_state() {
     // Given: mapped bytes and a distinct queue configuration register.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let memory = Arc::new(SharedMemory::new());
+    let allocator = SharedMemoryAllocator::new(memory.clone(), MemoryAddress::new(0x1000));
+    let (device, _worker) = AsyncDevice::new(memory.clone(), ResourceConfig::default());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
-    let region = handle.allocate_memory_region(4).await.expect("region");
+    let region = pdma_model_contract::abi::DmaAddress::new(
+        allocator
+            .allocate(
+                4,
+                hardware_interface_runtime::MemoryAlignment::try_new(64).expect("alignment"),
+            )
+            .expect("region")
+            .raw(),
+    );
     handle
-        .write_memory(region.base(), &[0xaa, 0xbb, 0xcc, 0xdd])
+        .write_memory(region, &[0xaa, 0xbb, 0xcc, 0xdd])
         .await
         .expect("bytes");
     let base = queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("base offset");
@@ -26,7 +35,7 @@ async fn malformed_reads_preserve_all_observable_state() {
         .await
         .expect("seed");
     let snapshot = handle.snapshot().await;
-    let generation = handle.memory_generation().await;
+    let revision = memory.revision();
     let reset = u32::try_from(GlobalRegisters::RESET.offset()).expect("reset offset");
     let accesses = [
         (
@@ -71,11 +80,11 @@ async fn malformed_reads_preserve_all_observable_state() {
         );
     }
 
-    // Then: register state, runtime accounting and committed memory survive.
+    // Then: register state, runtime accounting and backed memory survive.
     assert_eq!(handle.snapshot().await, snapshot);
-    assert_eq!(handle.memory_generation().await, generation);
+    assert_eq!(memory.revision(), revision);
     assert_eq!(
-        handle.read_memory(region.base(), 4).await.expect("bytes"),
+        handle.read_memory(region, 4).await.expect("bytes"),
         [0xaa, 0xbb, 0xcc, 0xdd]
     );
     let mut bytes = [0; 8];
@@ -86,10 +95,8 @@ async fn malformed_reads_preserve_all_observable_state() {
 #[tokio::test]
 async fn malformed_writes_preserve_registers_and_accounting() {
     // Given: a distinct queue configuration register and stable runtime snapshot.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let memory = Arc::new(SharedMemory::new());
+    let (device, _worker) = AsyncDevice::new(memory.clone(), ResourceConfig::default());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
     let base = queue_offset(0, QueueRegisters::SQ_BASE.offset()).expect("base");
@@ -97,7 +104,7 @@ async fn malformed_writes_preserve_registers_and_accounting() {
     let seed = 0x0123_4567_89ab_cdef_u64.to_le_bytes();
     endpoint.write(base, &seed).await.expect("seed");
     let snapshot = handle.snapshot().await;
-    let generation = handle.memory_generation().await;
+    let revision = memory.revision();
     let writes: [(u32, &[u8], MmioAccessError); 4] = [
         (
             base,
@@ -137,7 +144,7 @@ async fn malformed_writes_preserve_registers_and_accounting() {
 
     // Then: none of the writes reaches its mutation point.
     assert_eq!(handle.snapshot().await, snapshot);
-    assert_eq!(handle.memory_generation().await, generation);
+    assert_eq!(memory.revision(), revision);
     let mut bytes = [0; 8];
     endpoint.read(base, &mut bytes).await.expect("seed");
     assert_eq!(bytes, seed);

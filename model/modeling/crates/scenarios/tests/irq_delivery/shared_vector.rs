@@ -19,10 +19,13 @@ use tokio::sync::{mpsc, oneshot};
 #[tokio::test(flavor = "current_thread")]
 async fn completion_and_event_sources_share_one_persistent_vector_handler() -> DriverResult<()> {
     // Given: both driver sources route to one vector and one persistent handler instance.
-    let (device, worker) = fresh_device();
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let (device, worker) = fresh_device(&host_memory);
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone(), host_memory.clone());
     let cpu = Arc::new(SoftwareCpu::new());
     let depth = cpu.local(0usize);
     let vector = IrqVector::new(51);
@@ -125,10 +128,13 @@ async fn completion_and_event_sources_share_one_persistent_vector_handler() -> D
 #[tokio::test(flavor = "current_thread")]
 async fn shared_vector_redundant_messages_use_one_persistent_handler() -> DriverResult<()> {
     // Given: two masked fault messages accumulate for one source and one registered vector.
-    let (device, worker) = fresh_device();
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let (device, worker) = fresh_device(&host_memory);
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone(), host_memory.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
     let cpu = Arc::new(SoftwareCpu::new());
@@ -228,11 +234,11 @@ async fn shared_vector_redundant_messages_use_one_persistent_handler() -> Driver
     Ok(())
 }
 
-fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
+fn fresh_device(
+    host_memory: &pdma_model_host::adapter::abi::PdmaHostMemory,
+) -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
     AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     )
 }

@@ -3,18 +3,22 @@ use super::*;
 #[allow(clippy::expect_used, clippy::redundant_pub_crate)]
 pub(super) async fn run_strided_completion_retry_scenario() {
     // Given: two strided copies sharing a one-slot completion ring.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let (stalled_snapshot, second_snapshot, second_completion, second_command, second_dst_bytes) =
         SoftwareCpu::new()
             .run_main(async {
-                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                    .expect("active software CPU");
+                let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                    runner.handle(),
+                    host_memory.clone(),
+                ))
+                .expect("active software CPU");
                 let mut driver = AsyncDriver::setup_on(&mut handle, 4, 1)
                     .await
                     .expect("queue setup is valid");

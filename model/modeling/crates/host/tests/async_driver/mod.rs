@@ -28,13 +28,13 @@ use pdma_model_host::{CopyRequest, EventRouting, QueueConfig, SoftwareOwnerId};
 #[tokio::test(flavor = "current_thread")]
 async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
     // Given: a fresh manual device and no active modeled software CPU.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
-    let mut port = support::BlockingPort::new(device.handle());
+    let mut port = support::BlockingPort::new(device.handle(), memory.clone());
 
     // When: software-bearing setup is attempted outside run_main.
     let off_cpu = AsyncDriver::setup_on(&mut port, 1, 1).await;
@@ -62,13 +62,13 @@ async fn setup_on_rejects_inactive_cpu_before_creating_queue() {
 async fn cloned_drivers_share_depth_one_command_credit() {
     // Given: two driver capabilities for one depth-one queue.
     let cpu = SoftwareCpu::new();
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
-    let mut port = support::BlockingPort::new(device.handle());
+    let mut port = support::BlockingPort::new(device.handle(), memory.clone());
 
     // When: one capability consumes the only slot and the other submits.
     let (first, second) = cpu
@@ -102,14 +102,14 @@ async fn cloned_drivers_share_depth_one_command_credit() {
 #[tokio::test(flavor = "current_thread")]
 async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
     // Given: a queue-port AsyncDevice, handle, AsyncDriver::setup_on(&mut handle, 1, 4), src/dst buffers.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut handle = support::BlockingPort::new(runner.handle());
+    let mut handle = support::BlockingPort::new(runner.handle(), memory.clone());
     let (first, second) = SoftwareCpu::new()
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut handle, 1, 4).await?;
@@ -144,10 +144,10 @@ async fn submit_copy_on_rejects_second_command_when_local_slot_is_full() {
 #[tokio::test(flavor = "current_thread")]
 async fn irq_controls_are_available_through_async_device_port() {
     // Given: a manual device used through the host port trait.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, _worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let unknown_source = IrqSource::Completion(CompletionRingId::new(99));
@@ -155,7 +155,7 @@ async fn irq_controls_are_available_through_async_device_port() {
         pdma_model_contract::semantic::EpochIrqSource::new(DeviceEpoch::initial(), unknown_source);
     let (enable_result, unmask_result, invalid_result) = SoftwareCpu::new()
         .run_main(async {
-            let mut port = support::BlockingPort::new(device.handle());
+            let mut port = support::BlockingPort::new(device.handle(), memory.clone());
             let queue = port
                 .create_queue(QueueConfig::new(
                     4,

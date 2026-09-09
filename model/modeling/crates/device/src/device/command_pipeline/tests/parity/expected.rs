@@ -1,5 +1,8 @@
-use pdma_model_contract::abi::{AbiCompletion, AbiEventAccess, AbiEventKind, AbiEventStage};
-use pdma_model_contract::semantic::{BufferId, TraceEventKind};
+use pdma_model_contract::abi::{
+    AbiBounds, AbiCompletion, AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultSite,
+    DmaAddress,
+};
+use pdma_model_contract::semantic::TraceEventKind;
 
 use super::Observation;
 use crate::ModelError;
@@ -77,23 +80,28 @@ fn expected_bytes(case: Case) -> [Vec<u8>; 2] {
 }
 
 fn expected_fault(case: Case) -> (ModelError, AbiEventKind, u64) {
+    let site = AbiFaultSite::new(AbiEventStage::Source, AbiEventAccess::Read, 0);
     match case {
         Case::UnknownBuffer => (
-            ModelError::DmaSubmissionState,
+            ModelError::MemoryFault(AbiFault::unmapped(DmaAddress::new(0xdead_0000), 4, site)),
             AbiEventKind::UnmappedDmaAddress,
             0xdead_0000,
         ),
         Case::RangeOverflow => (
-            ModelError::DmaSubmissionState,
+            ModelError::MemoryFault(AbiFault::range_overflow_direct(
+                DmaAddress::new(u64::MAX),
+                2,
+                site,
+            )),
             AbiEventKind::RangeOverflow,
             u64::MAX,
         ),
         Case::OutOfBounds => (
-            ModelError::OutOfBounds {
-                buffer: BufferId::new(0),
-                len: 8,
-                end: 9,
-            },
+            ModelError::MemoryFault(AbiFault::out_of_bounds(
+                DmaAddress::new(0x1_0008),
+                AbiBounds::new(8, 0x1_0009),
+                site,
+            )),
             AbiEventKind::OutOfBounds,
             0x1_0008,
         ),

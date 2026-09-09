@@ -16,15 +16,16 @@ use tokio::sync::{mpsc, oneshot};
 #[tokio::test(flavor = "current_thread")]
 async fn line_completion_runs_device_main_and_delivery_as_concurrent_actors() -> DriverResult<()> {
     // Given: a line-routed completion and independently running device, main, and delivery actors.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let port = device.handle();
-    let access = AsyncDeviceAccess::new(port.clone());
+    let access = AsyncDeviceAccess::new(port.clone(), host_memory.clone());
     port.enable_tracing().await;
     port.clear_trace().await;
     let cpu = Arc::new(SoftwareCpu::new());

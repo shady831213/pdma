@@ -1,5 +1,6 @@
 use crate::test_support::{self, TestQueue};
-use crate::{DeviceCore, HardwareStepStatus, PdmaMemoryMappings, PdmaMemoryProvisioning};
+use crate::{DeviceCore, HardwareStepStatus};
+use hardware_interface_runtime::SharedMemoryAllocator;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
@@ -13,6 +14,8 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+
+mod prevalidation;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Failure {
@@ -30,6 +33,15 @@ struct FailingMemory {
 }
 
 impl MemoryAccess for FailingMemory {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.storage.validate(address, alignment, length)
+    }
+
     fn read(
         &self,
         address: MemoryAddress,
@@ -70,22 +82,17 @@ fn execution_write_failure_retires_without_replaying_written_rows() {
 }
 
 fn retires_once(failure: Failure) {
-    // Given: registered rows whose backing store fails only on the second data access.
+    // Given: runtime-backed rows whose store fails only on the second data access.
     let storage = Arc::new(SharedMemory::new());
-    let mut provisioning = PdmaMemoryProvisioning::shared(storage.clone());
-    let mut mappings = PdmaMemoryMappings::new(storage.clone());
-    let stage = provisioning
-        .stage(&mappings, &[8, 8, 128, 64, 128])
-        .expect("regions");
-    let regions = provisioning
-        .commit(&mut mappings, stage)
-        .expect("backing bytes");
-    let [source, destination, sq, cq, eq] = regions.as_slice() else {
-        panic!("five regions");
-    };
-    mappings
-        .write_memory(source.base(), &[1, 2, 3, 4, 5, 6, 7, 8])
-        .expect("source bytes");
+    let allocator = SharedMemoryAllocator::new(storage.clone(), MemoryAddress::new(0x1_0000));
+    let [source, destination, sq, cq, eq] =
+        [8, 8, 128, 64, 128].map(|length| test_support::allocate(&allocator, length));
+    crate::memory::write(
+        &allocator.memory_access(),
+        source.base(),
+        &[1, 2, 3, 4, 5, 6, 7, 8],
+    )
+    .expect("source bytes");
     let failed_address = match failure {
         Failure::Read => source.base().raw() + 4,
         Failure::Write => destination.base().raw() + 4,
@@ -98,15 +105,12 @@ fn retires_once(failure: Failure) {
         successful_writes: AtomicUsize::new(0),
     });
     let mut core = DeviceCore::new(backend.clone(), ResourceConfig::default());
-    core.memory
-        .register_regions(&regions)
-        .expect("hardware mappings");
     let queue = TestQueue {
         index: 0,
         layouts: QueueRingLayouts::new(
-            RingLayout::try_new(sq.region(), 2).expect("SQ"),
-            RingLayout::try_new(cq.region(), 2).expect("CQ"),
-            RingLayout::try_new(eq.region(), 2).expect("EQ"),
+            RingLayout::try_new(sq, 2).expect("SQ"),
+            RingLayout::try_new(cq, 2).expect("CQ"),
+            RingLayout::try_new(eq, 2).expect("EQ"),
         ),
     };
     for (offset, value) in [
@@ -165,9 +169,7 @@ fn retires_once(failure: Failure) {
     assert_eq!(backend.successful_writes.load(Ordering::SeqCst), 1);
     assert!(test_support::poll_event(&mut core, queue).is_none());
     assert_eq!(
-        core.memory
-            .read_memory(destination.base(), 8)
-            .expect("destination"),
+        crate::memory::read(&core.memory, destination.base(), 8).expect("destination"),
         [1, 2, 3, 4, 0, 0, 0, 0]
     );
 }

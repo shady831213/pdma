@@ -1,6 +1,8 @@
 use super::super::{DeviceCore, ModelStepStatus};
+use crate::AsyncStallReason;
 use crate::test_support::{configure, copy, doorbell, submit};
-use crate::{AsyncStallReason, MappedDmaRegion, PdmaMemoryProvisioning};
+use hardware_interface_runtime::SharedMemoryAllocator;
+use pdma_model_contract::abi::DmaRegion;
 use pdma_model_contract::abi::registers::{GlobalRegisters, locate};
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
 
@@ -10,22 +12,27 @@ fn reset(core: &mut DeviceCore) {
     core.write_mmio_register(register, 1).expect("reset action");
 }
 
-fn prepared(resources: ResourceConfig, count: u32) -> (DeviceCore, Vec<MappedDmaRegion>) {
-    let mut provisioning = PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
-    let mut core = DeviceCore::new(provisioning.memory_access(), resources);
+fn prepared(
+    resources: ResourceConfig,
+    count: u32,
+) -> (
+    DeviceCore,
+    Vec<DmaRegion>,
+    std::sync::Arc<hardware_interface_runtime::SharedMemory>,
+) {
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let allocator = SharedMemoryAllocator::new(
+        storage.clone(),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = DeviceCore::new(allocator.memory_access(), resources);
     core.enable_tracing();
-    let source = provisioning.allocate(&mut core.memory, 1).expect("source");
-    core.memory
-        .write_object(source.object(), 0, &[0x5a])
-        .expect("source bytes");
-    let queue = configure(&mut core, &mut provisioning, 0, [2, 1, 1]);
+    let source = crate::test_support::allocate(&allocator, 1);
+    crate::memory::write(&core.memory, source.base(), &[0x5a]).expect("source bytes");
+    let queue = configure(&mut core, &allocator, 0, [2, 1, 1]);
     let mut destinations = Vec::new();
     for command in 0..count {
-        let destination = provisioning
-            .allocate(&mut core.memory, 1)
-            .expect("destination");
+        let destination = crate::test_support::allocate(&allocator, 1);
         submit(
             &mut core,
             queue,
@@ -39,24 +46,27 @@ fn prepared(resources: ResourceConfig, count: u32) -> (DeviceCore, Vec<MappedDma
         destinations.push(destination);
     }
     doorbell(&mut core, queue);
-    (core, destinations)
+    (core, destinations, storage)
 }
 
 #[test]
 fn reset_preserves_persistent_state_and_clears_resettable_hardware() {
     // Given: one completed copy, trace history, DMA bytes, and an epoch-zero queue.
-    let (mut core, destinations) = prepared(ResourceConfig::default(), 1);
+    let (mut core, destinations, storage) = prepared(ResourceConfig::default(), 1);
     assert_eq!(core.step(), Ok(ModelStepStatus::Progressed));
-    let generation = core.memory.generation();
+    let revision = storage.revision();
     let trace = core.trace_events();
     // When: the sole reset runner advances the device epoch.
     reset(&mut core);
     // Then: persistent DMA/trace survive while work, IRQ, and queue identity restart.
     assert_eq!(core.epoch(), DeviceEpoch::new(1));
-    assert_eq!(core.memory.generation(), generation);
+    assert_eq!(storage.revision(), revision);
     assert_eq!(
-        core.memory
-            .read_object(destinations.first().expect("destination").object(), 0, 1),
+        crate::memory::read(
+            &core.memory,
+            destinations.first().expect("destination").base(),
+            1
+        ),
         Ok(vec![0x5a])
     );
     assert_eq!(core.trace_events(), trace);
@@ -69,7 +79,8 @@ fn reset_preserves_persistent_state_and_clears_resettable_hardware() {
 #[test]
 fn reset_discards_resource_stalled_work_before_execution() {
     // Given: a queued copy that cannot acquire a read slot.
-    let (mut core, destinations) = prepared(ResourceConfig::default().with_read_slots(0), 1);
+    let (mut core, destinations, _storage) =
+        prepared(ResourceConfig::default().with_read_slots(0), 1);
     assert_eq!(
         core.step(),
         Ok(ModelStepStatus::Stalled(
@@ -80,8 +91,11 @@ fn reset_discards_resource_stalled_work_before_execution() {
     reset(&mut core);
     // Then: discarded work neither executes nor publishes after reset.
     assert_eq!(
-        core.memory
-            .read_object(destinations.first().expect("destination").object(), 0, 1),
+        crate::memory::read(
+            &core.memory,
+            destinations.first().expect("destination").base(),
+            1
+        ),
         Ok(vec![0])
     );
     assert_eq!(core.step(), Ok(ModelStepStatus::Idle));
@@ -92,7 +106,7 @@ fn reset_discards_resource_stalled_work_before_execution() {
 #[test]
 fn reset_discards_pending_retirement_without_late_publication() {
     // Given: two executed copies with the second retained behind publication pressure.
-    let (mut core, destinations) = prepared(ResourceConfig::default(), 2);
+    let (mut core, destinations, _storage) = prepared(ResourceConfig::default(), 2);
     assert_eq!(core.step(), Ok(ModelStepStatus::Progressed));
     assert_eq!(
         core.step(),
@@ -105,7 +119,7 @@ fn reset_discards_pending_retirement_without_late_publication() {
     // Then: executed DMA effects persist but no late completion or IRQ can appear.
     for destination in destinations {
         assert_eq!(
-            core.memory.read_object(destination.object(), 0, 1),
+            crate::memory::read(&core.memory, destination.base(), 1),
             Ok(vec![0x5a])
         );
     }

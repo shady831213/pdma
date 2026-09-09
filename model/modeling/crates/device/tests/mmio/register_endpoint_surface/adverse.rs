@@ -11,18 +11,19 @@ pub(super) async fn run() -> TestResult {
     // Given: one observed endpoint and a real pending message.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(memory.clone()),
-        ResourceConfig::default(),
-        observer.clone(),
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        memory.clone(),
+        hardware_interface_runtime::MemoryAddress::new(0x1000),
     );
+    let (device, worker) =
+        AsyncDevice::new_observed(memory.clone(), ResourceConfig::default(), observer.clone());
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let endpoint = handle
         .register_endpoint()
         .at_mmio_base(RegisterBusBase::new(0x1_0000_0000));
-    let submission = create_message(&handle).await?;
-    submit_copy(&handle, submission).await?;
+    let submission = create_message(&handle, &allocator).await?;
+    submit_copy(&handle, &allocator, submission).await?;
     device.wait_for_progress_after(0).await;
     let before_state = handle.snapshot().await;
     let before_failures = observer.snapshot();

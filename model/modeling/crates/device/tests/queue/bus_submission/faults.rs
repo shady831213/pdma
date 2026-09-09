@@ -26,8 +26,8 @@ impl BroadcastFaultCase {
 
 pub(super) async fn malformed_and_resource_stall() -> TestResult {
     let malformed = fixture(ResourceConfig::default()).await?;
-    let source = allocate(&malformed.handle, 4).await?;
-    let destination = allocate(&malformed.handle, 4).await?;
+    let source = allocate(&malformed.memory, 4)?;
+    let destination = allocate(&malformed.memory, 4)?;
     malformed
         .handle
         .write_memory(source.base(), &[1, 2, 3, 4])
@@ -61,8 +61,8 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
     );
 
     let starved = fixture(ResourceConfig::default().with_read_slots(0)).await?;
-    let source = allocate(&starved.handle, 4).await?;
-    let destination = allocate(&starved.handle, 4).await?;
+    let source = allocate(&starved.memory, 4)?;
+    let destination = allocate(&starved.memory, 4)?;
     starved
         .handle
         .write_memory(source.base(), &[9, 8, 7, 6])
@@ -90,12 +90,12 @@ pub(super) async fn malformed_and_resource_stall() -> TestResult {
 
 pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResult {
     let fixture = fixture(ResourceConfig::default()).await?;
-    let source = allocate(&fixture.handle, 4).await?;
+    let source = allocate(&fixture.memory, 4)?;
     fixture
         .handle
         .write_memory(source.base(), &[1, 2, 3, 4])
         .await?;
-    let list = allocate(&fixture.handle, 8).await?;
+    let list = allocate(&fixture.memory, 8)?;
     let (list_base, count) = list_fields(case, list);
     let mut bytes = encode(AbiCommand::from_payload(
         30,
@@ -118,7 +118,7 @@ pub(super) async fn assert_broadcast_fault(case: BroadcastFaultCase) -> TestResu
 
 const fn list_fields(
     case: BroadcastFaultCase,
-    list: pdma_model_device::MappedDmaRegion,
+    list: crate::queue::hardware::Allocation,
 ) -> (DmaAddress, u64) {
     match case {
         BroadcastFaultCase::Count => (list.base(), 0),
@@ -132,7 +132,7 @@ const fn list_fields(
 fn expected_tuple(
     case: BroadcastFaultCase,
     base: DmaAddress,
-    list: pdma_model_device::MappedDmaRegion,
+    list: crate::queue::hardware::Allocation,
 ) -> (AbiEventKind, u64, u64, u64, u16, u16, u64) {
     let (kind, locator, detail0, detail1, access) = match case {
         BroadcastFaultCase::Count => (

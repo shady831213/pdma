@@ -12,13 +12,12 @@ use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig, TraceEventKind}
 async fn reset_discards_blocked_retirement_and_preserves_dma() -> TestResult {
     // Given: a second execution is waiting for completion space.
     let mut fixture = Fixture::new(ResourceConfig::default()).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
+    let pair = allocate_pair(&fixture).await?;
     fixture.copy(0, pair).await?;
     fixture.copy(1, pair).await?;
     fixture.cursor(QueueRegisters::DOORBELL.offset(), 2).await?;
     let worker = fixture.start()?;
     fixture.handle.wait_for_stall_after(0).await;
-    let generation = fixture.handle.memory_generation().await;
     // When: reset discards retained retirement and software activates fresh rings.
     write(
         &fixture.endpoint,
@@ -40,7 +39,6 @@ async fn reset_discards_blocked_retirement_and_preserves_dma() -> TestResult {
     write(&fresh, queue_offset(0, QueueRegisters::ENABLE.offset())?, 1).await?;
     hardware::idle(&fixture.handle).await;
     // Then: DMA persists while no discarded completion reaches the new queue.
-    assert_eq!(fixture.handle.memory_generation().await, generation);
     assert_eq!(fixture.handle.read_memory(pair[1], 4).await?, [1, 3, 5, 7]);
     assert_eq!(
         read(
@@ -78,7 +76,7 @@ async fn reset_discards_blocked_retirement_and_preserves_dma() -> TestResult {
 async fn reset_stales_a_delivered_message_before_ack_mutation() -> TestResult {
     // Given: a completion source emits one host-owned message.
     let mut fixture = Fixture::new(ResourceConfig::default()).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
+    let pair = allocate_pair(&fixture).await?;
     for (offset, value) in [
         (IrqSourceRegisters::ROUTE_KIND.offset(), 1),
         (IrqSourceRegisters::ROUTE_VECTOR.offset(), 9),
@@ -139,8 +137,8 @@ async fn reset_stales_a_delivered_message_before_ack_mutation() -> TestResult {
 async fn resource_starved_queue_does_not_block_another_hardware_queue() -> TestResult {
     // Given: a vector queue has no compute credits and another queue has a valid copy.
     let mut fixture = Fixture::new(ResourceConfig::default().with_compute_slots(0)).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
-    let second_destination = fixture.handle.allocate_memory_region(4).await?.base();
+    let pair = allocate_pair(&fixture).await?;
+    let second_destination = hardware::allocate(&fixture.memory, 4)?.base();
     let vector = AbiCommand::from_payload(
         40,
         AbiCommandPayloadValues::VectorAdd(AbiCommandPayloadVectorAddValues {
@@ -154,7 +152,7 @@ async fn resource_starved_queue_does_not_block_another_hardware_queue() -> TestR
     vector.encode(&mut bytes)?;
     fixture.bytes(0, &bytes).await?;
     fixture.cursor(QueueRegisters::DOORBELL.offset(), 1).await?;
-    let [second_sq, _, _] = hardware::activate(&fixture.handle, 1, [2; 3]).await?;
+    let [second_sq, _, _] = hardware::activate(&fixture.handle, &fixture.memory, 1, [2; 3]).await?;
     let copy = AbiCommand::from_payload(
         41,
         AbiCommandPayloadValues::Copy(pdma_model_contract::abi::AbiCommandPayloadCopyValues {
@@ -208,7 +206,7 @@ async fn resource_starved_queue_does_not_block_another_hardware_queue() -> TestR
 async fn execution_memory_fault_retires_once_without_success() -> TestResult {
     // Given: a copy descriptor has an overflowing destination.
     let mut fixture = Fixture::new(ResourceConfig::default()).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
+    let pair = allocate_pair(&fixture).await?;
     fixture
         .copy(0, [pair[0], DmaAddress::new(u64::MAX)])
         .await?;

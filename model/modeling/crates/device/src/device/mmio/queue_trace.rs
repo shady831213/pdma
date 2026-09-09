@@ -21,9 +21,8 @@ impl DeviceCore {
             else {
                 continue;
             };
-            let Ok(bytes) = self
-                .memory
-                .read_memory(address, u64::from(AbiCommand::ENTRY_SIZE))
+            let Ok(bytes) =
+                crate::memory::read(&self.memory, address, u64::from(AbiCommand::ENTRY_SIZE))
             else {
                 continue;
             };
@@ -63,10 +62,11 @@ impl DeviceCore {
                 let Ok(address) = active.completion.layout().entry_address(cursor) else {
                     continue;
                 };
-                let Ok(bytes) = self
-                    .memory
-                    .read_memory(address, u64::from(AbiCompletion::ENTRY_SIZE))
-                else {
+                let Ok(bytes) = crate::memory::read(
+                    &self.memory,
+                    address,
+                    u64::from(AbiCompletion::ENTRY_SIZE),
+                ) else {
                     continue;
                 };
                 let Ok(record) = AbiCompletion::decode(&bytes) else {
@@ -77,9 +77,8 @@ impl DeviceCore {
                 let Ok(address) = active.event.layout().entry_address(cursor) else {
                     continue;
                 };
-                let Ok(bytes) = self
-                    .memory
-                    .read_memory(address, u64::from(AbiEvent::ENTRY_SIZE))
+                let Ok(bytes) =
+                    crate::memory::read(&self.memory, address, u64::from(AbiEvent::ENTRY_SIZE))
                 else {
                     continue;
                 };

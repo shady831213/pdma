@@ -4,7 +4,7 @@ use pdma_model_contract::{
     abi::registers::{QueueRegisters, queue_offset},
     semantic::{CommandId, ResourceConfig},
 };
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, CopyRequest, DriverError, DriverPort, PortError,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterAccessError, PdmaRegisterPort},
@@ -32,12 +32,11 @@ fn assert_committed(error: DriverError) {
 #[tokio::test(flavor = "current_thread")]
 async fn committed_producer_observation_error_retains_accepted_credit() {
     // Given: the producer write commits before its observer reports failure.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle(), memory.clone()));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");
@@ -100,12 +99,11 @@ async fn committed_producer_observation_error_retains_accepted_credit() {
 )]
 async fn consumer_failure(fault: bool) {
     // Given: a published retirement record whose consumer write will report observer failure.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle(), memory.clone()));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

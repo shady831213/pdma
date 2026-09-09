@@ -4,7 +4,7 @@ use pdma_model_contract::abi::registers::{
     GlobalRegisters, PdmaRegisterMap, RegisterLocation, locate,
 };
 use pdma_model_contract::semantic::ResourceConfig;
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -13,10 +13,8 @@ mod malformed;
 #[tokio::test]
 async fn canonical_register_map_drives_readable_reset_values() {
     // Given: a fresh device and generated direct hardware register placements.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let (device, _worker) =
+        AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default());
     let endpoint = device.handle().register_endpoint();
     let resolved = PdmaRegisterMap::resolve().expect("register map");
     let mut visited = BTreeSet::new();

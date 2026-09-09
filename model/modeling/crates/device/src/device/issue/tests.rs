@@ -12,18 +12,17 @@ use crate::AsyncStallReason;
 use crate::device::{DeviceCore, context::HardwareContext};
 
 fn fixture() -> (DeviceCore, [QueueId; 2]) {
-    let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
     let mut core = DeviceCore::new(
-        provisioning.memory_access(),
+        allocator.memory_access(),
         ResourceConfig::default().with_read_slots(1),
     );
     core.enable_tracing();
-    let source = provisioning.allocate(&mut core.memory, 4).expect("source");
-    let destination = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("destination");
+    let source = crate::test_support::allocate(&allocator, 4);
+    let destination = crate::test_support::allocate(&allocator, 4);
     for (index, payload) in [
         (
             0,
@@ -43,7 +42,7 @@ fn fixture() -> (DeviceCore, [QueueId; 2]) {
             }),
         ),
     ] {
-        let queue = test_support::configure(&mut core, &mut provisioning, index, [4; 3]);
+        let queue = test_support::configure(&mut core, &allocator, index, [4; 3]);
         test_support::submit(&mut core, queue, AbiCommand::from_payload(7, payload));
         test_support::doorbell(&mut core, queue);
     }

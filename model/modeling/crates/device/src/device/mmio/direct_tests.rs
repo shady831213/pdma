@@ -72,20 +72,26 @@ fn disable_zero_is_inert_for_an_inactive_queue() {
 #[test]
 fn frontend_fault_distinguishes_first_publication_attempt_from_retry() {
     // Given: a malformed descriptor version and no event publication capacity.
-    let mut provisioning = crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new()));
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
     let mut core = DeviceCore::new(
-        provisioning.memory_access(),
+        allocator.memory_access(),
         ResourceConfig::default().with_event_publication_slots(0),
     );
-    let queue = crate::test_support::configure(&mut core, &mut provisioning, 0, [2, 2, 2]);
+    let queue = crate::test_support::configure(&mut core, &allocator, 0, [2, 2, 2]);
     crate::test_support::submit(
         &mut core,
         queue,
         crate::test_support::copy(7, 0xffff_0000, 0xffff_0040, 4),
     );
-    core.memory
-        .write_memory(queue.layouts.submission().region().base(), &[2, 0])
-        .expect("invalid version");
+    crate::memory::write(
+        &core.memory,
+        queue.layouts.submission().region().base(),
+        &[2, 0],
+    )
+    .expect("invalid version");
     crate::test_support::doorbell(&mut core, queue);
     assert_eq!(core.step(), Ok(crate::device::ModelStepStatus::FaultCached));
     // When: the retained frontend fault first attempts publication, then retries.

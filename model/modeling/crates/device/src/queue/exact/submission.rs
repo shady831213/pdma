@@ -1,14 +1,15 @@
 use super::ActiveQueue;
 use super::PdmaControlError;
 use crate::adapter::command::decode;
-use crate::memory::PdmaMemoryMappings;
 use crate::operation::DecodedCommand;
 use crate::queue::io::{NormalizedFault, NormalizedFetch};
 use crate::{ModelError, ModelResult};
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCommandView, AbiEvent, AbiEventKind, DescriptorDecodeError, DmaAddress,
+    AbiCommand, AbiCommandView, AbiEvent, AbiEventAccess, AbiEventStage, AbiFaultSite,
+    DescriptorDecodeError,
 };
-use pdma_model_contract::semantic::{BufferId, CommandId, CompletionRingId, QueueId};
+use pdma_model_contract::semantic::{CommandId, CompletionRingId, QueueId};
 
 #[derive(Debug, Clone)]
 pub(super) enum ExactFetch {
@@ -17,7 +18,7 @@ pub(super) enum ExactFetch {
 }
 
 pub(super) fn fetch(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     active: &ActiveQueue,
     queue_id: QueueId,
 ) -> ModelResult<Option<ExactFetch>> {
@@ -28,9 +29,14 @@ pub(super) fn fetch(
     let slot = ring
         .entry_address(ring.consumer())
         .map_err(|_| ModelError::DmaSubmissionState)?;
-    let bytes = memory
-        .read_memory(slot, u64::from(ring.layout().entry_size()))
-        .map_err(|_| ModelError::DmaSubmissionState)?;
+    let length = u64::from(ring.layout().entry_size());
+    let bytes = crate::memory::read(memory, slot, length).map_err(|error| {
+        ModelError::MemoryFault(crate::memory::fault(
+            error,
+            length,
+            AbiFaultSite::new(AbiEventStage::Descriptor, AbiEventAccess::Read, 0),
+        ))
+    })?;
     let (exact_command_id, command_id) = command_id(&bytes)?;
     let exact_queue_id =
         u64::try_from(queue_id.raw()).map_err(|_| ModelError::DmaSubmissionState)?;
@@ -58,8 +64,7 @@ pub(super) fn has_pending(active: &ActiveQueue) -> bool {
     active.submission.has_captured_entry()
 }
 
-pub(super) fn normalize(
-    memory: &PdmaMemoryMappings,
+pub(super) const fn normalize(
     completion_ring: CompletionRingId,
     fetched: ExactFetch,
 ) -> NormalizedFetch {
@@ -70,38 +75,8 @@ pub(super) fn normalize(
         },
         ExactFetch::Fault(queue, event) => NormalizedFetch::Fault(NormalizedFault {
             queue,
-            source: fault_source(memory, event),
+            source: ModelError::MemoryFault(event.fault()),
         }),
-    }
-}
-
-pub(super) fn fault_source(memory: &PdmaMemoryMappings, event: AbiEvent) -> ModelError {
-    let (kind, locator, detail0, detail1, _, _, _) = event.fault().tuple();
-    match kind {
-        AbiEventKind::UnmappedDmaAddress => ModelError::UnknownBuffer(BufferId::new(usize::MAX)),
-        AbiEventKind::RangeOverflow => ModelError::RangeOverflow,
-        AbiEventKind::OutOfBounds => memory
-            .region_ending_at(DmaAddress::new(locator))
-            .and_then(|region| {
-                let len = usize::try_from(detail0).ok()?;
-                let end = detail1.checked_sub(region.base().raw())?;
-                usize::try_from(end)
-                    .ok()
-                    .map(|end| ModelError::OutOfBounds {
-                        buffer: region.object(),
-                        len,
-                        end,
-                    })
-            })
-            .unwrap_or(ModelError::DmaSubmissionState),
-        AbiEventKind::InvalidVersion
-        | AbiEventKind::InvalidSize
-        | AbiEventKind::InvalidOpcode
-        | AbiEventKind::InvalidFlags
-        | AbiEventKind::InvalidReserved
-        | AbiEventKind::InvalidIndirectCount
-        | AbiEventKind::InvalidIndirectAlignment
-        | AbiEventKind::ValueOutOfRange => ModelError::DmaSubmissionState,
     }
 }
 

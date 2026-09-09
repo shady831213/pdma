@@ -3,16 +3,15 @@ use crate::adapter::abi::{PdmaInterruptReady, PdmaInterruptSourceError, PdmaRegi
 use hardware_interface_runtime::{InterruptSource, RegisterAccess, SharedMemory};
 use pdma_model_contract::abi::registers::GlobalRegisters;
 use pdma_model_contract::semantic::{DeviceEpoch, ResourceConfig};
-use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, PdmaMemoryProvisioning};
+use pdma_model_device::{AsyncDevice, AsyncDeviceHandle};
 use std::{future::Future, pin::pin, sync::Arc, task::Poll};
 
 fn fixture() -> (AsyncDeviceHandle, AsyncDeviceAccess) {
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = crate::adapter::abi::PdmaHostMemory::new(storage);
+    let (device, _worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let handle = device.handle();
-    let access = AsyncDeviceAccess::new(handle.clone());
+    let access = AsyncDeviceAccess::new(handle.clone(), memory);
     (handle, access)
 }
 

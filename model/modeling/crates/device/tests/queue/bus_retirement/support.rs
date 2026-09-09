@@ -7,6 +7,7 @@ use pdma_model_contract::semantic::ResourceConfig;
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, MmioRegisterEndpoint};
 
 pub(in crate::queue) struct Fixture {
+    pub(in crate::queue) memory: hardware_interface_runtime::SharedMemoryAllocator,
     pub(in crate::queue) handle: AsyncDeviceHandle,
     pub(in crate::queue) endpoint: MmioRegisterEndpoint,
     worker: Option<AsyncDeviceWorker>,
@@ -14,17 +15,14 @@ pub(in crate::queue) struct Fixture {
 }
 impl Fixture {
     pub(in crate::queue) async fn new(resources: ResourceConfig) -> TestResult<Self> {
-        let (device, worker) = AsyncDevice::new(
-            pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-                hardware_interface_runtime::SharedMemory::new(),
-            )),
-            resources,
-        );
+        let memory = hardware::allocator();
+        let (device, worker) = AsyncDevice::new(memory.memory_access(), resources);
         let handle = device.handle();
-        let rings = hardware::activate(&handle, 0, [4, 1, 1]).await?;
+        let rings = hardware::activate(&handle, &memory, 0, [4, 1, 1]).await?;
         let endpoint = handle.register_endpoint();
         handle.enable_tracing().await;
         Ok(Self {
+            memory,
             handle,
             endpoint,
             worker: Some(worker),
@@ -65,11 +63,12 @@ impl Fixture {
         read(&self.endpoint, queue_offset(0, offset)?).await
     }
 }
-pub(in crate::queue) async fn allocate_pair(
-    handle: &AsyncDeviceHandle,
-) -> TestResult<[DmaAddress; 2]> {
-    let source = handle.allocate_memory_region(4).await?;
-    let destination = handle.allocate_memory_region(4).await?;
-    handle.write_memory(source.base(), &[1, 3, 5, 7]).await?;
+pub(in crate::queue) async fn allocate_pair(fixture: &Fixture) -> TestResult<[DmaAddress; 2]> {
+    let source = hardware::allocate(&fixture.memory, 4)?;
+    let destination = hardware::allocate(&fixture.memory, 4)?;
+    fixture
+        .handle
+        .write_memory(source.base(), &[1, 3, 5, 7])
+        .await?;
     Ok([source.base(), destination.base()])
 }

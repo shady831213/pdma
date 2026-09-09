@@ -22,10 +22,10 @@ async fn address_adverse_rejects_translation_before_pdma_decode() -> TestResult 
     // Given: one base-aware endpoint and an immutable device/observation snapshot.
     let base = RegisterBusBase::new(0x1_0000_0000);
     let observer = Arc::new(Observer::default());
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         ResourceConfig::default(),
         observer.clone(),
     );

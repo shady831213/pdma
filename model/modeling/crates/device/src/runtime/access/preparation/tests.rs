@@ -11,13 +11,11 @@ use std::task::{Context, Poll, Waker};
 #[tokio::test]
 async fn pending_lock_acquisition_is_cancel_safe_before_commit() {
     // Given: a real core lock held before an exact register future reaches its commit point.
-    let endpoint = crate::AsyncDevice::new(
-        crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    )
-    .0
-    .handle()
-    .register_endpoint();
+    let endpoint =
+        crate::AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default())
+            .0
+            .handle()
+            .register_endpoint();
     let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
     let (release_sender, release_receiver) = std::sync::mpsc::channel();
     let shared = Arc::clone(&endpoint.shared);
@@ -47,13 +45,11 @@ async fn pending_lock_acquisition_is_cancel_safe_before_commit() {
 #[tokio::test]
 async fn prepared_read_and_write_are_side_effect_free_until_commit() {
     // Given: an unchanged core and generated read/write register identities.
-    let endpoint = crate::AsyncDevice::new(
-        crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    )
-    .0
-    .handle()
-    .register_endpoint();
+    let endpoint =
+        crate::AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default())
+            .0
+            .handle()
+            .register_endpoint();
     let (before, read_response, after) = endpoint
         .shared
         .backend
@@ -101,13 +97,11 @@ async fn prepared_read_and_write_are_side_effect_free_until_commit() {
 async fn completed_register_writes_survive_later_rejection_and_unpolled_write()
 -> Result<(), MmioRegisterError> {
     // Given: a CPU-independent endpoint with separately committed request registers.
-    let endpoint = crate::AsyncDevice::new(
-        crate::PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    )
-    .0
-    .handle()
-    .register_endpoint();
+    let endpoint =
+        crate::AsyncDevice::new(Arc::new(SharedMemory::new()), ResourceConfig::default())
+            .0
+            .handle()
+            .register_endpoint();
     endpoint
         .write(
             queue_offset(0, QueueRegisters::CQ_BASE.offset()).expect("CQ base"),

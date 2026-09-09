@@ -7,7 +7,7 @@ use pdma_model_contract::semantic::ResourceConfig;
 pub(super) async fn capture_and_nonzero_slot() -> TestResult {
     // Given: descriptor memory and producer publication alone do not capture work.
     let mut fixture = Fixture::new(ResourceConfig::default()).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
+    let pair = allocate_pair(&fixture).await?;
     fixture.copy(0, pair).await?;
     assert_eq!(fixture.read(QueueRegisters::SQ_CAPTURED.offset()).await?, 0);
     assert_eq!(fixture.handle.native_steps().await, 0);

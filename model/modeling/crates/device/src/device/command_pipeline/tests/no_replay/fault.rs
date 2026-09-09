@@ -2,7 +2,10 @@ use super::super::support::{
     Case, PipelineRunOutcome, drive_to_complete, drive_to_pending, prepare, trace_kinds,
 };
 use crate::{AsyncStallReason, ModelError, test_support};
-use pdma_model_contract::abi::{AbiEventKind, registers::IrqSourceRegisters};
+use pdma_model_contract::abi::{
+    AbiEventAccess, AbiEventKind, AbiEventStage, AbiFault, AbiFaultSite, DmaAddress,
+    registers::IrqSourceRegisters,
+};
 use pdma_model_contract::semantic::TraceEventKind;
 
 pub(super) fn pressure_revisits_only_fault_retirement() {
@@ -22,7 +25,8 @@ pub(super) fn pressure_revisits_only_fault_retirement() {
         IrqSourceRegisters::MASKED.offset(),
         0,
     );
-    let source = ModelError::DmaSubmissionState;
+    let site = AbiFaultSite::new(AbiEventStage::Source, AbiEventAccess::Read, 0);
+    let source = ModelError::MemoryFault(AbiFault::unmapped(DmaAddress::new(0xdead_0000), 4, site));
     assert_eq!(drive_to_complete(&mut prepared.fixture), Err(source));
     test_support::submit(
         &mut prepared.fixture.core,

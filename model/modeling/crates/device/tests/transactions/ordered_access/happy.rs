@@ -10,18 +10,15 @@ async fn individual_accesses_publish_direct_queue_cursors() -> TestResult {
     let bootstrap_cursors = support::cursors(&handle).await?;
 
     // When: descriptor bytes are written before ordinary producer publication.
-    handle.write_memory(submission.base(), &[0x6b; 64]).await?;
+    handle.write_memory(submission, &[0x6b; 64]).await?;
     support::publish(&handle, 1).await?;
     let submission_cursors = support::cursors(&handle).await?;
 
     // Then: producer publication changes only its live cursor, without capturing work.
     assert_eq!(bootstrap_cursors, vec![0; 7]);
     assert_eq!(submission_cursors, vec![1, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(
-        handle.read_memory(submission.base(), 64).await?,
-        vec![0x6b; 64]
-    );
-    assert_eq!(handle.memory_generation().await, 1);
+    assert_eq!(handle.read_memory(submission, 64).await?, vec![0x6b; 64]);
+    assert_eq!(handle.memory.revision().raw(), 3);
     Ok(())
 }
 
@@ -30,24 +27,21 @@ async fn indirect_bytes_commit_before_descriptor_and_publication() -> TestResult
     // Given: an active queue and a separately committed indirect mapping.
     let handle = support::new_handle();
     let submission = support::bootstrap(&handle).await?;
-    let region = handle.allocate_memory_region(16).await?;
+    let region = handle.allocate(16)?;
 
     // When: indirect data and the descriptor are separate writes preceding publication.
-    handle.write_memory(region.base(), &[0x33; 16]).await?;
-    handle.write_memory(submission.base(), &[0x44; 64]).await?;
+    handle.write_memory(region, &[0x33; 16]).await?;
+    handle.write_memory(submission, &[0x44; 64]).await?;
     support::publish(&handle, 1).await?;
 
     // Then: both completed writes survive with one published descriptor.
-    assert_eq!(handle.read_memory(region.base(), 16).await?, vec![0x33; 16]);
-    assert_eq!(
-        handle.read_memory(submission.base(), 64).await?,
-        vec![0x44; 64]
-    );
+    assert_eq!(handle.read_memory(region, 16).await?, vec![0x33; 16]);
+    assert_eq!(handle.read_memory(submission, 64).await?, vec![0x44; 64]);
     assert_eq!(
         support::read_cursor(&handle, QueueRegisters::SQ_PRODUCER.offset()).await?,
         1
     );
-    assert_eq!(handle.memory_generation().await, 2);
+    assert_eq!(handle.memory.revision().raw(), 4);
     Ok(())
 }
 
@@ -58,7 +52,7 @@ async fn observer_records_every_register_access_in_order() -> TestResult {
 
     // When: bootstrap and publication use the ordinary numeric register surface.
     let submission = support::bootstrap(&handle).await?;
-    handle.write_memory(submission.base(), &[0x6b; 64]).await?;
+    handle.write_memory(submission, &[0x6b; 64]).await?;
     support::publish(&handle, 1).await?;
 
     // Then: configuration, enable, and producer writes each own an observation.

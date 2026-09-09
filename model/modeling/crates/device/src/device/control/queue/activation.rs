@@ -1,8 +1,9 @@
 use crate::device::DeviceCore;
-use crate::memory::{MappedDmaRegion, PdmaMemoryError};
 use crate::queue::exact::PdmaControlError;
+use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::abi::{
-    AbiCommand, AbiCompletion, AbiEvent, AbiRingEntry, DmaAddress, QueueRingLayouts, RingLayout,
+    AbiCommand, AbiCompletion, AbiEvent, AbiRingEntry, DmaAddress, DmaRegion, QueueRingLayouts,
+    RingLayout,
 };
 use pdma_model_contract::semantic::QueueId;
 
@@ -13,46 +14,44 @@ impl DeviceCore {
             return Err(PdmaControlError::InvalidTransaction);
         }
         let submission =
-            mapped_ring::<AbiCommand>(self, registers.sq_base.raw(), registers.sq_depth.raw())?;
+            ring_layout::<AbiCommand>(self, registers.sq_base.raw(), registers.sq_depth.raw())?;
         let completion =
-            mapped_ring::<AbiCompletion>(self, registers.cq_base.raw(), registers.cq_depth.raw())?;
+            ring_layout::<AbiCompletion>(self, registers.cq_base.raw(), registers.cq_depth.raw())?;
         let event =
-            mapped_ring::<AbiEvent>(self, registers.eq_base.raw(), registers.eq_depth.raw())?;
-        let regions = [submission.0, completion.0, event.0];
-        self.memory.validate_region_set(&regions)?;
-        if regions_overlap(submission.0, completion.0)
-            || regions_overlap(submission.0, event.0)
-            || regions_overlap(completion.0, event.0)
+            ring_layout::<AbiEvent>(self, registers.eq_base.raw(), registers.eq_depth.raw())?;
+        if regions_overlap(submission.region(), completion.region())
+            || regions_overlap(submission.region(), event.region())
+            || regions_overlap(completion.region(), event.region())
         {
             return Err(PdmaControlError::InvalidTransaction);
         }
         let queue =
             QueueId::new(usize::try_from(index).map_err(|_| PdmaControlError::InvalidQueue)?);
-        self.queues.install_exact(
-            queue,
-            QueueRingLayouts::new(submission.1, completion.1, event.1),
-        )
+        self.queues
+            .install_exact(queue, QueueRingLayouts::new(submission, completion, event))
     }
 }
 
-fn mapped_ring<R: AbiRingEntry>(
+fn ring_layout<R: AbiRingEntry>(
     runner: &DeviceCore,
     base: u64,
     depth: u32,
-) -> Result<(MappedDmaRegion, RingLayout<R>), PdmaControlError> {
+) -> Result<RingLayout<R>, PdmaControlError> {
     let address = DmaAddress::new(base);
-    let region = runner
+    let length = RingLayout::<R>::checked_extent(u64::from(depth))?;
+    let region =
+        DmaRegion::try_new(address, length).map_err(|_| MemoryAccessError::AddressOverflow {
+            address: MemoryAddress::new(base),
+            length,
+        })?;
+    let layout = RingLayout::<R>::try_new(region, u64::from(depth))?;
+    runner
         .memory
-        .region_containing(address)
-        .ok_or(PdmaControlError::Dma(PdmaMemoryError::InvalidRegion))?;
-    if region.base() != address {
-        return Err(PdmaControlError::Dma(PdmaMemoryError::InvalidRegion));
-    }
-    let layout = RingLayout::<R>::try_new(region.region(), u64::from(depth))?;
-    Ok((region, layout))
+        .validate(MemoryAddress::new(base), MemoryAlignment::ONE, length)?;
+    Ok(layout)
 }
 
-const fn regions_overlap(left: MappedDmaRegion, right: MappedDmaRegion) -> bool {
+const fn regions_overlap(left: DmaRegion, right: DmaRegion) -> bool {
     left.base().raw() < right.exclusive_end().raw()
         && right.base().raw() < left.exclusive_end().raw()
 }

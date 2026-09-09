@@ -1,5 +1,5 @@
+use pdma_model_contract::abi::AbiEventKind;
 use pdma_model_contract::abi::{AbiCompletion, AbiCompletionStatus};
-use pdma_model_contract::semantic::event::EventErrorKind;
 
 pub(super) const fn completion_detail(record: AbiCompletion) -> &'static str {
     match record.status {
@@ -7,10 +7,18 @@ pub(super) const fn completion_detail(record: AbiCompletion) -> &'static str {
     }
 }
 
-pub(super) const fn event_detail(error: EventErrorKind) -> &'static str {
+pub(super) const fn event_detail(error: AbiEventKind) -> &'static str {
     match error {
-        EventErrorKind::UnknownBuffer => "Error UnknownBuffer",
-        EventErrorKind::RangeOverflow => "Error RangeOverflow",
-        EventErrorKind::OutOfBounds { len: _, end: _ } => "Error OutOfBounds",
+        AbiEventKind::UnmappedDmaAddress => "Error UnknownBuffer",
+        AbiEventKind::RangeOverflow => "Error RangeOverflow",
+        AbiEventKind::OutOfBounds => "Error OutOfBounds",
+        AbiEventKind::InvalidVersion
+        | AbiEventKind::InvalidSize
+        | AbiEventKind::InvalidOpcode
+        | AbiEventKind::InvalidFlags
+        | AbiEventKind::InvalidReserved
+        | AbiEventKind::InvalidIndirectCount
+        | AbiEventKind::InvalidIndirectAlignment
+        | AbiEventKind::ValueOutOfRange => "Error InvalidDescriptor",
     }
 }

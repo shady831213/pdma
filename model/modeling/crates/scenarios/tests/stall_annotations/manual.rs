@@ -5,15 +5,16 @@ use pdma_model_device::{AsyncDevice, AsyncStallReason, AsyncStepStatus};
 #[tokio::test(flavor = "current_thread")]
 async fn async_manual_run_until_blocked_returns_terminal_status_without_losing_idle_errors() {
     // Given: one hardware-visible copy and no read resources.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         ResourceConfig::default().with_read_slots(0),
     );
     let before = runner.snapshot().await;
     let handle = runner.handle();
-    let memory = raw_hardware::queue_copy(&handle, &[1, 2, 3, 4]).await;
+    let memory = raw_hardware::queue_copy(&handle, &host_memory, &[1, 2, 3, 4]).await;
     let worker = tokio::spawn(worker.run());
 
     // When: the actor reaches its first terminal resource stall.

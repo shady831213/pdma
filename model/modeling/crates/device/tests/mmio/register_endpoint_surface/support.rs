@@ -1,4 +1,4 @@
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{MemoryAddress, RegisterAccess, SharedMemoryAllocator};
 use hardware_interface_runtime::{RegisterObservation, RegisterObserver};
 use pdma_model_contract::abi::registers::{
     IrqSourceRegisters, QueueRegisters, irq_offset, queue_offset,
@@ -38,7 +38,7 @@ impl RegisterObserver for RecordingObserver {
 pub(super) struct CoreContention {
     release: mpsc::Sender<()>,
     memory_holder: thread::JoinHandle<TestResult>,
-    core_holder: thread::JoinHandle<TestResult<Vec<u8>>>,
+    core_holder: thread::JoinHandle<TestResult>,
 }
 
 impl CoreContention {
@@ -58,12 +58,12 @@ pub(super) async fn contend_core(
     handle: &AsyncDeviceHandle,
     memory: Arc<hardware_interface_runtime::SharedMemory>,
 ) -> TestResult<CoreContention> {
-    let object = handle.allocate_buffer(1).await?;
-    let address = handle
-        .region_for_object(object)
-        .await
-        .ok_or("allocated object has no region")?
-        .base();
+    let allocator = SharedMemoryAllocator::new(memory.clone(), MemoryAddress::new(0x10_0000));
+    let address = DmaAddress::new(
+        allocator
+            .allocate(1, hardware_interface_runtime::MemoryAlignment::try_new(64)?)?
+            .raw(),
+    );
     let (held_tx, held_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
     let memory_holder = thread::spawn(move || -> TestResult {
@@ -78,7 +78,7 @@ pub(super) async fn contend_core(
     let core_holder = thread::spawn(move || {
         tokio::runtime::Builder::new_current_thread()
             .build()?
-            .block_on(contender.read_memory(address, 1))
+            .block_on(contender.write_memory(address, &[0]))
             .map_err(Into::into)
     });
     wait_until_core_contended(handle).await?;
@@ -100,10 +100,13 @@ async fn wait_until_core_contended(handle: &AsyncDeviceHandle) -> TestResult {
         }
         probe.await?;
     }
-    Err("public memory read never acquired the core lock".into())
+    Err("public memory write never acquired the core lock".into())
 }
 
-pub(super) async fn create_message(handle: &AsyncDeviceHandle) -> TestResult<DmaAddress> {
+pub(super) async fn create_message(
+    handle: &AsyncDeviceHandle,
+    allocator: &SharedMemoryAllocator,
+) -> TestResult<DmaAddress> {
     let endpoint = handle.register_endpoint();
     let mut bases = Vec::new();
     for size in [
@@ -111,7 +114,14 @@ pub(super) async fn create_message(handle: &AsyncDeviceHandle) -> TestResult<Dma
         AbiCompletion::RECORD_SIZE,
         AbiEvent::RECORD_SIZE,
     ] {
-        bases.push(handle.allocate_memory_region(size).await?.base());
+        bases.push(DmaAddress::new(
+            allocator
+                .allocate(
+                    u64::try_from(size)?,
+                    hardware_interface_runtime::MemoryAlignment::try_new(64)?,
+                )?
+                .raw(),
+        ));
     }
     for (local, base) in [
         QueueRegisters::SQ_BASE.offset(),
@@ -153,15 +163,21 @@ pub(super) async fn create_message(handle: &AsyncDeviceHandle) -> TestResult<Dma
     Ok(*bases.first().ok_or("submission base")?)
 }
 
-pub(super) async fn submit_copy(handle: &AsyncDeviceHandle, submission: DmaAddress) -> TestResult {
+pub(super) async fn submit_copy(
+    handle: &AsyncDeviceHandle,
+    allocator: &SharedMemoryAllocator,
+    submission: DmaAddress,
+) -> TestResult {
     use pdma_model_contract::abi::{AbiCommandPayloadCopyValues, AbiCommandPayloadValues};
-    let source = handle.allocate_memory_region(1).await?;
-    let destination = handle.allocate_memory_region(1).await?;
+    let source =
+        allocator.allocate(1, hardware_interface_runtime::MemoryAlignment::try_new(64)?)?;
+    let destination =
+        allocator.allocate(1, hardware_interface_runtime::MemoryAlignment::try_new(64)?)?;
     let descriptor = AbiCommand::from_payload(
         0,
         AbiCommandPayloadValues::Copy(AbiCommandPayloadCopyValues {
-            source_dma_address: source.base().raw(),
-            destination_dma_address: destination.base().raw(),
+            source_dma_address: source.raw(),
+            destination_dma_address: destination.raw(),
             length: 1.into(),
         }),
     );

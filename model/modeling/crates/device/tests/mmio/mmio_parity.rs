@@ -11,7 +11,7 @@ use pdma_model_device::MmioRegisterError;
 #[tokio::test]
 async fn raw_endpoint_preserves_little_endian_bytes_and_exact_width_errors() -> TestResult {
     // Given: an untouched endpoint and exact generated register offsets.
-    let (device, _worker) = device(ResourceConfig::default());
+    let (device, _worker, _allocator) = device(ResourceConfig::default());
     let endpoint = device.handle().register_endpoint();
     let base = q(QueueRegisters::SQ_BASE.offset())?;
     let mut magic = [0; 4];

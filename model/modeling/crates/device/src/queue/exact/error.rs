@@ -1,4 +1,4 @@
-use crate::memory::PdmaMemoryError;
+use hardware_interface_runtime::MemoryAccessError;
 use pdma_model_contract::abi::AbiControlError;
 use pdma_model_contract::semantic::{DeviceEpoch, SemanticError};
 use std::fmt;
@@ -6,8 +6,8 @@ use std::fmt;
 /// Typed direct-register effect or queue transition failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PdmaControlError {
-    /// DMA staging or access validation failed.
-    Dma(PdmaMemoryError),
+    /// Address access validation failed.
+    Memory(MemoryAccessError),
     /// Exact ABI layout or numeric control validation failed.
     Abi(AbiControlError),
     /// Semantic queue state validation failed.
@@ -28,7 +28,7 @@ pub enum PdmaControlError {
 impl fmt::Display for PdmaControlError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Dma(error) => write!(formatter, "{error}"),
+            Self::Memory(error) => write!(formatter, "{error}"),
             Self::Abi(error) => write!(formatter, "{error}"),
             Self::Semantic(error) => write!(formatter, "{error}"),
             Self::StaleEpoch { expected, actual } => {
@@ -46,7 +46,7 @@ impl fmt::Display for PdmaControlError {
 impl std::error::Error for PdmaControlError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Dma(error) => Some(error),
+            Self::Memory(error) => Some(error),
             Self::Abi(error) => Some(error),
             Self::Semantic(error) => Some(error),
             Self::StaleEpoch { .. } | Self::InvalidQueue | Self::InvalidTransaction => None,
@@ -54,9 +54,9 @@ impl std::error::Error for PdmaControlError {
     }
 }
 
-impl From<PdmaMemoryError> for PdmaControlError {
-    fn from(error: PdmaMemoryError) -> Self {
-        Self::Dma(error)
+impl From<MemoryAccessError> for PdmaControlError {
+    fn from(error: MemoryAccessError) -> Self {
+        Self::Memory(error)
     }
 }
 

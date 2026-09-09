@@ -1,12 +1,12 @@
 use super::memory::QueueMemoryResolver;
 use super::{CommandRoute, ExecutionOutcome, success};
-use crate::memory::PdmaMemoryMappings;
 use crate::operation::BroadcastOperands;
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::{AbiEventAccess, AbiEventStage, AbiFaultSite, DmaAddress};
 use pdma_model_contract::semantic::TraceOperation;
 
 pub(super) fn execute(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     route: CommandRoute,
     request: &BroadcastOperands,
 ) -> ExecutionOutcome {

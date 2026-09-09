@@ -6,14 +6,14 @@ use pdma_model_contract::semantic::{DeviceEpoch, irq::IrqNotification};
 #[tokio::test(flavor = "current_thread")]
 async fn readiness_preserves_one_message_until_one_hardware_claim() -> TestResult {
     // Given: a masked Message-routed completion with pending hardware notification.
-    let (device, worker) = device(ResourceConfig::default());
+    let (device, worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    let [submission, _, _] = create_queue(&handle, 1).await?;
+    let [submission, _, _] = create_queue(&handle, &allocator, 1).await?;
     let endpoint = handle.register_endpoint();
     write_u32(&endpoint, i(IrqSourceRegisters::ROUTE_KIND.offset())?, 1).await?;
     write_u64(&endpoint, i(IrqSourceRegisters::ROUTE_VECTOR.offset())?, 41).await?;
     write_u32(&endpoint, i(IrqSourceRegisters::ENABLED.offset())?, 1).await?;
-    submit_copy(&handle, submission.base(), 0).await?;
+    submit_copy(&handle, &allocator, (submission, 0)).await?;
     write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await?;
     let worker = tokio::spawn(worker.run());
     device.wait_for_progress_after(0).await;
@@ -68,7 +68,7 @@ async fn readiness_preserves_one_message_until_one_hardware_claim() -> TestResul
 #[tokio::test(flavor = "current_thread")]
 async fn readiness_wait_returns_shutdown_without_notification() -> TestResult {
     // Given: a readiness waiter canceled before a second waiter starts.
-    let (device, _worker) = device(ResourceConfig::default());
+    let (device, _worker, _allocator) = device(ResourceConfig::default());
     let handle = device.handle();
     let cancelled = tokio::spawn({
         let handle = handle.clone();

@@ -1,6 +1,6 @@
 use super::MmioRegisterError;
 use super::preparation::{prepare_read, prepare_write};
-use crate::runtime::{DeviceCore, PdmaMemoryProvisioning, RunnerShared};
+use crate::runtime::{DeviceCore, RunnerShared};
 use crate::runtime::{backend::DeviceInteractionBackend, state::RunnerState};
 use hardware_interface_runtime::{
     AccessOrigin, NoopRegisterObserver, ObservationGate, RegisterAccess, RegisterBusAddress,
@@ -22,10 +22,9 @@ impl MmioRegisterEndpoint {
     /// Consumes a core into a standalone exact register endpoint.
     pub fn from_core(core: DeviceCore) -> Self {
         let epoch = core.epoch();
-        let provisioning = PdmaMemoryProvisioning::external(core.memory.memory_access());
         Self::new(
             Arc::new(RunnerShared {
-                backend: DeviceInteractionBackend::new(RunnerState::new(core, provisioning)),
+                backend: DeviceInteractionBackend::new(RunnerState::new(core)),
                 register_gate: ObservationGate::new(SharedRegisterObserver::new(Arc::new(
                     NoopRegisterObserver,
                 ))),

@@ -4,7 +4,7 @@ use pdma_model_contract::{
     abi::registers::{QueueRegisters, queue_offset},
     semantic::{CommandId, ResourceConfig},
 };
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     AsyncDriver, CopyRequest,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -17,12 +17,11 @@ use std::sync::Arc;
 )]
 async fn cancellation_preserves_record(fault: bool) {
     // Given: a real retirement record with its consumer publication gated.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle(), memory.clone()));
     SoftwareCpu::new()
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

@@ -10,11 +10,8 @@ async fn endpoint_clones_share_order_and_observe_before_return() -> TestResult {
     // Given: two endpoint clones over one core-owned observer and ordered gate.
     let observer = Arc::new(RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, _worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(memory.clone()),
-        ResourceConfig::default(),
-        observer.clone(),
-    );
+    let (device, _worker) =
+        AsyncDevice::new_observed(memory.clone(), ResourceConfig::default(), observer.clone());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
 
@@ -61,9 +58,7 @@ async fn endpoint_reset_preserves_history_and_advances_sequence() -> TestResult 
     // Given: one observed endpoint access before whole-device reset.
     let observer = Arc::new(RecordingObserver::default());
     let (device, _worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        Arc::new(hardware_interface_runtime::SharedMemory::new()),
         ResourceConfig::default(),
         observer.clone(),
     );

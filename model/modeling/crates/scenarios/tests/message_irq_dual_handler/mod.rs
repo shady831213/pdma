@@ -84,10 +84,10 @@ pub struct MainOutcome {
 #[tokio::test(flavor = "current_thread")]
 async fn message_irq_two_handlers_share_driver_accounting()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let (device, worker) = fresh_device();
+    let (device, worker, host_memory) = fresh_device();
     let worker = tokio::spawn(worker.run());
     let raw_port = device.handle();
-    let access = AsyncDeviceAccess::new(raw_port);
+    let access = AsyncDeviceAccess::new(raw_port, host_memory.clone());
     let main_access = access.clone();
     let cpu = Arc::new(SoftwareCpu::new());
     let completion_vector = IrqVector::new(65);
@@ -189,13 +189,19 @@ async fn message_irq_two_handlers_share_driver_accounting()
     Ok(())
 }
 
-fn fresh_device() -> (AsyncDevice, pdma_model_device::AsyncDeviceWorker) {
-    AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+fn fresh_device() -> (
+    AsyncDevice,
+    pdma_model_device::AsyncDeviceWorker,
+    pdma_model_host::adapter::abi::PdmaHostMemory,
+) {
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let (device, worker) = AsyncDevice::new(
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    )
+    );
+    (device, worker, memory)
 }
 
 const fn notification_source(notification: IrqNotification) -> IrqSource {

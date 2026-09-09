@@ -4,7 +4,7 @@ use pdma_model_contract::{
     abi::registers::{QueueRegisters, queue_offset},
     semantic::{CommandId, ResourceConfig},
 };
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     Command, CommandOperation, CopyRequest, DriverPort, PortError, PortResult, QueueConfigHandle,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -87,13 +87,12 @@ impl Operation {
 )]
 async fn repoll(operation: Operation, wrong_cpu: bool) {
     // Given: a direct hardware access suspends within its owning CPU poll.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
     let owner = SoftwareCpu::new();
-    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle()));
+    let access = GatedAccess::new(AsyncDeviceAccess::new(device.handle(), memory.clone()));
     let (mut port, queue, command) = owner
         .run_main(async {
             let mut port = PdmaRegisterPort::new(access.clone()).expect("port");

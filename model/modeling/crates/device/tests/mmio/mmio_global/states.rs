@@ -10,19 +10,18 @@ async fn status_distinguishes_all_current_work_and_pressure_classes_without_muta
         (ResourceConfig::default().with_read_slots(0), true, 2),
     ] {
         // Given: idle, runnable, or resource-blocked work with the worker unstarted.
-        let (device, _worker) = device(config);
+        let (device, _worker, allocator) = device(config);
         let handle = device.handle();
         let endpoint = handle.register_endpoint();
-        let [submission, _, _] = create_queue(&handle, 2).await?;
+        let [submission, _, _] = create_queue(&handle, &allocator, 2).await?;
         let target = if work {
-            let target = submit_copy(&handle, submission.base(), 0).await?;
+            let target = submit_copy(&handle, &allocator, (submission, 0)).await?;
             write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await?;
             Some(target)
         } else {
             None
         };
         let before = handle.snapshot().await;
-        let memory = handle.memory_generation().await;
         let queues = cursors(&endpoint).await?;
         let irq = handle.irq_snapshot().await;
         // When: repeated direct run-state reads observe the work.
@@ -38,11 +37,10 @@ async fn status_distinguishes_all_current_work_and_pressure_classes_without_muta
         }
         // Then: lifecycle, DMA, queues and IRQ remain unchanged.
         assert_eq!(handle.snapshot().await, before);
-        assert_eq!(handle.memory_generation().await, memory);
         assert_eq!(cursors(&endpoint).await?, queues);
         assert_eq!(handle.irq_snapshot().await, irq);
         if let Some(target) = target {
-            assert_eq!(handle.read_memory(target.base(), 4).await?, [0; 4]);
+            assert_eq!(handle.read_memory(target, 4).await?, [0; 4]);
         }
     }
     Ok(())
@@ -61,15 +59,15 @@ async fn status_observes_real_completion_and_event_publication_pressure() -> Tes
         ),
     ] {
         // Given: work whose result cannot be published with configured credits.
-        let (device, worker) = device(config);
+        let (device, worker, allocator) = device(config);
         let handle = device.handle();
         let endpoint = handle.register_endpoint();
-        let [submission, _, _] = create_queue(&handle, 2).await?;
+        let [submission, _, _] = create_queue(&handle, &allocator, 2).await?;
         if fault {
-            handle.write_memory(submission.base(), &[0; 64]).await?;
+            handle.write_memory(submission, &[0; 64]).await?;
             write_u64(&endpoint, q(QueueRegisters::SQ_PRODUCER.offset())?, 1).await?;
         } else {
-            submit_copy(&handle, submission.base(), 0).await?;
+            submit_copy(&handle, &allocator, (submission, 0)).await?;
         }
         write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await?;
         let worker = tokio::spawn(worker.run());

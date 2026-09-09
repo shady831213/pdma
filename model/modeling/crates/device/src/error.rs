@@ -1,6 +1,7 @@
 use core::fmt;
+use pdma_model_contract::abi::AbiFault;
 use pdma_model_contract::semantic::{
-    BufferId, CompletionRingId, DeviceEpoch, EventErrorKind, IrqSource, QueueId, SemanticError,
+    CompletionRingId, DeviceEpoch, IrqSource, QueueId, SemanticError,
 };
 
 /// Result returned by semantic device-model operations.
@@ -20,8 +21,8 @@ pub enum ModelError {
     ZeroCapacity,
     /// A producer attempted to push into a full ring.
     RingFull,
-    /// The requested buffer does not exist.
-    UnknownBuffer(BufferId),
+    /// A hardware address access or descriptor produced an exact ABI fault.
+    MemoryFault(AbiFault),
     /// The requested queue does not exist.
     UnknownQueue(QueueId),
     /// The requested completion ring does not exist.
@@ -32,17 +33,6 @@ pub enum ModelError {
     IrqSourceActive(IrqSource),
     /// A checked offset calculation overflowed.
     RangeOverflow,
-    /// A checked access exceeded the buffer.
-    OutOfBounds {
-        /// Buffer checked.
-        buffer: BufferId,
-        /// Buffer length.
-        len: usize,
-        /// Requested exclusive end.
-        end: usize,
-    },
-    /// DMA address space or backing reservation was exhausted.
-    DmaAllocationExhausted,
     /// DMA submission state was inconsistent.
     DmaSubmissionState,
 }
@@ -61,16 +51,6 @@ impl From<SemanticError> for ModelError {
     }
 }
 
-impl ModelError {
-    pub(crate) const fn from_memory_fault(buffer: BufferId, error: EventErrorKind) -> Self {
-        match error {
-            EventErrorKind::UnknownBuffer => Self::UnknownBuffer(buffer),
-            EventErrorKind::RangeOverflow => Self::RangeOverflow,
-            EventErrorKind::OutOfBounds { len, end } => Self::OutOfBounds { buffer, len, end },
-        }
-    }
-}
-
 impl fmt::Display for ModelError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -82,7 +62,7 @@ impl fmt::Display for ModelError {
             ),
             Self::ZeroCapacity => formatter.write_str("ring capacity must be greater than zero"),
             Self::RingFull => formatter.write_str("ring is full"),
-            Self::UnknownBuffer(id) => write!(formatter, "unknown buffer {}", id.raw()),
+            Self::MemoryFault(fault) => write!(formatter, "hardware memory fault {fault:?}"),
             Self::UnknownQueue(id) => write!(formatter, "unknown queue {}", id.raw()),
             Self::UnknownCompletionRing(id) => {
                 write!(formatter, "unknown completion ring {}", id.raw())
@@ -90,14 +70,6 @@ impl fmt::Display for ModelError {
             Self::UnknownIrqSource(source) => write!(formatter, "unknown IRQ source {source:?}"),
             Self::IrqSourceActive(source) => write!(formatter, "IRQ source {source:?} is active"),
             Self::RangeOverflow => formatter.write_str("range calculation overflowed"),
-            Self::OutOfBounds { buffer, len, end } => write!(
-                formatter,
-                "buffer {} range end {} exceeds length {}",
-                buffer.raw(),
-                end,
-                len
-            ),
-            Self::DmaAllocationExhausted => formatter.write_str("DMA allocation is exhausted"),
             Self::DmaSubmissionState => formatter.write_str("DMA submission state is inconsistent"),
         }
     }

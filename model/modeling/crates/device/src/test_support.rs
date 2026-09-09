@@ -1,8 +1,9 @@
-use crate::{DeviceCore, PdmaMemoryProvisioning};
+use crate::DeviceCore;
+use hardware_interface_runtime::{MemoryAlignment, SharedMemoryAllocator};
 use pdma_model_contract::abi::registers::{QueueRegisters, irq_offset, locate, queue_offset};
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
-    QueueRingLayouts, RingCursor, RingLayout, U32WordValues,
+    DmaAddress, DmaRegion, QueueRingLayouts, RingCursor, RingLayout, U32WordValues,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -25,29 +26,23 @@ impl TestQueue {
 
 pub(super) fn configure(
     core: &mut DeviceCore,
-    provisioning: &mut PdmaMemoryProvisioning,
+    allocator: &SharedMemoryAllocator,
     index: u32,
     depths: [u32; 3],
 ) -> TestQueue {
     let [sq, cq, eq] = depths;
     let regions = [
-        provisioning
-            .allocate(&mut core.memory, u64::from(sq) * 64)
-            .expect("SQ allocation"),
-        provisioning
-            .allocate(&mut core.memory, u64::from(cq) * 32)
-            .expect("CQ allocation"),
-        provisioning
-            .allocate(&mut core.memory, u64::from(eq) * 64)
-            .expect("EQ allocation"),
+        allocate(allocator, u64::from(sq) * 64),
+        allocate(allocator, u64::from(cq) * 32),
+        allocate(allocator, u64::from(eq) * 64),
     ];
     let [submission, completion, event] = regions;
     let queue = TestQueue {
         index,
         layouts: QueueRingLayouts::new(
-            RingLayout::try_new(submission.region(), u64::from(sq)).expect("SQ layout"),
-            RingLayout::try_new(completion.region(), u64::from(cq)).expect("CQ layout"),
-            RingLayout::try_new(event.region(), u64::from(eq)).expect("EQ layout"),
+            RingLayout::try_new(submission, u64::from(sq)).expect("SQ layout"),
+            RingLayout::try_new(completion, u64::from(cq)).expect("CQ layout"),
+            RingLayout::try_new(event, u64::from(eq)).expect("EQ layout"),
         ),
     };
     for (offset, value) in [
@@ -104,9 +99,7 @@ pub(super) fn submit(core: &mut DeviceCore, queue: TestQueue, command: AbiComman
         .expect("SQ slot");
     let mut bytes = [0; AbiCommand::RECORD_SIZE];
     command.encode(&mut bytes).expect("descriptor");
-    core.memory
-        .write_memory(address, &bytes)
-        .expect("descriptor DMA");
+    crate::memory::write(&core.memory, address, &bytes).expect("descriptor DMA");
     write_queue(
         core,
         queue,
@@ -130,13 +123,12 @@ pub(super) fn poll_completion(core: &mut DeviceCore, queue: TestQueue) -> Option
         .completion()
         .entry_address(RingCursor::new(consumer))
         .expect("CQ slot");
-    let bytes = core
-        .memory
-        .read_memory(
-            address,
-            u64::try_from(AbiCompletion::RECORD_SIZE).expect("record size"),
-        )
-        .expect("CQ read");
+    let bytes = crate::memory::read(
+        &core.memory,
+        address,
+        u64::try_from(AbiCompletion::RECORD_SIZE).expect("record size"),
+    )
+    .expect("CQ read");
     let record = AbiCompletion::decode(&bytes).expect("completion");
     write_queue(
         core,
@@ -157,13 +149,12 @@ pub(super) fn poll_event(core: &mut DeviceCore, queue: TestQueue) -> Option<AbiE
         .event()
         .entry_address(RingCursor::new(consumer))
         .expect("EQ slot");
-    let bytes = core
-        .memory
-        .read_memory(
-            address,
-            u64::try_from(AbiEvent::RECORD_SIZE).expect("record size"),
-        )
-        .expect("EQ read");
+    let bytes = crate::memory::read(
+        &core.memory,
+        address,
+        u64::try_from(AbiEvent::RECORD_SIZE).expect("record size"),
+    )
+    .expect("EQ read");
     let record = AbiEvent::decode(&bytes).expect("event");
     write_queue(
         core,
@@ -183,4 +174,11 @@ pub(super) const fn copy(id: u64, source: u64, destination: u64, length: u32) ->
             length: U32WordValues { value: length },
         }),
     )
+}
+
+pub(super) fn allocate(allocator: &SharedMemoryAllocator, length: u64) -> DmaRegion {
+    let base = allocator
+        .allocate(length, MemoryAlignment::try_new(64).expect("alignment"))
+        .expect("fixture memory");
+    DmaRegion::try_new(DmaAddress::new(base.raw()), length).expect("fixture extent")
 }

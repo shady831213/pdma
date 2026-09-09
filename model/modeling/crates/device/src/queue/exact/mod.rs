@@ -14,9 +14,9 @@ pub(crate) use ring_state::RingState;
 pub(crate) use state::ActiveQueue;
 pub use status::PendingDmaResult;
 
-use crate::memory::PdmaMemoryMappings;
 use crate::queue::io::{NormalizedFault, NormalizedFetch, PublicationOutcome};
 use crate::{ModelError, ModelResult};
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::{AbiCompletion, AbiEvent, QueueRingLayouts};
 use pdma_model_contract::semantic::{CompletionRingId, QueueId};
 
@@ -50,20 +50,19 @@ impl ExactQueueIo {
     }
     pub(super) fn probe(
         &self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         queue: QueueId,
     ) -> ModelResult<Option<NormalizedFetch>> {
         let active = self.ring_state();
         submission::fetch(memory, active, queue).map(|fetched| {
-            fetched.map(|fetched| {
-                submission::normalize(memory, CompletionRingId::new(queue.raw()), fetched)
-            })
+            fetched
+                .map(|fetched| submission::normalize(CompletionRingId::new(queue.raw()), fetched))
         })
     }
 
     pub(super) fn fetch(
         &mut self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         queue: QueueId,
     ) -> ModelResult<Option<NormalizedFetch>> {
         let active = self.ring_state();
@@ -77,7 +76,7 @@ impl ExactQueueIo {
                 self.pending_fault = Some(event);
                 NormalizedFetch::Fault(NormalizedFault {
                     queue,
-                    source: submission::fault_source(memory, event),
+                    source: ModelError::MemoryFault(event.fault()),
                 })
             }
         }))
@@ -94,7 +93,7 @@ impl ExactQueueIo {
 
     pub(super) fn publish_completion(
         &mut self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         record: AbiCompletion,
     ) -> PublicationOutcome {
         let active = self.ring_state_mut();
@@ -107,7 +106,7 @@ impl ExactQueueIo {
 
     pub(super) fn publish_fault(
         &mut self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
     ) -> super::io::FaultPublication {
         let Some(event) = self.pending_fault else {
             return super::io::FaultPublication::Retry;

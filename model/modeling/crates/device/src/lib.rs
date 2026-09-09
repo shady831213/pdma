@@ -19,7 +19,7 @@
 //! ```
 //!
 //! ```
-//! use pdma_model_device::{AsyncDevice, AsyncStallReason, DeviceCore, MappedDmaRegion, ModelError};
+//! use pdma_model_device::{AsyncDevice, AsyncStallReason, DeviceCore, ModelError};
 //! ```
 //!
 //! ```compile_fail
@@ -46,15 +46,17 @@
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
 mod adapter;
-pub mod memory;
-/// Compatibility import for the existing device-memory API.
-pub use memory as dma;
 mod error;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "private root caps downstream API while pub(crate) descendants are shared across sibling device systems"
 )]
 mod irq;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private address helpers are shared across device systems without exposing a memory API"
+)]
+mod memory;
 #[expect(
     clippy::redundant_pub_crate,
     reason = "decoded operands are shared across private hardware units"
@@ -93,11 +95,9 @@ mod test_support;
 pub use device::DeviceCore;
 pub use device::drive::HardwareStepStatus;
 pub use error::{ModelError, ModelError as DeviceError, ModelResult};
-pub use memory::{MappedDmaRegion, PdmaMemoryError, PdmaMemoryMappings};
 pub use queue::exact::{PdmaControlError, PendingDmaResult};
 pub use runtime::{
     AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, AsyncRunSnapshot, AsyncRunSummary,
     MmioRegisterEndpoint, MmioRegisterError,
 };
-pub use runtime::{PdmaMemoryProvisioning, PdmaMemoryStage};
 pub use status::{AsyncStallReason, AsyncStepStatus};

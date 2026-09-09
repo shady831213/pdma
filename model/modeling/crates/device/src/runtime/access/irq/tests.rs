@@ -1,5 +1,6 @@
 use crate::test_support::{configure, copy, doorbell, irq_write, submit};
-use crate::{AsyncDevice, AsyncDeviceHandle, DeviceCore, ModelError, PdmaMemoryProvisioning};
+use crate::{AsyncDevice, AsyncDeviceHandle, DeviceCore, ModelError};
+use hardware_interface_runtime::SharedMemoryAllocator;
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::abi::registers::{GlobalRegisters, IrqSourceRegisters};
 use pdma_model_contract::semantic::{DeviceEpoch, IrqNotification, ResourceConfig};
@@ -11,17 +12,11 @@ use std::{
 
 mod wake;
 
-fn publish_message(core: &mut DeviceCore, provisioning: &mut PdmaMemoryProvisioning) {
-    let queue = configure(core, provisioning, 0, [4, 4, 4]);
-    let source = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("source memory");
-    let destination = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("destination memory");
-    core.memory
-        .write_memory(source.base(), &[2, 4, 6, 8])
-        .expect("source write");
+fn publish_message(core: &mut DeviceCore, allocator: &SharedMemoryAllocator) {
+    let queue = configure(core, allocator, 0, [4, 4, 4]);
+    let source = crate::test_support::allocate(allocator, 4);
+    let destination = crate::test_support::allocate(allocator, 4);
+    crate::memory::write(&core.memory, source.base(), &[2, 4, 6, 8]).expect("source write");
     core.enable_tracing();
     for (offset, value) in [
         (IrqSourceRegisters::ROUTE_KIND.offset(), 1),
@@ -39,31 +34,27 @@ fn publish_message(core: &mut DeviceCore, provisioning: &mut PdmaMemoryProvision
     doorbell(core, queue);
     core.step().expect("copy retires");
     assert_eq!(
-        core.memory
-            .read_memory(destination.base(), 4)
-            .expect("copied memory"),
+        crate::memory::read(&core.memory, destination.base(), 4).expect("copied memory"),
         [2, 4, 6, 8]
     );
 }
 
-async fn pending_message() -> AsyncDeviceHandle {
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
+fn pending_message() -> (AsyncDeviceHandle, SharedMemoryAllocator) {
+    let allocator = SharedMemoryAllocator::new(
+        Arc::new(SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
     );
+    let mut core = DeviceCore::new(allocator.memory_access(), ResourceConfig::default());
+    publish_message(&mut core, &allocator);
+    let (device, _worker) = AsyncDevice::from_core(core);
     let handle = device.handle();
-    handle
-        .shared
-        .backend
-        .interact(|state| publish_message(&mut state.core, &mut state.provisioning))
-        .await;
-    handle
+    (handle, allocator)
 }
 
 #[tokio::test]
 async fn atomic_take_returns_empty_after_another_consumer_wins_readiness_race() {
     // Given: readiness observed twice for one actual hardware message.
-    let handle = pending_message().await;
+    let (handle, _allocator) = pending_message();
     assert!(handle.irq_notification_ready().await);
     assert!(
         handle
@@ -100,7 +91,7 @@ async fn atomic_take_returns_empty_after_another_consumer_wins_readiness_race() 
 #[tokio::test]
 async fn stale_take_cannot_consume_current_epoch_notification() {
     // Given: a message in a new device epoch.
-    let handle = pending_message().await;
+    let (handle, allocator) = pending_message();
     handle
         .register_endpoint()
         .write(
@@ -113,7 +104,7 @@ async fn stale_take_cannot_consume_current_epoch_notification() {
     handle
         .shared
         .backend
-        .interact(|state| publish_message(&mut state.core, &mut state.provisioning))
+        .interact(|state| publish_message(&mut state.core, &allocator))
         .await;
 
     // When: a stale capability attempts to take the new message.
@@ -141,7 +132,7 @@ async fn stale_take_cannot_consume_current_epoch_notification() {
 #[tokio::test]
 async fn pending_take_cancellation_preserves_notification() {
     // Given: a pending message and a backend lock held by a synchronized actor.
-    let handle = pending_message().await;
+    let (handle, _allocator) = pending_message();
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let shared = Arc::clone(&handle.shared);
@@ -178,7 +169,7 @@ async fn pending_take_cancellation_preserves_notification() {
 #[tokio::test]
 async fn readiness_wait_rejects_epoch_changed_while_pending() {
     // Given: a drained device and a readiness wait suspended in the initial epoch.
-    let handle = pending_message().await;
+    let (handle, _allocator) = pending_message();
     handle
         .take_irq_notification_at_epoch(DeviceEpoch::initial())
         .await

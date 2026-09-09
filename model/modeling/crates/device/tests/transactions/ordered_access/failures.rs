@@ -1,16 +1,17 @@
 use super::support::{self, TestResult};
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{
+    MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, RegisterAccess,
+};
 use pdma_model_contract::abi::registers::{GlobalRegisters, QueueRegisters, queue_offset};
 use pdma_model_contract::abi::{AbiControlError, DmaAddress};
 use pdma_model_contract::semantic::DeviceEpoch;
-use pdma_model_device::{MmioRegisterError, PdmaControlError, PdmaMemoryError};
+use pdma_model_device::{MmioRegisterError, PdmaControlError};
 
 #[tokio::test]
 async fn malformed_activation_preserves_previously_committed_mapping() -> TestResult {
     // Given: committed rings with a submission extent too short for the requested depth.
     let handle = support::new_handle();
-    let stage = handle.stage_memory_regions(&[64, 64, 128]).await?;
-    let regions = handle.commit_memory_stage(stage).await?;
+    let regions = handle.rings([64, 64, 128])?;
     support::program_activation(&handle.register_endpoint(), &regions).await?;
 
     // When: raw activation validates the actual mapped ring lengths.
@@ -25,10 +26,15 @@ async fn malformed_activation_preserves_previously_committed_mapping() -> TestRe
     // Then: queue activation fails, but the earlier memory commit remains visible.
     assert_eq!(
         result,
-        Err(MmioRegisterError::Control(PdmaControlError::Abi(
-            AbiControlError::RingExtentMismatch {
-                expected: 128,
-                actual: 64
+        Err(MmioRegisterError::Control(PdmaControlError::Memory(
+            MemoryAccessError::CrossesRegion {
+                address: MemoryAddress::new(regions[0].raw()),
+                length: 128,
+                region: MemoryRegion::try_new(
+                    MemoryAddress::new(regions[0].raw()),
+                    64,
+                    MemoryAlignment::try_new(64)?
+                )?
             }
         )))
     );
@@ -41,11 +47,11 @@ async fn malformed_activation_preserves_previously_committed_mapping() -> TestRe
         )
         .await?;
     assert_eq!(enabled, 0_u32.to_le_bytes());
-    assert_eq!(handle.memory_generation().await, 1);
-    for region in regions {
+    assert_eq!(handle.memory.revision().raw(), 3);
+    for (region, length) in regions.into_iter().zip([64, 64, 128]) {
         assert_eq!(
-            handle.region_for_object(region.object()).await,
-            Some(region)
+            handle.read_memory(region, length).await?,
+            vec![0; usize::try_from(length)?]
         );
     }
     Ok(())
@@ -56,7 +62,7 @@ async fn rejected_publication_preserves_written_bytes_and_live_cursors() -> Test
     // Given: an active queue and a descriptor write already completed.
     let handle = support::new_handle();
     let submission = support::bootstrap(&handle).await?;
-    handle.write_memory(submission.base(), &[0xaa; 64]).await?;
+    handle.write_memory(submission, &[0xaa; 64]).await?;
     let status_before = support::cursors(&handle).await?;
 
     // When: producer publication exceeds the two-entry ring capacity.
@@ -79,10 +85,7 @@ async fn rejected_publication_preserves_written_bytes_and_live_cursors() -> Test
             }
         )))
     );
-    assert_eq!(
-        handle.read_memory(submission.base(), 64).await?,
-        vec![0xaa; 64]
-    );
+    assert_eq!(handle.read_memory(submission, 64).await?, vec![0xaa; 64]);
     assert_eq!(support::cursors(&handle).await?, status_before);
     Ok(())
 }
@@ -92,9 +95,9 @@ async fn unmapped_descriptor_write_preserves_earlier_indirect_write() -> TestRes
     // Given: active rings and an independently mapped and written indirect extent.
     let handle = support::new_handle();
     let submission = support::bootstrap(&handle).await?;
-    handle.write_memory(submission.base(), &[0x5a; 64]).await?;
-    let indirect = handle.allocate_memory_region(8).await?;
-    handle.write_memory(indirect.base(), &[0xbb; 8]).await?;
+    handle.write_memory(submission, &[0x5a; 64]).await?;
+    let indirect = handle.allocate(8)?;
+    handle.write_memory(indirect, &[0xbb; 8]).await?;
     let before = handle.snapshot().await;
     let cursors_before = support::cursors(&handle).await?;
 
@@ -104,17 +107,15 @@ async fn unmapped_descriptor_write_preserves_earlier_indirect_write() -> TestRes
         .await;
 
     // Then: only that access fails; all completed memory operations remain visible.
-    assert_eq!(result, Err(PdmaMemoryError::Unmapped));
-    assert_eq!(handle.memory_generation().await, 2);
     assert_eq!(
-        handle.region_for_object(indirect.object()).await,
-        Some(indirect)
+        result,
+        Err(MemoryAccessError::Unmapped {
+            address: MemoryAddress::new(0xdead_0000)
+        })
     );
-    assert_eq!(handle.read_memory(indirect.base(), 8).await?, vec![0xbb; 8]);
-    assert_eq!(
-        handle.read_memory(submission.base(), 64).await?,
-        vec![0x5a; 64]
-    );
+    assert_eq!(handle.memory.revision().raw(), 4);
+    assert_eq!(handle.read_memory(indirect, 8).await?, vec![0xbb; 8]);
+    assert_eq!(handle.read_memory(submission, 64).await?, vec![0x5a; 64]);
     assert_eq!(support::cursors(&handle).await?, cursors_before);
     assert_eq!(handle.snapshot().await, before);
     Ok(())
@@ -124,8 +125,7 @@ async fn unmapped_descriptor_write_preserves_earlier_indirect_write() -> TestRes
 async fn stale_activation_after_reset_preserves_committed_memory() -> TestResult {
     // Given: committed ring mappings retained through whole-device reset.
     let handle = support::new_handle();
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let regions = handle.commit_memory_stage(stage).await?;
+    let regions = handle.rings([128, 64, 128])?;
     let expired = handle.register_endpoint();
     expired
         .write(
@@ -156,7 +156,7 @@ async fn stale_activation_after_reset_preserves_committed_memory() -> TestResult
             actual: DeviceEpoch::initial()
         })
     );
-    assert_eq!(handle.memory_generation().await, 1);
+    assert_eq!(handle.memory.revision().raw(), 3);
     let mut enabled = [0; 4];
     expired
         .read(
@@ -165,10 +165,10 @@ async fn stale_activation_after_reset_preserves_committed_memory() -> TestResult
         )
         .await?;
     assert_eq!(enabled, 0_u32.to_le_bytes());
-    for region in regions {
+    for (region, length) in regions.into_iter().zip([128, 64, 128]) {
         assert_eq!(
-            handle.region_for_object(region.object()).await,
-            Some(region)
+            handle.read_memory(region, length).await?,
+            vec![0; usize::try_from(length)?]
         );
     }
     Ok(())

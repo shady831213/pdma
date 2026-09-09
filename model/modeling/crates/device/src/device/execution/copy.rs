@@ -4,13 +4,13 @@ mod tests;
 use super::memory::QueueMemoryResolver;
 use super::{CommandRoute, ExecutionOutcome, success};
 use crate::device::flow::ExecutionFault;
-use crate::memory::PdmaMemoryMappings;
 use crate::operation::{CopyOperands, StridedOperands};
+use hardware_interface_runtime::SharedMemoryAccess;
 use pdma_model_contract::abi::{AbiEventAccess, AbiEventStage, AbiFaultSite};
 use pdma_model_contract::semantic::TraceOperation;
 
 pub(super) fn execute(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     route: CommandRoute,
     request: CopyOperands,
 ) -> ExecutionOutcome {
@@ -39,7 +39,7 @@ pub(super) fn execute(
 }
 
 pub(super) fn execute_strided(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     route: CommandRoute,
     request: StridedOperands,
 ) -> ExecutionOutcome {
@@ -73,7 +73,7 @@ pub(super) fn execute_strided(
 }
 
 fn resolve_row(
-    memory: &PdmaMemoryMappings,
+    memory: &SharedMemoryAccess,
     resolver: QueueMemoryResolver,
     request: StridedOperands,
     row: u32,

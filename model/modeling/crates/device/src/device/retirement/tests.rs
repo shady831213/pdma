@@ -9,11 +9,12 @@ use pdma_model_contract::semantic::{QueueId, ResourceConfig};
 #[test]
 fn frontend_fault_cache_consumes_command_and_holds_source_for_retry() {
     // Given: one exact queue with a published and captured descriptor.
-    let mut provisioning = crate::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
-    let mut core = crate::DeviceCore::new(provisioning.memory_access(), ResourceConfig::default());
-    let queue = crate::test_support::configure(&mut core, &mut provisioning, 0, [2, 2, 2]);
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = crate::DeviceCore::new(allocator.memory_access(), ResourceConfig::default());
+    let queue = crate::test_support::configure(&mut core, &allocator, 0, [2, 2, 2]);
     crate::test_support::submit(&mut core, queue, crate::test_support::copy(0, 0, 0, 1));
     crate::test_support::doorbell(&mut core, queue);
     let mut trace = TraceSink::default();

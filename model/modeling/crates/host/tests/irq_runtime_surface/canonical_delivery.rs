@@ -6,7 +6,7 @@ use pdma_model_contract::abi::registers::GlobalRegisters;
 use pdma_model_contract::semantic::{
     DeviceEpoch, IrqNotification, IrqRoute, IrqVector, ResourceConfig, TraceEventKind,
 };
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort};
 use pdma_model_host::runtime::interrupt::{
     PdmaInterruptTrace, PdmaIrqHandler, PdmaIrqService, PdmaIrqServiceError,
@@ -74,14 +74,13 @@ async fn submit_message(
 #[tokio::test(flavor = "current_thread")]
 async fn canonical_handler_error_traces_failure_without_hardware_ack() {
     // Given: an actual DMA completion and a software handler that rejects its drained record.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     device.handle().enable_tracing().await;
     let worker = tokio::spawn(worker.run());
     let cpu = Arc::new(SoftwareCpu::new());
-    let access = AsyncDeviceAccess::new(device.handle());
+    let access = AsyncDeviceAccess::new(device.handle(), memory.clone());
     let (port, driver) = submit_message(&cpu, access.clone()).await;
     let registry = HandlerRegistry::with_handler(
         IrqVector::new(9),
@@ -129,14 +128,13 @@ async fn canonical_handler_error_traces_failure_without_hardware_ack() {
 #[tokio::test(flavor = "current_thread")]
 async fn canonical_claimed_notification_after_reset_fails_before_drain_and_ack() {
     // Given: an actual claimed message waiting behind another complete handler turn.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     device.handle().enable_tracing().await;
     let worker = tokio::spawn(worker.run());
     let cpu = Arc::new(SoftwareCpu::new());
-    let access = AsyncDeviceAccess::new(device.handle());
+    let access = AsyncDeviceAccess::new(device.handle(), memory.clone());
     let (port, driver) = submit_message(&cpu, access.clone()).await;
     assert!(device.handle().wait_irq_notification_ready().await);
     let (entered, entered_rx) = tokio::sync::oneshot::channel();

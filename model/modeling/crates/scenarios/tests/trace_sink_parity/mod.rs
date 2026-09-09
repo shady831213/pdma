@@ -15,10 +15,11 @@ use pdma_model_host::{CopyRequest, VectorAddRequest, VectorBufferRange};
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_idle_status_steps() {
     // Given: an idle async runner with tracing enabled after startup noise is cleared.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -92,10 +93,11 @@ async fn async_trace_log_preserves_success_before_completion_pressure_stall() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_queue_only_doorbells() {
     // Given: two drivers whose first commands reuse the same command id on distinct queues.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -107,8 +109,11 @@ async fn async_trace_log_records_queue_only_doorbells() {
     // When: one software main submits command id zero on both queues.
     let (copy_command, vector_command, vector_queue_id) = cpu
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
-                .expect("active software CPU");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                raw_handle.clone(),
+                host_memory.clone(),
+            ))
+            .expect("active software CPU");
             let mut copy_driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("copy queue setup is valid");

@@ -21,11 +21,15 @@ use tokio::sync::oneshot;
 async fn message_irq_linear_copy_runs_main_handler_main_end_to_end()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let observer = Arc::new(RecordingRegisterObserver::default());
-    let (device, worker) = fresh_device(observer.clone());
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let (device, worker) = fresh_device(&host_memory, observer.clone());
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     start_trace(&handle).await;
-    let access = RecordingMemoryAccess::new(AsyncDeviceAccess::new(handle.clone()));
+    let access =
+        RecordingMemoryAccess::new(AsyncDeviceAccess::new(handle.clone(), host_memory.clone()));
     let cpu = Arc::new(SoftwareCpu::new());
     let phase = cpu.local(SoftwarePhase::MainBeforeSubmit);
     let vector = IrqVector::new(64);

@@ -3,6 +3,7 @@
 
 mod access;
 mod address;
+mod allocator;
 mod cpu;
 mod error;
 mod interrupt;
@@ -15,6 +16,7 @@ mod trace;
 
 pub use access::{MemoryAccess, MemoryAccessError};
 pub use address::{MemoryAddress, MemoryAlignment, MemoryRevision};
+pub use allocator::{MemoryAllocationError, SharedMemoryAllocator};
 pub use cpu::{CpuContextError, CpuLocal, CpuOwner, SoftwareCpu};
 pub use error::{MemoryAlignmentError, MemoryError, MemoryRegionError};
 pub use interrupt::{

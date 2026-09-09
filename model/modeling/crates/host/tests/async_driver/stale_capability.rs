@@ -3,7 +3,7 @@ use pdma_model_contract::{
     abi::registers::GlobalRegisters,
     semantic::{CommandId, DeviceEpoch, ResourceConfig},
 };
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     Command, CommandOperation, CopyRequest, DriverPort, PortError,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -13,14 +13,13 @@ use std::sync::Arc;
 #[tokio::test(flavor = "current_thread")]
 async fn stale_queue_and_result_capabilities_commit_nothing() {
     // Given: a queue capability retained across whole-device reset.
-    let (device, _worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, _worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let handle = device.handle();
     SoftwareCpu::new()
         .run_main(async {
-            let access = AsyncDeviceAccess::new(handle.clone());
+            let access = AsyncDeviceAccess::new(handle.clone(), memory.clone());
             let mut old = PdmaRegisterPort::new(access.clone()).expect("port");
             let queue = old
                 .create_queue(super::register_flow::config())
@@ -41,7 +40,7 @@ async fn stale_queue_and_result_capabilities_commit_nothing() {
                 CommandId::new(0),
                 CommandOperation::Copy(CopyRequest::new(src, dst, 1)),
             );
-            let before = handle.memory_generation().await;
+            let before = storage.revision().raw();
 
             // When: old capabilities attempt queue, IRQ, and result operations.
             let results = [
@@ -62,12 +61,9 @@ async fn stale_queue_and_result_capabilities_commit_nothing() {
                     })
                 );
             }
-            assert_eq!(handle.memory_generation().await, before);
+            assert_eq!(storage.revision().raw(), before);
             assert_eq!(
-                handle
-                    .read_buffer(src, 0, 1)
-                    .await
-                    .expect("persistent bytes"),
+                old.read_buffer(src, 0, 1).await.expect("persistent bytes"),
                 [7]
             );
             let mut fresh = PdmaRegisterPort::new_at(access, epoch).expect("new epoch port");

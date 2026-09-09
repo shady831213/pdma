@@ -11,9 +11,9 @@ use support::*;
 #[tokio::test]
 async fn source_registers_expose_complete_post_transition_state() -> TestResult {
     // Given: an activated completion source with default routing and mask.
-    let (device, _worker) = device(ResourceConfig::default());
+    let (device, _worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    create_queue(&handle, 1).await?;
+    create_queue(&handle, &allocator, 1).await?;
     let endpoint = handle.register_endpoint();
     assert_eq!(
         read_u32(&endpoint, i(IrqSourceRegisters::STATUS.offset())?).await?,
@@ -50,12 +50,12 @@ async fn source_registers_expose_complete_post_transition_state() -> TestResult 
 #[tokio::test(flavor = "current_thread")]
 async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> TestResult {
     // Given: one published completion on an enabled unmasked Line source.
-    let (device, worker) = device(ResourceConfig::default());
+    let (device, worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    let [submission, completion, _] = create_queue(&handle, 1).await?;
+    let [submission, completion, _] = create_queue(&handle, &allocator, 1).await?;
     let endpoint = handle.register_endpoint();
     enable(&endpoint).await?;
-    submit_copy(&handle, submission.base(), 0).await?;
+    submit_copy(&handle, &allocator, (submission, 0)).await?;
     write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await?;
     let worker = tokio::spawn(worker.run());
     device.wait_for_progress_after(0).await;
@@ -84,10 +84,7 @@ async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> 
     assert!(
         AbiCompletion::decode(
             &handle
-                .read_memory(
-                    completion.base(),
-                    u64::try_from(AbiCompletion::RECORD_SIZE)?
-                )
+                .read_memory(completion, u64::try_from(AbiCompletion::RECORD_SIZE)?)
                 .await?
         )
         .is_ok()
@@ -113,15 +110,15 @@ async fn line_snapshot_claim_and_ack_are_non_consuming_until_records_drain() -> 
 #[tokio::test(flavor = "current_thread")]
 async fn message_readiness_is_non_consuming_and_claim_consumes_exactly_one() -> TestResult {
     // Given: two completions on a Message source masked during publication.
-    let (device, worker) = device(ResourceConfig::default());
+    let (device, worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    let [submission, _, _] = create_queue(&handle, 2).await?;
+    let [submission, _, _] = create_queue(&handle, &allocator, 2).await?;
     let endpoint = handle.register_endpoint();
     write_u32(&endpoint, i(IrqSourceRegisters::ROUTE_KIND.offset())?, 1).await?;
     write_u64(&endpoint, i(IrqSourceRegisters::ROUTE_VECTOR.offset())?, 41).await?;
     write_u32(&endpoint, i(IrqSourceRegisters::ENABLED.offset())?, 1).await?;
     for slot in 0..2 {
-        submit_copy(&handle, submission.base(), slot).await?;
+        submit_copy(&handle, &allocator, (submission, slot)).await?;
     }
     write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 2).await?;
     let worker = tokio::spawn(worker.run());
@@ -187,9 +184,9 @@ async fn message_readiness_is_non_consuming_and_claim_consumes_exactly_one() -> 
 #[tokio::test]
 async fn malformed_stale_and_active_route_writes_preserve_source_state() -> TestResult {
     // Given: an enabled completion source.
-    let (device, _worker) = device(ResourceConfig::default());
+    let (device, _worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    create_queue(&handle, 1).await?;
+    create_queue(&handle, &allocator, 1).await?;
     let endpoint = handle.register_endpoint();
     enable(&endpoint).await?;
     let before = handle.snapshot().await;

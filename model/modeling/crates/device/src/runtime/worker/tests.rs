@@ -7,7 +7,7 @@ mod irq;
 
 struct AcceptedCopy {
     shared: RunnerShared,
-    target: pdma_model_contract::semantic::BufferId,
+    target: pdma_model_contract::abi::DmaAddress,
 }
 
 fn accepted_copy() -> AcceptedCopy {
@@ -15,21 +15,16 @@ fn accepted_copy() -> AcceptedCopy {
 }
 
 fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
-    let mut provisioning = crate::runtime::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-        hardware_interface_runtime::SharedMemory::new(),
-    ));
-    let mut core = crate::DeviceCore::new(provisioning.memory_access(), resources);
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1_0000),
+    );
+    let mut core = crate::DeviceCore::new(allocator.memory_access(), resources);
     core.enable_tracing();
-    let source = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("source allocation");
-    let target = provisioning
-        .allocate(&mut core.memory, 4)
-        .expect("target allocation");
-    core.memory
-        .write_object(source.object(), 0, &[1, 3, 5, 7])
-        .expect("source bytes");
-    let queue = crate::test_support::configure(&mut core, &mut provisioning, 0, [2, 2, 2]);
+    let source = crate::test_support::allocate(&allocator, 4);
+    let target = crate::test_support::allocate(&allocator, 4);
+    crate::memory::write(&core.memory, source.base(), &[1, 3, 5, 7]).expect("source bytes");
+    let queue = crate::test_support::configure(&mut core, &allocator, 0, [2, 2, 2]);
     crate::test_support::submit(
         &mut core,
         queue,
@@ -38,15 +33,12 @@ fn accepted_copy_with_resources(resources: ResourceConfig) -> AcceptedCopy {
     crate::test_support::doorbell(&mut core, queue);
     AcceptedCopy {
         shared: RunnerShared {
-            backend: crate::runtime::backend::DeviceInteractionBackend::new(RunnerState::new(
-                core,
-                provisioning,
-            )),
+            backend: crate::runtime::backend::DeviceInteractionBackend::new(RunnerState::new(core)),
             register_gate: ObservationGate::new(SharedRegisterObserver::new(std::sync::Arc::new(
                 NoopRegisterObserver,
             ))),
         },
-        target: target.object(),
+        target: target.base(),
     }
 }
 
@@ -84,11 +76,7 @@ async fn observation(fixture: &AcceptedCopy) -> (usize, Vec<u8>, usize, usize) {
         .interact(|state| {
             (
                 state.core.native_steps(),
-                state
-                    .core
-                    .memory
-                    .read_object(fixture.target, 0, 4)
-                    .expect("target bytes"),
+                crate::memory::read(&state.core.memory, fixture.target, 4).expect("target bytes"),
                 state.steps,
                 state
                     .core

@@ -63,7 +63,7 @@ fn fetch_and_retirement_share_one_queue_state_in_composed_operators() {
     assert!(core.irq_snapshot().expect("line source").asserted());
     for destination in prepared.destinations {
         assert_eq!(
-            core.memory.read_object(destination.object(), 0, 8),
+            crate::memory::read(&core.memory, destination.base(), 8),
             Ok(vec![1, 2, 3, 4, 0, 0, 0, 0])
         );
     }

@@ -5,7 +5,7 @@ use pdma_model_contract::abi::registers::irq_offset;
 #[tokio::test(flavor = "current_thread")]
 async fn mmio_unmask_wakes_idle_worker_and_releases_one_retained_message() {
     // Given: a masked message, an idle worker and a suspended readiness waiter.
-    let handle = pending_message().await;
+    let (handle, _allocator) = pending_message();
     let endpoint = handle.register_endpoint();
     let mask = irq_offset(0, 0, IrqSourceRegisters::MASKED.offset()).expect("mask offset");
     endpoint

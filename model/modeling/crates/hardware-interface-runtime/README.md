@@ -13,10 +13,21 @@ canonical offset decoder. A host can therefore issue full bus addresses while a
 device uses generated typed views over the same root image; the runtime does not own a
 register map or device effect.
 
+`MemoryAccess::validate` checks complete extents without reading or writing bytes or
+allocating backing. It preserves overflow, alignment, lookup, and region-crossing
+error order, including mapped zero-length endpoints. `SharedMemoryAccess` exposes
+this check together with reads and writes, without storage-management authority.
+
+`SharedMemoryAllocator` provides a clone-shared monotonic address cursor over a
+caller-supplied `SharedMemory`. Nonzero allocations install zeroed backing before
+advancing the cursor; failures preserve the cursor and storage. Zero-sized allocations
+reserve one logical address without installing backing. The consumer chooses the
+starting address and owns device mapping policy and logical zero-mapping semantics.
+
 The crate also contains concrete software CPU, interrupt-dispatch, and trace-buffer
-facilities. Those are runtime services rather than schema/storage algorithms. Address
-allocation, register maps and effects, device IDs, epochs, logical zero mappings,
-recording collectors, actors, PDMA scheduling, and timing remain consumer policy.
+facilities. Those are runtime services rather than schema/storage algorithms. Register
+maps and effects, device IDs, epochs, recording collectors, actors, PDMA scheduling,
+and timing remain consumer policy.
 
 `SoftwareCpu` treats each real main `Poll::Pending` as a segment boundary while retaining
 FIFO position during gate acquisition. `run_handler_turn` holds that gate for one complete

@@ -8,7 +8,7 @@ use pdma_model_contract::semantic::{ResourceConfig, TraceEventKind};
 async fn result_bytes_precede_irq_and_retry_does_not_reexecute() -> TestResult {
     // Given: two DMA copies compete for one completion slot.
     let mut fixture = Fixture::new(ResourceConfig::default()).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
+    let pair = allocate_pair(&fixture).await?;
     for (offset, value) in [
         (IrqSourceRegisters::ENABLED.offset(), 1),
         (IrqSourceRegisters::MASKED.offset(), 0),
@@ -102,7 +102,7 @@ async fn event_pressure_retries_one_fault_after_consumer_advance() -> TestResult
 async fn corrupt_result_and_masked_line_preserve_consumer_and_pending_cause() -> TestResult {
     // Given: one completion whose IRQ source is enabled but remains masked.
     let mut fixture = Fixture::new(ResourceConfig::default()).await?;
-    let pair = allocate_pair(&fixture.handle).await?;
+    let pair = allocate_pair(&fixture).await?;
     write(
         &fixture.endpoint,
         irq_offset(0, 0, IrqSourceRegisters::ENABLED.offset())?,

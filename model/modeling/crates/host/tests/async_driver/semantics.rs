@@ -8,14 +8,14 @@ use pdma_model_host::{AsyncDriver, ManualDriver};
 #[tokio::test(flavor = "current_thread")]
 async fn completion_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a completed command on a depth-one CPU-bound driver.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut port = super::support::BlockingPort::new(device.handle());
+    let mut port = super::support::BlockingPort::new(device.handle(), memory.clone());
 
     // When: software pops the completion and immediately submits another command.
     let (completion, next) = SoftwareCpu::new()
@@ -49,14 +49,14 @@ async fn completion_pop_reclaims_credit_before_future_can_suspend() {
 #[tokio::test(flavor = "current_thread")]
 async fn event_pop_reclaims_credit_before_future_can_suspend() {
     // Given: a fault event for a depth-one CPU-bound driver.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut port = super::support::BlockingPort::new(device.handle());
+    let mut port = super::support::BlockingPort::new(device.handle(), memory.clone());
 
     // When: software pops the event and immediately submits another command.
     let (event, next) = SoftwareCpu::new()
@@ -92,14 +92,14 @@ async fn event_pop_reclaims_credit_before_future_can_suspend() {
 #[tokio::test(flavor = "current_thread")]
 async fn manual_mode_matches_shared_credit_and_reclaim_semantics() {
     // Given: two manual driver capabilities for one depth-one queue.
+    let storage = std::sync::Arc::new(hardware_interface_runtime::SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
     let (device, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
-    let mut port = super::support::BlockingPort::new(device.handle());
+    let mut port = super::support::BlockingPort::new(device.handle(), memory.clone());
     let cpu = SoftwareCpu::new();
     let (mut first, mut second, src, dst, submitted, full) = cpu
         .run_main(async {

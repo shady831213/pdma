@@ -1,8 +1,9 @@
 use pdma_model_contract::semantic::TraceEvent;
 
 use super::{Fixture, PipelineRunOutcome};
+use crate::ModelError;
 use crate::device::{DeviceCore, ModelStepStatus};
-use crate::{MappedDmaRegion, ModelError, ModelResult};
+use pdma_model_contract::abi::DmaRegion;
 
 pub(crate) fn cursors(
     core: &DeviceCore,
@@ -46,6 +47,9 @@ pub(crate) fn trace_kinds(
     trace.iter().map(TraceEvent::kind).collect()
 }
 
-pub(crate) fn read(core: &DeviceCore, region: MappedDmaRegion) -> ModelResult<Vec<u8>> {
-    core.memory.read_object(region.object(), 0, 8)
+pub(crate) fn read(
+    core: &DeviceCore,
+    region: DmaRegion,
+) -> Result<Vec<u8>, hardware_interface_runtime::MemoryAccessError> {
+    crate::memory::read(&core.memory, region.base(), 8)
 }

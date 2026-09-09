@@ -19,17 +19,13 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     // Given: an exact queue whose captured descriptor has invalid ABI metadata.
     let mut fixture = Fixture::new(ResourceConfig::default());
     fixture.core.enable_tracing();
-    let queue =
-        crate::test_support::configure(&mut fixture.core, &mut fixture.provisioning, 0, [2, 1, 1]);
+    let queue = crate::test_support::configure(&mut fixture.core, &fixture.allocator, 0, [2, 1, 1]);
     let address = queue
         .layouts
         .submission()
         .entry_address(RingCursor::new(0))
         .expect("SQ slot");
-    fixture
-        .core
-        .memory
-        .write_memory(address, &[0; AbiCommand::RECORD_SIZE])
+    crate::memory::write(&fixture.core.memory, address, &[0; AbiCommand::RECORD_SIZE])
         .expect("invalid descriptor");
     crate::test_support::write_queue(
         &mut fixture.core,
@@ -61,7 +57,9 @@ fn frontend_normalization_fault_flows_through_fetch_and_retirement() {
     fixture.restart();
     assert_eq!(
         drive_to_complete(&mut fixture),
-        Err(ModelError::DmaSubmissionState)
+        Err(ModelError::MemoryFault(
+            pdma_model_contract::abi::AbiFault::invalid_version(address, 0)
+        ))
     );
     assert_eq!(fixture.fetch_count(), 1);
     assert!(fixture.core.command_pipeline.is_empty());
@@ -97,11 +95,7 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
         .submission()
         .entry_address(RingCursor::new(0))
         .expect("descriptor");
-    prepared
-        .fixture
-        .core
-        .memory
-        .write_memory(address, &0_u16.to_le_bytes())
+    crate::memory::write(&prepared.fixture.core.memory, address, &0_u16.to_le_bytes())
         .expect("invalid version");
     let source = ModelError::DmaSubmissionState;
     let fetched = prepared
@@ -149,16 +143,8 @@ fn frontend_fault_retirement_preserves_normalized_source_and_cursor() {
 fn invalid_completion_retires_without_dma_or_success_publication() {
     // Given: the execution hardware receives a route naming an absent completion ring.
     let mut prepared = prepare(Case::Copy);
-    let source = prepared
-        .fixture
-        .provisioning
-        .allocate(&mut prepared.fixture.core.memory, 8)
-        .expect("source");
-    prepared
-        .fixture
-        .core
-        .memory
-        .write_object(source.object(), 0, &[9; 8])
+    let source = crate::test_support::allocate(&prepared.fixture.allocator, 8);
+    crate::memory::write(&prepared.fixture.core.memory, source.base(), &[9; 8])
         .expect("source bytes");
     let route = CommandRoute::new(
         prepared.queue.queue_id(),

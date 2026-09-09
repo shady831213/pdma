@@ -28,16 +28,17 @@ async fn malformed_ack_width_is_typed_and_non_mutating() -> support::TestResult 
     // Given: one pending message and an observer with a stable pre-access transcript.
     let observer = Arc::new(support::RecordingObserver::default());
     let memory = Arc::new(hardware_interface_runtime::SharedMemory::new());
-    let (device, worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(memory),
-        ResourceConfig::default(),
-        observer.clone(),
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        memory.clone(),
+        hardware_interface_runtime::MemoryAddress::new(0x1000),
     );
+    let (device, worker) =
+        AsyncDevice::new_observed(memory.clone(), ResourceConfig::default(), observer.clone());
     let worker = tokio::spawn(worker.run());
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
-    let queue = support::create_message(&handle).await?;
-    support::submit_copy(&handle, queue).await?;
+    let queue = support::create_message(&handle, &allocator).await?;
+    support::submit_copy(&handle, &allocator, queue).await?;
     device.wait_for_progress_after(0).await;
     let before_state = handle.snapshot().await;
     let before_observations = observer.snapshot();

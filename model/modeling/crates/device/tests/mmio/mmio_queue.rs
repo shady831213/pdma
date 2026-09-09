@@ -11,12 +11,12 @@ use pdma_model_device::{MmioRegisterError, PdmaControlError};
 use support::*;
 
 #[tokio::test]
-async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors() -> TestResult {
-    // Given: exact committed depth-two SQ/CQ/EQ mappings.
-    let (device, _worker) = device(ResourceConfig::default());
+async fn raw_activation_uses_backed_extents_and_returns_zero_cursors() -> TestResult {
+    // Given: backed depth-two SQ/CQ/EQ extents.
+    let (device, _worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
     // When: the queue is enabled through its direct configuration registers.
-    let _regions = create_queue(&handle, 2).await?;
+    let _regions = create_queue(&handle, &allocator, 2).await?;
     // Then: the live cursor registers start at zero.
     let endpoint = handle.register_endpoint();
     assert_eq!(
@@ -28,11 +28,11 @@ async fn raw_activation_uses_exact_committed_mappings_and_returns_zero_cursors()
 }
 
 #[tokio::test]
-async fn stale_activation_rejects_and_fresh_epoch_reuses_committed_mappings() -> TestResult {
-    // Given: an enabled queue and committed mappings retained across reset.
-    let (device, _worker) = device(ResourceConfig::default());
+async fn stale_activation_rejects_and_fresh_epoch_reuses_backing() -> TestResult {
+    // Given: an enabled queue and backing retained across reset.
+    let (device, _worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    let regions = create_queue(&handle, 2).await?;
+    let regions = create_queue(&handle, &allocator, 2).await?;
     let stale = handle.register_endpoint();
     write_u32(&stale, u32::try_from(GlobalRegisters::RESET.offset())?, 1).await?;
     let fresh = stale.at_epoch(DeviceEpoch::new(1));
@@ -71,9 +71,9 @@ async fn stale_activation_rejects_and_fresh_epoch_reuses_committed_mappings() ->
 #[tokio::test]
 async fn direct_producer_rejects_regression_and_excess_distance_without_mutation() -> TestResult {
     // Given: one active depth-two queue with producer one.
-    let (device, _worker) = device(ResourceConfig::default());
+    let (device, _worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    let _regions = create_queue(&handle, 2).await?;
+    let _regions = create_queue(&handle, &allocator, 2).await?;
     let endpoint = handle.register_endpoint();
     let producer = q(QueueRegisters::SQ_PRODUCER.offset())?;
     write_u64(&endpoint, producer, 1).await?;
@@ -106,11 +106,11 @@ async fn direct_producer_rejects_regression_and_excess_distance_without_mutation
 async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_event() -> TestResult
 {
     // Given: an active queue containing a malformed descriptor.
-    let (device, worker) = device(ResourceConfig::default());
+    let (device, worker, allocator) = device(ResourceConfig::default());
     let handle = device.handle();
-    let [submission, _, event] = create_queue(&handle, 2).await?;
+    let [submission, _, event] = create_queue(&handle, &allocator, 2).await?;
     let endpoint = handle.register_endpoint();
-    handle.write_memory(submission.base(), &[0; 64]).await?;
+    handle.write_memory(submission, &[0; 64]).await?;
     // When: doorbell-before-publication rejects, then publication and capture succeed.
     assert_eq!(
         write_u64(&endpoint, q(QueueRegisters::DOORBELL.offset())?, 1).await,
@@ -130,7 +130,7 @@ async fn raw_publication_precedes_doorbell_and_malformed_descriptor_retires_as_e
     assert!(
         AbiEvent::decode(
             &handle
-                .read_memory(event.base(), u64::try_from(AbiEvent::RECORD_SIZE)?)
+                .read_memory(event, u64::try_from(AbiEvent::RECORD_SIZE)?)
                 .await?
         )
         .is_ok()

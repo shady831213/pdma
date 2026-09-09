@@ -9,10 +9,12 @@ use std::sync::Arc;
 pub(super) async fn run() -> TestResult {
     // Given: an observed endpoint, generated direct register placements and a real worker.
     let observer = Arc::new(RecordingObserver::default());
+    let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
+        Arc::new(hardware_interface_runtime::SharedMemory::new()),
+        hardware_interface_runtime::MemoryAddress::new(0x1000),
+    );
     let (device, worker) = AsyncDevice::new_observed(
-        pdma_model_device::PdmaMemoryProvisioning::shared(Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        allocator.memory_access(),
         ResourceConfig::default(),
         observer.clone(),
     );
@@ -20,7 +22,7 @@ pub(super) async fn run() -> TestResult {
     let handle = device.handle();
     let endpoint = handle.register_endpoint();
     let resolved = PdmaRegisterMap::resolve()?;
-    let submission = create_message(&handle).await?;
+    let submission = create_message(&handle, &allocator).await?;
 
     // When: every readable placement and a real message-producing copy use the hardware.
     let mut reads = 0;
@@ -36,7 +38,7 @@ pub(super) async fn run() -> TestResult {
             reads += 1;
         }
     }
-    submit_copy(&handle, submission).await?;
+    submit_copy(&handle, &allocator, submission).await?;
     device.wait_for_progress_after(0).await;
     let before_claim = observer.snapshot();
     let notification = super::support::claim(&handle).await?;

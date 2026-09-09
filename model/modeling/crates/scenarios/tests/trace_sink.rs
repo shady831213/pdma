@@ -14,10 +14,11 @@ use pdma_model_host::{
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_complete_copy_lifecycle() {
     // Given: an async runner, a driver handle, source/destination buffers, and tracing enabled.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -29,8 +30,11 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
     // When: one complete software main submits a copy, waits, and polls the completion.
     let (command_id, completion, copied) = cpu
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
-                .expect("active software CPU");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                raw_handle.clone(),
+                host_memory.clone(),
+            ))
+            .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -112,10 +116,11 @@ async fn async_trace_log_records_complete_copy_lifecycle() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_error_event_without_success_completion() {
     // Given: a traced async runner and a copy that reads past the source buffer.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
@@ -127,8 +132,11 @@ async fn async_trace_log_records_error_event_without_success_completion() {
     // When: one complete software main submits the fault and polls its event path.
     let (command_id, event, completion) = cpu
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
-                .expect("active software CPU");
+            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+                raw_handle.clone(),
+                host_memory.clone(),
+            ))
+            .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -189,10 +197,11 @@ async fn async_trace_log_records_error_event_without_success_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn async_trace_log_records_stall_annotations_for_status_waits() {
     // Given: a traced async runner whose resources cannot satisfy a copy read.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         ResourceConfig::default().with_read_slots(0),
     );
     let worker = tokio::spawn(worker.run());
@@ -203,8 +212,11 @@ async fn async_trace_log_records_stall_annotations_for_status_waits() {
 
     // When: one complete software main submits the copy and waits for its first stall.
     cpu.run_main(async {
-        let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(raw_handle.clone()))
-            .expect("active software CPU");
+        let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(
+            raw_handle.clone(),
+            host_memory.clone(),
+        ))
+        .expect("active software CPU");
         let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
             .await
             .expect("queue setup is valid");

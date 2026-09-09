@@ -3,7 +3,9 @@
     reason = "test fixtures fail immediately with contextual setup and observation errors"
 )]
 
-use hardware_interface_runtime::RegisterAccess;
+use hardware_interface_runtime::{
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAllocator,
+};
 use pdma_model_contract::{
     abi::{
         AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
@@ -13,6 +15,7 @@ use pdma_model_contract::{
     semantic::ResourceConfig,
 };
 use pdma_model_device::{AsyncDevice, AsyncDeviceHandle, AsyncDeviceWorker, MmioRegisterEndpoint};
+use std::sync::Arc;
 
 pub(super) struct Fixture {
     pub(super) device: AsyncDevice,
@@ -27,27 +30,19 @@ pub(super) struct Fixture {
 
 impl Fixture {
     pub(super) async fn new(config: ResourceConfig) -> (Self, AsyncDeviceWorker) {
-        let (device, worker) = AsyncDevice::new(
-            pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-                hardware_interface_runtime::SharedMemory::new(),
-            )),
-            config,
-        );
+        let memory = Arc::new(SharedMemory::new());
+        let allocator = SharedMemoryAllocator::new(Arc::clone(&memory), MemoryAddress::new(0x1000));
+        let (device, worker) = AsyncDevice::new(memory, config);
         let handle = device.handle();
         let endpoint = handle.register_endpoint();
-        let sq = handle.allocate_memory_region(256).await.expect("SQ").base();
-        let cq = handle.allocate_memory_region(128).await.expect("CQ").base();
-        let eq = handle.allocate_memory_region(256).await.expect("EQ").base();
-        let source = handle
-            .allocate_memory_region(8)
-            .await
-            .expect("source")
-            .base();
-        let destination = handle
-            .allocate_memory_region(8)
-            .await
-            .expect("destination")
-            .base();
+        let [sq, cq, eq, source, destination] = [256, 128, 256, 8, 8].map(|length| {
+            DmaAddress::new(
+                allocator
+                    .allocate(length, MemoryAlignment::try_new(64).expect("alignment"))
+                    .expect("fixture allocation")
+                    .raw(),
+            )
+        });
         let fixture = Self {
             device,
             handle,

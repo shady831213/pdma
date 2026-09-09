@@ -18,17 +18,18 @@ pub(super) struct CompletionPressureTrace {
 
 #[allow(clippy::expect_used, clippy::redundant_pub_crate)]
 pub(super) async fn completion_pressure_trace() -> CompletionPressureTrace {
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         ResourceConfig::default()
             .with_compute_slots(0)
             .with_completion_publication_slots(1),
     );
     let worker = tokio::spawn(worker.run());
     let raw_handle = runner.handle();
-    let access = AsyncDeviceAccess::new(raw_handle.clone());
+    let access = AsyncDeviceAccess::new(raw_handle.clone(), host_memory.clone());
     raw_handle.enable_tracing().await;
     raw_handle.clear_trace().await;
 

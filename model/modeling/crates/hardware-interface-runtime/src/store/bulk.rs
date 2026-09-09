@@ -3,6 +3,18 @@ use super::{Memory, MemoryStorage, SharedMemory};
 use crate::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion};
 
 impl<P: MemoryStorage> MemoryAccess for Memory<P> {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        let access = CheckedAccess::extent(address, alignment, length)?;
+        inspect(&self.backend, |state| {
+            state.resolve(access.address, access.length).map(|_| ())
+        })
+    }
+
     fn read(
         &self,
         address: MemoryAddress,
@@ -35,6 +47,15 @@ impl<P: MemoryStorage> MemoryAccess for Memory<P> {
 }
 
 impl MemoryAccess for SharedMemory {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.memory.validate(address, alignment, length)
+    }
+
     fn read(
         &self,
         address: MemoryAddress,
@@ -89,6 +110,14 @@ impl CheckedAccess {
             address,
             length: u64::MAX,
         })?;
+        Self::extent(address, alignment, length)
+    }
+
+    fn extent(
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<Self, MemoryAccessError> {
         let end = address
             .checked_add(length)
             .ok_or(MemoryAccessError::AddressOverflow { address, length })?;

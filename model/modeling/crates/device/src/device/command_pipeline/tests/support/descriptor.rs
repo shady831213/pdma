@@ -1,15 +1,12 @@
 use super::{Case, Fixture};
-use crate::{MappedDmaRegion, test_support};
+use crate::test_support;
+use pdma_model_contract::abi::DmaRegion;
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadBroadcastCopyValues, AbiCommandPayloadStridedCopyValues,
     AbiCommandPayloadValues, AbiCommandPayloadVectorAddValues, U32WordValues,
 };
 
-pub(super) fn command(
-    fixture: &mut Fixture,
-    case: Case,
-    [a, b, x, y]: [MappedDmaRegion; 4],
-) -> AbiCommand {
+pub(super) fn command(fixture: &Fixture, case: Case, [a, b, x, y]: [DmaRegion; 4]) -> AbiCommand {
     let payload = match case {
         Case::Copy => return test_support::copy(7, a.base().raw(), x.base().raw(), 4),
         Case::Strided => AbiCommandPayloadValues::StridedCopy(AbiCommandPayloadStridedCopyValues {
@@ -21,19 +18,13 @@ pub(super) fn command(
             destination_stride: U32WordValues { value: 3 },
         }),
         Case::Broadcast => {
-            let list = fixture
-                .provisioning
-                .allocate(&mut fixture.core.memory, 16)
-                .expect("list");
+            let list = crate::test_support::allocate(&fixture.allocator, 16);
             let entries = [
                 x.base().raw().to_le_bytes(),
                 (y.base().raw() + 2).to_le_bytes(),
             ]
             .concat();
-            fixture
-                .core
-                .memory
-                .write_memory(list.base(), &entries)
+            crate::memory::write(&fixture.core.memory, list.base(), &entries)
                 .expect("destinations");
             AbiCommandPayloadValues::BroadcastCopy(AbiCommandPayloadBroadcastCopyValues {
                 source_dma_address: a.base().raw() + 1,

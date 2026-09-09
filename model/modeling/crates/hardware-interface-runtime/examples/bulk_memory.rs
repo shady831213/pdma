@@ -2,9 +2,11 @@
 
 use std::cell::Cell;
 use std::io::{self, Write};
+use std::sync::Arc;
 
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
+    SharedMemoryAllocator,
 };
 
 struct RecordingMemoryAccess<A> {
@@ -32,6 +34,15 @@ impl<A> RecordingMemoryAccess<A> {
 }
 
 impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.inner.validate(address, alignment, length)
+    }
+
     fn read(
         &self,
         address: MemoryAddress,
@@ -60,9 +71,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let alignment = MemoryAlignment::try_new(64)?;
     let before = happy_memory.revision().raw();
     let region = MemoryRegion::try_new(MemoryAddress::new(0x4000), 64, alignment)?;
-    happy_memory
-        .prepare_regions(&[region])?
-        .try_install(&happy_memory)?;
+    let allocator =
+        SharedMemoryAllocator::new(Arc::new(happy_memory.clone()), MemoryAddress::new(0x4000));
+    let allocated_address = allocator.allocate(64, alignment)?;
 
     let mut descriptor = [0x5a; 64];
     if let Some(first) = descriptor.first_mut() {
@@ -72,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         *last = 0xee;
     }
     let happy_access = RecordingMemoryAccess::new(happy_memory.clone());
+    happy_access.validate(allocated_address, alignment, 64)?;
     let mut output = [0; 64];
     happy_access.write(MemoryAddress::new(0x4000), alignment, &descriptor)?;
     happy_access.read(MemoryAddress::new(0x4000), alignment, &mut output)?;
@@ -98,6 +110,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let setup_access = RecordingMemoryAccess::new(adverse_memory.clone());
     setup_access.write(MemoryAddress::new(0x4000), alignment, &expected_store)?;
     let adverse_access = RecordingMemoryAccess::new(adverse_memory.clone());
+    let validation_crossing =
+        adverse_access.validate(MemoryAddress::new(0x403f), MemoryAlignment::ONE, 2);
     let mut destination = [0x55, 0x66];
     let before_destination = destination;
     let crossing = adverse_access.write(
@@ -122,13 +136,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let observed_hash: u64 = observed_store.iter().copied().map(u64::from).sum();
     writeln!(
         surface,
-        "adverse setup_write_calls={} adverse_write_calls={} adverse_read_calls={} verification_read_calls={} crossing={crossing:?} misaligned={misaligned:?} overflow={overflow:?} destination_before={before_destination:?} destination_after={destination:?} expected_store_hash={expected_hash} observed_store_hash={observed_hash} destination_unchanged={} store_unchanged={}",
+        "adverse setup_write_calls={} adverse_write_calls={} adverse_read_calls={} verification_read_calls={} crossing={crossing:?} validation_crossing={validation_crossing:?} misaligned={misaligned:?} overflow={overflow:?} destination_before={before_destination:?} destination_after={destination:?} expected_store_hash={expected_hash} observed_store_hash={observed_hash} destination_unchanged={} store_unchanged={}",
         setup_access.write_calls(),
         adverse_access.write_calls(),
         adverse_access.read_calls(),
         verification_access.read_calls(),
         destination == before_destination,
         observed_store == expected_store
+    )?;
+    let empty_memory = Arc::new(SharedMemory::with_region_capacity(0));
+    let limited = SharedMemoryAllocator::new(Arc::clone(&empty_memory), MemoryAddress::new(0x8003));
+    let capacity_failure = limited.allocate(64, alignment);
+    let first_zero = limited.allocate(0, MemoryAlignment::ONE)?;
+    let second_zero = limited.allocate(0, MemoryAlignment::ONE)?;
+    writeln!(
+        surface,
+        "allocator capacity_failure={capacity_failure:?} first_zero={:#x} second_zero={:#x} installed_regions={} revision={}",
+        first_zero.raw(),
+        second_zero.raw(),
+        empty_memory.regions().len(),
+        empty_memory.revision().raw()
     )?;
     Ok(())
 }

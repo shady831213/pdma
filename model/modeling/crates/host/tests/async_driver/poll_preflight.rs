@@ -83,21 +83,27 @@ impl PollFixture {
     }
 }
 
-fn new_device() -> (AsyncDevice, AsyncDeviceWorker) {
-    AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+fn new_device() -> (
+    AsyncDevice,
+    AsyncDeviceWorker,
+    pdma_model_host::adapter::abi::PdmaHostMemory,
+) {
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
+    let (device, worker) = AsyncDevice::new(
+        memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
-    )
+    );
+    (device, worker, memory)
 }
 
 async fn completion_fixture() -> DriverResult<PollFixture> {
     let owner = SoftwareCpu::new();
-    let (device, worker) = new_device();
+    let (device, worker, memory) = new_device();
     let handle = device.handle();
     handle.enable_tracing().await;
-    let mut port = super::support::BlockingPort::new(handle.clone());
+    let mut port = super::support::BlockingPort::new(handle.clone(), memory.clone());
     let (driver, retry) = owner
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;
@@ -123,10 +129,10 @@ async fn completion_fixture() -> DriverResult<PollFixture> {
 
 async fn event_fixture() -> DriverResult<PollFixture> {
     let owner = SoftwareCpu::new();
-    let (device, worker) = new_device();
+    let (device, worker, memory) = new_device();
     let handle = device.handle();
     handle.enable_tracing().await;
-    let mut port = super::support::BlockingPort::new(handle.clone());
+    let mut port = super::support::BlockingPort::new(handle.clone(), memory.clone());
     let (driver, retry) = owner
         .run_main(async {
             let mut driver = AsyncDriver::setup_on(&mut port, 1, 1).await?;

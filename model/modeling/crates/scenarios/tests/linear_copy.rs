@@ -13,18 +13,20 @@ mod support;
 #[tokio::test(flavor = "current_thread")]
 async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
     // Given: async runner handle, AsyncDriver, source/destination buffers, source write.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let worker = tokio::spawn(worker.run());
     let cpu = SoftwareCpu::new();
     let (completion, command_id, snapshot, dst_bytes) = cpu
         .run_main(async {
-            let mut handle = PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle()))
-                .expect("active software CPU");
+            let mut handle =
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(runner.handle(), host_memory.clone()))
+                    .expect("active software CPU");
             let mut driver = AsyncDriver::setup_on(&mut handle, 4, 4)
                 .await
                 .expect("queue setup is valid");
@@ -70,14 +72,15 @@ async fn async_runner_copies_bytes_end_to_end_when_driver_polls_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn reports_step_budget_exhaustion_when_work_remains() {
     // Given: one pending copy published directly into hardware-visible memory and registers.
+    let host_memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(std::sync::Arc::new(
+        hardware_interface_runtime::SharedMemory::new(),
+    ));
     let (runner, worker) = AsyncDevice::new(
-        pdma_model_device::PdmaMemoryProvisioning::shared(std::sync::Arc::new(
-            hardware_interface_runtime::SharedMemory::new(),
-        )),
+        host_memory.memory_access(),
         pdma_model_contract::semantic::ResourceConfig::default(),
     );
     let handle = runner.handle();
-    let memory = support::raw_hardware::queue_copy(&handle, &[1]).await;
+    let memory = support::raw_hardware::queue_copy(&handle, &host_memory, &[1]).await;
 
     // When: the worker receives a zero-poll budget and is shut down before its first step.
     let snapshot = runner.snapshot().await;

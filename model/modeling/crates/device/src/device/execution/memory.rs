@@ -1,9 +1,11 @@
 use crate::device::flow::ExecutionFault;
-use crate::memory::PdmaMemoryMappings;
-use pdma_model_contract::abi::{
-    AbiBounds, AbiEventAccess, AbiEventStage, AbiFault, AbiFaultSite, AbiStrideOffset, DmaAddress,
+use hardware_interface_runtime::{
+    MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use pdma_model_contract::semantic::{CommandId, EventErrorKind, QueueId};
+use pdma_model_contract::abi::{
+    AbiEventAccess, AbiEventStage, AbiFault, AbiFaultSite, AbiStrideOffset, DmaAddress,
+};
+use pdma_model_contract::semantic::{CommandId, QueueId};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct QueueMemoryResolver {
@@ -21,66 +23,43 @@ impl QueueMemoryResolver {
 
     pub(super) fn validate(
         self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         address: DmaAddress,
         length: u64,
         site: AbiFaultSite,
     ) -> Result<(), ExecutionFault> {
-        let end = address.checked_add(length).map_err(|_| {
-            self.fault(
-                memory,
-                address,
-                EventErrorKind::RangeOverflow,
-                AbiFault::range_overflow_direct(address, length, site),
+        memory
+            .validate(
+                MemoryAddress::new(address.raw()),
+                MemoryAlignment::ONE,
+                length,
             )
-        })?;
-        let Some(region) = memory.region_containing(address) else {
-            return Err(self.unmapped(memory, address, length, site));
-        };
-        if end > region.exclusive_end() {
-            let error_kind = EventErrorKind::OutOfBounds {
-                len: usize::try_from(region.length()).unwrap_or(usize::MAX),
-                end: usize::try_from(end.raw() - region.base().raw()).unwrap_or(usize::MAX),
-            };
-            return Err(self.fault(
-                memory,
-                address,
-                error_kind,
-                AbiFault::out_of_bounds(
-                    region.exclusive_end(),
-                    AbiBounds::new(region.length(), end.raw()),
-                    site,
-                ),
-            ));
-        }
-        Ok(())
+            .map_err(|error| self.fault(crate::memory::fault(error, length, site)))
     }
 
     pub(super) fn read(
         self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         address: DmaAddress,
         length: u64,
         site: AbiFaultSite,
     ) -> Result<Vec<u8>, ExecutionFault> {
-        self.validate(memory, address, length, site)?;
-        memory
-            .read_memory(address, length)
-            .map_err(|_| self.unmapped(memory, address, length, site))
+        crate::memory::read(memory, address, length)
+            .map_err(|error| self.fault(crate::memory::fault(error, length, site)))
     }
 
     pub(super) fn write(
         self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         address: DmaAddress,
         bytes: &[u8],
         site: AbiFaultSite,
     ) -> Result<(), ExecutionFault> {
-        let length = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        let length = u64::try_from(bytes.len())
+            .map_err(|_| self.fault(AbiFault::range_overflow_direct(address, u64::MAX, site)))?;
         self.validate(memory, address, length, site)?;
-        memory
-            .write_memory(address, bytes)
-            .map_err(|_| self.unmapped(memory, address, length, site))
+        crate::memory::write(memory, address, bytes)
+            .map_err(|error| self.fault(crate::memory::fault(error, length, site)))
     }
 
     pub(super) fn strided_address(
@@ -94,33 +73,24 @@ impl QueueMemoryResolver {
             .checked_mul(u64::from(stride))
             .and_then(|offset| base.raw().checked_add(offset))
             .map(DmaAddress::new)
-            .ok_or_else(|| ExecutionFault {
-                queue: self.queue_id,
-                command: self.command_id,
-                buffer: None,
-                error_kind: EventErrorKind::RangeOverflow,
-                exact: AbiFault::range_overflow_strided(
+            .ok_or_else(|| {
+                self.fault(AbiFault::range_overflow_strided(
                     base,
                     AbiStrideOffset::new(u64::from(row), u64::from(stride)),
                     site,
-                ),
+                ))
             })
     }
 
     pub(super) fn indirect_list(
         self,
-        memory: &PdmaMemoryMappings,
+        memory: &SharedMemoryAccess,
         address: DmaAddress,
         count: u32,
     ) -> Result<Vec<u8>, ExecutionFault> {
         let length = u64::from(count) * 8;
         address.checked_add(length).map_err(|_| {
-            self.fault(
-                memory,
-                address,
-                EventErrorKind::RangeOverflow,
-                AbiFault::range_overflow_indirect(address, u64::from(count)),
-            )
+            self.fault(AbiFault::range_overflow_indirect(address, u64::from(count)))
         })?;
         self.read(
             memory,
@@ -130,36 +100,10 @@ impl QueueMemoryResolver {
         )
     }
 
-    fn unmapped(
-        self,
-        memory: &PdmaMemoryMappings,
-        address: DmaAddress,
-        length: u64,
-        site: AbiFaultSite,
-    ) -> ExecutionFault {
-        self.fault(
-            memory,
-            address,
-            EventErrorKind::UnknownBuffer,
-            AbiFault::unmapped(address, length, site),
-        )
-    }
-
-    fn fault(
-        self,
-        memory: &PdmaMemoryMappings,
-        address: DmaAddress,
-        error_kind: EventErrorKind,
-        exact: AbiFault,
-    ) -> ExecutionFault {
-        let buffer = memory
-            .region_containing(address)
-            .map(crate::memory::MappedDmaRegion::object);
+    const fn fault(self, exact: AbiFault) -> ExecutionFault {
         ExecutionFault {
             queue: self.queue_id,
             command: self.command_id,
-            buffer,
-            error_kind,
             exact,
         }
     }

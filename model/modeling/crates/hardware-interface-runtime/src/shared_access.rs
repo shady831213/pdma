@@ -29,6 +29,15 @@ impl fmt::Debug for SharedMemoryAccess {
 }
 
 impl MemoryAccess for SharedMemoryAccess {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.0.validate(address, alignment, length)
+    }
+
     fn read(
         &self,
         address: MemoryAddress,

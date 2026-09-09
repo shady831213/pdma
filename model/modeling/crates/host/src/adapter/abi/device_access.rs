@@ -2,46 +2,44 @@ mod mapping;
 #[cfg(test)]
 mod tests;
 
-use self::mapping::{
-    map_model_allocation, map_register, project_region, read_lock, validate_alignment, write_lock,
-};
+use self::mapping::map_register;
 use crate::adapter::abi::{
-    PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSourceError, PdmaMappedRegion,
-    PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest, PdmaRegisterAccessError,
+    PdmaHostMemory, PdmaInterruptNotification, PdmaInterruptReady, PdmaInterruptSourceError,
+    PdmaMappedRegion, PdmaMemoryProvisioning, PdmaProvisioningError, PdmaRegionRequest,
+    PdmaRegisterAccessError,
 };
 use hardware_interface_runtime::{
     AddressedRegisterAccess, InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress,
     MemoryAlignment, RegisterAccess, RegisterBusAddress, RegisterBusBase, RegisterBusError,
-    SharedMemoryAccess,
 };
 use pdma_model_contract::semantic::DeviceEpoch;
 use pdma_model_device::AsyncDeviceHandle;
-use std::collections::BTreeSet;
-use std::sync::{Arc, RwLock};
 
 /// One-core concrete canonical access adapter.
 #[derive(Clone, Debug)]
 pub struct AsyncDeviceAccess {
     handle: AsyncDeviceHandle,
-    memory: SharedMemoryAccess,
+    memory: PdmaHostMemory,
     mmio_base: RegisterBusBase,
-    zero_bases: Arc<RwLock<BTreeSet<MemoryAddress>>>,
     epoch: DeviceEpoch,
 }
 
 impl AsyncDeviceAccess {
-    /// Derives every capability from one existing asynchronous device handle.
-    pub fn new(handle: AsyncDeviceHandle) -> Self {
-        Self::new_at_mmio_base(handle, RegisterBusBase::new(0))
+    /// Combines device register access with explicitly supplied software memory.
+    pub const fn new(handle: AsyncDeviceHandle, memory: PdmaHostMemory) -> Self {
+        Self::new_at_mmio_base(handle, memory, RegisterBusBase::new(0))
     }
 
     /// Derives every capability with register traffic rooted at `mmio_base`.
-    pub fn new_at_mmio_base(handle: AsyncDeviceHandle, mmio_base: RegisterBusBase) -> Self {
+    pub const fn new_at_mmio_base(
+        handle: AsyncDeviceHandle,
+        memory: PdmaHostMemory,
+        mmio_base: RegisterBusBase,
+    ) -> Self {
         Self {
-            memory: handle.memory_access(),
+            memory,
             handle,
             mmio_base,
-            zero_bases: Arc::new(RwLock::new(BTreeSet::new())),
             epoch: DeviceEpoch::initial(),
         }
     }
@@ -67,32 +65,23 @@ impl AsyncDeviceAccess {
                 pdma_model_contract::abi::registers::MmioAccessError::UnmappedOffset { offset },
             ))
     }
-
-    fn remember_zero_regions(&self, regions: &[PdmaMappedRegion]) {
-        let mut zero_bases = write_lock(&self.zero_bases);
-        zero_bases.extend(
-            regions
-                .iter()
-                .filter(|region| region.length() == 0)
-                .map(|region| region.base()),
-        );
-    }
-
-    fn is_logical_zero_access(&self, address: MemoryAddress, length: usize) -> bool {
-        length == 0 && read_lock(&self.zero_bases).contains(&address)
-    }
 }
 
 impl MemoryAccess for AsyncDeviceAccess {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.memory.validate(address, alignment, length)
+    }
     fn read(
         &self,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
     ) -> Result<(), MemoryAccessError> {
-        if self.is_logical_zero_access(address, destination.len()) {
-            return Ok(());
-        }
         self.memory.read(address, alignment, destination)
     }
 
@@ -102,9 +91,6 @@ impl MemoryAccess for AsyncDeviceAccess {
         alignment: MemoryAlignment,
         source: &[u8],
     ) -> Result<(), MemoryAccessError> {
-        if self.is_logical_zero_access(address, source.len()) {
-            return Ok(());
-        }
         self.memory.write(address, alignment, source)
     }
 }
@@ -166,18 +152,7 @@ impl PdmaMemoryProvisioning for AsyncDeviceAccess {
         &self,
         request: PdmaRegionRequest,
     ) -> Result<PdmaMappedRegion, Self::Error> {
-        validate_alignment(request.alignment())?;
-        let region = self
-            .handle
-            .allocate_memory_region(
-                usize::try_from(request.length())
-                    .map_err(|_| PdmaProvisioningError::LengthOutOfRange)?,
-            )
-            .await
-            .map_err(map_model_allocation)?;
-        let mapped = project_region(region, request.alignment())?;
-        self.remember_zero_regions(&[mapped]);
-        Ok(mapped)
+        self.memory.allocate_region(request)
     }
 }
 

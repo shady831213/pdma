@@ -117,6 +117,14 @@ impl RegisterAccess for GatedAccess {
 }
 
 impl MemoryAccess for GatedAccess {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.inner.validate(address, alignment, length)
+    }
     fn read(
         &self,
         address: MemoryAddress,

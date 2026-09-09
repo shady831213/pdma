@@ -11,10 +11,6 @@ pub enum PdmaProvisioningCause {
     AddressExhausted,
     /// Backing storage reservation was exhausted.
     StorageExhausted,
-    /// No committed mapping contains the access start.
-    Unmapped,
-    /// An access extends beyond its containing mapping.
-    CrossesRegion,
     /// A region overlaps an existing mapping.
     OverlappingRegion,
     /// Mapping metadata is inconsistent.
@@ -35,8 +31,6 @@ pub enum PdmaProvisioningError {
     Provisioning(PdmaProvisioningCause),
     /// Runtime memory rejected a checked access.
     Access(MemoryAccessError),
-    /// A host length cannot be represented by the device allocator.
-    LengthOutOfRange,
     /// Logical and optional-storage metadata disagree.
     InvalidProjection,
 }
@@ -51,7 +45,7 @@ impl Error for PdmaProvisioningError {
         match self {
             Self::Provisioning(source) => Some(source),
             Self::Access(source) => Some(source),
-            Self::LengthOutOfRange | Self::InvalidProjection => None,
+            Self::InvalidProjection => None,
         }
     }
 }
@@ -166,13 +160,9 @@ impl From<PdmaRegisterPortError> for crate::semantic::PortError {
                 PdmaProvisioningError::Provisioning(
                     PdmaProvisioningCause::AddressExhausted
                     | PdmaProvisioningCause::StorageExhausted,
-                )
-                | PdmaProvisioningError::LengthOutOfRange => Self::AllocationExhausted,
+                ) => Self::AllocationExhausted,
                 source @ (PdmaProvisioningError::Provisioning(
-                    PdmaProvisioningCause::Unmapped
-                    | PdmaProvisioningCause::CrossesRegion
-                    | PdmaProvisioningCause::OverlappingRegion
-                    | PdmaProvisioningCause::InvalidRegion,
+                    PdmaProvisioningCause::OverlappingRegion | PdmaProvisioningCause::InvalidRegion,
                 )
                 | PdmaProvisioningError::Access(_)
                 | PdmaProvisioningError::InvalidProjection) => {

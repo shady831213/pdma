@@ -5,8 +5,7 @@ use std::future::{Future, poll_fn};
 async fn register_observer_runs_after_effect_and_before_wake() -> support::TestResult {
     // Given: committed rings and a callback-gated observer on queue enable.
     let (handle, observer, memory) = support::gated_handle();
-    let stage = handle.stage_memory_regions(&[128, 64, 128]).await?;
-    let regions = handle.commit_memory_stage(stage).await?;
+    let regions = handle.rings([128, 64, 128])?;
     support::program_activation(&handle.register_endpoint(), &regions).await?;
     let before = handle.snapshot().await;
     let mut wake = Box::pin(handle.wait_for_change_after(before));

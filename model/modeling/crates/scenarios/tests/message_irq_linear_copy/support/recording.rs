@@ -42,6 +42,15 @@ impl RecordingMemoryAccess {
 }
 
 impl MemoryAccess for RecordingMemoryAccess {
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError> {
+        self.inner.validate(address, alignment, length)
+    }
+
     fn read(
         &self,
         address: MemoryAddress,

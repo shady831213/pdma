@@ -2,7 +2,7 @@ use super::*;
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::abi::{
     AbiCommand, AbiCommandPayloadCopyValues, AbiCommandPayloadValues, AbiCompletion, AbiEvent,
-    AbiEventAccess, AbiEventStage,
+    AbiEventAccess, AbiEventKind, AbiEventStage,
     registers::{QueueRegisters, queue_offset},
 };
 use pdma_model_device::{AsyncDeviceHandle, MmioRegisterEndpoint};
@@ -14,12 +14,9 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 async fn raw_registers_execute_abi_rings_in_externally_provisioned_memory() -> TestResult {
     // Given externally owned rings and payload bytes with only address read/write access.
     let external = provisioned_bytes(0x8140)?;
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::external(external.clone().into()),
-        ResourceConfig::default(),
-    );
+    let (device, worker) = AsyncDevice::new(external.clone(), ResourceConfig::default());
     let handle = device.handle();
-    prepare(&handle, 0x8140).await?;
+    prepare(&handle).await?;
     let endpoint = handle.register_endpoint();
 
     // When direct producer and doorbell writes drive the actual worker.
@@ -72,20 +69,30 @@ async fn raw_registers_execute_abi_rings_in_externally_provisioned_memory() -> T
         cursor(&endpoint, QueueRegisters::EQ_PRODUCER.offset()).await?,
         0
     );
-    assert_eq!(handle.memory_generation().await, 1);
     Ok(())
 }
 
 #[tokio::test]
 async fn backend_read_fault_publishes_event_without_success_completion() -> TestResult {
-    // Given a valid logical source mapping whose external bytes are unavailable.
-    let external = provisioned_bytes(0x9000)?;
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::external(external.clone().into()),
-        ResourceConfig::default(),
-    );
+    for (source, expected) in [
+        (0x9000, (AbiEventKind::UnmappedDmaAddress, 0x9000, 4, 0)),
+        (0x81ff, (AbiEventKind::OutOfBounds, 0x8200, 512, 0x8203)),
+        (
+            u64::MAX - 1,
+            (AbiEventKind::RangeOverflow, u64::MAX - 1, 4, 0),
+        ),
+    ] {
+        assert_backend_fault(source, expected).await?;
+    }
+    Ok(())
+}
+
+async fn assert_backend_fault(source: u64, expected: (AbiEventKind, u64, u64, u64)) -> TestResult {
+    // Given: an exact source range is unmapped, crosses the backend extent, or overflows.
+    let external = provisioned_bytes(source)?;
+    let (device, worker) = AsyncDevice::new(external.clone(), ResourceConfig::default());
     let handle = device.handle();
-    prepare(&handle, 0x9000).await?;
+    prepare(&handle).await?;
     let endpoint = handle.register_endpoint();
 
     // When the worker accesses the unavailable source through the exact descriptor.
@@ -124,29 +131,23 @@ async fn backend_read_fault_publishes_event_without_success_completion() -> Test
     external.read(MemoryAddress::new(0x80c0), MemoryAlignment::ONE, &mut eq)?;
     let event = AbiEvent::decode(&eq)?;
     assert_eq!(event.command_id, 42);
-    assert_eq!(event.fault_locator, 0x9000);
+    let (kind, locator, detail0, detail1) = expected;
     assert_eq!(
-        (event.stage, event.access),
-        (AbiEventStage::Source, AbiEventAccess::Read)
+        event.fault().tuple(),
+        (
+            kind,
+            locator,
+            detail0,
+            detail1,
+            AbiEventStage::Source.raw(),
+            AbiEventAccess::Read.raw(),
+            0
+        )
     );
     Ok(())
 }
 
-async fn prepare(handle: &AsyncDeviceHandle, source: u64) -> TestResult {
-    let regions = [
-        (0x8000, 128),
-        (0x8080, 64),
-        (0x80c0, 128),
-        (source, 4),
-        (0x8180, 4),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(object, (base, length))| {
-        MappedDmaRegion::try_new(BufferId::new(object), DmaAddress::new(base), length)
-    })
-    .collect::<Result<Vec<_>, _>>()?;
-    handle.register_memory_regions(&regions).await?;
+async fn prepare(handle: &AsyncDeviceHandle) -> TestResult {
     let endpoint = handle.register_endpoint();
     for (local, value) in [
         (QueueRegisters::SQ_BASE.offset(), 0x8000_u64),

@@ -1,6 +1,6 @@
 use hardware_interface_runtime::{SharedMemory, SoftwareCpu};
 use pdma_model_contract::semantic::{CommandId, ResourceConfig};
-use pdma_model_device::{AsyncDevice, PdmaMemoryProvisioning};
+use pdma_model_device::AsyncDevice;
 use pdma_model_host::{
     Command, CommandOperation, CopyRequest, DriverPort,
     adapter::abi::{AsyncDeviceAccess, PdmaRegisterPort},
@@ -10,15 +10,15 @@ use std::sync::Arc;
 #[tokio::test(flavor = "current_thread")]
 async fn cloned_ports_keep_two_queues_and_their_completions_independent() {
     // Given: cloned register ports configure two real hardware queues.
-    let (device, worker) = AsyncDevice::new(
-        PdmaMemoryProvisioning::shared(Arc::new(SharedMemory::new())),
-        ResourceConfig::default(),
-    );
+    let storage = Arc::new(SharedMemory::new());
+    let memory = pdma_model_host::adapter::abi::PdmaHostMemory::new(storage.clone());
+    let (device, worker) = AsyncDevice::new(memory.memory_access(), ResourceConfig::default());
     let worker = tokio::spawn(worker.run());
     SoftwareCpu::new()
         .run_main(async {
             let mut first =
-                PdmaRegisterPort::new(AsyncDeviceAccess::new(device.handle())).expect("port");
+                PdmaRegisterPort::new(AsyncDeviceAccess::new(device.handle(), memory.clone()))
+                    .expect("port");
             let mut second = first.clone();
             let first_queue = first
                 .create_queue(super::config())

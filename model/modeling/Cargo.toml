@@ -1,14 +1,11 @@
 [workspace]
 members = [
-    "crates/contract",
-    "crates/device",
     "crates/hardware-interface-pipeline",
     "crates/hardware-interface-runtime",
     "crates/hardware-interface-schema",
     "crates/hardware-interface-schema-macros",
-    "crates/host",
-    "crates/scenarios",
 ]
+exclude = ["crates/scenarios"]
 resolver = "3"
 
 [workspace.package]

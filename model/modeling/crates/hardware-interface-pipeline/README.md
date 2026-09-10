@@ -13,6 +13,10 @@ future. `StepOutcome` transfers owned wait, output, and error values as `Progres
 same hardware can accept another operation. Dropping request state preserves effects
 already committed to the context or hardware.
 
+The `src/compositor/` module groups `Then`, `AfterEach`, and `Repeat` in their own
+`then.rs`, `after_each.rs`, and `repeat.rs` files. Their types remain re-exported
+from the crate root; execution policies live separately under `src/executor/`.
+
 `Then<A, B>` owns both hardware stages and requires `A::Output = B::Input`, with matching
 error and wait types. `upstream.then(downstream)` connects existing hardware. Each
 operation transfers an upstream result into downstream state exactly once and returns

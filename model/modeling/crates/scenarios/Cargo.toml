@@ -20,5 +20,5 @@ tokio = { version = "1.49", default-features = false, features = ["macros", "rt"
 workspace = true
 
 [[test]]
-name = "minimal_channel"
-path = "tests/minimal_channel/main.rs"
+name = "single_channel"
+path = "tests/single_channel/main.rs"

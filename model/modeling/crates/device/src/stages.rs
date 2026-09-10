@@ -1,5 +1,5 @@
-use crate::{Device, Error, ReadCopy, WriteCopy};
-use hardware_interface_pipeline::{AfterEach, Stage, StepOutcome, Then};
+use crate::{CheckLengths, Device, Error, NextChunk, ReadCopy, WriteCopy};
+use hardware_interface_pipeline::{AfterEach, Repeat, Stage, StepOutcome, Then};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{Command, Response};
 use std::convert::Infallible;
@@ -90,10 +90,17 @@ impl<M> Stage<Device<M>> for UpdateIrq {
 }
 
 /// The same statically composed hardware is used by step and async executors.
-pub type Pipeline = AfterEach<Then<Then<Fetch, Then<ReadCopy, WriteCopy>>, Publish>, UpdateIrq>;
+pub type Pipeline = AfterEach<Then<Then<Fetch, Execution>, Publish>, UpdateIrq>;
+
+/// One composable prepare/read/write iteration.
+pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
+
+/// Length validation followed by bounded-memory copy iterations.
+pub type Execution = Then<CheckLengths, Repeat<CopyLoop>>;
 
 /// Compose fetch, nested copy execution, publication and interrupt aggregation.
 pub const fn pipeline() -> Pipeline {
-    let execution = Then::new(ReadCopy, WriteCopy);
+    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+    let execution = Then::new(CheckLengths, Repeat::new(chunk));
     AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq)
 }

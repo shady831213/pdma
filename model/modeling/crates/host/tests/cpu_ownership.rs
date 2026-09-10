@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, CommandRegisters, DeviceRegisters};
+use pdma_model_contract::{Command, CommandRegisters, DeviceRegisters, Endpoint, Response};
 use pdma_model_device::Device;
 use pdma_model_host::{Channel, Error, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -40,10 +40,25 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
     // Given: a submission suspended just before publishing its producer cursor.
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
-    let alignment = MemoryAlignment::try_new(8)?;
     let rings = Rings {
-        command: RingConfig::new(allocator.allocate(32, alignment)?.raw(), 1)?,
-        response: RingConfig::new(allocator.allocate(16, alignment)?.raw(), 1)?,
+        command: RingConfig::new(
+            allocator
+                .allocate(
+                    u64::try_from(Command::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
+                )?
+                .raw(),
+            1,
+        )?,
+        response: RingConfig::new(
+            allocator
+                .allocate(
+                    u64::try_from(Response::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+                )?
+                .raw(),
+            1,
+        )?,
     };
     let model = Model::new(Device::new(allocator.memory_access()));
     let delay = Arc::new(AtomicBool::new(false));
@@ -63,9 +78,8 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
     delay.store(true, Ordering::SeqCst);
     let submission = channel.submit(Command {
         id: 1,
-        source: 0,
-        destination: 0,
-        length: 0,
+        source: Endpoint::linear(0, 0),
+        destination: Endpoint::linear(0, 0),
     });
     tokio::pin!(submission);
     owner

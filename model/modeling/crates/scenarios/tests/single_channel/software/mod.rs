@@ -1,13 +1,46 @@
 //! The complete software program and its persistent interrupt handler.
 
+mod buffers;
+
 use hardware_interface_runtime::{
-    InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
-    RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
+    InterruptHandler, InterruptRegistration, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
+    SharedMemoryAllocator,
 };
-use pdma_model_contract::{ChannelFaultCode, Command, Response};
+use pdma_model_contract::{ChannelFaultCode, Command, Response, Segment};
 use pdma_model_host::{Channel, Error as HostError, RingConfig, Rings, runtime::Irq};
 use std::error::Error;
 use tokio::sync::oneshot;
+
+/// Software-selected representation of one payload stream.
+#[derive(Clone, Copy, Debug)]
+pub enum BufferLayout<'a> {
+    /// One contiguous allocation.
+    Linear,
+    /// Independently allocated spans with these byte lengths.
+    ScatterGather(&'a [usize]),
+}
+
+/// Payload and independent source/destination allocation layouts.
+#[derive(Clone, Copy, Debug)]
+pub struct Input<'a> {
+    /// Bytes initialized by software before submission.
+    pub data: &'a [u8],
+    /// Source representation.
+    pub source: BufferLayout<'a>,
+    /// Destination representation.
+    pub destination: BufferLayout<'a>,
+}
+
+impl<'a> Input<'a> {
+    /// Uses contiguous buffers for both endpoints.
+    pub const fn linear(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            source: BufferLayout::Linear,
+            destination: BufferLayout::Linear,
+        }
+    }
+}
 
 /// Result delivered from the ISR to the main software program.
 pub type Completion = (Option<Response>, ChannelFaultCode);
@@ -32,7 +65,7 @@ pub struct Outcome {
     /// Sticky fault observed by the ISR.
     pub fault: ChannelFaultCode,
     /// Software-allocated destination of the DMA copy.
-    pub destination: MemoryAddress,
+    pub destination: Vec<Segment>,
 }
 
 /// Persistent software owner of response consumption and IRQ masking.
@@ -64,14 +97,13 @@ impl<B: RegisterAccess + Send + Sync> InterruptHandler<Irq> for CompletionHandle
 /// Run the complete software program on the caller's active software CPU.
 pub async fn main<B>(
     ports: Ports<'_, B>,
-    data: &[u8],
+    input: Input<'_>,
 ) -> Result<Outcome, Box<dyn Error + Send + Sync>>
 where
     B: RegisterAccess + Send + Sync,
     B::Error: Error + Send + Sync + 'static,
 {
     const CAPACITY: usize = 2;
-    let length = u32::try_from(data.len())?;
     let command = ports.allocator.allocate(
         u64::try_from(CAPACITY * Command::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
@@ -80,13 +112,12 @@ where
         u64::try_from(CAPACITY * Response::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
     )?;
-    let source = ports
-        .allocator
-        .allocate(u64::from(length), MemoryAlignment::ONE)?;
-    let destination = ports
-        .allocator
-        .allocate(u64::from(length), MemoryAlignment::ONE)?;
-    ports.memory.write(source, MemoryAlignment::ONE, data)?;
+    let buffers = buffers::Builder {
+        allocator: &ports.allocator,
+        memory: &ports.memory,
+    };
+    let source = buffers.build(input.source, input.data)?;
+    let destination = buffers.build(input.destination, &vec![0; input.data.len()])?;
     let rings = Rings {
         command: RingConfig::new(command.raw(), u32::try_from(CAPACITY)?)?,
         response: RingConfig::new(response.raw(), u32::try_from(CAPACITY)?)?,
@@ -95,9 +126,8 @@ where
     channel
         .submit(Command {
             id: 7,
-            source: source.raw(),
-            destination: destination.raw(),
-            length,
+            source: source.endpoint,
+            destination: destination.endpoint,
         })
         .await?;
 
@@ -113,6 +143,6 @@ where
     Ok(Outcome {
         response,
         fault,
-        destination,
+        destination: destination.segments,
     })
 }

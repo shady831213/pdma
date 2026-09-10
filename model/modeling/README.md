@@ -3,14 +3,15 @@
 Run from this directory:
 
 ```sh
-cargo test -p pdma-model-scenarios --test minimal_channel -- --nocapture
+cargo test -p pdma-model-scenarios --test single_channel -- --nocapture
 ```
 
-The system tests run successful copies, including a byte-aligned destination, and a
-response-ring write fault. They use
+The system tests run all four linear/SG endpoint combinations, unequal segment
+boundaries, multi-chunk and zero-total transfers, plus response-ring write faults. They use
 real memory access, the same composed device pipeline, a software CPU, and the
-existing interrupt dispatcher. Worker construction/join and assertions belong to
-the harness; buffer allocation, payload initialization, software setup, submission, handler registration
+existing interrupt dispatcher. Worker construction/join belongs to the harness;
+case modules own inputs and acceptance assertions. Buffer allocation, payload initialization,
+software setup, submission, handler registration
 and completion waiting run inside one
 `InterruptRuntime::run_main` per case, which uses `SoftwareCpu` internally. A channel is transferred once into its persistent
 IRQ handler, rather than repeatedly moved through shared optional state.
@@ -19,30 +20,40 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 
 | Location | Responsibility |
 | --- | --- |
-| `crates/contract/src/record.rs` | Generated command/response wire records. |
+| `crates/contract/src/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
 | `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/device/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
 | `crates/device/src/channel/mmio.rs` | Generated block routing and software-write effects. |
 | `crates/device/src/stages.rs` | The complete hardware composition. |
-| `crates/device/src/execution.rs` | Read and write transforms with request-owned payload. |
+| `crates/device/src/execution.rs` | Retained copy progress and chunk payload. |
+| `crates/device/src/execution/validate.rs` | Incremental endpoint-total validation. |
+| `crates/device/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
+| `crates/device/src/execution/next.rs` | Select the next chunk across independent boundaries. |
+| `crates/device/src/execution/copy.rs` | Composable chunk read/write transforms. |
 | `crates/host/src/channel.rs` | Software configuration, submit and response consumption. |
 | `crates/host/src/runtime.rs` | PDMA runtime transport: async context access, worker wakeup and IRQ line. |
 | `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
-| `crates/scenarios/tests/minimal_channel/hardware.rs` | Hardware assembly from the existing device and stage graph. |
-| `crates/scenarios/tests/minimal_channel/software.rs` | Complete software program, including buffer allocation and interrupt handler. |
-| `crates/scenarios/tests/minimal_channel/main.rs` | Platform provisioning, actor driving and acceptance assertions. |
+| `crates/scenarios/tests/single_channel/main.rs` | Test suite entry and module declarations. |
+| `crates/scenarios/tests/single_channel/cases/` | Linear, scatter/gather and fault cases, with acceptance assertions. |
+| `crates/scenarios/tests/single_channel/harness/` | Platform provisioning, fault injection and actor driving/cleanup. |
+| `crates/scenarios/tests/single_channel/hardware.rs` | Hardware assembly from the existing device and stage graph. |
+| `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
 
 The device composition is deliberately explicit:
 
 ```rust
-let execution = Then::new(ReadCopy, WriteCopy);
+let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+let execution = Then::new(CheckLengths, Repeat::new(chunk));
 AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq)
 ```
 
-Its ports are `() -> Command -> Transfer -> Response -> ()`. Command execution
-stages can inspect and transform the owned `Transfer`; `device/tests/composition.rs`
+The outer ports are `() -> Command -> CopyState -> Response -> ()`. The copy body is
+`CopyState -> Transfer -> Transfer -> ControlFlow<Response, CopyState>`: Continue feeds
+progress into the next iteration, Break finishes the command. Repeat advances one
+child step at a time and reuses its hardware; it does not add another executor.
+Command execution stages can inspect and transform the owned `Transfer`; `device/tests/composition.rs`
 inserts a payload transform between read and write without changing the core or executor.
 Command execution
 errors travel in the response value; they do not skip publication. Fetch and
@@ -86,18 +97,30 @@ cursor store. The separation follows
 [etha_model's register-backed ring operations](https://github.com/shady831213/etha_model/blob/5270f00874a1ad390fbbce6f5395be24a52d0ec9/src/reg_if/ring.rs#L125-L182),
 without adopting its raw pointer dereferences or phase-bit pointer encoding.
 
-## First-slice behavior
+## Channel behavior
 
 - One command ring and one response ring, with 32-bit wrapping cursors. Capacities
   are powers of two below 2^31, so slot order remains continuous across counter
   overflow; bases are 8-byte aligned. Geometry freezes on first
   enable, including across disable/re-enable. Software owns allocation and ensures
   rings and payload have appropriate backing and do not alias unintentionally.
-- Generated little-endian commands contain ID, source, destination and length.
-  A copy accepts 0..=256 bytes; zero length touches no payload memory. Larger lengths
-  receive `InvalidLength`; inaccessible source/destination receive `ReadFault` or
-  `WriteFault`. A failed copy never receives a success response. Reads snapshot the
-  payload before writes; no timing or chunked DMA engine is modeled yet.
+- Generated commands contain an ID and two independent endpoints. Each endpoint is
+  either Linear(address,length) or ScatterGather(list_address,count). Segment records
+  contain address/length; ring and list storage uses generated size/alignment metadata,
+  while payloads require only byte alignment. See `include/README.md` for the current ABI.
+- Hardware first traverses both descriptions and sums lengths with checked arithmetic.
+  Mismatched totals return `LengthMismatch` before payload reads or writes. List read
+  failures return `ListReadFault`; length/list-address arithmetic overflow returns
+  `InvalidLength`. Software keeps SG descriptors stable across validation and execution;
+  hardware retains only the current segment and cursor, not a snapshot of each list.
+- Copy iterations use the smaller of the current source remainder, destination remainder,
+  command remainder and 256-byte scratch capacity. This scratch size is not a protocol
+  limit; there is no additional segment-count/total-length bound. Zero-length segments
+  are skipped, zero counts do not read a list, and a zero-total command touches no payload.
+- Payload failures return `ReadFault` or `WriteFault` and stop further copying. One
+  response reports bytes_completed from successful writes; earlier writes are not rolled
+  back. Overlap is neither detected nor rejected. Later reads observe earlier writes
+  according to actual chunk order; there is no whole-transfer memmove guarantee.
 - Full command ring is a host submission error. Full response ring is hardware
   backpressure: publication waits with the response retained, without repeating copy.
 - Command fetch failure latches fault code 1 without consuming the command. Response

@@ -7,8 +7,11 @@ mod stages;
 
 pub use channel::{Channel, CommandRing, ResponseRing};
 pub use error::{Error, Fault};
-pub use execution::{ReadCopy, Transfer, WriteCopy};
-pub use stages::{Fetch, Pipeline, Publish, UpdateIrq, pipeline};
+pub use execution::{
+    COPY_CHUNK_BYTES, CheckLengths, CopyState, LengthCheck, NextChunk, ReadCopy, Transfer,
+    WriteCopy,
+};
+pub use stages::{CopyLoop, Execution, Fetch, Pipeline, Publish, UpdateIrq, pipeline};
 
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]

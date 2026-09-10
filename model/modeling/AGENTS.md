@@ -9,8 +9,8 @@ removed from master after backing up the complete source snapshot:
 `51707fe1d38e261a188e1d0ac14243c0caf58127`.
 
 The replacement now implements one channel with command and response rings,
-0..=256-byte DMA copy, sticky channel faults, and level IRQ delivery. See README.md
-and the `crates/scenarios/tests/minimal_channel/main.rs` system tests. Old interfaces, numeric register
+linear/scatter-gather DMA copy, sticky channel faults, and level IRQ delivery. See README.md
+and the `crates/scenarios/tests/single_channel/main.rs` system tests. Old interfaces, numeric register
 layouts, and ABI compatibility are not requirements for this model.
 
 ## Active building blocks
@@ -30,9 +30,10 @@ replacement model; do not introduce parallel composition or dispatch mechanisms.
 The obsolete scenarios sources are preserved on the backup branch only. The new
 `crates/scenarios` owns system tests against the replacement model's interfaces;
 individual crates retain their focused boundary tests. Scenario assembly, actor
-shutdown/join and assertions stay in the test harness, with one complete software
-program inside one `InterruptRuntime::run_main` per case. Keep hardware assembly, software
-program and harness in distinct native modules. Software owns ring/payload buffer allocation,
+shutdown/join stay in the test harness; case modules own inputs and acceptance assertions,
+with one complete software program inside one `InterruptRuntime::run_main` per case.
+Keep cases, hardware assembly, software program and harness in distinct native modules.
+Software owns ring/payload buffer allocation,
 payload initialization,
 queue configuration and handler construction/registration; the harness must not
 perform those operations for it. The harness selects memory backing and creates the
@@ -56,8 +57,15 @@ shapes into the rebuild.
 
 ## Implementation constraints
 
-- The first replacement slice is one channel, command/response rings, DMA copy, and IRQ delivery.
+- The replacement models one channel, command/response rings, linear/SG DMA copy, and IRQ delivery.
   Do not implement further slices without a user request.
+- Source and destination independently select linear spans or SG lists. Software owns
+  list/buffer allocation and keeps descriptors stable until completion. Hardware checks
+  total lengths before payload writes, reads lists incrementally and retains cursors;
+  do not cache whole lists, reject overlap or invent segment-count/total-length limits.
+  Fixed copy scratch size is an implementation detail, not a command-size limit.
+- Reuse Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
+  driving only; it must not gain PDMA traversal, validation or copy policy.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.
 - The shared `Ring` trait's entry geometry and pointer rules belong to contract. Host/device

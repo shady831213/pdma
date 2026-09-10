@@ -92,7 +92,7 @@ register_map! {
         alignment: 8,
         placements: [
             #[short_description = "Command ring base address"]
-            #[description = "Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 32 bytes apart. The value cannot change after the channel's first successful enable."]
+            #[description = "Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 56 bytes apart. The value cannot change after the channel's first successful enable."]
             pub base: Address,
             #[short_description = "Command ring capacity"]
             #[description = "Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]
@@ -114,7 +114,7 @@ register_map! {
         alignment: 8,
         placements: [
             #[short_description = "Response ring base address"]
-            #[description = "Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 16 bytes apart. The value cannot change after the channel's first successful enable."]
+            #[description = "Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable."]
             pub base: Address,
             #[short_description = "Response ring capacity"]
             #[description = "Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]

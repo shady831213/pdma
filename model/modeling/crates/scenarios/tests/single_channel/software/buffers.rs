@@ -1,0 +1,82 @@
+use hardware_interface_runtime::{
+    MemoryAccess, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
+};
+use pdma_model_contract::{Endpoint, Segment};
+use std::{error::Error, io};
+
+use super::BufferLayout;
+
+pub(super) struct Buffer {
+    pub(super) endpoint: Endpoint,
+    pub(super) segments: Vec<Segment>,
+}
+
+pub(super) struct Builder<'a> {
+    pub(super) allocator: &'a SharedMemoryAllocator,
+    pub(super) memory: &'a SharedMemoryAccess,
+}
+
+impl Builder<'_> {
+    pub(super) fn build(
+        &self,
+        layout: BufferLayout<'_>,
+        data: &[u8],
+    ) -> Result<Buffer, Box<dyn Error + Send + Sync>> {
+        let linear_lengths = [data.len()];
+        let lengths = match layout {
+            BufferLayout::Linear => &linear_lengths,
+            BufferLayout::ScatterGather(lengths) => lengths,
+        };
+        let mut remaining = data;
+        let mut segments = Vec::with_capacity(lengths.len());
+        for &length in lengths {
+            let (bytes, rest) = remaining
+                .split_at_checked(length)
+                .ok_or_else(|| io::Error::other("buffer layout exceeds payload length"))?;
+            remaining = rest;
+            let address = self
+                .allocator
+                .allocate(u64::try_from(length)?, MemoryAlignment::ONE)?;
+            if length > 0 {
+                self.memory.write(address, MemoryAlignment::ONE, bytes)?;
+            }
+            segments.push(Segment {
+                address: address.raw(),
+                length: u64::try_from(length)?,
+            });
+        }
+        if !remaining.is_empty() {
+            return Err(io::Error::other("buffer layout does not cover payload").into());
+        }
+        let endpoint = match layout {
+            BufferLayout::Linear => {
+                let segment = segments
+                    .first()
+                    .ok_or_else(|| io::Error::other("linear span missing"))?;
+                Endpoint::linear(segment.address, segment.length)
+            }
+            BufferLayout::ScatterGather(_) => {
+                let width = u64::try_from(Segment::RECORD_SIZE)?;
+                let alignment =
+                    MemoryAlignment::try_new(u64::try_from(Segment::RECORD_ALIGNMENT)?)?;
+                let count = u64::try_from(segments.len())?;
+                let size = count
+                    .checked_mul(width)
+                    .ok_or_else(|| io::Error::other("list size overflow"))?;
+                let list = self.allocator.allocate(size, alignment)?;
+                for (index, segment) in segments.iter().enumerate() {
+                    let offset = u64::try_from(index)?
+                        .checked_mul(width)
+                        .ok_or_else(|| io::Error::other("list offset overflow"))?;
+                    let address = list
+                        .checked_add(offset)
+                        .ok_or_else(|| io::Error::other("list address overflow"))?;
+                    self.memory
+                        .write(address, alignment, &segment.to_bytes()?)?;
+                }
+                Endpoint::scatter_gather(list.raw(), count)
+            }
+        };
+        Ok(Buffer { endpoint, segments })
+    }
+}

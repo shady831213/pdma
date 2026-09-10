@@ -6,8 +6,8 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Response, ResponseRegisters,
-    ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
+    ResponseRegisters, ResponseStatus,
 };
 use pdma_model_device::{Device, Error, Fault, Pipeline, pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
@@ -168,7 +168,7 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
         &mut device,
         &memory,
         Command {
-            destination: 0x8000,
+            destination: Endpoint::linear(0x8000, 4),
             ..command()
         },
     )?;
@@ -187,10 +187,10 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
 }
 
 #[test]
-fn length_boundaries_skip_inaccessible_payload_memory() -> TestResult {
+fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> TestResult {
     for (length, status) in [
         (0, ResponseStatus::Success),
-        (257, ResponseStatus::InvalidLength),
+        (257, ResponseStatus::ReadFault),
     ] {
         // Given
         let (mut device, memory) = setup(0x1100, 2)?;
@@ -198,9 +198,8 @@ fn length_boundaries_skip_inaccessible_payload_memory() -> TestResult {
             &mut device,
             &memory,
             Command {
-                source: u64::MAX,
-                destination: u64::MAX,
-                length,
+                source: Endpoint::linear(u64::MAX, length),
+                destination: Endpoint::linear(u64::MAX, length),
                 ..command()
             },
         )?;
@@ -209,7 +208,11 @@ fn length_boundaries_skip_inaccessible_payload_memory() -> TestResult {
         // Then
         let mut bytes = [0; Response::RECORD_SIZE];
         memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
-        assert_eq!(Response::from_bytes(&bytes)?, Response { id: 7, status });
+        let response = Response::from_bytes(&bytes)?;
+        assert_eq!(
+            (response.id, response.status, response.bytes_completed),
+            (7, status, 0)
+        );
         assert!(device.irq());
     }
     Ok(())
@@ -273,7 +276,8 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
                 Response::from_bytes(&bytes)?,
                 Response {
                     id: 7,
-                    status: ResponseStatus::Success
+                    status: ResponseStatus::Success,
+                    bytes_completed: 4,
                 }
             );
         }

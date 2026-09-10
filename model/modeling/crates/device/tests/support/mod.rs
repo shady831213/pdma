@@ -3,7 +3,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, ResponseRegisters,
+    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, ResponseRegisters,
 };
 use pdma_model_device::{Device, Pipeline, pipeline};
 
@@ -76,7 +76,7 @@ pub fn submit(
 pub fn run(device: &mut Device<SharedMemory>) -> TestResult {
     let mut hardware = pipeline();
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
-    for _ in 0..32 {
+    for _ in 0..1024 {
         match StepExecutor::new()
             .step(&mut hardware, &mut operation, device)
             .map_err(|e| format!("{e:?}"))?
@@ -106,8 +106,7 @@ pub fn read_word(
 pub const fn command() -> Command {
     Command {
         id: 7,
-        source: 0x1200,
-        destination: 0x1300,
-        length: 4,
+        source: Endpoint::linear(0x1200, 4),
+        destination: Endpoint::linear(0x1300, 4),
     }
 }

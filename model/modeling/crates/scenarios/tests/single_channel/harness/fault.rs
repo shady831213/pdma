@@ -8,14 +8,14 @@ use std::sync::{Arc, Mutex};
 
 /// Memory view rejecting writes to the first entry of a software-configured ring.
 #[derive(Debug)]
-pub struct UnmappedRing {
+pub(super) struct UnmappedRing {
     memory: SharedMemoryAccess,
     address: Mutex<Option<MemoryAddress>>,
 }
 
 impl UnmappedRing {
     /// Uses normal backing until the paired bus observes the selected ring base.
-    pub const fn new(memory: SharedMemoryAccess) -> Self {
+    pub(super) const fn new(memory: SharedMemoryAccess) -> Self {
         Self {
             memory,
             address: Mutex::new(None),
@@ -62,13 +62,13 @@ impl MemoryAccess for UnmappedRing {
 
 /// Observes actual software-selected addresses without changing register traffic.
 #[derive(Debug)]
-pub struct FaultBus<B> {
+pub(super) struct FaultBus<B> {
     /// Real register transport.
-    pub bus: B,
+    pub(super) bus: B,
     /// Generated offset of the ring base whose mapping should fail.
-    pub base_register: Option<u32>,
+    pub(super) base_register: Option<u32>,
     /// Faulted view shared by the injected memory endpoint.
-    pub memory: Arc<UnmappedRing>,
+    pub(super) memory: Arc<UnmappedRing>,
 }
 
 impl<B: RegisterAccess + Send + Sync> RegisterAccess for FaultBus<B> {

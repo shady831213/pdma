@@ -5,7 +5,9 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, CommandRegisters, DeviceRegisters, Response, ResponseStatus};
+use pdma_model_contract::{
+    Command, CommandRegisters, DeviceRegisters, Endpoint, Response, ResponseStatus,
+};
 use pdma_model_device::{Device, pipeline};
 use pdma_model_host::{Channel, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -18,8 +20,24 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let alignment = MemoryAlignment::try_new(8)?;
     let rings = Rings {
-        command: RingConfig::new(allocator.allocate(32, alignment)?.raw(), 1)?,
-        response: RingConfig::new(allocator.allocate(16, alignment)?.raw(), 1)?,
+        command: RingConfig::new(
+            allocator
+                .allocate(
+                    u64::try_from(Command::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
+                )?
+                .raw(),
+            1,
+        )?,
+        response: RingConfig::new(
+            allocator
+                .allocate(
+                    u64::try_from(Response::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+                )?
+                .raw(),
+            1,
+        )?,
     };
     let source = allocator.allocate(8, alignment)?;
     let destination = allocator.allocate(8, alignment)?;
@@ -32,9 +50,8 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         .await?;
     cpu.run_main(channel.submit(Command {
         id: 11,
-        source: source.raw(),
-        destination: destination.raw(),
-        length: 8,
+        source: Endpoint::linear(source.raw(), 8),
+        destination: Endpoint::linear(destination.raw(), 8),
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
@@ -64,7 +81,8 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         cpu.run_main(channel.response()).await?,
         Some(Response {
             id: 11,
-            status: ResponseStatus::Success
+            status: ResponseStatus::Success,
+            bytes_completed: 8,
         })
     );
     assert_eq!(cpu.run_main(channel.response()).await?, None);

@@ -7,10 +7,11 @@ The predecessor's scenarios remain on `backup/pdma-before-rebuild-20260909` only
 Run from `model/modeling`:
 
 ```sh
-cargo test -p pdma-model-scenarios -- --nocapture
+cargo test -p pdma-model-scenarios --test single_channel -- --nocapture
 ```
 
-`tests/minimal_channel/main.rs` contains three hardware system cases and two software failure cases:
+`single_channel` means one hardware channel with a command ring, a response ring and IRQ
+delivery. Its cases cover linear/SG copies and failures on that same channel:
 
 - `copy_completes_through_host_irq_delivery`: copied bytes, a Success response,
   one IRQ delivery and deassertion after draining the response.
@@ -23,15 +24,48 @@ cargo test -p pdma-model-scenarios -- --nocapture
   fails submission before ISR registration, and the runtime returns without hanging.
 - `software_allocation_failure_stops_interrupt_runtime`: software receives an exhausted
   allocator and returns its allocation error without installing memory or delivering IRQs.
+- `all_endpoint_combinations_copy_across_independent_segment_boundaries`: linear/linear,
+  linear/SG, SG/linear and SG/SG transfers preserve the byte stream, including source
+  segments `[3, 0, 5]` and destination segments `[2, 6]`.
+- `scatter_gather_copy_exceeds_the_internal_chunk_size`: a 769-byte command crosses
+  independent segment and internal chunk boundaries, including zero-length segments.
+- `zero_total_endpoints_complete_without_payload_mappings`: all nine pairs of linear,
+  empty-list and all-zero-list endpoints complete with zero bytes and normal IRQ
+  delivery, despite zero-length allocations having no payload backing.
 
-## Hardware, software and harness
+Every successful case verifies `bytes_completed`, the actual destination backing
+bytes, one IRQ delivery and interrupt deassertion.
+
+## Test structure
+
+```text
+tests/single_channel/
+├── main.rs
+├── cases/
+│   ├── mod.rs
+│   ├── linear.rs
+│   ├── scatter_gather.rs
+│   └── faults.rs
+├── harness/
+│   ├── mod.rs
+│   └── fault.rs
+├── hardware.rs
+└── software/
+    ├── mod.rs
+    └── buffers.rs
+```
+
+Paths below are relative to `tests/single_channel/`.
 
 | File | Responsibility | Boundary |
 | --- | --- | --- |
-| `tests/minimal_channel/hardware.rs` | Assemble `Device` and its existing pipeline. | Receives a memory capability; knows no software CPU, driver or handler. |
-| `tests/minimal_channel/software.rs` | Allocate rings and payload buffers, initialize data, configure queues, submit, register the ISR and await its result. | Receives allocator, bus/memory access and ISR registration; has no device core, executor or dispatcher access. |
-| `tests/minimal_channel/main.rs` | Select backing and allocation service, inject faults, drive hardware, run software and assert results. | Does not allocate application buffers or construct a handler registry. |
-| `tests/minimal_channel/fault.rs` | Reject a ring write through a test-only memory view. | Observes the actual software-programmed base through a forwarding bus; no fixed buffer addresses or allocation-order assumptions. |
+| `main.rs` | Declare suite modules. | Contains no setup or test logic. |
+| `cases/` | Select inputs and assert observable outcomes. | Calls the harness; contains no platform or actor assembly. |
+| `hardware.rs` | Assemble `Device` and its existing pipeline. | Receives a memory capability; knows no software CPU, driver or handler. |
+| `software/mod.rs` | Allocate rings and payload buffers, initialize data, configure queues, submit, register the ISR and await its result. | Receives allocator, bus/memory access and ISR registration; has no device core, executor or dispatcher access. |
+| `software/buffers.rs` | Build either endpoint from its requested buffer layout. | Software allocates and initializes byte-aligned payload spans and aligned, schema-encoded SG lists. |
+| `harness/mod.rs` | Select backing and allocation service, drive hardware, run software and collect results. | Owns actor cleanup; does not allocate application buffers or construct a handler registry. |
+| `harness/fault.rs` | Reject a ring write through a test-only memory view. | Observes the actual software-programmed base through a forwarding bus; no fixed buffer addresses or allocation-order assumptions. |
 | `hardware-interface-runtime::InterruptRuntime` | Run the program and dispatch interrupts on its CPU. | Owns the handler table, CPU context and dispatch lifetime. |
 
 The harness makes the execution boundary explicit:
@@ -42,7 +76,7 @@ let model = Model::new(device);
 let runtime = InterruptRuntime::new(cpu, model.clone());
 let (completed, summary) = runtime.run_main(async |interrupts| {
     let ports = software::Ports { bus: model.clone(), memory: memory.clone(), allocator, interrupts };
-    software::main(ports, b"dma-copy").await
+    software::main(ports, software::Input::linear(b"dma-copy")).await
 }).await?;
 ```
 
@@ -65,11 +99,17 @@ CPU rejection, duplicate registration and lifecycle tests belong to the runtime 
 
 Before the software starts, backing contains no allocated regions. The software calls
 the existing `SharedMemoryAllocator` for both rings and the source/destination buffers,
-then configures and uses them. It returns the allocated destination alongside its ISR
-result; the harness independently reads the backing bytes at that address.
+then configures and uses them. `software::Input` supplies the payload bytes and
+independent `BufferLayout` values for source and destination: `Linear` or
+`ScatterGather(&[segment_lengths])`. The shared software builder allocates each
+payload span, initializes it, and encodes the SG list using `Segment::to_bytes()`.
+The software returns destination spans alongside its ISR result; the harness returns
+these results and backing to the case. Shared assertions in `cases/mod.rs` read each
+span and compare their concatenation with the input stream.
 Ring allocation uses each record's generated `RECORD_SIZE` (including tail padding)
-times capacity and its `RECORD_ALIGNMENT`. Payload allocation and the command length
-come from the input byte slice; payload memory needs only `MemoryAlignment::ONE`.
+times capacity and its `RECORD_ALIGNMENT`. SG list allocation uses the generated
+`Segment` record geometry. Payload spans use `MemoryAlignment::ONE`; endpoint lengths
+come from software's allocations. Hardware's internal chunk size is not a protocol limit.
 
 Fault cases select a generated ring-base register in the harness. The forwarding bus
 records the address software writes there, and the injected memory view rejects writes

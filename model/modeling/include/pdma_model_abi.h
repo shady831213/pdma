@@ -4,16 +4,147 @@
 
 #include <stdint.h>
 
-#define PDMA_MAX_COPY_BYTES UINT32_C(256)
+/*
+ * Scatter/gather segment
+ * One contiguous payload span in a software-owned scatter/gather list. The 16-byte little-endian record is eight-byte aligned. Software keeps lists and payload buffers stable until the command completes.
+ */
+#define C_SEGMENT_SIZE UINT64_C(16)
+#define C_SEGMENT_ALIGNMENT UINT64_C(8)
+#define C_SEGMENT_ENDIAN_LITTLE UINT32_C(0)
+#define C_SEGMENT_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Payload address
+ * First payload byte in the attached memory address space. Zero-length segments perform no payload access and require no usable address.
+ */
+#define C_SEGMENT_C_ADDRESS_OFFSET UINT64_C(0)
+#define C_SEGMENT_C_ADDRESS_WIDTH UINT64_C(8)
+#define C_SEGMENT_C_ADDRESS_ENDIAN C_SEGMENT_ENDIAN_LITTLE
+static inline uint64_t C_SEGMENT_LOAD_C_ADDRESS(const uint8_t bytes[C_SEGMENT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET] | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SEGMENT_STORE_C_ADDRESS(uint8_t bytes[C_SEGMENT_SIZE], uint64_t value) {
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_ADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Segment byte length
+ * Number of bytes contributed to the endpoint stream. Zero-length segments are skipped. Endpoint totals use checked 64-bit arithmetic.
+ */
+#define C_SEGMENT_C_LENGTH_OFFSET UINT64_C(8)
+#define C_SEGMENT_C_LENGTH_WIDTH UINT64_C(8)
+#define C_SEGMENT_C_LENGTH_ENDIAN C_SEGMENT_ENDIAN_LITTLE
+static inline uint64_t C_SEGMENT_LOAD_C_LENGTH(const uint8_t bytes[C_SEGMENT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET] | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_SEGMENT_STORE_C_LENGTH(uint8_t bytes[C_SEGMENT_SIZE], uint64_t value) {
+    bytes[C_SEGMENT_C_LENGTH_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_SEGMENT_C_LENGTH_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * DMA stream endpoint
+ * An independently selected linear or scatter/gather byte stream. The 24-byte little-endian record is eight-byte aligned. List descriptors are read on demand; software keeps descriptors and payload buffers stable until completion. Hardware imposes no segment-count or total-length bound and performs no overlap check. Payload chunks are read then written in logical stream order; overlap follows that deterministic execution order without a whole-transfer memmove guarantee.
+ */
+#define C_ENDPOINT_SIZE UINT64_C(24)
+#define C_ENDPOINT_ALIGNMENT UINT64_C(8)
+#define C_ENDPOINT_ENDIAN_LITTLE UINT32_C(0)
+#define C_ENDPOINT_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Endpoint representation
+ * 0: Linear, a contiguous address and byte length.
+ * 1: ScatterGather, an address and count of Segment records.
+ * Other wire values are invalid. Encoding derives this tag from the selected payload case.
+ */
+#define C_ENDPOINT_C_MODE_C_QULINEAR UINT64_C(0)
+#define C_ENDPOINT_C_MODE_C_QUSCATTERQUGATHER UINT64_C(1)
+#define C_ENDPOINT_C_MODE_OFFSET UINT64_C(0)
+#define C_ENDPOINT_C_MODE_WIDTH UINT64_C(4)
+#define C_ENDPOINT_C_MODE_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
+static inline uint32_t C_ENDPOINT_LOAD_C_MODE(const uint8_t bytes[C_ENDPOINT_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET] | ((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_ENDPOINT_STORE_C_MODE(uint8_t bytes[C_ENDPOINT_SIZE], uint32_t value) {
+    bytes[C_ENDPOINT_C_MODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_MODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
+ */
+#define C_ENDPOINT_C_WORD0_OFFSET UINT64_C(8)
+#define C_ENDPOINT_C_WORD0_WIDTH UINT64_C(8)
+#define C_ENDPOINT_C_WORD0_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_ENDPOINT_LOAD_C_WORD0(const uint8_t bytes[C_ENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET] | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_ENDPOINT_STORE_C_WORD0(uint8_t bytes[C_ENDPOINT_SIZE], uint64_t value) {
+    bytes[C_ENDPOINT_C_WORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
+ */
+#define C_ENDPOINT_C_WORD1_OFFSET UINT64_C(16)
+#define C_ENDPOINT_C_WORD1_WIDTH UINT64_C(8)
+#define C_ENDPOINT_C_WORD1_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
+static inline uint64_t C_ENDPOINT_LOAD_C_WORD1(const uint8_t bytes[C_ENDPOINT_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET] | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_ENDPOINT_STORE_C_WORD1(uint8_t bytes[C_ENDPOINT_SIZE], uint64_t value) {
+    bytes[C_ENDPOINT_C_WORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_WORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
 
 /*
  * DMA copy command
- * A software-produced command ring entry requesting one bounded memory copy. The wire record is 32 bytes, eight-byte aligned and little-endian; its trailing four padding bytes encode as zero.
+ * A software-produced command requesting a copy between two independently described byte streams. The wire record is 56 bytes, eight-byte aligned and little-endian. Hardware checks both endpoint totals before any payload write and reports LengthMismatch if they differ. Software keeps all lists and buffers stable until completion.
  */
-#define C_COMMAND_SIZE UINT64_C(32)
+#define C_COMMAND_SIZE UINT64_C(56)
 #define C_COMMAND_ALIGNMENT UINT64_C(8)
 #define C_COMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_COMMAND_ENDIAN_BIG UINT32_C(1)
+/*
+ * Command.source
+ * Source stream
+ * Linear or scatter/gather stream supplying payload bytes in logical order.
+ */
+/*
+ * Command.destination
+ * Destination stream
+ * Linear or scatter/gather stream receiving payload bytes in logical order. Its total must match the source total.
+ */
 
 /*
  * Command identifier
@@ -37,69 +168,136 @@ static inline void C_COMMAND_STORE_C_ID(uint8_t bytes[C_COMMAND_SIZE], uint64_t 
 }
 
 /*
- * Source address
- * First payload byte to read in the attached memory backend's address space. No additional payload alignment is required. The address is not accessed for a zero-length or oversized command.
+ * Endpoint representation
+ * 0: Linear, a contiguous address and byte length.
+ * 1: ScatterGather, an address and count of Segment records.
+ * Other wire values are invalid. Encoding derives this tag from the selected payload case.
  */
-#define C_COMMAND_C_SOURCE_OFFSET UINT64_C(8)
-#define C_COMMAND_C_SOURCE_WIDTH UINT64_C(8)
-#define C_COMMAND_C_SOURCE_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_SOURCE(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_COMMAND_C_SOURCEQX2EMODE_C_QULINEAR UINT64_C(0)
+#define C_COMMAND_C_SOURCEQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
+#define C_COMMAND_C_SOURCEQX2EMODE_OFFSET UINT64_C(8)
+#define C_COMMAND_C_SOURCEQX2EMODE_WIDTH UINT64_C(4)
+#define C_COMMAND_C_SOURCEQX2EMODE_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_SOURCEQX2EMODE(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
 }
-static inline void C_COMMAND_STORE_C_SOURCE(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_SOURCE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_SOURCE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_COMMAND_STORE_C_SOURCEQX2EMODE(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 /*
- * Destination address
- * First payload byte to write in the attached memory backend's address space. Hardware retains the complete source payload before writing, so overlapping source and destination ranges are supported.
+ * Endpoint parameters
+ * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
  */
-#define C_COMMAND_C_DESTINATION_OFFSET UINT64_C(16)
-#define C_COMMAND_C_DESTINATION_WIDTH UINT64_C(8)
-#define C_COMMAND_C_DESTINATION_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint64_t C_COMMAND_LOAD_C_DESTINATION(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+#define C_COMMAND_C_SOURCEQX2EWORD0_OFFSET UINT64_C(16)
+#define C_COMMAND_C_SOURCEQX2EWORD0_WIDTH UINT64_C(8)
+#define C_COMMAND_C_SOURCEQX2EWORD0_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COMMAND_LOAD_C_SOURCEQX2EWORD0(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_COMMAND_STORE_C_DESTINATION(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
-    bytes[C_COMMAND_C_DESTINATION_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_COMMAND_C_DESTINATION_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+static inline void C_COMMAND_STORE_C_SOURCEQX2EWORD0(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
- * Copy length in bytes
- * Valid lengths are 0 through 256. Zero succeeds without payload memory access. A larger value produces InvalidLength without reading or writing payload memory; validation occurs during execution, not wire decoding.
+ * Endpoint parameters
+ * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
  */
-#define C_COMMAND_C_LENGTH_OFFSET UINT64_C(24)
-#define C_COMMAND_C_LENGTH_WIDTH UINT64_C(4)
-#define C_COMMAND_C_LENGTH_ENDIAN C_COMMAND_ENDIAN_LITTLE
-static inline uint32_t C_COMMAND_LOAD_C_LENGTH(const uint8_t bytes[C_COMMAND_SIZE]) {
-    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_LENGTH_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_LENGTH_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_LENGTH_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_LENGTH_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+#define C_COMMAND_C_SOURCEQX2EWORD1_OFFSET UINT64_C(24)
+#define C_COMMAND_C_SOURCEQX2EWORD1_WIDTH UINT64_C(8)
+#define C_COMMAND_C_SOURCEQX2EWORD1_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COMMAND_LOAD_C_SOURCEQX2EWORD1(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
 }
-static inline void C_COMMAND_STORE_C_LENGTH(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
-    bytes[C_COMMAND_C_LENGTH_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_COMMAND_C_LENGTH_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_COMMAND_C_LENGTH_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_COMMAND_C_LENGTH_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+static inline void C_COMMAND_STORE_C_SOURCEQX2EWORD1(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint representation
+ * 0: Linear, a contiguous address and byte length.
+ * 1: ScatterGather, an address and count of Segment records.
+ * Other wire values are invalid. Encoding derives this tag from the selected payload case.
+ */
+#define C_COMMAND_C_DESTINATIONQX2EMODE_C_QULINEAR UINT64_C(0)
+#define C_COMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER UINT64_C(1)
+#define C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET UINT64_C(32)
+#define C_COMMAND_C_DESTINATIONQX2EMODE_WIDTH UINT64_C(4)
+#define C_COMMAND_C_DESTINATIONQX2EMODE_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_DESTINATIONQX2EMODE(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COMMAND_STORE_C_DESTINATIONQX2EMODE(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
+ */
+#define C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET UINT64_C(40)
+#define C_COMMAND_C_DESTINATIONQX2EWORD0_WIDTH UINT64_C(8)
+#define C_COMMAND_C_DESTINATIONQX2EWORD0_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COMMAND_LOAD_C_DESTINATIONQX2EWORD0(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD0(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Endpoint parameters
+ * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
+ */
+#define C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET UINT64_C(48)
+#define C_COMMAND_C_DESTINATIONQX2EWORD1_WIDTH UINT64_C(8)
+#define C_COMMAND_C_DESTINATIONQX2EWORD1_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint64_t C_COMMAND_LOAD_C_DESTINATIONQX2EWORD1(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET] | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD1(uint8_t bytes[C_COMMAND_SIZE], uint64_t value) {
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2EWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
  * DMA copy response
- * A hardware-produced response ring entry carrying one command's result. The wire record is 16 bytes, eight-byte aligned and little-endian, with four zero padding bytes. Ring-access faults instead stop the channel and are reported through its fault register and IRQ condition.
+ * A hardware-produced response carrying one command's result and completed byte count. The wire record is 24 bytes, eight-byte aligned and little-endian, with four zero padding bytes. Ring-access faults instead stop the channel and are reported through its fault register and IRQ condition.
  */
-#define C_RESPONSE_SIZE UINT64_C(16)
+#define C_RESPONSE_SIZE UINT64_C(24)
 #define C_RESPONSE_ALIGNMENT UINT64_C(8)
 #define C_RESPONSE_ENDIAN_LITTLE UINT32_C(0)
 #define C_RESPONSE_ENDIAN_BIG UINT32_C(1)
@@ -128,15 +326,19 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
 /*
  * Copy result
  * 0: Success, including a zero-length copy.
- * 1: InvalidLength, exceeding the 256-byte limit.
- * 2: ReadFault, the payload source could not be read.
- * 3: WriteFault, the payload destination could not be written.
- * Other wire values are invalid. Payload errors return a response rather than setting the sticky ring-access fault.
+ * 1: InvalidLength, arithmetic overflow in summed lengths or list extent/address calculations.
+ * 2: ReadFault, the payload source could not be read, including address overflow.
+ * 3: WriteFault, the payload destination could not be written, including address overflow.
+ * 4: LengthMismatch, endpoint totals differ before payload writes.
+ * 5: ListReadFault, a scatter/gather descriptor could not be read, including inaccessible or misaligned list memory.
+ * Other wire values are invalid. Transfer errors return a response rather than setting the sticky ring-access fault.
  */
 #define C_RESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH UINT64_C(1)
 #define C_RESPONSE_C_STATUS_C_QUREADQUFAULT UINT64_C(2)
 #define C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT UINT64_C(3)
+#define C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH UINT64_C(4)
+#define C_RESPONSE_C_STATUS_C_QULISTQUREADQUFAULT UINT64_C(5)
 #define C_RESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_RESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_RESPONSE_C_STATUS_ENDIAN C_RESPONSE_ENDIAN_LITTLE
@@ -148,6 +350,27 @@ static inline void C_RESPONSE_STORE_C_STATUS(uint8_t bytes[C_RESPONSE_SIZE], uin
     bytes[C_RESPONSE_C_STATUS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
     bytes[C_RESPONSE_C_STATUS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_RESPONSE_C_STATUS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Completed payload bytes
+ * Bytes successfully written before completion or failure, counted with 64-bit arithmetic. A successful transfer reports its full endpoint total; validation failures before copying report zero.
+ */
+#define C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET UINT64_C(16)
+#define C_RESPONSE_C_BYTESQSCOMPLETED_WIDTH UINT64_C(8)
+#define C_RESPONSE_C_BYTESQSCOMPLETED_ENDIAN C_RESPONSE_ENDIAN_LITTLE
+static inline uint64_t C_RESPONSE_LOAD_C_BYTESQSCOMPLETED(const uint8_t bytes[C_RESPONSE_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET] | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_SIZE], uint64_t value) {
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
 
 /*
@@ -179,7 +402,7 @@ static inline void C_RESPONSE_STORE_C_STATUS(uint8_t bytes[C_RESPONSE_SIZE], uin
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 32 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 56 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_PDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(0)
 #define C_PDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
@@ -223,7 +446,7 @@ static inline void C_RESPONSE_STORE_C_STATUS(uint8_t bytes[C_RESPONSE_SIZE], uin
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 16 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_PDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(24)
 #define C_PDMA_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)

@@ -2,8 +2,8 @@
 
 use hardware_interface_schema::Documentation;
 use pdma_model_contract::{
-    Address, ChannelFault, ChannelRegisters, Command, CommandRegisters, DeviceRegisters, ReadWord,
-    Response, ResponseRegisters, Switch, Word,
+    Address, ChannelFault, ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint,
+    ReadWord, Response, ResponseRegisters, Segment, Switch, Word,
 };
 
 fn assert_documented(name: &str, docs: Documentation) {
@@ -66,7 +66,7 @@ fn register_definitions_and_placements_have_complete_documentation()
 fn command_and_response_records_describe_every_wire_field() -> Result<(), Box<dyn std::error::Error>>
 {
     // Given: both record definitions used by the channel's rings.
-    let definitions = [Command::SPEC, Response::SPEC];
+    let definitions = [Segment::SPEC, Endpoint::SPEC, Command::SPEC, Response::SPEC];
     // When: their metadata is resolved through the public schema surface.
     let records = definitions
         .iter()

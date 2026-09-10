@@ -4,10 +4,13 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
+    AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_device::{Device, Error, Fetch, Publish, ReadCopy, Transfer, UpdateIrq, WriteCopy};
+use pdma_model_device::{
+    CheckLengths, Device, Error, Fetch, NextChunk, Publish, ReadCopy, Transfer, UpdateIrq,
+    WriteCopy,
+};
 use support::{TestResult, command, setup, submit};
 
 struct InvertPayload;
@@ -46,7 +49,11 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         &[0, 1, 2, 255],
     )?;
     submit(&mut device, &memory, command())?;
-    let execution = Then::new(Then::new(ReadCopy, InvertPayload), WriteCopy);
+    let chunk = Then::new(
+        Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
+        WriteCopy,
+    );
+    let execution = Then::new(CheckLengths, Repeat::new(chunk));
     let mut hardware = AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq);
     let mut operation = Operation::new(());
     let mut complete = false;

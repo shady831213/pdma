@@ -11,14 +11,19 @@ use std::{
 };
 
 use hardware_interface_schema::Documentation;
-use pdma_model_contract::{Command, DeviceRegisters, Response, ResponseStatus};
+use pdma_model_contract::{Command, DeviceRegisters, Endpoint, Response, ResponseStatus, Segment};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
 #[test]
 fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
     // Given: the current record and MMIO schemas used by the device.
-    let records = [Command::SPEC.resolve()?, Response::SPEC.resolve()?];
+    let records = [
+        Segment::SPEC.resolve()?,
+        Endpoint::SPEC.resolve()?,
+        Command::SPEC.resolve()?,
+        Response::SPEC.resolve()?,
+    ];
     let registers = DeviceRegisters::resolve()?;
 
     // When: the public generator emits its complete header.
@@ -77,23 +82,31 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     // Then: C and Rust both match independently specified little-endian bytes and MMIO addresses.
     assert_success("C consumer", &output);
     let command_bytes = [
-        7, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
-        0, 0,
+        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
     ];
-    let response_bytes = [7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let response_bytes = [
+        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
     let offsets = [0_u8, 8, 12, 16, 24, 32, 36, 40, 44, 48, 52];
     let command = Command {
         id: 7,
-        source: 0x100,
-        destination: 0x200,
-        length: 8,
+        source: Endpoint::linear(0x100, 8),
+        destination: Endpoint::scatter_gather(0x200, 2),
     };
     let response = Response {
         id: 7,
         status: ResponseStatus::Success,
+        bytes_completed: 8,
+    };
+    let segment = Segment {
+        address: 0x300,
+        length: 8,
     };
     assert_eq!(command.to_bytes()?, command_bytes);
     assert_eq!(response.to_bytes()?, response_bytes);
+    assert_eq!(segment.to_bytes()?, segment_bytes);
     let resolved = DeviceRegisters::resolve()?;
     let rust_offsets = resolved
         .registers()
@@ -104,6 +117,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     let expected = [
         command_bytes.as_slice(),
         response_bytes.as_slice(),
+        segment_bytes.as_slice(),
         offsets.as_slice(),
     ]
     .concat();

@@ -1,6 +1,6 @@
 # Current PDMA contract header
 
-`pdma_model_abi.h` is generated from the current contract's `Command`, `Response`
+`pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`
 and `DeviceRegisters` schemas. It contains record sizes and byte accessors, MMIO
 offsets and access/reset metadata, and schema descriptions as C comments. It is
 a C11 data contract, not a callable device API or the predecessor's ABI.
@@ -8,6 +8,13 @@ a C11 data contract, not a callable device API or the predecessor's ABI.
 Enum fields export named discriminant constants and variant descriptions. For a
 bit field, these constants are unshifted values; its bit position determines
 where the encoded value belongs within the containing scalar.
+
+Endpoints use mode 0 for linear spans and mode 1 for scatter/gather lists. The
+existing exporter names the two union storage words `WORD0` and `WORD1`: these
+hold address/length for linear endpoints and list_address/count for list
+endpoints. Software keeps lists and buffers stable until command completion.
+The response carries a 64-bit `bytes_completed` count; transfer lengths have no
+fixed hardware limit.
 
 Run from `model/modeling`:
 

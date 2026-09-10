@@ -27,12 +27,14 @@ and four reusable building blocks:
 The original scenarios sources are preserved on the backup branch only.
 The new `crates/scenarios` contains current-model integration tests. Current acceptance
 uses these system scenarios and the active crates' boundary tests.
-The version plans, `model/docs/pdma_arch_spec_v0.md`, and generated PDMA header describe
+The version plans and `model/docs/pdma_arch_spec_v0.md` describe
 the old implementation, not the replacement's required architecture or ABI.
+The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 
-The current implementation has one channel with command/response rings, bounded DMA
-copy, and interrupt delivery using existing building blocks. Do not expand that scope or
+The current implementation has one channel with command/response rings, independently
+selected linear/scatter-gather DMA endpoints, and interrupt delivery using existing
+building blocks. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.
 
 ## Working rules

@@ -6,8 +6,8 @@ use hardware_interface_runtime::{
     MemoryRegionError,
 };
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Response, ResponseRegisters,
-    ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
+    ResponseRegisters, ResponseStatus,
 };
 use pdma_model_device::{Device, Pipeline, pipeline};
 use std::{cell::RefCell, ops::Range};
@@ -128,9 +128,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     let mut device = Device::new(FlatMemory::new()?);
     let command = Command {
         id: 91,
-        source: 256,
-        destination: 320,
-        length: 4,
+        source: Endpoint::linear(256, 4),
+        destination: Endpoint::linear(320, 4),
     };
     device.memory.write(
         MemoryAddress::new(0),
@@ -188,7 +187,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         Response::from_bytes(&response)?,
         Response {
             id: 91,
-            status: ResponseStatus::Success
+            status: ResponseStatus::Success,
+            bytes_completed: 4,
         }
     );
     assert!(device.irq());

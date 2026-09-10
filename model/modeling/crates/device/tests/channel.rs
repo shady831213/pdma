@@ -6,8 +6,8 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Response, ResponseRegisters,
-    ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
+    ResponseRegisters, ResponseStatus,
 };
 use pdma_model_device::{Device, Fault, Pipeline, pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
@@ -38,7 +38,8 @@ fn copy_publishes_response_before_irq_and_drain_lowers_line() -> TestResult {
         Response::from_bytes(&bytes)?,
         Response {
             id: 7,
-            status: ResponseStatus::Success
+            status: ResponseStatus::Success,
+            bytes_completed: 4,
         }
     );
     assert!(device.irq());
@@ -98,7 +99,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
         &mut device,
         &memory,
         Command {
-            source: 0x8000,
+            source: Endpoint::linear(0x8000, 4),
             ..command()
         },
     )?;

@@ -10,7 +10,7 @@ fn configuration_uses_the_selected_entry_layout() -> Result<(), RingError> {
     // When
     let addresses = (command.entry(1)?, response.entry(1)?);
     // Then
-    assert_eq!(addresses, (0x1020, 0x2010));
+    assert_eq!(addresses, (0x1038, 0x2018));
     Ok(())
 }
 

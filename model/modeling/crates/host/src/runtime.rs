@@ -1,5 +1,8 @@
 //! PDMA-specific runtime transport; not part of the software channel driver.
 
+#[cfg(test)]
+mod tests;
+
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use hardware_interface_runtime::{InterruptEnvelope, InterruptSource, RegisterAccess};
 use pdma_model_device::{Device, Error};
@@ -53,24 +56,33 @@ impl<M> Model<M> {
     }
 }
 
-impl<M: Send> RegisterAccess for Model<M> {
-    type Error = Error;
-
-    async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Error> {
-        let offset = usize::try_from(offset).map_err(|_| Error::Unmapped)?;
-        self.device.lock().await.read(offset, response)
-    }
-
-    async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Error> {
-        let offset = usize::try_from(offset).map_err(|_| Error::Unmapped)?;
+impl<M: Send> Model<M> {
+    async fn access(
+        &self,
+        access: impl FnOnce(&mut Device<M>) -> Result<(), Error> + Send,
+    ) -> Result<(), Error> {
         let result = {
             let mut device = self.device.lock().await;
-            let result = device.write(offset, request);
+            let result = access(&mut device);
             self.publish_irq(device.irq());
             result
         };
         self.changed.notify_one();
         result
+    }
+}
+
+impl<M: Send> RegisterAccess for Model<M> {
+    type Error = Error;
+
+    async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Error> {
+        let offset = usize::try_from(offset).map_err(|_| Error::Unmapped)?;
+        self.access(|device| device.read(offset, response)).await
+    }
+
+    async fn write(&self, offset: u32, request: &[u8]) -> Result<(), Error> {
+        let offset = usize::try_from(offset).map_err(|_| Error::Unmapped)?;
+        self.access(|device| device.write(offset, request)).await
     }
 }
 

@@ -60,21 +60,21 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     let result = run(&mut device);
     // Then
     assert!(result.is_err());
+    assert!(device.irq());
     assert_eq!(
         read_word(
-            &device,
+            &mut device,
             DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
         )?,
         Fault::ResponseWrite.code().raw()
     );
     assert_eq!(
         read_word(
-            &device,
+            &mut device,
             DeviceRegisters::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
         )?,
         0
     );
-    assert!(device.irq());
     device.write(
         DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
         &0_u32.to_le_bytes(),
@@ -83,7 +83,7 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert!(run(&mut device).is_err());
     assert_eq!(
         read_word(
-            &device,
+            &mut device,
             DeviceRegisters::COMMAND.offset() + CommandRegisters::CONSUMER.offset()
         )?,
         1
@@ -112,14 +112,14 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
         Response::from_bytes(&bytes)?.status,
         ResponseStatus::ReadFault
     );
+    assert!(device.irq());
     assert_eq!(
         read_word(
-            &device,
+            &mut device,
             DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
         )?,
         0
     );
-    assert!(device.irq());
     Ok(())
 }
 
@@ -174,7 +174,7 @@ fn full_response_ring_stalls_retained_publication_without_replaying_copy() -> Te
     assert_eq!(destination, [9; 4]);
     assert_eq!(
         read_word(
-            &device,
+            &mut device,
             DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
         )?,
         0

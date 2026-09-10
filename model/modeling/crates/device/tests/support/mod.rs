@@ -94,7 +94,7 @@ pub fn run(device: &mut Device<SharedMemory>) -> TestResult {
 
 /// Read one exact 32-bit register through the device bus.
 pub fn read_word(
-    device: &Device<SharedMemory>,
+    device: &mut Device<SharedMemory>,
     offset: usize,
 ) -> Result<u32, Box<dyn std::error::Error>> {
     let mut bytes = [0; 4];

@@ -65,13 +65,13 @@ fn malformed_writes_preserve_registers() -> TestResult {
         } else {
             offset
         };
-        let before = read_word(&device, observed)?;
+        let before = read_word(&mut device, observed)?;
         // When
         let bytes = u32::to_le_bytes(value);
         let result = device.write(offset, bytes.get(..width).ok_or("bad fixture width")?);
         // Then
         assert_eq!(result, Err(error), "offset {offset}");
-        assert_eq!(read_word(&device, observed)?, before);
+        assert_eq!(read_word(&mut device, observed)?, before);
         assert!(!device.irq());
     }
     Ok(())
@@ -96,7 +96,7 @@ fn geometry_remains_locked_after_disable() -> TestResult {
     assert_eq!(response, Err(Error::ConfigurationLocked));
     device.write(ENABLE, &1_u32.to_le_bytes())?;
     assert_eq!(
-        read_word(&device, RESPONSE + ResponseRegisters::CAPACITY.offset())?,
+        read_word(&mut device, RESPONSE + ResponseRegisters::CAPACITY.offset())?,
         2
     );
     Ok(())
@@ -117,7 +117,7 @@ fn invalid_geometry_rejects_enable() -> TestResult {
         let result = device.write(ENABLE, &1_u32.to_le_bytes());
         // Then
         assert_eq!(result, Err(Error::Configuration));
-        assert_eq!(read_word(&device, ENABLE)?, 0);
+        assert_eq!(read_word(&mut device, ENABLE)?, 0);
     }
     Ok(())
 }
@@ -151,10 +151,13 @@ fn command_read_fault_stays_masked_until_unmasked() -> TestResult {
     let result = run(&mut device);
     // Then
     assert!(result.is_err());
-    assert_eq!(read_word(&device, FAULT)?, Fault::CommandRead.code().raw());
-    assert_eq!(read_word(&device, COMMAND_CONSUMER)?, 0);
-    assert_eq!(read_word(&device, RESPONSE_PRODUCER)?, 0);
     assert!(!device.irq());
+    assert_eq!(
+        read_word(&mut device, FAULT)?,
+        Fault::CommandRead.code().raw()
+    );
+    assert_eq!(read_word(&mut device, COMMAND_CONSUMER)?, 0);
+    assert_eq!(read_word(&mut device, RESPONSE_PRODUCER)?, 0);
     device.write(IRQ_ENABLE, &1_u32.to_le_bytes())?;
     assert!(device.irq());
     Ok(())
@@ -181,8 +184,8 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
         Response::from_bytes(&bytes)?.status,
         ResponseStatus::WriteFault
     );
-    assert_eq!(read_word(&device, FAULT)?, 0);
     assert!(device.irq());
+    assert_eq!(read_word(&mut device, FAULT)?, 0);
     Ok(())
 }
 
@@ -248,9 +251,9 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
     }
     // Then
     assert_eq!(ids, [0, 1, 2, 3, 4]);
-    assert_eq!(read_word(&device, COMMAND_CONSUMER)?, 5);
-    assert_eq!(read_word(&device, RESPONSE_PRODUCER)?, 5);
     assert!(!device.irq());
+    assert_eq!(read_word(&mut device, COMMAND_CONSUMER)?, 5);
+    assert_eq!(read_word(&mut device, RESPONSE_PRODUCER)?, 5);
     Ok(())
 }
 
@@ -267,9 +270,10 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
             .step(&mut hardware, &mut operation, &mut device)
             .map_err(|error| format!("{error:?}"))?;
         // Then
-        let published = read_word(&device, RESPONSE_PRODUCER)?;
-        assert_eq!(device.irq(), published == 1);
-        if device.irq() {
+        let irq = device.irq();
+        let published = read_word(&mut device, RESPONSE_PRODUCER)?;
+        assert_eq!(irq, published == 1);
+        if irq {
             let mut bytes = [0; Response::RECORD_SIZE];
             memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
             assert_eq!(
@@ -286,7 +290,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
             RunOutcome::Pending(()) => return Err("unexpected stall".into()),
             RunOutcome::Complete(result) => {
                 result?;
-                assert!(device.irq());
+                assert!(irq);
                 return Ok(());
             }
         }

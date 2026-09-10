@@ -6,8 +6,8 @@ use pdma_model_contract::{
 };
 
 impl Channel {
-    pub(crate) fn read(&self, offset: usize, out: &mut [u8]) -> Result<(), Error> {
-        if offset < DeviceRegisters::RESPONSE.offset() {
+    pub(crate) fn read(&mut self, offset: usize, out: &mut [u8]) -> Result<(), Error> {
+        let result = if offset < DeviceRegisters::RESPONSE.offset() {
             read::<CommandRegisters>(&self.command.registers, offset, out)
         } else if offset < DeviceRegisters::CHANNEL.offset() {
             read::<ResponseRegisters>(
@@ -21,7 +21,9 @@ impl Channel {
                 offset - DeviceRegisters::CHANNEL.offset(),
                 out,
             )
-        }
+        };
+        self.update_irq();
+        result
     }
 
     pub(crate) fn write(&mut self, offset: usize, bytes: &[u8]) -> Result<(), Error> {

@@ -36,8 +36,8 @@ impl<M> Device<M> {
         self.channel.irq
     }
 
-    /// Reads an exact register leaf in the generated device map.
-    pub fn read(&self, offset: usize, destination: &mut [u8]) -> Result<(), Error> {
+    /// Reads a register and applies the owning channel's immediate side effects.
+    pub fn read(&mut self, offset: usize, destination: &mut [u8]) -> Result<(), Error> {
         self.channel.read(offset, destination)
     }
 

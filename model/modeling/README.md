@@ -68,6 +68,12 @@ a concrete backing. The scenario harness assembles shared memory and its allocat
 externally; software allocates its own rings and payload buffers through that service.
 `device/tests/flat_memory.rs` runs the same graph on an independent flat array.
 
+Both MMIO reads and writes are hardware transactions with exclusive device access.
+The register owner applies access side effects and refreshes its IRQ state; the runtime
+publishes that level, releases the device lock and notifies the worker to recheck its
+conditions, preserving the transaction's success or error. Ordinary reads may therefore
+cause an extra recheck. The current register set has no read-clear behavior.
+
 ## Shared ring contract
 
 `Ring` is a trait with an associated `Entry` schema. Implementations supply their

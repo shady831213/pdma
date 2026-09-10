@@ -2,6 +2,7 @@
 
 mod async_executor {
     mod backend;
+    mod repeat;
 
     use std::{
         future::Future,

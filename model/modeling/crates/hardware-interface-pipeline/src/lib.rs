@@ -6,6 +6,7 @@ mod compose;
 mod executor;
 mod operation;
 mod outcome;
+mod repeat;
 mod stage;
 
 pub use after_each::AfterEach;
@@ -16,4 +17,5 @@ pub use executor::{
 };
 pub use operation::Operation;
 pub use outcome::StepOutcome;
+pub use repeat::Repeat;
 pub use stage::Stage;

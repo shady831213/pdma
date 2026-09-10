@@ -3,14 +3,16 @@
 Run from this directory:
 
 ```sh
-cargo run -p pdma-model-host --example minimal_channel
+cargo test -p pdma-model-scenarios --test minimal_channel -- --nocapture
 ```
 
-The example runs a successful copy and an unmapped-response-ring fault. Both use
+The system tests run successful copies, including a byte-aligned destination, and a
+response-ring write fault. They use
 real memory access, the same composed device pipeline, a software CPU, and the
 existing interrupt dispatcher. Worker construction/join and assertions belong to
-the harness; software setup, submission and completion waiting run inside one
-`SoftwareCpu::run_main` per case. A channel is transferred once into its persistent
+the harness; buffer allocation, payload initialization, software setup, submission, handler registration
+and completion waiting run inside one
+`InterruptRuntime::run_main` per case, which uses `SoftwareCpu` internally. A channel is transferred once into its persistent
 IRQ handler, rather than repeatedly moved through shared optional state.
 
 ## Read the implementation
@@ -26,7 +28,11 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/device/src/stages.rs` | The complete hardware composition. |
 | `crates/device/src/execution.rs` | Read and write transforms with request-owned payload. |
 | `crates/host/src/channel.rs` | Software configuration, submit and response consumption. |
-| `crates/host/src/model.rs` | Async context access, worker wakeup and IRQ-line transport. |
+| `crates/host/src/runtime.rs` | PDMA runtime transport: async context access, worker wakeup and IRQ line. |
+| `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
+| `crates/scenarios/tests/minimal_channel/hardware.rs` | Hardware assembly from the existing device and stage graph. |
+| `crates/scenarios/tests/minimal_channel/software.rs` | Complete software program, including buffer allocation and interrupt handler. |
+| `crates/scenarios/tests/minimal_channel/main.rs` | Platform provisioning, actor driving and acceptance assertions. |
 
 The device composition is deliberately explicit:
 
@@ -47,7 +53,8 @@ Use one retained operation/worker per channel. Discarding an accepted operation 
 not a modeled hardware cancellation or recovery mechanism.
 
 `Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
-a concrete backing. The example assembles runtime-owned shared memory externally;
+a concrete backing. The scenario harness assembles shared memory and its allocation service
+externally; software allocates its own rings and payload buffers through that service.
 `device/tests/flat_memory.rs` runs the same graph on an independent flat array.
 
 ## Shared ring contract
@@ -72,7 +79,8 @@ semantic records, then publish pointers only after successful access and decodin
 Device `CommandRing`/`ResponseRing` implement the trait directly over their own
 registers and expose inherent synchronous operations. Host concrete rings implement
 the same trait and expose inherent asynchronous operations; `Channel` delegates to
-them. One private host register port retains the bus and per-poll CPU validation.
+them. One private host register port retains the bus and delegates per-poll CPU
+validation to the runtime's `CpuOwner::scope`.
 Software reads current pointers through that bus; there is no second authoritative
 cursor store. The separation follows
 [etha_model's register-backed ring operations](https://github.com/shady831213/etha_model/blob/5270f00874a1ad390fbbce6f5395be24a52d0ec9/src/reg_if/ring.rs#L125-L182),

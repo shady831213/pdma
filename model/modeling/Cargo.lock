@@ -105,6 +105,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdma-model-scenarios"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-pipeline",
+ "hardware-interface-runtime",
+ "pdma-model-contract",
+ "pdma-model-device",
+ "pdma-model-host",
+ "tokio",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

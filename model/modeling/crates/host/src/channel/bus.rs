@@ -1,10 +1,6 @@
 use crate::Error;
 use hardware_interface_runtime::{CpuOwner, RegisterAccess};
-use std::{
-    future::{Future, poll_fn},
-    pin::pin,
-    task::Poll,
-};
+use std::future::Future;
 
 #[derive(Debug)]
 pub(super) struct RegisterPort<B> {
@@ -45,13 +41,10 @@ impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
         &self,
         operation: impl Future<Output = Result<(), B::Error>> + Send,
     ) -> Result<(), Error<B::Error>> {
-        let mut operation = pin!(operation);
-        poll_fn(|context| {
-            if let Err(error) = self.owner.validate_active() {
-                return Poll::Ready(Err(Error::Cpu(error)));
-            }
-            operation.as_mut().poll(context).map_err(Error::Bus)
-        })
-        .await
+        self.owner
+            .scope(operation)
+            .await
+            .map_err(Error::Cpu)?
+            .map_err(Error::Bus)
     }
 }

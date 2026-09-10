@@ -1,0 +1,81 @@
+# Current PDMA scenarios
+
+This crate assembles the current contract, device, host and reusable building blocks
+into system acceptance tests. It contains no hardware implementation or driver API.
+The predecessor's scenarios remain on `backup/pdma-before-rebuild-20260909` only.
+
+Run from `model/modeling`:
+
+```sh
+cargo test -p pdma-model-scenarios -- --nocapture
+```
+
+`tests/minimal_channel/main.rs` contains three hardware system cases and two software failure cases:
+
+- `copy_completes_through_host_irq_delivery`: copied bytes, a Success response,
+  one IRQ delivery and deassertion after draining the response.
+- `copy_accepts_a_byte_aligned_destination`: a nine-byte payload is copied into
+  a destination that is not eight-byte aligned, with normal response and IRQ delivery.
+- `response_write_fault_reaches_host_without_a_response_entry`: the copy completes,
+  response publication fails, and the host observes `ChannelFaultCode::ResponseWrite`
+  through IRQ delivery without needing a response entry.
+- `software_setup_failure_stops_interrupt_runtime`: an unmapped command buffer
+  fails submission before ISR registration, and the runtime returns without hanging.
+- `software_allocation_failure_stops_interrupt_runtime`: software receives an exhausted
+  allocator and returns its allocation error without installing memory or delivering IRQs.
+
+## Hardware, software and harness
+
+| File | Responsibility | Boundary |
+| --- | --- | --- |
+| `tests/minimal_channel/hardware.rs` | Assemble `Device` and its existing pipeline. | Receives a memory capability; knows no software CPU, driver or handler. |
+| `tests/minimal_channel/software.rs` | Allocate rings and payload buffers, initialize data, configure queues, submit, register the ISR and await its result. | Receives allocator, bus/memory access and ISR registration; has no device core, executor or dispatcher access. |
+| `tests/minimal_channel/main.rs` | Select backing and allocation service, inject faults, drive hardware, run software and assert results. | Does not allocate application buffers or construct a handler registry. |
+| `tests/minimal_channel/fault.rs` | Reject a ring write through a test-only memory view. | Observes the actual software-programmed base through a forwarding bus; no fixed buffer addresses or allocation-order assumptions. |
+| `hardware-interface-runtime::InterruptRuntime` | Run the program and dispatch interrupts on its CPU. | Owns the handler table, CPU context and dispatch lifetime. |
+
+The harness makes the execution boundary explicit:
+
+```rust
+let (device, stage) = hardware::assemble(memory.clone());
+let model = Model::new(device);
+let runtime = InterruptRuntime::new(cpu, model.clone());
+let (completed, summary) = runtime.run_main(async |interrupts| {
+    let ports = software::Ports { bus: model.clone(), memory: memory.clone(), allocator, interrupts };
+    software::main(ports, b"dma-copy").await
+}).await?;
+```
+
+Each case has one complete program inside one `run_main`. Software installs its
+persistent ISR with `ports.interrupts.register((), handler)?`; the runtime enforces
+CPU ownership. Software has no CPU token, registry builder, freeze step or registry
+handoff channel. The remaining completion oneshot is ordinary software communication
+from the ISR to the waiting program, not runtime startup wiring.
+
+The current program transfers its channel into the ISR immediately after submission,
+in the same CPU poll as this transport's producer write. This is not a general rule
+for drivers whose bus can suspend after committing a write: those drivers need to
+install their ISR before enabling/submitting work. The runtime dispatches live IRQs
+and reports unregistered vectors rather than silently buffering them.
+
+On program return the runtime stops dispatch and waits for an accepted ISR to finish.
+An ISR/source failure ends the waiting program with the concrete dispatch error.
+Dropping the whole scoped runtime cancels its software futures without leaving tasks.
+CPU rejection, duplicate registration and lifecycle tests belong to the runtime crate.
+
+Before the software starts, backing contains no allocated regions. The software calls
+the existing `SharedMemoryAllocator` for both rings and the source/destination buffers,
+then configures and uses them. It returns the allocated destination alongside its ISR
+result; the harness independently reads the backing bytes at that address.
+Ring allocation uses each record's generated `RECORD_SIZE` (including tail padding)
+times capacity and its `RECORD_ALIGNMENT`. Payload allocation and the command length
+come from the input byte slice; payload memory needs only `MemoryAlignment::ONE`.
+
+Fault cases select a generated ring-base register in the harness. The forwarding bus
+records the address software writes there, and the injected memory view rejects writes
+at that entry address with `MemoryAccessError::Unmapped`. Both software and hardware use
+that view over the allocator's real backing. Software runs the same allocation path in
+all cases and has no fault-mode branches. Hardware behavior and driving still come from
+the existing device and pipeline crates.
+These tests run in ordinary `cargo test --workspace`; crate-local boundary tests
+stay in contract, device, host and the building-block crates.

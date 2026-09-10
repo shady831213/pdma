@@ -1,11 +1,10 @@
-//! Software operations for the minimal DMA channel.
+//! Software channel driver, with PDMA runtime transport in [`runtime`].
 
 mod channel;
 mod error;
-mod model;
 mod ring;
+pub mod runtime;
 
 pub use channel::{Channel, Rings};
 pub use error::Error;
-pub use model::{Irq, Model};
 pub use ring::RingConfig;

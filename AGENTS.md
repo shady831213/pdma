@@ -16,15 +16,17 @@ Do not restore their compatibility interfaces without a user request.
 ## Scope and retained material
 
 Active work is under `model/modeling`; read its `AGENTS.md`.
-Its Cargo workspace contains the three minimal PDMA crates and four reusable building blocks:
+Its Cargo workspace contains the three minimal PDMA crates, a system-scenarios crate,
+and four reusable building blocks:
 
 - `hardware-interface-pipeline`
 - `hardware-interface-runtime`
 - `hardware-interface-schema`
 - `hardware-interface-schema-macros`
 
-The original `crates/scenarios` sources are preserved on the backup branch only.
-Current acceptance uses the active crate tests and the `minimal_channel` host example.
+The original scenarios sources are preserved on the backup branch only.
+The new `crates/scenarios` contains current-model integration tests. Current acceptance
+uses these system scenarios and the active crates' boundary tests.
 The version plans, `model/docs/pdma_arch_spec_v0.md`, and generated PDMA header describe
 the old implementation, not the replacement's required architecture or ABI.
 `docs/white_boards/**` remains exploratory background.

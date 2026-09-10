@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{Command, CommandRegisters, DeviceRegisters};
 use pdma_model_device::Device;
-use pdma_model_host::{Channel, Error, Model, RingConfig, Rings};
+use pdma_model_host::{Channel, Error, RingConfig, Rings, runtime::Model};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},

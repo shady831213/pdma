@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{ChannelFaultCode, Command, Response, ResponseStatus};
 use pdma_model_device::{Device, pipeline};
-use pdma_model_host::{Channel, Model, RingConfig, Rings};
+use pdma_model_host::{Channel, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 #[tokio::test]

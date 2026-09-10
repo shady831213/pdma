@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
 use hardware_interface_schema::RegisterCodecError;
 use pdma_model_contract::{ChannelRegisters, DeviceRegisters};
 use pdma_model_device::Device;
-use pdma_model_host::{Channel, Error, Model, RingConfig, Rings};
+use pdma_model_host::{Channel, Error, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 struct CorruptFaultBus(Model<SharedMemoryAccess>);

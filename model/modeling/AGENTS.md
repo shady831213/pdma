@@ -10,7 +10,7 @@ removed from master after backing up the complete source snapshot:
 
 The replacement now implements one channel with command and response rings,
 0..=256-byte DMA copy, sticky channel faults, and level IRQ delivery. See README.md
-and the runnable `minimal_channel` host example. Old interfaces, numeric register
+and the `crates/scenarios/tests/minimal_channel/main.rs` system tests. Old interfaces, numeric register
 layouts, and ABI compatibility are not requirements for this model.
 
 ## Active building blocks
@@ -27,9 +27,23 @@ replacement model; do not introduce parallel composition or dispatch mechanisms.
 
 ## Historical references
 
-The obsolete `crates/scenarios` sources are preserved on the backup branch only.
-Current behavior is validated by the active crate tests and the `minimal_channel`
-host example. Add future scenarios against the replacement model's interfaces.
+The obsolete scenarios sources are preserved on the backup branch only. The new
+`crates/scenarios` owns system tests against the replacement model's interfaces;
+individual crates retain their focused boundary tests. Scenario assembly, actor
+shutdown/join and assertions stay in the test harness, with one complete software
+program inside one `InterruptRuntime::run_main` per case. Keep hardware assembly, software
+program and harness in distinct native modules. Software owns ring/payload buffer allocation,
+payload initialization,
+queue configuration and handler construction/registration; the harness must not
+perform those operations for it. The harness selects memory backing and creates the
+allocator service; it does not preallocate application buffers. Software receives
+allocation, bus/memory capabilities and input
+data, not a device core or executor. Hardware assembly receives memory access, not
+software handlers or CPU state. Software calls the runtime-supplied ISR registration
+capability; CPU validation, handler tables and dispatcher lifecycle belong to the
+runtime. Do not expose registry freezing, startup handoff channels or dispatcher tasks
+to the software program. `host::runtime` owns PDMA transport, separate from the host
+channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-runtime`.
 
 `include/pdma_model_abi.h` is generated from the current contract schemas by
 `pdma-abi-header` with the optional `export-c-header` feature. Regenerate and check

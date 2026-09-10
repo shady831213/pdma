@@ -5,6 +5,10 @@ and `DeviceRegisters` schemas. It contains record sizes and byte accessors, MMIO
 offsets and access/reset metadata, and schema descriptions as C comments. It is
 a C11 data contract, not a callable device API or the predecessor's ABI.
 
+Enum fields export named discriminant constants and variant descriptions. For a
+bit field, these constants are unshifted values; its bit position determines
+where the encoded value belongs within the containing scalar.
+
 Run from `model/modeling`:
 
 ```sh

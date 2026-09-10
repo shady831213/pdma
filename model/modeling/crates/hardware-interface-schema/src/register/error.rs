@@ -197,6 +197,13 @@ impl<I: fmt::Debug> std::error::Error for RegisterDefinitionError<I> {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RegisterValueError {
+    /// An enum field contains an undeclared code.
+    UnknownTag {
+        /// Exact schema member and root-relative bit coordinate.
+        location: SchemaLocation,
+        /// Observed unassigned code.
+        observed: u64,
+    },
     /// The definition cannot safely describe a checked value view.
     InvalidDefinition,
     /// The supplied byte slice is shorter than the register width.
@@ -241,6 +248,10 @@ impl RegisterValueError {
     #[must_use]
     pub const fn rebased(self, base: SchemaCoordinate) -> Self {
         match self {
+            Self::UnknownTag { location, observed } => match location.checked_rebase(base) {
+                Some(location) => Self::UnknownTag { location, observed },
+                None => Self::CoordinateRebaseOverflow { location, base },
+            },
             Self::InvalidDefinition => Self::InvalidDefinition,
             Self::BufferTooShort { required, actual } => Self::BufferTooShort { required, actual },
             Self::ValueOverflow { width, value } => Self::ValueOverflow { width, value },
@@ -271,3 +282,23 @@ impl fmt::Display for RegisterValueError {
 }
 
 impl std::error::Error for RegisterValueError {}
+
+impl RegisterValueError {
+    /// Converts a shared enum decoding failure for register access.
+    pub const fn from_schema_error(error: crate::SchemaCodecError) -> Self {
+        match error {
+            crate::SchemaCodecError::UnknownTag { location, observed } => {
+                Self::UnknownTag { location, observed }
+            }
+            crate::SchemaCodecError::CoordinateRebaseOverflow { location, base } => {
+                Self::CoordinateRebaseOverflow { location, base }
+            }
+            crate::SchemaCodecError::BufferTooShort { required, actual } => {
+                Self::BufferTooShort { required, actual }
+            }
+            crate::SchemaCodecError::NonZeroReserved { .. }
+            | crate::SchemaCodecError::NarrowingOverflow { .. }
+            | crate::SchemaCodecError::ConstantMismatch { .. } => Self::InvalidDefinition,
+        }
+    }
+}

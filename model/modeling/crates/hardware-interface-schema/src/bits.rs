@@ -10,6 +10,7 @@ use crate::{
 pub struct BitsFieldDefinition {
     bit_width: usize,
     documentation: Documentation,
+    enum_definition: Option<crate::EnumDefinition>,
 }
 
 impl BitsFieldDefinition {
@@ -18,6 +19,7 @@ impl BitsFieldDefinition {
         Self {
             bit_width,
             documentation: Documentation::EMPTY,
+            enum_definition: None,
         }
     }
 
@@ -36,6 +38,18 @@ impl BitsFieldDefinition {
     /// Returns the declared number of bits.
     pub const fn bit_width(self) -> usize {
         self.bit_width
+    }
+
+    /// Attaches the legal enum codes for this field.
+    #[must_use]
+    pub const fn with_enum(mut self, definition: crate::EnumDefinition) -> Self {
+        self.enum_definition = Some(definition);
+        self
+    }
+
+    /// Returns the optional enum definition.
+    pub const fn enum_definition(self) -> Option<crate::EnumDefinition> {
+        self.enum_definition
     }
 }
 
@@ -206,13 +220,13 @@ pub trait BitsLayout {
     const DECLARED_MASK: u64;
     /// Scalar metadata kind selected by the inferred extent.
     const SCALAR_KIND: crate::ScalarKind;
-    /// All-zero typed value.
+    /// Semantic default with zero integers and first-declared enum variants.
     const ZERO: Self::Value;
     /// Stable field metadata in declaration order.
     const FIELDS: &'static [BitsFieldSpec];
 
     /// Decodes declared fields from a register scalar while ignoring other bits.
-    fn decode_register(raw: u64) -> Self::Value;
+    fn decode_register(raw: u64) -> Result<Self::Value, RegisterValueError>;
 
     /// Encodes declared fields into their register-local scalar positions.
     fn encode_register(value: &Self::Value) -> Result<u64, RegisterValueError>;

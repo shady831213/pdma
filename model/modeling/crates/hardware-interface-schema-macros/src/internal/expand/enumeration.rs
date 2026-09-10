@@ -1,25 +1,27 @@
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 
-use crate::internal::{syntax::EnumDecl, validate::record::modern::enum_variants};
+use crate::internal::{syntax::EnumDecl, validate::enumeration::enum_variants};
 
 use super::scalar;
 
-pub(super) fn expand(
-    record: &syn::Ident,
+pub(in crate::internal) fn expand(
+    owner: &syn::Ident,
     field: &syn::Ident,
     decl: &EnumDecl,
     visibility: &syn::Visibility,
     facade: &TokenStream,
+    location: &TokenStream,
 ) -> syn::Result<TokenStream> {
-    let name = scalar::type_name(record, field, "");
-    let raw_name = scalar::type_name(record, field, "Raw");
-    let identity = format_ident!("{}_IDENTITY", field.to_string().to_ascii_uppercase());
+    let name = scalar::type_name(owner, field, "");
+    let raw_name = scalar::type_name(owner, field, "Raw");
     let raw_type = scalar::ty(decl.storage);
     let variants = enum_variants(decl)?;
-    let declarations = variants
-        .iter()
-        .map(|(variant, _)| quote!(#[doc = "Generated enum variant."] #variant));
+    let declarations = decl.variants.iter().map(|variant| {
+        let name = &variant.name;
+        let docs = variant.documentation.rust_docs();
+        quote!(#docs #[doc = "Generated enum variant."] #name)
+    });
     let from_arms = variants
         .iter()
         .map(|(variant, value)| quote!(#value => ::core::result::Result::Ok(Self::#variant),));
@@ -31,7 +33,7 @@ pub(super) fn expand(
         return Err(syn::Error::new(field.span(), "enum requires a variant"));
     };
     Ok(quote! {
-        #[doc = "Typed raw discriminant for the generated record enum."]
+        #[doc = "Typed raw discriminant for the generated enum."]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         #visibility struct #raw_name(#raw_type);
         impl #raw_name {
@@ -40,15 +42,15 @@ pub(super) fn expand(
             #[doc = "Returns the raw discriminant."]
             pub const fn value(self) -> #raw_type { self.0 }
         }
-        #[doc = "Generated typed record enum."]
+        #[doc = "Generated typed schema enum."]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #visibility enum #name { #(#declarations),* }
         impl #name {
-            #[doc = "First declared value used by generated zero records."]
+            #[doc = "First declared variant used by generated semantic defaults."]
             pub const ZERO: Self = Self::#first;
             #[doc = "Parses one raw discriminant."]
             pub fn from_raw(raw: #raw_type) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
-                Self::from_raw_at(raw, #record::#identity.at(0))
+                Self::from_raw_at(raw, #location)
             }
             fn from_raw_at(raw: #raw_type, location: #facade::SchemaLocation) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 match u64::from(raw) {
@@ -88,5 +90,24 @@ pub(super) fn expand(
                 <#name as #facade::Encode>::encode(value)
             }
         }
+    })
+}
+
+pub(in crate::internal) fn metadata(decl: &EnumDecl, facade: &TokenStream) -> TokenStream {
+    let variants = match enum_variants(decl) {
+        Ok(variants) => variants,
+        Err(error) => return error.into_compile_error(),
+    };
+    let specs = variants
+        .iter()
+        .zip(&decl.variants)
+        .map(|((name, value), variant)| {
+            let name = name.to_string();
+            let documentation = variant.documentation.metadata(facade);
+            quote!(#facade::EnumVariantSpec::new(#name, #value).with_documentation(#documentation))
+        });
+    quote!({
+        const VARIANTS: &[#facade::EnumVariantSpec] = &[#(#specs),*];
+        #facade::EnumDefinition::new(VARIANTS)
     })
 }

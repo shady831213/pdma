@@ -27,6 +27,35 @@ register_schema! {
 }
 
 register_schema! {
+    #[short_description = "Channel fault state"]
+    #[description = "Hardware-owned sticky failure state. Software can observe the code but cannot clear it."]
+    pub register ChannelFault {
+        width: 4,
+        endian: Little,
+        access: ReadOnly,
+        reset: Zero(0),
+        writable_mask: 0,
+        fields: {
+            #[short_description = "Fault code"]
+            #[description = "Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid."]
+            code: 0..32 => enum {
+                variants: {
+                    #[short_description = "No channel fault"]
+                    #[description = "Neither ring has latched a hardware access failure."]
+                    None = 0,
+                    #[short_description = "Command fetch failed"]
+                    #[description = "Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced."]
+                    CommandRead = 1,
+                    #[short_description = "Response publication failed"]
+                    #[description = "Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed."]
+                    ResponseWrite = 2,
+                },
+            },
+        },
+    }
+}
+
+register_schema! {
     #[short_description = "Memory address"]
     #[description = "A 64-bit little-endian address in the device's attached memory backend. The backend determines address interpretation; the value need not be a host pointer."]
     pub register Address {
@@ -113,8 +142,8 @@ register_map! {
             #[description = "One asserts the level interrupt while responses are unread or a channel fault is latched. Zero masks the line without clearing either condition. Writing this control immediately refreshes the line."]
             pub irq_enable: Switch,
             #[short_description = "Sticky channel fault"]
-            #[description = "Zero means no channel fault; 1 means command-ring fetch failed; 2 means response-ring publication failed. A nonzero value stops processing and contributes to IRQ. Software cannot clear it; this minimal model requires a new channel for recovery."]
-            pub fault: ReadWord,
+            #[description = "A latched ring-access failure stops processing and contributes to IRQ. Software cannot clear it; this minimal model requires a new channel for recovery."]
+            pub fault: ChannelFault,
         ],
     }
 }

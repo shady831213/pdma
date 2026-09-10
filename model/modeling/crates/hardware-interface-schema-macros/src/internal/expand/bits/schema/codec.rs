@@ -37,7 +37,7 @@ pub(super) fn expand(context: &Context<'_>) -> TokenStream {
                         observed: reserved,
                     });
                 }
-                ::core::result::Result::Ok(#values::from_raw(observed))
+                #values::from_raw(observed)
             }
         }
         impl #facade::Encode for #values {

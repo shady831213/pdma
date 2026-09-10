@@ -1,6 +1,8 @@
 mod bits;
 mod documentation;
+mod enumeration;
 pub(in crate::internal) use documentation::Documentation;
+pub(in crate::internal) use enumeration::EnumDecl;
 #[cfg(test)]
 mod description_tests;
 mod map_ordered;
@@ -9,7 +11,7 @@ mod register;
 
 pub(in crate::internal) use map_ordered::{AccessPathDecl, OrderedMapDecl, OrderedPlacementDecl};
 pub(in crate::internal) use record::{
-    BitsDecl, EnumDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, ScopedPath,
+    BitsDecl, ModernFieldDecl, ModernRecordDecl, ModernTypeDecl, ScalarType, ScopedPath,
     UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,
 };
 pub(in crate::internal) use register::{AccessValue, RegisterDefinitionDecl, RegisterFieldsDecl};

@@ -105,6 +105,12 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   fresh channel; there is no ACK/reset/retry command protocol yet. Disabling a healthy
   channel suspends its retained operation without losing committed effects.
 
+`ChannelRegisters.fault` uses the dedicated `ChannelFault` register schema. Its
+`code` field is `ChannelFaultCode::{None, CommandRead, ResponseWrite}` with wire
+values 0, 1 and 2. Host `Channel::fault()` returns this enum and rejects unknown
+encodings. Hardware updates the generated field directly; enum values and their
+descriptions are also exported to the C header from the same schema metadata.
+
 This is not the predecessor's ABI. There is no event ring, scheduler, multi-channel
 arbitration, resource credit policy, old semantic API, custom future, or additional
 executor. Historical scenarios are preserved on the backup branch only. The old

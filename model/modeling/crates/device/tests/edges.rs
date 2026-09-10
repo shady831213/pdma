@@ -151,7 +151,7 @@ fn command_read_fault_stays_masked_until_unmasked() -> TestResult {
     let result = run(&mut device);
     // Then
     assert!(result.is_err());
-    assert_eq!(read_word(&device, FAULT)?, Fault::CommandRead.code());
+    assert_eq!(read_word(&device, FAULT)?, Fault::CommandRead.code().raw());
     assert_eq!(read_word(&device, COMMAND_CONSUMER)?, 0);
     assert_eq!(read_word(&device, RESPONSE_PRODUCER)?, 0);
     assert!(!device.irq());

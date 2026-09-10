@@ -7,6 +7,7 @@
 //! the feature declaration and executable `RecordCHeaderExporter` workflow.
 
 mod documentation;
+mod enumeration;
 mod error;
 mod model;
 mod naming;

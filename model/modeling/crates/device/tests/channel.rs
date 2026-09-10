@@ -64,7 +64,7 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
             &device,
             DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
         )?,
-        Fault::ResponseWrite.code()
+        Fault::ResponseWrite.code().raw()
     );
     assert_eq!(
         read_word(

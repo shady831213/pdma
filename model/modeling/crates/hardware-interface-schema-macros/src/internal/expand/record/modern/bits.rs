@@ -11,7 +11,7 @@ pub(super) fn expand(
     decl: &BitsDecl,
     visibility: &syn::Visibility,
     facade: &TokenStream,
-) -> TokenStream {
+) -> syn::Result<TokenStream> {
     let name = scalar::type_name(record, field, "Values");
     let raw_name = scalar::type_name(record, field, "Raw");
     let raw_type = scalar::ty(decl.storage);
@@ -19,24 +19,20 @@ pub(super) fn expand(
     let declarations = decl.fields.iter().map(|field| {
         let field_name = &field.name;
         let rust_docs = field.documentation.rust_docs();
-        let width = crate::internal::expand::bits::width(field);
-        if width == 1 {
-            quote!(#rust_docs #[doc = "Generated one-bit boolean field."] #visibility #field_name: bool)
-        } else {
-            let ty = crate::internal::expand::bits::semantic_type(field);
-            quote!(#rust_docs #[doc = "Generated packed integer field."] #visibility #field_name: #ty)
-        }
+        let ty = crate::internal::expand::bits::field_type(&name, field);
+        quote!(#rust_docs #[doc = "Generated packed field."] #visibility #field_name: #ty)
     });
     let zero_fields = decl.fields.iter().map(|field| {
-        let name = &field.name;
-        let value = crate::internal::expand::bits::zero(field);
-        quote!(#name: #value)
+        let member = &field.name;
+        let value = crate::internal::expand::bits::field_zero(&name, field);
+        quote!(#member: #value)
     });
     let decoded_fields = decl.fields.iter().map(|field| {
-        let name = &field.name;
+        let member = &field.name;
         let observed = quote!(observed);
-        let value = crate::internal::expand::bits::decode(field, &observed);
-        quote!(#name: #value)
+        let value =
+            crate::internal::expand::bits::field_decode(&name, field, &observed, &quote!(base));
+        quote!(#member: #value)
     });
     let encoded_fields = encoded_fields(decl, facade);
     let used_mask = crate::internal::validate::bits::declared_mask(&decl.fields);
@@ -44,7 +40,9 @@ pub(super) fn expand(
     let narrowed_raw = scalar::from_u64(decl.storage, quote!(observed));
     let codec = codec(&name, &raw_name, facade);
     let member_identities = member_identities(decl, &name, facade);
-    quote! {
+    let enums = crate::internal::expand::bits::enum_items(&name, &decl.fields, visibility, facade)?;
+    Ok(quote! {
+        #enums
         #[doc = "Typed raw scalar for the generated packed-bit field."]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         #visibility struct #raw_name(#raw_type);
@@ -62,7 +60,7 @@ pub(super) fn expand(
             pub const RESERVED_IDENTITY: #facade::SchemaMemberIdentity =
                 #facade::SchemaMemberIdentity::new(stringify!(#name), "reserved");
             #member_identities
-            #[doc = "All-zero packed-bit value."]
+            #[doc = "Semantic default with zero integers and first-declared enum variants."]
             pub const ZERO: Self = Self { #(#zero_fields,)* };
             #[doc = "Parses packed bits and rejects nonzero reserved ranges."]
             pub fn from_raw(raw: #raw_type, offset: usize) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
@@ -97,7 +95,7 @@ pub(super) fn expand(
             fn default() -> Self { Self::ZERO }
         }
         #codec
-    }
+    })
 }
 
 fn encoded_fields(decl: &BitsDecl, facade: &TokenStream) -> TokenStream {
@@ -109,11 +107,12 @@ fn encoded_fields(decl: &BitsDecl, facade: &TokenStream) -> TokenStream {
         let maximum = crate::internal::validate::bits::bit_mask(width);
         let value = quote!(self.#name);
         let encoded = crate::internal::expand::bits::encode(field, &value);
+        let raw = crate::internal::expand::bits::field_raw(field, &value);
         if width == 1 {
             quote!(observed |= #encoded;)
         } else {
             quote!({
-                let value = u64::from(self.#name);
+                let value = #raw;
                 if value > #maximum {
                     return ::core::result::Result::Err(#facade::SchemaCodecError::NarrowingOverflow {
                         location: Self::#identity.at_bit(#lsb),

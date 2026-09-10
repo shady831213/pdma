@@ -1,0 +1,5 @@
+error: duplicate enum variant value
+ --> tests/ui/fail/enum_bits_duplicate_value.rs:7:63
+  |
+7 |         fields: { code: 0..2 => enum { variants: { First = 0, Second = 0 } } },
+  |                                                               ^^^^^^

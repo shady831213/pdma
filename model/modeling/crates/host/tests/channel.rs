@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, Response, ResponseStatus};
+use pdma_model_contract::{ChannelFaultCode, Command, Response, ResponseStatus};
 use pdma_model_device::{Device, pipeline};
 use pdma_model_host::{Channel, Model, RingConfig, Rings};
 use std::sync::Arc;
@@ -156,10 +156,16 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     // Then: sticky fault remains visible and software can mask its level IRQ.
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
-    assert_ne!(cpu.run_main(channel.fault()).await?, 0);
+    assert_eq!(
+        cpu.run_main(channel.fault()).await?,
+        ChannelFaultCode::ResponseWrite
+    );
     assert_eq!(cpu.run_main(channel.response()).await?, None);
     cpu.run_main(channel.set_irq_enabled(false)).await?;
     assert!(!model.irq());
-    assert_ne!(cpu.run_main(channel.fault()).await?, 0);
+    assert_eq!(
+        cpu.run_main(channel.fault()).await?,
+        ChannelFaultCode::ResponseWrite
+    );
     Ok(())
 }

@@ -1,10 +1,11 @@
 use core::ops::Range;
 
-use crate::{BitsFieldSpec, Documentation, Endian, ScalarKind};
+use crate::{BitsFieldSpec, Documentation, Endian, EnumDefinition, ScalarKind};
 
 /// Reusable scalar shape without placement identity or offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldDefinition {
+    enum_definition: Option<EnumDefinition>,
     bits: &'static [BitsFieldSpec],
     documentation: Documentation,
     width: usize,
@@ -16,12 +17,25 @@ impl FieldDefinition {
     /// Creates a little-endian definition whose width matches `scalar`.
     pub const fn new(scalar: ScalarKind) -> Self {
         Self {
+            enum_definition: None,
             width: scalar.width(),
             bits: &[],
             documentation: Documentation::EMPTY,
             scalar,
             endian: Endian::Little,
         }
+    }
+
+    /// Attaches the enum's named wire codes.
+    #[must_use]
+    pub const fn with_enum(mut self, definition: EnumDefinition) -> Self {
+        self.enum_definition = Some(definition);
+        self
+    }
+
+    /// Returns the scalar's enum metadata, when present.
+    pub const fn enum_definition(self) -> Option<EnumDefinition> {
+        self.enum_definition
     }
 
     /// Attaches definition documentation.
@@ -97,6 +111,18 @@ impl FieldSpec<u16> {
 }
 
 impl<I: Copy> FieldSpec<I> {
+    /// Attaches the enum's named wire codes.
+    #[must_use]
+    pub const fn with_enum(mut self, definition: EnumDefinition) -> Self {
+        self.definition = self.definition.with_enum(definition);
+        self
+    }
+
+    /// Returns the scalar's enum metadata, when present.
+    pub const fn enum_definition(self) -> Option<EnumDefinition> {
+        self.definition.enum_definition()
+    }
+
     /// Places a reusable field definition.
     pub const fn place(
         id: I,

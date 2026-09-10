@@ -1,0 +1,5 @@
+error: enum variant exceeds storage width
+ --> tests/ui/fail/enum_bits_implicit_overflow.rs:5:52
+  |
+5 |         code: 0..2 => enum { variants: { Last = 3, Overflow } },
+  |                                                    ^^^^^^^^

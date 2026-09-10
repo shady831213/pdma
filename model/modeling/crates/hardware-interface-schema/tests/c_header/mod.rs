@@ -6,6 +6,8 @@
 pub mod support;
 
 mod descriptions;
+mod enumeration;
+mod generated_enumeration;
 mod ordered_descriptions;
 
 use support::{

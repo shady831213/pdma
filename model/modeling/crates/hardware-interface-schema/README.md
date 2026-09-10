@@ -111,6 +111,33 @@ placement may omit its offset; the macro aligns the high-water mark. `count` def
 to one; omitted repeated strides use the aligned child extent. Maps and registers share
 one composable `RegisterLayout`; access namespaces define no layout, IDs, or storage.
 
+Scalar record enums and enum bit fields share declaration parsing, discriminant
+validation, typed conversions and enum metadata. A bit field adds its range before
+the enum declaration:
+
+```rust
+use hardware_interface_schema::bits_schema;
+
+bits_schema! {
+    pub bits Status(u8) {
+        code: 0..2 => enum {
+            variants: { Idle = 0, Active = 1, Fault = 2 },
+        },
+    }
+}
+```
+
+The same field syntax works inside register fields and record `bits(storage)`.
+Named bits layouts can be embedded in both containers. Enum variants may carry
+`description` and `short_description`. Values must fit the declared bit range;
+duplicate names/codes and overflowing implicit values are rejected during expansion.
+Unknown raw codes produce a located `UnknownTag` error when decoded as an enum.
+Register raw storage still preserves those codes and undeclared bits. An owned
+enum field setter is infallible because every variant fits by construction; typed
+reads remain fallible. Reading named register `fields()` is now fallible as well.
+The C exporter emits unshifted discriminant constants and variant documentation
+from the shared metadata, including nested and repeated placements.
+
 Every generated schema boundary has a distinct raw owner and semantic value. `Decode`
 converts the raw owner into the semantic value, `Encode` performs the reverse, and the
 macros provide matching concrete `TryFrom` implementations. Record and register owners

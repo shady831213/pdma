@@ -3,8 +3,8 @@ mod mmio;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::{
-    ChannelRegistersValues, Command, CommandRaw, CommandRegistersValues, ReadWordValues, Response,
-    ResponseRegistersValues, Ring, RingPointers,
+    ChannelFaultCode, ChannelRegistersValues, Command, CommandRaw, CommandRegistersValues,
+    ReadWordValues, Response, ResponseRegistersValues, Ring, RingPointers,
 };
 
 use crate::Fault;
@@ -121,16 +121,19 @@ pub struct Channel {
 
 impl Channel {
     pub(crate) const fn latch(&mut self, fault: Fault) {
-        self.registers.fault = ReadWordValues::new(fault.code());
+        self.registers.fault = self.registers.fault.with_code(fault.code());
     }
 
-    pub(crate) const fn update_irq(&mut self) {
+    pub(crate) fn update_irq(&mut self) {
         self.irq = self.registers.irq_enable.raw() != 0
-            && (self.registers.fault.raw() != 0 || !self.response.pointers().is_empty());
+            && (self.halted() || !self.response.pointers().is_empty());
     }
 
-    pub(crate) const fn halted(&self) -> bool {
-        self.registers.fault.raw() != 0
+    pub(crate) fn halted(&self) -> bool {
+        match self.registers.fault.code() {
+            Ok(ChannelFaultCode::None) => false,
+            Ok(ChannelFaultCode::CommandRead | ChannelFaultCode::ResponseWrite) | Err(_) => true,
+        }
     }
     pub(crate) const fn enabled(&self) -> bool {
         self.registers.enable.raw() != 0

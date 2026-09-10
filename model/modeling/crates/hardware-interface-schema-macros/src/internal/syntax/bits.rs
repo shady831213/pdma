@@ -2,7 +2,7 @@ use syn::{
     Ident, Result, Token, Visibility, braced, parenthesized, parse::Parse, parse::ParseStream,
 };
 
-use super::{Documentation, ScalarType, keyword, usize_lit};
+use super::{Documentation, EnumDecl, ScalarType, keyword, usize_lit};
 
 pub(in crate::internal) struct BitsSchemaDecl {
     pub(in crate::internal) documentation: Documentation,
@@ -13,6 +13,7 @@ pub(in crate::internal) struct BitsSchemaDecl {
 }
 
 pub(in crate::internal) struct BitFieldDecl {
+    pub(in crate::internal) enumeration: Option<EnumDecl>,
     pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) start: (usize, proc_macro2::Span),
@@ -27,7 +28,14 @@ impl Parse for BitFieldDecl {
         let start = usize_lit(input)?;
         input.parse::<Token![..]>()?;
         let end = usize_lit(input)?;
+        let enumeration = if input.peek(Token![=>]) {
+            input.parse::<Token![=>]>()?;
+            Some(EnumDecl::bit_field(input, end.0.saturating_sub(start.0))?)
+        } else {
+            None
+        };
         Ok(Self {
+            enumeration,
             documentation,
             name,
             start,

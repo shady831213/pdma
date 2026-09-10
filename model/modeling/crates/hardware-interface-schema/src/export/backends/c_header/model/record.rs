@@ -1,8 +1,12 @@
-use crate::{BitsFieldSpec, Documentation, Endian, ResolvedMemberKind, ResolvedRecord, ScalarKind};
+use crate::{
+    BitsFieldSpec, Documentation, Endian, EnumDefinition, ResolvedMemberKind, ResolvedRecord,
+    ScalarKind,
+};
 
 /// One resolved scalar row consumed by C-header renderers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordCHeaderField {
+    enum_definition: Option<EnumDefinition>,
     id: u16,
     path: String,
     name: String,
@@ -15,6 +19,11 @@ pub struct RecordCHeaderField {
 }
 
 impl RecordCHeaderField {
+    /// Returns the scalar's enum metadata, when present.
+    pub const fn enum_definition(&self) -> Option<EnumDefinition> {
+        self.enum_definition
+    }
+
     /// Returns the member's description text.
     pub const fn documentation(&self) -> Documentation {
         self.documentation
@@ -80,6 +89,7 @@ impl RecordCHeaderModel {
             .iter()
             .filter_map(|member| match member.kind() {
                 ResolvedMemberKind::Field { id, definition } => Some(RecordCHeaderField {
+                    enum_definition: definition.enum_definition(),
                     id,
                     path: member.path().into(),
                     name: relative_path(schema.root(), member.path()).into(),

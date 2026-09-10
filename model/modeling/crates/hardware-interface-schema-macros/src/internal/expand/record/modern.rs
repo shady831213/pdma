@@ -1,13 +1,16 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::internal::{crate_path, syntax::ModernRecordDecl, validate};
+use crate::internal::{
+    crate_path,
+    expand::{enumeration, scalar},
+    syntax::ModernRecordDecl,
+    validate,
+};
 
 mod bits;
-mod enumeration;
 mod layout;
 mod metadata;
-mod scalar;
 mod union;
 mod values;
 mod views;
@@ -23,15 +26,20 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
     let plan = layout::RecordPlan::new(decl, &facade);
     let type_items = decl.fields.iter().map(|field| match &field.ty {
         crate::internal::syntax::ModernTypeDecl::Enum(enum_decl) => {
-            enumeration::expand(marker, &field.name, enum_decl, visibility, &facade)
+            let identity =
+                format_ident!("{}_IDENTITY", field.name.to_string().to_ascii_uppercase());
+            enumeration::expand(
+                marker,
+                &field.name,
+                enum_decl,
+                visibility,
+                &facade,
+                &quote!(#marker::#identity.at(0)),
+            )
         }
-        crate::internal::syntax::ModernTypeDecl::Bits(bits_decl) => Ok(bits::expand(
-            marker,
-            &field.name,
-            bits_decl,
-            visibility,
-            &facade,
-        )),
+        crate::internal::syntax::ModernTypeDecl::Bits(bits_decl) => {
+            bits::expand(marker, &field.name, bits_decl, visibility, &facade)
+        }
         crate::internal::syntax::ModernTypeDecl::Union(union_decl) => union::expand(
             decl,
             &field.name,

@@ -17,19 +17,19 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
     let narrowed_raw = narrow_raw(&raw_type, context.extent);
     let declarations = context.decl.fields.iter().map(|field| {
         let name = &field.name;
-        let ty = super::super::semantic_type(field);
+        let ty = super::super::field_type(marker, field);
         let rust_docs = field.documentation.rust_docs();
         quote!(#rust_docs #[doc = "Generated typed bit field."] #visibility #name: #ty)
     });
     let constructor_parameters = context.decl.fields.iter().map(|field| {
         let name = &field.name;
-        let ty = super::super::semantic_type(field);
+        let ty = super::super::field_type(marker, field);
         quote!(#name: #ty)
     });
     let constructor_fields = context.decl.fields.iter().map(|field| &field.name);
     let accessors = context.decl.fields.iter().map(|field| {
         let name = &field.name;
-        let ty = super::super::semantic_type(field);
+        let ty = super::super::field_type(marker, field);
         let rust_docs = field.documentation.rust_docs();
         quote! {
             #rust_docs
@@ -39,12 +39,17 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
     });
     let zero_fields = context.decl.fields.iter().map(|field| {
         let name = &field.name;
-        let value = super::super::zero(field);
+        let value = super::super::field_zero(marker, field);
         quote!(#name: #value)
     });
     let decoded_fields = context.decl.fields.iter().map(|field| {
         let name = &field.name;
-        let value = super::super::decode(field, &quote!(raw));
+        let value = super::super::field_decode(
+            marker,
+            field,
+            &quote!(raw),
+            &quote!(#facade::SchemaCoordinate::Byte(0)),
+        );
         quote!(#name: #value)
     });
     let encoded_fields = encoded_fields(context);
@@ -81,10 +86,10 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
         impl #values {
             #[doc = "Creates one typed bits value."]
             pub const fn new(#(#constructor_parameters),*) -> Self { Self { #(#constructor_fields,)* } }
-            #[doc = "All-zero typed bits value."]
+            #[doc = "Semantic default with zero integers and first-declared enum variants."]
             pub const ZERO: Self = Self { #(#zero_fields,)* };
             #(#accessors)*
-            fn from_raw(raw: u64) -> Self { Self { #(#decoded_fields,)* } }
+            fn from_raw(raw: u64) -> ::core::result::Result<Self, #facade::SchemaCodecError> { Ok(Self { #(#decoded_fields,)* }) }
             fn raw(&self) -> ::core::result::Result<u64, #facade::BitsValueError> {
                 let value = self;
                 let mut raw = 0_u64;
@@ -114,8 +119,9 @@ fn encoded_fields(context: &SchemaContext<'_>) -> Vec<TokenStream> {
             let bit_width = super::super::width(field);
             let maximum = validate::bits::bit_mask(bit_width);
             let encoded = super::super::encode(field, &quote!(value.#name));
+            let observed = super::super::field_raw(field, &quote!(value.#name));
             quote!({
-                let observed = u64::from(value.#name);
+                let observed = #observed;
                 if observed > #maximum {
                     return ::core::result::Result::Err(#facade::BitsValueError::new(
                         #marker::#identity, #lsb, #bit_width, observed, #maximum,
@@ -134,7 +140,7 @@ fn transparent_conversions(context: &SchemaContext<'_>) -> Option<TokenStream> {
     }
     let values = &context.values;
     let name = &field.name;
-    let ty = super::super::semantic_type(field);
+    let ty = super::super::field_type(&context.decl.name, field);
     Some(quote! {
         impl ::core::convert::From<#ty> for #values {
             fn from(value: #ty) -> Self { Self::new(value) }

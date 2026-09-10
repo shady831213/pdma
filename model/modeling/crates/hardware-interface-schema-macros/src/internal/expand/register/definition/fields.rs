@@ -3,6 +3,8 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::{RegisterDefinitionDecl, RegisterFieldsDecl};
 
+mod owned;
+
 pub(super) struct FieldsExpansion {
     pub(super) id_declaration: TokenStream,
     pub(super) id_type: TokenStream,
@@ -43,7 +45,7 @@ fn expand_reference(
         #[doc = "Decodes the reusable typed bits value."]
         pub fn fields(&self) -> ::core::result::Result<<#path as #facade::BitsLayout>::Value, #facade::RegisterCodecError> {
             let raw = #marker::SPEC.view(self.bytes)?.value()?;
-            ::core::result::Result::Ok(<#path as #facade::BitsLayout>::decode_register(raw))
+            <#path as #facade::BitsLayout>::decode_register(raw).map_err(|error| error.rebased(self.base))
         }
     }];
     let setters = vec![quote! {
@@ -64,7 +66,7 @@ fn expand_reference(
     );
     let value_methods = vec![quote! {
         #[doc = "Decodes the reusable typed bits value."]
-        pub fn fields(self) -> <#path as #facade::BitsLayout>::Value {
+        pub fn fields(self) -> ::core::result::Result<<#path as #facade::BitsLayout>::Value, #facade::RegisterCodecError> {
             <#path as #facade::BitsLayout>::decode_register(u64::from(self.0))
         }
         #[doc = "Replaces declared fields while preserving every other register bit."]
@@ -122,47 +124,32 @@ fn expand_inline(
             pub const #identity: #facade::SchemaMemberIdentity =
                 #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);
         });
-        let semantic_type = crate::internal::expand::bits::semantic_type(field);
+        let semantic_type = crate::internal::expand::bits::field_type(marker, field);
         variants.push(super::super::variant(&name));
-        fields.push(quote!(#facade::BitsFieldSpec::place(#id, #name, #lsb, #facade::BitsFieldDefinition::new(#bit_width)).with_declaration_index(#index).with_documentation(#documentation)));
+        let enumeration = field.enumeration.as_ref().map(|decl| {
+            let metadata = crate::internal::expand::enumeration::metadata(decl, facade);
+            quote!(.with_enum(#metadata))
+        });
+        fields.push(quote!(#facade::BitsFieldSpec::place(#id, #name, #lsb, #facade::BitsFieldDefinition::new(#bit_width)#enumeration).with_declaration_index(#index).with_documentation(#documentation)));
         let raw = quote!(raw);
-        let decoded = crate::internal::expand::bits::decode_local(field, &raw);
-        getters.push(quote!(#rust_docs #[doc = "Reads the named register field."] pub fn #method(&self) -> ::core::result::Result<#semantic_type, #facade::RegisterCodecError> { let raw = #marker::SPEC.view(self.bytes)?.field_by_name(#name)?; Ok(#decoded) }));
+        let decoded = field.enumeration.as_ref().map_or_else(|| { let decoded = crate::internal::expand::bits::decode_local(field, &raw); quote!(Ok(#decoded)) }, |decl| {
+                let raw = crate::internal::expand::scalar::from_u64(decl.storage, raw.clone());
+                quote!(#semantic_type::from_raw(#raw).map_err(#facade::RegisterCodecError::from_schema_error).map_err(|error| error.rebased(self.base)))
+            });
+        getters.push(quote!(#rust_docs #[doc = "Reads the named register field."] pub fn #method(&self) -> ::core::result::Result<#semantic_type, #facade::RegisterCodecError> { let raw = #marker::SPEC.view(self.bytes)?.field_by_name(#name)?; #decoded }));
         let setter = format_ident!("set_{}", method);
         let value = quote!(value);
-        let encoded = crate::internal::expand::bits::encode_local(&value);
+        let encoded = crate::internal::expand::bits::field_raw(field, &value);
         setters.push(quote!(#rust_docs #[doc = "Writes the named register field."] pub fn #setter(&mut self, value: #semantic_type) -> ::core::result::Result<(), #facade::RegisterCodecError> { #marker::SPEC.view_mut(self.bytes)?.set_field_by_name(#name, #encoded).map_err(|error| error.rebased(self.base)) }));
-        let full = quote!(u64::from(self.0));
-        let decoded_value = crate::internal::expand::bits::decode(field, &full);
-        let with_method = format_ident!("with_{}", method);
-        let maximum = crate::internal::validate::bits::bit_mask(bit_width);
-        let field_mask = maximum << lsb;
-        let narrowed = scalar_from_u64(
-            &format_ident!("u{}", register_width * 8),
-            register_width,
-            &quote!(combined),
-        );
-        value_methods.push(quote! {
-            #rust_docs
-            #[doc = "Reads the named register field from the owned value."]
-            pub fn #method(self) -> #semantic_type { #decoded_value }
-            #rust_docs
-            #[doc = "Replaces the named field while preserving every other register bit."]
-            pub fn #with_method(self, value: #semantic_type) -> ::core::result::Result<Self, #facade::RegisterCodecError> {
-                let observed = u64::from(value);
-                if observed > #maximum {
-                    return ::core::result::Result::Err(#facade::RegisterCodecError::FieldValueOverflow { location: #marker::#identity.at_bit(#lsb), bit_width: #bit_width, value: observed });
-                }
-                let combined = (u64::from(self.0) & !#field_mask) | (observed << #lsb);
-                ::core::result::Result::Ok(Self(#narrowed))
-            }
-        });
+        value_methods.push(owned::expand(field, register_width, marker, facade));
     }
     let documented_variants = variants
         .iter()
         .map(|item| quote!(#[doc = "Stable generated field ID."] #item));
+    let enums = crate::internal::expand::bits::enum_items(marker, declared, visibility, facade)?;
     Ok(FieldsExpansion {
         id_declaration: quote! {
+            #enums
             #[doc = "Stable sibling-local register-field identities."]
             #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
             #visibility enum #id_name { #(#documented_variants),* }

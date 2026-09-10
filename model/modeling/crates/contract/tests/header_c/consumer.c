@@ -7,6 +7,13 @@ _Static_assert(C_RESPONSE_SIZE == 16, "response wire extent");
 _Static_assert(C_PDMA_SIZE == 56, "device MMIO extent");
 _Static_assert(C_COMMAND_ALIGNMENT == 8, "command alignment");
 _Static_assert(C_RESPONSE_ALIGNMENT == 8, "response alignment");
+_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QUNONE == 0, "no fault code");
+_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QUCOMMANDQUREAD == 1, "command fault code");
+_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QURESPONSEQUWRITE == 2, "response fault code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QUSUCCESS == 0, "success status code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH == 1, "invalid length status code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUFAULT == 2, "read fault status code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT == 3, "write fault status code");
 
 int main(void) {
     uint8_t command[C_COMMAND_SIZE] = {0};
@@ -29,7 +36,7 @@ int main(void) {
     C_COMMAND_STORE_C_DESTINATION(command, UINT64_C(0x200));
     C_COMMAND_STORE_C_LENGTH(command, UINT32_C(8));
     C_RESPONSE_STORE_C_ID(response, UINT64_C(7));
-    C_RESPONSE_STORE_C_STATUS(response, UINT32_C(0));
+    C_RESPONSE_STORE_C_STATUS(response, C_RESPONSE_C_STATUS_C_QUSUCCESS);
     if (C_COMMAND_LOAD_C_ID(command) != UINT64_C(7)) return 1;
     if (C_COMMAND_LOAD_C_SOURCE(command) != UINT64_C(0x100)) return 2;
     if (C_COMMAND_LOAD_C_DESTINATION(command) != UINT64_C(0x200)) return 3;

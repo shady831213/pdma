@@ -133,6 +133,10 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
  * 3: WriteFault, the payload destination could not be written.
  * Other wire values are invalid. Payload errors return a response rather than setting the sticky ring-access fault.
  */
+#define C_RESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
+#define C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH UINT64_C(1)
+#define C_RESPONSE_C_STATUS_C_QUREADQUFAULT UINT64_C(2)
+#define C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT UINT64_C(3)
 #define C_RESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_RESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_RESPONSE_C_STATUS_ENDIAN C_RESPONSE_ENDIAN_LITTLE
@@ -295,8 +299,31 @@ static inline void C_RESPONSE_STORE_C_STATUS(uint8_t bytes[C_RESPONSE_SIZE], uin
 
 /*
  * Sticky channel fault
- * Zero means no channel fault; 1 means command-ring fetch failed; 2 means response-ring publication failed. A nonzero value stops processing and contributes to IRQ. Software cannot clear it; this minimal model requires a new channel for recovery.
+ * A latched ring-access failure stops processing and contributes to IRQ. Software cannot clear it; this minimal model requires a new channel for recovery.
  */
+/*
+ * code
+ * Fault code
+ * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
+ */
+/*
+ * None
+ * No channel fault
+ * Neither ring has latched a hardware access failure.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QUNONE UINT64_C(0)
+/*
+ * CommandRead
+ * Command fetch failed
+ * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+/*
+ * ResponseWrite
+ * Response publication failed
+ * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
 #define C_PDMA_C_QUFQUAQUUQULQUT_OFFSET UINT64_C(52)
 #define C_PDMA_C_QUFQUAQUUQULQUT_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUFQUAQUUQULQUT_ACCESS C_PDMA_ACCESS_READ_ONLY

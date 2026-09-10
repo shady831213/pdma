@@ -25,6 +25,9 @@ pub(in crate::internal) fn check(fields: &[BitFieldDecl], storage_bits: usize) -
             return Err(syn::Error::new(field.start.1, "bits fields overlap"));
         }
         ranges.push((field.start.0, field.end.0));
+        if let Some(enumeration) = &field.enumeration {
+            super::enumeration::enum_variants(enumeration)?;
+        }
     }
     Ok(())
 }

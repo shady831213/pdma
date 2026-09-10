@@ -1,0 +1,12 @@
+error: enum requires at least one variant
+ --> tests/ui/fail/enum_bits_empty.rs:3:1
+  |
+3 | / record_schema! {
+4 | |     pub record Bad {
+5 | |         endian: Little,
+6 | |         fields: { state: bits(u8) { fields: { code: 0..2 => enum { variants: {} } } } },
+7 | |     }
+8 | | }
+  | |_^
+  |
+  = note: this error originates in the macro `record_schema` (in Nightly builds, run with -Z macro-backtrace for more info)

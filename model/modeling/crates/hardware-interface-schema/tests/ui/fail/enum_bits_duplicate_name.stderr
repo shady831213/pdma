@@ -1,0 +1,5 @@
+error: duplicate enum variant name
+ --> tests/ui/fail/enum_bits_duplicate_name.rs:5:52
+  |
+5 |         code: 0..2 => enum { variants: { Same = 0, Same = 1 } },
+  |                                                    ^^^^

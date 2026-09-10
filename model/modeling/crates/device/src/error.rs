@@ -1,3 +1,4 @@
+use pdma_model_contract::ChannelFaultCode;
 use std::fmt::{self, Display, Formatter};
 
 /// Sticky hardware faults; recovery requires a new channel in this first slice.
@@ -11,10 +12,10 @@ pub enum Fault {
 
 impl Fault {
     /// Value latched in the channel's fault register.
-    pub const fn code(self) -> u32 {
+    pub const fn code(self) -> ChannelFaultCode {
         match self {
-            Self::CommandRead => 1,
-            Self::ResponseWrite => 2,
+            Self::CommandRead => ChannelFaultCode::CommandRead,
+            Self::ResponseWrite => ChannelFaultCode::ResponseWrite,
         }
     }
 }

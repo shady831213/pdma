@@ -8,6 +8,7 @@ use crate::{
 use super::{
     C_MEDIA_TYPE, CHeaderExportError, FragmentConfig,
     documentation::push_documentation,
+    enumeration::push_enum,
     model::{RecordCHeaderField, RecordCHeaderModel},
     naming::{c_identifier, disambiguate_identifiers},
 };
@@ -79,11 +80,21 @@ fn render(model: &RecordCHeaderModel, prefix: &str) -> String {
 }
 
 fn push_field(output: &mut String, prefix: &str, field_name: &str, field: &RecordCHeaderField) {
+    let metadata = format!("{prefix}_{field_name}");
     push_documentation(output, "", field.documentation());
     for bit in field.bits() {
         push_documentation(output, bit.name(), bit.documentation());
+        if let Some(definition) = bit.definition().enum_definition() {
+            push_enum(
+                output,
+                &format!("{metadata}_{}", c_identifier(bit.name())),
+                definition,
+            );
+        }
     }
-    let metadata = format!("{prefix}_{field_name}");
+    if let Some(definition) = field.enum_definition() {
+        push_enum(output, &metadata, definition);
+    }
     let names = FieldNames {
         prefix,
         field: field_name,

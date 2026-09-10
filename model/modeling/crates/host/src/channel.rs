@@ -5,7 +5,8 @@ use crate::{Error, RingConfig};
 use bus::RegisterPort;
 use hardware_interface_runtime::{CpuOwner, MemoryAccess, RegisterAccess};
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Response, ResponseRegisters, Ring,
+    ChannelFaultCode, ChannelFaultValues, ChannelRegisters, Command, CommandRegisters,
+    DeviceRegisters, Response, ResponseRegisters, Ring,
 };
 use rings::{CommandRing, ResponseRing};
 
@@ -105,10 +106,14 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     }
 
     /// Reads the hardware's sticky fault code.
-    pub async fn fault(&self) -> Result<u32, Error<B::Error>> {
-        self.port
+    pub async fn fault(&self) -> Result<ChannelFaultCode, Error<B::Error>> {
+        let raw = self
+            .port
             .read_word(CHANNEL + ChannelRegisters::FAULT.offset())
-            .await
+            .await?;
+        ChannelFaultValues::new(raw)
+            .code()
+            .map_err(Error::RegisterCodec)
     }
 
     /// Enables or masks the hardware level interrupt.

@@ -1,5 +1,5 @@
 use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
-use hardware_interface_schema::SchemaCodecError;
+use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
 use pdma_model_contract::RingError;
 use std::{error::Error as StdError, fmt};
 
@@ -12,6 +12,8 @@ pub enum Error<B> {
     Memory(MemoryAccessError),
     /// A wire record failed its generated codec.
     Codec(SchemaCodecError),
+    /// A register field contains an invalid encoding.
+    RegisterCodec(RegisterCodecError),
     /// The owning software CPU is not active.
     Cpu(CpuContextError),
     /// A shared ring pointer update is invalid.
@@ -28,6 +30,7 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             Self::Bus(error) => error.fmt(f),
             Self::Memory(error) => error.fmt(f),
             Self::Codec(error) => error.fmt(f),
+            Self::RegisterCodec(error) => error.fmt(f),
             Self::Cpu(error) => error.fmt(f),
             Self::Ring(error) => error.fmt(f),
             Self::Geometry => f.write_str("invalid host register address"),
@@ -42,6 +45,7 @@ impl<B: StdError + 'static> StdError for Error<B> {
             Self::Bus(error) => Some(error),
             Self::Memory(error) => Some(error),
             Self::Codec(error) => Some(error),
+            Self::RegisterCodec(error) => Some(error),
             Self::Cpu(error) => Some(error),
             Self::Ring(error) => Some(error),
             Self::Geometry | Self::Full => None,

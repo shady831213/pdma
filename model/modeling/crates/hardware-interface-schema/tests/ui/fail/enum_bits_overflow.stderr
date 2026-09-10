@@ -1,0 +1,5 @@
+error: enum variant exceeds storage width
+ --> tests/ui/fail/enum_bits_overflow.rs:5:53
+  |
+5 |         code: 7..10 => enum { variants: { Good = 0, Bad = 8 } },
+  |                                                     ^^^

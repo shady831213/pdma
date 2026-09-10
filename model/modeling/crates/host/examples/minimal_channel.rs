@@ -6,8 +6,8 @@ use hardware_interface_runtime::{
     MemoryAlignment, NoopInterruptObserver, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, Response, ResponseStatus};
-use pdma_model_device::{Device, Fault, pipeline};
+use pdma_model_contract::{ChannelFaultCode, Command, Response, ResponseStatus};
+use pdma_model_device::{Device, pipeline};
 use pdma_model_host::{Channel, Irq, Model, RingConfig, Rings};
 use std::{error::Error, sync::Arc};
 use tokio::{sync::oneshot, task::JoinSet};
@@ -17,7 +17,7 @@ type HostError = pdma_model_host::Error<pdma_model_device::Error>;
 
 struct CompletionHandler {
     channel: HostChannel,
-    completion: Option<oneshot::Sender<(Option<Response>, u32)>>,
+    completion: Option<oneshot::Sender<(Option<Response>, ChannelFaultCode)>>,
 }
 
 impl InterruptHandler<Irq> for CompletionHandler {
@@ -26,8 +26,11 @@ impl InterruptHandler<Irq> for CompletionHandler {
     async fn handle(&mut self, _: &Irq) -> Result<(), HostError> {
         let fault = self.channel.fault().await?;
         let response = self.channel.response().await?;
-        if fault != 0 {
-            self.channel.set_irq_enabled(false).await?;
+        match fault {
+            ChannelFaultCode::None => {}
+            ChannelFaultCode::CommandRead | ChannelFaultCode::ResponseWrite => {
+                self.channel.set_irq_enabled(false).await?;
+            }
         }
         if let Some(completion) = self.completion.take() {
             let _receiver_closed = completion.send((response, fault));
@@ -114,10 +117,10 @@ async fn run(fault_case: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
     assert_eq!(summary.deliveries(), 1);
     assert!(!model.irq());
     if fault_case {
-        assert_eq!(fault, Fault::ResponseWrite.code());
+        assert_eq!(fault, ChannelFaultCode::ResponseWrite);
         assert_eq!(response, None);
         assert!(result.is_err());
-        println!("fault: copied={copied:?}, sticky_fault={fault}, IRQ handled and masked");
+        println!("fault: copied={copied:?}, sticky_fault={fault:?}, IRQ handled and masked");
     } else {
         assert_eq!(
             response,
@@ -126,7 +129,7 @@ async fn run(fault_case: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
                 status: ResponseStatus::Success
             })
         );
-        assert_eq!(fault, 0);
+        assert_eq!(fault, ChannelFaultCode::None);
         assert!(result.is_ok());
         println!("copy: copied={copied:?}, response={response:?}, IRQ handled and cleared");
     }

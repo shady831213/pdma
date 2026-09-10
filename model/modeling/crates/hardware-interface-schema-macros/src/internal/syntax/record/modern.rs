@@ -4,14 +4,12 @@ use syn::{
 };
 
 use super::ScalarType;
-use crate::internal::syntax::{Documentation, key, keyword, usize_lit};
+use crate::internal::syntax::{Documentation, EnumDecl, key, keyword, usize_lit};
 
 mod bits;
-mod enumeration;
 mod union;
 
 pub(in crate::internal) use bits::{BitsDecl, BitsTypeDecl};
-pub(in crate::internal) use enumeration::EnumDecl;
 pub(in crate::internal) use union::{
     ScopedPath, UnionCaseDecl, UnionDecl, UnionFieldDecl, UnionFieldType,
 };

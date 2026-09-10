@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 
 use crate::internal::syntax::ScalarType;
 
-pub(super) fn ty(scalar: ScalarType) -> TokenStream {
+pub(in crate::internal) fn ty(scalar: ScalarType) -> TokenStream {
     match scalar {
         ScalarType::U8 => quote!(u8),
         ScalarType::U16 => quote!(u16),
@@ -24,7 +24,7 @@ pub(super) fn kind(scalar: ScalarType) -> syn::Ident {
     )
 }
 
-pub(super) fn from_u64(scalar: ScalarType, value: TokenStream) -> TokenStream {
+pub(in crate::internal) fn from_u64(scalar: ScalarType, value: TokenStream) -> TokenStream {
     match scalar {
         ScalarType::U8 => {
             quote!({ let bytes = (#value).to_le_bytes(); u8::from_le_bytes([bytes[0]]) })
@@ -73,7 +73,11 @@ pub(super) fn record_size_path(path: &syn::Path) -> syn::Path {
     output
 }
 
-pub(super) fn type_name(record: &syn::Ident, field: &syn::Ident, suffix: &str) -> syn::Ident {
+pub(in crate::internal) fn type_name(
+    record: &syn::Ident,
+    field: &syn::Ident,
+    suffix: &str,
+) -> syn::Ident {
     let field = pascal(&field.to_string());
     format_ident!("{record}{field}{suffix}")
 }

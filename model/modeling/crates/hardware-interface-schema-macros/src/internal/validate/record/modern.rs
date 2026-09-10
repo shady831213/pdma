@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use crate::internal::syntax::{EnumDecl, ModernRecordDecl, ModernTypeDecl, UnionDecl};
+use crate::internal::syntax::{ModernRecordDecl, ModernTypeDecl, UnionDecl};
+use crate::internal::validate::enumeration::enum_variants;
 
 pub(in crate::internal) fn check(decl: &ModernRecordDecl) -> syn::Result<()> {
     super::validate_endian(decl.endian.to_string().as_str(), decl.endian.span())?;
@@ -20,46 +21,6 @@ pub(in crate::internal) fn check(decl: &ModernRecordDecl) -> syn::Result<()> {
         check_type(decl, &field.ty)?;
     }
     Ok(())
-}
-
-pub(in crate::internal) fn enum_variants(decl: &EnumDecl) -> syn::Result<Vec<(syn::Ident, u64)>> {
-    if decl.variants.is_empty() {
-        return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "enum requires at least one variant",
-        ));
-    }
-    let mut names = HashSet::new();
-    let mut values = HashSet::new();
-    let mut previous = None;
-    let mut output = Vec::with_capacity(decl.variants.len());
-    for variant in &decl.variants {
-        if !names.insert(variant.name.to_string()) {
-            return Err(syn::Error::new(
-                variant.name.span(),
-                "duplicate enum variant name",
-            ));
-        }
-        let value = match variant.value {
-            Some((value, _)) => value,
-            None => previous.map_or(0, |value: u64| value.saturating_add(1)),
-        };
-        if value > decl.storage.maximum() {
-            return Err(syn::Error::new(
-                variant.name.span(),
-                "enum variant exceeds storage width",
-            ));
-        }
-        if !values.insert(value) {
-            return Err(syn::Error::new(
-                variant.name.span(),
-                "duplicate enum variant value",
-            ));
-        }
-        previous = Some(value);
-        output.push((variant.name.clone(), value));
-    }
-    Ok(output)
 }
 
 fn check_type(decl: &ModernRecordDecl, ty: &ModernTypeDecl) -> syn::Result<()> {

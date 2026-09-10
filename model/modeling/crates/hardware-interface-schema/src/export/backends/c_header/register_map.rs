@@ -11,7 +11,9 @@ use crate::{
 use super::{
     C_MEDIA_TYPE, CHeaderExportError, FragmentConfig,
     documentation::push_documentation,
+    enumeration::push_enum,
     model::{RegisterCHeaderBank, RegisterCHeaderModel, RegisterMapCHeaderModel},
+    naming::c_identifier,
 };
 use names::{BankNames, map_names};
 
@@ -125,6 +127,13 @@ fn push_register<I: Copy, F: Copy>(
     push_documentation(output, "", register.documentation());
     for field in register.fields() {
         push_documentation(output, field.name(), field.documentation());
+        if let Some(definition) = field.definition().enum_definition() {
+            push_enum(
+                output,
+                &format!("{name}_{}", c_identifier(field.name())),
+                definition,
+            );
+        }
     }
     if let Some((offset_name, offset)) = offset {
         let _ = writeln!(output, "#define {offset_name} UINT64_C({offset})");

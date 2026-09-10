@@ -142,9 +142,13 @@ fn metadata_parts(
                     let lsb = bit.start.0;
                     let width = crate::internal::expand::bits::width(bit);
                     let documentation = bit.documentation.metadata(facade);
+                    let enumeration = bit.enumeration.as_ref().map(|decl| {
+                        let metadata = crate::internal::expand::enumeration::metadata(decl, facade);
+                        quote!(.with_enum(#metadata))
+                    });
                     quote!(#facade::BitsFieldSpec::place(
                         match #facade::inferred_field_id(#index) { Some(id) => id, None => 0 },
-                        #name, #lsb, #facade::BitsFieldDefinition::new(#width),
+                        #name, #lsb, #facade::BitsFieldDefinition::new(#width)#enumeration,
                     ).with_declaration_index(#index).with_documentation(#documentation))
                 });
                 quote!({
@@ -154,12 +158,19 @@ fn metadata_parts(
             }
             _ => quote!(&[]),
         };
+        let enumeration = match &field.decl.ty {
+            ModernTypeDecl::Enum(decl) => {
+                let metadata = crate::internal::expand::enumeration::metadata(decl, facade);
+                quote!(.with_enum(#metadata))
+            }
+            _ => TokenStream::new(),
+        };
         fillers.push(quote!({
             let first_output = output_index;
             #filler
             let mut documented = first_output;
             while documented < output_index {
-                fields[documented] = fields[documented].with_documentation(#documentation).with_bits(#bits);
+                fields[documented] = fields[documented].with_documentation(#documentation).with_bits(#bits)#enumeration;
                 documented += 1;
             }
         }));

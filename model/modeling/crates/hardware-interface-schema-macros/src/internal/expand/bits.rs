@@ -16,6 +16,73 @@ pub(in crate::internal) fn semantic_type(field: &BitFieldDecl) -> TokenStream {
     integer_type(width(field))
 }
 
+pub(in crate::internal) fn field_type(owner: &syn::Ident, field: &BitFieldDecl) -> TokenStream {
+    match &field.enumeration {
+        Some(_) => {
+            let name = super::scalar::type_name(owner, &field.name, "");
+            quote!(#name)
+        }
+        None => semantic_type(field),
+    }
+}
+
+pub(in crate::internal) fn field_zero(owner: &syn::Ident, field: &BitFieldDecl) -> TokenStream {
+    match &field.enumeration {
+        Some(_) => {
+            let ty = field_type(owner, field);
+            quote!(#ty::ZERO)
+        }
+        None => zero(field),
+    }
+}
+
+pub(in crate::internal) fn field_decode(
+    owner: &syn::Ident,
+    field: &BitFieldDecl,
+    observed: &TokenStream,
+    base: &TokenStream,
+) -> TokenStream {
+    field.enumeration.as_ref().map_or_else(
+        || decode(field, observed),
+        |decl| {
+            let ty = field_type(owner, field);
+            let start = field.start.0;
+            let mask = crate::internal::validate::bits::bit_mask(width(field));
+            let raw = super::scalar::from_u64(decl.storage, quote!((#observed >> #start) & #mask));
+            quote!(#ty::from_raw(#raw).map_err(|error| error.rebased(#base))?)
+        },
+    )
+}
+
+pub(in crate::internal) fn enum_items(
+    owner: &syn::Ident,
+    fields: &[BitFieldDecl],
+    visibility: &syn::Visibility,
+    facade: &TokenStream,
+) -> syn::Result<TokenStream> {
+    let items = fields
+        .iter()
+        .filter_map(|field| {
+            field.enumeration.as_ref().map(|decl| {
+                let identity = quote::format_ident!(
+                    "{}_IDENTITY",
+                    field.name.to_string().to_ascii_uppercase()
+                );
+                let start = field.start.0;
+                super::enumeration::expand(
+                    owner,
+                    &field.name,
+                    decl,
+                    visibility,
+                    facade,
+                    &quote!(#owner::#identity.at_bit(#start)),
+                )
+            })
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+    Ok(quote!(#(#items)*))
+}
+
 pub(in crate::internal) fn zero(field: &BitFieldDecl) -> TokenStream {
     if width(field) == 1 {
         quote!(false)
@@ -38,7 +105,16 @@ pub(in crate::internal) fn decode(field: &BitFieldDecl, observed: &TokenStream) 
 
 pub(in crate::internal) fn encode(field: &BitFieldDecl, value: &TokenStream) -> TokenStream {
     let start = field.start.0;
-    quote!(u64::from(#value) << #start)
+    let value = field_raw(field, value);
+    quote!(#value << #start)
+}
+
+pub(in crate::internal) fn field_raw(field: &BitFieldDecl, value: &TokenStream) -> TokenStream {
+    if field.enumeration.is_some() {
+        quote!(u64::from((#value).raw()))
+    } else {
+        quote!(u64::from(#value))
+    }
 }
 
 pub(in crate::internal) fn decode_local(
@@ -50,10 +126,6 @@ pub(in crate::internal) fn decode_local(
     } else {
         narrow(width(field), observed)
     }
-}
-
-pub(in crate::internal) fn encode_local(value: &TokenStream) -> TokenStream {
-    quote!(u64::from(#value))
 }
 
 pub(in crate::internal) const fn width(field: &BitFieldDecl) -> usize {

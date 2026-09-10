@@ -62,7 +62,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
             const SCALAR_KIND: #facade::ScalarKind = #facade::ScalarKind::#scalar_kind;
             const ZERO: Self::Value = #values::ZERO;
             const FIELDS: &'static [#facade::BitsFieldSpec] = &Self::FIELDS;
-            fn decode_register(raw: u64) -> Self::Value { #values::from_raw(raw) }
+            fn decode_register(raw: u64) -> ::core::result::Result<Self::Value, #facade::RegisterValueError> { #values::from_raw(raw).map_err(#facade::RegisterValueError::from_schema_error) }
             fn encode_register(value: &Self::Value) -> ::core::result::Result<u64, #facade::RegisterValueError> {
                 value.raw().map_err(#facade::BitsValueError::into_register_error)
             }
@@ -86,7 +86,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
                         observed: reserved,
                     });
                 }
-                ::core::result::Result::Ok(#values::from_raw(raw))
+                #values::from_raw(raw).map_err(|error| error.rebased(location.coordinate()))
             }
             fn encode_record(bytes: &mut [u8], endian: #facade::Endian, value: &Self::Value, location: #facade::SchemaLocation) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 let raw = value
@@ -114,8 +114,12 @@ fn specs(context: &SchemaContext<'_>) -> syn::Result<Vec<TokenStream>> {
             let documentation = field.documentation.metadata(facade);
             let lsb = field.start.0;
             let width = super::super::width(field);
+            let enumeration = field.enumeration.as_ref().map(|decl| {
+                let metadata = crate::internal::expand::enumeration::metadata(decl, facade);
+                quote!(.with_enum(#metadata))
+            });
             Ok(quote!(#facade::BitsFieldSpec::place(
-                #id, #name, #lsb, #facade::BitsFieldDefinition::new(#width),
+                #id, #name, #lsb, #facade::BitsFieldDefinition::new(#width)#enumeration,
             ).with_declaration_index(#index).with_documentation(#documentation)))
         })
         .collect()

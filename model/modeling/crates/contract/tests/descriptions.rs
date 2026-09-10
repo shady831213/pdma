@@ -2,8 +2,8 @@
 
 use hardware_interface_schema::Documentation;
 use pdma_model_contract::{
-    Address, ChannelRegisters, Command, CommandRegisters, DeviceRegisters, ReadWord, Response,
-    ResponseRegisters, Switch, Word,
+    Address, ChannelFault, ChannelRegisters, Command, CommandRegisters, DeviceRegisters, ReadWord,
+    Response, ResponseRegisters, Switch, Word,
 };
 
 fn assert_documented(name: &str, docs: Documentation) {
@@ -22,7 +22,13 @@ fn assert_documented(name: &str, docs: Documentation) {
 fn register_definitions_and_placements_have_complete_documentation()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: the reusable register types and the concrete device register tree.
-    let definitions = [Word::SPEC, ReadWord::SPEC, Address::SPEC, Switch::SPEC];
+    let definitions = [
+        Word::SPEC,
+        ReadWord::SPEC,
+        Address::SPEC,
+        Switch::SPEC,
+        ChannelFault::SPEC,
+    ];
     // When: the public metadata is resolved as a documentation generator would consume it.
     let map = DeviceRegisters::resolve()?;
     // Then: both descriptions exist at every definition, bit field, map and leaf placement.

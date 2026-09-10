@@ -1,0 +1,5 @@
+error: enum variant exceeds storage width
+ --> tests/ui/fail/enum_u64_implicit_overflow.rs:6:78
+  |
+6 |         fields: { code: enum(u64) { variants: { Last = 18446744073709551615, Overflow } } },
+  |                                                                              ^^^^^^^^

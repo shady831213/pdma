@@ -8,7 +8,6 @@ members = [
     "crates/hardware-interface-schema",
     "crates/hardware-interface-schema-macros",
 ]
-exclude = ["crates/scenarios"]
 resolver = "3"
 
 [workspace.package]

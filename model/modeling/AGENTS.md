@@ -27,10 +27,9 @@ replacement model; do not introduce parallel composition or dispatch mechanisms.
 
 ## Historical references
 
-`crates/scenarios` is preserved unchanged but excluded from workspace membership
-because its old PDMA APIs no longer exist. It is not part of current test
-acceptance and cannot run standalone in this cleanup snapshot.
-Reintroduce scenarios deliberately as the new model gains real behavior.
+The obsolete `crates/scenarios` sources are preserved on the backup branch only.
+Current behavior is validated by the active crate tests and the `minimal_channel`
+host example. Add future scenarios against the replacement model's interfaces.
 
 `include/pdma_model_abi.h` is generated from the current contract schemas by
 `pdma-abi-header` with the optional `export-c-header` feature. Regenerate and check

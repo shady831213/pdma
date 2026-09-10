@@ -23,8 +23,8 @@ Its Cargo workspace contains the three minimal PDMA crates and four reusable bui
 - `hardware-interface-schema`
 - `hardware-interface-schema-macros`
 
-The original `crates/scenarios` sources are retained as historical behavior references
-but excluded from the active Cargo workspace. They depend on obsolete PDMA APIs.
+The original `crates/scenarios` sources are preserved on the backup branch only.
+Current acceptance uses the active crate tests and the `minimal_channel` host example.
 The version plans, `model/docs/pdma_arch_spec_v0.md`, and generated PDMA header describe
 the old implementation, not the replacement's required architecture or ABI.
 `docs/white_boards/**` remains exploratory background.

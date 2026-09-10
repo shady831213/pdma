@@ -107,7 +107,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
 
 This is not the predecessor's ABI. There is no event ring, scheduler, multi-channel
 arbitration, resource credit policy, old semantic API, custom future, or additional
-executor. Historical scenarios remain outside acceptance for this slice. The old
+executor. Historical scenarios are preserved on the backup branch only. The old
 C header has been replaced by the current generated contract; see
 [`include/README.md`](include/README.md) for generation and consistency checking.
 

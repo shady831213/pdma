@@ -22,7 +22,7 @@ impl<V, H> DuplicateHandler<V, H> {
 
 /// Mutable build-time vector registry with one concrete handler representation.
 pub struct HandlerRegistry<V, N, H> {
-    handlers: BTreeMap<V, H>,
+    pub(super) handlers: BTreeMap<V, H>,
     notification: PhantomData<fn(N)>,
 }
 
@@ -121,6 +121,15 @@ impl<V, N, H> EmptyRegistry<V, N, H> {
 pub struct FrozenHandlerRegistry<V, N, H> {
     pub(super) handlers: BTreeMap<V, H>,
     notification: PhantomData<fn(N)>,
+}
+
+impl<V, N, H> FrozenHandlerRegistry<V, N, H> {
+    pub(super) fn into_registry(self) -> HandlerRegistry<V, N, H> {
+        HandlerRegistry {
+            handlers: self.handlers,
+            notification: PhantomData,
+        }
+    }
 }
 
 impl<V: fmt::Debug, N, H> fmt::Debug for FrozenHandlerRegistry<V, N, H> {

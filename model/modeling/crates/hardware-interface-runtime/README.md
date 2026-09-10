@@ -42,6 +42,21 @@ FIFO position during gate acquisition. `run_handler_turn` holds that gate for on
 handler future. `CpuOwner` and `CpuLocal<T>` expose opaque validation and synchronous state
 access without exposing CPU identity, locks, or await-spanning borrows.
 
+`InterruptRuntime::run_main` runs a complete software program with a borrowed
+`InterruptRegistration` capability. Software registers persistent ISRs directly;
+the runtime owns their table and drives the same canonical dispatcher used by
+`InterruptDispatcher`. Registration is CPU-bound, rejects duplicates without replacing
+handlers, and can occur after the program suspends. The capability cannot outlive the
+invocation. Install handlers before their vectors can arrive; an unregistered vector
+remains a dispatch error. The older frozen-registry entry points remain available for
+explicit static runtime assembly, not as a requirement on software programs.
+
+Program return requests cooperative dispatch shutdown; an accepted ISR finishes first.
+Source/handler failure cancels the waiting program and returns the concrete error.
+Dropping the whole scoped `run_main` future cancels both software futures; it spawns
+no background tasks. `CpuOwner::scope` checks ownership before every inner poll of a
+capability, including when an already-pending future is repolled from another CPU.
+
 Observation reservations are affine committed state. Consumers reserve only after every
 fallible check, inside a non-awaiting commit section, then release effect locks and call
 `ObservationReservation::emit` in the same non-cancellable tail. Dropping a reservation,

@@ -33,6 +33,10 @@ impl SoftwareCpu {
         CpuLocal::new(CpuOwner::from_token(Arc::clone(&self.token)), value)
     }
 
+    pub(crate) fn owner(&self) -> CpuOwner {
+        CpuOwner::from_token(Arc::clone(&self.token))
+    }
+
     /// Runs main as FIFO-acquired atomic poll-to-pending segments.
     pub async fn run_main<F, T>(&self, program: F) -> T
     where

@@ -1,4 +1,12 @@
-use std::{cell::RefCell, error::Error, fmt, sync::Arc};
+use std::{
+    cell::RefCell,
+    error::Error,
+    fmt,
+    future::{Future, poll_fn},
+    pin::pin,
+    sync::Arc,
+    task::Poll,
+};
 
 #[derive(Debug)]
 pub(super) struct CpuToken;
@@ -52,6 +60,18 @@ impl CpuOwner {
         } else {
             Err(CpuContextError::Mismatch)
         }
+    }
+
+    /// Checks CPU ownership before every poll of an asynchronous capability.
+    pub async fn scope<F: Future>(&self, operation: F) -> Result<F::Output, CpuContextError> {
+        let mut operation = pin!(operation);
+        poll_fn(|context| {
+            if let Err(error) = self.validate_active() {
+                return Poll::Ready(Err(error));
+            }
+            operation.as_mut().poll(context).map(Ok)
+        })
+        .await
     }
 
     pub(super) const fn from_token(token: Arc<CpuToken>) -> Self {

@@ -1,14 +1,24 @@
 use super::{
     error::{InterruptDispatchError, InterruptJoinError},
     observer::{InterruptLifecycleEvent, SharedInterruptObserver},
-    registry::FrozenHandlerRegistry,
+    registry::{FrozenHandlerRegistry, HandlerRegistry},
     traits::{InterruptEnvelope, InterruptHandler, InterruptSource},
 };
 use crate::SoftwareCpu;
 use std::{fmt, sync::Arc};
-use tokio::{sync::watch, task::JoinHandle};
+use tokio::{
+    sync::{Mutex, watch},
+    task::JoinHandle,
+};
 
 type DispatchJoin<V, S, H> = JoinHandle<Result<InterruptSummary, InterruptDispatchError<V, S, H>>>;
+type DispatchRegistry<S, H> = Mutex<
+    HandlerRegistry<
+        <<S as InterruptSource>::Notification as InterruptEnvelope>::Vector,
+        <S as InterruptSource>::Notification,
+        H,
+    >,
+>;
 
 /// Stateless constructor namespace for supervised interrupt dispatch.
 #[derive(Debug, Clone, Copy)]
@@ -36,7 +46,7 @@ pub struct InterruptShutdown {
 /// Sole-consumer shutdown signal paired with [`InterruptShutdown`].
 #[derive(Debug)]
 pub struct InterruptShutdownReceiver {
-    shutdown: watch::Receiver<bool>,
+    pub(super) shutdown: watch::Receiver<bool>,
 }
 
 impl InterruptShutdown {
@@ -122,7 +132,8 @@ impl InterruptDispatcher {
         S: InterruptSource,
         H: InterruptHandler<S::Notification>,
     {
-        run_dispatch(cpu, registry, source, observer, receiver.shutdown).await
+        let registry = Mutex::new(registry.into_registry());
+        run_dispatch(cpu, &registry, source, observer, receiver.shutdown).await
     }
 
     /// Freezes a non-empty registry and starts its sole-owner dispatcher task.
@@ -153,13 +164,9 @@ impl InterruptDispatcher {
     }
 }
 
-async fn run_dispatch<S, H>(
+pub(super) async fn run_dispatch<S, H>(
     cpu: Arc<SoftwareCpu>,
-    mut registry: FrozenHandlerRegistry<
-        <<S as InterruptSource>::Notification as InterruptEnvelope>::Vector,
-        S::Notification,
-        H,
-    >,
+    registry: &DispatchRegistry<S, H>,
     mut source: S,
     observer: SharedInterruptObserver<S::Notification>,
     mut shutdown: watch::Receiver<bool>,
@@ -194,32 +201,35 @@ where
             continue;
         };
         let vector = notification.vector();
-        let handler = registry
-            .handlers
-            .get_mut(&vector)
-            .ok_or_else(|| InterruptDispatchError::UnregisteredVector(vector.clone()))?;
-        let handler_result = cpu
-            .run_handler_turn(async {
-                observer.observe(InterruptLifecycleEvent::Started {
+        if !registry.lock().await.handlers.contains_key(&vector) {
+            return Err(InterruptDispatchError::UnregisteredVector(vector));
+        }
+        cpu.run_handler_turn(async {
+            let mut registry = registry.lock().await;
+            let handler = registry
+                .handlers
+                .get_mut(&vector)
+                .ok_or_else(|| InterruptDispatchError::UnregisteredVector(vector.clone()))?;
+            observer.observe(InterruptLifecycleEvent::Started {
+                notification: &notification,
+                vector: &vector,
+            });
+            let result = handler.handle(&notification).await;
+            drop(registry);
+            match &result {
+                Ok(()) => observer.observe(InterruptLifecycleEvent::Succeeded {
                     notification: &notification,
                     vector: &vector,
-                });
-                let result = handler.handle(&notification).await;
-                match &result {
-                    Ok(()) => observer.observe(InterruptLifecycleEvent::Succeeded {
-                        notification: &notification,
-                        vector: &vector,
-                    }),
-                    Err(error) => observer.observe(InterruptLifecycleEvent::Failed {
-                        notification: &notification,
-                        vector: &vector,
-                        error,
-                    }),
-                }
-                result
-            })
-            .await;
-        handler_result.map_err(|source| InterruptDispatchError::Handler { vector, source })?;
+                }),
+                Err(error) => observer.observe(InterruptLifecycleEvent::Failed {
+                    notification: &notification,
+                    vector: &vector,
+                    error,
+                }),
+            }
+            result.map_err(|source| InterruptDispatchError::Handler { vector, source })
+        })
+        .await?;
         deliveries = deliveries.saturating_add(1);
     }
     Ok(InterruptSummary { deliveries })

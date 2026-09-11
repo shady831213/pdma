@@ -89,21 +89,27 @@ cargo run -p hardware-interface-schema --features export-c-header --example docu
 `record_schema!` declares record-level `endian`, optional `alignment`, and ordered
 fields whose aligned offsets and final size are generated.
 Its field types are scalars, nested records, `enum(storage)`, `bits(storage)` with
-LSB0 half-open ranges such as `0..5`, and `union` cases selected by a local or nested
-`self` tag. Enum values may omit assignments after an explicit value. Union fields may
+LSB0 half-open ranges such as `0..5` or inclusive ranges such as `0..=4`, and `union`
+cases selected by a local or nested `self` tag. Enum values may omit assignments after
+an explicit value. Union fields may
 use wider wire `storage`, while unused union slots and undeclared bits are reserved
 zero. A scalar `{ const: OtherRecord::record_size }` is derived during encoding and
 validated during decoding. Generated `*Values` types therefore expose the semantic
 record directly rather than requiring a second handwritten overlay.
-`bits_schema!` gives one LSB0 half-open bit layout a stable name, typed value, field
+`bits_schema!` gives one LSB0 bit layout a stable name, typed value, field
 identities, inferred minimum scalar extent, and checked codecs. Inferred records refer
 to it with `bits(Name)`, while registers use `fields: Name`; both embeddings therefore
 share the exact field names, ranges, semantic types, and metadata. Byte order belongs
 to the containing record or register rather than to the bits schema.
 `register_schema!` declares an offset-free register with explicit width and alignment.
 Its inline `fields` use the same bit language: one-bit fields have typed `bool`
-accessors and wider ranges use the smallest matching unsigned integer. Field IDs are
-inferred in declaration order. Undeclared bits are preserved by field writes, and the
+accessors and wider ranges use the smallest matching unsigned integer. `0..=0` selects
+only bit 0, `7..=9` selects three bits, and `0..=63` selects an entire 64-bit word.
+The existing `..` spelling stays half-open; both forms can be mixed in a declaration.
+Inclusive endpoints are normalized at parsing, so codecs, metadata and overlap checks
+use the same internal layout. Descending, overlapping and out-of-storage ranges are
+rejected, as are inclusive endpoints whose conversion would overflow.
+Field IDs are inferred in declaration order. Undeclared bits are preserved by field writes, and the
 writable mask may not select an undeclared bit. `register_map!` declares an optional
 exact `extent`, ordered `placements: [...]`, and optional `access: [...]` tree. Access
 paths name existing placements and generate borrowed views of the root bytes. A

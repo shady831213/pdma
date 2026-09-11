@@ -26,8 +26,19 @@ impl Parse for BitFieldDecl {
         let name = input.parse()?;
         input.parse::<Token![:]>()?;
         let start = usize_lit(input)?;
-        input.parse::<Token![..]>()?;
-        let end = usize_lit(input)?;
+        let inclusive = if input.peek(Token![..=]) {
+            input.parse::<Token![..=]>()?;
+            true
+        } else {
+            input.parse::<Token![..]>()?;
+            false
+        };
+        let mut end = usize_lit(input)?;
+        if inclusive {
+            end.0 = end.0.checked_add(1).ok_or_else(|| {
+                syn::Error::new(end.1, "inclusive bit range endpoint overflows usize")
+            })?;
+        }
         let enumeration = if input.peek(Token![=>]) {
             input.parse::<Token![=>]>()?;
             Some(EnumDecl::bit_field(input, end.0.saturating_sub(start.0))?)

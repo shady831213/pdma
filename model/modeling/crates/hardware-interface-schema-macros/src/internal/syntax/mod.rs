@@ -6,6 +6,8 @@ pub(in crate::internal) use enumeration::EnumDecl;
 #[cfg(test)]
 mod description_tests;
 mod map_ordered;
+#[cfg(test)]
+mod range_tests;
 mod record;
 mod register;
 

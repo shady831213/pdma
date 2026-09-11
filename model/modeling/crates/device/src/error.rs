@@ -1,7 +1,7 @@
 use pdma_model_contract::ChannelFaultCode;
 use std::fmt::{self, Display, Formatter};
 
-/// Sticky hardware faults; recovery requires a new channel in this first slice.
+/// Sticky channel faults cleared only by channel or device reset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
     /// The command ring could not be read.
@@ -41,6 +41,8 @@ pub enum Error {
     Fault(Fault),
     /// The channel remains stopped after an earlier hardware fault.
     Halted,
+    /// Hardware reset invalidated this retained operation before another interaction.
+    Reset,
 }
 
 impl Display for Error {

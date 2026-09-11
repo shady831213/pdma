@@ -127,6 +127,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
     let mut device = Device::new(FlatMemory::new()?);
     let command = Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 91,
         source: Endpoint::linear(256, 4),
         destination: Endpoint::linear(320, 4),
@@ -186,6 +187,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     assert_eq!(
         Response::from_bytes(&response)?,
         Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 91,
             status: ResponseStatus::Success,
             bytes_completed: 4,

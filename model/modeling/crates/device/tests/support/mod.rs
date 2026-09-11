@@ -105,6 +105,7 @@ pub fn read_word(
 /// Canonical four-byte copy input.
 pub const fn command() -> Command {
     Command {
+        flags: pdma_model_contract::CompletionFlagsValues { ioc: false },
         id: 7,
         source: Endpoint::linear(0x1200, 4),
         destination: Endpoint::linear(0x1300, 4),

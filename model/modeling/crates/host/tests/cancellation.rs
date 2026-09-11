@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+    InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{
@@ -49,6 +49,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         .run_main(Channel::setup(model.clone(), memory.clone(), rings))
         .await?;
     cpu.run_main(channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 11,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),
@@ -80,6 +81,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     assert_eq!(
         cpu.run_main(channel.response()).await?,
         Some(Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 11,
             status: ResponseStatus::Success,
             bytes_completed: 8,
@@ -89,6 +91,9 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let mut copied = [0; 8];
     memory.read(destination, alignment, &mut copied)?;
     assert_eq!(&copied, b"retained");
+    assert!(model.irq());
+    assert!(model.clone().claim(()).await?.is_some());
+    assert!(model.clone().claim(()).await?.is_none());
     assert!(!model.irq());
     Ok(())
 }

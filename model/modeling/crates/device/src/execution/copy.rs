@@ -23,7 +23,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for ReadCopy {
         context: &mut Device<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
-        if context.channel.halted() {
+        if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {
@@ -76,7 +76,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for WriteCopy {
         context: &mut Device<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
-        if context.channel.halted() {
+        if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {

@@ -1,4 +1,4 @@
-use crate::{CheckLengths, Device, Error, NextChunk, ReadCopy, WriteCopy};
+use crate::{CheckLengths, Device, Error, NextChunk, ReadCopy, Resettable, WriteCopy};
 use hardware_interface_pipeline::{AfterEach, Repeat, Stage, StepOutcome, Then};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{Command, Response};
@@ -16,7 +16,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for Fetch {
     type State = ();
     fn start((): ()) {}
     fn step(&mut self, context: &mut Device<M>, (): &mut ()) -> StepOutcome<Command, Error, ()> {
-        if context.channel.halted() {
+        if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {
@@ -51,14 +51,18 @@ impl<M: MemoryAccess> Stage<Device<M>> for Publish {
         context: &mut Device<M>,
         response: &mut Response,
     ) -> StepOutcome<(), Error, ()> {
-        if context.channel.halted() {
+        if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {
             return StepOutcome::Pending(());
         }
+        let was_empty = context.channel.response.pointers().is_empty();
         match context.channel.response.push(&context.memory, response) {
-            Ok(true) => StepOutcome::Complete(Ok(())),
+            Ok(true) => {
+                context.channel.published(response, was_empty);
+                StepOutcome::Complete(Ok(()))
+            }
             Ok(false) => StepOutcome::Pending(()),
             Err(fault) => {
                 context.channel.latch(fault);
@@ -68,7 +72,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for Publish {
     }
 }
 
-/// Refresh the level line from queue-owned response and fault state.
+/// Refresh observable IRQ causes from queue-owned response and fault state.
 #[derive(Debug, Default)]
 pub struct UpdateIrq;
 
@@ -90,7 +94,7 @@ impl<M> Stage<Device<M>> for UpdateIrq {
 }
 
 /// The same statically composed hardware is used by step and async executors.
-pub type Pipeline = AfterEach<Then<Then<Fetch, Execution>, Publish>, UpdateIrq>;
+pub type Pipeline = Resettable<AfterEach<Then<Then<Fetch, Execution>, Publish>, UpdateIrq>>;
 
 /// One composable prepare/read/write iteration.
 pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
@@ -102,5 +106,8 @@ pub type Execution = Then<CheckLengths, Repeat<CopyLoop>>;
 pub const fn pipeline() -> Pipeline {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
     let execution = Then::new(CheckLengths, Repeat::new(chunk));
-    AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq)
+    Resettable::new(AfterEach::new(
+        Then::new(Then::new(Fetch, execution), Publish),
+        UpdateIrq,
+    ))
 }

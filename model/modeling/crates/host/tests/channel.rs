@@ -1,4 +1,4 @@
-//! End-to-end host submission and level interrupt behavior.
+//! End-to-end host submission and interrupt notification behavior.
 
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
@@ -40,6 +40,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         .run_main(Channel::setup(model.clone(), memory.clone(), rings))
         .await?;
     cpu.run_main(channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 13,
         source: Endpoint::linear(0, 0),
         destination: Endpoint::linear(0, 0),
@@ -54,6 +55,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
             .is_ok()
     );
     let expected = Response {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 13,
         status: ResponseStatus::Success,
         bytes_completed: 0,
@@ -73,6 +75,9 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
     assert!(model.irq());
     memory.write(response_address, alignment, &expected.to_bytes()?)?;
     assert_eq!(cpu.run_main(channel.response()).await?, Some(expected));
+    assert!(model.irq());
+    assert!(model.clone().claim(()).await?.is_some());
+    assert!(model.clone().claim(()).await?.is_none());
     assert!(!model.irq());
     Ok(())
 }
@@ -119,6 +124,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
 
     // When: a real async worker executes the submitted command.
     cpu.run_main(channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 7,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),
@@ -129,10 +135,11 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     assert!(model.claim(()).await?.is_some());
     let response = cpu.run_main(channel.response()).await?;
 
-    // Then: response, payload and interrupt deassertion agree.
+    // Then: response, payload and claimed notification agree.
     assert_eq!(
         response,
         Some(Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 7,
             status: ResponseStatus::Success,
             bytes_completed: 8,
@@ -141,6 +148,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     let mut copied = [0; 8];
     memory.read(destination, alignment, &mut copied)?;
     assert_eq!(&copied, b"dma-copy");
+    assert!(model.claim(()).await?.is_none());
     assert!(!model.irq());
     Ok(())
 }
@@ -173,6 +181,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         .run_main(Channel::setup(model.clone(), memory, rings))
         .await?;
     cpu.run_main(channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 9,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),
@@ -185,7 +194,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     // When: response publication fails at the real memory boundary.
     assert!(executor.run(&mut stage, &mut operation).await.is_err());
 
-    // Then: sticky fault remains visible and software can mask its level IRQ.
+    // Then: the notification is claimed once while the fault remains visible through masking.
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
     assert_eq!(
@@ -194,6 +203,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     );
     assert_eq!(cpu.run_main(channel.response()).await?, None);
     cpu.run_main(channel.set_irq_enabled(false)).await?;
+    assert!(model.claim(()).await?.is_none());
     assert!(!model.irq());
     assert_eq!(
         cpu.run_main(channel.fault()).await?,

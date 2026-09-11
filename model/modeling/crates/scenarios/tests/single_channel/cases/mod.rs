@@ -55,6 +55,7 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
         assert_eq!(
             response,
             Some(Response {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::Success,
                 bytes_completed: u64::try_from(input.data.len())?

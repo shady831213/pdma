@@ -16,6 +16,11 @@ endpoints. Software keeps lists and buffers stable until command completion.
 The response carries a 64-bit `bytes_completed` count; transfer lengths have no
 fixed hardware limit.
 
+Commands are 64 bytes and carry `CompletionFlags.ioc`; responses remain 24 bytes
+and echo the flags at byte 12. The 80-byte MMIO map contains independent channel
+non-empty/IOC masks, read-only causes, channel reset and device fatal/reset controls.
+Unmask does not replay notifications. Channel and device reset preserve external memory.
+
 Run from `model/modeling`:
 
 ```sh

@@ -77,6 +77,7 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
         assert_eq!(
             Response::from_bytes(&raw)?,
             Response {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::InvalidLength,
                 bytes_completed: 0

@@ -125,6 +125,7 @@ where
     let mut channel = Channel::setup(ports.bus, ports.memory, rings).await?;
     channel
         .submit(Command {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 7,
             source: source.endpoint,
             destination: destination.endpoint,

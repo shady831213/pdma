@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
+    InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus};
@@ -47,6 +47,7 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
         .run_main(Channel::setup(model.clone(), memory.clone(), rings))
         .await?;
     cpu.run_main(channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 23,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),
@@ -87,6 +88,7 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     assert_eq!(
         cpu.run_main(channel.response()).await?,
         Some(Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 23,
             status: ResponseStatus::Success,
             bytes_completed: 8,
@@ -96,6 +98,9 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     let mut copied = [0; 8];
     memory.read(destination, alignment, &mut copied)?;
     assert_eq!(&copied, b"sentinel");
+    assert!(model.irq());
+    assert!(model.clone().claim(()).await?.is_some());
+    assert!(model.clone().claim(()).await?.is_none());
     assert!(!model.irq());
     Ok(())
 }

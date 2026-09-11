@@ -1,4 +1,5 @@
 use super::Model;
+mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::{ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters};
@@ -102,12 +103,13 @@ async fn rejected_read_preserves_the_bus_error_and_notifies() -> TestResult {
 }
 
 #[tokio::test]
-async fn read_publishes_the_current_hardware_irq_level() -> TestResult {
-    // Given: a real ring fault created beneath transport's cached IRQ snapshot.
-    let model = Model::new(Device::new(SharedMemory::new()));
+async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestResult {
+    // Given: a real fault notification created beneath the transport.
+    let mut model = Model::new(Device::new(SharedMemory::new()));
     {
         let mut device = model.device.lock().await;
         for offset in [
+            IRQ_ENABLE,
             DeviceRegisters::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
             DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
             DeviceRegisters::CHANNEL.offset() + ChannelRegisters::ENABLE.offset(),
@@ -124,21 +126,20 @@ async fn read_publishes_the_current_hardware_irq_level() -> TestResult {
             StepOutcome::Complete(Err(Error::Fault(Fault::CommandRead)))
         );
     }
-    for enabled in [1_u32, 0] {
-        {
-            let mut device = model.device.lock().await;
-            device.write(IRQ_ENABLE, &enabled.to_le_bytes())?;
-            let irq = device.irq();
-            drop(device);
-            assert_eq!(irq, enabled != 0);
-        }
-        assert_ne!(model.irq(), enabled != 0);
-        // When: a read transaction samples the hardware's current line.
-        let mut bytes = [0; 4];
-        model.read(u32::try_from(IRQ_ENABLE)?, &mut bytes).await?;
-        // Then: both assertion and deassertion reach transport without another pipeline step.
-        assert_eq!(model.irq(), enabled != 0);
-        assert_eq!(u32::from_le_bytes(bytes), enabled);
-    }
+    assert!(!model.irq());
+    // When: a read finishes the transport interaction boundary.
+    model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;
+    // Then: the emitted notification is transferred once, even though the cause persists.
+    assert!(
+        hardware_interface_runtime::InterruptSource::claim(&mut model, ())
+            .await?
+            .is_some()
+    );
+    model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;
+    assert!(
+        hardware_interface_runtime::InterruptSource::claim(&mut model, ())
+            .await?
+            .is_none()
+    );
     Ok(())
 }

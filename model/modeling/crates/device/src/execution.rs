@@ -39,6 +39,7 @@ impl CopyState {
 
     const fn response(&self) -> Response {
         Response {
+            flags: self.command.flags,
             id: self.command.id,
             status: self.status,
             bytes_completed: self.bytes_completed,

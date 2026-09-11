@@ -6,11 +6,7 @@ mod tests;
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use hardware_interface_runtime::{InterruptEnvelope, InterruptSource, RegisterAccess};
 use pdma_model_device::{Device, Error};
-use std::{
-    convert::Infallible,
-    future::{Future, ready},
-    sync::Arc,
-};
+use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, Notify, watch};
 
 /// Shared async transport for one device, driven by one retained worker operation.
@@ -18,7 +14,7 @@ use tokio::sync::{Mutex, Notify, watch};
 pub struct Model<M> {
     device: Arc<Mutex<Device<M>>>,
     changed: Arc<Notify>,
-    level: watch::Sender<bool>,
+    pending: watch::Sender<bool>,
 }
 
 impl<M> Clone for Model<M> {
@@ -26,33 +22,35 @@ impl<M> Clone for Model<M> {
         Self {
             device: Arc::clone(&self.device),
             changed: Arc::clone(&self.changed),
-            level: self.level.clone(),
+            pending: self.pending.clone(),
         }
     }
 }
 
 impl<M> Model<M> {
     /// Wraps externally assembled hardware without selecting its memory backend.
-    pub fn new(device: Device<M>) -> Self {
-        let (level, _) = watch::channel(device.irq());
+    pub fn new(mut device: Device<M>) -> Self {
+        let (pending, _) = watch::channel(device.take_interrupt());
         Self {
             device: Arc::new(Mutex::new(device)),
             changed: Arc::new(Notify::new()),
-            level,
+            pending,
         }
     }
 
-    /// Returns the most recently committed hardware interrupt level.
+    /// Reports an emitted notification awaiting platform dispatch, not a hardware level.
     pub fn irq(&self) -> bool {
-        *self.level.borrow()
+        *self.pending.borrow()
     }
 
-    fn publish_irq(&self, asserted: bool) {
-        self.level.send_if_modified(|level| {
-            let changed = *level != asserted;
-            *level = asserted;
-            changed
-        });
+    fn publish_irq(&self, emitted: bool) {
+        if emitted {
+            self.pending.send_if_modified(|pending| {
+                let changed = !*pending;
+                *pending = true;
+                changed
+            });
+        }
     }
 }
 
@@ -64,7 +62,7 @@ impl<M: Send> Model<M> {
         let result = {
             let mut device = self.device.lock().await;
             let result = access(&mut device);
-            self.publish_irq(device.irq());
+            self.publish_irq(device.take_interrupt());
             result
         };
         self.changed.notify_one();
@@ -98,7 +96,7 @@ impl<M: Send> AsyncInteractionBackend<Device<M>, ()> for Model<M> {
         tokio::task::yield_now().await;
         let mut device = self.device.lock().await;
         let outcome = interaction(&mut device);
-        self.publish_irq(device.irq());
+        self.publish_irq(device.take_interrupt());
         drop(device);
         Ok(outcome)
     }
@@ -109,7 +107,7 @@ impl<M: Send> AsyncInteractionBackend<Device<M>, ()> for Model<M> {
     }
 }
 
-/// Notification for the channel's single level-sensitive interrupt vector.
+/// Notification for the device's shared edge/message interrupt vector.
 #[derive(Clone, Copy, Debug)]
 pub struct Irq;
 
@@ -124,12 +122,12 @@ impl<M: Send + 'static> InterruptSource for Model<M> {
     type Error = watch::error::RecvError;
 
     async fn wait_ready(&self) -> Result<(), Self::Error> {
-        let mut level = self.level.subscribe();
-        level.wait_for(|asserted| *asserted).await?;
+        let mut pending = self.pending.subscribe();
+        pending.wait_for(|ready| *ready).await?;
         Ok(())
     }
 
-    fn claim(&mut self, (): ()) -> impl Future<Output = Result<Option<Irq>, Self::Error>> + Send {
-        ready(Ok(self.irq().then_some(Irq)))
+    async fn claim(&mut self, (): ()) -> Result<Option<Irq>, Self::Error> {
+        Ok(self.pending.send_replace(false).then_some(Irq))
     }
 }

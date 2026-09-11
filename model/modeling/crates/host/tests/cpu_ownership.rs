@@ -77,6 +77,7 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
         .await?;
     delay.store(true, Ordering::SeqCst);
     let submission = channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 1,
         source: Endpoint::linear(0, 0),
         destination: Endpoint::linear(0, 0),

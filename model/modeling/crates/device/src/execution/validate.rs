@@ -46,7 +46,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for CheckLengths {
         context: &mut Device<M>,
         state: &mut Self::State,
     ) -> StepOutcome<CopyState, Error, ()> {
-        if context.channel.halted() {
+        if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {

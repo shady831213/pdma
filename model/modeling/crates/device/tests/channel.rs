@@ -13,7 +13,7 @@ use pdma_model_device::{Device, Fault, Pipeline, pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]
-fn copy_publishes_response_before_irq_and_drain_lowers_line() -> TestResult {
+fn copy_publishes_response_before_notification_is_taken() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(
@@ -37,12 +37,14 @@ fn copy_publishes_response_before_irq_and_drain_lowers_line() -> TestResult {
     assert_eq!(
         Response::from_bytes(&bytes)?,
         Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 7,
             status: ResponseStatus::Success,
             bytes_completed: 4,
         }
     );
     assert!(device.irq());
+    assert!(device.take_interrupt());
     device.write(
         DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
@@ -79,6 +81,7 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
         DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
         &0_u32.to_le_bytes(),
     )?;
+    assert!(device.take_interrupt());
     assert!(!device.irq());
     assert!(run(&mut device).is_err());
     assert_eq!(

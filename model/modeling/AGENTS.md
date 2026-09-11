@@ -9,7 +9,7 @@ removed from master after backing up the complete source snapshot:
 `51707fe1d38e261a188e1d0ac14243c0caf58127`.
 
 The replacement now implements one channel with command and response rings,
-linear/scatter-gather DMA copy, sticky channel faults, and level IRQ delivery. See README.md
+linear/scatter-gather DMA copy, error/reset boundaries, and edge/IOC IRQ delivery. See README.md
 and the `crates/scenarios/tests/single_channel/main.rs` system tests. Old interfaces, numeric register
 layouts, and ABI compatibility are not requirements for this model.
 
@@ -57,7 +57,8 @@ shapes into the rebuild.
 
 ## Implementation constraints
 
-- The replacement models one channel, command/response rings, linear/SG DMA copy, and IRQ delivery.
+- The replacement models one channel, command/response rings, linear/SG DMA copy,
+  independently masked non-empty/IOC notifications, and channel/device error/reset boundaries.
   Do not implement further slices without a user request.
 - Source and destination independently select linear spans or SG lists. Software owns
   list/buffer allocation and keeps descriptors stable until completion. Hardware checks
@@ -72,6 +73,9 @@ shapes into the rebuild.
   keep side-specific memory/MMIO access and publish pointers only after successful
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.
 - Keep the model deterministic and step-based. No cycle timing or extra executors.
+- Device notification masks never replay old events when cleared. Platform-pending
+  notifications survive device masking/reset until claimed. Response errors stop
+  the channel after publication; reset never rolls back external memory writes.
 - Software handlers remain outside the hardware. Preserve CPU-local and handler
   execution guarantees supplied by the runtime.
 - Use native module declarations and matching paths. No `#[path]`, conditional path

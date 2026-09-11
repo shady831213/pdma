@@ -1,4 +1,12 @@
-use hardware_interface_schema::record_schema;
+use hardware_interface_schema::{bits_schema, record_schema};
+
+bits_schema! {
+    pub bits CompletionFlags(u32) {
+        #[short_description = "Interrupt on completion"]
+        #[description = "Request a channel notification after successful response publication, independently of empty-to-non-empty notification. Echoed in the response; consuming that response clears its IOC cause. Device masks suppress new notifications without replay on unmask."]
+        ioc: 0..=0,
+    }
+}
 
 record_schema! {
     #[short_description = "Scatter/gather segment"]
@@ -71,7 +79,7 @@ impl Endpoint {
 
 record_schema! {
     #[short_description = "DMA copy command"]
-    #[description = "A software-produced command requesting a copy between two independently described byte streams. The wire record is 56 bytes, eight-byte aligned and little-endian. Hardware checks both endpoint totals before any payload write and reports LengthMismatch if they differ. Software keeps all lists and buffers stable until completion."]
+    #[description = "A software-produced command requesting a copy between two independently described byte streams. The wire record is 64 bytes, eight-byte aligned and little-endian. Hardware checks both endpoint totals before any payload write and reports LengthMismatch if they differ. Software keeps all lists and buffers stable until completion or reset."]
     pub record Command {
         alignment: 8,
         endian: Little,
@@ -85,13 +93,16 @@ record_schema! {
             #[short_description = "Destination stream"]
             #[description = "Linear or scatter/gather stream receiving payload bytes in logical order. Its total must match the source total."]
             destination: Endpoint,
+            #[short_description = "Completion notification flags"]
+            #[description = "IOC requests notification after this command's response is published. Reserved bits must be zero."]
+            flags: bits(CompletionFlags),
         },
     }
 }
 
 record_schema! {
     #[short_description = "DMA copy response"]
-    #[description = "A hardware-produced response carrying one command's result and completed byte count. The wire record is 24 bytes, eight-byte aligned and little-endian, with four zero padding bytes. Ring-access faults instead stop the channel and are reported through its fault register and IRQ condition."]
+    #[description = "A hardware-produced 24-byte, eight-byte-aligned little-endian response. Any unsuccessful result stops the channel until reset and forces an error notification. Ring-access faults instead use the channel fatal register. Previously committed external memory writes are never rolled back."]
     pub record Response {
         alignment: 8,
         endian: Little,
@@ -100,7 +111,7 @@ record_schema! {
             #[description = "The identifier copied unchanged from the command, allowing software to associate this response with its submission."]
             id: u64,
             #[short_description = "Copy result"]
-            #[description = "0: Success, including a zero-length copy.\n1: InvalidLength, arithmetic overflow in summed lengths or list extent/address calculations.\n2: ReadFault, the payload source could not be read, including address overflow.\n3: WriteFault, the payload destination could not be written, including address overflow.\n4: LengthMismatch, endpoint totals differ before payload writes.\n5: ListReadFault, a scatter/gather descriptor could not be read, including inaccessible or misaligned list memory.\nOther wire values are invalid. Transfer errors return a response rather than setting the sticky ring-access fault."]
+            #[description = "0: Success, including a zero-length copy.\n1: InvalidLength, arithmetic overflow in summed lengths or list extent/address calculations.\n2: ReadFault, payload read failed.\n3: WriteFault, payload write failed.\n4: LengthMismatch, endpoint totals differ before payload writes.\n5: ListReadFault, scatter/gather descriptor read failed.\nOther wire values are invalid. Error responses stop the channel until channel reset without setting the ring-access fatal code."]
             status: enum(u32) {
                 variants: {
                     Success = 0,
@@ -111,6 +122,9 @@ record_schema! {
                     ListReadFault = 5,
                 },
             },
+            #[short_description = "Echoed completion flags"]
+            #[description = "The command's IOC request, identifying the notification-bearing response without a separate task-pointer register."]
+            flags: bits(CompletionFlags),
             #[short_description = "Completed payload bytes"]
             #[description = "Bytes successfully written before completion or failure, counted with 64-bit arithmetic. A successful transfer reports its full endpoint total; validation failures before copying report zero."]
             bytes_completed: u64,

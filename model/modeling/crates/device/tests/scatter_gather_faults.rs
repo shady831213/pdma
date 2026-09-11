@@ -43,6 +43,7 @@ fn mismatched_totals_leave_payload_untouched() -> TestResult {
         &mut device,
         &memory,
         Command {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 1,
             source: Endpoint::scatter_gather(0x1400, 1),
             destination: Endpoint::linear(0x1300, 5),
@@ -54,6 +55,7 @@ fn mismatched_totals_leave_payload_untouched() -> TestResult {
     assert_eq!(
         response(&memory)?,
         Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 1,
             status: ResponseStatus::LengthMismatch,
             bytes_completed: 0
@@ -115,6 +117,7 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
             &mut device,
             &memory,
             Command {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 2,
                 source,
                 destination,
@@ -126,6 +129,7 @@ fn list_errors_and_length_overflow_precede_payload_writes() -> TestResult {
         assert_eq!(
             response(&memory)?,
             Response {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 2,
                 status: expected,
                 bytes_completed: 0
@@ -182,6 +186,7 @@ fn payload_fault_reports_written_prefix_without_rollback() -> TestResult {
             &mut device,
             &memory,
             Command {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 3,
                 source,
                 destination,
@@ -198,6 +203,7 @@ fn payload_fault_reports_written_prefix_without_rollback() -> TestResult {
         assert_eq!(
             response(&memory)?,
             Response {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 3,
                 status,
                 bytes_completed: 3
@@ -233,6 +239,7 @@ fn zero_total_does_not_access_payload_or_empty_list_addresses() -> TestResult {
         &mut device,
         &memory,
         Command {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 4,
             source: Endpoint::scatter_gather(0x1400, 2),
             destination: Endpoint::scatter_gather(u64::MAX, 0),
@@ -244,6 +251,7 @@ fn zero_total_does_not_access_payload_or_empty_list_addresses() -> TestResult {
     assert_eq!(
         response(&memory)?,
         Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 4,
             status: ResponseStatus::Success,
             bytes_completed: 0

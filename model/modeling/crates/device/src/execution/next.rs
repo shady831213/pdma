@@ -23,7 +23,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for NextChunk {
         context: &mut Device<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
-        if context.channel.halted() {
+        if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {

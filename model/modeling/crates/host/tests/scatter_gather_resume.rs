@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
+    InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus, Segment};
@@ -70,6 +70,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
         .run_main(Channel::setup(model.clone(), memory.clone(), rings))
         .await?;
     cpu.run_main(channel.submit(Command {
+        flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 31,
         source,
         destination,
@@ -108,7 +109,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     memory.write(source_first, MemoryAlignment::ONE, b"XX")?;
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());
 
-    // Then: only the remaining logical stream is copied and one completion drains the IRQ.
+    // Then: only the remaining stream is copied, with one completion and one notification.
     let mut first = [0; 2];
     let mut remaining = [0; 6];
     memory.read(destination_first, MemoryAlignment::ONE, &mut first)?;
@@ -121,12 +122,16 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     assert_eq!(
         cpu.run_main(channel.response()).await?,
         Some(Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 31,
             status: ResponseStatus::Success,
             bytes_completed: 8,
         })
     );
     assert_eq!(cpu.run_main(channel.response()).await?, None);
+    assert!(model.irq());
+    assert!(model.clone().claim(()).await?.is_some());
+    assert!(model.clone().claim(()).await?.is_none());
     assert!(!model.irq());
     Ok(())
 }

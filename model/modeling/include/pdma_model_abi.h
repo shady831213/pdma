@@ -129,9 +129,9 @@ static inline void C_ENDPOINT_STORE_C_WORD1(uint8_t bytes[C_ENDPOINT_SIZE], uint
 
 /*
  * DMA copy command
- * A software-produced command requesting a copy between two independently described byte streams. The wire record is 56 bytes, eight-byte aligned and little-endian. Hardware checks both endpoint totals before any payload write and reports LengthMismatch if they differ. Software keeps all lists and buffers stable until completion.
+ * A software-produced command requesting a copy between two independently described byte streams. The wire record is 64 bytes, eight-byte aligned and little-endian. Hardware checks both endpoint totals before any payload write and reports LengthMismatch if they differ. Software keeps all lists and buffers stable until completion or reset.
  */
-#define C_COMMAND_SIZE UINT64_C(56)
+#define C_COMMAND_SIZE UINT64_C(64)
 #define C_COMMAND_ALIGNMENT UINT64_C(8)
 #define C_COMMAND_ENDIAN_LITTLE UINT32_C(0)
 #define C_COMMAND_ENDIAN_BIG UINT32_C(1)
@@ -294,8 +294,30 @@ static inline void C_COMMAND_STORE_C_DESTINATIONQX2EWORD1(uint8_t bytes[C_COMMAN
 }
 
 /*
+ * Completion notification flags
+ * IOC requests notification after this command's response is published. Reserved bits must be zero.
+ */
+/*
+ * ioc
+ * Interrupt on completion
+ * Request a channel notification after successful response publication, independently of empty-to-non-empty notification. Echoed in the response; consuming that response clears its IOC cause. Device masks suppress new notifications without replay on unmask.
+ */
+#define C_COMMAND_C_FLAGS_OFFSET UINT64_C(56)
+#define C_COMMAND_C_FLAGS_WIDTH UINT64_C(4)
+#define C_COMMAND_C_FLAGS_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_FLAGS(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_FLAGS_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COMMAND_STORE_C_FLAGS(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_FLAGS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
  * DMA copy response
- * A hardware-produced response carrying one command's result and completed byte count. The wire record is 24 bytes, eight-byte aligned and little-endian, with four zero padding bytes. Ring-access faults instead stop the channel and are reported through its fault register and IRQ condition.
+ * A hardware-produced 24-byte, eight-byte-aligned little-endian response. Any unsuccessful result stops the channel until reset and forces an error notification. Ring-access faults instead use the channel fatal register. Previously committed external memory writes are never rolled back.
  */
 #define C_RESPONSE_SIZE UINT64_C(24)
 #define C_RESPONSE_ALIGNMENT UINT64_C(8)
@@ -327,11 +349,11 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
  * Copy result
  * 0: Success, including a zero-length copy.
  * 1: InvalidLength, arithmetic overflow in summed lengths or list extent/address calculations.
- * 2: ReadFault, the payload source could not be read, including address overflow.
- * 3: WriteFault, the payload destination could not be written, including address overflow.
+ * 2: ReadFault, payload read failed.
+ * 3: WriteFault, payload write failed.
  * 4: LengthMismatch, endpoint totals differ before payload writes.
- * 5: ListReadFault, a scatter/gather descriptor could not be read, including inaccessible or misaligned list memory.
- * Other wire values are invalid. Transfer errors return a response rather than setting the sticky ring-access fault.
+ * 5: ListReadFault, scatter/gather descriptor read failed.
+ * Other wire values are invalid. Error responses stop the channel until channel reset without setting the ring-access fatal code.
  */
 #define C_RESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH UINT64_C(1)
@@ -350,6 +372,28 @@ static inline void C_RESPONSE_STORE_C_STATUS(uint8_t bytes[C_RESPONSE_SIZE], uin
     bytes[C_RESPONSE_C_STATUS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
     bytes[C_RESPONSE_C_STATUS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_RESPONSE_C_STATUS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Echoed completion flags
+ * The command's IOC request, identifying the notification-bearing response without a separate task-pointer register.
+ */
+/*
+ * ioc
+ * Interrupt on completion
+ * Request a channel notification after successful response publication, independently of empty-to-non-empty notification. Echoed in the response; consuming that response clears its IOC cause. Device masks suppress new notifications without replay on unmask.
+ */
+#define C_RESPONSE_C_FLAGS_OFFSET UINT64_C(12)
+#define C_RESPONSE_C_FLAGS_WIDTH UINT64_C(4)
+#define C_RESPONSE_C_FLAGS_ENDIAN C_RESPONSE_ENDIAN_LITTLE
+static inline uint32_t C_RESPONSE_LOAD_C_FLAGS(const uint8_t bytes[C_RESPONSE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_RESPONSE_C_FLAGS_OFFSET] | ((uint32_t)bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_RESPONSE_STORE_C_FLAGS(uint8_t bytes[C_RESPONSE_SIZE], uint32_t value) {
+    bytes[C_RESPONSE_C_FLAGS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 /*
@@ -375,9 +419,9 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 
 /*
  * Minimal PDMA device registers
- * One channel with a command ring, a response ring and a level interrupt. Register transactions use little-endian bytes and must match an exact register start and width; layout gaps are not registers.
+ * One channel with command/response rings, edge notifications, channel reset and device-wide fatal/reset controls. Register transactions use little-endian bytes and must match an exact register start and width; layout gaps are not registers.
  */
-#define C_PDMA_SIZE UINT64_C(56)
+#define C_PDMA_SIZE UINT64_C(80)
 #define C_PDMA_ACCESS_READ_ONLY UINT32_C(0)
 #define C_PDMA_ACCESS_READ_WRITE UINT32_C(1)
 #define C_PDMA_ACCESS_WRITE_ONLY UINT32_C(2)
@@ -397,12 +441,17 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 /*
  * DeviceRegisters.channel
  * Channel management interface
- * Processing enable, interrupt enable and sticky ring-access fault state shared by the two rings. There is no separate event ring or software fault-clear register in this model.
+ * Processing enable, interrupt causes, sticky channel fault and channel reset. There is no separate event ring.
+ */
+/*
+ * DeviceRegisters.control
+ * Device-wide controls
+ * Device-wide fatal reporting and reset, independent of channel recovery.
  */
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 56 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_PDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(0)
 #define C_PDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
@@ -468,7 +517,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 
 /*
  * Published response count
- * Hardware advances this wrapping cursor only after successfully writing a complete response to memory. A difference from consumer represents unread responses and contributes to the level interrupt.
+ * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
  */
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET UINT64_C(36)
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WIDTH UINT64_C(4)
@@ -506,23 +555,23 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 
 /*
  * Channel interrupt enable
- * One asserts the level interrupt while responses are unread or a channel fault is latched. Zero masks the line without clearing either condition. Writing this control immediately refreshes the line.
+ * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
  */
 /*
  * enabled
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_OFFSET UINT64_C(48)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_ACCESS C_PDMA_ACCESS_READ_WRITE
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(1)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(48)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Sticky channel fault
- * A latched ring-access failure stops processing and contributes to IRQ. Software cannot clear it; this minimal model requires a new channel for recovery.
+ * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
 /*
  * code
@@ -534,24 +583,125 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * No channel fault
  * Neither ring has latched a hardware access failure.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QUNONE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * ResponseWrite
  * Response publication failed
  * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
-#define C_PDMA_C_QUFQUAQUUQULQUT_OFFSET UINT64_C(52)
-#define C_PDMA_C_QUFQUAQUUQULQUT_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUFQUAQUUQULQUT_ACCESS C_PDMA_ACCESS_READ_ONLY
-#define C_PDMA_C_QUFQUAQUUQULQUT_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUFQUAQUUQULQUT_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUFQUAQUUQULQUT_WRITABLE_MASK UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_OFFSET UINT64_C(52)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Channel interrupt causes
+ * Response non-empty, IOC, response error and channel fatal causes, visible even while masked.
+ */
+/*
+ * response_non_empty
+ * The response ring currently contains unread entries.
+ */
+/*
+ * ioc
+ * At least one published IOC response remains unconsumed.
+ */
+/*
+ * response_error
+ * An error response was published; processing is stopped until reset.
+ */
+/*
+ * channel_fatal
+ * The channel fault register contains a fatal error.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_OFFSET UINT64_C(56)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Channel response notification masks
+ * Independent non-empty and IOC notification masks. Unmask does not replay past events.
+ */
+/*
+ * response_non_empty
+ * Mask notifications on response empty-to-non-empty transitions.
+ */
+/*
+ * ioc
+ * Mask notifications on publication of IOC responses.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_OFFSET UINT64_C(60)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_WRITABLE_MASK UINT64_C(3)
+
+/*
+ * Hardware reset request
+ * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
+ */
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_OFFSET UINT64_C(64)
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Enable control
+ * Enables notification of device fatal independently of channel IRQ enable.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(68)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Device fatal state
+ * Device fatal cause; read-only and sticky until device reset.
+ */
+/*
+ * code
+ * Zero is healthy; Internal is a device-wide unrecoverable hardware fault.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUINTERNAL UINT64_C(1)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_OFFSET UINT64_C(72)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Hardware reset request
+ * Resets device controls and every channel, including retained execution.
+ */
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_OFFSET UINT64_C(76)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_WRITABLE_MASK UINT64_C(1)
 
 #endif

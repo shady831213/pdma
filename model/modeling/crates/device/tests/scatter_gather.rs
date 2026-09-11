@@ -83,6 +83,7 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
             &mut device,
             &memory,
             Command {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 7,
                 source,
                 destination,
@@ -110,6 +111,7 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
         assert_eq!(
             response(&memory)?,
             Response {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::Success,
                 bytes_completed: 8
@@ -133,6 +135,7 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
         &mut device,
         &memory,
         Command {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 8,
             source: Endpoint::linear(0x1400, 769),
             destination: Endpoint::linear(0x1800, 769),
@@ -147,6 +150,7 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
     assert_eq!(
         response(&memory)?,
         Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 8,
             status: ResponseStatus::Success,
             bytes_completed: 769
@@ -178,6 +182,7 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
         &mut device,
         &memory,
         Command {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 5,
             source: Endpoint::scatter_gather(0x1400, 2),
             destination: Endpoint::linear(0x1202, 4),
@@ -193,6 +198,7 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
     assert_eq!(
         response(&memory)?,
         Response {
+            flags: pdma_model_contract::CompletionFlagsValues::default(),
             id: 5,
             status: ResponseStatus::Success,
             bytes_completed: 4

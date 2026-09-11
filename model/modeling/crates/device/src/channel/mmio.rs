@@ -1,6 +1,5 @@
 use super::{Channel, CommandRing, ResponseRing};
-use crate::Error;
-use hardware_interface_schema::{Access, RegisterMapLayout};
+use crate::{Error, read_register as read, write_register as write};
 use pdma_model_contract::{
     ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters, Ring,
 };
@@ -54,10 +53,22 @@ impl Channel {
             {
                 return Err(Error::ConfigurationLocked);
             }
-            let candidate = ResponseRing { registers: next };
+            let mut candidate = ResponseRing {
+                registers: next,
+                last_ioc: self.response.last_ioc,
+            };
             candidate
                 .with_consumer(self.response.pointers(), next.consumer.raw())
                 .map_err(|_| Error::Cursor)?;
+            if candidate.last_ioc.is_some_and(|boundary| {
+                boundary.wrapping_sub(self.response.pointers().consumer)
+                    <= next
+                        .consumer
+                        .raw()
+                        .wrapping_sub(self.response.pointers().consumer)
+            }) {
+                candidate.last_ioc = None;
+            }
             self.response = candidate;
         } else {
             let mut next = self.registers;
@@ -66,6 +77,10 @@ impl Channel {
                 offset - DeviceRegisters::CHANNEL.offset(),
                 bytes,
             )?;
+            if next.reset.raw() != 0 {
+                self.reset();
+                return Ok(());
+            }
             if next.enable.raw() != 0 {
                 self.validate_geometry()?;
                 self.configured = true;
@@ -85,46 +100,4 @@ impl Channel {
             .map_err(|_| Error::Configuration)?;
         Ok(())
     }
-}
-
-fn read<M: RegisterMapLayout>(
-    values: &M::Value,
-    offset: usize,
-    out: &mut [u8],
-) -> Result<(), Error> {
-    let definition = M::register_definition(offset).ok_or(Error::Unmapped)?;
-    if out.len() != definition.width() {
-        return Err(Error::Width);
-    }
-    if definition.access() == Access::WriteOnly {
-        return Err(Error::Access);
-    }
-    let raw = M::read_register(values, offset).ok_or(Error::Unmapped)?;
-    definition
-        .view_mut(out)
-        .and_then(|mut view| view.set_value(raw))
-        .map_err(|_| Error::Width)
-}
-
-fn write<M: RegisterMapLayout>(
-    values: &mut M::Value,
-    offset: usize,
-    bytes: &[u8],
-) -> Result<(), Error> {
-    let definition = M::register_definition(offset).ok_or(Error::Unmapped)?;
-    if bytes.len() != definition.width() {
-        return Err(Error::Width);
-    }
-    if definition.access() == Access::ReadOnly {
-        return Err(Error::Access);
-    }
-    let raw = definition
-        .view(bytes)
-        .and_then(|view| view.value())
-        .map_err(|_| Error::Width)?;
-    let old = M::read_register(values, offset).ok_or(Error::Unmapped)?;
-    if (raw ^ old) & !definition.writable_mask() != 0 {
-        return Err(Error::ReservedBits);
-    }
-    M::write_register(values, offset, raw).ok_or(Error::Width)
 }

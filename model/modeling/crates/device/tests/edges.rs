@@ -3,13 +3,12 @@
 /// Shared channel integration fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
     ResponseRegisters, ResponseStatus,
 };
-use pdma_model_device::{Device, Error, Fault, Pipeline, pipeline};
+use pdma_model_device::{Device, Error, Fault};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const COMMAND: usize = DeviceRegisters::COMMAND.offset();
@@ -142,7 +141,7 @@ fn pending_commands_cannot_exceed_capacity_when_enabled() -> TestResult {
 }
 
 #[test]
-fn command_read_fault_stays_masked_until_unmasked() -> TestResult {
+fn unmask_does_not_replay_command_read_fault() -> TestResult {
     // Given
     let mut device = disabled(0x8000, 2)?;
     device.write(ENABLE, &1_u32.to_le_bytes())?;
@@ -159,7 +158,7 @@ fn command_read_fault_stays_masked_until_unmasked() -> TestResult {
     assert_eq!(read_word(&mut device, COMMAND_CONSUMER)?, 0);
     assert_eq!(read_word(&mut device, RESPONSE_PRODUCER)?, 0);
     device.write(IRQ_ENABLE, &1_u32.to_le_bytes())?;
-    assert!(device.irq());
+    assert!(!device.irq());
     Ok(())
 }
 
@@ -233,6 +232,7 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
             MemoryAddress::new(0x1000 + slot * u64::try_from(Command::RECORD_SIZE)?),
             MemoryAlignment::ONE,
             &Command {
+                flags: pdma_model_contract::CompletionFlagsValues::default(),
                 id: u64::from(cursor),
                 ..command()
             }
@@ -247,6 +247,7 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
             &mut bytes,
         )?;
         ids.push(Response::from_bytes(&bytes)?.id);
+        assert!(device.take_interrupt());
         device.write(CONSUMER, &(cursor + 1).to_le_bytes())?;
     }
     // Then
@@ -255,45 +256,4 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
     assert_eq!(read_word(&mut device, COMMAND_CONSUMER)?, 5);
     assert_eq!(read_word(&mut device, RESPONSE_PRODUCER)?, 5);
     Ok(())
-}
-
-#[test]
-fn irq_requires_published_response_on_every_step() -> TestResult {
-    // Given
-    let (mut device, memory) = setup(0x1100, 2)?;
-    submit(&mut device, &memory, command())?;
-    let mut hardware = pipeline();
-    let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
-    // When
-    for _ in 0..32 {
-        let outcome = StepExecutor::new()
-            .step(&mut hardware, &mut operation, &mut device)
-            .map_err(|error| format!("{error:?}"))?;
-        // Then
-        let irq = device.irq();
-        let published = read_word(&mut device, RESPONSE_PRODUCER)?;
-        assert_eq!(irq, published == 1);
-        if irq {
-            let mut bytes = [0; Response::RECORD_SIZE];
-            memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
-            assert_eq!(
-                Response::from_bytes(&bytes)?,
-                Response {
-                    id: 7,
-                    status: ResponseStatus::Success,
-                    bytes_completed: 4,
-                }
-            );
-        }
-        match outcome {
-            RunOutcome::Progressed => {}
-            RunOutcome::Pending(()) => return Err("unexpected stall".into()),
-            RunOutcome::Complete(result) => {
-                result?;
-                assert!(irq);
-                return Ok(());
-            }
-        }
-    }
-    Err("pipeline exceeded step bound".into())
 }

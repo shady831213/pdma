@@ -8,8 +8,8 @@ use hardware_interface_pipeline::{
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_device::{
-    CheckLengths, Device, Error, Fetch, NextChunk, Publish, ReadCopy, Transfer, UpdateIrq,
-    WriteCopy,
+    CheckLengths, Device, Error, Fetch, NextChunk, Publish, ReadCopy, Resettable, Transfer,
+    UpdateIrq, WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
 
@@ -54,7 +54,10 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         WriteCopy,
     );
     let execution = Then::new(CheckLengths, Repeat::new(chunk));
-    let mut hardware = AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq);
+    let mut hardware = Resettable::new(AfterEach::new(
+        Then::new(Then::new(Fetch, execution), Publish),
+        UpdateIrq,
+    ));
     let mut operation = Operation::new(());
     let mut complete = false;
     // When
@@ -78,5 +81,19 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
     assert!(complete);
     assert_eq!(bytes, [255, 254, 253, 0]);
     assert!(device.irq());
+    Ok(())
+}
+
+#[test]
+fn independently_composed_execution_obeys_device_fatal() -> TestResult {
+    // Given: an execution stage started with a valid command.
+    let (mut device, _) = setup(0x1100, 2)?;
+    let mut execution = CheckLengths;
+    let mut operation = Operation::new(command());
+    device.signal_fatal();
+    // When: the stage is driven without the default outer pipeline.
+    let result = operation.step(&mut execution, &mut device);
+    // Then: device fatal blocks even independently composed hardware.
+    assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
     Ok(())
 }

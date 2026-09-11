@@ -33,7 +33,9 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/device/src/execution/next.rs` | Select the next chunk across independent boundaries. |
 | `crates/device/src/execution/copy.rs` | Composable chunk read/write transforms. |
 | `crates/host/src/channel.rs` | Software configuration, submit and response consumption. |
-| `crates/host/src/runtime.rs` | PDMA runtime transport: async context access, worker wakeup and IRQ line. |
+| `crates/host/src/runtime.rs` | PDMA transport: async context access, worker wakeup and pending notification delivery. |
+| `crates/host/src/channel/control.rs` | CPU-checked software mask, cause and reset access. |
+| `crates/device/src/reset.rs` | Reset generation boundary around the composed stages. |
 | `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
 | `crates/scenarios/tests/single_channel/main.rs` | Test suite entry and module declarations. |
 | `crates/scenarios/tests/single_channel/cases/` | Linear, scatter/gather and fault cases, with acceptance assertions. |
@@ -46,7 +48,9 @@ The device composition is deliberately explicit:
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
 let execution = Then::new(CheckLengths, Repeat::new(chunk));
-AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq)
+Resettable::new(AfterEach::new(
+    Then::new(Then::new(Fetch, execution), Publish), UpdateIrq,
+))
 ```
 
 The outer ports are `() -> Command -> CopyState -> Response -> ()`. The copy body is
@@ -57,11 +61,16 @@ Command execution stages can inspect and transform the owned `Transfer`; `device
 inserts a payload transform between read and write without changing the core or executor.
 Command execution
 errors travel in the response value; they do not skip publication. Fetch and
-publication faults stop the channel. Rings are state in the shared hardware
+publication faults stop the channel. An error response is published before the channel
+stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
 Use one retained operation/worker per channel. Discarding an accepted operation is
-not a modeled hardware cancellation or recovery mechanism.
+not a modeled hardware cancellation or recovery mechanism. MMIO reset increments the
+channel generation; `Resettable` rejects retained pre-reset work before its next
+interaction, even if software has already reconfigured and re-enabled the channel.
+Custom compositions use the same reset boundary; execution itself still uses the
+existing Then/Repeat/AfterEach building blocks.
 
 `Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles shared memory and its allocation service
@@ -70,7 +79,7 @@ externally; software allocates its own rings and payload buffers through that se
 
 Both MMIO reads and writes are hardware transactions with exclusive device access.
 The register owner applies access side effects and refreshes its IRQ state; the runtime
-publishes that level, releases the device lock and notifies the worker to recheck its
+accepts emitted notifications, releases the device lock and notifies the worker to recheck its
 conditions, preserving the transaction's success or error. Ordinary reads may therefore
 cause an extra recheck. The current register set has no read-clear behavior.
 
@@ -133,14 +142,35 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   publication failure latches code 2 without advancing response producer. Payload
   copy may already have completed in the latter case; software must not assume retry
   is safe. No event ring or memory write is needed to expose the fault.
-- IRQ level is `irq_enable && (response_pending || fault != 0)`. The existing
-  `AfterEach` runs aggregation after each hardware interaction, including faults and
-  stalls; MMIO writes update the same equation immediately. Draining responses clears
-  their source. Masking clears the line, not the fault. Unmasking a latched source
-  reasserts the line. IRQ handlers belong only to host software.
-- Fault is read-only and sticky in this first version. Restart/recovery requires a
-  fresh channel; there is no ACK/reset/retry command protocol yet. Disabling a healthy
-  channel suspends its retained operation without losing committed effects.
+- Successful publication notifies on response empty-to-non-empty transitions and,
+  independently, when the command's IOC flag is set. `irq_mask` bit 0 masks the
+  first source and bit 1 masks IOC; one means masked. Both masks reset to zero.
+  `irq_enable` gates all channel notifications. There is no watermark. Software can
+  use IOC-only batches, but must leave enough response space to reach the IOC entry.
+- `irq_cause` is read-only: bit 0 is current response non-empty, bit 1 means an
+  unconsumed IOC response exists, bit 2 is sticky response-error stop, bit 3 is
+  channel fatal. IOC clears when consumer passes the latest IOC response, even if
+  ordinary responses remain. Causes are visible regardless of notification masks.
+  There is no W1C ACK or exposed IOC task pointer. Error responses and new channel
+  fatal events bypass the two routine masks, including when response is already non-empty.
+- Device-side unmask/enabling never replays historical events. Software must check
+  responses and errors after enabling before it waits. Software drains through fresh
+  producer snapshots until empty, or explicitly schedules further consumption.
+  Notification coalescing does not promise one handler call per IOC.
+- Hardware emits notifications without knowing software handlers. `take_interrupt`
+  hands them to the platform. Runtime retains a pending notification until the existing
+  dispatcher claims it; draining, masking or reset cannot retract a delivered event.
+  `Model::irq()` reports this platform pending state, not a live device level.
+- Channel reset clears configuration, pointers, causes and in-flight work; the host
+  reset method consumes its driver, and software creates a fresh driver through setup.
+  Device reset additionally clears device-wide fault and controls. Neither reset clears
+  external memory or rolls back committed writes. Merely disabling a healthy channel
+  still suspends and preserves its operation.
+- `Device::signal_fatal()` represents a device-wide internal hardware fault input.
+  It stops all execution and uses the device control block's independent IRQ enable.
+  Only device reset clears it; channel reset does not. The minimal model has no
+  autonomous shared-engine fault source, and memory-backend diagnostics are not
+  automatically promoted to device-wide fatal.
 
 `ChannelRegisters.fault` uses the dedicated `ChannelFault` register schema. Its
 `code` field is `ChannelFaultCode::{None, CommandRead, ResponseWrite}` with wire

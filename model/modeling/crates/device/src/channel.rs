@@ -1,10 +1,13 @@
 mod mmio;
+#[cfg(test)]
+mod tests;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::{
-    ChannelFaultCode, ChannelRegistersValues, Command, CommandRaw, CommandRegistersValues,
-    ReadWordValues, Response, ResponseRegistersValues, Ring, RingPointers,
+    ChannelFaultCode, ChannelIrqCauseValues, ChannelRegistersValues, Command, CommandRaw,
+    CommandRegistersValues, ReadWordValues, Response, ResponseRegistersValues, ResponseStatus,
+    Ring, RingPointers,
 };
 
 use crate::Fault;
@@ -60,6 +63,7 @@ impl CommandRing {
 #[derive(Debug, Default)]
 pub struct ResponseRing {
     pub(crate) registers: ResponseRegistersValues,
+    pub(crate) last_ioc: Option<u32>,
 }
 
 impl Ring for ResponseRing {
@@ -103,6 +107,9 @@ impl ResponseRing {
             .write_typed(address, MemoryAlignment::ONE, &raw)
             .map_err(|_| Fault::ResponseWrite)?;
         self.registers.producer = ReadWordValues::new(next.producer);
+        if response.flags.ioc {
+            self.last_ioc = Some(next.producer);
+        }
         Ok(true)
     }
 }
@@ -117,21 +124,50 @@ pub struct Channel {
     pub(crate) registers: ChannelRegistersValues,
     pub(crate) configured: bool,
     pub(crate) irq: bool,
+    pub(crate) generation: u64,
 }
 
 impl Channel {
-    pub(crate) const fn latch(&mut self, fault: Fault) {
-        self.registers.fault = self.registers.fault.with_code(fault.code());
+    pub(crate) fn latch(&mut self, fault: Fault) {
+        if self.registers.fault.code() == Ok(ChannelFaultCode::None) {
+            self.registers.fault = self.registers.fault.with_code(fault.code());
+            self.irq |= self.registers.irq_enable.raw() != 0;
+        }
     }
 
     pub(crate) fn update_irq(&mut self) {
-        self.irq = self.registers.irq_enable.raw() != 0
-            && (self.halted() || !self.response.pointers().is_empty());
+        self.registers.irq_cause = ChannelIrqCauseValues::new(
+            u32::from(!self.response.pointers().is_empty())
+                | (u32::from(self.response.last_ioc.is_some()) << 1)
+                | (self.registers.irq_cause.raw() & 4)
+                | (u32::from(self.registers.fault.code() != Ok(ChannelFaultCode::None)) << 3),
+        );
+    }
+
+    pub(crate) fn published(&mut self, response: &Response, was_empty: bool) {
+        let error = response.status != ResponseStatus::Success;
+        if error {
+            self.registers.irq_cause =
+                ChannelIrqCauseValues::new(self.registers.irq_cause.raw() | 4);
+        }
+        let mask = self.registers.irq_mask;
+        self.irq |= self.registers.irq_enable.raw() != 0
+            && ((was_empty && !mask.response_non_empty())
+                || (response.flags.ioc && !mask.ioc())
+                || error);
+    }
+
+    pub(crate) fn reset(&mut self) {
+        let generation = self.generation.wrapping_add(1);
+        *self = Self {
+            generation,
+            ..Self::default()
+        };
     }
 
     pub(crate) fn halted(&self) -> bool {
         match self.registers.fault.code() {
-            Ok(ChannelFaultCode::None) => false,
+            Ok(ChannelFaultCode::None) => self.registers.irq_cause.response_error(),
             Ok(ChannelFaultCode::CommandRead | ChannelFaultCode::ResponseWrite) | Err(_) => true,
         }
     }

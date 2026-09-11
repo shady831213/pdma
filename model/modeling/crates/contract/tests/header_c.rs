@@ -11,7 +11,9 @@ use std::{
 };
 
 use hardware_interface_schema::Documentation;
-use pdma_model_contract::{Command, DeviceRegisters, Endpoint, Response, ResponseStatus, Segment};
+use pdma_model_contract::{
+    Command, CompletionFlagsValues, DeviceRegisters, Endpoint, Response, ResponseStatus, Segment,
+};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -83,19 +85,24 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     assert_success("C consumer", &output);
     let command_bytes = [
         7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
-        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0,
     ];
     let response_bytes = [
-        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
+        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
     ];
     let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
-    let offsets = [0_u8, 8, 12, 16, 24, 32, 36, 40, 44, 48, 52];
+    let offsets = [
+        0_u8, 8, 12, 16, 24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76,
+    ];
     let command = Command {
+        flags: CompletionFlagsValues { ioc: true },
         id: 7,
         source: Endpoint::linear(0x100, 8),
         destination: Endpoint::scatter_gather(0x200, 2),
     };
     let response = Response {
+        flags: CompletionFlagsValues { ioc: true },
         id: 7,
         status: ResponseStatus::Success,
         bytes_completed: 8,

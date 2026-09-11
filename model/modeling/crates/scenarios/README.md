@@ -14,7 +14,7 @@ cargo test -p pdma-model-scenarios --test single_channel -- --nocapture
 delivery. Its cases cover linear/SG copies and failures on that same channel:
 
 - `copy_completes_through_host_irq_delivery`: copied bytes, a Success response,
-  one IRQ delivery and deassertion after draining the response.
+  one IRQ delivery and no remaining platform notification after its claim.
 - `copy_accepts_a_byte_aligned_destination`: a nine-byte payload is copied into
   a destination that is not eight-byte aligned, with normal response and IRQ delivery.
 - `response_write_fault_reaches_host_without_a_response_entry`: the copy completes,
@@ -34,7 +34,13 @@ delivery. Its cases cover linear/SG copies and failures on that same channel:
   delivery, despite zero-length allocations having no payload backing.
 
 Every successful case verifies `bytes_completed`, the actual destination backing
-bytes, one IRQ delivery and interrupt deassertion.
+bytes, one IRQ delivery and consumption of the platform notification.
+
+`recovery/` adds IOC-only batched copies and error-response recovery in the same
+runtime. Its software owns allocations, handler registration, response draining and
+reset/reconfiguration; its hardware module assembles/drives the pipeline and joins
+worker teardown. The batch selects IOC on its last command; the recovery case masks
+both routine notification sources and proves error notification still arrives.
 
 ## Test structure
 

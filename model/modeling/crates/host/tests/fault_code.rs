@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
 use hardware_interface_schema::RegisterCodecError;
 use pdma_model_contract::{ChannelRegisters, DeviceRegisters};
 use pdma_model_device::Device;
-use pdma_model_host::{Channel, Error, RingConfig, Rings, runtime::Model};
+use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 struct CorruptFaultBus(Model<SharedMemoryAccess>);
@@ -18,7 +18,11 @@ impl RegisterAccess for CorruptFaultBus {
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         self.0.read(offset, response).await?;
         if usize::try_from(offset).ok()
-            == Some(DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset())
+            == Some(
+                (DeviceRegisters::CHANNELS_OFFSET
+                    + pdma_model_contract::ChannelBlock::CONTROL.offset())
+                    + ChannelRegisters::FAULT.offset(),
+            )
         {
             response.copy_from_slice(&3_u32.to_le_bytes());
         }
@@ -36,14 +40,22 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let bus = CorruptFaultBus(Model::new(Device::new(memory.clone())));
+    let bus = CorruptFaultBus(Model::new(Device::new(memory.clone(), 1)?));
     let rings = Rings {
         command: RingConfig::new(0x1000, 1)?,
         response: RingConfig::new(0x2000, 1)?,
     };
     let cpu = SoftwareCpu::new();
     cpu.run_main(async {
-        let channel = Channel::setup(bus, memory, rings).await?;
+        let channel = Channel::setup(
+            bus,
+            memory,
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        )
+        .await?;
         // When: software reads the fault as a typed state.
         let result = channel.fault().await;
         // Then: unknown is reported explicitly rather than returned as a normal state.

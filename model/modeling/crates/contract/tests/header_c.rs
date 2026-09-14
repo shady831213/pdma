@@ -26,10 +26,12 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         Command::SPEC.resolve()?,
         Response::SPEC.resolve()?,
     ];
-    let registers = DeviceRegisters::resolve()?;
+    let registers = DeviceRegisters::resolve(3)?;
 
     // When: the public generator emits its complete header.
-    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header")).output()?;
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header"))
+        .args(["--channels", "3"])
+        .output()?;
 
     // Then: schema descriptions survive in the C artifact, including multiline status details.
     assert_success("header generator", &output);
@@ -57,7 +59,9 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
 fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     // Given: a generated header and a C consumer using actual exported accessors.
     let temp = TempDirectory::new()?;
-    let header = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header")).output()?;
+    let header = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header"))
+        .args(["--channels", "3"])
+        .output()?;
     assert_success("header generator", &header);
     fs::write(temp.0.join("pdma_model_abi.h"), header.stdout)?;
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/header_c/consumer.c");
@@ -93,7 +97,9 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     ];
     let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
     let offsets = [
-        0_u8, 8, 12, 16, 24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76,
+        0_u8, 4, 8, 12, 16, 24, 28, 32, 40, 48, 52, 56, 60, 64, 68, 72, 76, 80, 88, 96, 100, 104,
+        112, 120, 124, 128, 132, 136, 140, 144, 148, 152, 160, 168, 172, 176, 184, 192, 196, 200,
+        204, 208, 212, 216, 220, 224,
     ];
     let command = Command {
         flags: CompletionFlagsValues { ioc: true },
@@ -114,7 +120,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     assert_eq!(command.to_bytes()?, command_bytes);
     assert_eq!(response.to_bytes()?, response_bytes);
     assert_eq!(segment.to_bytes()?, segment_bytes);
-    let resolved = DeviceRegisters::resolve()?;
+    let resolved = DeviceRegisters::resolve(3)?;
     let rust_offsets = resolved
         .registers()
         .iter()

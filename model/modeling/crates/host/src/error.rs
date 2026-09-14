@@ -1,6 +1,6 @@
 use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
-use pdma_model_contract::RingError;
+use pdma_model_contract::{ChannelId, RingError};
 use std::{error::Error as StdError, fmt};
 
 /// Software ring operation failure retaining its boundary cause.
@@ -18,6 +18,13 @@ pub enum Error<B> {
     Cpu(CpuContextError),
     /// A shared ring pointer update is invalid.
     Ring(RingError),
+    /// The selected channel is outside the hardware-advertised channel count.
+    Channel {
+        /// Requested channel identifier.
+        requested: ChannelId,
+        /// Channel count read from hardware.
+        available: u32,
+    },
     /// A register address cannot be represented.
     Geometry,
     /// No command slot is currently available.
@@ -33,6 +40,14 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             Self::RegisterCodec(error) => error.fmt(f),
             Self::Cpu(error) => error.fmt(f),
             Self::Ring(error) => error.fmt(f),
+            Self::Channel {
+                requested,
+                available,
+            } => write!(
+                f,
+                "channel {} is outside {available} available channels",
+                requested.index()
+            ),
             Self::Geometry => f.write_str("invalid host register address"),
             Self::Full => f.write_str("command ring is full"),
         }
@@ -48,7 +63,7 @@ impl<B: StdError + 'static> StdError for Error<B> {
             Self::RegisterCodec(error) => Some(error),
             Self::Cpu(error) => Some(error),
             Self::Ring(error) => Some(error),
-            Self::Geometry | Self::Full => None,
+            Self::Channel { .. } | Self::Geometry | Self::Full => None,
         }
     }
 }

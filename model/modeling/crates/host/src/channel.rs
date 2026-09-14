@@ -6,13 +6,14 @@ use crate::{Error, RingConfig};
 use bus::RegisterPort;
 use hardware_interface_runtime::{CpuOwner, MemoryAccess, RegisterAccess};
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Response, ResponseRegisters, Ring,
+    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Response,
+    ResponseRegisters, Ring,
 };
 use rings::{CommandRing, ResponseRing};
 
-const COMMAND: usize = DeviceRegisters::COMMAND.offset();
-const RESPONSE: usize = DeviceRegisters::RESPONSE.offset();
-const CHANNEL: usize = DeviceRegisters::CHANNEL.offset();
+const COMMAND: usize = ChannelBlock::COMMAND.offset();
+const RESPONSE: usize = ChannelBlock::RESPONSE.offset();
+const CHANNEL: usize = ChannelBlock::CONTROL.offset();
 
 /// The command and response storage selected by software.
 #[derive(Clone, Copy, Debug)]
@@ -21,6 +22,15 @@ pub struct Rings {
     pub command: RingConfig<Command>,
     /// Hardware-produced response records.
     pub response: RingConfig<Response>,
+}
+
+/// A hardware channel and its software-owned ring storage.
+#[derive(Clone, Copy, Debug)]
+pub struct ChannelConfig {
+    /// Channel selected from hardware discovery.
+    pub id: ChannelId,
+    /// Storage allocated by the software caller.
+    pub rings: Rings,
 }
 
 /// Sole software ring cursor owner, bound to its setup CPU.
@@ -33,57 +43,57 @@ pub struct Channel<B, M> {
 }
 
 impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
-    /// Programs disabled hardware and enables channel and device interrupts.
+    /// Discovers and programs one channel, enabling its interrupt gate.
     ///
     /// Cancellation may leave partial setup; issue channel reset through the bus before retrying.
-    pub async fn setup(bus: B, memory: M, rings: Rings) -> Result<Self, Error<B::Error>> {
+    pub async fn setup(bus: B, memory: M, config: ChannelConfig) -> Result<Self, Error<B::Error>> {
         let owner = CpuOwner::capture_active().map_err(Error::Cpu)?;
+        let ChannelConfig { id, rings } = config;
         let channel = Self {
-            port: RegisterPort::new(bus, owner),
+            port: RegisterPort::new(bus, owner, id).await?,
             memory,
             command: CommandRing::new(rings.command),
             response: ResponseRing::new(rings.response),
         };
         channel
             .port
-            .write(
+            .channel_write(
                 CHANNEL + ChannelRegisters::ENABLE.offset(),
                 &0_u32.to_le_bytes(),
             )
             .await?;
         channel
             .port
-            .write(
+            .channel_write(
                 COMMAND + CommandRegisters::BASE.offset(),
                 &rings.command.base().to_le_bytes(),
             )
             .await?;
         channel
             .port
-            .write(
+            .channel_write(
                 COMMAND + CommandRegisters::CAPACITY.offset(),
                 &rings.command.capacity().to_le_bytes(),
             )
             .await?;
         channel
             .port
-            .write(
+            .channel_write(
                 RESPONSE + ResponseRegisters::BASE.offset(),
                 &rings.response.base().to_le_bytes(),
             )
             .await?;
         channel
             .port
-            .write(
+            .channel_write(
                 RESPONSE + ResponseRegisters::CAPACITY.offset(),
                 &rings.response.capacity().to_le_bytes(),
             )
             .await?;
         channel.set_irq_enabled(true).await?;
-        channel.set_device_irq_enabled(true).await?;
         channel
             .port
-            .write(
+            .channel_write(
                 CHANNEL + ChannelRegisters::ENABLE.offset(),
                 &1_u32.to_le_bytes(),
             )

@@ -9,7 +9,7 @@ the retired sync model, is preserved on:
 - Branch: `backup/pdma-before-rebuild-20260909`
 - Commit: `51707fe1d38e261a188e1d0ac14243c0caf58127`
 
-The replacement `contract`, `device`, and `host` implement a minimal single channel.
+The replacement `contract`, `device`, and `host` implement minimal statically configured channels.
 The old implementations and `model/retired` remain only on the backup branch.
 Do not restore their compatibility interfaces without a user request.
 
@@ -32,7 +32,8 @@ the old implementation, not the replacement's required architecture or ABI.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 
-The current implementation has one channel with command/response rings, independently
+The current implementation has an instance-configured channel count with independent reset,
+command/response rings and one shared DMA execution pipeline. It supports independently
 selected linear/scatter-gather DMA endpoints, and interrupt delivery using existing
 building blocks. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.

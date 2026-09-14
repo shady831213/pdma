@@ -418,10 +418,10 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 }
 
 /*
- * Minimal PDMA device registers
- * One channel with command/response rings, edge notifications, channel reset and device-wide fatal/reset controls. Register transactions use little-endian bytes and must match an exact register start and width; layout gaps are not registers.
+ * PDMA device registers
+ * Device-wide discovery and recovery controls followed by the instance's independent channel blocks. Register transactions use little-endian bytes and must match an exact register start and width; layout gaps are not registers.
  */
-#define C_PDMA_SIZE UINT64_C(80)
+#define C_PDMA_SIZE UINT64_C(228)
 #define C_PDMA_ACCESS_READ_ONLY UINT32_C(0)
 #define C_PDMA_ACCESS_READ_WRITE UINT32_C(1)
 #define C_PDMA_ACCESS_WRITE_ONLY UINT32_C(2)
@@ -429,31 +429,131 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_PDMA_RESET_ZERO UINT32_C(1)
 #define C_PDMA_RESET_POST_RESET UINT32_C(2)
 /*
- * DeviceRegisters.command
+ * DeviceRegisters.control
+ * Device management interface
+ * Hardware channel discovery, device fatal notification and whole-device reset.
+ */
+/*
+ * DeviceRegisters.channels[0]
+ * Independent channel interfaces
+ * Repeated command/response rings and channel management. Each block owns its configuration, cursors, faults, notifications and recovery.
+ */
+/*
+ * DeviceRegisters.channels[0].command
  * Command queue interface
  * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
  */
 /*
- * DeviceRegisters.response
+ * DeviceRegisters.channels[0].response
  * Response queue interface
  * Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor.
  */
 /*
- * DeviceRegisters.channel
+ * DeviceRegisters.channels[0].control
  * Channel management interface
  * Processing enable, interrupt causes, sticky channel fault and channel reset. There is no separate event ring.
  */
 /*
- * DeviceRegisters.control
- * Device-wide controls
- * Device-wide fatal reporting and reset, independent of channel recovery.
+ * DeviceRegisters.channels[1]
+ * Independent channel interfaces
+ * Repeated command/response rings and channel management. Each block owns its configuration, cursors, faults, notifications and recovery.
  */
+/*
+ * DeviceRegisters.channels[1].command
+ * Command queue interface
+ * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
+ */
+/*
+ * DeviceRegisters.channels[1].response
+ * Response queue interface
+ * Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor.
+ */
+/*
+ * DeviceRegisters.channels[1].control
+ * Channel management interface
+ * Processing enable, interrupt causes, sticky channel fault and channel reset. There is no separate event ring.
+ */
+/*
+ * DeviceRegisters.channels[2]
+ * Independent channel interfaces
+ * Repeated command/response rings and channel management. Each block owns its configuration, cursors, faults, notifications and recovery.
+ */
+/*
+ * DeviceRegisters.channels[2].command
+ * Command queue interface
+ * Registers owned by the software-produced, hardware-consumed command ring. Software programs storage before enabling the channel and publishes descriptors through its producer cursor.
+ */
+/*
+ * DeviceRegisters.channels[2].response
+ * Response queue interface
+ * Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor.
+ */
+/*
+ * DeviceRegisters.channels[2].control
+ * Channel management interface
+ * Processing enable, interrupt causes, sticky channel fault and channel reset. There is no separate event ring.
+ */
+
+/*
+ * Implemented channel count
+ * Number of physical channel register blocks. Software discovers this read-only hardware configuration before selecting a channel; device reset preserves it.
+ */
+#define C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET UINT64_C(0)
+#define C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_KIND C_PDMA_RESET_POST_RESET
+#define C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Enable control
+ * Enables notification of device fatal independently of channel IRQ enable.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Device fatal state
+ * Device fatal cause; read-only and sticky until device reset.
+ */
+/*
+ * code
+ * Zero is healthy; Internal is a device-wide unrecoverable hardware fault.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUNONE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUINTERNAL UINT64_C(1)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_OFFSET UINT64_C(8)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__1_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Hardware reset request
+ * Resets device controls and every channel, including retained execution.
+ */
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_OFFSET UINT64_C(12)
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Command ring base address
  * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
-#define C_PDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(0)
+#define C_PDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(16)
 #define C_PDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
 #define C_PDMA_C_QUBQUAQUSQUE__1_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QUBQUAQUSQUE__1_RESET_KIND C_PDMA_RESET_ZERO
@@ -464,7 +564,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Command ring capacity
  * Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
-#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET UINT64_C(8)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET UINT64_C(24)
 #define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_RESET_KIND C_PDMA_RESET_ZERO
@@ -475,7 +575,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Published command count
  * Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
  */
-#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET UINT64_C(12)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET UINT64_C(28)
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_RESET_KIND C_PDMA_RESET_ZERO
@@ -486,7 +586,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Fetched command count
  * Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
  */
-#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET UINT64_C(16)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET UINT64_C(32)
 #define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_ACCESS C_PDMA_ACCESS_READ_ONLY
 #define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_RESET_KIND C_PDMA_RESET_ZERO
@@ -497,7 +597,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Response ring base address
  * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
-#define C_PDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(24)
+#define C_PDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(40)
 #define C_PDMA_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)
 #define C_PDMA_C_QUBQUAQUSQUE__2_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QUBQUAQUSQUE__2_RESET_KIND C_PDMA_RESET_ZERO
@@ -508,7 +608,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Response ring capacity
  * Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
  */
-#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET UINT64_C(32)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET UINT64_C(48)
 #define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_RESET_KIND C_PDMA_RESET_ZERO
@@ -519,7 +619,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Published response count
  * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
  */
-#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET UINT64_C(36)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET UINT64_C(52)
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_ACCESS C_PDMA_ACCESS_READ_ONLY
 #define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_RESET_KIND C_PDMA_RESET_ZERO
@@ -530,7 +630,7 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Consumed response count
  * Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
  */
-#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET UINT64_C(40)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET UINT64_C(56)
 #define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_WIDTH UINT64_C(4)
 #define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_RESET_KIND C_PDMA_RESET_ZERO
@@ -546,12 +646,12 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_PDMA_C_QUEQUNQUAQUBQULQUE_OFFSET UINT64_C(44)
-#define C_PDMA_C_QUEQUNQUAQUBQULQUE_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUEQUNQUAQUBQULQUE_ACCESS C_PDMA_ACCESS_READ_WRITE
-#define C_PDMA_C_QUEQUNQUAQUBQULQUE_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(1)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(60)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__1_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Channel interrupt enable
@@ -562,12 +662,12 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET UINT64_C(48)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_ACCESS C_PDMA_ACCESS_READ_WRITE
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(64)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Sticky channel fault
@@ -583,25 +683,25 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * No channel fault
  * Neither ring has latched a hardware access failure.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUNONE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * ResponseWrite
  * Response publication failed
  * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_OFFSET UINT64_C(52)
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_ACCESS C_PDMA_ACCESS_READ_ONLY
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUFQUAQUUQULQUT__1_WRITABLE_MASK UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_OFFSET UINT64_C(68)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__2_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Channel interrupt causes
@@ -623,12 +723,12 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * channel_fatal
  * The channel fault register contains a fatal error.
  */
-#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_OFFSET UINT64_C(56)
-#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_ACCESS C_PDMA_ACCESS_READ_ONLY
-#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE_WRITABLE_MASK UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET UINT64_C(72)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Channel response notification masks
@@ -642,66 +742,444 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
  * ioc
  * Mask notifications on publication of IOC responses.
  */
-#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_OFFSET UINT64_C(60)
-#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_ACCESS C_PDMA_ACCESS_READ_WRITE
-#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK_WRITABLE_MASK UINT64_C(3)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_OFFSET UINT64_C(76)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
 
 /*
  * Hardware reset request
  * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
  */
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_OFFSET UINT64_C(64)
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_WIDTH UINT64_C(4)
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS C_PDMA_ACCESS_WRITE_ONLY
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_WRITABLE_MASK UINT64_C(1)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_OFFSET UINT64_C(80)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Enable control
- * Enables notification of device fatal independently of channel IRQ enable.
+ * Command ring base address
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ */
+#define C_PDMA_C_QUBQUAQUSQUE__3_OFFSET UINT64_C(88)
+#define C_PDMA_C_QUBQUAQUSQUE__3_WIDTH UINT64_C(8)
+#define C_PDMA_C_QUBQUAQUSQUE__3_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUBQUAQUSQUE__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUBQUAQUSQUE__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUBQUAQUSQUE__3_WRITABLE_MASK UINT64_C(18446744073709551615)
+
+/*
+ * Command ring capacity
+ * Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ */
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_OFFSET UINT64_C(96)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Published command count
+ * Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
+ */
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_OFFSET UINT64_C(100)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Fetched command count
+ * Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
+ */
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_OFFSET UINT64_C(104)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Response ring base address
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ */
+#define C_PDMA_C_QUBQUAQUSQUE__4_OFFSET UINT64_C(112)
+#define C_PDMA_C_QUBQUAQUSQUE__4_WIDTH UINT64_C(8)
+#define C_PDMA_C_QUBQUAQUSQUE__4_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUBQUAQUSQUE__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUBQUAQUSQUE__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUBQUAQUSQUE__4_WRITABLE_MASK UINT64_C(18446744073709551615)
+
+/*
+ * Response ring capacity
+ * Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ */
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_OFFSET UINT64_C(120)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Published response count
+ * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
+ */
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET UINT64_C(124)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Consumed response count
+ * Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
+ */
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_OFFSET UINT64_C(128)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Channel processing enable
+ * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or faults.
  */
 /*
  * enabled
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(68)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_ACCESS C_PDMA_ACCESS_READ_WRITE
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET UINT64_C(132)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__2_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Device fatal state
- * Device fatal cause; read-only and sticky until device reset.
+ * Channel interrupt enable
+ * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_OFFSET UINT64_C(136)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Sticky channel fault
+ * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
 /*
  * code
- * Zero is healthy; Internal is a device-wide unrecoverable hardware fault.
+ * Fault code
+ * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
  */
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE UINT64_C(0)
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUINTERNAL UINT64_C(1)
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_OFFSET UINT64_C(72)
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_WIDTH UINT64_C(4)
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_ACCESS C_PDMA_ACCESS_READ_ONLY
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QUFQUAQUUQULQUT__2_WRITABLE_MASK UINT64_C(0)
+/*
+ * None
+ * No channel fault
+ * Neither ring has latched a hardware access failure.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_C_CODE_C_QUNONE UINT64_C(0)
+/*
+ * CommandRead
+ * Command fetch failed
+ * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+/*
+ * ResponseWrite
+ * Response publication failed
+ * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_OFFSET UINT64_C(140)
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__3_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Channel interrupt causes
+ * Response non-empty, IOC, response error and channel fatal causes, visible even while masked.
+ */
+/*
+ * response_non_empty
+ * The response ring currently contains unread entries.
+ */
+/*
+ * ioc
+ * At least one published IOC response remains unconsumed.
+ */
+/*
+ * response_error
+ * An error response was published; processing is stopped until reset.
+ */
+/*
+ * channel_fatal
+ * The channel fault register contains a fatal error.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET UINT64_C(144)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Channel response notification masks
+ * Independent non-empty and IOC notification masks. Unmask does not replay past events.
+ */
+/*
+ * response_non_empty
+ * Mask notifications on response empty-to-non-empty transitions.
+ */
+/*
+ * ioc
+ * Mask notifications on publication of IOC responses.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_OFFSET UINT64_C(148)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
 
 /*
  * Hardware reset request
- * Resets device controls and every channel, including retained execution.
+ * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
  */
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_OFFSET UINT64_C(76)
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_WIDTH UINT64_C(4)
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS C_PDMA_ACCESS_WRITE_ONLY
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_KIND C_PDMA_RESET_ZERO
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_VALUE UINT64_C(0)
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_WRITABLE_MASK UINT64_C(1)
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_OFFSET UINT64_C(152)
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Command ring base address
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ */
+#define C_PDMA_C_QUBQUAQUSQUE__5_OFFSET UINT64_C(160)
+#define C_PDMA_C_QUBQUAQUSQUE__5_WIDTH UINT64_C(8)
+#define C_PDMA_C_QUBQUAQUSQUE__5_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUBQUAQUSQUE__5_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUBQUAQUSQUE__5_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUBQUAQUSQUE__5_WRITABLE_MASK UINT64_C(18446744073709551615)
+
+/*
+ * Command ring capacity
+ * Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ */
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_OFFSET UINT64_C(168)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Published command count
+ * Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer.
+ */
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_OFFSET UINT64_C(172)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Fetched command count
+ * Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed.
+ */
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_OFFSET UINT64_C(176)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Response ring base address
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ */
+#define C_PDMA_C_QUBQUAQUSQUE__6_OFFSET UINT64_C(184)
+#define C_PDMA_C_QUBQUAQUSQUE__6_WIDTH UINT64_C(8)
+#define C_PDMA_C_QUBQUAQUSQUE__6_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUBQUAQUSQUE__6_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUBQUAQUSQUE__6_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUBQUAQUSQUE__6_WRITABLE_MASK UINT64_C(18446744073709551615)
+
+/*
+ * Response ring capacity
+ * Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable.
+ */
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_OFFSET UINT64_C(192)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Published response count
+ * Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked.
+ */
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET UINT64_C(196)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Consumed response count
+ * Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault.
+ */
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_OFFSET UINT64_C(200)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Channel processing enable
+ * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or faults.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET UINT64_C(204)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__3_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Channel interrupt enable
+ * One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_OFFSET UINT64_C(208)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Sticky channel fault
+ * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
+ */
+/*
+ * code
+ * Fault code
+ * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
+ */
+/*
+ * None
+ * No channel fault
+ * Neither ring has latched a hardware access failure.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_C_CODE_C_QUNONE UINT64_C(0)
+/*
+ * CommandRead
+ * Command fetch failed
+ * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+/*
+ * ResponseWrite
+ * Response publication failed
+ * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
+ */
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_OFFSET UINT64_C(212)
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUFQUAQUUQULQUT__4_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Channel interrupt causes
+ * Response non-empty, IOC, response error and channel fatal causes, visible even while masked.
+ */
+/*
+ * response_non_empty
+ * The response ring currently contains unread entries.
+ */
+/*
+ * ioc
+ * At least one published IOC response remains unconsumed.
+ */
+/*
+ * response_error
+ * An error response was published; processing is stopped until reset.
+ */
+/*
+ * channel_fatal
+ * The channel fault register contains a fatal error.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET UINT64_C(216)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_ACCESS C_PDMA_ACCESS_READ_ONLY
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Channel response notification masks
+ * Independent non-empty and IOC notification masks. Unmask does not replay past events.
+ */
+/*
+ * response_non_empty
+ * Mask notifications on response empty-to-non-empty transitions.
+ */
+/*
+ * ioc
+ * Mask notifications on publication of IOC responses.
+ */
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_OFFSET UINT64_C(220)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WIDTH UINT64_C(4)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_ACCESS C_PDMA_ACCESS_READ_WRITE
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
+
+/*
+ * Hardware reset request
+ * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
+ */
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_OFFSET UINT64_C(224)
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_WIDTH UINT64_C(4)
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_RESET_KIND C_PDMA_RESET_ZERO
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_RESET_VALUE UINT64_C(0)
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_WRITABLE_MASK UINT64_C(1)
 
 #endif

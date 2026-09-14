@@ -1,23 +1,23 @@
 use super::{Channel, CommandRing, ResponseRing};
 use crate::{Error, read_register as read, write_register as write};
 use pdma_model_contract::{
-    ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters, Ring,
+    ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters, Ring,
 };
 
 impl Channel {
     pub(crate) fn read(&mut self, offset: usize, out: &mut [u8]) -> Result<(), Error> {
-        let result = if offset < DeviceRegisters::RESPONSE.offset() {
+        let result = if offset < ChannelBlock::RESPONSE.offset() {
             read::<CommandRegisters>(&self.command.registers, offset, out)
-        } else if offset < DeviceRegisters::CHANNEL.offset() {
+        } else if offset < ChannelBlock::CONTROL.offset() {
             read::<ResponseRegisters>(
                 &self.response.registers,
-                offset - DeviceRegisters::RESPONSE.offset(),
+                offset - ChannelBlock::RESPONSE.offset(),
                 out,
             )
         } else {
             read::<ChannelRegisters>(
                 &self.registers,
-                offset - DeviceRegisters::CHANNEL.offset(),
+                offset - ChannelBlock::CONTROL.offset(),
                 out,
             )
         };
@@ -26,7 +26,7 @@ impl Channel {
     }
 
     pub(crate) fn write(&mut self, offset: usize, bytes: &[u8]) -> Result<(), Error> {
-        if offset < DeviceRegisters::RESPONSE.offset() {
+        if offset < ChannelBlock::RESPONSE.offset() {
             let mut next = self.command.registers;
             write::<CommandRegisters>(&mut next, offset, bytes)?;
             if self.configured
@@ -40,13 +40,9 @@ impl Channel {
                 .with_producer(self.command.pointers(), next.producer.raw())
                 .map_err(|_| Error::Cursor)?;
             self.command = candidate;
-        } else if offset < DeviceRegisters::CHANNEL.offset() {
+        } else if offset < ChannelBlock::CONTROL.offset() {
             let mut next = self.response.registers;
-            write::<ResponseRegisters>(
-                &mut next,
-                offset - DeviceRegisters::RESPONSE.offset(),
-                bytes,
-            )?;
+            write::<ResponseRegisters>(&mut next, offset - ChannelBlock::RESPONSE.offset(), bytes)?;
             if self.configured
                 && (next.base != self.response.registers.base
                     || next.capacity != self.response.registers.capacity)
@@ -72,11 +68,7 @@ impl Channel {
             self.response = candidate;
         } else {
             let mut next = self.registers;
-            write::<ChannelRegisters>(
-                &mut next,
-                offset - DeviceRegisters::CHANNEL.offset(),
-                bytes,
-            )?;
+            write::<ChannelRegisters>(&mut next, offset - ChannelBlock::CONTROL.offset(), bytes)?;
             if next.reset.raw() != 0 {
                 self.reset();
                 return Ok(());

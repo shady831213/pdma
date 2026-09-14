@@ -8,8 +8,8 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     Command, CommandRegisters, DeviceRegisters, Endpoint, Response, ResponseStatus,
 };
-use pdma_model_device::{Device, pipeline};
-use pdma_model_host::{Channel, RingConfig, Rings, runtime::Model};
+use pdma_model_device::Device;
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -43,10 +43,19 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"retained")?;
-    let model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let mut stage = device.pipeline();
+    let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
-        .run_main(Channel::setup(model.clone(), memory.clone(), rings))
+        .run_main(Channel::setup(
+            model.clone(),
+            memory.clone(),
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
     cpu.run_main(channel.submit(Command {
         flags: pdma_model_contract::CompletionFlagsValues::default(),
@@ -56,10 +65,11 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut stage = pipeline();
     let mut operation = Operation::new(());
-    let consumer_offset =
-        u32::try_from(DeviceRegisters::COMMAND.offset() + CommandRegisters::CONSUMER.offset())?;
+    let consumer_offset = u32::try_from(
+        (DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::COMMAND.offset())
+            + CommandRegisters::CONSUMER.offset(),
+    )?;
 
     // When: the driver is dropped after acceptance and the same operation is resumed.
     tokio::select! {

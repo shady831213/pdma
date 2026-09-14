@@ -1,53 +1,75 @@
-use crate::{Device, Error};
+use crate::{ChannelContext, Device, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
+use pdma_model_contract::ChannelId;
 
-/// A channel reset boundary around an otherwise unchanged stage composition.
+/// A value bound to the channel generation that accepted its command.
 #[derive(Debug)]
-pub struct Resettable<S>(S);
-
-/// Retained stage state belongs to the channel generation that first executed it.
-#[derive(Debug)]
-pub struct ResetState<S> {
-    generation: Option<u64>,
-    inner: S,
+pub struct ChannelTask<T> {
+    pub(crate) channel: ChannelId,
+    pub(crate) generation: u64,
+    /// Typed payload passed into the selected channel's composition.
+    pub value: T,
 }
 
-impl<S> Resettable<S> {
-    /// Wraps a composed channel pipeline without changing its typed ports.
-    pub const fn new(stage: S) -> Self {
-        Self(stage)
+impl<T> ChannelTask<T> {
+    /// Identifies the channel owning this task.
+    pub const fn channel(&self) -> ChannelId {
+        self.channel
+    }
+
+    /// Transforms the payload while retaining the original reset boundary.
+    pub fn map<U>(self, transform: impl FnOnce(T) -> U) -> ChannelTask<U> {
+        ChannelTask {
+            channel: self.channel,
+            generation: self.generation,
+            value: transform(self.value),
+        }
     }
 }
 
-impl<M, S> Stage<Device<M>> for Resettable<S>
+/// Routes one accepted task through a composition and rejects work invalidated by reset.
+#[derive(Debug)]
+pub struct Resettable<S> {
+    stage: S,
+}
+
+impl<S> Resettable<S> {
+    /// Wraps hardware whose context is the task's selected channel.
+    pub const fn new(stage: S) -> Self {
+        Self { stage }
+    }
+}
+
+impl<M, S, I, O, W, T> Stage<Device<M>> for Resettable<S>
 where
-    S: Stage<Device<M>, Error = Error>,
+    for<'a> S:
+        Stage<ChannelContext<'a, M>, Input = I, Output = O, Wait = W, State = T, Error = Error>,
 {
-    type Input = S::Input;
-    type Output = S::Output;
+    type Input = ChannelTask<I>;
+    type Output = O;
     type Error = Error;
-    type Wait = S::Wait;
-    type State = ResetState<S::State>;
+    type Wait = W;
+    type State = ChannelTask<T>;
 
     fn start(input: Self::Input) -> Self::State {
-        ResetState {
-            generation: None,
-            inner: S::start(input),
-        }
+        input.map(S::start)
     }
 
     fn step(
         &mut self,
         context: &mut Device<M>,
         state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Error, Self::Wait> {
-        let generation = state.generation.get_or_insert(context.channel.generation);
-        if *generation != context.channel.generation {
+    ) -> StepOutcome<O, Error, W> {
+        let mut selected = match context.channel_context(state.channel) {
+            Ok(selected) => selected,
+            Err(error) => return StepOutcome::Complete(Err(error)),
+        };
+        if state.generation != selected.channel.generation {
             return StepOutcome::Complete(Err(Error::Reset));
         }
-        if context.halted() {
+        if selected.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
-        self.0.step(context, &mut state.inner)
+        self.stage.step(&mut selected, &mut state.value)
     }
 }

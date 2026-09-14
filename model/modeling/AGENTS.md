@@ -8,16 +8,16 @@ removed from master after backing up the complete source snapshot:
 `backup/pdma-before-rebuild-20260909` at
 `51707fe1d38e261a188e1d0ac14243c0caf58127`.
 
-The replacement now implements one channel with command and response rings,
+The replacement now implements instance-configured channels with command and response rings,
 linear/scatter-gather DMA copy, error/reset boundaries, and edge/IOC IRQ delivery. See README.md
-and the `crates/scenarios/tests/single_channel/main.rs` system tests. Old interfaces, numeric register
+and the `crates/scenarios/tests/{single_channel,multi_channel}/main.rs` system tests. Old interfaces, numeric register
 layouts, and ABI compatibility are not requirements for this model.
 
 ## Active building blocks
 
 | Crate | Responsibility |
 | --- | --- |
-| hardware-interface-pipeline | Typed stages, composition, and driving policies. |
+| hardware-interface-pipeline | Typed stages, ready-input combination, composition, and driving policies. |
 | hardware-interface-runtime | Memory backends, register access/observation, CPU-local state, interrupt dispatch, and trace storage. |
 | hardware-interface-schema | Runtime-neutral record/register schemas, metadata, access, and exporters. |
 | hardware-interface-schema-macros | Schema code generation and compile-time validation. |
@@ -57,15 +57,23 @@ shapes into the rebuild.
 
 ## Implementation constraints
 
-- The replacement models one channel, command/response rings, linear/SG DMA copy,
+- The replacement models statically configured channels, command/response rings, linear/SG DMA copy,
   independently masked non-empty/IOC notifications, and channel/device error/reset boundaries.
   Do not implement further slices without a user request.
+- The constructor fixes the channel count for each instance; software only reads it.
+  Contract layout/export takes that count explicitly, with generated child register blocks.
+  One shared execution pipeline processes whole commands selected by round-robin arbitration.
+  Use the generic Combiner over channel-bound Fetch ports; ready checks do not consume
+  commands, and PDMA eligibility rules belong to Fetch, not the generic compositor.
+  Skip full-response channels before accepting commands; do not add per-channel copy state.
+  Bind accepted work to channel identity and generation so reset invalidates only its work
+  before the next side effect, even after immediate reconfiguration.
 - Source and destination independently select linear spans or SG lists. Software owns
   list/buffer allocation and keeps descriptors stable until completion. Hardware checks
   total lengths before payload writes, reads lists incrementally and retains cursors;
   do not cache whole lists, reject overlap or invent segment-count/total-length limits.
   Fixed copy scratch size is an implementation detail, not a command-size limit.
-- Reuse Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
+- Reuse Combiner/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
   driving only; it must not gain PDMA traversal, validation or copy policy.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.

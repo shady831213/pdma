@@ -1,43 +1,18 @@
-use crate::{CheckLengths, Device, Error, NextChunk, ReadCopy, Resettable, WriteCopy};
-use hardware_interface_pipeline::{AfterEach, Repeat, Stage, StepOutcome, Then};
+use crate::{
+    ChannelContext, CheckLengths, Device, Error, Fetch, NextChunk, ReadCopy, Resettable, WriteCopy,
+};
+use hardware_interface_pipeline::{
+    AfterEach, Combiner, Repeat, Selection, Stage, StepOutcome, Then,
+};
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::{Command, Response};
+use pdma_model_contract::{ChannelId, Response};
 use std::convert::Infallible;
-
-/// Take one published descriptor from command queue state.
-#[derive(Debug, Default)]
-pub struct Fetch;
-
-impl<M: MemoryAccess> Stage<Device<M>> for Fetch {
-    type Input = ();
-    type Output = Command;
-    type Error = Error;
-    type Wait = ();
-    type State = ();
-    fn start((): ()) {}
-    fn step(&mut self, context: &mut Device<M>, (): &mut ()) -> StepOutcome<Command, Error, ()> {
-        if context.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
-        }
-        if !context.channel.enabled() {
-            return StepOutcome::Pending(());
-        }
-        match context.channel.command.pop(&context.memory) {
-            Ok(Some(command)) => StepOutcome::Complete(Ok(command)),
-            Ok(None) => StepOutcome::Pending(()),
-            Err(fault) => {
-                context.channel.latch(fault);
-                StepOutcome::Complete(Err(Error::Fault(fault)))
-            }
-        }
-    }
-}
 
 /// Publish a retained response; a full ring suspends only this stage.
 #[derive(Debug, Default)]
 pub struct Publish;
 
-impl<M: MemoryAccess> Stage<Device<M>> for Publish {
+impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for Publish {
     type Input = Response;
     type Output = ();
     type Error = Error;
@@ -48,7 +23,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for Publish {
     }
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut ChannelContext<'_, M>,
         response: &mut Response,
     ) -> StepOutcome<(), Error, ()> {
         if context.halted() {
@@ -58,7 +33,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for Publish {
             return StepOutcome::Pending(());
         }
         let was_empty = context.channel.response.pointers().is_empty();
-        match context.channel.response.push(&context.memory, response) {
+        match context.channel.response.push(context.memory, response) {
             Ok(true) => {
                 context.channel.published(response, was_empty);
                 StepOutcome::Complete(Ok(()))
@@ -76,7 +51,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for Publish {
 #[derive(Debug, Default)]
 pub struct UpdateIrq;
 
-impl<M> Stage<Device<M>> for UpdateIrq {
+impl<M> Stage<ChannelContext<'_, M>> for UpdateIrq {
     type Input = ();
     type Output = Infallible;
     type Error = Infallible;
@@ -85,7 +60,7 @@ impl<M> Stage<Device<M>> for UpdateIrq {
     fn start((): ()) {}
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut ChannelContext<'_, M>,
         (): &mut (),
     ) -> StepOutcome<Infallible, Infallible, Infallible> {
         context.channel.update_irq();
@@ -94,7 +69,8 @@ impl<M> Stage<Device<M>> for UpdateIrq {
 }
 
 /// The same statically composed hardware is used by step and async executors.
-pub type Pipeline = Resettable<AfterEach<Then<Then<Fetch, Execution>, Publish>, UpdateIrq>>;
+pub type Pipeline =
+    Then<Combiner<Fetch>, Resettable<AfterEach<Then<Execution, Publish>, UpdateIrq>>>;
 
 /// One composable prepare/read/write iteration.
 pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
@@ -102,12 +78,21 @@ pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
 /// Length validation followed by bounded-memory copy iterations.
 pub type Execution = Then<CheckLengths, Repeat<CopyLoop>>;
 
-/// Compose fetch, nested copy execution, publication and interrupt aggregation.
-pub const fn pipeline() -> Pipeline {
-    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckLengths, Repeat::new(chunk));
-    Resettable::new(AfterEach::new(
-        Then::new(Then::new(Fetch, execution), Publish),
-        UpdateIrq,
-    ))
+impl<M> Device<M> {
+    /// Builds this device's lightweight command input ports for custom compositions.
+    pub fn fetches(&self) -> Vec<Fetch> {
+        (0..self.channels.len())
+            .map(|index| Fetch::new(ChannelId::new(index)))
+            .collect()
+    }
+
+    /// Combines the instance's input ports into one shared copy and publication path.
+    pub fn pipeline(&self) -> Pipeline {
+        let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+        let execution = Then::new(CheckLengths, Repeat::new(chunk));
+        Then::new(
+            Combiner::new(self.fetches(), Selection::RoundRobin, ()),
+            Resettable::new(AfterEach::new(Then::new(execution, Publish), UpdateIrq)),
+        )
+    }
 }

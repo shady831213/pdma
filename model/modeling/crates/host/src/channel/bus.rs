@@ -1,20 +1,64 @@
 use crate::Error;
 use hardware_interface_runtime::{CpuOwner, RegisterAccess};
+use pdma_model_contract::{ChannelId, DeviceControl, DeviceRegisters};
 use std::future::Future;
 
 #[derive(Debug)]
 pub(super) struct RegisterPort<B> {
     bus: B,
     owner: CpuOwner,
+    channel_base: usize,
 }
 
 impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
-    pub(super) const fn new(bus: B, owner: CpuOwner) -> Self {
-        Self { bus, owner }
+    pub(super) async fn new(
+        bus: B,
+        owner: CpuOwner,
+        id: ChannelId,
+    ) -> Result<Self, Error<B::Error>> {
+        let mut port = Self {
+            bus,
+            owner,
+            channel_base: 0,
+        };
+        let available = port
+            .read_word(DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset())
+            .await?;
+        if id.index() >= usize::try_from(available).map_err(|_| Error::Geometry)? {
+            return Err(Error::Channel {
+                requested: id,
+                available,
+            });
+        }
+        port.channel_base = id.register_offset().ok_or(Error::Geometry)?;
+        Ok(port)
     }
 
     pub(super) fn validate_active(&self) -> Result<(), Error<B::Error>> {
         self.owner.validate_active().map_err(Error::Cpu)
+    }
+
+    pub(super) async fn channel_read_word(&self, offset: usize) -> Result<u32, Error<B::Error>> {
+        self.read_word(
+            self.channel_base
+                .checked_add(offset)
+                .ok_or(Error::Geometry)?,
+        )
+        .await
+    }
+
+    pub(super) async fn channel_write(
+        &self,
+        offset: usize,
+        bytes: &[u8],
+    ) -> Result<(), Error<B::Error>> {
+        self.write(
+            self.channel_base
+                .checked_add(offset)
+                .ok_or(Error::Geometry)?,
+            bytes,
+        )
+        .await
     }
 
     pub(super) async fn read_word(&self, offset: usize) -> Result<u32, Error<B::Error>> {

@@ -8,7 +8,7 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     ChannelRegisters, CommandRegisters, DeviceControl, DeviceRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_device::{Error, pipeline};
+use pdma_model_device::Error;
 use support::{TestResult, command, read_word, setup, submit};
 
 #[test]
@@ -16,13 +16,15 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     // Given: one retained operation with already committed payload bytes.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = pipeline();
+    let mut hardware = device.pipeline();
     let mut operation = Operation::new(());
     let _ = StepExecutor::new().step(&mut hardware, &mut operation, &mut device);
     memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, b"keep")?;
     // When: MMIO reset occurs before the retained operation resumes.
     device.write(
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::RESET.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::RESET.offset(),
         &1_u32.to_le_bytes(),
     )?;
     let result = StepExecutor::new().step(&mut hardware, &mut operation, &mut device);
@@ -38,7 +40,9 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset()
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::CAPACITY.offset()
         )?,
         0
     );
@@ -57,7 +61,9 @@ fn channel_reset_cannot_clear_device_fatal() -> TestResult {
     device.signal_fatal();
     // When: software resets only its channel.
     device.write(
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::RESET.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::RESET.offset(),
         &1_u32.to_le_bytes(),
     )?;
     // Then: device fatal survives until a whole-device reset.
@@ -87,7 +93,9 @@ fn channel_reset_cannot_clear_device_fatal() -> TestResult {
 #[test]
 fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -> TestResult {
     for reset in [
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::RESET.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::RESET.offset(),
         DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset(),
     ] {
         // Given: the first half of a two-chunk DMA has really reached memory.
@@ -97,7 +105,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         input.source = Endpoint::linear(0x1200, 512);
         input.destination = Endpoint::linear(0x1600, 512);
         submit(&mut device, &memory, input)?;
-        let mut hardware = pipeline();
+        let mut hardware = device.pipeline();
         let mut operation = Operation::new(());
         let mut first_committed = false;
         let mut first_chunk = [0; 256];
@@ -117,21 +125,31 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         // When: software resets and reconfigures before the old operation is stepped again.
         device.write(reset, &1_u32.to_le_bytes())?;
         device.write(
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::BASE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::BASE.offset(),
             &0x1000_u64.to_le_bytes(),
         )?;
         device.write(
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::BASE.offset(),
             &0x1100_u64.to_le_bytes(),
         )?;
         for offset in [
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::CAPACITY.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::CAPACITY.offset(),
         ] {
             device.write(offset, &2_u32.to_le_bytes())?;
         }
         device.write(
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::ENABLE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::ENABLE.offset(),
             &1_u32.to_le_bytes(),
         )?;
         assert!(matches!(
@@ -157,7 +175,9 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         assert_eq!(
             read_word(
                 &mut device,
-                DeviceRegisters::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
+                DeviceRegisters::CHANNELS_OFFSET
+                    + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                    + ResponseRegisters::PRODUCER.offset()
             )?,
             1
         );

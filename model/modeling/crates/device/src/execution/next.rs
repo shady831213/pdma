@@ -1,5 +1,5 @@
 use super::{COPY_CHUNK_BYTES, CopyState, Transfer};
-use crate::{Device, Error};
+use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress};
 use pdma_model_contract::ResponseStatus;
@@ -8,7 +8,7 @@ use pdma_model_contract::ResponseStatus;
 #[derive(Debug, Default)]
 pub struct NextChunk;
 
-impl<M: MemoryAccess> Stage<Device<M>> for NextChunk {
+impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for NextChunk {
     type Input = CopyState;
     type Output = Transfer;
     type Error = Error;
@@ -20,7 +20,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for NextChunk {
 
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
         if context.halted() {
@@ -45,7 +45,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for NextChunk {
                     None
                 };
                 if let Some(cursor) = cursor {
-                    match cursor.next_segment(&context.memory) {
+                    match cursor.next_segment(context.memory) {
                         Ok(Some(_)) => {}
                         Ok(None) => progress.status = ResponseStatus::LengthMismatch,
                         Err(status) => progress.status = status,

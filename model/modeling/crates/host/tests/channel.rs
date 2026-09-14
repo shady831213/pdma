@@ -6,8 +6,8 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{ChannelFaultCode, Command, Endpoint, Response, ResponseStatus};
-use pdma_model_device::{Device, pipeline};
-use pdma_model_host::{Channel, RingConfig, Rings, runtime::Model};
+use pdma_model_device::Device;
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -34,10 +34,19 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         response: RingConfig::new(response_address.raw(), 1)?,
     };
     let memory = allocator.memory_access();
-    let model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let mut stage = device.pipeline();
+    let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
-        .run_main(Channel::setup(model.clone(), memory.clone(), rings))
+        .run_main(Channel::setup(
+            model.clone(),
+            memory.clone(),
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
     cpu.run_main(channel.submit(Command {
         flags: pdma_model_contract::CompletionFlagsValues::default(),
@@ -46,7 +55,6 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         destination: Endpoint::linear(0, 0),
     }))
     .await?;
-    let mut stage = pipeline();
     let mut operation = Operation::new(());
     assert!(
         AsyncExecutor::new(model.clone())
@@ -113,12 +121,20 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"dma-copy")?;
-    let mut model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let mut stage = device.pipeline();
+    let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
-        .run_main(Channel::setup(model.clone(), memory.clone(), rings))
+        .run_main(Channel::setup(
+            model.clone(),
+            memory.clone(),
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
-    let mut stage = pipeline();
     let mut operation = Operation::new(());
     let executor = AsyncExecutor::new(model.clone());
 
@@ -175,10 +191,19 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     let source = allocator.allocate(8, alignment)?;
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
-    let mut model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let mut stage = device.pipeline();
+    let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
-        .run_main(Channel::setup(model.clone(), memory, rings))
+        .run_main(Channel::setup(
+            model.clone(),
+            memory,
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
     cpu.run_main(channel.submit(Command {
         flags: pdma_model_contract::CompletionFlagsValues::default(),
@@ -187,7 +212,6 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         destination: Endpoint::linear(destination.raw(), 8),
     }))
     .await?;
-    let mut stage = pipeline();
     let mut operation = Operation::new(());
     let executor = AsyncExecutor::new(model.clone());
 

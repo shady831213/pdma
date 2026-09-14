@@ -8,10 +8,12 @@ Run from `model/modeling`:
 
 ```sh
 cargo test -p pdma-model-scenarios --test single_channel -- --nocapture
+cargo test -p pdma-model-scenarios --test multi_channel -- --nocapture
 ```
 
-`single_channel` means one hardware channel with a command ring, a response ring and IRQ
-delivery. Its cases cover linear/SG copies and failures on that same channel:
+`single_channel` constructs a device with one channel, with a command
+ring, a response ring and IRQ delivery. Its cases cover linear/SG copies and failures
+on that same channel:
 
 - `copy_completes_through_host_irq_delivery`: copied bytes, a Success response,
   one IRQ delivery and no remaining platform notification after its claim.
@@ -77,7 +79,7 @@ Paths below are relative to `tests/single_channel/`.
 The harness makes the execution boundary explicit:
 
 ```rust
-let (device, stage) = hardware::assemble(memory.clone());
+let (device, stage) = hardware::assemble(memory.clone())?;
 let model = Model::new(device);
 let runtime = InterruptRuntime::new(cpu, model.clone());
 let (completed, summary) = runtime.run_main(async |interrupts| {
@@ -125,3 +127,33 @@ all cases and has no fault-mode branches. Hardware behavior and driving still co
 the existing device and pipeline crates.
 These tests run in ordinary `cargo test --workspace`; crate-local boundary tests
 stay in contract, device, host and the building-block crates.
+
+## Multi-channel reset isolation
+
+`tests/multi_channel/` constructs a three-channel device and drives its shared DMA execution stage through the
+existing async executor. Each case runs one complete software program inside one
+`InterruptRuntime::run_main`. Software discovers the channel count, allocates all
+three channels' independent rings and payloads, registers the shared IRQ handler,
+submits work, resets hardware through its selected host driver, and drains every
+active channel after a shared notification.
+
+The cases cover:
+
+- A reset after A's first committed payload write while B/C remain queued. A's old
+  destination stays identical to its pre-reset snapshot while B/C and fresh A complete.
+- A queued B reset while A is copying. A and C complete exactly, B's original
+  destination stays untouched, and fresh B work succeeds.
+- A full one-entry response ring while B/C finish. A's second command remains
+  unconsumed and its destination untouched; resetting A discards the old response
+  and queued command before fresh A work completes.
+- A device reset while A is copying and B/C remain queued. A's committed prefix
+  stays unchanged and B/C remain untouched; only fresh A work completes.
+
+Every case checks the exact completion IDs and byte counts. Software also verifies
+that channel-count discovery rejects writes and preserves its instance value across reset.
+
+The software program receives memory-write notifications from a test-only forwarding
+memory capability. It waits for observable payload changes without inspecting device
+internals or using elapsed-time delays. `hardware.rs` assembles and drives hardware;
+`harness.rs` selects the backing and owns joined worker teardown; `software/` owns the
+complete program and application buffers; `cases.rs` owns acceptance assertions.

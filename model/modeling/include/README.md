@@ -17,18 +17,26 @@ The response carries a 64-bit `bytes_completed` count; transfer lengths have no
 fixed hardware limit.
 
 Commands are 64 bytes and carry `CompletionFlags.ioc`; responses remain 24 bytes
-and echo the flags at byte 12. The 80-byte MMIO map contains independent channel
-non-empty/IOC masks, read-only causes, channel reset and device fatal/reset controls.
-Unmask does not replay notifications. Channel and device reset preserve external memory.
+and echo the flags at byte 12. The checked-in header describes an explicitly
+selected three-channel example. Its 228-byte MMIO map starts with read-only
+`channel_num` at byte 0, followed by device IRQ enable, fatal state and reset at
+bytes 4, 8 and 12. Three independent channel blocks start at bytes 16, 88 and 160
+with a 72-byte stride. Each block contains command/response ring registers,
+non-empty/IOC masks, read-only causes and channel reset.
+Unmask does not replay notifications. Channel and device reset preserve external
+memory; device reset also preserves the hardware channel count. Each device
+instance selects its count at construction. The discovery register has post-reset
+initialization metadata because hardware supplies that instance's count.
 
 Run from `model/modeling`:
 
 ```sh
-cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --write include/pdma_model_abi.h
-cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --check include/pdma_model_abi.h
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --write include/pdma_model_abi.h
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --check include/pdma_model_abi.h
 ```
 
-With no arguments the generator writes to stdout. `--help` lists the options.
+`--channels COUNT` is required and selects the concrete instance metadata; with
+no output option the generator writes to stdout. `--help` lists the options.
 The optional `export-c-header` feature composes the existing schema exporters;
 normal host/device builds do not enable it. Do not edit the header by hand.
 

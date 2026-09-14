@@ -4,18 +4,19 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
+    AfterEach, Combiner, Operation, Repeat, RunOutcome, Selection, Stage, StepExecutor,
+    StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_device::{
-    CheckLengths, Device, Error, Fetch, NextChunk, Publish, ReadCopy, Resettable, Transfer,
+    ChannelContext, CheckLengths, Error, NextChunk, Publish, ReadCopy, Resettable, Transfer,
     UpdateIrq, WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
 
 struct InvertPayload;
 
-impl Stage<Device<SharedMemory>> for InvertPayload {
+impl Stage<ChannelContext<'_, SharedMemory>> for InvertPayload {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
@@ -26,7 +27,7 @@ impl Stage<Device<SharedMemory>> for InvertPayload {
     }
     fn step(
         &mut self,
-        _: &mut Device<SharedMemory>,
+        _: &mut ChannelContext<'_, SharedMemory>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
         let Some(mut transfer) = state.take() else {
@@ -54,10 +55,10 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         WriteCopy,
     );
     let execution = Then::new(CheckLengths, Repeat::new(chunk));
-    let mut hardware = Resettable::new(AfterEach::new(
-        Then::new(Then::new(Fetch, execution), Publish),
-        UpdateIrq,
-    ));
+    let mut hardware = Then::new(
+        Combiner::new(device.fetches(), Selection::RoundRobin, ()),
+        Resettable::new(AfterEach::new(Then::new(execution, Publish), UpdateIrq)),
+    );
     let mut operation = Operation::new(());
     let mut complete = false;
     // When
@@ -92,7 +93,8 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     let mut operation = Operation::new(command());
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.
-    let result = operation.step(&mut execution, &mut device);
+    let mut context = device.channel_context(pdma_model_contract::ChannelId::new(0))?;
+    let result = operation.step(&mut execution, &mut context);
     // Then: device fatal blocks even independently composed hardware.
     assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
     Ok(())

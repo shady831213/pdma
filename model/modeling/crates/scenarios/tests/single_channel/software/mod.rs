@@ -6,8 +6,10 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::{ChannelFaultCode, Command, Response, Segment};
-use pdma_model_host::{Channel, Error as HostError, RingConfig, Rings, runtime::Irq};
+use pdma_model_contract::{ChannelFaultCode, ChannelId, Command, Response, Segment};
+use pdma_model_host::{
+    Channel, ChannelConfig, Error as HostError, RingConfig, Rings, runtime::Irq,
+};
 use std::error::Error;
 use tokio::sync::oneshot;
 
@@ -122,7 +124,11 @@ where
         command: RingConfig::new(command.raw(), u32::try_from(CAPACITY)?)?,
         response: RingConfig::new(response.raw(), u32::try_from(CAPACITY)?)?,
     };
-    let mut channel = Channel::setup(ports.bus, ports.memory, rings).await?;
+    let config = ChannelConfig {
+        id: ChannelId::new(0),
+        rings,
+    };
+    let mut channel = Channel::setup(ports.bus, ports.memory, config).await?;
     channel
         .submit(Command {
             flags: pdma_model_contract::CompletionFlagsValues::default(),

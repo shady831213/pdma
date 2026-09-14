@@ -1,9 +1,10 @@
-# Minimal PDMA channel
+# Minimal multi-channel PDMA
 
 Run from this directory:
 
 ```sh
 cargo test -p pdma-model-scenarios --test single_channel -- --nocapture
+cargo test -p pdma-model-scenarios --test multi_channel -- --nocapture
 ```
 
 The system tests run all four linear/SG endpoint combinations, unequal segment
@@ -26,7 +27,10 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/device/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
 | `crates/device/src/channel/mmio.rs` | Generated block routing and software-write effects. |
-| `crates/device/src/stages.rs` | The complete hardware composition. |
+| `crates/device/src/stages.rs` | One channel's hardware composition. |
+| `crates/device/src/fetch.rs` | Per-channel readiness and generation-tagged command acceptance. |
+| `crates/hardware-interface-pipeline/src/compositor/combiner.rs` | Generic ready-input selection and retained grants. |
+| `crates/device/src/multi_channel.rs` | Repetition of one shared command execution pipeline. |
 | `crates/device/src/execution.rs` | Retained copy progress and chunk payload. |
 | `crates/device/src/execution/validate.rs` | Incremental endpoint-total validation. |
 | `crates/device/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
@@ -42,18 +46,24 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/scenarios/tests/single_channel/harness/` | Platform provisioning, fault injection and actor driving/cleanup. |
 | `crates/scenarios/tests/single_channel/hardware.rs` | Hardware assembly from the existing device and stage graph. |
 | `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
+| `crates/scenarios/tests/multi_channel/` | Three-channel reset isolation through the same hardware/software/harness separation. |
 
 The device composition is deliberately explicit:
 
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
 let execution = Then::new(CheckLengths, Repeat::new(chunk));
-Resettable::new(AfterEach::new(
-    Then::new(Then::new(Fetch, execution), Publish), UpdateIrq,
-))
+let inputs = Combiner::new(device.fetches(), Selection::RoundRobin, ());
+Then::new(inputs, Resettable::new(AfterEach::new(
+    Then::new(execution, Publish), UpdateIrq,
+)))
 ```
 
-The outer ports are `() -> Command -> CopyState -> Response -> ()`. The copy body is
+Each `Fetch` produces `ChannelTask<Command>`, carrying channel identity and generation.
+Its `ReadyStage::ready` checks channel/ring state without consuming a command.
+The generic `Combiner` selects one input; it does not know PDMA register or ring semantics.
+`Resettable` selects its context and checks the generation before every nested interaction.
+The inner ports are `Command -> CopyState -> Response -> ()`. The copy body is
 `CopyState -> Transfer -> Transfer -> ControlFlow<Response, CopyState>`: Continue feeds
 progress into the next iteration, Break finishes the command. Repeat advances one
 child step at a time and reuses its hardware; it does not add another executor.
@@ -65,12 +75,23 @@ publication faults stop the channel. An error response is published before the c
 stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
-Use one retained operation/worker per channel. Discarding an accepted operation is
+`device.multi_channel()` uses `Repeat` to reuse one shared pipeline and one in-flight command.
+It arbitrates at command boundaries, not between chunks of different channels.
+A full idle arbitration round returns Pending; a channel's fault or reset releases
+its command, and channels without response space are skipped before acceptance.
+`ChannelContext` borrows
+only the selected channel and shared memory for each step. Discarding an accepted operation is
 not a modeled hardware cancellation or recovery mechanism. MMIO reset increments the
 channel generation; `Resettable` rejects retained pre-reset work before its next
 interaction, even if software has already reconfigured and re-enabled the channel.
 Custom compositions use the same reset boundary; execution itself still uses the
 existing Then/Repeat/AfterEach building blocks.
+
+Build `device.pipeline()` or `device.multi_channel()` before moving the device into
+the runtime transport, and retain that graph across commands. Its lightweight Fetch
+ports come from the actual instance population. Custom graphs can pass a subset or
+different ordering of Fetch ports to Combiner, or select fixed-priority arbitration.
+Runtime only drives the supplied graph; it never constructs the hardware policy.
 
 `Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles shared memory and its allocation service
@@ -114,6 +135,13 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
 
 ## Channel behavior
 
+- `Device::new(memory, channel_count)` fixes the population for that instance;
+  `DeviceRegisters::resolve(channel_count)` composes its generated register blocks.
+  `DeviceControl.channel_num` reports the actual count read-only; neither reset changes it.
+  Different counts can coexist in the same program. Host `ChannelConfig { id, rings }` selects a
+  channel after reading discovery; setup does not change the device-wide IRQ gate.
+  All channels share one notification output, so software checks every channel's
+  causes and drains their responses when servicing an interrupt.
 - One command ring and one response ring, with 32-bit wrapping cursors. Capacities
   are powers of two below 2^31, so slot order remains continuous across counter
   overflow; bases are 8-byte aligned. Geometry freezes on first
@@ -137,7 +165,10 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   back. Overlap is neither detected nor rejected. Later reads observe earlier writes
   according to actual chunk order; there is no whole-transfer memmove guarantee.
 - Full command ring is a host submission error. Full response ring is hardware
-  backpressure: publication waits with the response retained, without repeating copy.
+  backpressure: arbitration leaves that channel's commands queued and serves eligible peers.
+  With one in-flight command, a free response slot cannot be taken by another command
+  before publication. The composable Publish stage still retains a response if driven
+  independently against a full ring.
 - Command fetch failure latches fault code 1 without consuming the command. Response
   publication failure latches code 2 without advancing response producer. Payload
   copy may already have completed in the latter case; software must not assume retry
@@ -166,6 +197,11 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   Device reset additionally clears device-wide fault and controls. Neither reset clears
   external memory or rolls back committed writes. Merely disabling a healthy channel
   still suspends and preserves its operation.
+  Execution is non-preemptive: disabling the active channel holds the shared unit
+  until that channel is re-enabled or reset.
+  Resetting one channel neither changes peer registers nor restarts a peer's active command.
+  If the reset channel owns the shared engine, its old buffered data and unpublished
+  response are discarded before another interaction; a fresh command may then be selected.
 - `Device::signal_fatal()` represents a device-wide internal hardware fault input.
   It stops all execution and uses the device control block's independent IRQ enable.
   Only device reset clears it; channel reset does not. The minimal model has no
@@ -178,8 +214,8 @@ values 0, 1 and 2. Host `Channel::fault()` returns this enum and rejects unknown
 encodings. Hardware updates the generated field directly; enum values and their
 descriptions are also exported to the C header from the same schema metadata.
 
-This is not the predecessor's ABI. There is no event ring, scheduler, multi-channel
-arbitration, resource credit policy, old semantic API, custom future, or additional
+This is not the predecessor's ABI. There is no event ring, resource credit policy,
+old semantic API, custom future, or additional
 executor. Historical scenarios are preserved on the backup branch only. The old
 C header has been replaced by the current generated contract; see
 [`include/README.md`](include/README.md) for generation and consistency checking.

@@ -22,3 +22,7 @@ workspace = true
 [[test]]
 name = "single_channel"
 path = "tests/single_channel/main.rs"
+
+[[test]]
+name = "multi_channel"
+path = "tests/multi_channel/main.rs"

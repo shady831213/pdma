@@ -1,4 +1,4 @@
-use super::Switch;
+use super::{ChannelCount, Switch};
 use hardware_interface_schema::{register_map, register_schema};
 
 register_schema! {
@@ -60,6 +60,9 @@ register_map! {
     pub map DeviceControl {
         alignment: 4,
         placements: [
+            #[short_description = "Implemented channel count"]
+            #[description = "Number of physical channel register blocks. Software discovers this read-only hardware configuration before selecting a channel; device reset preserves it."]
+            pub channel_num: ChannelCount,
             #[description = "Enables notification of device fatal independently of channel IRQ enable."]
             pub irq_enable: Switch,
             #[description = "Device fatal cause; read-only and sticky until device reset."]

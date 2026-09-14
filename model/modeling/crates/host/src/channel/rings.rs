@@ -40,10 +40,10 @@ impl CommandRing {
     {
         port.validate_active()?;
         let producer = port
-            .read_word(COMMAND + CommandRegisters::PRODUCER.offset())
+            .channel_read_word(COMMAND + CommandRegisters::PRODUCER.offset())
             .await?;
         let consumer = port
-            .read_word(COMMAND + CommandRegisters::CONSUMER.offset())
+            .channel_read_word(COMMAND + CommandRegisters::CONSUMER.offset())
             .await?;
         let pointers = RingPointers { producer, consumer };
         if pointers.pending() >= self.capacity() {
@@ -58,7 +58,7 @@ impl CommandRing {
                 &command.encode().map_err(Error::Codec)?,
             )
             .map_err(Error::Memory)?;
-        port.write(
+        port.channel_write(
             COMMAND + CommandRegisters::PRODUCER.offset(),
             &next.producer.to_le_bytes(),
         )
@@ -99,10 +99,10 @@ impl ResponseRing {
     {
         port.validate_active()?;
         let consumer = port
-            .read_word(RESPONSE + ResponseRegisters::CONSUMER.offset())
+            .channel_read_word(RESPONSE + ResponseRegisters::CONSUMER.offset())
             .await?;
         let producer = port
-            .read_word(RESPONSE + ResponseRegisters::PRODUCER.offset())
+            .channel_read_word(RESPONSE + ResponseRegisters::PRODUCER.offset())
             .await?;
         let pointers = RingPointers { producer, consumer };
         if pointers.is_empty() {
@@ -114,7 +114,7 @@ impl ResponseRing {
             .read_typed::<ResponseRaw>(address, MemoryAlignment::ONE)
             .map_err(Error::Memory)?;
         let response = raw.decode().map_err(Error::Codec)?;
-        port.write(
+        port.channel_write(
             RESPONSE + ResponseRegisters::CONSUMER.offset(),
             &next.consumer.to_le_bytes(),
         )

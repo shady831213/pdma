@@ -5,17 +5,18 @@ use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{DeviceRegisters, Response, ResponseRegisters, ResponseStatus};
 use pdma_model_device::Device;
-use pdma_model_device::{Pipeline, pipeline};
+use pdma_model_device::Pipeline;
 use support::{TestResult, command, read_word, setup, submit};
-const RESPONSE_PRODUCER: usize =
-    DeviceRegisters::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset();
+const RESPONSE_PRODUCER: usize = DeviceRegisters::CHANNELS_OFFSET
+    + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+    + ResponseRegisters::PRODUCER.offset();
 
 #[test]
 fn irq_requires_published_response_on_every_step() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = pipeline();
+    let mut hardware = device.pipeline();
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
     // When
     for _ in 0..32 {

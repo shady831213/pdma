@@ -9,7 +9,7 @@ use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
     ResponseRegisters, ResponseStatus,
 };
-use pdma_model_device::{Device, Fault, Pipeline, pipeline};
+use pdma_model_device::{Device, Fault, Pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]
@@ -46,7 +46,9 @@ fn copy_publishes_response_before_notification_is_taken() -> TestResult {
     assert!(device.irq());
     assert!(device.take_interrupt());
     device.write(
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
     )?;
     assert!(!device.irq());
@@ -66,19 +68,25 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::FAULT.offset()
         )?,
         Fault::ResponseWrite.code().raw()
     );
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::PRODUCER.offset()
         )?,
         0
     );
     device.write(
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::IRQ_ENABLE.offset(),
         &0_u32.to_le_bytes(),
     )?;
     assert!(device.take_interrupt());
@@ -87,7 +95,9 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::CONSUMER.offset()
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::CONSUMER.offset()
         )?,
         1
     );
@@ -119,7 +129,9 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::FAULT.offset()
         )?,
         0
     );
@@ -127,7 +139,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
 }
 
 #[test]
-fn full_response_ring_stalls_retained_publication_without_replaying_copy() -> TestResult {
+fn full_response_ring_defers_command_acceptance_until_space_is_available() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 1)?;
     submit(&mut device, &memory, command())?;
@@ -139,10 +151,12 @@ fn full_response_ring_stalls_retained_publication_without_replaying_copy() -> Te
     )?;
     memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[2; 4])?;
     device.write(
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut hardware = pipeline();
+    let mut hardware = device.pipeline();
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
     // When
     let mut stalled = false;
@@ -157,28 +171,56 @@ fn full_response_ring_stalls_retained_publication_without_replaying_copy() -> Te
             break;
         }
     }
-    memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[9; 4])?;
+    assert_eq!(
+        read_word(
+            &mut device,
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::CONSUMER.offset()
+        )?,
+        1
+    );
+    assert_eq!(
+        memory.read_typed::<[u8; 4]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
+        [0; 4]
+    );
     device.write(
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
     )?;
-    let result = StepExecutor::new()
-        .step(&mut hardware, &mut operation, &mut device)
-        .map_err(|e| format!("{e:?}"))?;
+    let mut finished = false;
+    for _ in 0..32 {
+        match StepExecutor::new()
+            .step(&mut hardware, &mut operation, &mut device)
+            .map_err(|e| format!("{e:?}"))?
+        {
+            RunOutcome::Complete(result) => {
+                result?;
+                finished = true;
+                break;
+            }
+            RunOutcome::Progressed => {}
+            RunOutcome::Pending(()) => return Err("space was released but command stalled".into()),
+        }
+    }
     // Then
     assert!(stalled);
-    assert!(matches!(result, RunOutcome::Complete(Ok(()))));
+    assert!(finished);
     let mut destination = [0; 4];
     memory.read(
         MemoryAddress::new(0x1300),
         MemoryAlignment::ONE,
         &mut destination,
     )?;
-    assert_eq!(destination, [9; 4]);
+    assert_eq!(destination, [2; 4]);
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::FAULT.offset()
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::FAULT.offset()
         )?,
         0
     );

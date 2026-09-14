@@ -6,7 +6,7 @@ use pdma_model_device::Device;
 #[tokio::test]
 async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> TestResult {
     // Given: the platform has accepted a hardware error notification.
-    let mut device = Device::new(());
+    let mut device = Device::new((), 1)?;
     device.write(
         DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset(),
         &1_u32.to_le_bytes(),
@@ -31,7 +31,7 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
 #[tokio::test]
 async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResult {
     // Given: a fatal event occurred with device notifications disabled.
-    let mut device = Device::new(());
+    let mut device = Device::new((), 1)?;
     device.signal_fatal();
     let mut model = Model::new(device);
     // When: software enables notifications after the event.

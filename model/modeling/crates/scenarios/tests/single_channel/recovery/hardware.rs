@@ -9,7 +9,7 @@ use hardware_interface_runtime::{
     InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_device::{Device, Error, pipeline};
+use pdma_model_device::{Device, Error, Pipeline};
 use pdma_model_host::runtime::Model;
 use std::{io, sync::Arc};
 use tokio::task::JoinSet;
@@ -21,9 +21,8 @@ pub(super) struct Report {
     pub(super) irq: bool,
 }
 
-async fn drive(model: Model<SharedMemoryAccess>) -> TestResult {
+async fn drive(model: Model<SharedMemoryAccess>, mut stage: Pipeline) -> TestResult {
     let executor = AsyncExecutor::new(model.clone());
-    let mut stage = pipeline();
     loop {
         let mut operation = Operation::new(());
         match executor.run(&mut stage, &mut operation).await {
@@ -44,10 +43,12 @@ pub(super) async fn run(scenario: Scenario, payload: &[u8]) -> TestResult<Report
     let storage = Arc::new(SharedMemory::new());
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let stage = device.pipeline();
+    let model = Model::new(device);
     let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
     let mut workers = JoinSet::new();
-    workers.spawn(drive(model.clone()));
+    workers.spawn(drive(model.clone(), stage));
     assert!(storage.regions().is_empty());
     let execution = runtime.run_main(async |interrupts| {
         software::main(

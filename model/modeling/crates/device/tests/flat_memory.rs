@@ -9,7 +9,7 @@ use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
     ResponseRegisters, ResponseStatus,
 };
-use pdma_model_device::{Device, Pipeline, pipeline};
+use pdma_model_device::{Device, Pipeline};
 use std::{cell::RefCell, ops::Range};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -125,7 +125,7 @@ fn flat_store_preserves_bytes_when_write_crosses_extent() -> TestResult {
 #[test]
 fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
-    let mut device = Device::new(FlatMemory::new()?);
+    let mut device = Device::new(FlatMemory::new()?, 1)?;
     let command = Command {
         flags: pdma_model_contract::CompletionFlagsValues::default(),
         id: 91,
@@ -141,19 +141,31 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         .memory
         .write(MemoryAddress::new(256), MemoryAlignment::ONE, &[8, 6, 7, 5])?;
     device.write(
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            + ResponseRegisters::BASE.offset(),
         &128_u64.to_le_bytes(),
     )?;
     for offset in [
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::ENABLE.offset(),
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            + CommandRegisters::CAPACITY.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            + ResponseRegisters::CAPACITY.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::IRQ_ENABLE.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::ENABLE.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            + CommandRegisters::PRODUCER.offset(),
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
-    let mut hardware = pipeline();
+    let mut hardware = device.pipeline();
     let mut operation = Operation::<Pipeline, Device<FlatMemory>>::new(());
     let mut completed = false;
     // When

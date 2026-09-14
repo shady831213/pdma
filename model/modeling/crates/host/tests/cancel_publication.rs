@@ -6,8 +6,8 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus};
-use pdma_model_device::{Device, pipeline};
-use pdma_model_host::{Channel, RingConfig, Rings, runtime::Model};
+use pdma_model_device::Device;
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -41,10 +41,19 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"original")?;
-    let model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let mut stage = device.pipeline();
+    let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
-        .run_main(Channel::setup(model.clone(), memory.clone(), rings))
+        .run_main(Channel::setup(
+            model.clone(),
+            memory.clone(),
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
     cpu.run_main(channel.submit(Command {
         flags: pdma_model_contract::CompletionFlagsValues::default(),
@@ -54,7 +63,6 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut stage = pipeline();
     let mut operation = Operation::new(());
 
     // When: cancellation follows the DMA write, then changed buffers precede resumption.

@@ -13,7 +13,7 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     pub async fn fault(&self) -> Result<ChannelFaultCode, Error<B::Error>> {
         let raw = self
             .port
-            .read_word(CHANNEL + ChannelRegisters::FAULT.offset())
+            .channel_read_word(CHANNEL + ChannelRegisters::FAULT.offset())
             .await?;
         ChannelFaultValues::new(raw)
             .code()
@@ -25,7 +25,7 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Enabling does not replay masked events; inspect causes and pending responses.
     pub async fn set_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
-            .write(
+            .channel_write(
                 CHANNEL + ChannelRegisters::IRQ_ENABLE.offset(),
                 &u32::from(enabled).to_le_bytes(),
             )
@@ -37,7 +37,7 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Clearing a mask does not replay events; inspect causes and pending responses.
     pub async fn set_irq_mask(&self, mask: ChannelIrqMaskValues) -> Result<(), Error<B::Error>> {
         self.port
-            .write(
+            .channel_write(
                 CHANNEL + ChannelRegisters::IRQ_MASK.offset(),
                 &mask.raw().to_le_bytes(),
             )
@@ -47,7 +47,7 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Reads channel causes regardless of interrupt masks without acknowledging them.
     pub async fn irq_cause(&self) -> Result<ChannelIrqCauseValues, Error<B::Error>> {
         self.port
-            .read_word(CHANNEL + ChannelRegisters::IRQ_CAUSE.offset())
+            .channel_read_word(CHANNEL + ChannelRegisters::IRQ_CAUSE.offset())
             .await
             .map(ChannelIrqCauseValues::new)
     }
@@ -57,7 +57,7 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// External memory is preserved. Construct a fresh driver with `Self::setup` before reuse.
     pub async fn reset(self) -> Result<(), Error<B::Error>> {
         self.port
-            .write(
+            .channel_write(
                 CHANNEL + ChannelRegisters::RESET.offset(),
                 &1_u32.to_le_bytes(),
             )

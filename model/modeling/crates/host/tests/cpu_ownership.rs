@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{Command, CommandRegisters, DeviceRegisters, Endpoint, Response};
 use pdma_model_device::Device;
-use pdma_model_host::{Channel, Error, RingConfig, Rings, runtime::Model};
+use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -60,7 +60,7 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
             1,
         )?,
     };
-    let model = Model::new(Device::new(allocator.memory_access()));
+    let model = Model::new(Device::new(allocator.memory_access(), 1)?);
     let delay = Arc::new(AtomicBool::new(false));
     let paused = Arc::new(Notify::new());
     let resume = Arc::new(Notify::new());
@@ -73,7 +73,14 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
     let owner = SoftwareCpu::new();
     let other = SoftwareCpu::new();
     let mut channel = owner
-        .run_main(Channel::setup(bus, allocator.memory_access(), rings))
+        .run_main(Channel::setup(
+            bus,
+            allocator.memory_access(),
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
     delay.store(true, Ordering::SeqCst);
     let submission = channel.submit(Command {
@@ -102,7 +109,11 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
     let mut producer = [0; 4];
     model
         .read(
-            u32::try_from(DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset())?,
+            u32::try_from(
+                (DeviceRegisters::CHANNELS_OFFSET
+                    + pdma_model_contract::ChannelBlock::COMMAND.offset())
+                    + CommandRegisters::PRODUCER.offset(),
+            )?,
             &mut producer,
         )
         .await?;

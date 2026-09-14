@@ -4,18 +4,19 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
+    AfterEach, Combiner, Operation, Repeat, RunOutcome, Selection, Stage, StepExecutor,
+    StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{Response, ResponseStatus};
 use pdma_model_device::{
-    CheckLengths, Device, Error, Fetch, NextChunk, Publish, ReadCopy, Transfer, UpdateIrq,
-    WriteCopy,
+    ChannelContext, CheckLengths, Error, NextChunk, Publish, ReadCopy, Resettable, Transfer,
+    UpdateIrq, WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
 
 struct Resize(usize);
-impl Stage<Device<SharedMemory>> for Resize {
+impl Stage<ChannelContext<'_, SharedMemory>> for Resize {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
@@ -26,7 +27,7 @@ impl Stage<Device<SharedMemory>> for Resize {
     }
     fn step(
         &mut self,
-        _: &mut Device<SharedMemory>,
+        _: &mut ChannelContext<'_, SharedMemory>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
         let Some(mut transfer) = state.take() else {
@@ -49,8 +50,10 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
             WriteCopy,
         );
         let execution = Then::new(CheckLengths, Repeat::new(chunk));
-        let mut pipeline =
-            AfterEach::new(Then::new(Then::new(Fetch, execution), Publish), UpdateIrq);
+        let mut pipeline = Then::new(
+            Combiner::new(device.fetches(), Selection::RoundRobin, ()),
+            Resettable::new(AfterEach::new(Then::new(execution, Publish), UpdateIrq)),
+        );
         let mut operation = Operation::new(());
         let mut finished = false;
         // When: the transformed chunk reaches the ordinary write stage.

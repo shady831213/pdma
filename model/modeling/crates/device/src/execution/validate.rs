@@ -1,5 +1,5 @@
 use super::{CopyState, Cursor};
-use crate::{Device, Error};
+use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{Command, ResponseStatus};
@@ -24,7 +24,7 @@ pub struct LengthCheck {
 #[derive(Debug, Default)]
 pub struct CheckLengths;
 
-impl<M: MemoryAccess> Stage<Device<M>> for CheckLengths {
+impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for CheckLengths {
     type Input = Command;
     type Output = CopyState;
     type Error = Error;
@@ -43,7 +43,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for CheckLengths {
 
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<CopyState, Error, ()> {
         if context.halted() {
@@ -55,7 +55,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for CheckLengths {
         let Some(scan) = state.as_mut() else {
             return StepOutcome::Exhausted;
         };
-        let result = match scan.cursor.next_segment(&context.memory) {
+        let result = match scan.cursor.next_segment(context.memory) {
             Ok(Some(segment)) => match scan.total.checked_add(segment.length) {
                 Some(total) => {
                     scan.total = total;

@@ -7,10 +7,10 @@ use hardware_interface_runtime::{
     RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::{
-    ChannelFaultCode, ChannelIrqCauseValues, ChannelIrqMaskValues, Command, CompletionFlagsValues,
-    Endpoint, Response,
+    ChannelFaultCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
+    CompletionFlagsValues, Endpoint, Response,
 };
-use pdma_model_host::{Channel, RingConfig, Rings, runtime::Irq};
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;
 
@@ -95,7 +95,11 @@ where
     ports.memory.write(source, MemoryAlignment::ONE, payload)?;
     let (notice, mut notifications) = mpsc::channel(4);
     ports.interrupts.register((), Handler(notice))?;
-    let mut channel = Channel::setup(ports.bus.clone(), ports.memory.clone(), rings).await?;
+    let config = ChannelConfig {
+        id: ChannelId::new(0),
+        rings,
+    };
+    let mut channel = Channel::setup(ports.bus.clone(), ports.memory.clone(), config).await?;
     let mut outcome = Outcome {
         responses: Vec::new(),
         causes: Vec::new(),
@@ -144,7 +148,7 @@ where
         Scenario::ChannelReset => {
             outcome.fault = channel.fault().await?;
             channel.reset().await?;
-            channel = Channel::setup(ports.bus, ports.memory, rings).await?;
+            channel = Channel::setup(ports.bus, ports.memory, config).await?;
             channel
                 .submit(Command {
                     id: 42,

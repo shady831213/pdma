@@ -1,5 +1,5 @@
 use super::{CopyState, Transfer};
-use crate::{Device, Error};
+use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{Response, ResponseStatus};
@@ -9,7 +9,7 @@ use std::ops::ControlFlow;
 #[derive(Debug, Default)]
 pub struct ReadCopy;
 
-impl<M: MemoryAccess> Stage<Device<M>> for ReadCopy {
+impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for ReadCopy {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
@@ -20,7 +20,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for ReadCopy {
     }
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
         if context.halted() {
@@ -62,7 +62,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for ReadCopy {
 #[derive(Debug, Default)]
 pub struct WriteCopy;
 
-impl<M: MemoryAccess> Stage<Device<M>> for WriteCopy {
+impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for WriteCopy {
     type Input = Transfer;
     type Output = ControlFlow<Response, CopyState>;
     type Error = Error;
@@ -73,7 +73,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for WriteCopy {
     }
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
         if context.halted() {

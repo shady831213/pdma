@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_device::{Device, Pipeline, pipeline};
+use pdma_model_device::{Device, Pipeline};
 
 /// Test harness error propagation.
 pub type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -18,14 +18,18 @@ pub fn setup(
     let memory = SharedMemory::new();
     let region = MemoryRegion::try_new(MemoryAddress::new(0x1000), 0x1000, MemoryAlignment::ONE)?;
     memory.prepare_regions(&[region])?.try_install(&memory)?;
-    let mut device = Device::new(memory.clone());
+    let mut device = Device::new(memory.clone(), 1)?;
     for (offset, value) in [
         (
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::BASE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::BASE.offset(),
             0x1000,
         ),
         (
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::BASE.offset(),
             response_base,
         ),
     ] {
@@ -33,19 +37,27 @@ pub fn setup(
     }
     for (offset, value) in [
         (
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::CAPACITY.offset(),
             capacity,
         ),
         (
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::CAPACITY.offset(),
             capacity,
         ),
         (
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_ENABLE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::IRQ_ENABLE.offset(),
             1,
         ),
         (
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::ENABLE.offset(),
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::ENABLE.offset(),
             1,
         ),
     ] {
@@ -66,7 +78,9 @@ pub fn submit(
         &command.to_bytes()?,
     )?;
     device.write(
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        DeviceRegisters::CHANNELS_OFFSET
+            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            + CommandRegisters::PRODUCER.offset(),
         &1_u32.to_le_bytes(),
     )?;
     Ok(())
@@ -74,7 +88,7 @@ pub fn submit(
 
 /// Drive one operation within a fixed interaction bound.
 pub fn run(device: &mut Device<SharedMemory>) -> TestResult {
-    let mut hardware = pipeline();
+    let mut hardware = device.pipeline();
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
     for _ in 0..1024 {
         match StepExecutor::new()

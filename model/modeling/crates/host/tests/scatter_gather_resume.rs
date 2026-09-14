@@ -6,8 +6,8 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus, Segment};
-use pdma_model_device::{Device, pipeline};
-use pdma_model_host::{Channel, RingConfig, Rings, runtime::Model};
+use pdma_model_device::Device;
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -64,10 +64,19 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     let (destination, [destination_first, destination_second]) =
         scatter_gather(&allocator, [&[0; 2], &[0; 6]])?;
     let memory = allocator.memory_access();
-    let model = Model::new(Device::new(memory.clone()));
+    let device = Device::new(memory.clone(), 1)?;
+    let mut stage = device.pipeline();
+    let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
-        .run_main(Channel::setup(model.clone(), memory.clone(), rings))
+        .run_main(Channel::setup(
+            model.clone(),
+            memory.clone(),
+            ChannelConfig {
+                id: pdma_model_contract::ChannelId::new(0),
+                rings,
+            },
+        ))
         .await?;
     cpu.run_main(channel.submit(Command {
         flags: pdma_model_contract::CompletionFlagsValues::default(),
@@ -77,7 +86,6 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut stage = pipeline();
     let mut operation = Operation::new(());
 
     // When: cancellation follows the first two-byte write and the same operation resumes.

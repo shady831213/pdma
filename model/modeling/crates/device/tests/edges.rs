@@ -11,9 +11,12 @@ use pdma_model_contract::{
 use pdma_model_device::{Device, Error, Fault};
 use support::{TestResult, command, read_word, run, setup, submit};
 
-const COMMAND: usize = DeviceRegisters::COMMAND.offset();
-const RESPONSE: usize = DeviceRegisters::RESPONSE.offset();
-const CHANNEL: usize = DeviceRegisters::CHANNEL.offset();
+const COMMAND: usize =
+    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::COMMAND.offset();
+const RESPONSE: usize =
+    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::RESPONSE.offset();
+const CHANNEL: usize =
+    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset();
 const ENABLE: usize = CHANNEL + ChannelRegisters::ENABLE.offset();
 const IRQ_ENABLE: usize = CHANNEL + ChannelRegisters::IRQ_ENABLE.offset();
 const FAULT: usize = CHANNEL + ChannelRegisters::FAULT.offset();
@@ -23,7 +26,7 @@ const COMMAND_CONSUMER: usize = COMMAND + CommandRegisters::CONSUMER.offset();
 const RESPONSE_PRODUCER: usize = RESPONSE + ResponseRegisters::PRODUCER.offset();
 
 fn disabled(base: u64, capacity: u32) -> Result<Device<SharedMemory>, Box<dyn std::error::Error>> {
-    let mut device = Device::new(SharedMemory::new());
+    let mut device = Device::new(SharedMemory::new(), 1)?;
     device.write(
         COMMAND + CommandRegisters::BASE.offset(),
         &base.to_le_bytes(),

@@ -9,7 +9,7 @@ use hardware_interface_runtime::{
     InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{CommandRegisters, DeviceRegisters, ResponseRegisters};
+use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
 use pdma_model_host::runtime::Model;
 use std::{convert::Infallible, error::Error, sync::Arc};
 use tokio::task::JoinSet;
@@ -63,14 +63,17 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(first_address));
     let faulted = Arc::new(UnmappedRing::new(allocator.memory_access()));
     let access = SharedMemoryAccess::from(Arc::clone(&faulted));
-    let (device, mut stage) = hardware::assemble(access.clone());
+    let (device, mut stage) = hardware::assemble(access.clone())?;
     let model = Model::new(device);
+    let channel_base = ChannelId::new(0)
+        .register_offset()
+        .ok_or("channel zero missing")?;
     let base_register = match injection {
         FaultInjection::ResponseWrite => Some(u32::try_from(
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            channel_base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
         )?),
         FaultInjection::CommandWrite => Some(u32::try_from(
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::BASE.offset(),
+            channel_base + ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),
         )?),
         FaultInjection::None | FaultInjection::AllocationExhausted => None,
     };

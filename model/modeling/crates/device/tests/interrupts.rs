@@ -7,13 +7,20 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters};
 use support::{TestResult, command, read_word, run, setup, submit};
 
+const CONTROL: usize =
+    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset();
+const COMMAND: usize =
+    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::COMMAND.offset();
+const RESPONSE: usize =
+    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::RESPONSE.offset();
+
 #[test]
 fn each_response_source_obeys_only_its_own_mask() -> TestResult {
     for mask in 0..4_u32 {
         // Given: every combination of independent masks and a delivered first response.
         let (mut device, memory) = setup(0x1100, 2)?;
         device.write(
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_MASK.offset(),
+            CONTROL + ChannelRegisters::IRQ_MASK.offset(),
             &mask.to_le_bytes(),
         )?;
         submit(&mut device, &memory, command())?;
@@ -27,7 +34,7 @@ fn each_response_source_obeys_only_its_own_mask() -> TestResult {
             &ioc.to_bytes()?,
         )?;
         device.write(
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+            COMMAND + CommandRegisters::PRODUCER.offset(),
             &2_u32.to_le_bytes(),
         )?;
         // When: an IOC arrives without a new empty-to-non-empty transition.
@@ -35,10 +42,7 @@ fn each_response_source_obeys_only_its_own_mask() -> TestResult {
         // Then: only the IOC mask decides delivery; causes ignore both masks.
         assert_eq!(device.take_interrupt(), mask & 2 == 0);
         assert_eq!(
-            read_word(
-                &mut device,
-                DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-            )?,
+            read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
             3
         );
     }
@@ -59,7 +63,7 @@ fn non_empty_notifies_only_on_transition() -> TestResult {
         &command().to_bytes()?,
     )?;
     device.write(
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        COMMAND + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
     // When: a second response arrives while the first remains unread.
@@ -67,14 +71,11 @@ fn non_empty_notifies_only_on_transition() -> TestResult {
     // Then: the cause remains visible without a duplicate notification.
     assert!(!device.take_interrupt());
     assert_eq!(
-        read_word(
-            &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-        )?,
+        read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
         1
     );
     device.write(
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+        RESPONSE + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
     )?;
     assert!(!device.irq());
@@ -85,7 +86,7 @@ fn non_empty_notifies_only_on_transition() -> TestResult {
 fn ioc_notifies_while_non_empty_and_mask_does_not_replay() -> TestResult {
     // Given: queue notifications masked but IOC enabled.
     let (mut device, memory) = setup(0x1100, 2)?;
-    let mask = DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_MASK.offset();
+    let mask = CONTROL + ChannelRegisters::IRQ_MASK.offset();
     device.write(mask, &1_u32.to_le_bytes())?;
     submit(&mut device, &memory, command())?;
     run(&mut device)?;
@@ -98,7 +99,7 @@ fn ioc_notifies_while_non_empty_and_mask_does_not_replay() -> TestResult {
         &ioc.to_bytes()?,
     )?;
     device.write(
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        COMMAND + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
     // When: IOC completes in an already non-empty queue.
@@ -108,21 +109,15 @@ fn ioc_notifies_while_non_empty_and_mask_does_not_replay() -> TestResult {
     device.write(mask, &0_u32.to_le_bytes())?;
     assert!(!device.take_interrupt());
     assert_eq!(
-        read_word(
-            &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-        )?,
+        read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
         3
     );
     device.write(
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+        RESPONSE + ResponseRegisters::CONSUMER.offset(),
         &2_u32.to_le_bytes(),
     )?;
     assert_eq!(
-        read_word(
-            &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-        )?,
+        read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
         0
     );
     Ok(())
@@ -133,7 +128,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
     // Given: mismatched endpoints followed by a valid command.
     let (mut device, memory) = setup(0x1100, 2)?;
     device.write(
-        DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_MASK.offset(),
+        CONTROL + ChannelRegisters::IRQ_MASK.offset(),
         &3_u32.to_le_bytes(),
     )?;
     let mut invalid = command();
@@ -141,7 +136,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
     submit(&mut device, &memory, invalid)?;
     run(&mut device)?;
     device.write(
-        DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+        RESPONSE + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
     )?;
     memory.write(
@@ -150,7 +145,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
         &command().to_bytes()?,
     )?;
     device.write(
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        COMMAND + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
     // When: software tries to continue without reset.
@@ -158,18 +153,12 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
     // Then: no second command is fetched and the error cause stays asserted.
     assert!(result.is_err());
     assert_eq!(
-        read_word(
-            &mut device,
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::CONSUMER.offset()
-        )?,
+        read_word(&mut device, COMMAND + CommandRegisters::CONSUMER.offset())?,
         1
     );
     assert!(device.irq());
     assert_eq!(
-        read_word(
-            &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-        )?,
+        read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
         4
     );
     Ok(())
@@ -186,7 +175,7 @@ fn fatal_notifies_even_when_response_cause_is_already_active() -> TestResult {
     malformed[8] = 255;
     memory.write(MemoryAddress::new(0x1040), MemoryAlignment::ONE, &malformed)?;
     device.write(
-        DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+        COMMAND + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
     // When: a new command fetch fails while response non-empty remains true.
@@ -194,10 +183,7 @@ fn fatal_notifies_even_when_response_cause_is_already_active() -> TestResult {
     // Then: an independent fatal event is emitted with both causes visible.
     assert!(device.take_interrupt());
     assert_eq!(
-        read_word(
-            &mut device,
-            DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-        )?,
+        read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
         9
     );
     Ok(())
@@ -216,7 +202,7 @@ fn ioc_cause_clears_at_latest_ioc_not_at_ring_empty() -> TestResult {
             &input.to_bytes()?,
         )?;
         device.write(
-            DeviceRegisters::COMMAND.offset() + CommandRegisters::PRODUCER.offset(),
+            COMMAND + CommandRegisters::PRODUCER.offset(),
             &(producer + 1).to_le_bytes(),
         )?;
         run(&mut device)?;
@@ -225,15 +211,12 @@ fn ioc_cause_clears_at_latest_ioc_not_at_ring_empty() -> TestResult {
     // When: software consumes each IOC but leaves the last ordinary response unread.
     for (consumer, cause) in [(1_u32, 3), (2, 1)] {
         device.write(
-            DeviceRegisters::RESPONSE.offset() + ResponseRegisters::CONSUMER.offset(),
+            RESPONSE + ResponseRegisters::CONSUMER.offset(),
             &consumer.to_le_bytes(),
         )?;
         // Then: IOC persists through the first consumption and clears exactly at the last IOC.
         assert_eq!(
-            read_word(
-                &mut device,
-                DeviceRegisters::CHANNEL.offset() + ChannelRegisters::IRQ_CAUSE.offset()
-            )?,
+            read_word(&mut device, CONTROL + ChannelRegisters::IRQ_CAUSE.offset())?,
             cause
         );
     }

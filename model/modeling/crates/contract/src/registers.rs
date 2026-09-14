@@ -1,7 +1,9 @@
 use hardware_interface_schema::{register_map, register_schema};
 
 mod control;
+mod device;
 pub use control::*;
+pub use device::*;
 
 register_schema! {
     #[short_description = "Read/write word"]
@@ -158,9 +160,9 @@ register_map! {
 }
 
 register_map! {
-    #[short_description = "Minimal PDMA device registers"]
-    #[description = "One channel with command/response rings, edge notifications, channel reset and device-wide fatal/reset controls. Register transactions use little-endian bytes and must match an exact register start and width; layout gaps are not registers."]
-    pub map DeviceRegisters {
+    #[short_description = "PDMA channel register block"]
+    #[description = "One independent channel's command/response rings, notification controls, sticky fault and reset. DeviceRegisters repeats this block for every implemented channel."]
+    pub map ChannelBlock {
         alignment: 8,
         placements: [
             #[short_description = "Command queue interface"]
@@ -171,9 +173,7 @@ register_map! {
             pub response: ResponseRegisters,
             #[short_description = "Channel management interface"]
             #[description = "Processing enable, interrupt causes, sticky channel fault and channel reset. There is no separate event ring."]
-            pub channel: ChannelRegisters,
-            #[description = "Device-wide fatal reporting and reset, independent of channel recovery."]
-            pub control: DeviceControl,
+            pub control: ChannelRegisters,
         ],
     }
 }

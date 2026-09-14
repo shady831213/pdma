@@ -47,21 +47,18 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> Exporter<ResolvedR
         Sink: ArtifactSink<Error = Self::Error>,
     {
         let model = RegisterMapCHeaderModel::from_resolved(schema);
-        let paths_and_names = schema
-            .registers()
-            .iter()
-            .map(|register| {
-                (
-                    register.path().into(),
-                    super::naming::c_identifier(register.path()),
-                )
-            })
+        let contents = render(&model, &self.config.symbol_prefix);
+        let paths_and_names = contents
+            .lines()
+            .filter_map(|line| line.strip_prefix("#define "))
+            .filter_map(|definition| definition.split_ascii_whitespace().next())
+            .map(|name| (name.to_owned(), name.to_owned()))
             .collect::<Vec<_>>();
         super::naming::reject_collisions(&paths_and_names)?;
         sink.emit(Artifact {
             logical_name: self.config.logical_name.clone(),
             media_type: String::from(C_MEDIA_TYPE),
-            contents: render(&model, &self.config.symbol_prefix).into_bytes(),
+            contents: contents.into_bytes(),
         })
     }
 }

@@ -3,15 +3,15 @@ use core::fmt;
 /// Failure while projecting or emitting a resolved C fragment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CHeaderExportError {
-    /// Two resolved paths project to one C11-significant identifier prefix.
+    /// Two export origins share one C11-significant identifier prefix.
     NameCollision {
-        /// Earlier resolved path.
+        /// Earlier schema path or emitted symbol.
         first_path: String,
-        /// Later resolved path.
+        /// Later schema path or emitted symbol.
         second_path: String,
-        /// Earlier declaration-order position.
+        /// Earlier position in the validated origin sequence.
         first_index: usize,
-        /// Later declaration-order position.
+        /// Later position in the validated origin sequence.
         second_index: usize,
     },
     /// Application sink rejection used by typed sink implementations.

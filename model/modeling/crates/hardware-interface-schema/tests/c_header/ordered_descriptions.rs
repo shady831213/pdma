@@ -38,6 +38,45 @@ register_map! {
     }
 }
 
+register_map! {
+    pub map DeeplyNestedDeviceRegisterInterface {
+        alignment: 4,
+        placements: [
+            channels_with_independent_configuration: Device { count: 2 },
+        ],
+    }
+}
+
+#[test]
+fn long_rust_paths_export_when_actual_c_symbols_are_distinct() -> TestResult {
+    // Given: repeated nesting whose Rust paths share more than 63 encoded bytes.
+    let resolved = DeeplyNestedDeviceRegisterInterface::resolve()?;
+    // When: rendering the generated map's short, disambiguated register symbols.
+    let artifact = render(
+        &RegisterMapCHeaderExporter::new("deep.h", "deep"),
+        &resolved,
+    )?;
+    // Then: the actual symbols compile and expose the final repeated register.
+    compile_fragments("deep-map", &[&artifact.contents],
+        b"_Static_assert(C_DEEP_C_QUSQUTQUAQUTQUUQUS__12_OFFSET == 44, \"last register\");\nint main(void) { return C_DEEP_SIZE != 48; }\n")?;
+    Ok(())
+}
+
+#[test]
+fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult {
+    use hardware_interface_schema::export::{Exporter, InMemoryArtifactSink};
+    // Given: a prefix that consumes C11's complete significant identifier length.
+    let resolved = Channels::resolve()?;
+    let exporter = RegisterMapCHeaderExporter::new("long.h", "a".repeat(64));
+    let mut sink = InMemoryArtifactSink::new();
+    // When: rendering symbols whose distinguishing suffix lies beyond that length.
+    let result = exporter.export(&resolved, &mut sink);
+    // Then: no artifact is emitted and the collision remains a typed error.
+    assert!(matches!(result, Err(hardware_interface_schema::export::backends::c_header::CHeaderExportError::NameCollision { .. })));
+    assert!(sink.artifacts().is_empty());
+    Ok(())
+}
+
 bits_schema! {
     #[short_description = "Reusable flags"]
     pub bits Flags(u32) {

@@ -63,7 +63,9 @@ pub(super) fn placement_geometry(
     let alignment_mask =
         quote!(<#definition as #facade::RegisterLayout>::ALIGNMENT.saturating_sub(1));
     let alignment_check = quote!(#map_alignment & #alignment_mask == 0);
-    let offset_alignment = quote!(#marker::#offset_name & #alignment_mask == 0);
+    let offset_alignment = quote!(
+        matches!(#facade::checked_align_up(#marker::#offset_name, <#definition as #facade::RegisterLayout>::ALIGNMENT), Some(aligned) if aligned == #marker::#offset_name)
+    );
     let stride_alignment = quote!(#marker::#stride_name >= <#definition as #facade::RegisterLayout>::EXTENT && #marker::#stride_name & #alignment_mask == 0);
     let mut assertions = vec![
         quote!(

@@ -6,4 +6,5 @@ mod fan_out {
     mod lifecycle;
     mod policies;
     mod routing;
+    mod terminal;
 }

@@ -1,6 +1,8 @@
 //! Application-defined fan-in behavior.
 
-use hardware_interface_pipeline::{BranchError, Combine, FanIn, Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{
+    BranchError, Combine, FanIn, FanInState, Operation, Stage, StepOutcome,
+};
 
 struct Number(u8);
 
@@ -172,7 +174,8 @@ fn terminal_planning_stops_without_child_or_reducer_effects() {
         };
         let mut hardware = FanIn::new(vec![Number(3)], policy);
         let mut context = Vec::new();
-        let mut state = <FanIn<Number, StopPolicy<'_>> as Stage<Vec<u8>>>::start(());
+        let mut state: FanInState<(), bool, u8> =
+            <FanIn<Number, StopPolicy<'_>> as Stage<Vec<u8>>>::start(());
         // When: the planning result is observed and its state is stepped again.
         let result = hardware.step(&mut context, &mut state);
         let terminal = hardware.step(&mut context, &mut state);

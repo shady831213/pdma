@@ -1,13 +1,6 @@
-use crate::{BranchError, Stage, StepOutcome, Then};
+use crate::{BranchError, Stage, StepOutcome};
 
-use super::{
-    branches::{Branches, RunBranch},
-    flow::{FlowState, Frame, start},
-    reduce::Reduce,
-};
-
-mod stages;
-use stages::Split;
+use super::fan::{BranchPlan, Fan, FanState, Frame, compose, start};
 
 /// Planning result containing application metadata and ordered destination requests.
 pub type DeliveryPlan<T, I, E> = Result<(T, Vec<(usize, I)>), BranchError<E>>;
@@ -49,22 +42,20 @@ pub trait Distribute<C, S: Stage<C>> {
 /// Failure stops remaining deliveries without reverting committed effects.
 #[derive(Debug)]
 pub struct FanOut<S, P> {
-    destinations: Vec<S>,
-    policy: P,
+    fan: Fan<S, P>,
 }
 
 /// Owned input, application metadata, and destination progress of one operation.
 #[derive(Debug)]
 pub struct FanOutState<I, P, D, T, O> {
-    pipeline: FlowState<I, P, D, T, O>,
+    pipeline: FanState<I, P, D, T, O>,
 }
 
 impl<S, P> FanOut<S, P> {
     /// Owns the destination population and application delivery policy.
     pub const fn new(destinations: Vec<S>, policy: P) -> Self {
         Self {
-            destinations,
-            policy,
+            fan: Fan::new(destinations, policy),
         }
     }
 }
@@ -81,13 +72,7 @@ where
     type State = FanOutState<P::Input, P::State, S::Input, S::State, S::Output>;
 
     fn start(input: Self::Input) -> Self::State {
-        let pipeline = Then::new(
-            Split,
-            Then::new(
-                Branches::<P::State>::new(RunBranch::new()),
-                Reduce::new(P::combine),
-            ),
-        );
+        let pipeline = compose(Split, P::combine);
         FanOutState {
             pipeline: start::<Frame<'_, C, S, P>, _>(&pipeline, input),
         }
@@ -98,20 +83,37 @@ where
         context: &mut C,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let mut pipeline = Then::new(
-            Split,
-            Then::new(
-                Branches::<P::State>::new(RunBranch::new()),
-                Reduce::new(P::combine),
-            ),
-        );
-        pipeline.step(
-            &mut Frame {
-                context,
-                ports: &mut self.destinations,
-                policy: &mut self.policy,
-            },
-            &mut state.pipeline,
+        self.fan
+            .step(context, &mut state.pipeline, compose(Split, P::combine))
+    }
+}
+
+struct Split;
+
+impl<C, S: Stage<C>, P: Distribute<C, S>> Stage<Frame<'_, C, S, P>> for Split {
+    type Input = P::Input;
+    type Output = BranchPlan<P::State, S::Input, S::Output>;
+    type Error = BranchError<S::Error>;
+    type Wait = S::Wait;
+    type State = Option<P::Input>;
+
+    fn start(input: Self::Input) -> Self::State {
+        Some(input)
+    }
+
+    fn step(
+        &mut self,
+        frame: &mut Frame<'_, C, S, P>,
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        let Some(input) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
+        StepOutcome::Complete(
+            frame
+                .policy
+                .split(frame.context, input)
+                .and_then(|(metadata, plan)| BranchPlan::new(metadata, plan, frame.ports.len())),
         )
     }
 }

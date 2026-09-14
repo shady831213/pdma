@@ -2,17 +2,17 @@ use std::{collections::BTreeSet, marker::PhantomData, ops::ControlFlow, vec::Int
 
 use crate::{BranchError, Repeat, Stage, StepOutcome};
 
-use super::flow::Frame;
+use super::Frame;
 
 #[derive(Debug)]
-pub(super) struct BranchPlan<M, I, O> {
+pub(in crate::combinators) struct BranchPlan<M, I, O> {
     metadata: M,
     requests: IntoIter<(usize, I)>,
     outputs: Vec<O>,
 }
 
 impl<M, I, O> BranchPlan<M, I, O> {
-    pub(super) fn new<E>(
+    pub(in crate::combinators) fn new<E>(
         metadata: M,
         requests: Vec<(usize, I)>,
         ports: usize,
@@ -38,7 +38,7 @@ impl<M, I, O> BranchPlan<M, I, O> {
 }
 
 #[derive(Debug)]
-pub(super) struct RunBranchState<M, I, T, O> {
+pub(in crate::combinators) struct RunBranchState<M, I, T, O> {
     plan: Option<BranchPlan<M, I, O>>,
     active: Option<(usize, T)>,
 }
@@ -54,9 +54,9 @@ impl<M, I, T, O> RunBranchState<M, I, T, O> {
     }
 }
 
-pub(super) type Branches<M> = Repeat<RunBranch<M>>;
+pub(in crate::combinators) type Branches<M> = Repeat<RunBranch<M>>;
 
-pub(super) struct RunBranch<M>(PhantomData<fn() -> M>);
+pub(in crate::combinators) struct RunBranch<M>(PhantomData<fn() -> M>);
 
 impl<M> RunBranch<M> {
     pub(super) const fn new() -> Self {

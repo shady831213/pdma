@@ -46,13 +46,17 @@ Pending work blocks later branches and retains completed outputs without cloning
 Child failure or exhaustion terminalizes the whole operation. `BranchError` separates
 invalid plans from application errors; `MapError` adapts error types when connecting
 stages with `Then`. These combinators use the existing operation and executor APIs.
-Internally both fan combinators are `Then<PlanOrSplit, Then<Branches, Reduce>>` compositions.
+The private `combinators/fan/` module owns the shared port population, policy borrowing,
+composition state and assembly for both fan combinators. Their public wrappers supply
+`Plan` or `Split` and the application reducer to the same
+`Then<PlanOrSplit, Then<Branches, Reduce>>` composition.
 `ThenState` owns their phase transitions. `Branches` is `Repeat<RunBranch>`:
 one iteration advances one selected child, returning the remaining plan and accumulated
 outputs through `Continue`, or the final aggregate through `Break`. `Repeat` owns iteration
 and termination; a pending child keeps its current state. Preparing an iteration does not
 start its child, so arbitration can still invalidate an unstarted selection.
-Both use the same `Reduce` stage, supplying their policy's reduction function and consuming
+`Branches` and `Reduce` are internal stages in that module, not application-facing combinators.
+Both fans use the same `Reduce` stage, supplying their policy's reduction function and consuming
 the owned metadata and outputs once. The policy and connected
 hardware remain owned by the fan combinator; stateless internal stages borrow them and
 the application context for each call. No frame borrow enters retained operation state.

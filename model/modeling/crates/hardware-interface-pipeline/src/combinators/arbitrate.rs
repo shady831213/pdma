@@ -114,6 +114,6 @@ where
     A: Arbitration<C, S>,
 {
     fn ready(&self, context: &C) -> bool {
-        self.0.sources.iter().any(|source| source.ready(context))
+        self.0.fan.ports.iter().any(|source| source.ready(context))
     }
 }

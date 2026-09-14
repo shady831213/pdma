@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 
 use crate::{BranchError, Stage, StepOutcome};
 
-use super::flow::Frame;
+use super::Frame;
 
-pub(super) struct Reduce<M, F> {
+pub(in crate::combinators) struct Reduce<M, F> {
     reduce: F,
     metadata: PhantomData<fn() -> M>,
 }

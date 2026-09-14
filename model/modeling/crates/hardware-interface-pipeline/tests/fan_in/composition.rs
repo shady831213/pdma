@@ -1,8 +1,7 @@
+use super::policy::Policy;
 use std::ops::ControlFlow;
 
-use hardware_interface_pipeline::{
-    Combiner, Operation, Repeat, Selection, Stage, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{Arbitrate, Operation, Repeat, Stage, StepOutcome, Then};
 
 use super::sources::{Context, Job, Queue};
 
@@ -13,7 +12,7 @@ struct Collect {
 impl Stage<Context> for Collect {
     type Input = u8;
     type Output = ControlFlow<Vec<u8>>;
-    type Error = &'static str;
+    type Error = hardware_interface_pipeline::BranchError<&'static str>;
     type Wait = &'static str;
     type State = Option<u8>;
 
@@ -44,10 +43,9 @@ fn then_and_repeat_preserve_round_robin_across_iteration_state() {
     let mut context = Context::default();
     context.enqueue(0, [Job::Value(10), Job::Value(11)]);
     context.enqueue(1, [Job::Value(20), Job::Value(21)]);
-    let fan_in = Combiner::new(
+    let fan_in = Arbitrate::new(
         vec![Queue::new(0), Queue::new(1)],
-        Selection::RoundRobin,
-        "idle",
+        Policy::round_robin("idle"),
     );
     let mut hardware = Repeat::new(Then::new(fan_in, Collect { values: Vec::new() }));
     let mut operation = Operation::new(());

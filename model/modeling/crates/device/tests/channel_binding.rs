@@ -51,7 +51,7 @@ fn different_instance_counts_control_arbitration_wait_rounds()
     // Given: independently configured one- and five-channel devices.
     for count in [1, 5] {
         let mut device = Device::new(SharedMemory::new(), count)?;
-        let mut arbiter = device.pipeline().upstream;
+        let mut arbiter = device.intake();
         let mut operation = Operation::new(());
         // When: scanning each empty population.
         for _ in 1..count {

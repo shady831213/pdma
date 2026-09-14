@@ -1,5 +1,6 @@
 //! Instance-configured channels sharing one DMA execution path.
 
+mod arbitration;
 mod build;
 mod channel;
 mod error;
@@ -7,8 +8,10 @@ mod execution;
 mod fetch;
 mod multi_channel;
 mod reset;
+mod routing;
 mod stages;
 
+pub use arbitration::RoundRobin;
 pub use build::BuildError;
 pub use channel::{Channel, CommandRing, ResponseRing};
 pub use error::{Error, Fault};
@@ -23,7 +26,8 @@ use pdma_model_contract::{
     ChannelId, DeviceControl, DeviceControlValues, DeviceFaultCode, DeviceRegisters,
 };
 pub use reset::{ChannelTask, Resettable};
-pub use stages::{CopyLoop, Execution, Pipeline, Publish, UpdateIrq};
+pub use routing::{ResponsePort, RouteResponse};
+pub use stages::{CopyLoop, Execution, Intake, Pipeline, Publish, Responses, UpdateIrq};
 
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]

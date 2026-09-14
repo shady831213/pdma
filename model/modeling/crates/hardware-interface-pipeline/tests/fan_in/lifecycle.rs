@@ -1,4 +1,5 @@
-use hardware_interface_pipeline::{Combiner, Operation, Selection, Stage, StepOutcome};
+use super::policy::Policy;
+use hardware_interface_pipeline::{Arbitrate, Operation, Stage, StepOutcome};
 
 use super::sources::{Context, Job, Queue};
 
@@ -8,7 +9,7 @@ fn pending_grant_retains_accepted_state_after_readiness_disappears() {
     let mut context = Context::default();
     context.enqueue(0, [Job::Value(8)]);
     context.enqueue(1, [Job::Value(9)]);
-    let mut hardware = Combiner::new(
+    let mut hardware = Arbitrate::new(
         vec![
             Queue {
                 id: 0,
@@ -16,8 +17,7 @@ fn pending_grant_retains_accepted_state_after_readiness_disappears() {
             },
             Queue::new(1),
         ],
-        Selection::RoundRobin,
-        "idle",
+        Policy::round_robin("idle"),
     );
     let mut operation = Operation::new(());
 
@@ -42,13 +42,18 @@ fn terminal_outcomes_are_forwarded_and_direct_stage_state_is_inert() {
     // Given: sources independently completing, failing, or exhausting immediately.
     for (job, expected) in [
         (Job::Value(3), StepOutcome::Complete(Ok(3))),
-        (Job::Fail, StepOutcome::Complete(Err("source fault"))),
+        (
+            Job::Fail,
+            StepOutcome::Complete(Err(hardware_interface_pipeline::BranchError::Application(
+                "source fault",
+            ))),
+        ),
         (Job::End, StepOutcome::Exhausted),
     ] {
         let mut context = Context::default();
         context.enqueue(0, [job, Job::Value(4)]);
-        let mut hardware = Combiner::new(vec![Queue::new(0)], Selection::RoundRobin, "idle");
-        let mut state = <Combiner<Queue, &str> as Stage<Context>>::start(());
+        let mut hardware = Arbitrate::new(vec![Queue::new(0)], Policy::round_robin("idle"));
+        let mut state = <Arbitrate<Queue, Policy> as Stage<Context>>::start(());
 
         // When: the same state is stepped beyond its terminal result.
         let first = hardware.step(&mut context, &mut state);
@@ -62,9 +67,9 @@ fn terminal_outcomes_are_forwarded_and_direct_stage_state_is_inert() {
 }
 
 #[test]
-fn empty_combiner_is_exhausted_without_interaction() {
+fn empty_arbiter_is_exhausted_without_interaction() {
     // Given: fan-in hardware with no sources.
-    let mut hardware = Combiner::<Queue, _>::new(Vec::new(), Selection::RoundRobin, "idle");
+    let mut hardware = Arbitrate::<Queue, _>::new(Vec::new(), Policy::round_robin("idle"));
     let mut context = Context::default();
 
     // When: an operation is driven once.

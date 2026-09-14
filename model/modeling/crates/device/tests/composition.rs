@@ -4,13 +4,12 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Combiner, Operation, Repeat, RunOutcome, Selection, Stage, StepExecutor,
-    StepOutcome, Then,
+    AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_device::{
-    ChannelContext, CheckLengths, Error, NextChunk, Publish, ReadCopy, Resettable, Transfer,
-    UpdateIrq, WriteCopy,
+    ChannelContext, CheckLengths, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
+    WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
 
@@ -56,8 +55,11 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
     );
     let execution = Then::new(CheckLengths, Repeat::new(chunk));
     let mut hardware = Then::new(
-        Combiner::new(device.fetches(), Selection::RoundRobin, ()),
-        Resettable::new(AfterEach::new(Then::new(execution, Publish), UpdateIrq)),
+        Then::new(
+            device.intake(),
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        ),
+        device.responses(),
     );
     let mut operation = Operation::new(());
     let mut complete = false;

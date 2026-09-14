@@ -1,8 +1,8 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Combiner, Operation, ReadyStage, Selection, StepOutcome};
+use hardware_interface_pipeline::{Arbitrate, BranchError, Operation, ReadyStage, StepOutcome};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters};
-use pdma_model_device::{Device, Error, Fetch};
+use pdma_model_device::{Device, Error, Fetch, RoundRobin};
 
 fn device() -> TestResult<Device<SharedMemory>> {
     let memory = SharedMemory::new();
@@ -49,13 +49,12 @@ fn probing_fetch_readiness_does_not_consume_any_command() -> TestResult {
 }
 
 #[test]
-fn generic_combiner_selects_only_its_explicit_channel_inputs() -> TestResult {
+fn generic_fan_in_selects_only_its_explicit_channel_inputs() -> TestResult {
     // Given: a channel subset whose input order differs from hardware indices.
     let mut device = device()?;
-    let mut combined = Combiner::new(
+    let mut combined = Arbitrate::new(
         vec![Fetch::new(ChannelId::new(2)), Fetch::new(ChannelId::new(0))],
-        Selection::RoundRobin,
-        (),
+        RoundRobin::default(),
     );
     // When: two successive commands cross the generic fan-in.
     for index in [2, 0] {
@@ -79,17 +78,13 @@ fn generic_combiner_selects_only_its_explicit_channel_inputs() -> TestResult {
 fn invalid_fetch_target_reports_an_error_without_consuming_valid_inputs() -> TestResult {
     // Given: a custom graph with an input outside the device's channel population.
     let mut device = device()?;
-    let mut combined = Combiner::new(
-        vec![Fetch::new(ChannelId::new(3))],
-        Selection::RoundRobin,
-        (),
-    );
+    let mut combined = Arbitrate::new(vec![Fetch::new(ChannelId::new(3))], RoundRobin::default());
     // When: the invalid input is selected.
     let result = Operation::new(()).step(&mut combined, &mut device);
     // Then: configuration misuse is reported rather than waiting forever or touching another channel.
     assert!(matches!(
         result,
-        StepOutcome::Complete(Err(Error::Unmapped))
+        StepOutcome::Complete(Err(BranchError::Application(Error::Unmapped)))
     ));
     for index in 0..3 {
         assert_eq!(consumer(&mut device, index)?, 0);

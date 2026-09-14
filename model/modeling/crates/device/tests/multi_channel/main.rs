@@ -9,9 +9,10 @@ use pdma_model_contract::{
 };
 use pdma_model_device::{Device, Error};
 
-mod combiner_inputs;
 mod fairness;
+mod fan_in_inputs;
 mod reset_boundaries;
+mod response_routing;
 mod shared;
 /// Shared raw-bus fixtures for the multi-channel boundary tests.
 pub mod support;

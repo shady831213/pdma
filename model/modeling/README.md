@@ -29,7 +29,9 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/device/src/channel/mmio.rs` | Generated block routing and software-write effects. |
 | `crates/device/src/stages.rs` | One channel's hardware composition. |
 | `crates/device/src/fetch.rs` | Per-channel readiness and generation-tagged command acceptance. |
-| `crates/hardware-interface-pipeline/src/compositor/combiner.rs` | Generic ready-input selection and retained grants. |
+| `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
+| `crates/device/src/arbitration.rs` | PDMA round-robin selection policy. |
+| `crates/device/src/routing.rs` | Generation-bound response destination policy. |
 | `crates/device/src/multi_channel.rs` | Repetition of one shared command execution pipeline. |
 | `crates/device/src/execution.rs` | Retained copy progress and chunk payload. |
 | `crates/device/src/execution/validate.rs` | Incremental endpoint-total validation. |
@@ -53,17 +55,25 @@ The device composition is deliberately explicit:
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
 let execution = Then::new(CheckLengths, Repeat::new(chunk));
-let inputs = Combiner::new(device.fetches(), Selection::RoundRobin, ());
-Then::new(inputs, Resettable::new(AfterEach::new(
-    Then::new(execution, Publish), UpdateIrq,
-)))
+Then::new(
+    Then::new(device.intake(), Resettable::new(AfterEach::new(execution, UpdateIrq))),
+    device.responses(),
+)
 ```
 
 Each `Fetch` produces `ChannelTask<Command>`, carrying channel identity and generation.
 Its `ReadyStage::ready` checks channel/ring state without consuming a command.
-The generic `Combiner` selects one input; it does not know PDMA register or ring semantics.
-`Resettable` selects its context and checks the generation before every nested interaction.
-The inner ports are `Command -> CopyState -> Response -> ()`. The copy body is
+`device.intake()` uses `Arbitrate<Fetch, RoundRobin>`: arbitration specializes the generic
+`FanIn` with a singleton plan and identity output, while device owns the selection policy.
+`FanIn` itself can gather multiple sources and reduce them into a different output type.
+`device.responses()` uses `FanOut` with a PDMA policy that dispatches the owned response
+to one channel-bound publication port. The generic combinators also support application-defined
+broadcast and split plans without requiring input cloning. Branches run in plan order;
+a pending branch retains its state and completed branches are never replayed.
+`Resettable` selects its context and checks the generation before every nested interaction,
+retaining `ChannelTask<T>` across output transformations and rejecting a wrong destination.
+The shared execution transforms `ChannelTask<Command>` into `ChannelTask<Response>`;
+publication consumes that tagged response. The copy body is
 `CopyState -> Transfer -> Transfer -> ControlFlow<Response, CopyState>`: Continue feeds
 progress into the next iteration, Break finishes the command. Repeat advances one
 child step at a time and reuses its hardware; it does not add another executor.
@@ -90,7 +100,7 @@ existing Then/Repeat/AfterEach building blocks.
 Build `device.pipeline()` or `device.multi_channel()` before moving the device into
 the runtime transport, and retain that graph across commands. Its lightweight Fetch
 ports come from the actual instance population. Custom graphs can pass a subset or
-different ordering of Fetch ports to Combiner, or select fixed-priority arbitration.
+different ordering of Fetch ports to Arbitrate, or supply their own arbitration policy.
 Runtime only drives the supplied graph; it never constructs the hardware policy.
 
 `Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses

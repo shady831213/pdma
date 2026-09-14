@@ -13,8 +13,8 @@ future. `StepOutcome` transfers owned wait, output, and error values as `Progres
 same hardware can accept another operation. Dropping request state preserves effects
 already committed to the context or hardware.
 
-The `src/compositor/` module groups `Then`, `AfterEach`, `Repeat`, and `Combiner` in their own
-`then.rs`, `after_each.rs`, `repeat.rs`, and `combiner.rs` files. Their types remain re-exported
+The `src/combinators/` module groups `Then`, `AfterEach`, `Repeat`, `FanIn`, `Arbitrate`,
+`FanOut`, and `MapError` in native modules. Their types remain re-exported
 from the crate root; execution policies live separately under `src/executor/`.
 
 `Then<A, B>` owns both hardware stages and requires `A::Output = B::Input`, with matching
@@ -24,17 +24,23 @@ operation transfers an upstream result into downstream state exactly once and re
 state without replaying upstream work. Public `upstream` and `downstream` fields keep
 hardware configuration and counters accessible between operations.
 
-`Combiner<S, W>` owns a fixed population of sources implementing `ReadyStage<C>`.
-Its non-consuming `ready(&self, &C)` predicate allows selection before any input is
-accepted. `Combiner::new(sources, Selection::RoundRobin, idle_wait)` starts each
-operation after the previous grant; `Selection::FixedPriority` starts at source zero.
-Each searching step probes one candidate, and a complete unsuccessful pass returns
-`Pending(idle_wait.clone())`. An empty population returns `Exhausted`.
-Once granted, only that source is stepped; its single retained state survives
-`Progressed` and `Pending` even if readiness disappears. Completion and errors pass
-through unchanged. Sources stay private, and starting an operation allocates no
-per-source state. Combiners also implement `ReadyStage` for nested fan-in and compose
-with the existing `Then`, `Repeat`, and executor APIs.
+`FanIn<S, P>` owns source stages and an application `Combine` policy. The policy
+retains operation state, plans an ordered subset of inputs, and reduces their owned
+outputs to its own output type. An empty plan reaches the reducer with no outputs.
+`Arbitrate<S, A>` specializes this same lifecycle with an application `Arbitration`
+policy, a singleton plan, and identity reduction. Round-robin, priority, and idle
+behavior belong to applications. `ReadyStage` exposes non-consuming eligibility;
+`Arbitrate` forwards readiness for nested selection.
+
+`FanOut<S, P>` accepts an application input and uses `Distribute` to create an ordered
+plan of owned requests and reduce their results. Policies choose how to split,
+move, or explicitly clone their input. Fan-in and fan-out share one branch runner:
+it validates every index and duplicate before any child starts, then steps at most
+one child per outer step. Planning can drive the first child in the same frame.
+Pending work blocks later branches and retains completed outputs without cloning.
+Child failure or exhaustion terminalizes the whole operation. `BranchError` separates
+invalid plans from application errors; `MapError` adapts error types when connecting
+stages with `Then`. These combinators use the existing operation and executor APIs.
 `Then` and `AfterEach` forward readiness from their upstream source, so complete
 source pipelines can be combined without running transforms or updates during selection.
 

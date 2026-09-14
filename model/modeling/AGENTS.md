@@ -17,7 +17,7 @@ layouts, and ABI compatibility are not requirements for this model.
 
 | Crate | Responsibility |
 | --- | --- |
-| hardware-interface-pipeline | Typed stages, ready-input combination, composition, and driving policies. |
+| hardware-interface-pipeline | Typed stages, generic gathering/distribution, composition, and driving policies. |
 | hardware-interface-runtime | Memory backends, register access/observation, CPU-local state, interrupt dispatch, and trace storage. |
 | hardware-interface-schema | Runtime-neutral record/register schemas, metadata, access, and exporters. |
 | hardware-interface-schema-macros | Schema code generation and compile-time validation. |
@@ -63,8 +63,10 @@ shapes into the rebuild.
 - The constructor fixes the channel count for each instance; software only reads it.
   Contract layout/export takes that count explicitly, with generated child register blocks.
   One shared execution pipeline processes whole commands selected by round-robin arbitration.
-  Use the generic Combiner over channel-bound Fetch ports; ready checks do not consume
-  commands, and PDMA eligibility rules belong to Fetch, not the generic compositor.
+  Use Arbitrate (the singleton specialization of FanIn) over channel-bound Fetch ports,
+  with the RoundRobin policy owned by device. Ready checks do not consume commands,
+  and PDMA eligibility rules belong to Fetch, not the generic combinators.
+  Route tagged responses through FanOut to channel-bound publication ports.
   Skip full-response channels before accepting commands; do not add per-channel copy state.
   Bind accepted work to channel identity and generation so reset invalidates only its work
   before the next side effect, even after immediate reconfiguration.
@@ -73,7 +75,7 @@ shapes into the rebuild.
   total lengths before payload writes, reads lists incrementally and retains cursors;
   do not cache whole lists, reject overlap or invent segment-count/total-length limits.
   Fixed copy scratch size is an implementation detail, not a command-size limit.
-- Reuse Combiner/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
+- Reuse FanIn/Arbitrate/FanOut/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
   driving only; it must not gain PDMA traversal, validation or copy policy.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.

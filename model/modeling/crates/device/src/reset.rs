@@ -31,12 +31,24 @@ impl<T> ChannelTask<T> {
 #[derive(Debug)]
 pub struct Resettable<S> {
     stage: S,
+    channel: Option<ChannelId>,
 }
 
 impl<S> Resettable<S> {
     /// Wraps hardware whose context is the task's selected channel.
     pub const fn new(stage: S) -> Self {
-        Self { stage }
+        Self {
+            stage,
+            channel: None,
+        }
+    }
+
+    /// Binds a destination port to one channel, rejecting misrouted tasks before effects.
+    pub const fn for_channel(channel: ChannelId, stage: S) -> Self {
+        Self {
+            stage,
+            channel: Some(channel),
+        }
     }
 }
 
@@ -46,7 +58,7 @@ where
         Stage<ChannelContext<'a, M>, Input = I, Output = O, Wait = W, State = T, Error = Error>,
 {
     type Input = ChannelTask<I>;
-    type Output = O;
+    type Output = ChannelTask<O>;
     type Error = Error;
     type Wait = W;
     type State = ChannelTask<T>;
@@ -59,7 +71,10 @@ where
         &mut self,
         context: &mut Device<M>,
         state: &mut Self::State,
-    ) -> StepOutcome<O, Error, W> {
+    ) -> StepOutcome<Self::Output, Error, W> {
+        if self.channel.is_some_and(|channel| channel != state.channel) {
+            return StepOutcome::Complete(Err(Error::Routing));
+        }
         let mut selected = match context.channel_context(state.channel) {
             Ok(selected) => selected,
             Err(error) => return StepOutcome::Complete(Err(error)),
@@ -70,6 +85,17 @@ where
         if selected.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
-        self.stage.step(&mut selected, &mut state.value)
+        match self.stage.step(&mut selected, &mut state.value) {
+            StepOutcome::Complete(result) => {
+                StepOutcome::Complete(result.map(|value| ChannelTask {
+                    channel: state.channel,
+                    generation: state.generation,
+                    value,
+                }))
+            }
+            StepOutcome::Progressed => StepOutcome::Progressed,
+            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+            StepOutcome::Exhausted => StepOutcome::Exhausted,
+        }
     }
 }

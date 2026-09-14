@@ -43,6 +43,8 @@ pub enum Error {
     Halted,
     /// Hardware reset invalidated this retained operation before another interaction.
     Reset,
+    /// A composition selected an invalid destination or returned an invalid result shape.
+    Routing,
 }
 
 impl Display for Error {
@@ -51,3 +53,15 @@ impl Display for Error {
     }
 }
 impl std::error::Error for Error {}
+
+impl From<hardware_interface_pipeline::BranchError<Self>> for Error {
+    fn from(error: hardware_interface_pipeline::BranchError<Self>) -> Self {
+        use hardware_interface_pipeline::BranchError;
+        match error {
+            BranchError::Application(error) => error,
+            BranchError::InvalidIndex { .. }
+            | BranchError::DuplicateIndex { .. }
+            | BranchError::OutputCount { .. } => Self::Routing,
+        }
+    }
+}

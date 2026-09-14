@@ -1,8 +1,9 @@
 use crate::{
-    ChannelContext, CheckLengths, Device, Error, Fetch, NextChunk, ReadCopy, Resettable, WriteCopy,
+    ChannelContext, CheckLengths, Device, Error, Fetch, NextChunk, ReadCopy, Resettable,
+    ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
-    AfterEach, Combiner, Repeat, Selection, Stage, StepOutcome, Then,
+    AfterEach, Arbitrate, BranchError, FanOut, MapError, Repeat, Stage, StepOutcome, Then,
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{ChannelId, Response};
@@ -69,8 +70,13 @@ impl<M> Stage<ChannelContext<'_, M>> for UpdateIrq {
 }
 
 /// The same statically composed hardware is used by step and async executors.
-pub type Pipeline =
-    Then<Combiner<Fetch>, Resettable<AfterEach<Then<Execution, Publish>, UpdateIrq>>>;
+pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>>>, Responses>;
+
+/// Application arbitration over the instance's command ports.
+pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) -> Error>;
+
+/// One-to-many response dispatch over the instance's publication ports.
+pub type Responses = MapError<FanOut<ResponsePort, RouteResponse>, fn(BranchError<Error>) -> Error>;
 
 /// One composable prepare/read/write iteration.
 pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
@@ -86,13 +92,34 @@ impl<M> Device<M> {
             .collect()
     }
 
+    /// Builds command arbitration independently of the downstream transform.
+    pub fn intake(&self) -> Intake {
+        MapError::new(
+            Arbitrate::new(self.fetches(), RoundRobin::default()),
+            Error::from,
+        )
+    }
+
+    /// Builds response dispatch with each destination bound to its owning channel.
+    pub fn responses(&self) -> Responses {
+        let ports = (0..self.channels.len())
+            .map(|index| {
+                Resettable::for_channel(ChannelId::new(index), AfterEach::new(Publish, UpdateIrq))
+            })
+            .collect();
+        MapError::new(FanOut::new(ports, RouteResponse), Error::from)
+    }
+
     /// Combines the instance's input ports into one shared copy and publication path.
     pub fn pipeline(&self) -> Pipeline {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
         let execution = Then::new(CheckLengths, Repeat::new(chunk));
         Then::new(
-            Combiner::new(self.fetches(), Selection::RoundRobin, ()),
-            Resettable::new(AfterEach::new(Then::new(execution, Publish), UpdateIrq)),
+            Then::new(
+                self.intake(),
+                Resettable::new(AfterEach::new(execution, UpdateIrq)),
+            ),
+            self.responses(),
         )
     }
 }

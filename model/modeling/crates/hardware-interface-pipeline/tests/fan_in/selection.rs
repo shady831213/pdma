@@ -1,4 +1,5 @@
-use hardware_interface_pipeline::{Combiner, Operation, ReadyStage, Selection, StepOutcome};
+use super::policy::Policy;
+use hardware_interface_pipeline::{Arbitrate, Operation, ReadyStage, StepOutcome};
 
 use super::sources::{Context, Job, Queue};
 
@@ -8,10 +9,9 @@ fn selection_consumes_only_the_ready_granted_source() {
     let mut context = Context::default();
     context.enqueue(1, [Job::Value(11)]);
     context.enqueue(2, [Job::Value(22)]);
-    let mut hardware = Combiner::new(
+    let mut hardware = Arbitrate::new(
         vec![Queue::new(0), Queue::new(1), Queue::new(2)],
-        Selection::RoundRobin,
-        "idle",
+        Policy::round_robin("idle"),
     );
     let mut operation = Operation::new(());
 
@@ -39,10 +39,9 @@ fn round_robin_wraps_across_repeated_operations() {
     for id in 0..3 {
         context.enqueue(id, [Job::Value(id), Job::Value(id + 3)]);
     }
-    let mut hardware = Combiner::new(
+    let mut hardware = Arbitrate::new(
         (0..3).map(Queue::new).collect(),
-        Selection::RoundRobin,
-        "idle",
+        Policy::round_robin("idle"),
     );
 
     // When: six independent operations use the same hardware.
@@ -66,10 +65,9 @@ fn fixed_priority_restarts_at_the_first_source() {
     let mut context = Context::default();
     context.enqueue(0, [Job::Value(10), Job::Value(11)]);
     context.enqueue(1, [Job::Value(20)]);
-    let mut hardware = Combiner::new(
+    let mut hardware = Arbitrate::new(
         vec![Queue::new(0), Queue::new(1)],
-        Selection::FixedPriority,
-        "idle",
+        Policy::fixed_priority("idle"),
     );
 
     // When: two requests complete.
@@ -89,10 +87,9 @@ fn fixed_priority_restarts_at_the_first_source() {
 fn idle_pass_returns_the_configured_wait_and_rechecks_sources() {
     // Given: two empty queues and a non-unit idle notification.
     let mut context = Context::default();
-    let mut hardware = Combiner::new(
+    let mut hardware = Arbitrate::new(
         vec![Queue::new(0), Queue::new(1)],
-        Selection::RoundRobin,
-        "queue changed",
+        Policy::round_robin("queue changed"),
     );
     let mut operation = Operation::new(());
 
@@ -110,19 +107,18 @@ fn idle_pass_returns_the_configured_wait_and_rechecks_sources() {
 }
 
 #[test]
-fn nested_combiners_forward_readiness_without_consuming_queues() {
+fn nested_arbiters_forward_readiness_without_consuming_queues() {
     // Given: two fan-in groups with only the second group ready.
     let mut context = Context::default();
     context.enqueue(2, [Job::Value(42)]);
     let groups = vec![
-        Combiner::new(vec![Queue::new(0)], Selection::RoundRobin, "idle"),
-        Combiner::new(
+        Arbitrate::new(vec![Queue::new(0)], Policy::round_robin("idle")),
+        Arbitrate::new(
             vec![Queue::new(1), Queue::new(2)],
-            Selection::RoundRobin,
-            "idle",
+            Policy::round_robin("idle"),
         ),
     ];
-    let mut hardware = Combiner::new(groups, Selection::RoundRobin, "idle");
+    let mut hardware = Arbitrate::new(groups, Policy::round_robin("idle"));
     let mut operation = Operation::new(());
 
     // When: readiness is observed through a borrowed compositor and the request is driven.

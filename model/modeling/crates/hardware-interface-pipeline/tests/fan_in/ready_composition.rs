@@ -1,8 +1,7 @@
+use super::policy::Policy;
 use std::convert::Infallible;
 
-use hardware_interface_pipeline::{
-    AfterEach, Combiner, Operation, Selection, Stage, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{AfterEach, Arbitrate, Operation, Stage, StepOutcome, Then};
 
 use super::sources::{Context, Job, Queue};
 
@@ -62,7 +61,7 @@ fn then_sources_gate_acceptance_and_retain_pending_upstream_and_downstream() {
     let sources = (0..3)
         .map(|id| Then::new(Queue { id, delayed: true }, Transform(id)))
         .collect();
-    let mut hardware = Combiner::new(sources, Selection::RoundRobin, "idle");
+    let mut hardware = Arbitrate::new(sources, Policy::round_robin("idle"));
     let mut operation = Operation::new(());
 
     // When: the selected upstream suspends after acceptance and later hands off its value.
@@ -96,7 +95,7 @@ fn after_each_sources_update_only_the_granted_composed_source() {
             AfterEach::new(chain, Update(id))
         })
         .collect();
-    let mut hardware = Combiner::new(sources, Selection::FixedPriority, "idle");
+    let mut hardware = Arbitrate::new(sources, Policy::fixed_priority("idle"));
     let mut operation = Operation::new(());
 
     // When: selection skips the empty source, then resumes the granted chain after a wait.

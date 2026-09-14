@@ -130,6 +130,10 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
             device.write(offset, &1_u32.to_le_bytes())?;
         }
         let mut operation = Operation::new(());
+        assert_eq!(
+            operation.step(&mut hardware, &mut device),
+            StepOutcome::Progressed
+        );
         let outcome = operation.step(&mut hardware, &mut device);
         drop(device);
         assert_eq!(

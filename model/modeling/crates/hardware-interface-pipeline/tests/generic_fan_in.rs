@@ -46,13 +46,22 @@ impl Combine<Vec<u8>, Number> for Sum {
         StepOutcome::Complete(Ok(std::mem::take(&mut self.0)))
     }
 
-    fn combine(
-        &mut self,
-        (): &mut (),
-        values: Vec<u8>,
-    ) -> Result<String, BranchError<&'static str>> {
+    fn combine(&mut self, (): (), values: Vec<u8>) -> Result<String, BranchError<&'static str>> {
         Ok(values.into_iter().map(u16::from).sum::<u16>().to_string())
     }
+}
+
+#[test]
+fn planning_finishes_before_any_child_effect() {
+    // Given: a valid plan selects an immediately completing child.
+    let mut hardware = FanIn::new(vec![Number(3)], Sum(vec![0]));
+    let mut context = Vec::new();
+    let mut operation = Operation::new(());
+    // When: the operation performs its planning step.
+    let outcome = operation.step(&mut hardware, &mut context);
+    // Then: execution stops at the boundary before entering the child.
+    assert_eq!(outcome, StepOutcome::Progressed);
+    assert!(context.is_empty());
 }
 
 #[test]
@@ -61,11 +70,17 @@ fn all_inputs_reduce_to_application_output_in_planned_order() {
     let mut hardware = FanIn::new(vec![Number(3), Number(8)], Sum(vec![1, 0]));
     let mut context = Vec::new();
     let mut operation = Operation::new(());
-    // When: two outer steps gather the two selected branches.
+    // When: planning, both children, and reduction run in separate steps.
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
     let first = operation.step(&mut hardware, &mut context);
+    let second = operation.step(&mut hardware, &mut context);
     let result = operation.step(&mut hardware, &mut context);
     // Then: one child ran per step and the reducer changed the output type.
     assert_eq!(first, StepOutcome::Progressed);
+    assert_eq!(second, StepOutcome::Progressed);
     assert_eq!(result, StepOutcome::Complete(Ok("11".to_owned())));
     assert_eq!(context, [8, 3]);
 }
@@ -93,8 +108,17 @@ fn empty_plan_reduces_without_child_interaction() {
     // Given: an application requests the empty aggregate.
     let mut hardware = FanIn::<Number, _>::new(Vec::new(), Sum(Vec::new()));
     let mut context = Vec::new();
-    // When: the aggregate runs once.
-    let result = Operation::new(()).step(&mut hardware, &mut context);
+    // When: the empty aggregate crosses planning and gathering before reduction.
+    let mut operation = Operation::new(());
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
+    let result = operation.step(&mut hardware, &mut context);
     // Then: the reducer receives an empty collection.
     assert_eq!(result, StepOutcome::Complete(Ok("0".to_owned())));
     assert!(context.is_empty());
@@ -125,7 +149,7 @@ impl Combine<Vec<u8>, Number> for StopPolicy<'_> {
             Stop::Exhaust => StepOutcome::Exhausted,
         }
     }
-    fn combine(&mut self, (): &mut (), _: Vec<u8>) -> Result<(), BranchError<&'static str>> {
+    fn combine(&mut self, (): (), _: Vec<u8>) -> Result<(), BranchError<&'static str>> {
         self.reductions.set(self.reductions.get() + 1);
         Ok(())
     }

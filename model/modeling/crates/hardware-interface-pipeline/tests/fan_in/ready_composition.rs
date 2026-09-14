@@ -66,10 +66,18 @@ fn then_sources_gate_acceptance_and_retain_pending_upstream_and_downstream() {
 
     // When: the selected upstream suspends after acceptance and later hands off its value.
     let searching = operation.step(&mut hardware, &mut context);
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
     let accepted = operation.step(&mut hardware, &mut context);
     let pending = operation.step(&mut hardware, &mut context);
     context.released = true;
     let handoff = operation.step(&mut hardware, &mut context);
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
     let complete = operation.step(&mut hardware, &mut context);
 
     // Then: only the granted chain runs, retaining the value until its transform completes.
@@ -78,7 +86,7 @@ fn then_sources_gate_acceptance_and_retain_pending_upstream_and_downstream() {
     assert_eq!(pending, StepOutcome::Pending("source release"));
     assert_eq!(handoff, StepOutcome::Progressed);
     assert_eq!(complete, StepOutcome::Complete(Ok(17)));
-    assert_eq!(*context.probes.borrow(), [0, 1]);
+    assert_eq!(*context.probes.borrow(), [0, 1, 1]);
     assert_eq!(context.consumed, [1]);
     assert_eq!(context.transformed, [1]);
 }
@@ -101,10 +109,18 @@ fn after_each_sources_update_only_the_granted_composed_source() {
     // When: selection skips the empty source, then resumes the granted chain after a wait.
     let searching = operation.step(&mut hardware, &mut context);
     let updates_after_search = context.updated.clone();
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
     let accepted = operation.step(&mut hardware, &mut context);
     let pending = operation.step(&mut hardware, &mut context);
     context.released = true;
     let handoff = operation.step(&mut hardware, &mut context);
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
     let complete = operation.step(&mut hardware, &mut context);
 
     // Then: readiness performs no update and each granted interaction runs its update once.
@@ -114,7 +130,7 @@ fn after_each_sources_update_only_the_granted_composed_source() {
     assert_eq!(pending, StepOutcome::Pending("source release"));
     assert_eq!(handoff, StepOutcome::Progressed);
     assert_eq!(complete, StepOutcome::Complete(Ok(17)));
-    assert_eq!(*context.probes.borrow(), [0, 1]);
+    assert_eq!(*context.probes.borrow(), [0, 1, 1]);
     assert_eq!(context.consumed, [1]);
     assert_eq!(context.transformed, [1]);
     assert_eq!(context.updated, [1, 1, 1, 1]);

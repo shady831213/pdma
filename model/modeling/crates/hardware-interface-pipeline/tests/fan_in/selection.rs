@@ -19,13 +19,19 @@ fn selection_consumes_only_the_ready_granted_source() {
     let first = operation.step(&mut hardware, &mut context);
     let probes_after_first = context.probes.borrow().clone();
     let granted = operation.step(&mut hardware, &mut context);
+    let consumed_after_grant = context.consumed.clone();
+    let child = operation.step(&mut hardware, &mut context);
+    let result = operation.step(&mut hardware, &mut context);
 
     // Then: the selected queue alone is consumed and later candidates remain untouched.
     assert_eq!(first, StepOutcome::Progressed);
     assert_eq!(probes_after_first, [0]);
-    assert_eq!(granted, StepOutcome::Complete(Ok(11)));
+    assert_eq!(granted, StepOutcome::Progressed);
+    assert!(consumed_after_grant.is_empty());
+    assert_eq!(child, StepOutcome::Progressed);
+    assert_eq!(result, StepOutcome::Complete(Ok(11)));
     assert_eq!(context.consumed, [1]);
-    assert_eq!(*context.probes.borrow(), [0, 1]);
+    assert_eq!(*context.probes.borrow(), [0, 1, 1]);
     assert_eq!(
         context.queues.get(&2),
         Some(&Vec::from([Job::Value(22)]).into())
@@ -46,7 +52,18 @@ fn round_robin_wraps_across_repeated_operations() {
 
     // When: six independent operations use the same hardware.
     let outcomes: Vec<_> = (0..6)
-        .map(|_| Operation::new(()).step(&mut hardware, &mut context))
+        .map(|_| {
+            let mut operation = Operation::new(());
+            assert_eq!(
+                operation.step(&mut hardware, &mut context),
+                StepOutcome::Progressed
+            );
+            assert_eq!(
+                operation.step(&mut hardware, &mut context),
+                StepOutcome::Progressed
+            );
+            operation.step(&mut hardware, &mut context)
+        })
         .collect();
 
     // Then: every source gets a turn before any source is selected again.
@@ -72,7 +89,18 @@ fn fixed_priority_restarts_at_the_first_source() {
 
     // When: two requests complete.
     let outcomes: Vec<_> = (0..2)
-        .map(|_| Operation::new(()).step(&mut hardware, &mut context))
+        .map(|_| {
+            let mut operation = Operation::new(());
+            assert_eq!(
+                operation.step(&mut hardware, &mut context),
+                StepOutcome::Progressed
+            );
+            assert_eq!(
+                operation.step(&mut hardware, &mut context),
+                StepOutcome::Progressed
+            );
+            operation.step(&mut hardware, &mut context)
+        })
         .collect();
 
     // Then: both grants belong to the first source.
@@ -97,6 +125,14 @@ fn idle_pass_returns_the_configured_wait_and_rechecks_sources() {
     let first = operation.step(&mut hardware, &mut context);
     let idle = operation.step(&mut hardware, &mut context);
     context.enqueue(0, [Job::Value(7)]);
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        StepOutcome::Progressed
+    );
     let resumed = operation.step(&mut hardware, &mut context);
 
     // Then: idle suspends without consuming inputs and a later pass accepts the work.
@@ -124,7 +160,7 @@ fn nested_arbiters_forward_readiness_without_consuming_queues() {
     // When: readiness is observed through a borrowed compositor and the request is driven.
     assert!(ReadyStage::ready(&&mut hardware, &context));
     let consumed_after_readiness = context.consumed.clone();
-    let outcomes: Vec<_> = (0..3)
+    let outcomes: Vec<_> = (0..7)
         .map(|_| operation.step(&mut hardware, &mut context))
         .collect();
 
@@ -133,6 +169,10 @@ fn nested_arbiters_forward_readiness_without_consuming_queues() {
     assert_eq!(
         outcomes,
         [
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
             StepOutcome::Progressed,
             StepOutcome::Progressed,
             StepOutcome::Complete(Ok(42))

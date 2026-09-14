@@ -51,7 +51,7 @@ fn then_and_repeat_preserve_round_robin_across_iteration_state() {
     let mut operation = Operation::new(());
 
     // When: four complete iterations are stepped through fan-in and downstream stages.
-    let outcomes: Vec<_> = (0..8)
+    let outcomes: Vec<_> = (0..16)
         .map(|_| operation.step(&mut hardware, &mut context))
         .collect();
 
@@ -59,7 +59,7 @@ fn then_and_repeat_preserve_round_robin_across_iteration_state() {
     assert!(
         outcomes
             .iter()
-            .take(7)
+            .take(15)
             .all(|outcome| *outcome == StepOutcome::Progressed)
     );
     assert_eq!(

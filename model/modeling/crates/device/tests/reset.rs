@@ -13,12 +13,29 @@ use support::{TestResult, command, read_word, setup, submit};
 
 #[test]
 fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult {
-    // Given: one retained operation with already committed payload bytes.
+    // Given: an accepted operation and externally written payload bytes.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = device.pipeline();
     let mut operation = Operation::new(());
-    let _ = StepExecutor::new().step(&mut hardware, &mut operation, &mut device);
+    let mut accepted = false;
+    for _ in 0..16 {
+        assert!(matches!(
+            StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
+            Ok(RunOutcome::Progressed)
+        ));
+        if read_word(
+            &mut device,
+            DeviceRegisters::CHANNELS_OFFSET
+                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+                + CommandRegisters::CONSUMER.offset(),
+        )? == 1
+        {
+            accepted = true;
+            break;
+        }
+    }
+    assert!(accepted);
     memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, b"keep")?;
     // When: MMIO reset occurs before the retained operation resumes.
     device.write(
@@ -27,7 +44,10 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
             + ChannelRegisters::RESET.offset(),
         &1_u32.to_le_bytes(),
     )?;
-    let result = StepExecutor::new().step(&mut hardware, &mut operation, &mut device);
+    let result = (0..16)
+        .map(|_| StepExecutor::new().step(&mut hardware, &mut operation, &mut device))
+        .find(|outcome| !matches!(outcome, Ok(RunOutcome::Progressed)))
+        .ok_or("reset operation never terminated")?;
     // Then: stale work is discarded and external memory remains intact.
     assert!(matches!(
         result,

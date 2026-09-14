@@ -70,6 +70,11 @@ Its `ReadyStage::ready` checks channel/ring state without consuming a command.
 to one channel-bound publication port. The generic combinators also support application-defined
 broadcast and split plans without requiring input cloning. Branches run in plan order;
 a pending branch retains its state and completed branches are never replayed.
+Both fan combinators use `Then` internally for planning, branch execution and reduction,
+sharing the branch and reduction stages. Selection and command acceptance occur in
+separate steps. Branch traversal is `Repeat<RunBranch>`, feeding remaining requests and
+collected outputs into the next iteration. If a selected channel becomes ineligible before acceptance, arbitration
+selects again; work already accepted remains subject to its channel's reset generation.
 `Resettable` selects its context and checks the generation before every nested interaction,
 retaining `ChannelTask<T>` across output transformations and rejecting a wrong destination.
 The shared execution transforms `ChannelTask<Command>` into `ChannelTask<Response>`;

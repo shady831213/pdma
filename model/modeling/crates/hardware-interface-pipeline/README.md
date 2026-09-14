@@ -19,9 +19,11 @@ from the crate root; execution policies live separately under `src/executor/`.
 
 `Then<A, B>` owns both hardware stages and requires `A::Output = B::Input`, with matching
 error and wait types. `upstream.then(downstream)` connects existing hardware. Each
-operation transfers an upstream result into downstream state exactly once and returns
-`Progressed` without stepping downstream. A downstream `Pending` resumes that retained
-state without replaying upstream work. Public `upstream` and `downstream` fields keep
+operation transfers an upstream result into downstream state exactly once and
+returns `Progressed` without stepping downstream. Every stage handoff has the same
+boundary; `Pending` and `Progressed` are never retried in the same call.
+A downstream `Pending` resumes retained state without replaying upstream work.
+Public `upstream` and `downstream` fields keep
 hardware configuration and counters accessible between operations.
 
 `FanIn<S, P>` owns source stages and an application `Combine` policy. The policy
@@ -30,17 +32,30 @@ outputs to its own output type. An empty plan reaches the reducer with no output
 `Arbitrate<S, A>` specializes this same lifecycle with an application `Arbitration`
 policy, a singleton plan, and identity reduction. Round-robin, priority, and idle
 behavior belong to applications. `ReadyStage` exposes non-consuming eligibility;
-`Arbitrate` forwards readiness for nested selection.
+`Arbitrate` forwards readiness for nested selection. It rechecks the chosen source
+before its first step. If readiness disappeared, it discards that unstarted selection
+and plans again, preserving the arbitration policy's cursor. After the first source
+step, retained work is never discarded because readiness changed.
 
 `FanOut<S, P>` accepts an application input and uses `Distribute` to create an ordered
 plan of owned requests and reduce their results. Policies choose how to split,
-move, or explicitly clone their input. Fan-in and fan-out share one branch runner:
+move, or explicitly clone their input. Fan-in and fan-out share one branch stage:
 it validates every index and duplicate before any child starts, then steps at most
-one child per outer step. Planning can drive the first child in the same frame.
+one child per outer step. Planning, branch execution and reduction run in separate steps.
 Pending work blocks later branches and retains completed outputs without cloning.
 Child failure or exhaustion terminalizes the whole operation. `BranchError` separates
 invalid plans from application errors; `MapError` adapts error types when connecting
 stages with `Then`. These combinators use the existing operation and executor APIs.
+Internally both fan combinators are `Then<PlanOrSplit, Then<Branches, Reduce>>` compositions.
+`ThenState` owns their phase transitions. `Branches` is `Repeat<RunBranch>`:
+one iteration advances one selected child, returning the remaining plan and accumulated
+outputs through `Continue`, or the final aggregate through `Break`. `Repeat` owns iteration
+and termination; a pending child keeps its current state. Preparing an iteration does not
+start its child, so arbitration can still invalidate an unstarted selection.
+Both use the same `Reduce` stage, supplying their policy's reduction function and consuming
+the owned metadata and outputs once. The policy and connected
+hardware remain owned by the fan combinator; stateless internal stages borrow them and
+the application context for each call. No frame borrow enters retained operation state.
 `Then` and `AfterEach` forward readiness from their upstream source, so complete
 source pipelines can be combined without running transforms or updates during selection.
 

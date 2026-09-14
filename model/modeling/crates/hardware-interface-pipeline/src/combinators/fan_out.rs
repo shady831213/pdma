@@ -1,11 +1,21 @@
-use crate::{BranchError, Stage, StepOutcome};
+use crate::{BranchError, Stage, StepOutcome, Then};
 
-use super::branches::Branches;
+use super::{
+    branches::{Branches, RunBranch},
+    flow::{FlowState, Frame, start},
+    reduce::Reduce,
+};
+
+mod stages;
+use stages::Split;
 
 /// Planning result containing application metadata and ordered destination requests.
 pub type DeliveryPlan<T, I, E> = Result<(T, Vec<(usize, I)>), BranchError<E>>;
 
 /// Application-owned delivery planning and receipt reduction.
+///
+/// Splitting prepares destination inputs; reduction consumes the retained
+/// metadata and results after all selected destinations complete.
 pub trait Distribute<C, S: Stage<C>> {
     /// Owned request to split among selected destinations.
     type Input;
@@ -46,14 +56,7 @@ pub struct FanOut<S, P> {
 /// Owned input, application metadata, and destination progress of one operation.
 #[derive(Debug)]
 pub struct FanOutState<I, P, D, T, O> {
-    phase: Phase<I, P, D, T, O>,
-}
-
-#[derive(Debug)]
-enum Phase<I, P, D, T, O> {
-    Planning(I),
-    Active(P, Branches<D, T, O>),
-    Done,
+    pipeline: FlowState<I, P, D, T, O>,
 }
 
 impl<S, P> FanOut<S, P> {
@@ -78,8 +81,15 @@ where
     type State = FanOutState<P::Input, P::State, S::Input, S::State, S::Output>;
 
     fn start(input: Self::Input) -> Self::State {
+        let pipeline = Then::new(
+            Split,
+            Then::new(
+                Branches::<P::State>::new(RunBranch::new()),
+                Reduce::new(P::combine),
+            ),
+        );
         FanOutState {
-            phase: Phase::Planning(input),
+            pipeline: start::<Frame<'_, C, S, P>, _>(&pipeline, input),
         }
     }
 
@@ -88,33 +98,20 @@ where
         context: &mut C,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let (policy, mut branches) = match std::mem::replace(&mut state.phase, Phase::Done) {
-            Phase::Planning(input) => {
-                let (policy, plan) = match self.policy.split(context, input) {
-                    Ok(plan) => plan,
-                    Err(error) => return StepOutcome::Complete(Err(error)),
-                };
-                match Branches::new(plan, self.destinations.len()) {
-                    Ok(branches) => (policy, branches),
-                    Err(error) => return StepOutcome::Complete(Err(error)),
-                }
-            }
-            Phase::Active(policy, branches) => (policy, branches),
-            Phase::Done => return StepOutcome::Exhausted,
-        };
-        match branches.step(&mut self.destinations, context) {
-            StepOutcome::Progressed => {
-                state.phase = Phase::Active(policy, branches);
-                StepOutcome::Progressed
-            }
-            StepOutcome::Pending(wait) => {
-                state.phase = Phase::Active(policy, branches);
-                StepOutcome::Pending(wait)
-            }
-            StepOutcome::Complete(result) => StepOutcome::Complete(
-                result.and_then(|outputs| self.policy.combine(policy, outputs)),
+        let mut pipeline = Then::new(
+            Split,
+            Then::new(
+                Branches::<P::State>::new(RunBranch::new()),
+                Reduce::new(P::combine),
             ),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-        }
+        );
+        pipeline.step(
+            &mut Frame {
+                context,
+                ports: &mut self.destinations,
+                policy: &mut self.policy,
+            },
+            &mut state.pipeline,
+        )
     }
 }

@@ -50,7 +50,7 @@ where
 
     fn combine(
         &mut self,
-        _: &mut Self::State,
+        _: Self::State,
         mut outputs: Vec<S::Output>,
     ) -> Result<S::Output, BranchError<S::Error>> {
         let actual = outputs.len();
@@ -96,6 +96,14 @@ where
         context: &mut C,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        if self
+            .0
+            .unstarted_source(state)
+            .is_some_and(|source| !source.ready(context))
+        {
+            *state = FanIn::<S, Select<A>>::start(());
+            return StepOutcome::Progressed;
+        }
         self.0.step(context, state)
     }
 }

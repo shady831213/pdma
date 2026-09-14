@@ -44,10 +44,11 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
                     + ChannelRegisters::ENABLE.offset(),
                 &0_u32.to_le_bytes(),
             )?;
-            assert!(matches!(
-                publication.step(&mut destinations, &mut device),
-                StepOutcome::Pending(())
-            ));
+            let suspended = (0..8)
+                .map(|_| publication.step(&mut destinations, &mut device))
+                .find(|outcome| !matches!(outcome, StepOutcome::Progressed))
+                .ok_or("publication never suspended")?;
+            assert!(matches!(suspended, StepOutcome::Pending(())));
         }
         // When: software resets and immediately reconfigures that channel before publication.
         device.write(
@@ -57,7 +58,10 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
             &1_u32.to_le_bytes(),
         )?;
         configure(&mut device, 0)?;
-        let outcome = publication.step(&mut destinations, &mut device);
+        let outcome = (0..8)
+            .map(|_| publication.step(&mut destinations, &mut device))
+            .find(|outcome| !matches!(outcome, StepOutcome::Progressed))
+            .ok_or("publication never terminated")?;
         // Then: generation checking rejects the retained result without advancing either response ring.
         assert!(matches!(outcome, StepOutcome::Complete(Err(Error::Reset))));
         for index in 0..2 {

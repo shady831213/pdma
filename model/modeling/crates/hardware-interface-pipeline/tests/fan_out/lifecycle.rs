@@ -23,12 +23,20 @@ fn pending_destination_retains_prior_receipt_and_blocks_later_deliveries() {
     let mut operation = Operation::new(dispatch(&[0, 1, 2]));
 
     // When: the operation pauses twice, then resumes after the application releases it.
+    assert_eq!(
+        operation.step(&mut stage, &mut context),
+        StepOutcome::Progressed
+    );
     let first = operation.step(&mut stage, &mut context);
     let pending = operation.step(&mut stage, &mut context);
     let pending_again = operation.step(&mut stage, &mut context);
     let before_release = context.deliveries.clone();
     context.released = true;
     let resumed = operation.step(&mut stage, &mut context);
+    assert_eq!(
+        operation.step(&mut stage, &mut context),
+        StepOutcome::Progressed
+    );
     let complete = operation.step(&mut stage, &mut context);
 
     // Then: completed work and its receipt survive, and each delivery commits once.
@@ -105,6 +113,10 @@ fn terminal_destination_stops_unscheduled_work_and_keeps_committed_effects() {
             );
             let mut state =
                 <FanOut<Destination, Routing> as Stage<Context>>::start(dispatch(&[0, 1, 2]));
+            assert_eq!(
+                hardware.step(&mut context, &mut state),
+                StepOutcome::Progressed
+            );
             let first = hardware.step(&mut context, &mut state);
             let terminal = hardware.step(&mut context, &mut state);
             let again = hardware.step(&mut context, &mut state);
@@ -137,6 +149,16 @@ fn policy_errors_preserve_only_effects_already_committed() {
             let mut context = Context::default();
             let mut stage = FanOut::new(vec![Destination::new(0)], policy);
             let mut operation = Operation::new(Parcel("request".into()));
+            if committed == 1 {
+                assert_eq!(
+                    operation.step(&mut stage, &mut context),
+                    StepOutcome::Progressed
+                );
+                assert_eq!(
+                    operation.step(&mut stage, &mut context),
+                    StepOutcome::Progressed
+                );
+            }
             (
                 operation.step(&mut stage, &mut context),
                 context,
@@ -164,6 +186,10 @@ fn reset_abandons_queued_delivery_without_reverting_committed_delivery() {
     let mut operation = Operation::new(dispatch(&[0, 1]));
 
     // When: reset follows the first completed delivery.
+    assert_eq!(
+        operation.step(&mut stage, &mut context),
+        StepOutcome::Progressed
+    );
     let first = operation.step(&mut stage, &mut context);
     operation.reset();
     let terminal = operation.step(&mut stage, &mut context);

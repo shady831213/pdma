@@ -33,11 +33,7 @@ impl Combine<Context, Queue> for All {
     ) -> StepOutcome<Vec<usize>, BranchError<&'static str>, &'static str> {
         StepOutcome::Complete(Ok((0..sources.len()).collect()))
     }
-    fn combine(
-        &mut self,
-        (): &mut (),
-        outputs: Vec<u8>,
-    ) -> Result<Vec<u8>, BranchError<&'static str>> {
+    fn combine(&mut self, (): (), outputs: Vec<u8>) -> Result<Vec<u8>, BranchError<&'static str>> {
         Ok(outputs)
     }
 }
@@ -136,6 +132,6 @@ async fn executor_drop_and_resume_retains_idle_search_and_active_grant() {
     assert_eq!(lock(&executor.backend().context).consumed, [0]);
     assert_eq!(
         *lock(&executor.backend().context).probes.borrow(),
-        [0, 1, 0]
+        [0, 1, 0, 0]
     );
 }

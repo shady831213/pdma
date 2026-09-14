@@ -4,7 +4,9 @@ mod branches;
 mod error;
 mod fan_in;
 mod fan_out;
+mod flow;
 mod map_error;
+mod reduce;
 mod repeat;
 mod then;
 

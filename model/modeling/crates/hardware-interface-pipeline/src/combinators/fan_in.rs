@@ -1,8 +1,18 @@
-use crate::{BranchError, Stage, StepOutcome};
+use crate::{BranchError, Stage, StepOutcome, Then, ThenState};
 
-use super::branches::Branches;
+use super::{
+    branches::{Branches, RunBranch, RunBranchState},
+    flow::{FlowState, Frame, start},
+    reduce::Reduce,
+};
+
+mod stages;
+use stages::Plan;
 
 /// Application-owned input planning and reduction for one fan-in operation.
+///
+/// Planning observes sources without consuming them; reduction consumes the
+/// retained metadata and branch outputs after all selected sources complete.
 pub trait Combine<C, S: Stage<C, Input = ()>> {
     /// Aggregate returned after all selected inputs complete.
     type Output;
@@ -23,7 +33,7 @@ pub trait Combine<C, S: Stage<C, Input = ()>> {
     /// Returns the application's aggregate failure.
     fn combine(
         &mut self,
-        state: &mut Self::State,
+        state: Self::State,
         outputs: Vec<S::Output>,
     ) -> Result<Self::Output, BranchError<S::Error>>;
 }
@@ -38,15 +48,26 @@ pub struct FanIn<S, P> {
 /// Retained planning, accepted child work, and partial aggregate.
 #[derive(Debug)]
 pub struct FanInState<P, T, O> {
-    policy: P,
-    branches: Option<Branches<(), T, O>>,
-    done: bool,
+    pipeline: FlowState<P, P, (), T, O>,
 }
 
 impl<S, P> FanIn<S, P> {
     /// Owns the sources and application policy for the hardware lifetime.
     pub const fn new(sources: Vec<S>, policy: P) -> Self {
         Self { sources, policy }
+    }
+
+    pub(super) fn unstarted_source<M, T, O>(&self, state: &FanInState<M, T, O>) -> Option<&S> {
+        match &state.pipeline {
+            ThenState::Downstream(next) => match next {
+                ThenState::Upstream(branches) => branches
+                    .as_ref()
+                    .and_then(RunBranchState::unstarted_index)
+                    .and_then(|index| self.sources.get(index)),
+                ThenState::Downstream(_) | ThenState::Done => None,
+            },
+            ThenState::Upstream(_) | ThenState::Done => None,
+        }
     }
 }
 
@@ -62,10 +83,15 @@ where
     type State = FanInState<P::State, S::State, S::Output>;
 
     fn start((): ()) -> Self::State {
+        let pipeline = Then::new(
+            Plan,
+            Then::new(
+                Branches::<P::State>::new(RunBranch::new()),
+                Reduce::new(P::combine),
+            ),
+        );
         FanInState {
-            policy: P::start(),
-            branches: None,
-            done: false,
+            pipeline: start::<Frame<'_, C, S, P>, _>(&pipeline, ()),
         }
     }
 
@@ -74,50 +100,20 @@ where
         context: &mut C,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        if state.done {
-            return StepOutcome::Exhausted;
-        }
-        if state.branches.is_none() {
-            let plan = match self.policy.plan(context, &self.sources, &mut state.policy) {
-                StepOutcome::Progressed => return StepOutcome::Progressed,
-                StepOutcome::Pending(wait) => return StepOutcome::Pending(wait),
-                StepOutcome::Complete(Ok(plan)) => plan,
-                StepOutcome::Complete(Err(error)) => {
-                    state.done = true;
-                    return StepOutcome::Complete(Err(error));
-                }
-                StepOutcome::Exhausted => {
-                    state.done = true;
-                    return StepOutcome::Exhausted;
-                }
-            };
-            match Branches::new(
-                plan.into_iter().map(|index| (index, ())).collect(),
-                self.sources.len(),
-            ) {
-                Ok(branches) => state.branches = Some(branches),
-                Err(error) => {
-                    state.done = true;
-                    return StepOutcome::Complete(Err(error));
-                }
-            }
-        }
-        let Some(branches) = &mut state.branches else {
-            return StepOutcome::Exhausted;
-        };
-        match branches.step(&mut self.sources, context) {
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
-            StepOutcome::Complete(result) => {
-                state.done = true;
-                StepOutcome::Complete(
-                    result.and_then(|outputs| self.policy.combine(&mut state.policy, outputs)),
-                )
-            }
-            StepOutcome::Exhausted => {
-                state.done = true;
-                StepOutcome::Exhausted
-            }
-        }
+        let mut pipeline = Then::new(
+            Plan,
+            Then::new(
+                Branches::<P::State>::new(RunBranch::new()),
+                Reduce::new(P::combine),
+            ),
+        );
+        pipeline.step(
+            &mut Frame {
+                context,
+                ports: &mut self.sources,
+                policy: &mut self.policy,
+            },
+            &mut state.pipeline,
+        )
     }
 }

@@ -31,8 +31,9 @@ pub trait Stage<C> {
 
 /// A source whose readiness can be checked before accepting an operation.
 ///
-/// Readiness must not consume input or commit hardware effects. Once selected,
-/// the source retains its operation even when this predicate becomes false.
+/// Readiness must not consume input or commit hardware effects. Recheck before
+/// the first step; after that step, the source retains its operation even when
+/// this predicate becomes false.
 pub trait ReadyStage<C>: Stage<C, Input = ()> {
     /// Reports whether a new operation can currently be accepted.
     fn ready(&self, context: &C) -> bool;

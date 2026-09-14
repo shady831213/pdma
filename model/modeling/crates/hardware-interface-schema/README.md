@@ -14,10 +14,19 @@ explicit `Little` or `Big` byte order. Fields may leave gaps. Register declarati
 carry typed IDs, width, alignment, access, reset, and writable-mask metadata. Maps place
 registers or nested maps in one declaration-ordered layout.
 
-This crate does **not** own ring structure, entry publication, cursors, register
-storage, MMIO or bus transactions/effects, DMA, reset epochs, IRQ state machines,
-callbacks, actors, concurrency, or an executor. An application consumes its metadata
-and decides those runtime concerns.
+`RegisterWindow<M>` owns one generated register value at a caller-selected base.
+Its exact-leaf MMIO access checks window bounds, width, permissions and writable
+bits. Synchronous per-access hooks let hardware validate a proposed write, refresh
+a read or apply effects after acceptance; hooks are never stored. Failed validation
+or a rejecting hook preserves the window values and read destination. Effects on
+external captures cannot be rolled back.
+
+`register_dispatch!` evaluates access expressions lazily and falls through only on
+`RegisterAccessError::OutsideWindow`. Gaps inside a window and rejected accesses are
+terminal. Dispatch requires non-overlapping windows, as established by generated
+placements. Applications own ring structure, entry publication, cursors, DMA, reset
+epochs and IRQ behavior. Storage backends, bus observation, actors, concurrency and
+execution remain outside this crate.
 
 ## Reuse
 
@@ -401,19 +410,19 @@ fn main() {}
 ```
 
 No Markdown, JSON, or PDF exporter is implemented. This crate does not provide `no_std`,
-a callable C API, native-layout ABI casts, PCIe/MSI-X behavior, SR-IOV, FLR, or runtime
-effects.
+a callable C API, native-layout ABI casts, PCIe/MSI-X behavior, SR-IOV, FLR, or
+hardware-specific effects.
 
-## PDMA compatibility
+## PDMA consumer
 
-PDMA is a compatibility consumer of this facility. Its four record schemas and the
-exact 66-register, 4 KiB little-endian map retain the same bytes, public APIs, error
-precedence, generated C header, and runtime ownership. Execution, retirement, reset,
-and IRQ behavior remain in PDMA's contract, device, host, and scenario crates. This
-extraction is reusable infrastructure, not new PDMA hardware behavior.
+PDMA uses generated layouts for an instance-configured channel count, independent
+command/response rings and device/channel controls. Its current contract generates
+the C header; historical register counts and layouts are not compatibility targets.
+DMA, ring validation, reset and IRQ behavior belong to the PDMA device and host.
 
 The resulting layer boundary is deliberate: this crate owns schema descriptors,
-codecs, and checked flat/grouped views only. `hardware-interface-runtime` supplies
-storage backends and bus/observation algorithms, `hardware-interface-pipeline`
+codecs, checked views and generated-value register windows.
+`hardware-interface-runtime` supplies storage backends and bus/observation algorithms,
+`hardware-interface-pipeline`
 supplies interaction drive policies, and the PDMA device supplies register command,
-DMA, reset, IRQ, and retirement effects.
+DMA, reset and IRQ effects.

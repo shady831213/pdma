@@ -43,9 +43,9 @@ pub use record::{
     RecordValidationError, ResolvedMember, ResolvedMemberKind, ResolvedRecord,
 };
 pub use register::{
-    Access, RegisterDefinition, RegisterDefinitionError, RegisterFieldDefinition,
-    RegisterFieldSpec, RegisterSpec, RegisterValidationError, RegisterValueError,
-    RegisterValueView, RegisterValueViewMut, ResetKind,
+    Access, RegisterAccessError, RegisterDefinition, RegisterDefinitionError,
+    RegisterFieldDefinition, RegisterFieldSpec, RegisterSpec, RegisterValidationError,
+    RegisterValueError, RegisterValueView, RegisterValueViewMut, RegisterWindow, ResetKind,
 };
 pub use register_map::{
     OrderedRegisterMapSpec, RegisterAccessGroup, RegisterAccessLeaf, RegisterAccessPath,

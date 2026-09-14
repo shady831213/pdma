@@ -1,4 +1,4 @@
-use crate::{Stage, StepOutcome};
+use crate::{ReadyStage, Stage, StepOutcome};
 
 /// Persistent hardware stages connected by matching output and input ports.
 #[derive(Debug)]
@@ -76,6 +76,16 @@ where
             }
             ThenState::Done => StepOutcome::Exhausted,
         }
+    }
+}
+
+impl<C, A, B> ReadyStage<C> for Then<A, B>
+where
+    A: ReadyStage<C>,
+    B: Stage<C, Input = A::Output, Error = A::Error, Wait = A::Wait>,
+{
+    fn ready(&self, context: &C) -> bool {
+        self.upstream.ready(context)
     }
 }
 

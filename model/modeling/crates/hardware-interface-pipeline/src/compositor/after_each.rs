@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use crate::{Stage, StepOutcome};
+use crate::{ReadyStage, Stage, StepOutcome};
 
 /// Runs an always-ready update stage after each upstream interaction, including stalls.
 ///
@@ -51,5 +51,15 @@ where
             }
         }
         outcome
+    }
+}
+
+impl<C, A, B> ReadyStage<C> for AfterEach<A, B>
+where
+    A: ReadyStage<C>,
+    B: Stage<C, Input = (), Output = Infallible, Error = Infallible, Wait = Infallible>,
+{
+    fn ready(&self, context: &C) -> bool {
+        self.upstream.ready(context)
     }
 }

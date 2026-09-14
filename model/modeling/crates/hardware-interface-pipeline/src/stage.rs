@@ -29,6 +29,21 @@ pub trait Stage<C> {
     ) -> StepOutcome<Self::Output, Self::Error, Self::Wait>;
 }
 
+/// A source whose readiness can be checked before accepting an operation.
+///
+/// Readiness must not consume input or commit hardware effects. Once selected,
+/// the source retains its operation even when this predicate becomes false.
+pub trait ReadyStage<C>: Stage<C, Input = ()> {
+    /// Reports whether a new operation can currently be accepted.
+    fn ready(&self, context: &C) -> bool;
+}
+
+impl<C, S: ReadyStage<C> + ?Sized> ReadyStage<C> for &mut S {
+    fn ready(&self, context: &C) -> bool {
+        S::ready(self, context)
+    }
+}
+
 impl<C, S: Stage<C> + ?Sized> Stage<C> for &mut S {
     type Input = S::Input;
     type Output = S::Output;

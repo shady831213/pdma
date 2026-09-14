@@ -8,10 +8,12 @@ mod outcome;
 mod stage;
 
 pub use backend::AsyncInteractionBackend;
-pub use compositor::{AfterEach, PipelineExt, Repeat, Then, ThenState};
+pub use compositor::{
+    AfterEach, Combiner, CombinerState, PipelineExt, Repeat, Selection, Then, ThenState,
+};
 pub use executor::{
     AsyncExecutor, AsyncRunError, ImmediateExecutor, RunError, RunOutcome, RunResult, StepExecutor,
 };
 pub use operation::Operation;
 pub use outcome::StepOutcome;
-pub use stage::Stage;
+pub use stage::{ReadyStage, Stage};

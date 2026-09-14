@@ -13,8 +13,8 @@ future. `StepOutcome` transfers owned wait, output, and error values as `Progres
 same hardware can accept another operation. Dropping request state preserves effects
 already committed to the context or hardware.
 
-The `src/compositor/` module groups `Then`, `AfterEach`, and `Repeat` in their own
-`then.rs`, `after_each.rs`, and `repeat.rs` files. Their types remain re-exported
+The `src/compositor/` module groups `Then`, `AfterEach`, `Repeat`, and `Combiner` in their own
+`then.rs`, `after_each.rs`, `repeat.rs`, and `combiner.rs` files. Their types remain re-exported
 from the crate root; execution policies live separately under `src/executor/`.
 
 `Then<A, B>` owns both hardware stages and requires `A::Output = B::Input`, with matching
@@ -23,6 +23,20 @@ operation transfers an upstream result into downstream state exactly once and re
 `Progressed` without stepping downstream. A downstream `Pending` resumes that retained
 state without replaying upstream work. Public `upstream` and `downstream` fields keep
 hardware configuration and counters accessible between operations.
+
+`Combiner<S, W>` owns a fixed population of sources implementing `ReadyStage<C>`.
+Its non-consuming `ready(&self, &C)` predicate allows selection before any input is
+accepted. `Combiner::new(sources, Selection::RoundRobin, idle_wait)` starts each
+operation after the previous grant; `Selection::FixedPriority` starts at source zero.
+Each searching step probes one candidate, and a complete unsuccessful pass returns
+`Pending(idle_wait.clone())`. An empty population returns `Exhausted`.
+Once granted, only that source is stepped; its single retained state survives
+`Progressed` and `Pending` even if readiness disappears. Completion and errors pass
+through unchanged. Sources stay private, and starting an operation allocates no
+per-source state. Combiners also implement `ReadyStage` for nested fan-in and compose
+with the existing `Then`, `Repeat`, and executor APIs.
+`Then` and `AfterEach` forward readiness from their upstream source, so complete
+source pipelines can be combined without running transforms or updates during selection.
 
 The executors select interaction drive policy, not device behavior:
 

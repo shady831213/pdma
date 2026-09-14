@@ -3,7 +3,7 @@ use crate::{
     ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
-    AfterEach, Arbitrate, BranchError, FanOut, MapError, Repeat, Stage, StepOutcome, Then,
+    AfterEach, Arbitrate, BranchError, Dispatch, MapError, Repeat, Stage, StepOutcome, Then,
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{ChannelId, Response};
@@ -75,8 +75,9 @@ pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>
 /// Application arbitration over the instance's command ports.
 pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) -> Error>;
 
-/// One-to-many response dispatch over the instance's publication ports.
-pub type Responses = MapError<FanOut<ResponsePort, RouteResponse>, fn(BranchError<Error>) -> Error>;
+/// Single-destination response dispatch over the instance's publication ports.
+pub type Responses =
+    MapError<Dispatch<ResponsePort, RouteResponse>, fn(BranchError<Error>) -> Error>;
 
 /// One composable prepare/read/write iteration.
 pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
@@ -107,7 +108,7 @@ impl<M> Device<M> {
                 Resettable::for_channel(ChannelId::new(index), AfterEach::new(Publish, UpdateIrq))
             })
             .collect();
-        MapError::new(FanOut::new(ports, RouteResponse), Error::from)
+        MapError::new(Dispatch::new(ports, RouteResponse), Error::from)
     }
 
     /// Combines the instance's input ports into one shared copy and publication path.

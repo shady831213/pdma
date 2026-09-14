@@ -2,6 +2,9 @@ use crate::{BranchError, Stage, StepOutcome};
 
 use super::fan::{BranchPlan, Fan, FanState, Frame, compose, start};
 
+mod arbitrate;
+pub use arbitrate::{Arbitrate, Arbitration, Select};
+
 /// Application-owned input planning and reduction for one fan-in operation.
 ///
 /// Planning observes sources without consuming them; reduction consumes the

@@ -9,8 +9,9 @@ mod stage;
 
 pub use backend::AsyncInteractionBackend;
 pub use combinators::{
-    AfterEach, Arbitrate, Arbitration, BranchError, Combine, DeliveryPlan, Distribute, FanIn,
-    FanInState, FanOut, FanOutState, MapError, PipelineExt, Repeat, Select, Then, ThenState,
+    AfterEach, Arbitrate, Arbitration, BranchError, Combine, DeliveryPlan, Dispatch, Distribute,
+    FanIn, FanInState, FanOut, FanOutState, MapError, PipelineExt, Repeat, Route, Select, Then,
+    ThenState,
 };
 pub use executor::{
     AsyncExecutor, AsyncRunError, ImmediateExecutor, RunError, RunOutcome, RunResult, StepExecutor,

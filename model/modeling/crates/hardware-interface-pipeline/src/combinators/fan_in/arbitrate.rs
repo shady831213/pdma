@@ -1,4 +1,6 @@
-use crate::{BranchError, Combine, FanIn, ReadyStage, Stage, StepOutcome};
+use crate::{BranchError, ReadyStage, Stage, StepOutcome};
+
+use super::{Combine, FanIn};
 
 /// Application policy selecting one ready source per operation.
 pub trait Arbitration<C, S: ReadyStage<C>> {

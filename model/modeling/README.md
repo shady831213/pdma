@@ -66,8 +66,10 @@ Its `ReadyStage::ready` checks channel/ring state without consuming a command.
 `device.intake()` uses `Arbitrate<Fetch, RoundRobin>`: arbitration specializes the generic
 `FanIn` with a singleton plan and identity output, while device owns the selection policy.
 `FanIn` itself can gather multiple sources and reduce them into a different output type.
-`device.responses()` uses `FanOut` with a PDMA policy that dispatches the owned response
-to one channel-bound publication port. The generic combinators also support application-defined
+`device.responses()` uses `Dispatch<ResponsePort, RouteResponse>`, the singleton
+specialization of `FanOut`. The PDMA `Route` policy supplies only the channel-bound
+destination and owned response; successful publication returns unit without an
+application reducer. The generic combinators also support application-defined
 broadcast and split plans without requiring input cloning. Branches run in plan order;
 a pending branch retains its state and completed branches are never replayed.
 Both fan combinators use `Then` internally for planning, branch execution and reduction,

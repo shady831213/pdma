@@ -2,6 +2,9 @@ use crate::{BranchError, Stage, StepOutcome};
 
 use super::fan::{BranchPlan, Fan, FanState, Frame, compose, start};
 
+mod dispatch;
+pub use dispatch::{Dispatch, Route};
+
 /// Planning result containing application metadata and ordered destination requests.
 pub type DeliveryPlan<T, I, E> = Result<(T, Vec<(usize, I)>), BranchError<E>>;
 

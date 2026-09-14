@@ -66,7 +66,8 @@ shapes into the rebuild.
   Use Arbitrate (the singleton specialization of FanIn) over channel-bound Fetch ports,
   with the RoundRobin policy owned by device. Ready checks do not consume commands,
   and PDMA eligibility rules belong to Fetch, not the generic combinators.
-  Route tagged responses through FanOut to channel-bound publication ports.
+  Route tagged responses through Dispatch (the singleton FanOut specialization) to
+  channel-bound publication ports.
   Skip full-response channels before accepting commands; do not add per-channel copy state.
   Bind accepted work to channel identity and generation so reset invalidates only its work
   before the next side effect, even after immediate reconfiguration.
@@ -75,7 +76,7 @@ shapes into the rebuild.
   total lengths before payload writes, reads lists incrementally and retains cursors;
   do not cache whole lists, reject overlap or invent segment-count/total-length limits.
   Fixed copy scratch size is an implementation detail, not a command-size limit.
-- Reuse FanIn/Arbitrate/FanOut/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
+- Reuse FanIn/Arbitrate/FanOut/Dispatch/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
   driving only; it must not gain PDMA traversal, validation or copy policy.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.

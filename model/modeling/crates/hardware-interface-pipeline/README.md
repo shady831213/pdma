@@ -14,8 +14,10 @@ same hardware can accept another operation. Dropping request state preserves eff
 already committed to the context or hardware.
 
 The `src/combinators/` module groups `Then`, `AfterEach`, `Repeat`, `FanIn`, `Arbitrate`,
-`FanOut`, and `MapError` in native modules. Their types remain re-exported
+`FanOut`, `Dispatch`, and `MapError` in native modules. Their types remain re-exported
 from the crate root; execution policies live separately under `src/executor/`.
+The `fan_in/` module owns `FanIn` and its `Arbitrate` specialization;
+`fan_out/` owns `FanOut` and its `Dispatch` specialization.
 
 `Then<A, B>` owns both hardware stages and requires `A::Output = B::Input`, with matching
 error and wait types. `upstream.then(downstream)` connects existing hardware. Each
@@ -46,6 +48,14 @@ Pending work blocks later branches and retains completed outputs without cloning
 Child failure or exhaustion terminalizes the whole operation. `BranchError` separates
 invalid plans from application errors; `MapError` adapts error types when connecting
 stages with `Then`. These combinators use the existing operation and executor APIs.
+
+`Dispatch<S, R>` specializes `FanOut` for one destination and a unit completion result.
+An application implements only `Route::Input` and `Route::route`, returning the selected
+index and its owned input. The private adapter creates a singleton plan and discards
+the successful receipt; applications need no operation metadata or `combine` method.
+Routing runs once per operation. Index validation, pending work, errors and completion
+boundaries are inherited from `FanOut`, without a separate execution state machine.
+
 The private `combinators/fan/` module owns the shared port population, policy borrowing,
 composition state and assembly for both fan combinators. Their public wrappers supply
 `Plan` or `Split` and the application reducer to the same

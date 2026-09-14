@@ -9,7 +9,7 @@ use pdma_model_device::Device;
 fn idle_or_device_fatal_parks_after_a_full_round() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a three-channel instance with no runnable command.
     let mut device = Device::new(SharedMemory::new(), 3)?;
-    let mut hardware = device.multi_channel();
+    let mut hardware = device.command_loop();
     let mut operation = Operation::new(());
     for fatal in [false, true] {
         if fatal {

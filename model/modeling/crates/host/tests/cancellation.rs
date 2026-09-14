@@ -1,5 +1,7 @@
 //! Retained device operations survive async driving cancellation.
 
+pub mod support;
+
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
@@ -44,7 +46,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"retained")?;
     let device = Device::new(memory.clone(), 1)?;
-    let mut stage = device.pipeline();
+    let mut stage = support::single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

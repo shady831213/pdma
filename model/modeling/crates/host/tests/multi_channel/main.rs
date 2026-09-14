@@ -2,7 +2,7 @@
 
 mod instances;
 
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_pipeline::{AfterEach, AsyncExecutor, Operation, Repeat, Then};
 use hardware_interface_runtime::{
     CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
@@ -10,7 +10,9 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelId, Command, CompletionFlagsValues, DeviceControl, DeviceRegisters, Endpoint, Response,
 };
-use pdma_model_device::Device;
+use pdma_model_device::{
+    CheckLengths, Device, NextChunk, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+};
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::sync::{
     Arc,
@@ -135,7 +137,15 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let allocator = allocator();
     let memory = allocator.memory_access();
     let device = Device::new(memory.clone(), 3)?;
-    let mut hardware = device.pipeline();
+    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    let mut hardware = Then::new(
+        Then::new(
+            device.intake(),
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        ),
+        device.responses(),
+    );
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     cpu.run_main(async {

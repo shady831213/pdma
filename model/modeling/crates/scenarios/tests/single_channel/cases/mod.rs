@@ -23,7 +23,7 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
         fault,
         destination,
     } = report.program?;
-    let result = report.worker.ok_or("device worker is missing")?;
+    assert!(report.worker.is_cancelled());
     let mut copied = Vec::with_capacity(input.data.len());
     for segment in &destination {
         if segment.length == 0 {
@@ -49,7 +49,6 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
     if response_fault {
         assert_eq!(fault, ChannelFaultCode::ResponseWrite);
         assert_eq!(response, None);
-        assert!(result.is_err());
         println!("fault: copied={copied:?}, sticky_fault={fault:?}, IRQ handled and masked");
     } else {
         assert_eq!(
@@ -62,7 +61,6 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
             })
         );
         assert_eq!(fault, ChannelFaultCode::None);
-        assert!(result.is_ok());
         println!("copy: copied={copied:?}, response={response:?}, IRQ handled and cleared");
     }
     Ok(destination)

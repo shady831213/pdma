@@ -1,11 +1,27 @@
+use hardware_interface_pipeline::{AfterEach, Repeat, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     Endpoint, ResponseRegisters,
 };
-use pdma_model_device::Device;
+use pdma_model_device::{
+    CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+};
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+/// Assemble one command while keeping arbitration state across test operations.
+pub fn single_command<M>(device: &Device<M>) -> Pipeline {
+    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    Then::new(
+        Then::new(
+            device.intake(),
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        ),
+        device.responses(),
+    )
+}
 
 /// Read an exact 32-bit register through the device bus.
 pub fn word<M>(device: &mut Device<M>, offset: usize) -> TestResult<u32> {

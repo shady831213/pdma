@@ -1,5 +1,8 @@
 //! DMA integration with an independently owned flat byte store.
 
+/// Shared raw-bus fixtures and single-command assembly.
+pub mod support;
+
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
@@ -165,7 +168,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
-    let mut hardware = device.pipeline();
+    let mut hardware = support::single_command(&device);
     let mut operation = Operation::<Pipeline, Device<FlatMemory>>::new(());
     let mut completed = false;
     // When

@@ -1,7 +1,7 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
     CpuContextError, DeviceControl, DeviceFaultCode, DeviceRegisters, Endpoint, Error, Model,
-    Operation, RegisterAccess, SoftwareCpu, fixture,
+    Operation, RegisterAccess, SoftwareCpu, fixture, single_command,
 };
 
 #[tokio::test]
@@ -49,7 +49,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a configured channel with one published response.
     let (device, memory, rings) = fixture()?;
-    let mut stage = device.pipeline();
+    let mut stage = single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

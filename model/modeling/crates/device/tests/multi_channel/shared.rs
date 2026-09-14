@@ -27,7 +27,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         )?;
         submit(&mut device, index, u64::try_from(index)?)?;
     }
-    let mut hardware = device.multi_channel();
+    let mut hardware = device.command_loop();
     let mut operation = Operation::new(());
     let mut first_write = false;
     // When: A reaches its first committed chunk, before response publication.

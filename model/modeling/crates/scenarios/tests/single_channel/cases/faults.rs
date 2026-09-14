@@ -32,6 +32,7 @@ async fn software_allocation_failure_stops_interrupt_runtime() -> TestResult {
         Some(hardware_interface_runtime::MemoryAllocationError::AddressExhausted)
     ));
     assert!(report.storage.regions().is_empty());
+    assert!(report.worker.is_cancelled());
     assert_eq!(report.summary.deliveries(), 0);
     assert!(!report.irq);
     Ok(())
@@ -54,6 +55,7 @@ async fn software_setup_failure_stops_interrupt_runtime() -> TestResult {
         Some(pdma_model_host::Error::Memory(_))
     ));
     assert_eq!(report.summary.deliveries(), 0);
+    assert!(report.worker.is_cancelled());
     assert!(!report.irq);
     Ok(())
 }

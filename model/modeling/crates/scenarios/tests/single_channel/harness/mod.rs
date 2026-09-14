@@ -1,23 +1,21 @@
 //! Platform assembly, actor driving and teardown for single-channel scenarios.
 
 mod fault;
+pub mod lifecycle;
 
 use crate::{hardware, software};
 use fault::{FaultBus, UnmappedRing};
-use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Operation};
 use hardware_interface_runtime::{
     InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
 use pdma_model_host::runtime::Model;
-use std::{convert::Infallible, error::Error, sync::Arc};
-use tokio::task::JoinSet;
+use std::{error::Error, sync::Arc};
+use tokio::task::JoinError;
 
 /// Scenario setup or execution infrastructure error.
 pub type TestResult<T = ()> = Result<T, Box<dyn Error + Send + Sync>>;
-/// Result of driving the existing hardware pipeline.
-pub type WorkerResult = Result<(), AsyncRunError<Infallible, pdma_model_device::Error>>;
 
 /// Test-side fault selection, never passed to the software program.
 #[derive(Clone, Copy, Debug)]
@@ -37,8 +35,8 @@ pub enum FaultInjection {
 pub struct Report {
     /// Software completion or its original failure.
     pub program: TestResult<software::Outcome>,
-    /// Hardware outcome when a worker ran to completion.
-    pub worker: Option<WorkerResult>,
+    /// Joined cancellation of the persistent hardware worker after software finishes.
+    pub worker: JoinError,
     /// Completed interrupt delivery accounting.
     pub summary: InterruptSummary,
     /// Final hardware interrupt level.
@@ -63,7 +61,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(first_address));
     let faulted = Arc::new(UnmappedRing::new(allocator.memory_access()));
     let access = SharedMemoryAccess::from(Arc::clone(&faulted));
-    let (device, mut stage) = hardware::assemble(access.clone())?;
+    let (device, stage) = hardware::assemble(access.clone())?;
     let model = Model::new(device);
     let channel_base = ChannelId::new(0)
         .register_offset()
@@ -83,43 +81,28 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
         memory: faulted,
     };
     let cpu = Arc::new(SoftwareCpu::new());
-    let mut workers = JoinSet::new();
-    match injection {
-        FaultInjection::None | FaultInjection::ResponseWrite => {
-            let worker_model = model.clone();
-            workers.spawn(async move {
-                let executor = AsyncExecutor::new(worker_model);
-                let mut operation = Operation::new(());
-                executor.run(&mut stage, &mut operation).await
-            });
-        }
-        FaultInjection::CommandWrite | FaultInjection::AllocationExhausted => {}
-    }
     assert!(
         storage.regions().is_empty(),
         "buffers must be allocated by the running software"
     );
     let runtime = InterruptRuntime::new(cpu, model.clone());
-    let (program, summary) = runtime
-        .run_main(async |interrupts| {
-            software::main(
-                software::Ports {
-                    bus,
-                    memory: access,
-                    allocator,
-                    interrupts,
-                },
-                input,
-            )
-            .await
-        })
-        .await?;
-    let worker = if program.is_ok() {
-        workers.join_next().await.transpose()?
-    } else {
-        None
-    };
-    drop(workers);
+    let execution = runtime.run_main(async |interrupts| {
+        software::main(
+            software::Ports {
+                bus,
+                memory: access,
+                allocator,
+                interrupts,
+            },
+            input,
+        )
+        .await
+    });
+    let ((program, summary), worker) = lifecycle::run(
+        hardware::drive(model.clone(), stage),
+        Box::pin(async { execution.await.map_err(Into::into) }),
+    )
+    .await?;
     Ok(Report {
         program,
         worker,

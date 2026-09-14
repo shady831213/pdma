@@ -70,7 +70,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         )?;
         submit(&mut device, index, u64::try_from(index)?)?;
     }
-    let mut hardware = device.multi_channel();
+    let mut hardware = device.command_loop();
     let mut operation = Operation::new(());
     let mut committed = false;
     for _ in 0..256 {

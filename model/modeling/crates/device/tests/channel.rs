@@ -156,7 +156,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut hardware = device.pipeline();
+    let mut hardware = support::single_command(&device);
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
     // When
     let mut stalled = false;

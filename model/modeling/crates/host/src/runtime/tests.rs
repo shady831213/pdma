@@ -108,7 +108,7 @@ async fn rejected_read_preserves_the_bus_error_and_notifies() -> TestResult {
 async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestResult {
     // Given: a real fault notification created beneath the transport.
     let device = Device::new(SharedMemory::new(), 1)?;
-    let mut hardware = device.pipeline();
+    let mut hardware = device.intake();
     let mut model = Model::new(device);
     {
         let mut device = model.device.lock().await;
@@ -130,16 +130,16 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
             device.write(offset, &1_u32.to_le_bytes())?;
         }
         let mut operation = Operation::new(());
-        assert_eq!(
+        assert!(matches!(
             operation.step(&mut hardware, &mut device),
             StepOutcome::Progressed
-        );
+        ));
         let outcome = operation.step(&mut hardware, &mut device);
         drop(device);
-        assert_eq!(
+        assert!(matches!(
             outcome,
             StepOutcome::Complete(Err(Error::Fault(Fault::CommandRead)))
-        );
+        ));
     }
     assert!(!model.irq());
     // When: a read finishes the transport interaction boundary.

@@ -1,6 +1,8 @@
 //! CPU-owned host interrupt controls and explicit reset recovery.
 
-use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Operation, StepOutcome};
+use hardware_interface_pipeline::{
+    AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, StepOutcome, Then,
+};
 use hardware_interface_runtime::{
     CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
@@ -9,11 +11,25 @@ use pdma_model_contract::{
     ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DeviceControl,
     DeviceFaultCode, DeviceRegisters, Endpoint, Response,
 };
-use pdma_model_device::Device;
+use pdma_model_device::{
+    CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+};
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 mod reset;
+
+fn single_command<M>(device: &Device<M>) -> Pipeline {
+    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    Then::new(
+        Then::new(
+            device.intake(),
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        ),
+        device.responses(),
+    )
+}
 
 fn fixture()
 -> Result<(Device<SharedMemoryAccess>, SharedMemoryAccess, Rings), Box<dyn std::error::Error>> {
@@ -110,7 +126,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: both routine completion events are masked.
     let (device, memory, rings) = fixture()?;
-    let mut stage = device.pipeline();
+    let mut stage = single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

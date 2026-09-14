@@ -151,7 +151,7 @@ fn reset_or_disable_before_acceptance_rearbitrates_without_consuming_the_selecti
 fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> TestResult {
     // Given: the graph has selected A without accepting its old command.
     let mut device = device()?;
-    let mut hardware = device.pipeline();
+    let mut hardware = super::support::single_command(&device);
     let mut operation = Operation::new(());
     assert!(matches!(
         operation.step(&mut hardware, &mut device),

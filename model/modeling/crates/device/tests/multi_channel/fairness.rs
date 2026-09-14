@@ -42,7 +42,7 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
             submit(&mut device, index, u64::try_from(index)?)?;
         }
         // When: the sustained graph visits all channels while A cannot publish.
-        let mut hardware = device.multi_channel();
+        let mut hardware = device.command_loop();
         let mut operation = Operation::new(());
         for _ in 0..512 {
             assert!(matches!(
@@ -108,7 +108,7 @@ fn fill_response_ring(device: &mut Device<SharedMemory>, base: usize) -> TestRes
         if producer == 3 {
             break;
         }
-        let mut hardware = device.pipeline();
+        let mut hardware = super::support::single_command(device);
         let mut operation = Operation::new(());
         let mut finished = false;
         for _ in 0..128 {

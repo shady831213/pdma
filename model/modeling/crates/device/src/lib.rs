@@ -6,7 +6,6 @@ mod channel;
 mod error;
 mod execution;
 mod fetch;
-mod multi_channel;
 mod reset;
 mod routing;
 mod stages;
@@ -21,13 +20,14 @@ pub use execution::{
 };
 pub use fetch::Fetch;
 use hardware_interface_schema::{Access, RegisterMapLayout};
-pub use multi_channel::{MultiChannel, RunCommand};
 use pdma_model_contract::{
     ChannelId, DeviceControl, DeviceControlValues, DeviceFaultCode, DeviceRegisters,
 };
 pub use reset::{ChannelTask, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
-pub use stages::{CopyLoop, Execution, Intake, Pipeline, Publish, Responses, UpdateIrq};
+pub use stages::{
+    CommandLoop, CopyLoop, Execution, Intake, Pipeline, Publish, Responses, RunCommand, UpdateIrq,
+};
 
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]

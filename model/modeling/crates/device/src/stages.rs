@@ -7,7 +7,7 @@ use hardware_interface_pipeline::{
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{ChannelId, Response};
-use std::convert::Infallible;
+use std::{convert::Infallible, ops::ControlFlow};
 
 /// Publish a retained response; a full ring suspends only this stage.
 #[derive(Debug, Default)]
@@ -69,8 +69,45 @@ impl<M> Stage<ChannelContext<'_, M>> for UpdateIrq {
     }
 }
 
-/// The same statically composed hardware is used by step and async executors.
-pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>>>, Responses>;
+/// Ends one command after completion or channel-local termination.
+#[derive(Debug)]
+pub struct RunCommand {
+    pipeline: Pipeline,
+}
+
+impl<M: MemoryAccess> Stage<Device<M>> for RunCommand {
+    type Input = ();
+    type Output = ControlFlow<(), ()>;
+    type Error = Error;
+    type Wait = ();
+    type State = <Pipeline as Stage<Device<M>>>::State;
+
+    fn start((): ()) -> Self::State {
+        <Pipeline as Stage<Device<M>>>::start(())
+    }
+
+    fn step(
+        &mut self,
+        device: &mut Device<M>,
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Error, ()> {
+        match self.pipeline.step(device, state) {
+            StepOutcome::Complete(Ok(()) | Err(Error::Reset | Error::Fault(_) | Error::Halted)) => {
+                StepOutcome::Complete(Ok(ControlFlow::Continue(())))
+            }
+            StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
+            StepOutcome::Progressed => StepOutcome::Progressed,
+            StepOutcome::Pending(()) => StepOutcome::Pending(()),
+            StepOutcome::Exhausted => StepOutcome::Exhausted,
+        }
+    }
+}
+
+/// One composable prepare/read/write iteration.
+pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
+
+/// Length validation followed by bounded-memory copy iterations.
+pub type Execution = Then<CheckLengths, Repeat<CopyLoop>>;
 
 /// Application arbitration over the instance's command ports.
 pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) -> Error>;
@@ -79,11 +116,11 @@ pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) 
 pub type Responses =
     MapError<Dispatch<ResponsePort, RouteResponse>, fn(BranchError<Error>) -> Error>;
 
-/// One composable prepare/read/write iteration.
-pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
+/// The same statically composed hardware is used by step and async executors.
+pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>>>, Responses>;
 
-/// Length validation followed by bounded-memory copy iterations.
-pub type Execution = Then<CheckLengths, Repeat<CopyLoop>>;
+/// Continuously executes commands through one shared pipeline.
+pub type CommandLoop = Repeat<RunCommand>;
 
 impl<M> Device<M> {
     /// Builds this device's lightweight command input ports for custom compositions.
@@ -111,16 +148,18 @@ impl<M> Device<M> {
         MapError::new(Dispatch::new(ports, RouteResponse), Error::from)
     }
 
-    /// Combines the instance's input ports into one shared copy and publication path.
-    pub fn pipeline(&self) -> Pipeline {
+    /// Builds the sustained command loop from this instance's hardware stages.
+    pub fn command_loop(&self) -> CommandLoop {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
         let execution = Then::new(CheckLengths, Repeat::new(chunk));
-        Then::new(
-            Then::new(
-                self.intake(),
-                Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        Repeat::new(RunCommand {
+            pipeline: Then::new(
+                Then::new(
+                    self.intake(),
+                    Resettable::new(AfterEach::new(execution, UpdateIrq)),
+                ),
+                self.responses(),
             ),
-            self.responses(),
-        )
+        })
     }
 }

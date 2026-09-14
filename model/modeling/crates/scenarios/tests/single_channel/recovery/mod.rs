@@ -21,6 +21,7 @@ async fn recovery_batch_last_ioc_notifies_once_and_drains_all_responses() -> Tes
     let report = hardware::run(Scenario::Batch, payload).await?;
     // Then: one notification exposes every response and every destination's copied bytes.
     assert_eq!(report.summary.deliveries(), 1);
+    assert!(report.worker.is_cancelled());
     assert_eq!(report.outcome.responses.len(), 3);
     for (index, response) in report.outcome.responses.iter().enumerate() {
         assert_eq!(
@@ -57,6 +58,7 @@ async fn recovery_error_irq_allows_channel_reset_and_next_copy_in_same_runtime()
     let report = hardware::run(Scenario::ChannelReset, payload).await?;
     // Then: the error bypassed masks and a fresh nonempty event completed the next copy.
     assert_eq!(report.summary.deliveries(), 2);
+    assert!(report.worker.is_cancelled());
     assert_eq!(
         report.outcome.responses,
         vec![

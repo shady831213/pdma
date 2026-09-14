@@ -1,5 +1,7 @@
 //! Cancellation after a committed DMA write preserves publication state.
 
+pub mod support;
+
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
@@ -42,7 +44,7 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"original")?;
     let device = Device::new(memory.clone(), 1)?;
-    let mut stage = device.pipeline();
+    let mut stage = support::single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

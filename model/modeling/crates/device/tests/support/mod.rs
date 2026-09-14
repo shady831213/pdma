@@ -1,14 +1,29 @@
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{AfterEach, Operation, Repeat, RunOutcome, StepExecutor, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_device::{Device, Pipeline};
+use pdma_model_device::{
+    CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+};
 
 /// Test harness error propagation.
 pub type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// Assemble one command for tests that inspect its completion and intermediate boundaries.
+pub fn single_command<M>(device: &Device<M>) -> Pipeline {
+    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
+    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    Then::new(
+        Then::new(
+            device.intake(),
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        ),
+        device.responses(),
+    )
+}
 
 /// Configure mapped test memory and one enabled channel.
 pub fn setup(
@@ -88,7 +103,7 @@ pub fn submit(
 
 /// Drive one operation within a fixed interaction bound.
 pub fn run(device: &mut Device<SharedMemory>) -> TestResult {
-    let mut hardware = device.pipeline();
+    let mut hardware = single_command(device);
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
     for _ in 0..1024 {
         match StepExecutor::new()

@@ -16,7 +16,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.pipeline();
+    let mut hardware = support::single_command(&device);
     let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
     // When
     for _ in 0..32 {

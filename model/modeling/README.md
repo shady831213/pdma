@@ -27,12 +27,11 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/device/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
 | `crates/device/src/channel/mmio.rs` | Generated block routing and software-write effects. |
-| `crates/device/src/stages.rs` | One channel's hardware composition. |
+| `crates/device/src/stages.rs` | Hardware stages, single-command pipeline and sustained command loop. |
 | `crates/device/src/fetch.rs` | Per-channel readiness and generation-tagged command acceptance. |
 | `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
 | `crates/device/src/arbitration.rs` | PDMA round-robin selection policy. |
 | `crates/device/src/routing.rs` | Generation-bound response destination policy. |
-| `crates/device/src/multi_channel.rs` | Repetition of one shared command execution pipeline. |
 | `crates/device/src/execution.rs` | Retained copy progress and chunk payload. |
 | `crates/device/src/execution/validate.rs` | Incremental endpoint-total validation. |
 | `crates/device/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
@@ -50,7 +49,8 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
 | `crates/scenarios/tests/multi_channel/` | Three-channel reset isolation through the same hardware/software/harness separation. |
 
-The device composition is deliberately explicit:
+`device.command_loop()` is the complete hardware assembly entry. Its per-command
+composition is deliberately explicit:
 
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
@@ -92,7 +92,8 @@ publication faults stop the channel. An error response is published before the c
 stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
-`device.multi_channel()` uses `Repeat` to reuse one shared pipeline and one in-flight command.
+`device.command_loop()` builds `CommandLoop = Repeat<RunCommand>`, reusing one shared
+pipeline and one in-flight command for either single-channel or multi-channel devices.
 It arbitrates at command boundaries, not between chunks of different channels.
 A full idle arbitration round returns Pending; a channel's fault or reset releases
 its command, and channels without response space are skipped before acceptance.
@@ -104,11 +105,15 @@ interaction, even if software has already reconfigured and re-enabled the channe
 Custom compositions use the same reset boundary; execution itself still uses the
 existing Then/Repeat/AfterEach building blocks.
 
-Build `device.pipeline()` or `device.multi_channel()` before moving the device into
+Build `device.command_loop()` before moving the device into
 the runtime transport, and retain that graph across commands. Its lightweight Fetch
 ports come from the actual instance population. Custom graphs can pass a subset or
 different ordering of Fetch ports to Arbitrate, or supply their own arbitration policy.
 Runtime only drives the supplied graph; it never constructs the hardware policy.
+Complete scenarios drive one persistent command-loop operation until their software
+program finishes, then abort and join the hardware task. Command-local termination
+is handled inside the device, not by a scenario-side retry loop. Boundary tests that
+need a single command assemble the existing stages in test fixtures.
 
 `Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles shared memory and its allocation service

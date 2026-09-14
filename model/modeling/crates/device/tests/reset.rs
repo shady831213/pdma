@@ -16,7 +16,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     // Given: an accepted operation and externally written payload bytes.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.pipeline();
+    let mut hardware = support::single_command(&device);
     let mut operation = Operation::new(());
     let mut accepted = false;
     for _ in 0..16 {
@@ -125,7 +125,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         input.source = Endpoint::linear(0x1200, 512);
         input.destination = Endpoint::linear(0x1600, 512);
         submit(&mut device, &memory, input)?;
-        let mut hardware = device.pipeline();
+        let mut hardware = support::single_command(&device);
         let mut operation = Operation::new(());
         let mut first_committed = false;
         let mut first_chunk = [0; 256];

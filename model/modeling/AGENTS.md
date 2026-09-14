@@ -68,6 +68,10 @@ shapes into the rebuild.
   and PDMA eligibility rules belong to Fetch, not the generic combinators.
   Route tagged responses through Dispatch (the singleton FanOut specialization) to
   channel-bound publication ports.
+  Complete hardware assembly uses Device::command_loop(); scenarios drive one retained
+  operation and abort/join it after software finishes. Do not recreate command-local
+  completion/reset/fault recovery in a scenario-side loop. Single-command boundary
+  tests may assemble existing stages in test fixtures, not a production factory.
   Skip full-response channels before accepting commands; do not add per-channel copy state.
   Bind accepted work to channel identity and generation so reset invalidates only its work
   before the next side effect, even after immediate reconfiguration.

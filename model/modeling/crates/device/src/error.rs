@@ -54,6 +54,28 @@ impl Display for Error {
 }
 impl std::error::Error for Error {}
 
+impl From<hardware_interface_schema::RegisterAccessError<Self>> for Error {
+    fn from(error: hardware_interface_schema::RegisterAccessError<Self>) -> Self {
+        use hardware_interface_schema::RegisterAccessError;
+        match error {
+            RegisterAccessError::OutsideWindow { .. }
+            | RegisterAccessError::InvalidOffset { .. } => Self::Unmapped,
+            RegisterAccessError::WidthMismatch { .. }
+            | RegisterAccessError::InvalidLayout { .. } => Self::Width,
+            RegisterAccessError::ReadForbidden { .. }
+            | RegisterAccessError::WriteForbidden { .. } => Self::Access,
+            RegisterAccessError::ReservedBitChange { .. } => Self::ReservedBits,
+            RegisterAccessError::Other(error) => error,
+        }
+    }
+}
+
+impl From<hardware_interface_schema::RegisterAccessError> for Error {
+    fn from(error: hardware_interface_schema::RegisterAccessError) -> Self {
+        error.widen::<Self>().into()
+    }
+}
+
 impl From<hardware_interface_pipeline::BranchError<Self>> for Error {
     fn from(error: hardware_interface_pipeline::BranchError<Self>) -> Self {
         use hardware_interface_pipeline::BranchError;

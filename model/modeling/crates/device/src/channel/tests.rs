@@ -1,9 +1,27 @@
 use super::*;
 use crate::Device;
-use hardware_interface_runtime::{MemoryRegion, SharedMemory};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::{
-    ChannelRegisters, CompletionFlagsValues, DeviceRegisters, ResponseRegisters, WordValues,
+    ChannelRegisters, CompletionFlagsValues, DeviceRegisters, ReadWordValues, ResponseRegisters,
+    WordValues,
 };
+
+#[test]
+fn ring_mmio_uses_its_instance_base() -> Result<(), Box<dyn std::error::Error>> {
+    // Given: independently placed command and response register windows.
+    let mut command = CommandRing::new(0x200);
+    let mut response = ResponseRing::new(0x100);
+    // When: each ring accepts a write at its own placement.
+    command.write(0x208, &4_u32.to_le_bytes(), false)?;
+    response.write(0x108, &8_u32.to_le_bytes(), false)?;
+    // Then: generated offsets select distinct ring-owned values.
+    let mut bytes = [0; 4];
+    command.read(0x208, &mut bytes)?;
+    assert_eq!(u32::from_le_bytes(bytes), 4);
+    response.read(0x108, &mut bytes)?;
+    assert_eq!(u32::from_le_bytes(bytes), 8);
+    Ok(())
+}
 
 #[test]
 fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
@@ -36,6 +54,7 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
         .ok_or("missing channel")?
         .response
         .registers
+        .values
         .producer = ReadWordValues::new(u32::MAX - 1);
     device
         .channels
@@ -43,6 +62,7 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
         .ok_or("missing channel")?
         .response
         .registers
+        .values
         .consumer = WordValues::new(u32::MAX - 1);
     for ioc in [true, true, false] {
         let response = Response {

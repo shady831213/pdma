@@ -1,7 +1,6 @@
 use crate::{Channel, Device};
-use pdma_model_contract::{
-    ChannelCountValues, DeviceControlValues, DeviceLayoutError, DeviceRegisters,
-};
+use hardware_interface_schema::RegisterWindow;
+use pdma_model_contract::{ChannelCountValues, DeviceControl, DeviceLayoutError, DeviceRegisters};
 use std::{collections::TryReserveError, fmt};
 
 /// Instance construction failure, separate from hardware or MMIO errors.
@@ -33,13 +32,12 @@ impl<M> Device<M> {
             .try_reserve_exact(channel_count)
             .map_err(BuildError::Allocation)?;
         channels.resize_with(channel_count, Channel::default);
+        let mut control = RegisterWindow::<DeviceControl>::new(DeviceRegisters::CONTROL.offset());
+        control.values.channel_num = ChannelCountValues::new(count);
         Ok(Self {
             channels,
             memory,
-            control: DeviceControlValues {
-                channel_num: ChannelCountValues::new(count),
-                ..DeviceControlValues::default()
-            },
+            control,
             interrupt: false,
         })
     }

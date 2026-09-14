@@ -9,6 +9,8 @@ mod fetch;
 mod reset;
 mod routing;
 mod stages;
+#[cfg(test)]
+mod tests;
 
 pub use arbitration::RoundRobin;
 pub use build::BuildError;
@@ -19,9 +21,9 @@ pub use execution::{
     WriteCopy,
 };
 pub use fetch::Fetch;
-use hardware_interface_schema::{Access, RegisterMapLayout};
+use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_dispatch};
 use pdma_model_contract::{
-    ChannelId, DeviceControl, DeviceControlValues, DeviceFaultCode, DeviceRegisters,
+    ChannelBlock, ChannelId, DeviceControl, DeviceControlValues, DeviceFaultCode, DeviceRegisters,
 };
 pub use reset::{ChannelTask, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
@@ -35,7 +37,7 @@ pub struct Device<M> {
     channels: Vec<Channel>,
     /// Injected memory access capability, never a device-selected backend.
     pub memory: M,
-    control: DeviceControlValues,
+    control: RegisterWindow<DeviceControl>,
     interrupt: bool,
 }
 
@@ -56,14 +58,18 @@ impl<M> Device<M> {
 
     /// Signals a device-wide internal hardware fault, never a software bus command.
     pub fn signal_fatal(&mut self) {
-        if self.control.fault.code() == Ok(DeviceFaultCode::None) {
-            self.control.fault = self.control.fault.with_code(DeviceFaultCode::Internal);
-            self.interrupt |= self.control.irq_enable.raw() != 0;
+        if self.control.values.fault.code() == Ok(DeviceFaultCode::None) {
+            self.control.values.fault = self
+                .control
+                .values
+                .fault
+                .with_code(DeviceFaultCode::Internal);
+            self.interrupt |= self.control.values.irq_enable.raw() != 0;
         }
     }
 
     pub(crate) fn halted(&self) -> bool {
-        self.control.fault.code() != Ok(DeviceFaultCode::None)
+        self.control.values.fault.code() != Ok(DeviceFaultCode::None)
     }
 
     /// Borrows one channel and shared hardware resources for a single interaction.
@@ -78,50 +84,93 @@ impl<M> Device<M> {
 
     /// Reads a register and applies the owning channel's immediate side effects.
     pub fn read(&mut self, offset: usize, destination: &mut [u8]) -> Result<(), Error> {
-        if offset < DeviceRegisters::CHANNELS_OFFSET {
-            read_register::<DeviceControl>(
-                &self.control,
-                offset - DeviceRegisters::CONTROL.offset(),
-                destination,
-            )
-        } else {
-            let relative = offset - DeviceRegisters::CHANNELS_OFFSET;
-            let stride = DeviceRegisters::CHANNEL_STRIDE;
-            self.channels
-                .get_mut(relative / stride)
-                .ok_or(Error::Unmapped)?
-                .read(relative % stride, destination)
-        }
+        register_dispatch!(
+            self.control
+                .read(offset, destination)
+                .map_err(RegisterAccessError::widen),
+            self.read_channels(offset, destination),
+        )
+        .map_err(Error::from)
     }
 
     /// Writes a register and applies the owning channel's immediate side effects.
     pub fn write(&mut self, offset: usize, source: &[u8]) -> Result<(), Error> {
-        if offset < DeviceRegisters::CHANNELS_OFFSET {
-            write_register::<DeviceControl>(
-                &mut self.control,
-                offset - DeviceRegisters::CONTROL.offset(),
-                source,
-            )?;
-            if self.control.reset.raw() != 0 {
-                for channel in &mut self.channels {
-                    channel.reset();
+        register_dispatch!(
+            self.write_control(offset, source),
+            self.write_channels(offset, source),
+        )
+        .map_err(Error::from)
+    }
+
+    fn write_control(
+        &mut self,
+        address: usize,
+        source: &[u8],
+    ) -> Result<(), RegisterAccessError<Error>> {
+        let channels = &mut self.channels;
+        let interrupt = &mut self.interrupt;
+        self.control.write_with(
+            address,
+            source,
+            |_, _, _| Ok(()),
+            |_, next| {
+                if next.reset.raw() != 0 {
+                    for channel in channels {
+                        channel.reset();
+                    }
+                    *next = DeviceControlValues {
+                        channel_num: next.channel_num,
+                        ..DeviceControlValues::default()
+                    };
+                    *interrupt = false;
                 }
-                let channel_num = self.control.channel_num;
-                self.control = DeviceControlValues {
-                    channel_num,
-                    ..DeviceControlValues::default()
-                };
-                self.interrupt = false;
-            }
-            Ok(())
-        } else {
-            let relative = offset - DeviceRegisters::CHANNELS_OFFSET;
-            let stride = DeviceRegisters::CHANNEL_STRIDE;
-            self.channels
-                .get_mut(relative / stride)
-                .ok_or(Error::Unmapped)?
-                .write(relative % stride, source)
+            },
+        )
+    }
+
+    fn read_channels(
+        &mut self,
+        address: usize,
+        destination: &mut [u8],
+    ) -> Result<(), RegisterAccessError<Error>> {
+        let (channel, offset) = self.channel_registers(address)?;
+        register_dispatch!(
+            channel.read(offset, destination),
+            Err(RegisterAccessError::InvalidOffset { offset }),
+        )
+    }
+
+    fn write_channels(
+        &mut self,
+        address: usize,
+        source: &[u8],
+    ) -> Result<(), RegisterAccessError<Error>> {
+        let (channel, offset) = self.channel_registers(address)?;
+        register_dispatch!(
+            channel.write(offset, source),
+            Err(RegisterAccessError::InvalidOffset { offset }),
+        )
+    }
+
+    fn channel_registers(
+        &mut self,
+        address: usize,
+    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
+        let relative = address
+            .checked_sub(DeviceRegisters::CHANNELS_OFFSET)
+            .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        let stride = DeviceRegisters::CHANNEL_STRIDE;
+        let index = relative / stride;
+        let offset = relative % stride;
+        let count = self.channels.len();
+        let channel = self
+            .channels
+            .get_mut(index)
+            .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        if index + 1 == count && offset >= ChannelBlock::EXTENT {
+            return Err(RegisterAccessError::OutsideWindow { address });
         }
+        Ok((channel, offset))
     }
 }
 
@@ -140,45 +189,4 @@ impl<M> ChannelContext<'_, M> {
     pub fn halted(&self) -> bool {
         self.device_fatal || self.channel.halted()
     }
-}
-fn read_register<M: RegisterMapLayout>(
-    values: &M::Value,
-    offset: usize,
-    out: &mut [u8],
-) -> Result<(), Error> {
-    let definition = M::register_definition(offset).ok_or(Error::Unmapped)?;
-    if out.len() != definition.width() {
-        return Err(Error::Width);
-    }
-    if definition.access() == Access::WriteOnly {
-        return Err(Error::Access);
-    }
-    let raw = M::read_register(values, offset).ok_or(Error::Unmapped)?;
-    definition
-        .view_mut(out)
-        .and_then(|mut view| view.set_value(raw))
-        .map_err(|_| Error::Width)
-}
-
-fn write_register<M: RegisterMapLayout>(
-    values: &mut M::Value,
-    offset: usize,
-    bytes: &[u8],
-) -> Result<(), Error> {
-    let definition = M::register_definition(offset).ok_or(Error::Unmapped)?;
-    if bytes.len() != definition.width() {
-        return Err(Error::Width);
-    }
-    if definition.access() == Access::ReadOnly {
-        return Err(Error::Access);
-    }
-    let raw = definition
-        .view(bytes)
-        .and_then(|view| view.value())
-        .map_err(|_| Error::Width)?;
-    let old = M::read_register(values, offset).ok_or(Error::Unmapped)?;
-    if (raw ^ old) & !definition.writable_mask() != 0 {
-        return Err(Error::ReservedBits);
-    }
-    M::write_register(values, offset, raw).ok_or(Error::Width)
 }

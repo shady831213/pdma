@@ -5,10 +5,11 @@ use hardware_interface_schema::{
     register_schema,
 };
 
-include!("located_child.rs");
+use located_child::LocatedChild;
 
 mod errors;
 mod layout;
+pub mod located_child;
 mod values;
 
 register_schema! {

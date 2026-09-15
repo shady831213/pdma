@@ -7,8 +7,19 @@ use std::{
 
 use hardware_interface_schema::export::backends::c_header::CHeaderExportError;
 use hardware_interface_schema::export::{Exporter, InMemoryArtifactSink};
+use hardware_interface_schema::{Endian, FieldSpec, RecordSpec, ScalarKind};
 
 pub type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+
+const RECORD_FIELDS: [FieldSpec; 4] = [
+    FieldSpec::new(1, "tag", 0, ScalarKind::U8),
+    FieldSpec::new(2, "sequence", 2, ScalarKind::U16).with_endian(Endian::Big),
+    FieldSpec::new(3, "measure", 5, ScalarKind::U32),
+    FieldSpec::new(4, "timestamp", 10, ScalarKind::U64).with_endian(Endian::Big),
+];
+
+/// Shared record fixture for fragment rendering and C11 consumer tests.
+pub const RECORD: RecordSpec = RecordSpec::new(18, 2, &RECORD_FIELDS);
 
 const STRICT_C11_FLAGS: [&str; 5] = [
     "-std=c11",

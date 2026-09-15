@@ -1,3 +1,4 @@
+use super::located_child::{LOCATED_CHILD_IDENTITY, LocatedChildValues};
 use super::*;
 
 #[test]

@@ -1,3 +1,18 @@
+use hardware_interface_schema::{
+    FieldSpec, RecordSpec, ScalarKind,
+    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
+    register::{Access, RegisterSpec, ResetKind},
+    register_map::{RegisterMapSpec, RepeatedRegisterBank},
+};
+
+use super::support::{
+    COLLISION_C_MAIN, HAPPY_C_MAIN, RECORD, TestResult, compile_fragments, render,
+};
+
+const MAP_GOLDEN: &[u8] = include_bytes!("../golden/c_header_register_map.h");
+const COLLISION_RECORD_GOLDEN: &[u8] = include_bytes!("../golden/c_header_collision_record.h");
+const COLLISION_MAP_GOLDEN: &[u8] = include_bytes!("../golden/c_header_collision_map.h");
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RegisterId {
     Status,

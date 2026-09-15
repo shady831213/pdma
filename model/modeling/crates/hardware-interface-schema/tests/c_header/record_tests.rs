@@ -1,10 +1,13 @@
-const RECORD_FIELDS: [FieldSpec; 4] = [
-    FieldSpec::new(1, "tag", 0, ScalarKind::U8),
-    FieldSpec::new(2, "sequence", 2, ScalarKind::U16).with_endian(Endian::Big),
-    FieldSpec::new(3, "measure", 5, ScalarKind::U32),
-    FieldSpec::new(4, "timestamp", 10, ScalarKind::U64).with_endian(Endian::Big),
-];
-const RECORD: RecordSpec = RecordSpec::new(18, 2, &RECORD_FIELDS);
+use hardware_interface_schema::{
+    FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
+    export::backends::c_header::{CHeaderExportError, RecordCHeaderExporter},
+    export::{Artifact, ArtifactSink, Exporter},
+};
+
+use super::support::{NESTED_C_MAIN, PREFIX_C_MAIN, RECORD, TestResult, compile_fragments, render};
+
+const RECORD_GOLDEN: &[u8] = include_bytes!("../golden/c_header_record.h");
+
 const CHILD_FIELDS: [FieldSpec; 1] = [FieldSpec::new(1, "value", 0, ScalarKind::U16)];
 const CHILD: RecordSpec = RecordSpec::named("Child", 2, 2, &CHILD_FIELDS, &[]);
 const NESTED: [RecordPlacement; 1] = [RecordPlacement::repeated(1, "items", 4, 2, 4, &CHILD)];

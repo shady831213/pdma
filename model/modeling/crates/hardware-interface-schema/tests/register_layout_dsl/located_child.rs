@@ -1,12 +1,20 @@
-const LOCATED_CHILD_IDENTITY: SchemaMemberIdentity =
+//! Child-layout fixture for checking nested codec error locations.
+
+use hardware_interface_schema::{RegisterLayout, SchemaCodecError, SchemaMemberIdentity};
+
+/// Leaf identity retained while containing maps rebase its coordinates.
+pub const LOCATED_CHILD_IDENTITY: SchemaMemberIdentity =
     SchemaMemberIdentity::new("LocatedChild", "value");
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct LocatedChild;
+/// Child layout that returns errors at fixed leaf coordinates.
+pub struct LocatedChild;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct LocatedChildValues {
-    rejects_encoding: bool,
+/// Child value controlling whether encoding reports a leaf error.
+pub struct LocatedChildValues {
+    /// Requests a narrowing error from the child encoder.
+    pub rejects_encoding: bool,
 }
 
 impl RegisterLayout for LocatedChild {

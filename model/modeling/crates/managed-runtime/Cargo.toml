@@ -1,0 +1,22 @@
+[package]
+name = "pdma-model-managed-runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Runtime assembly for firmware-managed DMA"
+
+[dependencies]
+pdma-model-contract = { path = "../contract" }
+pdma-model-dma = { path = "../dma" }
+pdma-model-hw-components = { path = "../hw-components" }
+pdma-model-firmware = { path = "../firmware" }
+pdma-model-host = { path = "../host" }
+hardware-interface-runtime = { path = "../hardware-interface-runtime" }
+hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
+tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
+
+[lints]
+workspace = true

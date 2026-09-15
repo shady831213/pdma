@@ -1,0 +1,96 @@
+use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
+use pdma_model_contract::{
+    ReadWordValues, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl, WindowStatus,
+};
+
+use crate::{AccessError, WindowConfigError};
+
+/// Firmware-controlled permission gate for a concrete downstream register range.
+#[derive(Debug)]
+pub struct AccessWindow {
+    control: RegisterWindow<WindowControl>,
+    extent: usize,
+}
+
+impl AccessWindow {
+    /// Creates closed access to `[0, extent)`, excluding reserved management addresses.
+    pub fn new(extent: usize) -> Result<Self, WindowConfigError> {
+        let base = usize::try_from(WINDOW_CONTROL_BASE)
+            .map_err(|_| WindowConfigError::AddressUnrepresentable)?;
+        if extent > base {
+            return Err(WindowConfigError::ReservedAddressOverlap);
+        }
+        Ok(Self {
+            control: RegisterWindow::new(base),
+            extent,
+        })
+    }
+
+    /// Reads the firmware-only control map even while downstream access is closed.
+    pub fn management_read(
+        &mut self,
+        address: usize,
+        out: &mut [u8],
+    ) -> Result<(), RegisterAccessError> {
+        self.control.read(address, out)
+    }
+
+    /// Writes the firmware-only control map; opening publishes readiness immediately.
+    pub fn management_write(
+        &mut self,
+        address: usize,
+        source: &[u8],
+    ) -> Result<(), RegisterAccessError> {
+        self.control.write(address, source)
+    }
+
+    /// Returns the authoritative firmware control bit.
+    pub fn is_open(&self) -> bool {
+        self.control.values.open.enabled()
+    }
+
+    /// Reads host status or forwards a complete permitted downstream transaction.
+    pub fn read<E>(
+        &self,
+        address: usize,
+        out: &mut [u8],
+        downstream: impl FnOnce(usize, &mut [u8]) -> Result<(), E>,
+    ) -> Result<(), AccessError<E>> {
+        let status_base = usize::try_from(WINDOW_STATUS_BASE).map_err(|_| AccessError::Unmapped)?;
+        if address >= status_base && address - status_base < WindowStatus::EXTENT {
+            let mut status = RegisterWindow::<WindowStatus>::new(status_base);
+            status.values.ready = ReadWordValues::new(u32::from(self.is_open()));
+            return status.read(address, out).map_err(AccessError::Register);
+        }
+        self.check_downstream(address, out.len())?;
+        downstream(address, out).map_err(AccessError::Downstream)
+    }
+
+    /// Forwards a complete permitted host write; management and status remain protected.
+    pub fn write<E>(
+        &self,
+        address: usize,
+        source: &[u8],
+        downstream: impl FnOnce(usize, &[u8]) -> Result<(), E>,
+    ) -> Result<(), AccessError<E>> {
+        self.check_downstream(address, source.len())?;
+        downstream(address, source).map_err(AccessError::Downstream)
+    }
+
+    fn check_downstream<E>(&self, address: usize, width: usize) -> Result<(), AccessError<E>> {
+        let end = address.checked_add(width).ok_or(AccessError::Unmapped)?;
+        let status_base = usize::try_from(WINDOW_STATUS_BASE).map_err(|_| AccessError::Unmapped)?;
+        if (address < self.control.base() + WindowControl::EXTENT && end > self.control.base())
+            || (address < status_base + WindowStatus::EXTENT && end > status_base)
+        {
+            return Err(AccessError::Denied);
+        }
+        if width == 0 || address >= self.extent || end > self.extent {
+            return Err(AccessError::Unmapped);
+        }
+        if !self.is_open() {
+            return Err(AccessError::Closed);
+        }
+        Ok(())
+    }
+}

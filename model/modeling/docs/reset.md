@@ -113,8 +113,8 @@ These tests specify the observable contract; this list is not a test-run report.
 
 | Test source | Boundary covered |
 | --- | --- |
-| [`device/tests/reset_protocol.rs`](../crates/dma/tests/reset_protocol.rs) | Visible busy state, rejected configuration, whole-command retirement after response publication/rejection, repeated/zero writes and device reset scope. |
-| [`device/tests/multi_channel/reset_boundaries.rs`](../crates/dma/tests/multi_channel/reset_boundaries.rs) | Reset across command/payload/response interactions, preserved peer work and fresh configuration. |
-| [`device/tests/multi_channel/scatter_gather_reset.rs`](../crates/dma/tests/multi_channel/scatter_gather_reset.rs) | SG access boundaries and absence of stale interactions after completion. |
+| [`dma/tests/reset_protocol.rs`](../crates/dma/tests/reset_protocol.rs) | Visible busy state, rejected configuration, whole-command retirement after response publication/rejection, repeated/zero writes and device reset scope. |
+| [`dma/tests/multi_channel/reset_boundaries.rs`](../crates/dma/tests/multi_channel/reset_boundaries.rs) | Reset across command/payload/response interactions, preserved peer work and fresh configuration. |
+| [`dma/tests/multi_channel/scatter_gather_reset.rs`](../crates/dma/tests/multi_channel/scatter_gather_reset.rs) | SG access boundaries and absence of stale interactions after completion. |
 | [`host/tests/reset_handshake.rs`](../crates/host/tests/reset_handshake.rs) | Polling after write acknowledgment, completion, read errors, CPU checks and cancellation. |
 | [`scenarios/tests/multi_channel/cases.rs`](../crates/scenarios/tests/multi_channel/cases.rs) | Independently driven hardware/software reset isolation, fresh work and device-wide reset. |

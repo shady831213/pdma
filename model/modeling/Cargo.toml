@@ -2,6 +2,9 @@
 members = [
     "crates/contract",
     "crates/dma",
+    "crates/firmware",
+    "crates/hw-components",
+    "crates/managed-runtime",
     "crates/host",
     "crates/scenarios",
     "crates/hardware-interface-pipeline",

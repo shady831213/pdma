@@ -44,6 +44,20 @@ reset/reconfiguration; its hardware module assembles/drives the pipeline and joi
 worker teardown. The batch selects IOC on its last command; the recovery case masks
 both routine notification sources and proves error notification still arrives.
 
+## Firmware-managed architecture MVP
+
+`tests/firmware_managed` contains cases and harness support only. It uses the
+production `managed-runtime` assembly, `hw-components` access window and `firmware`
+program rather than implementing them in the tests. One Host program probes denied
+access before boot, waits for firmware readiness, allocates its own buffers and
+performs a real IRQ-driven copy. A second case ends with an early Host error and
+checks that no system actor retains memory ownership. The initial startup signal
+only controls test scheduling; firmware alone opens the hardware window.
+
+```sh
+cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture
+```
+
 ## Test structure
 
 ```text

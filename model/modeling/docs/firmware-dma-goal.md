@@ -1,7 +1,8 @@
 # Next goal: firmware-managed DMA
 
 Recorded: 2026-09-15.
-Status: agreed architectural direction for the next major goal, not implemented.
+Status: broader architectural direction; the first architecture MVP is implemented,
+while virtualization, context selection and Function lifecycle features remain future work.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
@@ -46,7 +47,7 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 | Component | Responsibility |
 | --- | --- |
 | Contract | Software-visible registers, descriptor context selection, status and capability definitions once their semantics are agreed. |
-| `dma` | Current DMA core, to be renamed from `device`: channel execution, admission/stop/reset, local completion facts, and memory requests through injected access capabilities. |
+| `dma` | DMA core: channel execution, admission/stop/reset, local completion facts, and memory requests through injected access capabilities. |
 | `hw-components` | Hardware components outside the DMA core: authorized MMIO views, channel/context-to-request identity resolution, interrupt routing, and ownership of accepted external access obligations. |
 | Device firmware | Resource allocation, management register programming, lifecycle sequencing, and coordination of independently reported completion conditions. |
 | Host software | Use granted channels/contexts, allocate buffers, submit commands, consume responses, handle interrupts and coordinate OS address-space lifetimes. |
@@ -62,25 +63,30 @@ The agreed target is separate `dma`, `hw-components` and `firmware` crates, with
 shared soft/hard definitions in `contract` and Host software interfaces in `host`.
 `hw-components` is a collection of concrete hardware objects, not a generic bus
 fabric or a firmware policy controller. Each object owns its own registers/state.
-This is a target organization; the current core still lives in `crates/dma`.
+The core now lives in `crates/dma`; the first access window and firmware program
+live in `crates/hw-components` and `crates/firmware` respectively.
 
 Firmware is an async program. Host and firmware reuse the existing software CPU
 and interrupt runtime implementations, but have separate CPU instances, CPU-local
 state, interrupt registries/sources and capability views. Sharing an async executor
 does not mean sharing a software CPU or granting access to the same hardware view.
 
-A separate concrete runtime assembly connects and drives the firmware-managed
+A distinct concrete runtime assembly connects and drives the firmware-managed
 system. Retain the existing ordinary assembly/transport; do not turn
 `host::runtime::Model` into an all-purpose container of optional features. Reuse
 memory, CPU, interrupt and pipeline components rather than implementing another
-executor or dispatcher. The new assembly's source location is not yet selected.
+executor or dispatcher. The MVP currently places this in `crates/managed-runtime`;
+user review selected migration of its assembly into the `firmware_managed`
+scenario harness for the next session, not retention of this additional crate.
 Firmware management sequencing and hardware access enforcement stay out of it.
 
-Production firmware, hardware objects and reusable system wiring live outside
-`scenarios`. Scenarios contain cases, acceptance assertions and the harness for
+Production firmware and hardware objects live outside `scenarios`. Scenarios
+contain cases, acceptance assertions and the harness for concrete system assembly,
 external provisioning, startup, fault injection and teardown. Test-specific Host
 programs remain test support; reusable Host driver behavior belongs in `host`.
 The harness must not implement firmware initialization or hardware behavior.
+See the MVP's review checkpoint for deferred runtime framework enhancements and
+the updated placement decision; do not implement those changes until resumed.
 
 ## Management MMIO
 

@@ -53,15 +53,20 @@ header is preserved on the backup branch, not in the active include directory.
 
 The obsolete architecture specification and version plans formerly under
 `model/docs` are retained in Git history only. They must not force old software
-interface shapes into the rebuild. This README and `docs/reset.md` describe the
+interface shapes into the rebuild. The workspace README and `docs/reset.md` describe the
 active model; `docs/firmware-dma-goal.md` records the agreed next direction, not
 implemented functionality or an instruction to start it automatically.
 The approved first milestone is `docs/firmware-dma-mvp.md`: validate the `dma`,
 `hw-components`, firmware and concrete runtime boundaries through a real copy
-behind a firmware-configured access window. Production hardware, firmware and
-reusable system wiring belong outside scenarios; new scenario code contains cases
-and harness support. Keep the direct-DMA assembly available for ordinary tests.
-The core rename and managed assembly are not implemented yet.
+behind a firmware-configured access window. Production hardware and firmware
+belong outside scenarios. The next session will move concrete managed assembly
+into the scenario harness, superseding the earlier wiring placement requirement.
+Keep the direct-DMA assembly available for ordinary tests.
+The DMA core lives in `crates/dma`. `crates/managed-runtime` assembles the managed
+MVP over `hw-components::AccessWindow` and `firmware::main`. Host and firmware use
+separate software CPUs and interrupt runtimes. Readiness derives from the window's
+open bit; no shadow channel registers or firmware writes in the harness are allowed.
+The managed MVP does not add Function/PASID or external transaction semantics.
 
 ## Implementation constraints
 
@@ -72,7 +77,7 @@ The core rename and managed assembly are not implemented yet.
   Contract layout/export takes that count explicitly, with generated child register blocks.
   One shared execution pipeline processes whole commands selected by round-robin arbitration.
   Use Arbitrate (the singleton specialization of FanIn) over channel-bound Fetch ports,
-  with the RoundRobin policy owned by device. Ready checks do not consume commands,
+  with the RoundRobin policy owned by dma. Ready checks do not consume commands,
   and PDMA eligibility rules belong to Fetch, not the generic combinators.
   Route tagged responses through Dispatch (the singleton FanOut specialization) to
   channel-bound publication ports.

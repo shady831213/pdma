@@ -93,6 +93,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdma-model-firmware"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-runtime",
+ "pdma-model-contract",
+ "tokio",
+]
+
+[[package]]
 name = "pdma-model-host"
 version = "0.1.0"
 dependencies = [
@@ -105,6 +114,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdma-model-hw-components"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-schema",
+ "pdma-model-contract",
+]
+
+[[package]]
+name = "pdma-model-managed-runtime"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-pipeline",
+ "hardware-interface-runtime",
+ "pdma-model-contract",
+ "pdma-model-dma",
+ "pdma-model-firmware",
+ "pdma-model-host",
+ "pdma-model-hw-components",
+ "tokio",
+]
+
+[[package]]
 name = "pdma-model-scenarios"
 version = "0.1.0"
 dependencies = [
@@ -113,6 +144,7 @@ dependencies = [
  "pdma-model-contract",
  "pdma-model-dma",
  "pdma-model-host",
+ "pdma-model-managed-runtime",
  "tokio",
 ]
 

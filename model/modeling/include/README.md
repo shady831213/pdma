@@ -1,7 +1,7 @@
 # Current PDMA contract header
 
 `pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`
-and `DeviceRegisters` schemas. It contains record sizes and byte accessors, MMIO
+and `DeviceRegisters`, `WindowControl`, and `WindowStatus` schemas. It contains record sizes and byte accessors, MMIO
 offsets and access/reset metadata, and schema descriptions as C comments. It is
 a C11 data contract, not a callable device API or the predecessor's ABI.
 
@@ -28,6 +28,14 @@ memory; device reset also preserves the hardware channel count. Each device
 instance selects its count at construction. The discovery register has post-reset
 initialization metadata because hardware supplies that instance's count.
 
+The management maps use separate `C_WINDOWCONTROL` and `C_WINDOWSTATUS` prefixes.
+Their offsets are relative to `PDMA_WINDOW_CONTROL_BASE` and
+`PDMA_WINDOW_STATUS_BASE`, respectively; these absolute base macros come from
+the Rust contract. Both maps occupy four bytes. Firmware alone may access control,
+whose writable bit zero opens the Host work window. Host readiness is read-only
+and remains accessible while the work window is closed. These maps are separate
+from the channel-count-dependent `C_PDMA_SIZE` extent.
+
 Both reset registers are read/write handshakes. Write one to request reset, then
 poll that same register until hardware clears it to zero. One means busy; zero
 writes have no effect, and repeated one writes while busy coalesce. Hardware
@@ -48,7 +56,7 @@ cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-heade
 `--channels COUNT` is required and selects the concrete instance metadata; with
 no output option the generator writes to stdout. `--help` lists the options.
 The optional `export-c-header` feature composes the existing schema exporters;
-normal host/device builds do not enable it. Do not edit the header by hand.
+normal host/DMA builds do not enable it. Do not edit the header by hand.
 
 Initialize record byte arrays to zero before storing fields so reserved padding
 matches the Rust wire encoding. The generated field accessors do not initialize

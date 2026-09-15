@@ -3,7 +3,7 @@
 Next major goal: [firmware-managed DMA](docs/firmware-dma-goal.md), preparing
 SR-IOV, PASID and Function reset boundaries while preserving the ordinary
 configuration. This is a recorded direction, not implemented functionality.
-The first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
+The implemented first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
 independent firmware-managed assembly that opens a Host access window and runs
 one real copy, while retaining the current direct-DMA scenarios.
 
@@ -12,6 +12,7 @@ Run from this directory:
 ```sh
 cargo test -p pdma-model-scenarios --test single_channel -- --nocapture
 cargo test -p pdma-model-scenarios --test multi_channel -- --nocapture
+cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture
 ```
 
 The system tests run all four linear/SG endpoint combinations, unequal segment
@@ -37,6 +38,10 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | --- | --- |
 | `crates/contract/src/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
+| `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
+| `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
+| `crates/firmware/src/lib.rs` | Async firmware initialization through management MMIO. |
+| `crates/managed-runtime/` | Independent managed-system assembly, transports and scoped actor execution. |
 | `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
@@ -99,7 +104,7 @@ publication consumes that tagged response. The copy body is
 `CopyState -> Transfer -> Transfer -> ControlFlow<Response, CopyState>`: Continue feeds
 progress into the next iteration, Break finishes the command. Repeat advances one
 child step at a time and reuses its hardware; it does not add another executor.
-Command execution stages can inspect and transform the owned `Transfer`; `device/tests/composition.rs`
+Command execution stages can inspect and transform the owned `Transfer`; `dma/tests/composition.rs`
 inserts a payload transform between read and write without changing the core or executor.
 Command execution
 errors travel in the response value; they do not skip publication. Fetch and
@@ -142,7 +147,7 @@ need a single command assemble the existing stages in test fixtures.
 `Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles shared memory and its allocation service
 externally; software allocates its own rings and payload buffers through that service.
-`device/tests/flat_memory.rs` runs the same graph on an independent flat array.
+`dma/tests/flat_memory.rs` runs the same graph on an independent flat array.
 
 Both MMIO reads and writes are hardware transactions with exclusive device access.
 The register owner applies access side effects and refreshes its IRQ state; the runtime

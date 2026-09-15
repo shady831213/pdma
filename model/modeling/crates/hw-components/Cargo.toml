@@ -1,0 +1,16 @@
+[package]
+name = "pdma-model-hw-components"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Concrete PDMA management access-window hardware"
+
+[dependencies]
+hardware-interface-schema = { path = "../hardware-interface-schema" }
+pdma-model-contract = { path = "../contract" }
+
+[lints]
+workspace = true

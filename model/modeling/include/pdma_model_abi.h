@@ -1198,4 +1198,59 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_RESET_VALUE UINT64_C(0)
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_WRITABLE_MASK UINT64_C(1)
 
+/*
+ * Access-window management
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+#define C_WINDOWCONTROL_SIZE UINT64_C(4)
+#define C_WINDOWCONTROL_ACCESS_READ_ONLY UINT32_C(0)
+#define C_WINDOWCONTROL_ACCESS_READ_WRITE UINT32_C(1)
+#define C_WINDOWCONTROL_ACCESS_WRITE_ONLY UINT32_C(2)
+#define C_WINDOWCONTROL_RESET_CONSTANT UINT32_C(0)
+#define C_WINDOWCONTROL_RESET_ZERO UINT32_C(1)
+#define C_WINDOWCONTROL_RESET_POST_RESET UINT32_C(2)
+
+/*
+ * Downstream access enable
+ * Bit zero opens downstream host access and publishes ready immediately. Zero closes access. Initially zero; other bits are reserved. Only firmware may read or write this control.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_WINDOWCONTROL_C_QUOQUPQUEQUN_OFFSET UINT64_C(0)
+#define C_WINDOWCONTROL_C_QUOQUPQUEQUN_WIDTH UINT64_C(4)
+#define C_WINDOWCONTROL_C_QUOQUPQUEQUN_ACCESS C_WINDOWCONTROL_ACCESS_READ_WRITE
+#define C_WINDOWCONTROL_C_QUOQUPQUEQUN_RESET_KIND C_WINDOWCONTROL_RESET_ZERO
+#define C_WINDOWCONTROL_C_QUOQUPQUEQUN_RESET_VALUE UINT64_C(0)
+#define C_WINDOWCONTROL_C_QUOQUPQUEQUN_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Access-window readiness
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
+ */
+#define C_WINDOWSTATUS_SIZE UINT64_C(4)
+#define C_WINDOWSTATUS_ACCESS_READ_ONLY UINT32_C(0)
+#define C_WINDOWSTATUS_ACCESS_READ_WRITE UINT32_C(1)
+#define C_WINDOWSTATUS_ACCESS_WRITE_ONLY UINT32_C(2)
+#define C_WINDOWSTATUS_RESET_CONSTANT UINT32_C(0)
+#define C_WINDOWSTATUS_RESET_ZERO UINT32_C(1)
+#define C_WINDOWSTATUS_RESET_POST_RESET UINT32_C(2)
+
+/*
+ * Downstream access ready
+ * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
+ */
+#define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_OFFSET UINT64_C(0)
+#define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_WIDTH UINT64_C(4)
+#define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_ACCESS C_WINDOWSTATUS_ACCESS_READ_ONLY
+#define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_RESET_KIND C_WINDOWSTATUS_RESET_ZERO
+#define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_RESET_VALUE UINT64_C(0)
+#define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_WRITABLE_MASK UINT64_C(0)
+
+/* Absolute bases for the relative management maps above. */
+#define PDMA_WINDOW_CONTROL_BASE UINT32_C(4294967040)
+#define PDMA_WINDOW_STATUS_BASE UINT32_C(4294967048)
+
 #endif

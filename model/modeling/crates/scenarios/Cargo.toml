@@ -12,6 +12,7 @@ description = "System scenarios for the minimal PDMA channel"
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 pdma-model-host = { path = "../host" }
+pdma-model-managed-runtime = { path = "../managed-runtime" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
@@ -26,3 +27,7 @@ path = "tests/single_channel/main.rs"
 [[test]]
 name = "multi_channel"
 path = "tests/multi_channel/main.rs"
+
+[[test]]
+name = "firmware_managed"
+path = "tests/firmware_managed/main.rs"

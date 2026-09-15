@@ -5,7 +5,7 @@ mod tests;
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use hardware_interface_runtime::{InterruptEnvelope, InterruptSource, RegisterAccess};
-use pdma_model_device::{Device, Error};
+use pdma_model_dma::{Device, Error};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, Notify, watch};
 

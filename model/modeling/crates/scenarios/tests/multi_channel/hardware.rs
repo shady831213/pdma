@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Operation};
 use hardware_interface_runtime::SharedMemoryAccess;
-use pdma_model_device::{CommandLoop, Device};
+use pdma_model_dma::{CommandLoop, Device};
 use pdma_model_host::runtime::Model;
 
 use crate::TestResult;

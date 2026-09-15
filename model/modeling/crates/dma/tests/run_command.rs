@@ -11,7 +11,7 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     ChannelBlock, ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters,
 };
-use pdma_model_device::{Error, ResetControl, RunCommand};
+use pdma_model_dma::{Error, ResetControl, RunCommand};
 use std::ops::ControlFlow;
 use support::{TestResult, command, read_word, setup, single_command, submit};
 

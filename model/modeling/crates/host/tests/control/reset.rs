@@ -49,7 +49,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a configured channel with one published response.
     let (device, memory, rings) = fixture()?;
-    let mut stage = pdma_model_device::RunCommand::new(single_command(&device));
+    let mut stage = pdma_model_dma::RunCommand::new(single_command(&device));
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

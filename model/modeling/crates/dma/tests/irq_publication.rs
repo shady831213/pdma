@@ -4,8 +4,8 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{DeviceRegisters, Response, ResponseRegisters, ResponseStatus};
-use pdma_model_device::Device;
-use pdma_model_device::Pipeline;
+use pdma_model_dma::Device;
+use pdma_model_dma::Pipeline;
 use support::{TestResult, command, read_word, setup, submit};
 const RESPONSE_PRODUCER: usize = DeviceRegisters::CHANNELS_OFFSET
     + pdma_model_contract::ChannelBlock::RESPONSE.offset()

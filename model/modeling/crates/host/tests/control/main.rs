@@ -11,7 +11,7 @@ use pdma_model_contract::{
     ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DeviceControl,
     DeviceFaultCode, DeviceRegisters, Endpoint, Response,
 };
-use pdma_model_device::{
+use pdma_model_dma::{
     CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
@@ -23,7 +23,7 @@ async fn with_idle_hardware<F: std::future::Future>(
     model: &Model<SharedMemoryAccess>,
     software: F,
 ) -> F::Output {
-    let mut control = pdma_model_device::ResetControl;
+    let mut control = pdma_model_dma::ResetControl;
     let mut operation = Operation::new(());
     tokio::pin!(software);
     loop {

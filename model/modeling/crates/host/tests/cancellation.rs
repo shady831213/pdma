@@ -10,7 +10,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     Command, CommandRegisters, DeviceRegisters, Endpoint, Response, ResponseStatus,
 };
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
@@ -80,7 +80,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
             loop {
                 let mut consumer = [0; 4];
                 model.read(consumer_offset, &mut consumer).await?;
-                if u32::from_le_bytes(consumer) == 1 { return Ok::<(), pdma_model_device::Error>(()); }
+                if u32::from_le_bytes(consumer) == 1 { return Ok::<(), pdma_model_dma::Error>(()); }
                 tokio::task::yield_now().await;
             }
         } => observed?,

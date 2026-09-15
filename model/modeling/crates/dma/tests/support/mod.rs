@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_device::{
+use pdma_model_dma::{
     CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 

@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseStatus,
 };
-use pdma_model_device::{Device, Error, Fetch, ResetControl, RoundRobin};
+use pdma_model_dma::{Device, Error, Fetch, ResetControl, RoundRobin};
 
 fn device() -> TestResult<Device<SharedMemory>> {
     let memory = SharedMemory::new();

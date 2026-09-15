@@ -10,7 +10,7 @@ description = "System scenarios for the minimal PDMA channel"
 
 [dev-dependencies]
 pdma-model-contract = { path = "../contract" }
-pdma-model-device = { path = "../device" }
+pdma-model-dma = { path = "../dma" }
 pdma-model-host = { path = "../host" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }

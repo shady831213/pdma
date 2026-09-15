@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 
 #[test]
 fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {

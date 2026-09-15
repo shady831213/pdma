@@ -9,7 +9,7 @@ struct CountWrites {
 }
 
 impl RegisterAccess for CountWrites {
-    type Error = pdma_model_device::Error;
+    type Error = pdma_model_dma::Error;
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         self.model.read(offset, response).await

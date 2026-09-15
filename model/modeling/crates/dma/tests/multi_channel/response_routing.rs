@@ -2,7 +2,7 @@ use super::support::{TestResult, configure, submit, word};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_device::{Device, Error, Publish, Resettable};
+use pdma_model_dma::{Device, Error, Publish, Resettable};
 
 fn setup() -> TestResult<Device<SharedMemory>> {
     let memory = SharedMemory::new();

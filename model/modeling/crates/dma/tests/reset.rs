@@ -8,7 +8,7 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     ChannelRegisters, CommandRegisters, DeviceControl, DeviceRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_device::ResetControl;
+use pdma_model_dma::ResetControl;
 use support::{TestResult, command, read_word, setup, submit};
 
 #[test]

@@ -10,7 +10,7 @@ description = "Software ring operations and minimal model assembly"
 
 [dependencies]
 pdma-model-contract = { path = "../contract" }
-pdma-model-device = { path = "../device" }
+pdma-model-dma = { path = "../dma" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }

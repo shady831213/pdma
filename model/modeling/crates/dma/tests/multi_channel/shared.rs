@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 
 #[test]
 fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResult {

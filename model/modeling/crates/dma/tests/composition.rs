@@ -7,7 +7,7 @@ use hardware_interface_pipeline::{
     AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_device::{
+use pdma_model_dma::{
     ChannelContext, CheckLengths, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
     WriteCopy,
 };

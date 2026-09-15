@@ -35,7 +35,7 @@ not implemented behavior or an automatic implementation order.
 `model/modeling/docs/firmware-dma-mvp.md` defines the approved architecture-validation
 milestone before broader feature work. The target split is `dma`, `hw-components`
 and `firmware`, with concrete runtime wiring outside scenarios. These are future
-boundaries; the current DMA core still lives in `crates/device`.
+boundaries; the current DMA core still lives in `crates/dma`.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 

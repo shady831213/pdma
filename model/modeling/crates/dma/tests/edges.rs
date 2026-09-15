@@ -8,7 +8,7 @@ use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
     ResponseRegisters, ResponseStatus,
 };
-use pdma_model_device::{Device, Error, Fault};
+use pdma_model_dma::{Device, Error, Fault};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const COMMAND: usize =

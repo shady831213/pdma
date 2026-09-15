@@ -5,7 +5,7 @@ use crate::{
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{ChannelBlock, Command, CommandRegisters, DeviceRegisters};
-use pdma_model_device::{ChannelTask, Device, Error, Fault, Intake, ResetControl, RunCommand};
+use pdma_model_dma::{ChannelTask, Device, Error, Fault, Intake, ResetControl, RunCommand};
 use std::{cell::Cell, ops::ControlFlow, rc::Rc};
 
 struct DropWitness(Rc<Cell<usize>>);

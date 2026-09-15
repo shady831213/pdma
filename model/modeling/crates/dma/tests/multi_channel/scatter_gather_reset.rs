@@ -8,7 +8,7 @@ use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     DeviceControl, DeviceRegisters, Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
 };
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 
 #[derive(Clone, Copy, Debug)]
 enum Boundary {

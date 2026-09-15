@@ -2,7 +2,7 @@ use super::{Model, TestResult};
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{InterruptSource, RegisterAccess};
 use pdma_model_contract::{DeviceControl, DeviceRegisters};
-use pdma_model_device::{Device, ResetControl};
+use pdma_model_dma::{Device, ResetControl};
 
 #[tokio::test]
 async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> TestResult {

@@ -8,7 +8,7 @@ use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DeviceControl, DeviceRegisters,
     ResponseRegisters,
 };
-use pdma_model_device::{Device, Error, ResetControl};
+use pdma_model_dma::{Device, Error, ResetControl};
 use support::{TestResult, command, read_word, setup, submit};
 
 const CHANNEL: usize = DeviceRegisters::CHANNELS_OFFSET + ChannelBlock::CONTROL.offset();

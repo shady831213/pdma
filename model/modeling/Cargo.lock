@@ -83,7 +83,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pdma-model-device"
+name = "pdma-model-dma"
 version = "0.1.0"
 dependencies = [
  "hardware-interface-pipeline",
@@ -100,7 +100,7 @@ dependencies = [
  "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
- "pdma-model-device",
+ "pdma-model-dma",
  "tokio",
 ]
 
@@ -111,7 +111,7 @@ dependencies = [
  "hardware-interface-pipeline",
  "hardware-interface-runtime",
  "pdma-model-contract",
- "pdma-model-device",
+ "pdma-model-dma",
  "pdma-model-host",
  "tokio",
 ]

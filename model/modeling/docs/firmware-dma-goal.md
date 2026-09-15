@@ -62,7 +62,7 @@ The agreed target is separate `dma`, `hw-components` and `firmware` crates, with
 shared soft/hard definitions in `contract` and Host software interfaces in `host`.
 `hw-components` is a collection of concrete hardware objects, not a generic bus
 fabric or a firmware policy controller. Each object owns its own registers/state.
-This is a target organization; the current core still lives in `crates/device`.
+This is a target organization; the current core still lives in `crates/dma`.
 
 Firmware is an async program. Host and firmware reuse the existing software CPU
 and interrupt runtime implementations, but have separate CPU instances, CPU-local

@@ -6,14 +6,14 @@ use hardware_interface_runtime::{
 };
 use hardware_interface_schema::RegisterCodecError;
 use pdma_model_contract::{ChannelRegisters, DeviceRegisters};
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
 struct CorruptFaultBus(Model<SharedMemoryAccess>);
 
 impl RegisterAccess for CorruptFaultBus {
-    type Error = pdma_model_device::Error;
+    type Error = pdma_model_dma::Error;
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         self.0.read(offset, response).await?;

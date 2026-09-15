@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, DeviceControl, DeviceRegisters,
 };
-use pdma_model_device::{Device, ResetControl};
+use pdma_model_dma::{Device, ResetControl};
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::{
     future::{Future, poll_fn},
@@ -24,11 +24,11 @@ struct ReadFailureBus {
 }
 
 impl RegisterAccess for ReadFailureBus {
-    type Error = pdma_model_device::Error;
+    type Error = pdma_model_dma::Error;
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         if self.fail.load(Ordering::SeqCst) {
-            return Err(pdma_model_device::Error::Unmapped);
+            return Err(pdma_model_dma::Error::Unmapped);
         }
         self.model.read(offset, response).await
     }
@@ -118,7 +118,7 @@ async fn reset_read_failure_is_returned_to_software() -> Result<(), Box<dyn std:
         // Then: a failed status read is not successful reset completion.
         assert!(matches!(
             result,
-            Err(Error::Bus(pdma_model_device::Error::Unmapped))
+            Err(Error::Bus(pdma_model_dma::Error::Unmapped))
         ));
     }
     Ok(())

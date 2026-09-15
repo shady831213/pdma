@@ -9,7 +9,7 @@ use observed::Observed;
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseRegisters,
 };
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 use std::cell::Cell;
 
 #[derive(Clone, Copy, Debug)]

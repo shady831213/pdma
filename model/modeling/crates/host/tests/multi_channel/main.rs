@@ -12,7 +12,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelId, Command, CompletionFlagsValues, DeviceControl, DeviceRegisters, Endpoint, Response,
 };
-use pdma_model_device::{
+use pdma_model_dma::{
     CheckLengths, Device, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
 };
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
@@ -83,7 +83,7 @@ struct ObservedBus {
 }
 
 impl RegisterAccess for ObservedBus {
-    type Error = pdma_model_device::Error;
+    type Error = pdma_model_dma::Error;
 
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         self.reads.fetch_add(1, Ordering::SeqCst);
@@ -238,7 +238,7 @@ async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResu
         model
             .write(u32::try_from(COUNT)?, &1_u32.to_le_bytes())
             .await,
-        Err(pdma_model_device::Error::Access),
+        Err(pdma_model_dma::Error::Access),
     );
     with_idle_hardware(&model, cpu.run_main(first.reset())).await?;
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;

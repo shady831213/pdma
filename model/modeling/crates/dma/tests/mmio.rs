@@ -6,7 +6,7 @@ pub mod support;
 use pdma_model_contract::{
     ChannelBlock, ChannelRegisters, DeviceControl, DeviceRegisters, ResponseRegisters,
 };
-use pdma_model_device::Error;
+use pdma_model_dma::Error;
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const CONTROL: usize = DeviceRegisters::CHANNELS_OFFSET + ChannelBlock::CONTROL.offset();

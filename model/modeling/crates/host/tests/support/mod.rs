@@ -1,7 +1,7 @@
 //! Single-command stage assembly for host boundary tests.
 
 use hardware_interface_pipeline::{AfterEach, Repeat, Then};
-use pdma_model_device::{
+use pdma_model_dma::{
     CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 

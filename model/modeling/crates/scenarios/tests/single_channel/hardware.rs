@@ -6,7 +6,7 @@ use crate::harness::TestResult;
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Operation};
 use hardware_interface_runtime::MemoryAccess;
 use hardware_interface_runtime::SharedMemoryAccess;
-use pdma_model_device::{BuildError, CommandLoop, Device};
+use pdma_model_dma::{BuildError, CommandLoop, Device};
 use pdma_model_host::runtime::Model;
 
 /// Assemble the existing hardware state and stage graph over injected memory.

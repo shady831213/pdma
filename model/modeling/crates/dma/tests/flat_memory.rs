@@ -12,7 +12,7 @@ use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
     ResponseRegisters, ResponseStatus,
 };
-use pdma_model_device::{Device, Pipeline};
+use pdma_model_dma::{Device, Pipeline};
 use std::{cell::RefCell, ops::Range};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

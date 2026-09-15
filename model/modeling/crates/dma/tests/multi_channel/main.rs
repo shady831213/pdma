@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, DeviceControl, DeviceRegisters, ResponseRegisters,
 };
-use pdma_model_device::{Device, Error, ResetControl};
+use pdma_model_dma::{Device, Error, ResetControl};
 
 mod fairness;
 mod fan_in_inputs;

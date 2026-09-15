@@ -3,7 +3,7 @@ mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::{ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters};
-use pdma_model_device::{Device, Error, Fault};
+use pdma_model_dma::{Device, Error, Fault};
 use std::{
     future::Future,
     pin::{Pin, pin},

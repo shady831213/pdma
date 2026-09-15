@@ -4,7 +4,7 @@ use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     Endpoint, ResponseRegisters,
 };
-use pdma_model_device::{
+use pdma_model_dma::{
     CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 /// Test harness error propagation.

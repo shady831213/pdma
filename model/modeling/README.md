@@ -39,23 +39,23 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
 | `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
-| `crates/device/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
-| `crates/device/src/channel/mmio.rs` | Generated block routing and software-write effects. |
-| `crates/device/src/stages.rs` | Hardware stages, single-command pipeline and sustained command loop. |
-| `crates/device/src/fetch.rs` | Per-channel readiness and generation-tagged command acceptance. |
+| `crates/dma/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
+| `crates/dma/src/channel/mmio.rs` | Generated block routing and software-write effects. |
+| `crates/dma/src/stages.rs` | Hardware stages, single-command pipeline and sustained command loop. |
+| `crates/dma/src/fetch.rs` | Per-channel readiness and generation-tagged command acceptance. |
 | `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
-| `crates/device/src/arbitration.rs` | PDMA round-robin selection policy. |
-| `crates/device/src/routing.rs` | Generation-bound response destination policy. |
-| `crates/device/src/execution.rs` | Retained copy progress and chunk payload. |
-| `crates/device/src/execution/validate.rs` | Incremental endpoint-total validation. |
-| `crates/device/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
-| `crates/device/src/execution/next.rs` | Select the next chunk across independent boundaries. |
-| `crates/device/src/execution/copy.rs` | Composable chunk read/write transforms. |
+| `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
+| `crates/dma/src/routing.rs` | Generation-bound response destination policy. |
+| `crates/dma/src/execution.rs` | Retained copy progress and chunk payload. |
+| `crates/dma/src/execution/validate.rs` | Incremental endpoint-total validation. |
+| `crates/dma/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
+| `crates/dma/src/execution/next.rs` | Select the next chunk across independent boundaries. |
+| `crates/dma/src/execution/copy.rs` | Composable chunk read/write transforms. |
 | `crates/host/src/channel.rs` | Software configuration, submit and response consumption. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, worker wakeup and pending notification delivery. |
 | `crates/host/src/channel/control.rs` | CPU-checked software mask, cause and reset access. |
-| `crates/device/src/reset.rs` | Channel-bound task guards around the composed stages. |
-| `crates/device/src/reset/control.rs` | Reset completion after affected accepted work retires. |
+| `crates/dma/src/reset.rs` | Channel-bound task guards around the composed stages. |
+| `crates/dma/src/reset/control.rs` | Reset completion after affected accepted work retires. |
 | `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
 | `crates/scenarios/tests/single_channel/main.rs` | Test suite entry and module declarations. |
 | `crates/scenarios/tests/single_channel/cases/` | Linear, scatter/gather and fault cases, with acceptance assertions. |

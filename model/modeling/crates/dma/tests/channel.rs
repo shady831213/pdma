@@ -9,7 +9,7 @@ use pdma_model_contract::{
     ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
     ResponseRegisters, ResponseStatus,
 };
-use pdma_model_device::{Device, Fault, Pipeline};
+use pdma_model_dma::{Device, Fault, Pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]

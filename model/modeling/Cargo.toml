@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/contract",
-    "crates/device",
+    "crates/dma",
     "crates/host",
     "crates/scenarios",
     "crates/hardware-interface-pipeline",

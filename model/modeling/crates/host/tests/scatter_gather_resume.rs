@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus, Segment};
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
 

@@ -3,7 +3,7 @@
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::SharedMemory;
 use pdma_model_contract::ChannelId;
-use pdma_model_device::Device;
+use pdma_model_dma::Device;
 
 #[test]
 fn idle_or_device_fatal_parks_after_a_full_round() -> Result<(), Box<dyn std::error::Error>> {

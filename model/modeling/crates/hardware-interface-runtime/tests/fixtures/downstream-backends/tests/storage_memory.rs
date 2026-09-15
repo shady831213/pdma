@@ -19,7 +19,7 @@ fn memory_transcript<P: MemoryStorage>() -> Result<[u8; 4], Box<dyn std::error::
         16,
         MemoryAlignment::try_new(16)?,
     )?;
-    memory.prepare_regions(&[region])?.try_install_on(&memory)?;
+    memory.add_regions(&[region])?;
     memory.write(
         MemoryAddress::new(0x4004),
         MemoryAlignment::try_new(4)?,

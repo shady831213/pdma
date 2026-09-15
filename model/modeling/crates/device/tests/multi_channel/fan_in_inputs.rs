@@ -10,13 +10,11 @@ use pdma_model_device::{Device, Error, Fetch, ResetControl, RoundRobin};
 
 fn device() -> TestResult<Device<SharedMemory>> {
     let memory = SharedMemory::new();
-    memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            0x3000,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory)?;
+    memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        0x3000,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(memory, 3)?;
     for index in 0..3 {
         configure(&mut device, index)?;

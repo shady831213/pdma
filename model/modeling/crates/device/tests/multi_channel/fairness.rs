@@ -16,13 +16,11 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
         } else {
             (0x1000, 0x3000)
         };
-        memory
-            .prepare_regions(&[MemoryRegion::try_new(
-                MemoryAddress::new(start),
-                length,
-                MemoryAlignment::ONE,
-            )?])?
-            .try_install(&memory)?;
+        memory.add_regions(&[MemoryRegion::try_new(
+            MemoryAddress::new(start),
+            length,
+            MemoryAlignment::ONE,
+        )?])?;
         let mut device = Device::new(memory, 3)?;
         configure(&mut device, 0)?;
         let base = ChannelId::new(0)

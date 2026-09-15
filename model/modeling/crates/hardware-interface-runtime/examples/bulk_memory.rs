@@ -69,7 +69,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut surface = io::stdout().lock();
     let happy_memory = SharedMemory::new();
     let alignment = MemoryAlignment::try_new(64)?;
-    let before = happy_memory.revision().raw();
     let region = MemoryRegion::try_new(MemoryAddress::new(0x4000), 64, alignment)?;
     let allocator =
         SharedMemoryAllocator::new(Arc::new(happy_memory.clone()), MemoryAddress::new(0x4000));
@@ -91,21 +90,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let last = output.last().copied().unwrap_or_default();
     writeln!(
         surface,
-        "happy installed_regions={} region_base={:#x} region_length={} region_alignment={} write_calls={} read_calls={} first={first:#04x} last={last:#04x} revision={before}->{} equal={}",
+        "happy installed_regions={} region_base={:#x} region_length={} region_alignment={} write_calls={} read_calls={} first={first:#04x} last={last:#04x} equal={}",
         happy_memory.regions().len(),
         region.base().raw(),
         region.length(),
         region.alignment().raw(),
         happy_access.write_calls(),
         happy_access.read_calls(),
-        happy_memory.revision().raw(),
         output == descriptor
     )?;
 
     let adverse_memory = SharedMemory::new();
-    adverse_memory
-        .prepare_regions(&[region])?
-        .try_install(&adverse_memory)?;
+    adverse_memory.add_regions(&[region])?;
     let expected_store = descriptor;
     let setup_access = RecordingMemoryAccess::new(adverse_memory.clone());
     setup_access.write(MemoryAddress::new(0x4000), alignment, &expected_store)?;
@@ -151,11 +147,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let second_zero = limited.allocate(0, MemoryAlignment::ONE)?;
     writeln!(
         surface,
-        "allocator capacity_failure={capacity_failure:?} first_zero={:#x} second_zero={:#x} installed_regions={} revision={}",
+        "allocator capacity_failure={capacity_failure:?} first_zero={:#x} second_zero={:#x} installed_regions={}",
         first_zero.raw(),
         second_zero.raw(),
-        empty_memory.regions().len(),
-        empty_memory.revision().raw()
+        empty_memory.regions().len()
     )?;
     Ok(())
 }

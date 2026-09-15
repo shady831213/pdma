@@ -56,23 +56,3 @@ impl MemoryAlignment {
         address.raw() & (self.0 - 1) == 0
     }
 }
-
-/// A monotonic installed-region revision.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MemoryRevision(u64);
-
-impl MemoryRevision {
-    pub(crate) const INITIAL: Self = Self(0);
-
-    /// Returns the numeric revision.
-    pub const fn raw(self) -> u64 {
-        self.0
-    }
-
-    pub(crate) const fn checked_next(self) -> Option<Self> {
-        match self.0.checked_add(1) {
-            Some(raw) => Some(Self(raw)),
-            None => None,
-        }
-    }
-}

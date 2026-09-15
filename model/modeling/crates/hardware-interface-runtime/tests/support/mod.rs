@@ -25,11 +25,7 @@ pub fn region(base: u64, length: u64, alignment_value: u64) -> MemoryRegion {
 }
 
 pub fn install(memory: &SharedMemory, regions: &[MemoryRegion]) {
-    memory
-        .prepare_regions(regions)
-        .expect("valid proposal")
-        .try_install(memory)
-        .expect("current proposal");
+    memory.add_regions(regions).expect("regions install");
 }
 
 pub fn run_ready<T>(future: impl Future<Output = T>) -> Option<T> {

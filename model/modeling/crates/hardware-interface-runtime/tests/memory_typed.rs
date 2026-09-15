@@ -27,9 +27,7 @@ fn existing_backends_inherit_typed_access() -> Result<(), Box<dyn std::error::Er
     let shared = Arc::new(SharedMemory::new());
     install(&shared, &[region(0x1000, 8, 1)]);
     let local = Memory::<LocalMemoryStorage>::new();
-    local
-        .prepare_regions(&[region(0x1000, 8, 1)])?
-        .try_install_on(&local)?;
+    local.add_regions(&[region(0x1000, 8, 1)])?;
     let erased = SharedMemoryAccess::from(Arc::clone(&shared));
     // When / Then: typed and raw access observe the same bytes on every backend.
     exercise(shared.as_ref())?;

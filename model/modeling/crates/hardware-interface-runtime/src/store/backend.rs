@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use crate::{
-    LocalStorage, MemoryAccessError, MemoryAddress, MemoryError, MemoryRegion, MemoryRevision,
-    MutexStorage, StorageBackend, StorageError,
+    LocalStorage, MemoryAccessError, MemoryAddress, MemoryError, MemoryRegion, MutexStorage,
+    StorageBackend, StorageError,
 };
 
 /// Selects closure-scoped storage for a generic checked memory.
@@ -66,7 +66,6 @@ fn preserve_reentrant_compatibility() -> ! {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct MemoryState {
-    pub(super) revision: MemoryRevision,
     pub(super) regions: Vec<StoredRegion>,
     pub(super) region_capacity: Option<usize>,
 }
@@ -74,7 +73,6 @@ pub(super) struct MemoryState {
 impl MemoryState {
     pub(super) const fn new() -> Self {
         Self {
-            revision: MemoryRevision::INITIAL,
             regions: Vec::new(),
             region_capacity: None,
         }
@@ -82,37 +80,39 @@ impl MemoryState {
 
     pub(super) const fn with_region_capacity(capacity: usize) -> Self {
         Self {
-            revision: MemoryRevision::INITIAL,
             regions: Vec::new(),
             region_capacity: Some(capacity),
         }
     }
 
-    pub(super) fn install(&mut self, mut prepared: super::PreparedRegions) {
-        let existing = std::mem::take(&mut self.regions);
-        prepared.additions.extend(existing);
-        prepared
-            .additions
-            .sort_unstable_by_key(|stored| stored.region.base());
-        self.regions = prepared.additions;
-        self.revision = prepared.next_revision;
-    }
-
-    pub(super) fn try_clone(&self) -> Result<Self, MemoryError> {
-        let mut regions = Vec::new();
-        regions.try_reserve_exact(self.regions.len()).map_err(|_| {
+    pub(super) fn add_regions(&mut self, regions: &[MemoryRegion]) -> Result<(), MemoryError> {
+        validate_overlaps(self, regions)?;
+        let final_count = self.regions.len().checked_add(regions.len()).ok_or(
             MemoryError::RegionTableExhausted {
-                entries: self.regions.len(),
+                entries: usize::MAX,
+            },
+        )?;
+        if self
+            .region_capacity
+            .is_some_and(|capacity| final_count > capacity)
+        {
+            return Err(MemoryError::RegionTableExhausted {
+                entries: final_count,
+            });
+        }
+        let mut additions = Vec::new();
+        additions.try_reserve_exact(final_count).map_err(|_| {
+            MemoryError::RegionTableExhausted {
+                entries: final_count,
             }
         })?;
-        for stored in &self.regions {
-            regions.push(stored.try_clone()?);
+        for region in regions {
+            additions.push(StoredRegion::allocate(*region)?);
         }
-        Ok(Self {
-            revision: self.revision,
-            regions,
-            region_capacity: self.region_capacity,
-        })
+        additions.append(&mut self.regions);
+        additions.sort_unstable_by_key(|stored| stored.region.base());
+        self.regions = additions;
+        Ok(())
     }
 
     pub(super) fn resolve(
@@ -154,20 +154,6 @@ impl StoredRegion {
             })?;
         bytes.resize(region.storage_length(), 0);
         Ok(Self { region, bytes })
-    }
-
-    fn try_clone(&self) -> Result<Self, MemoryError> {
-        let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(self.bytes.len())
-            .map_err(|_| MemoryError::StorageExhausted {
-                length: self.region.length(),
-            })?;
-        bytes.extend_from_slice(&self.bytes);
-        Ok(Self {
-            region: self.region,
-            bytes,
-        })
     }
 
     pub(super) fn range(

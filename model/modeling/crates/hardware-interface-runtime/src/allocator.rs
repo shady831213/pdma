@@ -14,7 +14,7 @@ pub enum MemoryAllocationError {
     AddressExhausted,
     /// The requested backing region cannot be represented.
     Region(MemoryRegionError),
-    /// Backing preparation or installation failed before cursor advancement.
+    /// Backing installation failed before cursor advancement.
     Storage(MemoryError),
 }
 
@@ -91,11 +91,7 @@ impl SharedMemoryAllocator {
             let region = MemoryRegion::try_new(address, length, alignment)
                 .map_err(MemoryAllocationError::Region)?;
             self.memory
-                .transaction(|transaction| {
-                    let prepared = transaction.prepare_regions(&[region])?;
-                    transaction.install_prepared(prepared);
-                    Ok(())
-                })
+                .add_regions(&[region])
                 .map_err(MemoryAllocationError::Storage)?;
         }
         *cursor = next;

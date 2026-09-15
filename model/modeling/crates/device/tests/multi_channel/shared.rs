@@ -10,13 +10,11 @@ use pdma_model_device::Device;
 fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResult {
     // Given: three queued commands and one shared execution unit.
     let memory = SharedMemory::new();
-    memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            0x3000,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory)?;
+    memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        0x3000,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(memory.clone(), 3)?;
     for index in 0..3 {
         configure(&mut device, index)?;

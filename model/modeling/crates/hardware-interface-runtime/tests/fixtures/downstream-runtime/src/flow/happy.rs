@@ -22,7 +22,7 @@ fn memory_flow(
     let memory = SharedMemory::new();
     let alignment = MemoryAlignment::try_new(64)?;
     let region = MemoryRegion::try_new(MemoryAddress::new(0x5000), 64, alignment)?;
-    memory.prepare_regions(&[region])?.try_install(&memory)?;
+    memory.add_regions(&[region])?;
     let mut descriptor = [0x5a; 64];
     let Some((first, remaining)) = descriptor.split_first_mut() else {
         return Err(Box::new(FlowError("descriptor is unexpectedly empty")));
@@ -37,7 +37,6 @@ fn memory_flow(
     let mut output = [0_u8; 64];
     memory.read(MemoryAddress::new(0x5000), alignment, &mut output)?;
     trace.push_with(|sequence| (sequence, "memory-read"));
-    require(memory.revision().raw() == 1, "memory revision changed")?;
     require(
         output == descriptor,
         "memory read did not match literal input",

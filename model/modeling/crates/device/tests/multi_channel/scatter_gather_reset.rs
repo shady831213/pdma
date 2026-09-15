@@ -33,14 +33,11 @@ impl Boundary {
 
 fn setup() -> TestResult<Device<Observed>> {
     let memory = Observed::default();
-    memory
-        .memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            0x1000,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory.memory)?;
+    memory.memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        0x1000,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(memory, 1)?;
     configure(&mut device, 0)?;
     device

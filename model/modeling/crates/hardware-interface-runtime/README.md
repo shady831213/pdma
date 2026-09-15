@@ -7,7 +7,14 @@ and blocking storage or observation policies live in their backend modules. Gene
 algorithms name the backend traits and never expose a guard, reference, or borrow
 outside the synchronous closure.
 
-`SharedMemory` and `RegisterAccess` remain compatibility surfaces. Addressed register
+`Memory<P>::add_regions` installs a batch of zero-initialized regions in one synchronous
+storage mutation. It checks overlaps and region capacity and reserves all backing and
+table storage before changing installed regions. Any returned error preserves existing
+regions and bytes; an empty batch is a no-op. Metadata is returned in address order.
+`SharedMemory` provides the same operation with shared storage. Region installation
+does not expose proposals, revisions, transaction closures, or byte-store snapshots.
+
+`RegisterAccess` remains a compatibility surface. Addressed register
 access subtracts a checked `RegisterBusBase` once and then reuses the consumer's
 canonical offset decoder. A host can therefore issue full bus addresses while a
 device uses generated typed views over the same root image; the runtime does not own a

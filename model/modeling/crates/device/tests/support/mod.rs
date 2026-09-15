@@ -32,7 +32,7 @@ pub fn setup(
 ) -> Result<(Device<SharedMemory>, SharedMemory), Box<dyn std::error::Error>> {
     let memory = SharedMemory::new();
     let region = MemoryRegion::try_new(MemoryAddress::new(0x1000), 0x1000, MemoryAlignment::ONE)?;
-    memory.prepare_regions(&[region])?.try_install(&memory)?;
+    memory.add_regions(&[region])?;
     let mut device = Device::new(memory.clone(), 1)?;
     for (offset, value) in [
         (

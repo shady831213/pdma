@@ -81,7 +81,7 @@ impl Display for MemoryRegionError {
 
 impl Error for MemoryRegionError {}
 
-/// Failure to prepare or install storage regions.
+/// Failure to atomically add storage regions.
 #[derive(Debug, PartialEq, Eq)]
 pub enum MemoryError {
     /// Backing storage could not reserve the requested byte length.
@@ -101,15 +101,6 @@ pub enum MemoryError {
         /// Later proposed region.
         second: MemoryRegion,
     },
-    /// A prepared proposal observed an older installed-region revision.
-    StaleRevision {
-        /// Revision captured during preparation.
-        expected_revision: u64,
-        /// Revision observed during installation.
-        actual_revision: u64,
-    },
-    /// The monotonic revision has no successor.
-    RevisionExhausted,
 }
 
 impl Display for MemoryError {
@@ -133,14 +124,6 @@ impl Display for MemoryError {
                 first.base().raw(),
                 second.base().raw()
             ),
-            Self::StaleRevision {
-                expected_revision,
-                actual_revision,
-            } => write!(
-                formatter,
-                "prepared memory revision {expected_revision} is stale; current revision is {actual_revision}"
-            ),
-            Self::RevisionExhausted => formatter.write_str("memory revision is exhausted"),
         }
     }
 }

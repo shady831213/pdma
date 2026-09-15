@@ -39,13 +39,11 @@ fn bytes(memory: &SharedMemory, address: u64) -> TestResult<[u8; 512]> {
 
 fn setup() -> TestResult<Device<Observed>> {
     let memory = SharedMemory::new();
-    memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            0x3000,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory)?;
+    memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        0x3000,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(
         Observed {
             memory: memory.clone(),

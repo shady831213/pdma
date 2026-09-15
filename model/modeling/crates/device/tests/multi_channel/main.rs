@@ -57,13 +57,11 @@ fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
 fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     // Given: three active copies and the first committed chunk on A.
     let memory = SharedMemory::new();
-    memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            0x3000,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory)?;
+    memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        0x3000,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(memory.clone(), 3)?;
     for index in 0..3 {
         configure(&mut device, index)?;

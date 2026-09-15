@@ -15,7 +15,7 @@ mod store;
 mod trace;
 
 pub use access::{MemoryAccess, MemoryAccessError};
-pub use address::{MemoryAddress, MemoryAlignment, MemoryRevision};
+pub use address::{MemoryAddress, MemoryAlignment};
 pub use allocator::{MemoryAllocationError, SharedMemoryAllocator};
 pub use cpu::{CpuContextError, CpuLocal, CpuOwner, SoftwareCpu};
 pub use error::{MemoryAlignmentError, MemoryError, MemoryRegionError};
@@ -40,8 +40,5 @@ pub use register::{
 };
 pub use shared_access::SharedMemoryAccess;
 pub use storage::{LocalStorage, MutexStorage, StorageBackend, StorageError};
-pub use store::{
-    LocalMemoryStorage, Memory, MemoryStorage, MemoryTransaction, MemoryTransactionDraft,
-    PreparedRegions, SharedMemory, SharedMemoryStorage, TransactionPreparedRegions,
-};
+pub use store::{LocalMemoryStorage, Memory, MemoryStorage, SharedMemory, SharedMemoryStorage};
 pub use trace::TraceBuffer;

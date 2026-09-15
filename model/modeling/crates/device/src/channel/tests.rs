@@ -28,13 +28,11 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a valid empty ring just before the 32-bit cursor wrap.
     let memory = SharedMemory::new();
-    memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            256,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory)?;
+    memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        256,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(memory, 1)?;
     device.write(
         DeviceRegisters::CHANNELS_OFFSET

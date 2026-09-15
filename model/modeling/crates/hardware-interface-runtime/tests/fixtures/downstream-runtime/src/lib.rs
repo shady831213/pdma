@@ -33,20 +33,6 @@
 //!     async fn observe(&self, _: InterruptLifecycleEvent<'_, Notice>) {}
 //! }
 //! ```
-//!
-//! The standalone runtime exposes mutation through prepared regions and transactions,
-//! not an independent snapshot replacement surface:
-//!
-//! ```compile_fail
-//! use hir::SharedMemory;
-//!
-//! let memory = SharedMemory::new();
-//! let snapshot = match memory.try_snapshot() {
-//!     Ok(snapshot) => snapshot,
-//!     Err(_) => return,
-//! };
-//! SharedMemory::new().install_snapshot(&snapshot);
-//! ```
 
 mod flow;
 #[doc(hidden)]

@@ -6,13 +6,11 @@ use pdma_model_device::{Device, Error, Publish, Resettable};
 
 fn setup() -> TestResult<Device<SharedMemory>> {
     let memory = SharedMemory::new();
-    memory
-        .prepare_regions(&[MemoryRegion::try_new(
-            MemoryAddress::new(0x1000),
-            0x2000,
-            MemoryAlignment::ONE,
-        )?])?
-        .try_install(&memory)?;
+    memory.add_regions(&[MemoryRegion::try_new(
+        MemoryAddress::new(0x1000),
+        0x2000,
+        MemoryAlignment::ONE,
+    )?])?;
     let mut device = Device::new(memory, 2)?;
     for index in 0..2 {
         configure(&mut device, index)?;

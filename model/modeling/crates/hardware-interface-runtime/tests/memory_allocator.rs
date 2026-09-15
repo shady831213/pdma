@@ -80,7 +80,6 @@ fn zero_allocation_advances_cursor_without_installing_backing() {
         Arc::clone(&memory),
         MemoryAddress::new(0x1000),
     );
-    let before = memory.revision();
 
     // When two zero-length logical addresses are reserved.
     let first = allocator.allocate(0, alignment(1)).expect("first zero");
@@ -89,7 +88,6 @@ fn zero_allocation_advances_cursor_without_installing_backing() {
     // Then addresses advance by one byte without creating storage or a valid extent.
     assert_eq!(first, MemoryAddress::new(0x1000));
     assert_eq!(second, MemoryAddress::new(0x1001));
-    assert_eq!(memory.revision(), before);
     assert!(memory.regions().is_empty());
     assert_eq!(
         allocator.memory_access().validate(first, alignment(1), 0),
@@ -105,7 +103,6 @@ fn failed_allocation_preserves_cursor_and_installed_bytes() {
     memory
         .write(MemoryAddress::new(0x1040), alignment(64), &[0xa5; 64])
         .expect("sentinel");
-    let before = memory.revision();
     let allocator = hardware_interface_runtime::SharedMemoryAllocator::new(
         Arc::clone(&memory),
         MemoryAddress::new(0x1000),
@@ -124,7 +121,6 @@ fn failed_allocation_preserves_cursor_and_installed_bytes() {
             }
         ))
     );
-    assert_eq!(memory.revision(), before);
     assert_eq!(memory.regions(), [region(0x1040, 64, 64)]);
     let mut bytes = [0; 64];
     memory
@@ -156,7 +152,6 @@ fn capacity_failure_preserves_cursor_for_zero_allocation() {
             MemoryError::RegionTableExhausted { entries: 1 }
         ))
     );
-    assert_eq!(memory.revision().raw(), 0);
     assert!(memory.regions().is_empty());
     assert_eq!(
         allocator.allocate(0, alignment(1)).expect("zero"),
@@ -184,7 +179,6 @@ fn address_exhaustion_preserves_cursor_and_storage() {
             result,
             Err(hardware_interface_runtime::MemoryAllocationError::AddressExhausted)
         );
-        assert_eq!(memory.revision().raw(), 0);
         assert!(memory.regions().is_empty());
         if start < u64::MAX {
             assert_eq!(

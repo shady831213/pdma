@@ -80,14 +80,13 @@ fn validate_preserves_error_precedence_and_zero_endpoints() {
 }
 
 #[test]
-fn validate_through_shared_capability_preserves_bytes_regions_and_revision() {
+fn validate_through_shared_capability_preserves_bytes_and_regions() {
     // Given a shared capability over initialized backing.
     let memory = Arc::new(SharedMemory::new());
     install(&memory, &[region(0x1000, 64, 64)]);
     memory
         .write(MemoryAddress::new(0x1000), alignment(1), &[0xa5; 64])
         .expect("sentinel");
-    let revision = memory.revision();
     let regions = memory.regions();
     let access = SharedMemoryAccess::from(Arc::clone(&memory));
 
@@ -96,7 +95,6 @@ fn validate_through_shared_capability_preserves_bytes_regions_and_revision() {
 
     // Then validation leaves every observable storage property unchanged.
     assert_eq!(result, Ok(()));
-    assert_eq!(memory.revision(), revision);
     assert_eq!(memory.regions(), regions);
     let mut bytes = [0; 64];
     memory
@@ -110,10 +108,8 @@ fn validate_is_available_on_local_memory() {
     // Given the local storage policy with a committed region.
     let memory = Memory::<LocalMemoryStorage>::new();
     memory
-        .prepare_regions(&[region(0x1000, 64, 64)])
-        .expect("prepare")
-        .try_install_on(&memory)
-        .expect("install");
+        .add_regions(&[region(0x1000, 64, 64)])
+        .expect("regions install");
 
     // When the generic memory implementation validates a mapped endpoint.
     let result = memory.validate(MemoryAddress::new(0x1040), alignment(64), 0);

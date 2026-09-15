@@ -29,9 +29,8 @@ fn memory_bulk_descriptor_round_trips_in_one_write_and_one_read() {
         .read(MemoryAddress::new(0x4000), alignment(64), &mut output)
         .expect("bulk read");
 
-    // Then metadata, revision, and every literal byte survive the public surface.
+    // Then metadata and every literal byte survive the public surface.
     assert_eq!(memory.regions(), vec![installed]);
-    assert_eq!(memory.revision().raw(), 1);
     assert_eq!(output, descriptor);
     assert_eq!(output.first(), Some(&0x11));
     assert_eq!(output.last(), Some(&0xee));

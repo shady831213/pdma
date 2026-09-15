@@ -1,5 +1,12 @@
 # PDMA Conceptual Model v0 Proposal
 
+> Historical exploration predating the clean rebuild. Requirements, decisions and
+> future work below are preserved as discussion history, not the current model's
+> scope or implementation status. See the [active model](../../model/modeling/README.md)
+> and [next goal](../../model/modeling/docs/firmware-dma-goal.md).
+> References below to `model/docs` describe the old documentation layout;
+> those documents are now available through Git history only.
+
 ## Purpose
 
 This document proposes a Rust-based conceptual model for PDMA. The goal is to create a discussion starting point before any implementation work begins.

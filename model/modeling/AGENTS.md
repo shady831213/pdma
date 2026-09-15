@@ -51,9 +51,11 @@ channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-runt
 it using the commands in `include/README.md`; never edit it by hand. The old ABI
 header is preserved on the backup branch, not in the active include directory.
 
-The documents under `model/docs`, including the previous architecture specification,
-describe the backed-up implementation. They must not force old software interface
-shapes into the rebuild.
+The obsolete architecture specification and version plans formerly under
+`model/docs` are retained in Git history only. They must not force old software
+interface shapes into the rebuild. This README and `docs/reset.md` describe the
+active model; `docs/firmware-dma-goal.md` records the agreed next direction, not
+implemented functionality or an instruction to start it automatically.
 
 ## Implementation constraints
 

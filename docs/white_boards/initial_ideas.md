@@ -1,5 +1,12 @@
 # Programmable DMA Subsystem (PDMA)
 
+> Historical exploration predating the clean rebuild. Requirements, decisions and
+> future work below are preserved as discussion history, not the current model's
+> scope or implementation status. See the [active model](../../model/modeling/README.md)
+> and [next goal](../../model/modeling/docs/firmware-dma-goal.md).
+> References below to `model/docs` describe the old documentation layout;
+> those documents are now available through Git history only.
+
 ## Purpose And Scope
 
 PDMA is a memory-to-memory DMA subsystem framework that targets complex, programmable data movement inside a larger system integration. It is designed as an internal subsystem-level IP deliverable, not as a full SoC or DPU product. The subsystem moves data from source memory to destination memory and can optionally perform in-path computation on the data before it reaches the destination.

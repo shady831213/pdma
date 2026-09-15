@@ -27,8 +27,11 @@ and four reusable building blocks:
 The original scenarios sources are preserved on the backup branch only.
 The new `crates/scenarios` contains current-model integration tests. Current acceptance
 uses these system scenarios and the active crates' boundary tests.
-The version plans and `model/docs/pdma_arch_spec_v0.md` describe
-the old implementation, not the replacement's required architecture or ABI.
+The obsolete architecture specification and v0.x plans were removed from
+`model/docs`; use Git history for those documents, not as current requirements.
+Current architecture and reset documentation live under `model/modeling`.
+`model/modeling/docs/firmware-dma-goal.md` records the next major direction,
+not implemented behavior or an automatic implementation order.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 

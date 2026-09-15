@@ -1,5 +1,9 @@
 # Minimal multi-channel PDMA
 
+Next major goal: [firmware-managed DMA](docs/firmware-dma-goal.md), preparing
+SR-IOV, PASID and Function reset boundaries while preserving the ordinary
+configuration. This is a recorded direction, not implemented functionality.
+
 Run from this directory:
 
 ```sh

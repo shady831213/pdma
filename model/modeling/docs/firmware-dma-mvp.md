@@ -1,0 +1,107 @@
+# Firmware-managed DMA architecture MVP
+
+Recorded: 2026-09-15.
+Status: user-approved first milestone; not implemented.
+This defines scope and observable acceptance, not a task execution plan. The
+current request updates documentation only; no implementation starts implicitly.
+
+Parent direction: [firmware-managed DMA](firmware-dma-goal.md).
+
+## Purpose
+
+Prove that DMA hardware, management hardware components, firmware, concrete
+runtime assembly and scenario harness can stay within their respective ownership
+boundaries. Run one real copy through that structure before adding SR-IOV, PASID
+or Function reset. A successful build alone is not acceptance.
+
+## Minimal running story
+
+1. Assemble one DMA channel and a work MMIO window that starts closed. Give Host
+   only the work view and firmware the privileged management view.
+2. Host attempts a channel access while the window is closed and observes an
+   access error, with no forwarded channel side effect.
+3. Run the firmware async program on its own software CPU. Firmware initializes
+   the access window through management MMIO and publishes observable readiness.
+4. The same Host program observes readiness, configures its rings, submits an
+   ordinary copy, receives the DMA notification and consumes the response.
+5. Check copied bytes, response and notification behavior; then end and join all
+   actors through the concrete runtime/harness lifecycle boundary.
+
+Host allocates and initializes application buffers through the supplied allocator.
+Neither firmware nor the harness preallocates Host buffers. The harness may control
+actor startup order to observe the closed window, but may not perform the firmware's
+management writes or manufacture readiness. Define how Host observes readiness
+without requiring access to the closed channel window.
+
+## Placement and responsibility
+
+| Part | MVP responsibility |
+| --- | --- |
+| `contract` | Minimal shared management/work register definitions and observable access outcomes. No context selector or PCIe ABI additions yet. |
+| `dma` | Rename the current `device` core without changing its ordinary behavior; reuse its channel state and shared copy pipeline. |
+| `hw-components` | Implement one real access-window hardware object with firmware-owned configuration access; reject or forward Host MMIO to the original channel state. |
+| `firmware` | Implement the async initialization program using supplied management access and software execution capabilities, not DMA internals. |
+| Host software | Use only its work/readiness/memory/interrupt capabilities; reuse the existing channel driver where applicable. |
+| Concrete runtime assembly | Connect hardware and software ports, drive hardware and firmware, and define startup/error/shutdown propagation using existing runtime components. Production wiring stays outside scenarios. |
+| `scenarios` | Add an isolated `firmware_managed` test suite containing cases and harness support, not production hardware, firmware or runtime implementations. |
+
+The concrete runtime assembly's module/crate location and exact management register
+layout remain to be selected. Do not infer a requirement for a new runtime framework
+or one crate per small hardware object. Ordinary single/multi-channel scenarios
+continue to use the direct DMA assembly; path/package updates for the core rename
+must not make them depend on firmware or `hw-components`.
+
+## Runtime and access boundaries
+
+- Host and firmware have independent `SoftwareCpu` and `InterruptRuntime`
+  instances, CPU ownership, handler registries and interrupt inputs. Reuse their
+  implementations and the underlying async executor.
+- Host and firmware receive different port sets. Host cannot access window-control
+  registers, and closing the work window does not disable firmware's management
+  path. Do not pass either program a mutable DMA object or an unrestricted system
+  handle and rely on convention to restrict its use.
+- Hardware objects own their register state and enforce access. Firmware owns the
+  initialization policy. Runtime owns transport, driving and wakeups, not either
+  behavior. Reuse schema register windows/dispatch and existing stage combinators
+  where applicable rather than introducing duplicate mechanisms.
+- The memory backend remains synchronous for this MVP. Keep storage selection
+  outside DMA and share actual channel/register state, not copied views.
+- Construction must not create unowned background actors. A firmware initialization
+  error and a hardware/dispatcher failure must be observable by the supervisor;
+  successful initialization must have a defined continuing or terminal firmware
+  state. Waiting firmware must not prevent Host or hardware progress.
+- Define normal test completion and early failure cleanup. Stop/join all owned
+  actors without claiming that cancellation of simulation proves hardware reset,
+  transaction drain or permission to reuse in-flight memory.
+
+## Acceptance
+
+These are future behavioral checks, not claims that tests already exist or pass.
+
+- Before firmware opens the window, Host channel accesses fail and cannot alter
+  channel state; attempts to program management registers through the Host view
+  remain rejected after the work window opens.
+- Firmware management access works while Host access is closed. Readiness becomes
+  visible only after firmware performs the required configuration writes.
+- After readiness, the same Host program performs a real DMA copy and observes
+  exact destination bytes, a successful matching response and the expected Host
+  notification using the existing interrupt runtime.
+- CPU ownership and interrupt dispatch remain separate between software domains;
+  no Host handler executes as firmware or vice versa. Waiting firmware does not
+  stall the copy/Host path.
+- Initialization failure and early shutdown produce an explicit result and leave
+  no orphan hardware, firmware or dispatcher tasks.
+- Existing single/multi-channel copy, SG, fault, reset and interrupt scenarios
+  remain valid without enabling the managed assembly.
+- Source dependencies reflect the table above: no production firmware/hardware
+  implementation in scenarios, no firmware policy in runtime, no shadow channel
+  registers and no direct software mutation of hardware internals.
+
+## Not in this MVP
+
+No PCIe integration, PF/VF allocation, Function reset/FLR, context table, PASID or
+command-format extension, context rebinding, ATS/PRI, delayed external transaction
+model, multi-version mapping, task-context ledger or new scheduling policy. Do not
+add an ISA simulator or a second executor/interrupt framework. Broader lifecycle
+requirements remain in the parent goal and must not be claimed as validated by
+this access-window demonstration.

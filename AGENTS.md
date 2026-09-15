@@ -32,6 +32,10 @@ The obsolete architecture specification and v0.x plans were removed from
 Current architecture and reset documentation live under `model/modeling`.
 `model/modeling/docs/firmware-dma-goal.md` records the next major direction,
 not implemented behavior or an automatic implementation order.
+`model/modeling/docs/firmware-dma-mvp.md` defines the approved architecture-validation
+milestone before broader feature work. The target split is `dma`, `hw-components`
+and `firmware`, with concrete runtime wiring outside scenarios. These are future
+boundaries; the current DMA core still lives in `crates/device`.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 

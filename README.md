@@ -15,6 +15,7 @@ execution and interrupt delivery are supplied outside the hardware model.
 - [Generated ABI header](model/modeling/include/README.md): generation and consistency checks.
 - [System scenarios](model/modeling/crates/scenarios/README.md).
 - [Next goal: firmware-managed DMA](model/modeling/docs/firmware-dma-goal.md): firmware plus DMA as the primary direction for preparing SR-IOV, PASID and Function reset support, without requiring firmware for ordinary configurations. This is not implemented functionality or a request to begin PCIe integration.
+- [First milestone: architecture MVP](model/modeling/docs/firmware-dma-mvp.md): validate separate hardware, firmware and runtime responsibilities with a firmware-opened Host window and one real DMA copy. Approved scope, not implemented yet.
 
 ## Historical background and references
 

@@ -3,6 +3,9 @@
 Next major goal: [firmware-managed DMA](docs/firmware-dma-goal.md), preparing
 SR-IOV, PASID and Function reset boundaries while preserving the ordinary
 configuration. This is a recorded direction, not implemented functionality.
+The first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
+independent firmware-managed assembly that opens a Host access window and runs
+one real copy, while retaining the current direct-DMA scenarios.
 
 Run from this directory:
 

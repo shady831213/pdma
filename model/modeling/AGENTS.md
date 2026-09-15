@@ -56,6 +56,12 @@ The obsolete architecture specification and version plans formerly under
 interface shapes into the rebuild. This README and `docs/reset.md` describe the
 active model; `docs/firmware-dma-goal.md` records the agreed next direction, not
 implemented functionality or an instruction to start it automatically.
+The approved first milestone is `docs/firmware-dma-mvp.md`: validate the `dma`,
+`hw-components`, firmware and concrete runtime boundaries through a real copy
+behind a firmware-configured access window. Production hardware, firmware and
+reusable system wiring belong outside scenarios; new scenario code contains cases
+and harness support. Keep the direct-DMA assembly available for ordinary tests.
+The core rename and managed assembly are not implemented yet.
 
 ## Implementation constraints
 

@@ -5,6 +5,10 @@ Status: agreed architectural direction for the next major goal, not implemented.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
+First milestone: the [firmware-managed DMA architecture MVP](firmware-dma-mvp.md).
+Validate the ownership and runtime assembly boundaries before implementing the
+broader virtualization and address-space features below.
+
 ## Objective
 
 Use firmware plus the existing shared DMA hardware as the primary architecture
@@ -26,14 +30,14 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 - Commands select an address-space context using `context_id`. This is a reusable
   context selector, not the software task identifier. Preserve task ID as a
   submission/response correlation value, not a hardware lookup-table key.
-- Peripheral access logic derives Function identity from the controlled channel
+- Access logic in `hw-components` derives Function identity from the controlled channel
   binding and resolves the selected context to PASID and any required access
   attributes. Lookup must be scoped and authorized; a guessed context ID must not
   grant access to another Function's address space.
 - Firmware owns allocation policy; hardware routing/permission configuration
   enforces the resulting decisions. Avoid duplicate mutable ownership tables in
   the PDMA core, runtime and firmware.
-- PDMA reports channel events. Peripheral interrupt routing maps them to the
+- PDMA reports channel events. Interrupt routing in `hw-components` maps them to the
   appropriate Function/vector without putting PCIe notification protocols or
   software interrupt handlers into the core.
 
@@ -42,8 +46,8 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 | Component | Responsibility |
 | --- | --- |
 | Contract | Software-visible registers, descriptor context selection, status and capability definitions once their semantics are agreed. |
-| PDMA hardware | Channel execution, admission/stop/reset, local completion facts, and memory requests through injected access capabilities. |
-| Peripheral hardware | Authorized MMIO views, channel/context-to-request identity resolution, interrupt routing, and ownership of accepted external access obligations. |
+| `dma` | Current DMA core, to be renamed from `device`: channel execution, admission/stop/reset, local completion facts, and memory requests through injected access capabilities. |
+| `hw-components` | Hardware components outside the DMA core: authorized MMIO views, channel/context-to-request identity resolution, interrupt routing, and ownership of accepted external access obligations. |
 | Device firmware | Resource allocation, management register programming, lifecycle sequencing, and coordination of independently reported completion conditions. |
 | Host software | Use granted channels/contexts, allocate buffers, submit commands, consume responses, handle interrupts and coordinate OS address-space lifetimes. |
 | Runtime/platform | Assemble hardware and software execution domains; provide memory backing, transports, wakeups and interrupt delivery. No PDMA traversal, copy or recovery policy. |
@@ -51,6 +55,32 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 Device firmware is a real modeled software actor with its own execution context.
 It accesses hardware through management capabilities/MMIO, not direct mutation of
 `Device` internals. Firmware does not replace the hardware DMA data path.
+
+### Code and assembly boundaries
+
+The agreed target is separate `dma`, `hw-components` and `firmware` crates, with
+shared soft/hard definitions in `contract` and Host software interfaces in `host`.
+`hw-components` is a collection of concrete hardware objects, not a generic bus
+fabric or a firmware policy controller. Each object owns its own registers/state.
+This is a target organization; the current core still lives in `crates/device`.
+
+Firmware is an async program. Host and firmware reuse the existing software CPU
+and interrupt runtime implementations, but have separate CPU instances, CPU-local
+state, interrupt registries/sources and capability views. Sharing an async executor
+does not mean sharing a software CPU or granting access to the same hardware view.
+
+A separate concrete runtime assembly connects and drives the firmware-managed
+system. Retain the existing ordinary assembly/transport; do not turn
+`host::runtime::Model` into an all-purpose container of optional features. Reuse
+memory, CPU, interrupt and pipeline components rather than implementing another
+executor or dispatcher. The new assembly's source location is not yet selected.
+Firmware management sequencing and hardware access enforcement stay out of it.
+
+Production firmware, hardware objects and reusable system wiring live outside
+`scenarios`. Scenarios contain cases, acceptance assertions and the harness for
+external provisioning, startup, fault injection and teardown. Test-specific Host
+programs remain test support; reusable Host driver behavior belongs in `host`.
+The harness must not implement firmware initialization or hardware behavior.
 
 ## Management MMIO
 
@@ -60,9 +90,17 @@ register state and operations rather than creating shadow registers.
 - Host/VF work views expose only authorized resources and operations.
 - Firmware's PDMA management view can control the relevant channels and observe
   stop/reset completion; add only genuinely missing hardware mechanisms.
-- PCIe-facing management registers belong to the peripheral integration layer:
+- PCIe-facing management registers belong to the integration hardware, not the core:
   Function lifecycle requests, access/context routing and controller handshake
   state do not belong in the PDMA core.
+
+Host software uses an authorized work MMIO view for normal ring submission,
+response consumption and permitted channel/IRQ configuration, without firmware
+proxying every command. Firmware has a separate privileged view of management
+hardware and relevant channel controls. Both views can reach the same underlying
+channel state; neither requires shadow registers. Host accesses cannot bypass the
+work-side checks or acquire the management capability. Closing Host MMIO does not
+by itself stop already accepted DMA work.
 
 ## Lifecycle and memory invariants
 
@@ -107,7 +145,7 @@ reset. It must not require a Function-management table or firmware control loop.
 Reuse the same execution stages; avoid feature checks scattered through stages
 and speculative collections of policy generics.
 
-## Questions to settle before implementation
+## Questions for the broader goal, beyond the MVP
 
 - Context selector width, table capacity, namespace and authorized programming
   interface; exact descriptor and register layouts remain undecided.
@@ -116,8 +154,9 @@ and speculative collections of policy generics.
   determine the access needed to fetch that command itself.
 - Exact management access permissions, stop/rebind interlocks and ownership of
   local-completion, external-drain and release observations.
-- Firmware execution/notification model, management reset domain and recovery
-  when firmware is unavailable.
+- Firmware management event protocol, management reset domain and recovery when
+  firmware is unavailable. Async execution with independent software CPU/interrupt
+  instances is already agreed.
 - Scheduling policy when an accepted task waits on memory. Retaining one shared
   engine does not automatically provide cross-Function progress while it waits;
   do not silently introduce per-channel suspended execution or preemption.

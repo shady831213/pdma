@@ -17,6 +17,13 @@ and completion waiting run inside one
 `InterruptRuntime::run_main` per case, which uses `SoftwareCpu` internally. A channel is transferred once into its persistent
 IRQ handler, rather than repeatedly moved through shared optional state.
 
+Runtime-owned memory installs regions through one atomic `add_regions(&regions)` call.
+Overlap and capacity checks, backing allocation and installation run under one exclusive
+storage access; an error leaves existing regions and bytes unchanged. There are no public
+prepared tokens, transaction drafts or memory revisions. The software allocator advances
+its address cursor only after installation succeeds. Hardware still receives only
+`MemoryAccess`, without memory ownership or allocation authority.
+
 ## Read the implementation
 
 | Location | Responsibility |
@@ -104,8 +111,11 @@ hardware keeps the reset register at one until affected accepted work retires, t
 clears it to zero. `ResetControl` runs after each command-loop step, including pending
 steps. Configuration writes are rejected while the affected scope is resetting.
 Generation tags additionally reject retained pre-reset tasks after later reconfiguration;
-they do not acknowledge reset. Custom command compositions must use `RunCommand`
-as their ownership-release boundary and step `ResetControl`. Only termination of the
+they do not acknowledge reset. Custom command compositions use `RunCommand<S>`
+as their ownership-release boundary and step `ResetControl`. The wrapper accepts any
+child stage with the complete command's input/output/error/wait contract and uses the
+existing `Operation` to dispose of terminal child state before releasing ownership.
+Only termination of the
 complete pipeline releases ownership; response publication and `Resettable` binding
 do not acknowledge command cleanup.
 Discarding an accepted operation does not

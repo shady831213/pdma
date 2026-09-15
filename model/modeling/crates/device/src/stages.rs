@@ -3,7 +3,8 @@ use crate::{
     Resettable, ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
-    AfterEach, Arbitrate, BranchError, Dispatch, MapError, Repeat, Stage, StepOutcome, Then,
+    AfterEach, Arbitrate, BranchError, Dispatch, MapError, Operation, Repeat, Stage, StepOutcome,
+    Then,
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{ChannelId, Response};
@@ -74,26 +75,29 @@ impl<M> Stage<ChannelContext<'_, M>> for UpdateIrq {
 
 /// Ends one command after completion or channel-local termination.
 #[derive(Debug)]
-pub struct RunCommand {
-    pipeline: Pipeline,
+pub struct RunCommand<S = Pipeline> {
+    pipeline: S,
 }
 
-impl RunCommand {
+impl<S> RunCommand<S> {
     /// Runs one composed command with shared execution ownership and terminal cleanup.
-    pub const fn new(pipeline: Pipeline) -> Self {
+    pub const fn new(pipeline: S) -> Self {
         Self { pipeline }
     }
 }
 
-impl<M: MemoryAccess> Stage<Device<M>> for RunCommand {
+impl<M, S> Stage<Device<M>> for RunCommand<S>
+where
+    S: Stage<Device<M>, Input = (), Output = (), Error = Error, Wait = ()>,
+{
     type Input = ();
     type Output = ControlFlow<(), ()>;
     type Error = Error;
     type Wait = ();
-    type State = <Pipeline as Stage<Device<M>>>::State;
+    type State = Operation<S, Device<M>>;
 
     fn start((): ()) -> Self::State {
-        <Pipeline as Stage<Device<M>>>::start(())
+        Operation::new(())
     }
 
     fn step(
@@ -101,7 +105,10 @@ impl<M: MemoryAccess> Stage<Device<M>> for RunCommand {
         device: &mut Device<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
-        let outcome = self.pipeline.step(device, state);
+        if state.is_complete() {
+            return StepOutcome::Exhausted;
+        }
+        let outcome = state.step(&mut self.pipeline, device);
         if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
             device.active = None;
         }

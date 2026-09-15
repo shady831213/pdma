@@ -85,6 +85,8 @@ shapes into the rebuild.
   complete pipeline terminates, including normal completion, reset and errors.
   Response publication and `Resettable` binding must not retire the whole command.
   Custom command assemblies must retain this lifecycle boundary and drive `ResetControl`.
+  `RunCommand<S>` constrains the child stage's associated types, not its concrete composition;
+  reuse `Operation` to discard terminal state before releasing command ownership.
   Guard command, SG-list, payload and response accesses before old work can interact again.
   Memory calls are synchronous within a step: do not invent bus transactions, outstanding
   queues, cycle timing or timeout delays. Host reset waits for hardware completion; caller
@@ -107,6 +109,11 @@ shapes into the rebuild.
   the channel after publication; reset never rolls back external memory writes.
 - Software handlers remain outside the hardware. Preserve CPU-local and handler
   execution guarantees supplied by the runtime.
+- Runtime memory installs regions atomically with `add_regions(&regions)`. Keep overlap,
+  capacity, allocation-failure atomicity and concurrent-writer serialization guarantees.
+  Do not restore public prepare/install tokens, transaction drafts or memory revisions.
+  Allocation and backing ownership remain outside hardware; the allocator advances its
+  cursor only after successful installation.
 - Use native module declarations and matching paths. No `#[path]`, conditional path
   redirection, `include!` workaround, symlink workaround, or duplicated source trees.
 - Tests use Given/When/Then and observable outcomes. Do not weaken them to get green.

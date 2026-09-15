@@ -43,8 +43,9 @@ reset does not retract them.
 device reset before accepting commands. Accepted work records its channel and generation in
 `Device.active`; the command, SG-list, payload and response paths check reset before
 further memory access. `RunCommand` alone clears `Device.active` when the complete
-pipeline terminates, covering success, reset and errors at any stage. The enclosing
-`Then` discards its child state before returning a terminal outcome. Response publication
+pipeline terminates, covering success, reset and errors at any stage. Its retained
+`Operation<S, Device<M>>` discards child state before ownership is released, including
+for custom child stages that do not clear their own state. Response publication
 can precede that outcome by additional composition steps; ownership remains held during
 those steps, so reset cannot acknowledge cleanup early. Neither response ports nor
 `Resettable` release whole-command ownership.
@@ -64,7 +65,9 @@ so guarded custom stages can reject stale tasks even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
 Custom command graphs must preserve the single shared execution path, wrap the
-assembled pipeline in `RunCommand`, and drive `ResetControl`. Merely
+assembled pipeline in `RunCommand<S>`, and drive `ResetControl`. The child must implement
+`Stage<Device<M>, Input = (), Output = (), Error = Error, Wait = ()>`; its internal
+composition and arbitration policy need not match the default `Pipeline`. Merely
 dropping a software waiter or abandoning an accepted `Operation` does not flush
 hardware. The complete-loop guarantee does not claim that arbitrary externally
 held task objects have been driven to completion; custom stages must preserve the

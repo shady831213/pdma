@@ -539,12 +539,16 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_PDMA_C_QUFQUAQUUQULQUT__1_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Hardware reset request
- * Resets device controls and every channel, including retained execution.
+ * Hardware reset request and busy state
+ * Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved.
+ */
+/*
+ * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
 #define C_PDMA_C_QURQUEQUSQUEQUT__1_OFFSET UINT64_C(12)
 #define C_PDMA_C_QURQUEQUSQUEQUT__1_WIDTH UINT64_C(4)
-#define C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_KIND C_PDMA_RESET_ZERO
 #define C_PDMA_C_QURQUEQUSQUEQUT__1_RESET_VALUE UINT64_C(0)
 #define C_PDMA_C_QURQUEQUSQUEQUT__1_WRITABLE_MASK UINT64_C(1)
@@ -750,12 +754,16 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
 
 /*
- * Hardware reset request
- * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
+ * Hardware reset request and busy state
+ * Requests reset of this channel's configuration, pointers, errors, device-owned notifications and retained work. Reads busy until its memory accesses drain and cleanup completes. Other channels and device fatal are unaffected.
+ */
+/*
+ * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
 #define C_PDMA_C_QURQUEQUSQUEQUT__2_OFFSET UINT64_C(80)
 #define C_PDMA_C_QURQUEQUSQUEQUT__2_WIDTH UINT64_C(4)
-#define C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_KIND C_PDMA_RESET_ZERO
 #define C_PDMA_C_QURQUEQUSQUEQUT__2_RESET_VALUE UINT64_C(0)
 #define C_PDMA_C_QURQUEQUSQUEQUT__2_WRITABLE_MASK UINT64_C(1)
@@ -961,12 +969,16 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
 
 /*
- * Hardware reset request
- * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
+ * Hardware reset request and busy state
+ * Requests reset of this channel's configuration, pointers, errors, device-owned notifications and retained work. Reads busy until its memory accesses drain and cleanup completes. Other channels and device fatal are unaffected.
+ */
+/*
+ * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
 #define C_PDMA_C_QURQUEQUSQUEQUT__3_OFFSET UINT64_C(152)
 #define C_PDMA_C_QURQUEQUSQUEQUT__3_WIDTH UINT64_C(4)
-#define C_PDMA_C_QURQUEQUSQUEQUT__3_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__3_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QURQUEQUSQUEQUT__3_RESET_KIND C_PDMA_RESET_ZERO
 #define C_PDMA_C_QURQUEQUSQUEQUT__3_RESET_VALUE UINT64_C(0)
 #define C_PDMA_C_QURQUEQUSQUEQUT__3_WRITABLE_MASK UINT64_C(1)
@@ -1172,12 +1184,16 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
 
 /*
- * Hardware reset request
- * Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected.
+ * Hardware reset request and busy state
+ * Requests reset of this channel's configuration, pointers, errors, device-owned notifications and retained work. Reads busy until its memory accesses drain and cleanup completes. Other channels and device fatal are unaffected.
+ */
+/*
+ * request
+ * Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request.
  */
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_OFFSET UINT64_C(224)
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_WIDTH UINT64_C(4)
-#define C_PDMA_C_QURQUEQUSQUEQUT__4_ACCESS C_PDMA_ACCESS_WRITE_ONLY
+#define C_PDMA_C_QURQUEQUSQUEQUT__4_ACCESS C_PDMA_ACCESS_READ_WRITE
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_RESET_KIND C_PDMA_RESET_ZERO
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_RESET_VALUE UINT64_C(0)
 #define C_PDMA_C_QURQUEQUSQUEQUT__4_WRITABLE_MASK UINT64_C(1)

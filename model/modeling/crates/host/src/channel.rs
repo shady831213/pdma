@@ -45,7 +45,8 @@ pub struct Channel<B, M> {
 impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
     /// Discovers and programs one channel, enabling its interrupt gate.
     ///
-    /// Cancellation may leave partial setup; issue channel reset through the bus before retrying.
+    /// Cancellation may leave partial setup; request channel reset through the bus and
+    /// wait for its reset register to read zero before retrying.
     pub async fn setup(bus: B, memory: M, config: ChannelConfig) -> Result<Self, Error<B::Error>> {
         let owner = CpuOwner::capture_active().map_err(Error::Cpu)?;
         let ChannelConfig { id, rings } = config;

@@ -19,6 +19,27 @@ use std::sync::Arc;
 
 mod reset;
 
+async fn with_idle_hardware<F: std::future::Future>(
+    model: &Model<SharedMemoryAccess>,
+    software: F,
+) -> F::Output {
+    let mut control = pdma_model_device::ResetControl;
+    let mut operation = Operation::new(());
+    tokio::pin!(software);
+    loop {
+        tokio::select! {
+            result = &mut software => return result,
+            result = model.interact(|device| {
+                assert!(matches!(operation.step(&mut control, device), StepOutcome::Progressed));
+                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+            }) => {
+                let Ok(outcome) = result;
+                assert!(matches!(outcome, StepOutcome::Progressed));
+            }
+        }
+    }
+}
+
 fn single_command<M>(device: &Device<M>) -> Pipeline {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
     let execution = Then::new(CheckLengths, Repeat::new(chunk));
@@ -237,7 +258,7 @@ async fn device_fault_is_visible_after_unmask_without_replaying_notification()
         cpu.run_main(channel.device_fault()).await?,
         DeviceFaultCode::Internal
     );
-    cpu.run_main(channel.reset_device()).await?;
+    with_idle_hardware(&model, cpu.run_main(channel.reset_device())).await?;
     let channel = cpu
         .run_main(Channel::setup(
             model,

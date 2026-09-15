@@ -23,9 +23,9 @@ pub use execution::{
 pub use fetch::Fetch;
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_dispatch};
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, DeviceControl, DeviceControlValues, DeviceFaultCode, DeviceRegisters,
+    ChannelBlock, ChannelId, DeviceControl, DeviceFaultCode, DeviceRegisters, ResetValues,
 };
-pub use reset::{ChannelTask, Resettable};
+pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
 pub use stages::{
     CommandLoop, CopyLoop, Execution, Intake, Pipeline, Publish, Responses, RunCommand, UpdateIrq,
@@ -39,6 +39,7 @@ pub struct Device<M> {
     pub memory: M,
     control: RegisterWindow<DeviceControl>,
     interrupt: bool,
+    active: Option<(ChannelId, u64)>,
 }
 
 impl<M> Device<M> {
@@ -70,6 +71,19 @@ impl<M> Device<M> {
 
     pub(crate) fn halted(&self) -> bool {
         self.control.values.fault.code() != Ok(DeviceFaultCode::None)
+    }
+
+    pub(crate) fn resetting(&self) -> bool {
+        self.control.values.reset.request()
+    }
+
+    pub(crate) fn request_reset(&mut self) {
+        if !self.resetting() {
+            self.control.values.reset = ResetValues::new(1);
+            for channel in &mut self.channels {
+                channel.request_reset();
+            }
+        }
     }
 
     /// Borrows one channel and shared hardware resources for a single interaction.
@@ -107,25 +121,28 @@ impl<M> Device<M> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let channels = &mut self.channels;
-        let interrupt = &mut self.interrupt;
+        let resetting = self.resetting();
+        let mut requested = false;
         self.control.write_with(
             address,
             source,
-            |_, _, _| Ok(()),
-            |_, next| {
-                if next.reset.raw() != 0 {
-                    for channel in channels {
-                        channel.reset();
-                    }
-                    *next = DeviceControlValues {
-                        channel_num: next.channel_num,
-                        ..DeviceControlValues::default()
-                    };
-                    *interrupt = false;
+            |offset, _, _| {
+                if resetting && offset != DeviceControl::RESET.offset() {
+                    return Err(Error::ResetInProgress);
+                }
+                Ok(())
+            },
+            |offset, next| {
+                if offset == DeviceControl::RESET.offset() {
+                    requested = next.reset.request();
+                    next.reset = ResetValues::new(u32::from(resetting));
                 }
             },
-        )
+        )?;
+        if requested {
+            self.request_reset();
+        }
+        Ok(())
     }
 
     fn read_channels(

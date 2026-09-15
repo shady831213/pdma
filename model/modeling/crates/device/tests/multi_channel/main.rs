@@ -7,12 +7,13 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, DeviceControl, DeviceRegisters, ResponseRegisters,
 };
-use pdma_model_device::{Device, Error};
+use pdma_model_device::{Device, Error, ResetControl};
 
 mod fairness;
 mod fan_in_inputs;
 mod reset_boundaries;
 mod response_routing;
+mod scatter_gather_reset;
 mod shared;
 /// Shared raw-bus fixtures for the multi-channel boundary tests.
 pub mod support;
@@ -37,6 +38,9 @@ fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
         DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset(),
     ] {
         device.write(reset, &1_u32.to_le_bytes())?;
+        assert_eq!(word(&mut device, reset)?, 1);
+        let _ = Operation::new(()).step(&mut ResetControl, &mut device);
+        assert_eq!(word(&mut device, reset)?, 0);
         assert_eq!(word(&mut device, count)?, 3);
     }
     assert_eq!(
@@ -88,12 +92,17 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
             + ChannelRegisters::RESET.offset(),
         &1_u32.to_le_bytes(),
     )?;
+    let reset = ChannelId::new(0).register_offset().ok_or("offset")?
+        + ChannelBlock::CONTROL.offset()
+        + ChannelRegisters::RESET.offset();
+    assert_eq!(word(&mut device, reset)?, 1);
     for _ in 0..512 {
         assert!(!matches!(
             operation.step(&mut hardware, &mut device),
             StepOutcome::Complete(Err(_))
         ));
     }
+    assert_eq!(word(&mut device, reset)?, 0);
     // Then: B/C complete; A's uncommitted suffix and response remain absent.
     for index in 1..3 {
         let mut bytes = [0; 512];

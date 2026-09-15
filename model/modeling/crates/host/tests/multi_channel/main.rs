@@ -2,7 +2,9 @@
 
 mod instances;
 
-use hardware_interface_pipeline::{AfterEach, AsyncExecutor, Operation, Repeat, Then};
+use hardware_interface_pipeline::{
+    AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, StepOutcome, Then,
+};
 use hardware_interface_runtime::{
     CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
@@ -11,7 +13,7 @@ use pdma_model_contract::{
     ChannelId, Command, CompletionFlagsValues, DeviceControl, DeviceRegisters, Endpoint, Response,
 };
 use pdma_model_device::{
-    CheckLengths, Device, NextChunk, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+    CheckLengths, Device, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
 };
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -21,6 +23,27 @@ use std::sync::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const COUNT: usize = DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset();
+
+async fn with_idle_hardware<F: std::future::Future>(
+    model: &Model<SharedMemoryAccess>,
+    software: F,
+) -> F::Output {
+    let mut control = ResetControl;
+    let mut operation = Operation::new(());
+    tokio::pin!(software);
+    loop {
+        tokio::select! {
+            result = &mut software => return result,
+            result = model.interact(|device| {
+                assert!(matches!(operation.step(&mut control, device), StepOutcome::Progressed));
+                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+            }) => {
+                let Ok(outcome) = result;
+                assert!(matches!(outcome, StepOutcome::Progressed));
+            }
+        }
+    }
+}
 
 fn allocator() -> SharedMemoryAllocator {
     SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
@@ -148,37 +171,41 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     );
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
-    cpu.run_main(async {
-        let mut channels = Vec::new();
-        for index in 0..3 {
-            let mut channel =
-                Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?).await?;
-            channel
-                .submit(Command {
-                    flags: CompletionFlagsValues::default(),
-                    id: u64::try_from(index)?,
-                    source: Endpoint::linear(0, 0),
-                    destination: Endpoint::linear(0, 0),
-                })
-                .await?;
-            channels.push(channel);
-        }
-        // When: only channel zero is reset before hardware processes the pending work.
-        channels.remove(0).reset().await?;
-        // Then: the other two drivers retain their submissions and distinct completions.
-        for (index, channel) in (1..3).zip(&mut channels) {
-            AsyncExecutor::new(model.clone())
-                .run(&mut hardware, &mut Operation::new(()))
-                .await
-                .map_err(|error| format!("{error:?}"))?;
-            assert_eq!(
-                channel.response().await?.map(|response| response.id),
-                Some(u64::try_from(index)?)
-            );
-            assert_eq!(channel.response().await?, None);
-        }
-        Ok::<_, Box<dyn std::error::Error>>(())
-    })
+    with_idle_hardware(
+        &model,
+        cpu.run_main(async {
+            let mut channels = Vec::new();
+            for index in 0..3 {
+                let mut channel =
+                    Channel::setup(model.clone(), memory.clone(), config(&allocator, index)?)
+                        .await?;
+                channel
+                    .submit(Command {
+                        flags: CompletionFlagsValues::default(),
+                        id: u64::try_from(index)?,
+                        source: Endpoint::linear(0, 0),
+                        destination: Endpoint::linear(0, 0),
+                    })
+                    .await?;
+                channels.push(channel);
+            }
+            // When: only channel zero is reset before hardware processes the pending work.
+            channels.remove(0).reset().await?;
+            // Then: the other two drivers retain their submissions and distinct completions.
+            for (index, channel) in (1..3).zip(&mut channels) {
+                AsyncExecutor::new(model.clone())
+                    .run(&mut hardware, &mut Operation::new(()))
+                    .await
+                    .map_err(|error| format!("{error:?}"))?;
+                assert_eq!(
+                    channel.response().await?.map(|response| response.id),
+                    Some(u64::try_from(index)?)
+                );
+                assert_eq!(channel.response().await?, None);
+            }
+            Ok::<_, Box<dyn std::error::Error>>(())
+        }),
+    )
     .await
 }
 
@@ -213,10 +240,10 @@ async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResu
             .await,
         Err(pdma_model_device::Error::Access),
     );
-    cpu.run_main(first.reset()).await?;
+    with_idle_hardware(&model, cpu.run_main(first.reset())).await?;
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);
-    cpu.run_main(second.reset_device()).await?;
+    with_idle_hardware(&model, cpu.run_main(second.reset_device())).await?;
     // Then: immutable hardware discovery remains available after device reset.
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);

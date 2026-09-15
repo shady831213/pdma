@@ -27,8 +27,8 @@ _Static_assert(C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QURESPONSEQUWRITE == 2, "res
 _Static_assert(C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUINTERNAL == 1, "device internal fault code");
 _Static_assert(C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_ACCESS == C_PDMA_ACCESS_READ_ONLY, "causes are read-only");
 _Static_assert(C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK == 3, "two notification mask bits");
-_Static_assert(C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS == C_PDMA_ACCESS_WRITE_ONLY, "channel reset is write-only");
-_Static_assert(C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS == C_PDMA_ACCESS_WRITE_ONLY, "device reset is write-only");
+_Static_assert(C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS == C_PDMA_ACCESS_READ_WRITE, "channel reset exposes busy state");
+_Static_assert(C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS == C_PDMA_ACCESS_READ_WRITE, "device reset exposes busy state");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUSUCCESS == 0, "success status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH == 1, "invalid length status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUFAULT == 2, "read fault status code");

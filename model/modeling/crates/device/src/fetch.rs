@@ -18,7 +18,7 @@ impl Fetch {
 
 impl<M: MemoryAccess> ReadyStage<Device<M>> for Fetch {
     fn ready(&self, device: &Device<M>) -> bool {
-        if device.halted() {
+        if device.halted() || device.resetting() {
             return false;
         }
         device
@@ -26,6 +26,7 @@ impl<M: MemoryAccess> ReadyStage<Device<M>> for Fetch {
             .get(self.channel.index())
             .is_none_or(|channel| {
                 channel.enabled()
+                    && !channel.resetting()
                     && !channel.halted()
                     && !channel.command.pointers().is_empty()
                     && channel.response.pointers().pending() < channel.response.capacity()
@@ -50,23 +51,29 @@ impl<M: MemoryAccess> Stage<Device<M>> for Fetch {
         if !self.ready(device) {
             return StepOutcome::Pending(());
         }
-        let selected = match device.channel_context(self.channel) {
-            Ok(selected) => selected,
-            Err(error) => return StepOutcome::Complete(Err(error)),
+        let outcome = {
+            let selected = match device.channel_context(self.channel) {
+                Ok(selected) => selected,
+                Err(error) => return StepOutcome::Complete(Err(error)),
+            };
+            let outcome = match selected.channel.command.pop(selected.memory) {
+                Ok(Some(value)) => StepOutcome::Complete(Ok(ChannelTask {
+                    channel: self.channel,
+                    generation: selected.channel.generation,
+                    value,
+                })),
+                Ok(None) => StepOutcome::Pending(()),
+                Err(fault) => {
+                    selected.channel.latch(fault);
+                    StepOutcome::Complete(Err(Error::Fault(fault)))
+                }
+            };
+            selected.channel.update_irq();
+            outcome
         };
-        let outcome = match selected.channel.command.pop(selected.memory) {
-            Ok(Some(value)) => StepOutcome::Complete(Ok(ChannelTask {
-                channel: self.channel,
-                generation: selected.channel.generation,
-                value,
-            })),
-            Ok(None) => StepOutcome::Pending(()),
-            Err(fault) => {
-                selected.channel.latch(fault);
-                StepOutcome::Complete(Err(Error::Fault(fault)))
-            }
-        };
-        selected.channel.update_irq();
+        if let StepOutcome::Complete(Ok(task)) = &outcome {
+            device.active = Some((task.channel(), task.generation));
+        }
         outcome
     }
 }

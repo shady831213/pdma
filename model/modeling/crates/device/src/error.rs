@@ -33,6 +33,8 @@ pub enum Error {
     ReservedBits,
     /// Ring geometry is immutable after first enable.
     ConfigurationLocked,
+    /// Reset cleanup is pending; configuration writes are temporarily rejected.
+    ResetInProgress,
     /// Ring capacity, alignment, or extent is invalid.
     Configuration,
     /// Producer or consumer advancement exceeds available entries.

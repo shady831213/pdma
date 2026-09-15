@@ -153,7 +153,7 @@ register_map! {
             pub irq_cause: ChannelIrqCause,
             #[description = "Independent non-empty and IOC notification masks. Unmask does not replay past events."]
             pub irq_mask: ChannelIrqMask,
-            #[description = "Clears this channel's configuration, pointers, errors, notifications and in-flight work. Device fatal is unaffected."]
+            #[description = "Requests reset of this channel's configuration, pointers, errors, device-owned notifications and retained work. Reads busy until its memory accesses drain and cleanup completes. Other channels and device fatal are unaffected."]
             pub reset: Reset,
         ],
     }

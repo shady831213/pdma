@@ -1,6 +1,6 @@
 use crate::{
-    ChannelContext, CheckLengths, Device, Error, Fetch, NextChunk, ReadCopy, Resettable,
-    ResponsePort, RoundRobin, RouteResponse, WriteCopy,
+    ChannelContext, CheckLengths, Device, Error, Fetch, NextChunk, ReadCopy, ResetControl,
+    Resettable, ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
     AfterEach, Arbitrate, BranchError, Dispatch, MapError, Repeat, Stage, StepOutcome, Then,
@@ -27,6 +27,9 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for Publish {
         context: &mut ChannelContext<'_, M>,
         response: &mut Response,
     ) -> StepOutcome<(), Error, ()> {
+        if context.channel.resetting() {
+            return StepOutcome::Complete(Err(Error::Reset));
+        }
         if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
@@ -75,6 +78,13 @@ pub struct RunCommand {
     pipeline: Pipeline,
 }
 
+impl RunCommand {
+    /// Runs one composed command with shared execution ownership and terminal cleanup.
+    pub const fn new(pipeline: Pipeline) -> Self {
+        Self { pipeline }
+    }
+}
+
 impl<M: MemoryAccess> Stage<Device<M>> for RunCommand {
     type Input = ();
     type Output = ControlFlow<(), ()>;
@@ -91,7 +101,11 @@ impl<M: MemoryAccess> Stage<Device<M>> for RunCommand {
         device: &mut Device<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
-        match self.pipeline.step(device, state) {
+        let outcome = self.pipeline.step(device, state);
+        if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
+            device.active = None;
+        }
+        match outcome {
             StepOutcome::Complete(Ok(()) | Err(Error::Reset | Error::Fault(_) | Error::Halted)) => {
                 StepOutcome::Complete(Ok(ControlFlow::Continue(())))
             }
@@ -120,7 +134,7 @@ pub type Responses =
 pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>>>, Responses>;
 
 /// Continuously executes commands through one shared pipeline.
-pub type CommandLoop = Repeat<RunCommand>;
+pub type CommandLoop = AfterEach<Repeat<RunCommand>, ResetControl>;
 
 impl<M> Device<M> {
     /// Builds this device's lightweight command input ports for custom compositions.
@@ -152,14 +166,15 @@ impl<M> Device<M> {
     pub fn command_loop(&self) -> CommandLoop {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
         let execution = Then::new(CheckLengths, Repeat::new(chunk));
-        Repeat::new(RunCommand {
-            pipeline: Then::new(
+        AfterEach::new(
+            Repeat::new(RunCommand::new(Then::new(
                 Then::new(
                     self.intake(),
                     Resettable::new(AfterEach::new(execution, UpdateIrq)),
                 ),
                 self.responses(),
-            ),
-        })
+            ))),
+            ResetControl,
+        )
     }
 }

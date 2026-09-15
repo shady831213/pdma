@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseStatus,
 };
-use pdma_model_device::{Device, Error, Fetch, RoundRobin};
+use pdma_model_device::{Device, Error, Fetch, ResetControl, RoundRobin};
 
 fn device() -> TestResult<Device<SharedMemory>> {
     let memory = SharedMemory::new();
@@ -165,6 +165,12 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
             + ChannelRegisters::RESET.offset(),
         &1_u32.to_le_bytes(),
     )?;
+    let reset = ChannelId::new(0).register_offset().ok_or("offset")?
+        + ChannelBlock::CONTROL.offset()
+        + ChannelRegisters::RESET.offset();
+    assert_eq!(word(&mut device, reset)?, 1);
+    let _ = Operation::new(()).step(&mut ResetControl, &mut device);
+    assert_eq!(word(&mut device, reset)?, 0);
     configure(&mut device, 0)?;
     submit(&mut device, 0, 99)?;
     (0..128)

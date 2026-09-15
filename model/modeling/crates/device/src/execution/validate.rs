@@ -46,6 +46,9 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for CheckLengths {
         context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<CopyState, Error, ()> {
+        if context.channel.resetting() {
+            return StepOutcome::Complete(Err(Error::Reset));
+        }
         if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }

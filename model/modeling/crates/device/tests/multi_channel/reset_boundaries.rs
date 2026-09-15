@@ -138,7 +138,23 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
                     Boundary::PayloadWritten => [7; 512],
                 }
             };
-            // When: reset is immediately followed by reconfiguration and a fresh command.
+            // When: hardware completes reset before software reconfigures and submits fresh work.
+            let reset = register(
+                reset_index,
+                ChannelBlock::CONTROL.offset() + ChannelRegisters::RESET.offset(),
+            )?;
+            device.write(reset, &1_u32.to_le_bytes())?;
+            assert_eq!(word(&mut device, reset)?, 1);
+            for _ in 0..32 {
+                assert!(matches!(
+                    operation.step(&mut hardware, &mut device),
+                    StepOutcome::Progressed | StepOutcome::Pending(())
+                ));
+                if word(&mut device, reset)? == 0 {
+                    break;
+                }
+            }
+            assert_eq!(word(&mut device, reset)?, 0);
             let memory_base = replace(&mut device, reset_index)?;
             for _ in 0..512 {
                 assert!(matches!(
@@ -154,48 +170,46 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
             );
             assert_eq!(bytes(&device.memory.memory, 0x3400)?, [7; 512]);
             assert_eq!(bytes(&device.memory.memory, memory_base + 0x800)?, [7; 512]);
-            for index in 0..3 {
-                assert_eq!(
-                    word(
-                        &mut device,
-                        register(
-                            index,
-                            ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
-                        )?
-                    )?,
-                    1
-                );
-                let raw = device
-                    .memory
-                    .memory
-                    .read_typed::<[u8; Response::RECORD_SIZE]>(
-                        MemoryAddress::new(0x1100 + u64::try_from(index)? * 0x1000),
-                        MemoryAlignment::ONE,
-                    )?;
-                let response = Response::from_bytes(&raw)?;
-                assert_eq!(
-                    response.id,
-                    if index == reset_index {
-                        99
-                    } else {
-                        u64::try_from(index)?
-                    }
-                );
-                assert_eq!(response.bytes_completed, 512);
-            }
+            assert_responses(&mut device, reset_index)?;
         }
     }
     Ok(())
 }
 
+fn assert_responses(device: &mut Device<Observed>, reset_index: usize) -> TestResult {
+    for index in 0..3 {
+        assert_eq!(
+            word(
+                device,
+                register(
+                    index,
+                    ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset()
+                )?
+            )?,
+            1
+        );
+        let raw = device
+            .memory
+            .memory
+            .read_typed::<[u8; Response::RECORD_SIZE]>(
+                MemoryAddress::new(0x1100 + u64::try_from(index)? * 0x1000),
+                MemoryAlignment::ONE,
+            )?;
+        let response = Response::from_bytes(&raw)?;
+        assert_eq!(
+            response.id,
+            if index == reset_index {
+                99
+            } else {
+                u64::try_from(index)?
+            }
+        );
+        assert_eq!(response.bytes_completed, 512);
+    }
+    Ok(())
+}
+
 fn replace(device: &mut Device<Observed>, reset_index: usize) -> TestResult<u64> {
-    device.write(
-        register(
-            reset_index,
-            ChannelBlock::CONTROL.offset() + ChannelRegisters::RESET.offset(),
-        )?,
-        &1_u32.to_le_bytes(),
-    )?;
     configure(device, reset_index)?;
     let memory_base = 0x1000 + u64::try_from(reset_index)? * 0x1000;
     let fresh = pdma_model_contract::Command {

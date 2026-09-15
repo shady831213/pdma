@@ -34,11 +34,14 @@ register_schema! {
 }
 
 register_schema! {
-    #[short_description = "Hardware reset request"]
-    #[description = "Writing bit zero resets the owning hardware scope to disabled and unconfigured. Other bits are reserved; writing zero has no effect. External memory is neither cleared nor rolled back."]
+    #[short_description = "Hardware reset request and busy state"]
+    #[description = "Writing one to bit zero requests reset of the owning hardware scope. Reading one means reset is busy; only hardware clears it to zero after draining all prior command-ring reads, SG-list reads, payload reads/writes and response-ring writes, invalidating retained work and clearing configuration, cursors, errors and device-owned notification state. Once zero is observed, no further memory access can belong to pre-reset work in that scope. Writing zero has no effect, and repeated requests while busy coalesce. Configuration writes are rejected while reset is busy. External memory is neither cleared nor rolled back; platform-pending notifications remain claimable. Software must keep affected memory valid until completion, even if it cancels or times out its wait. Other bits are reserved."]
     pub register Reset {
-        width: 4, endian: Little, access: WriteOnly, reset: Zero(0), writable_mask: 1,
-        fields: { request: 0..=0 },
+        width: 4, endian: Little, access: ReadWrite, reset: Zero(0), writable_mask: 1,
+        fields: {
+            #[description = "Write one to request reset; read one while busy and zero after hardware cleanup. Writing zero cannot clear a pending request."]
+            request: 0..=0,
+        },
     }
 }
 
@@ -67,7 +70,7 @@ register_map! {
             pub irq_enable: Switch,
             #[description = "Device fatal cause; read-only and sticky until device reset."]
             pub fault: DeviceFault,
-            #[description = "Resets device controls and every channel, including retained execution."]
+            #[description = "Requests reset of device controls and every channel, including retained execution. Reads busy until all affected memory accesses drain and cleanup completes. Hardware channel count is preserved."]
             pub reset: Reset,
         ],
     }

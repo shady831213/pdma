@@ -10,7 +10,7 @@ pub use response::ResponseRing;
 use crate::Fault;
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::{
-    ChannelBlock, ChannelFaultCode, ChannelIrqCauseValues, ChannelRegisters, Response,
+    ChannelBlock, ChannelFaultCode, ChannelIrqCauseValues, ChannelRegisters, ResetValues, Response,
     ResponseStatus,
 };
 
@@ -71,12 +71,23 @@ impl Channel {
                 || error);
     }
 
-    pub(crate) fn reset(&mut self) {
-        let generation = self.generation.wrapping_add(1);
+    pub(crate) fn request_reset(&mut self) {
+        if !self.resetting() {
+            self.generation = self.generation.wrapping_add(1);
+            self.registers.values.reset = ResetValues::new(1);
+        }
+    }
+
+    pub(crate) fn finish_reset(&mut self) {
+        let generation = self.generation;
         *self = Self {
             generation,
             ..Self::default()
         };
+    }
+
+    pub(crate) fn resetting(&self) -> bool {
+        self.registers.values.reset.request()
     }
 
     pub(crate) fn halted(&self) -> bool {

@@ -28,6 +28,16 @@ memory; device reset also preserves the hardware channel count. Each device
 instance selects its count at construction. The discovery register has post-reset
 initialization metadata because hardware supplies that instance's count.
 
+Both reset registers are read/write handshakes. Write one to request reset, then
+poll that same register until hardware clears it to zero. One means busy; zero
+writes have no effect, and repeated one writes while busy coalesce. Hardware
+rejects configuration writes for the affected scope until cleanup completes.
+Completion guarantees that all prior command-ring reads, SG-list reads, payload
+reads/writes and response-ring writes in that scope have drained and that no
+later access belongs to that work. Software must retain affected memory until
+completion, including when it cancels or times out its wait. Platform-pending
+interrupt notifications remain claimable after reset.
+
 Run from `model/modeling`:
 
 ```sh

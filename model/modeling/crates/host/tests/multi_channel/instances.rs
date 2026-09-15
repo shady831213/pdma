@@ -1,6 +1,6 @@
 use super::{
     Arc, AtomicUsize, COUNT, Channel, ChannelId, Device, Error, Model, Ordering, RegisterAccess,
-    SharedMemoryAccess, SoftwareCpu, TestResult, allocator, config,
+    SharedMemoryAccess, SoftwareCpu, TestResult, allocator, config, with_idle_hardware,
 };
 
 struct CountWrites {
@@ -76,24 +76,28 @@ async fn instance_channel_counts_survive_channel_and_device_resets() -> TestResu
         (5, Model::new(Device::new(memory.clone(), 5)?)),
     ];
     let cpu = SoftwareCpu::new();
-    cpu.run_main(async {
-        for (count, model) in instances {
-            let config = config(&allocator, count - 1)?;
-            let channel = Channel::setup(model.clone(), memory.clone(), config).await?;
-            // When: software resets the highest channel and then the entire instance.
-            channel.reset().await?;
-            let mut bytes = [0; 4];
-            model.read(u32::try_from(COUNT)?, &mut bytes).await?;
-            assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);
-            let channel = Channel::setup(model.clone(), memory.clone(), config).await?;
-            channel.reset_device().await?;
-            // Then: reset retains discovery and permits fresh setup of the highest channel.
-            model.read(u32::try_from(COUNT)?, &mut bytes).await?;
-            assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);
-            let mut channel = Channel::setup(model, memory.clone(), config).await?;
-            assert_eq!(channel.response().await?, None);
-        }
-        Ok::<_, Box<dyn std::error::Error>>(())
-    })
-    .await
+    for (count, model) in instances {
+        with_idle_hardware(
+            &model,
+            cpu.run_main(async {
+                let config = config(&allocator, count - 1)?;
+                let channel = Channel::setup(model.clone(), memory.clone(), config).await?;
+                // When: software resets the highest channel and then the entire instance.
+                channel.reset().await?;
+                let mut bytes = [0; 4];
+                model.read(u32::try_from(COUNT)?, &mut bytes).await?;
+                assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);
+                let channel = Channel::setup(model.clone(), memory.clone(), config).await?;
+                channel.reset_device().await?;
+                // Then: reset retains discovery and permits fresh setup of the highest channel.
+                model.read(u32::try_from(COUNT)?, &mut bytes).await?;
+                assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);
+                let mut channel = Channel::setup(model.clone(), memory.clone(), config).await?;
+                assert_eq!(channel.response().await?, None);
+                Ok::<_, Box<dyn std::error::Error>>(())
+            }),
+        )
+        .await?;
+    }
+    Ok(())
 }

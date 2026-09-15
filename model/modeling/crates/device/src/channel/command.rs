@@ -59,6 +59,7 @@ impl CommandRing {
         address: usize,
         bytes: &[u8],
         configured: bool,
+        resetting: bool,
     ) -> Result<(), RegisterAccessError<Error>> {
         let pointers = self.pointers();
         let base = self.registers.base();
@@ -66,6 +67,9 @@ impl CommandRing {
             address,
             bytes,
             |_, old, next| {
+                if resetting {
+                    return Err(Error::ResetInProgress);
+                }
                 if configured && (next.base != old.base || next.capacity != old.capacity) {
                     return Err(Error::ConfigurationLocked);
                 }

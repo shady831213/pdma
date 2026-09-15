@@ -12,8 +12,8 @@ fn ring_mmio_uses_its_instance_base() -> Result<(), Box<dyn std::error::Error>> 
     let mut command = CommandRing::new(0x200);
     let mut response = ResponseRing::new(0x100);
     // When: each ring accepts a write at its own placement.
-    command.write(0x208, &4_u32.to_le_bytes(), false)?;
-    response.write(0x108, &8_u32.to_le_bytes(), false)?;
+    command.write(0x208, &4_u32.to_le_bytes(), false, false)?;
+    response.write(0x108, &8_u32.to_le_bytes(), false, false)?;
     // Then: generated offsets select distinct ring-owned values.
     let mut bytes = [0; 4];
     command.read(0x208, &mut bytes)?;

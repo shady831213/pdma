@@ -52,7 +52,7 @@ fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult 
     submit(&mut device, &memory, command())?;
     run(&mut device)?;
     for (offset, width, expected) in [
-        (CONTROL + ChannelRegisters::RESET.offset(), 4, Error::Access),
+        (CONTROL + ChannelRegisters::RESET.offset(), 1, Error::Width),
         (RESPONSE + ResponseRegisters::BASE.offset(), 4, Error::Width),
         (RESPONSE + 1, 4, Error::Unmapped),
         (usize::MAX, 4, Error::Unmapped),

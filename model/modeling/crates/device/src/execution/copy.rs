@@ -23,6 +23,9 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for ReadCopy {
         context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
+        if context.channel.resetting() {
+            return StepOutcome::Complete(Err(Error::Reset));
+        }
         if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
@@ -76,6 +79,9 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for WriteCopy {
         context: &mut ChannelContext<'_, M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
+        if context.channel.resetting() {
+            return StepOutcome::Complete(Err(Error::Reset));
+        }
         if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }

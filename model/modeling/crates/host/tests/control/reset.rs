@@ -1,7 +1,7 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
     CpuContextError, DeviceControl, DeviceFaultCode, DeviceRegisters, Endpoint, Error, Model,
-    Operation, RegisterAccess, SoftwareCpu, fixture, single_command,
+    Operation, RegisterAccess, SoftwareCpu, fixture, single_command, with_idle_hardware,
 };
 
 #[tokio::test]
@@ -49,7 +49,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a configured channel with one published response.
     let (device, memory, rings) = fixture()?;
-    let mut stage = single_command(&device);
+    let mut stage = pdma_model_device::RunCommand::new(single_command(&device));
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -69,12 +69,15 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
         destination: Endpoint::linear(0, 0),
     };
     cpu.run_main(channel.submit(command)).await?;
-    AsyncExecutor::new(model.clone())
-        .run(&mut stage, &mut Operation::new(()))
-        .await
-        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        AsyncExecutor::new(model.clone())
+            .run(&mut stage, &mut Operation::new(()))
+            .await
+            .map_err(|error| format!("{error:?}"))?,
+        std::ops::ControlFlow::Continue(())
+    );
     // When: software resets and constructs a fresh driver over the same storage.
-    cpu.run_main(channel.reset()).await?;
+    with_idle_hardware(&model, cpu.run_main(channel.reset())).await?;
     let mut channel = cpu
         .run_main(Channel::setup(
             model.clone(),
@@ -86,10 +89,13 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
         ))
         .await?;
     cpu.run_main(channel.submit(command)).await?;
-    AsyncExecutor::new(model)
-        .run(&mut stage, &mut Operation::new(()))
-        .await
-        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        AsyncExecutor::new(model)
+            .run(&mut stage, &mut Operation::new(()))
+            .await
+            .map_err(|error| format!("{error:?}"))?,
+        std::ops::ControlFlow::Continue(())
+    );
     // Then: the fresh cursors expose exactly the new completion.
     assert_eq!(
         cpu.run_main(channel.response())
@@ -120,7 +126,7 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
         .await?;
     // When: software requests whole-device reset.
     cpu.run_main(channel.set_device_irq_enabled(true)).await?;
-    cpu.run_main(channel.reset_device()).await?;
+    with_idle_hardware(&model, cpu.run_main(channel.reset_device())).await?;
     // Then: both scopes are disabled and a fresh driver sees healthy hardware.
     for offset in [
         (DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset())

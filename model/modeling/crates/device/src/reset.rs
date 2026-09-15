@@ -1,3 +1,7 @@
+mod control;
+
+pub use control::ResetControl;
+
 use crate::{ChannelContext, Device, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use pdma_model_contract::ChannelId;

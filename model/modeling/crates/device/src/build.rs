@@ -39,6 +39,7 @@ impl<M> Device<M> {
             memory,
             control,
             interrupt: false,
+            active: None,
         })
     }
 }

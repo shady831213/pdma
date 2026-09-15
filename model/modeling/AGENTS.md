@@ -74,7 +74,21 @@ shapes into the rebuild.
   tests may assemble existing stages in test fixtures, not a production factory.
   Skip full-response channels before accepting commands; do not add per-channel copy state.
   Bind accepted work to channel identity and generation so reset invalidates only its work
-  before the next side effect, even after immediate reconfiguration.
+  before the next side effect, including after subsequent reconfiguration.
+  Follow the request/cleanup/completion contract in `docs/reset.md`: reset write one
+  requests cleanup; read one means busy; only hardware clears zero after affected accepted
+  work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
+  writes in a busy scope with `Error::ResetInProgress`; retain read access.
+  Use `AfterEach<Repeat<RunCommand>, ResetControl>` for the command loop. Track accepted
+  channel/generation ownership until its terminal release; generation invalidation alone
+  is not completion. `RunCommand` is the sole ownership-release boundary when the
+  complete pipeline terminates, including normal completion, reset and errors.
+  Response publication and `Resettable` binding must not retire the whole command.
+  Custom command assemblies must retain this lifecycle boundary and drive `ResetControl`.
+  Guard command, SG-list, payload and response accesses before old work can interact again.
+  Memory calls are synchronous within a step: do not invent bus transactions, outstanding
+  queues, cycle timing or timeout delays. Host reset waits for hardware completion; caller
+  cancellation does not release affected memory or cancel hardware cleanup.
 - Source and destination independently select linear spans or SG lists. Software owns
   list/buffer allocation and keeps descriptors stable until completion. Hardware checks
   total lengths before payload writes, reads lists incrementally and retains cursors;

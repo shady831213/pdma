@@ -52,16 +52,31 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
             .map(ChannelIrqCauseValues::new)
     }
 
-    /// Resets the channel to disabled, unconfigured state and consumes its stale cursors.
+    /// Requests channel reset and waits for disabled, unconfigured hardware.
     ///
-    /// External memory is preserved. Construct a fresh driver with `Self::setup` before reuse.
+    /// Success means all prior command, list, payload and response memory accesses have
+    /// drained and no later access can belong to that work. External memory is preserved;
+    /// construct a fresh driver with `Self::setup` before reuse. Hardware must run independently.
+    ///
+    /// # Cancel safety
+    /// Dropping this future, including through a caller timeout, does not cancel an accepted
+    /// hardware request. A timeout is not completion: keep its memory valid until reset reads zero.
     pub async fn reset(self) -> Result<(), Error<B::Error>> {
         self.port
             .channel_write(
                 CHANNEL + ChannelRegisters::RESET.offset(),
                 &1_u32.to_le_bytes(),
             )
-            .await
+            .await?;
+        while self
+            .port
+            .channel_read_word(CHANNEL + ChannelRegisters::RESET.offset())
+            .await?
+            != 0
+        {
+            tokio::task::yield_now().await;
+        }
+        Ok(())
     }
 
     /// Reads the sticky device-wide fault, which channel reset cannot clear.
@@ -87,15 +102,31 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
             .await
     }
 
-    /// Resets the whole device to disabled, unconfigured state and consumes this driver.
+    /// Requests device reset and waits for every channel to become disabled and unconfigured.
     ///
-    /// External memory is preserved. Construct a fresh driver with `Self::setup` before reuse.
+    /// Success drains all prior command, list, payload and response memory accesses across
+    /// all channels and prevents later accesses by that work. External memory is preserved;
+    /// construct fresh drivers before reuse. Hardware must run independently.
+    ///
+    /// # Cancel safety
+    /// Dropping this future, including through a caller timeout, leaves an accepted request
+    /// owned by hardware. Keep all affected memory valid until device reset reads zero.
+    /// A timeout never indicates successful reset completion.
     pub async fn reset_device(self) -> Result<(), Error<B::Error>> {
         self.port
             .write(
                 CONTROL + DeviceControl::RESET.offset(),
                 &1_u32.to_le_bytes(),
             )
-            .await
+            .await?;
+        while self
+            .port
+            .read_word(CONTROL + DeviceControl::RESET.offset())
+            .await?
+            != 0
+        {
+            tokio::task::yield_now().await;
+        }
+        Ok(())
     }
 }

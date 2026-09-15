@@ -94,7 +94,7 @@ fn interrupt_and_reset_metadata_define_software_access() -> Result<(), Box<dyn s
             )
         })
         .collect::<Vec<_>>();
-    // Then: causes are read-only, reset requests are write-only, and reserved bits are unwritable.
+    // Then: causes are read-only, reset exposes busy state, and reserved bits are unwritable.
     assert_eq!(
         metadata,
         [
@@ -103,7 +103,7 @@ fn interrupt_and_reset_metadata_define_software_access() -> Result<(), Box<dyn s
             (8, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (12, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (16, Access::ReadWrite, 3, ResetKind::Zero, 0),
-            (20, Access::WriteOnly, 1, ResetKind::Zero, 0),
+            (20, Access::ReadWrite, 1, ResetKind::Zero, 0),
         ]
     );
     Ok(())
@@ -144,13 +144,13 @@ fn device_recovery_metadata_defines_independent_software_access()
             )
         })
         .collect::<Vec<_>>();
-    // Then: device fatal is read-only and device reset is write-only with bit zero writable.
+    // Then: device fatal is read-only and device reset exposes busy state with bit zero writable.
     assert_eq!(
         metadata,
         [
             (4, Access::ReadWrite, 1, ResetKind::Zero, 0),
             (8, Access::ReadOnly, 0, ResetKind::Zero, 0),
-            (12, Access::WriteOnly, 1, ResetKind::Zero, 0),
+            (12, Access::ReadWrite, 1, ResetKind::Zero, 0),
         ]
     );
     Ok(())

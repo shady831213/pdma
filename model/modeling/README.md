@@ -40,7 +40,8 @@ IRQ handler, rather than repeatedly moved through shared optional state.
 | `crates/host/src/channel.rs` | Software configuration, submit and response consumption. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, worker wakeup and pending notification delivery. |
 | `crates/host/src/channel/control.rs` | CPU-checked software mask, cause and reset access. |
-| `crates/device/src/reset.rs` | Reset generation boundary around the composed stages. |
+| `crates/device/src/reset.rs` | Channel-bound task guards around the composed stages. |
+| `crates/device/src/reset/control.rs` | Reset completion after affected accepted work retires. |
 | `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
 | `crates/scenarios/tests/single_channel/main.rs` | Test suite entry and module declarations. |
 | `crates/scenarios/tests/single_channel/cases/` | Linear, scatter/gather and fault cases, with acceptance assertions. |
@@ -92,18 +93,24 @@ publication faults stop the channel. An error response is published before the c
 stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
-`device.command_loop()` builds `CommandLoop = Repeat<RunCommand>`, reusing one shared
+`device.command_loop()` builds `CommandLoop = AfterEach<Repeat<RunCommand>, ResetControl>`, reusing one shared
 pipeline and one in-flight command for either single-channel or multi-channel devices.
 It arbitrates at command boundaries, not between chunks of different channels.
 A full idle arbitration round returns Pending; a channel's fault or reset releases
 its command, and channels without response space are skipped before acceptance.
 `ChannelContext` borrows
-only the selected channel and shared memory for each step. Discarding an accepted operation is
-not a modeled hardware cancellation or recovery mechanism. MMIO reset increments the
-channel generation; `Resettable` rejects retained pre-reset work before its next
-interaction, even if software has already reconfigured and re-enabled the channel.
-Custom compositions use the same reset boundary; execution itself still uses the
-existing Then/Repeat/AfterEach building blocks.
+only the selected channel and shared memory for each step. A reset write requests cleanup;
+hardware keeps the reset register at one until affected accepted work retires, then
+clears it to zero. `ResetControl` runs after each command-loop step, including pending
+steps. Configuration writes are rejected while the affected scope is resetting.
+Generation tags additionally reject retained pre-reset tasks after later reconfiguration;
+they do not acknowledge reset. Custom command compositions must use `RunCommand`
+as their ownership-release boundary and step `ResetControl`. Only termination of the
+complete pipeline releases ownership; response publication and `Resettable` binding
+do not acknowledge command cleanup.
+Discarding an accepted operation does not
+model hardware cleanup. See the [reset contract](docs/reset.md) for completion and memory
+lifetime requirements.
 
 Build `device.command_loop()` before moving the device into
 the runtime transport, and retain that graph across commands. Its lightweight Fetch
@@ -214,16 +221,25 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   hands them to the platform. Runtime retains a pending notification until the existing
   dispatcher claims it; draining, masking or reset cannot retract a delivered event.
   `Model::irq()` reports this platform pending state, not a live device level.
-- Channel reset clears configuration, pointers, causes and in-flight work; the host
-  reset method consumes its driver, and software creates a fresh driver through setup.
-  Device reset additionally clears device-wide fault and controls. Neither reset clears
-  external memory or rolls back committed writes. Merely disabling a healthy channel
-  still suspends and preserves its operation.
+- Channel and device reset use the same request/cleanup/completion handshake: write one
+  requests reset, read one means busy, and hardware clears zero after affected accepted
+  work retires. Writing zero is ignored; repeated requests coalesce. Busy scopes reject
+  configuration writes with `Error::ResetInProgress`, while reads remain available.
+  Completion clears channel configuration, pointers, causes and retained work; device
+  reset also clears device-wide fault and controls and preserves `channel_num`.
+  The host reset methods consume their driver and poll for zero before returning success;
+  software then creates fresh drivers through setup. A cancelled wait or caller timeout
+  is not completion: affected memory must stay valid until completion is observed.
+  Neither reset clears external memory or rolls back committed writes. Merely disabling
+  a healthy channel still suspends and preserves its operation.
   Execution is non-preemptive: disabling the active channel holds the shared unit
   until that channel is re-enabled or reset.
   Resetting one channel neither changes peer registers nor restarts a peer's active command.
-  If the reset channel owns the shared engine, its old buffered data and unpublished
-  response are discarded before another interaction; a fresh command may then be selected.
+  If the reset channel owns the shared engine, retiring its old buffered data and
+  unpublished response can delay peers. Completion guarantees that old work cannot
+  make another command, SG-list, payload or response memory access. The model's memory
+  calls finish synchronously within a step; it models no outstanding bus transactions
+  or timed drain. See [reset semantics and hardware comparison](docs/reset.md).
 - `Device::signal_fatal()` represents a device-wide internal hardware fault input.
   It stops all execution and uses the device control block's independent IRQ enable.
   Only device reset clears it; channel reset does not. The minimal model has no

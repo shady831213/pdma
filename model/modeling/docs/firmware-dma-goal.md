@@ -67,17 +67,18 @@ The core now lives in `crates/dma`; the first access window and firmware program
 live in `crates/hw-components` and `crates/firmware` respectively.
 
 Firmware is an async program. Host and firmware reuse the existing software CPU
-and interrupt runtime implementations, but have separate CPU instances, CPU-local
-state, interrupt registries/sources and capability views. Sharing an async executor
-does not mean sharing a software CPU or granting access to the same hardware view.
+implementation with separate CPU instances, CPU-local state and capability views.
+Each domain uses an interrupt runtime only when it has interrupt inputs; the MVP
+firmware currently needs none. Sharing an async executor does not mean sharing a
+software CPU or granting access to the same hardware view.
 
 A distinct concrete runtime assembly connects and drives the firmware-managed
 system. Retain the existing ordinary assembly/transport; do not turn
 `host::runtime::Model` into an all-purpose container of optional features. Reuse
 memory, CPU, interrupt and pipeline components rather than implementing another
-executor or dispatcher. The MVP currently places this in `crates/managed-runtime`;
-user review selected migration of its assembly into the `firmware_managed`
-scenario harness for the next session, not retention of this additional crate.
+executor or dispatcher. The managed assembly now lives in
+`crates/scenarios/tests/firmware_managed/harness/runtime`, with its entry module
+at `harness/runtime.rs`. The additional managed-runtime crate has been removed.
 Firmware management sequencing and hardware access enforcement stay out of it.
 
 Production firmware and hardware objects live outside `scenarios`. Scenarios
@@ -85,8 +86,12 @@ contain cases, acceptance assertions and the harness for concrete system assembl
 external provisioning, startup, fault injection and teardown. Test-specific Host
 programs remain test support; reusable Host driver behavior belongs in `host`.
 The harness must not implement firmware initialization or hardware behavior.
-See the MVP's review checkpoint for deferred runtime framework enhancements and
-the updated placement decision; do not implement those changes until resumed.
+Both transports reuse the framework's pending-interrupt component. The framework's
+default-on `async-runtime` feature isolates Tokio/CPU/interrupt dependencies from
+the synchronous APIs used by DMA. A generic shared-context wrapper was evaluated
+but not introduced: model-specific projection and IRQ extraction still belong at
+the consumer, and the remaining mutex/wakeup mechanics do not justify extra hooks
+or traits. A memory-only package split remains undecided, not a current requirement.
 
 ## Management MMIO
 

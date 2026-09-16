@@ -41,7 +41,8 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
 | `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
 | `crates/firmware/src/lib.rs` | Async firmware initialization through management MMIO. |
-| `crates/managed-runtime/` | Independent managed-system assembly, transports and scoped actor execution. |
+| `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
+| `crates/hardware-interface-runtime/src/interrupt/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
 | `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |

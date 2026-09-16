@@ -1,11 +1,11 @@
 //! Software allocation, submission and interrupt-driven response consumption.
 
+use super::super::runtime::{AccessError, HostBus};
 use hardware_interface_runtime::{
     InterruptHandler, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
 use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Irq};
-use pdma_model_managed_runtime::{AccessError, HostBus};
 use tokio::sync::oneshot;
 
 use super::{Ports, TestResult};

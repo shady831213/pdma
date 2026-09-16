@@ -8,9 +8,13 @@ repository.workspace = true
 publish.workspace = true
 description = "Runtime-neutral shared hardware-interface mechanics"
 
+[features]
+default = ["async-runtime"]
+async-runtime = ["dep:tokio"]
+
 [dependencies]
 hardware-interface-schema = { path = "../hardware-interface-schema" }
-tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
+tokio = { version = "1.49", optional = true, default-features = false, features = ["macros", "rt", "sync"] }
 
 [dev-dependencies]
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
@@ -21,6 +25,43 @@ workspace = true
 [[test]]
 name = "interrupt_dispatch"
 path = "tests/interrupt_dispatch/mod.rs"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "cpu_context"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "cpu_scope"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "interrupt_freeze_contract"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "interrupt_runtime"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "interrupt_runtime_lifecycle"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "pending_interrupt"
+required-features = ["async-runtime"]
+
+[[test]]
+name = "pending_interrupt_delivery"
+required-features = ["async-runtime"]
+
+[[example]]
+name = "interrupt_dispatch"
+required-features = ["async-runtime"]
+
+[[example]]
+name = "software_cpu_segments"
+required-features = ["async-runtime"]
 
 [[test]]
 name = "register_gate"

@@ -1,11 +1,12 @@
 //! Scoped platform assembly and scheduling for managed system cases.
 
 pub mod program;
+pub mod runtime;
 
 use hardware_interface_runtime::{
     InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAllocator,
 };
-use pdma_model_managed_runtime::Managed;
+use runtime::Managed;
 use std::{error::Error, io, sync::Arc};
 use tokio::sync::oneshot;
 

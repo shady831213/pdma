@@ -1,9 +1,20 @@
+use super::super::AccessError;
 use super::*;
-use crate::AccessError;
-use hardware_interface_runtime::{RegisterAccess, SoftwareCpu};
+use hardware_interface_runtime::{InterruptHandler, RegisterAccess, SoftwareCpu};
+use pdma_model_host::runtime::Irq;
 use std::{future::pending, pin::pin, task::Poll};
 
 struct FailedManagement;
+
+struct TestHandler;
+
+impl InterruptHandler<Irq> for TestHandler {
+    type Error = Infallible;
+
+    async fn handle(&mut self, _: &Irq) -> Result<(), Infallible> {
+        Ok(())
+    }
+}
 
 #[tokio::test]
 async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
@@ -14,7 +25,7 @@ async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
     let (system, host) = Managed::new(memory).unwrap();
     let (owner, _) = host
         .runtime
-        .run_main::<IdleHandler, _>(async |_| {
+        .run_main::<TestHandler, _>(async |_| {
             hardware_interface_runtime::CpuOwner::capture_active().unwrap()
         })
         .await

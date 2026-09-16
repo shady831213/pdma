@@ -4,49 +4,41 @@ use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAcces
 use pdma_model_contract::{WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE};
 use std::sync::Arc;
 
+use super::{AccessError, Managed};
+
 #[tokio::test]
 async fn construction_leaves_host_closed() {
     // Given: an assembled but undriven system.
     let memory = SharedMemoryAccess::from(Arc::new(SharedMemory::new()));
-    let (_system, host) = pdma_model_managed_runtime::Managed::new(memory).unwrap();
+    let (_system, host) = Managed::new(memory).unwrap();
     // When: Host attempts DMA discovery and reads separate readiness.
     let mut value = [0; 4];
     let discovery = host.bus.read(0, &mut value).await;
     host.bus.read(WINDOW_STATUS_BASE, &mut value).await.unwrap();
     // Then: construction did not run firmware or open the hardware window.
-    assert!(matches!(
-        discovery,
-        Err(pdma_model_managed_runtime::AccessError::Closed)
-    ));
+    assert!(matches!(discovery, Err(AccessError::Closed)));
     assert_eq!(value, [0; 4]);
 }
 
 #[tokio::test]
 async fn host_cannot_program_management_before_boot() {
     // Given: the Host work capability, not the firmware management capability.
-    let (_system, host) = pdma_model_managed_runtime::Managed::new(SharedMemoryAccess::from(
-        Arc::new(SharedMemory::new()),
-    ))
-    .unwrap();
+    let (_system, host) =
+        Managed::new(SharedMemoryAccess::from(Arc::new(SharedMemory::new()))).unwrap();
     // When: Host attempts to open the window itself.
     let result = host
         .bus
         .write(WINDOW_CONTROL_BASE, &1u32.to_le_bytes())
         .await;
     // Then: hardware denies the management write.
-    assert!(matches!(
-        result,
-        Err(pdma_model_managed_runtime::AccessError::Denied)
-    ));
+    assert!(matches!(result, Err(AccessError::Denied)));
 }
 
 #[tokio::test]
 async fn firmware_opens_access_without_owning_host_cpu() {
     // Given: independently running firmware and Host software domains.
-    let (system, host) = pdma_model_managed_runtime::Managed::new(SharedMemoryAccess::from(
-        Arc::new(SharedMemory::new()),
-    ))
-    .unwrap();
+    let (system, host) =
+        Managed::new(SharedMemoryAccess::from(Arc::new(SharedMemory::new()))).unwrap();
     // When: Host waits for readiness while firmware initializes via management MMIO.
     let result = system
         .run_until(async {

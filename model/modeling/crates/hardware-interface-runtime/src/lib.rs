@@ -4,8 +4,10 @@
 mod access;
 mod address;
 mod allocator;
+#[cfg(feature = "async-runtime")]
 mod cpu;
 mod error;
+#[cfg(feature = "async-runtime")]
 mod interrupt;
 mod region;
 mod register;
@@ -17,15 +19,18 @@ mod trace;
 pub use access::{MemoryAccess, MemoryAccessError};
 pub use address::{MemoryAddress, MemoryAlignment};
 pub use allocator::{MemoryAllocationError, SharedMemoryAllocator};
+#[cfg(feature = "async-runtime")]
 pub use cpu::{CpuContextError, CpuLocal, CpuOwner, SoftwareCpu};
 pub use error::{MemoryAlignmentError, MemoryError, MemoryRegionError};
+#[cfg(feature = "async-runtime")]
 pub use interrupt::{
     DuplicateHandler, EmptyRegistry, FrozenHandlerRegistry, HandlerRegistry,
-    InterruptDispatchError, InterruptDispatcher, InterruptDispatcherTask, InterruptEnvelope,
-    InterruptHandler, InterruptJoinError, InterruptLifecycleEvent, InterruptLifecycleObserver,
-    InterruptRegistration, InterruptRegistrationError, InterruptRuntime, InterruptShutdown,
-    InterruptShutdownReceiver, InterruptSource, InterruptSummary, NoopInterruptObserver,
-    SharedInterruptObserver,
+    InterruptDispatchError, InterruptDispatcher, InterruptDispatcherTask, InterruptEmitter,
+    InterruptEnvelope, InterruptHandler, InterruptJoinError, InterruptLifecycleEvent,
+    InterruptLifecycleObserver, InterruptRegistration, InterruptRegistrationError,
+    InterruptRuntime, InterruptShutdown, InterruptShutdownReceiver, InterruptSource,
+    InterruptSummary, NoopInterruptObserver, PendingInterrupt, SharedInterruptObserver,
+    pending_interrupt,
 };
 pub use region::MemoryRegion;
 pub use register::{

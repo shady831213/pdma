@@ -1,6 +1,7 @@
 mod dispatcher;
 mod error;
 mod observer;
+mod pending;
 mod registration;
 mod registry;
 mod runtime;
@@ -15,6 +16,7 @@ pub use observer::{
     InterruptLifecycleEvent, InterruptLifecycleObserver, NoopInterruptObserver,
     SharedInterruptObserver,
 };
+pub use pending::{InterruptEmitter, PendingInterrupt, pending_interrupt};
 pub use registration::{InterruptRegistration, InterruptRegistrationError};
 pub use registry::{DuplicateHandler, EmptyRegistry, FrozenHandlerRegistry, HandlerRegistry};
 pub use runtime::InterruptRuntime;

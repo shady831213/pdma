@@ -1,21 +1,10 @@
-use crate::{Driver, Managed, ManagementBus, Notifications, RunError};
+use super::{Driver, Managed, ManagementBus, RunError};
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
-use hardware_interface_runtime::{InterruptHandler, InterruptRuntime, MemoryAccess};
-use pdma_model_host::runtime::Irq;
+use hardware_interface_runtime::MemoryAccess;
 use std::{convert::Infallible, future::Future, sync::Arc};
 
 #[cfg(test)]
 mod tests;
-
-struct IdleHandler;
-
-impl InterruptHandler<Irq> for IdleHandler {
-    type Error = Infallible;
-
-    async fn handle(&mut self, _: &Irq) -> Result<(), Infallible> {
-        Ok(())
-    }
-}
 
 impl<M: MemoryAccess + Send + 'static> Managed<M> {
     /// Runs hardware and firmware until an actor fails or the caller cancels simulation.
@@ -23,14 +12,12 @@ impl<M: MemoryAccess + Send + 'static> Managed<M> {
     /// All actor futures are scoped here; cancellation leaves no spawned tasks.
     /// It does not acknowledge hardware reset or authorize memory reuse.
     pub async fn run(self) -> Result<Infallible, RunError> {
-        let runtime = InterruptRuntime::new(self.firmware_cpu, Notifications::new());
         let management = ManagementBus(Arc::clone(&self.shared));
         let firmware = async {
-            let (result, _) = runtime
-                .run_main::<IdleHandler, _>(async |_| pdma_model_firmware::main(management).await)
+            self.firmware_cpu
+                .run_main(pdma_model_firmware::main(management))
                 .await
-                .map_err(RunError::FirmwareInterrupt)?;
-            result.map_err(RunError::Firmware)
+                .map_err(RunError::Firmware)
         };
         let hardware = async {
             let mut pipeline = self.pipeline;

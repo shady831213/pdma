@@ -7,6 +7,13 @@ and blocking storage or observation policies live in their backend modules. Gene
 algorithms name the backend traits and never expose a guard, reference, or borrow
 outside the synchronous closure.
 
+The default `async-runtime` feature supplies the Tokio-based software CPU and
+interrupt facilities. Hardware consumers can set `default-features = false` to
+use the synchronous memory, allocation, storage, register, observation, and trace
+APIs without a Tokio dependency. Their public paths and backend behavior remain
+the same. This feature separates asynchronous execution dependencies; it does not
+make the crate memory-only or `no_std`.
+
 `Memory<P>::add_regions` installs a batch of zero-initialized regions in one synchronous
 storage mutation. It checks overlaps and region capacity and reserves all backing and
 table storage before changing installed regions. Any returned error preserves existing
@@ -57,6 +64,16 @@ handlers, and can occur after the program suspends. The capability cannot outliv
 invocation. Install handlers before their vectors can arrive; an unregistered vector
 remains a dispatch error. The older frozen-registry entry points remain available for
 explicit static runtime assembly, not as a requirement on software programs.
+
+`pending_interrupt(notification)` creates an `InterruptEmitter` and a
+`PendingInterrupt<N>` source for one fixed, coalescing destination. Only the emitter
+can raise; only the source can wait/claim. Multiple raises before a claim merge;
+claim clears atomically, and a subsequent raise remains pending. Source clones
+compete for the same pending notification rather than duplicating deliveries.
+Waiting is non-consuming and cancellation-safe. A live source keeps the channel
+alive even after all emitters are dropped; shutdown is controlled by its runtime.
+This component knows no DMA, register mask, cause or software handler, and is not
+a queue for per-message payloads. It is provided by the default `async-runtime` feature.
 
 Program return requests cooperative dispatch shutdown; an accepted ISR finishes first.
 Source/handler failure cancels the waiting program and returns the concrete error.

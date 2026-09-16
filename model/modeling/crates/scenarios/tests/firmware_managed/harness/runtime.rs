@@ -1,18 +1,22 @@
-//! Concrete assembly of DMA hardware and an independently executing firmware CPU.
+//! Scenario assembly of DMA hardware and an independently executing firmware CPU.
 
 mod bus;
 mod error;
-mod interrupt;
 mod run;
 mod transport;
 
+#[cfg(test)]
+mod tests;
+
 pub use bus::HostBus;
 pub use error::{BuildError, RunError};
-pub use interrupt::Notifications;
 
-use hardware_interface_runtime::{InterruptRuntime, SoftwareCpu};
+use hardware_interface_runtime::{
+    InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
+};
 use pdma_model_contract::DeviceRegisters;
 use pdma_model_dma::{CommandLoop, Device};
+use pdma_model_host::runtime::Irq;
 use pdma_model_hw_components::AccessWindow;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
@@ -27,7 +31,7 @@ struct Hardware<M> {
 struct Shared<M> {
     hardware: Mutex<Hardware<M>>,
     changed: Notify,
-    notifications: Notifications,
+    interrupt: InterruptEmitter,
 }
 
 #[derive(Debug)]
@@ -45,7 +49,7 @@ pub struct Host<M> {
     /// Restricted work bus and read-only readiness view.
     pub bus: HostBus<M>,
     /// The Host CPU's independent interrupt execution environment.
-    pub runtime: InterruptRuntime<Notifications>,
+    pub runtime: InterruptRuntime<PendingInterrupt<Irq>>,
 }
 
 /// One managed channel, driven only when its scoped run future is polled.
@@ -63,17 +67,17 @@ impl<M> Managed<M> {
         let pipeline = dma.command_loop();
         let extent = DeviceRegisters::extent(1).map_err(BuildError::Layout)?;
         let window = AccessWindow::new(extent).map_err(BuildError::Window)?;
-        let notifications = Notifications::new();
+        let (interrupt, source) = pending_interrupt(Irq);
         let shared = Arc::new(Shared {
             hardware: Mutex::new(Hardware { dma, window }),
             changed: Notify::new(),
-            notifications: notifications.clone(),
+            interrupt,
         });
         let host = Host {
             bus: HostBus {
                 shared: Arc::clone(&shared),
             },
-            runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), notifications),
+            runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source),
         };
         Ok((
             Self {

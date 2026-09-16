@@ -2,12 +2,12 @@
 
 pub mod transfer;
 
+use super::runtime::{AccessError, HostBus};
 use hardware_interface_runtime::{
     InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::{Response, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE};
 use pdma_model_host::runtime::Irq;
-use pdma_model_managed_runtime::{AccessError, HostBus};
 use tokio::sync::oneshot;
 
 use super::TestResult;

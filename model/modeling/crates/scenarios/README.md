@@ -46,13 +46,17 @@ both routine notification sources and proves error notification still arrives.
 
 ## Firmware-managed architecture MVP
 
-`tests/firmware_managed` contains cases and harness support only. It uses the
-production `managed-runtime` assembly, `hw-components` access window and `firmware`
-program rather than implementing them in the tests. One Host program probes denied
+`tests/firmware_managed` contains cases and harness support. Its `harness/runtime`
+modules assemble the production `dma`, `hw-components` access window and `firmware`
+program, without implementing their hardware behavior or firmware policy. One Host program probes denied
 access before boot, waits for firmware readiness, allocates its own buffers and
 performs a real IRQ-driven copy. A second case ends with an early Host error and
 checks that no system actor retains memory ownership. The initial startup signal
 only controls test scheduling; firmware alone opens the hardware window.
+The original assembly boundary tests now live beside this harness, with no path
+redirection or source duplication. Host notifications use the same framework
+pending-interrupt component as the direct DMA runtime. Firmware has its own
+software CPU and does not create an unused interrupt dispatcher.
 
 ```sh
 cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture

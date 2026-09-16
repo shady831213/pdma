@@ -1,4 +1,4 @@
-use crate::{Driver, Hardware, Shared};
+use super::{Driver, Hardware, Shared};
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use pdma_model_dma::Device;
 use std::convert::Infallible;
@@ -7,7 +7,9 @@ impl<M> Shared<M> {
     pub(super) async fn access<T>(&self, access: impl FnOnce(&mut Hardware<M>) -> T) -> T {
         let mut hardware = self.hardware.lock().await;
         let result = access(&mut hardware);
-        self.notifications.publish(hardware.dma.take_interrupt());
+        if hardware.dma.take_interrupt() {
+            self.interrupt.raise();
+        }
         drop(hardware);
         self.changed.notify_one();
         result
@@ -26,7 +28,9 @@ impl<M: Send> AsyncInteractionBackend<Device<M>, ()> for Driver<M> {
         tokio::task::yield_now().await;
         let mut hardware = self.0.hardware.lock().await;
         let outcome = interaction(&mut hardware.dma);
-        self.0.notifications.publish(hardware.dma.take_interrupt());
+        if hardware.dma.take_interrupt() {
+            self.0.interrupt.raise();
+        }
         drop(hardware);
         Ok(outcome)
     }

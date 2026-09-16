@@ -6,31 +6,30 @@ This records scope and observable acceptance; the broader goal remains separate.
 
 Parent direction: [firmware-managed DMA](firmware-dma-goal.md).
 
-## Review checkpoint and next session
+## Review follow-up: 2026-09-16
 
-The current MVP is retained as a working checkpoint. The user requested a pause;
-the following changes are deferred to the next session, not implemented here:
+The working MVP checkpoint is preserved at `43515cb`. Its standalone
+`managed-runtime` crate was a provisional placement, not an architectural requirement.
+The follow-up keeps the behavior while changing ownership and reusable mechanics:
 
-- Move the concrete managed-system assembly from `crates/managed-runtime` into
-  `crates/scenarios/tests/firmware_managed` harness support. This supersedes the
-  earlier decision to keep that wiring outside scenarios. Hardware component and
-  firmware implementations remain in their own crates. Review the placement of
-  the remaining concrete transport adapters rather than assuming this extra crate
-  must survive.
-- Extract the duplicated platform-pending interrupt mechanism into
-  `hardware-interface-runtime`, with separate emission and reception capabilities.
-  Both ordinary and managed transports should reuse it. This is existing Host DMA
-  interrupt delivery, not a new firmware communication protocol.
-- Evaluate a small reusable async shared-context access facility against both
-  transports; do not add a generic supervisor or recreate existing executors.
-- Use the existing software CPU directly for firmware with no interrupts instead
-  of requiring an idle source/handler merely to match the Host runtime's shape.
-- Review the framework's neutral memory interfaces versus runtime implementations.
-  DMA currently imports only memory access/address/alignment APIs from that crate;
-  do not infer a need for another crate solely from its name.
-
-The implementation/placement descriptions below document the checkpoint, not a
-requirement to preserve `managed-runtime` as a standalone crate.
+- Concrete assembly, transport adapters and their seven boundary tests now live
+  under `crates/scenarios/tests/firmware_managed/harness/runtime`. Native module
+  paths preserve the tests without source duplication. The extra crate is removed;
+  hardware components and firmware remain independent production crates.
+- `hardware-interface-runtime::pending_interrupt` supplies split emission and
+  reception capabilities, reused by both ordinary and managed Host DMA delivery.
+  This is not a new firmware communication protocol.
+- Firmware with no interrupt inputs runs directly through `SoftwareCpu::run_main`,
+  without an idle source, handler or dispatcher. Its CPU remains distinct from Host.
+- The framework's default-on `async-runtime` feature gates CPU/interrupt execution
+  and Tokio. DMA disables defaults and builds independently without a normal Tokio
+  dependency. Synchronous interfaces and backend implementations remain in the same
+  crate: this does not claim a strictly API-only or `no_std` package.
+- A generic async shared-context wrapper was evaluated and not added. Concrete
+  state projection and IRQ extraction still differ; retaining the small explicit
+  mutex/wakeup adapters avoids extra hook/trait machinery. Software accesses still
+  wake the single hardware worker, including reads and error results; steps do not
+  wake themselves into a busy loop. No new supervisor framework is introduced.
 
 ## Purpose
 
@@ -67,20 +66,21 @@ without requiring access to the closed channel window.
 | `hw-components` | Implement one real access-window hardware object with firmware-owned configuration access; reject or forward Host MMIO to the original channel state. |
 | `firmware` | Implement the async initialization program using supplied management access and software execution capabilities, not DMA internals. |
 | Host software | Use only its work/readiness/memory/interrupt capabilities; reuse the existing channel driver where applicable. |
-| Concrete runtime assembly | Connect hardware and software ports, drive hardware and firmware, and define startup/error/shutdown propagation using existing runtime components. Production wiring stays outside scenarios. |
-| `scenarios` | Add an isolated `firmware_managed` test suite containing cases and harness support, not production hardware, firmware or runtime implementations. |
+| Concrete runtime assembly | Connect hardware and software ports, drive hardware and firmware, and define startup/error/shutdown propagation in the scenario harness using existing runtime components. |
+| `scenarios` | Keep an isolated `firmware_managed` test suite with cases and concrete assembly/harness support, not production hardware behavior, firmware policy or generic runtime mechanisms. |
 
-The concrete assembly is `crates/managed-runtime`; it reuses the existing software
-CPU, interrupt runtime and hardware executor. It is not a new runtime framework
+The concrete assembly is `crates/scenarios/tests/firmware_managed/harness/runtime.rs`
+and its native submodules; it reuses the existing software CPU, interrupt runtime
+and hardware executor. It is not a new runtime framework
 or one crate per small hardware object. Ordinary single/multi-channel scenarios
 continue to use the direct DMA assembly; path/package updates for the core rename
 must not make them depend on firmware or `hw-components`.
 
 ## Runtime and access boundaries
 
-- Host and firmware have independent `SoftwareCpu` and `InterruptRuntime`
-  instances, CPU ownership, handler registries and interrupt inputs. Reuse their
-  implementations and the underlying async executor.
+- Host and firmware have independent `SoftwareCpu` instances and capability views.
+  Host uses `InterruptRuntime`; firmware currently has no interrupt inputs and
+  runs directly on its CPU. Reuse existing implementations and the async executor.
 - Host and firmware receive different port sets. Host cannot access window-control
   registers, and closing the work window does not disable firmware's management
   path. Do not pass either program a mutable DMA object or an unrestricted system
@@ -144,28 +144,35 @@ this access-window demonstration.
   to access management registers. It owns no DMA register copy or software policy.
 - `firmware::main` performs the management write on its own software CPU and then
   remains idle until simulation cancellation. No management interrupts are generated
-  in this MVP; its independent interrupt runtime has no installed handlers.
-- `managed-runtime::Managed::new` returns an undriven system and Host capabilities.
+  in this MVP; it does not instantiate an interrupt runtime.
+- The harness's `runtime::Managed::new` returns an undriven system and Host capabilities.
   `run` scopes hardware and firmware futures. `run_until` additionally supervises
   a supplied Host execution; actor errors take priority over ready Host completion.
   No actor is spawned during construction, and neither run method detaches tasks.
 - The scenario harness delays system startup until the same Host program has
   observed the closed window. This is test scheduling, not firmware emulation.
-  Production wiring and firmware remain outside the test crate.
+  Concrete wiring belongs to the harness; firmware policy and hardware behavior
+  remain in their production crates.
 
 From `model/modeling`:
 
 ```sh
 cargo test -p pdma-model-hw-components
-cargo test -p pdma-model-firmware -p pdma-model-managed-runtime
+cargo test -p pdma-model-firmware
+cargo test -p hardware-interface-runtime --test pending_interrupt --test pending_interrupt_delivery
 cargo test -p pdma-model-scenarios --test firmware_managed
+cargo check -p pdma-model-dma --lib
+cargo tree -p pdma-model-dma --edges normal
+cargo test -p hardware-interface-runtime --no-default-features
 cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 `hw-components/tests` covers gate permissions and transactional boundaries.
 `firmware/tests/boot.rs` covers software CPU and management transport failures.
-`managed-runtime/src/run/tests.rs` covers actual assembly CPU separation, scoped
-cancellation, real firmware failure through the supervisor seam and error priority;
-`managed-runtime/tests/access.rs` covers work-view behavior. The scenario suite
+The scenario's `harness/runtime/run/tests.rs` covers actual assembly CPU separation,
+scoped cancellation, real firmware failure through the supervisor seam and error
+priority; `harness/runtime/tests.rs` covers work-view behavior. The scenario suite
 checks an IRQ-driven copy and early Host failure with all runtime owners released.
+Check the DMA dependency tree on its own: workspace feature unification can enable
+async support for other consumers and would conceal the standalone boundary.

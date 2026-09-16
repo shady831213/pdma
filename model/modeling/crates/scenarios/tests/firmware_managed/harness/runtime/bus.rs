@@ -1,4 +1,4 @@
-use crate::{AccessError, Hardware, ManagementBus, Shared};
+use super::{AccessError, Hardware, ManagementBus, Shared};
 use hardware_interface_runtime::RegisterAccess;
 use std::sync::Arc;
 

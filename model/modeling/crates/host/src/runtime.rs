@@ -4,7 +4,10 @@
 mod tests;
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use hardware_interface_runtime::{InterruptEnvelope, InterruptSource, RegisterAccess};
+use hardware_interface_runtime::{
+    InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, RegisterAccess,
+    pending_interrupt,
+};
 use pdma_model_dma::{Device, Error};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, Notify, watch};
@@ -14,7 +17,8 @@ use tokio::sync::{Mutex, Notify, watch};
 pub struct Model<M> {
     device: Arc<Mutex<Device<M>>>,
     changed: Arc<Notify>,
-    pending: watch::Sender<bool>,
+    emitter: InterruptEmitter,
+    pending: PendingInterrupt<Irq>,
 }
 
 impl<M> Clone for Model<M> {
@@ -22,6 +26,7 @@ impl<M> Clone for Model<M> {
         Self {
             device: Arc::clone(&self.device),
             changed: Arc::clone(&self.changed),
+            emitter: self.emitter.clone(),
             pending: self.pending.clone(),
         }
     }
@@ -30,26 +35,26 @@ impl<M> Clone for Model<M> {
 impl<M> Model<M> {
     /// Wraps externally assembled hardware without selecting its memory backend.
     pub fn new(mut device: Device<M>) -> Self {
-        let (pending, _) = watch::channel(device.take_interrupt());
+        let (emitter, pending) = pending_interrupt(Irq);
+        if device.take_interrupt() {
+            emitter.raise();
+        }
         Self {
             device: Arc::new(Mutex::new(device)),
             changed: Arc::new(Notify::new()),
+            emitter,
             pending,
         }
     }
 
     /// Reports an emitted notification awaiting platform dispatch, not a hardware level.
     pub fn irq(&self) -> bool {
-        *self.pending.borrow()
+        self.pending.is_pending()
     }
 
     fn publish_irq(&self, emitted: bool) {
         if emitted {
-            self.pending.send_if_modified(|pending| {
-                let changed = !*pending;
-                *pending = true;
-                changed
-            });
+            self.emitter.raise();
         }
     }
 }
@@ -122,12 +127,10 @@ impl<M: Send + 'static> InterruptSource for Model<M> {
     type Error = watch::error::RecvError;
 
     async fn wait_ready(&self) -> Result<(), Self::Error> {
-        let mut pending = self.pending.subscribe();
-        pending.wait_for(|ready| *ready).await?;
-        Ok(())
+        self.pending.wait_ready().await
     }
 
     async fn claim(&mut self, (): ()) -> Result<Option<Irq>, Self::Error> {
-        Ok(self.pending.send_replace(false).then_some(Irq))
+        self.pending.claim(()).await
     }
 }

@@ -64,3 +64,25 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
     assert!(model.claim(()).await?.is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn masking_preserves_emitted_notification_across_model_clones() -> TestResult {
+    // Given: a fatal notification emitted before the platform claims it.
+    let mut device = Device::new((), 1)?;
+    let irq_enable = DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset();
+    device.write(irq_enable, &1_u32.to_le_bytes())?;
+    device.signal_fatal();
+    let mut first = Model::new(device);
+    let mut second = first.clone();
+    // When: software masks the device through one transport handle.
+    first
+        .write(u32::try_from(irq_enable)?, &0_u32.to_le_bytes())
+        .await?;
+    // Then: both handles retain readiness, but their claims consume one notification.
+    first.wait_ready().await?;
+    second.wait_ready().await?;
+    assert!(first.claim(()).await?.is_some());
+    assert!(second.claim(()).await?.is_none());
+    assert!(!second.irq());
+    Ok(())
+}

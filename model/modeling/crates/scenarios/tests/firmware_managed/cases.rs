@@ -1,7 +1,7 @@
+use crate::harness::runtime::AccessError;
 use crate::harness::{self, Input, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{CompletionFlagsValues, Response, ResponseStatus};
-use pdma_model_managed_runtime::AccessError;
 use std::sync::Arc;
 
 #[tokio::test(flavor = "current_thread")]

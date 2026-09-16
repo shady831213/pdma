@@ -122,7 +122,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pdma-model-managed-runtime"
+name = "pdma-model-scenarios"
 version = "0.1.0"
 dependencies = [
  "hardware-interface-pipeline",
@@ -132,19 +132,6 @@ dependencies = [
  "pdma-model-firmware",
  "pdma-model-host",
  "pdma-model-hw-components",
- "tokio",
-]
-
-[[package]]
-name = "pdma-model-scenarios"
-version = "0.1.0"
-dependencies = [
- "hardware-interface-pipeline",
- "hardware-interface-runtime",
- "pdma-model-contract",
- "pdma-model-dma",
- "pdma-model-host",
- "pdma-model-managed-runtime",
  "tokio",
 ]
 

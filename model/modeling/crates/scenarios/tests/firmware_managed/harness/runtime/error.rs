@@ -1,5 +1,4 @@
 use hardware_interface_pipeline::AsyncRunError;
-use hardware_interface_runtime::InterruptDispatchError;
 use std::{convert::Infallible, fmt};
 
 /// Invalid managed hardware assembly.
@@ -24,9 +23,7 @@ impl std::error::Error for BuildError {}
 #[derive(Debug)]
 pub enum RunError {
     /// Firmware initialization failed.
-    Firmware(pdma_model_firmware::Error<crate::AccessError>),
-    /// Firmware interrupt delivery failed.
-    FirmwareInterrupt(InterruptDispatchError<(), tokio::sync::watch::error::RecvError, Infallible>),
+    Firmware(pdma_model_firmware::Error<super::AccessError>),
     /// The hardware pipeline failed.
     Hardware(AsyncRunError<Infallible, pdma_model_dma::Error>),
     /// A persistent hardware operation unexpectedly completed.

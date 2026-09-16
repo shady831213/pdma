@@ -17,7 +17,7 @@ Do not restore their compatibility interfaces without a user request.
 
 Active work is under `model/modeling`; read its `AGENTS.md`.
 Its Cargo workspace contains the core `contract`, `dma` and `host` crates, the
-managed MVP's `hw-components`, `firmware` and `managed-runtime`, system scenarios,
+managed MVP's `hw-components` and `firmware`, system scenarios,
 and four reusable building blocks:
 
 - `hardware-interface-pipeline`
@@ -35,9 +35,11 @@ Current architecture and reset documentation live under `model/modeling`.
 not implemented behavior or an automatic implementation order.
 `model/modeling/docs/firmware-dma-mvp.md` defines the approved architecture-validation
 milestone before broader feature work. The implemented split is `dma`, `hw-components`
-and `firmware`, with concrete wiring currently in `managed-runtime`. User review
-selected moving that assembly into `scenarios/tests/firmware_managed`; this move
-and runtime framework enhancements are deferred to the next session.
+and `firmware`, with concrete wiring in `scenarios/tests/firmware_managed/harness`.
+The standalone managed-runtime crate was removed after user review. Ordinary and
+managed transports share the framework's split pending-interrupt capabilities.
+DMA disables the framework's default async-runtime feature; its standalone normal
+dependency tree has no Tokio. This is not a separate memory-only interface crate.
 The managed MVP has one firmware-opened work window and a separate Host readiness
 view; it does not implement Function/PASID mapping or PCIe integration.
 The generated header under `model/modeling/include` describes the current contract.

@@ -59,14 +59,23 @@ implemented functionality or an instruction to start it automatically.
 The approved first milestone is `docs/firmware-dma-mvp.md`: validate the `dma`,
 `hw-components`, firmware and concrete runtime boundaries through a real copy
 behind a firmware-configured access window. Production hardware and firmware
-belong outside scenarios. The next session will move concrete managed assembly
-into the scenario harness, superseding the earlier wiring placement requirement.
+belong outside scenarios. Concrete managed assembly and transport adapters belong
+in the scenario harness, superseding the earlier wiring placement requirement.
 Keep the direct-DMA assembly available for ordinary tests.
-The DMA core lives in `crates/dma`. `crates/managed-runtime` assembles the managed
-MVP over `hw-components::AccessWindow` and `firmware::main`. Host and firmware use
-separate software CPUs and interrupt runtimes. Readiness derives from the window's
+The DMA core lives in `crates/dma`. The `firmware_managed/harness/runtime` modules
+assemble the MVP over `hw-components::AccessWindow` and `firmware::main`.
+Host and firmware use separate software CPUs. Only Host needs an interrupt runtime
+in this MVP; firmware runs directly on its own CPU. Readiness derives from the window's
 open bit; no shadow channel registers or firmware writes in the harness are allowed.
 The managed MVP does not add Function/PASID or external transaction semantics.
+
+The generic runtime's default `async-runtime` feature gates CPU/interrupt execution
+and its Tokio dependency. DMA selects `default-features = false`; synchronous
+memory/backend APIs stay available and unchanged. Verify DMA's normal dependency
+tree independently because workspace feature unification can enable async support.
+Both concrete transports use `pending_interrupt`: hardware-side adapters hold the
+emitter, software dispatch holds the source. Keep causes, masking, routing policy
+and hardware-step wakeup decisions out of that generic component.
 
 ## Implementation constraints
 

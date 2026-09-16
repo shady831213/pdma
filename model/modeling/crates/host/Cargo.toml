@@ -14,7 +14,10 @@ pdma-model-dma = { path = "../dma" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }
-tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
+tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync", "time"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.49", default-features = false, features = ["test-util", "time"] }

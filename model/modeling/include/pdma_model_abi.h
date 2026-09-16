@@ -1249,8 +1249,45 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_RESET_VALUE UINT64_C(0)
 #define C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_WRITABLE_MASK UINT64_C(0)
 
+/*
+ * Firmware lifecycle status
+ * Always accessible independently of DMA window permissions. Firmware can read/write; hardware denies all Host writes.
+ */
+#define C_FIRMWARE_SIZE UINT64_C(4)
+#define C_FIRMWARE_ACCESS_READ_ONLY UINT32_C(0)
+#define C_FIRMWARE_ACCESS_READ_WRITE UINT32_C(1)
+#define C_FIRMWARE_ACCESS_WRITE_ONLY UINT32_C(2)
+#define C_FIRMWARE_RESET_CONSTANT UINT32_C(0)
+#define C_FIRMWARE_RESET_ZERO UINT32_C(1)
+#define C_FIRMWARE_RESET_POST_RESET UINT32_C(2)
+
+/*
+ * Firmware boot report
+ * One atomic firmware boot state and error report.
+ */
+/*
+ * state
+ * Firmware initializes after subsystem reset release; Ready means initialization completed, not that any particular DMA window is open.
+ */
+#define C_FIRMWARE_C_QUBQUOQUOQUT_C_STATE_C_QUBOOTING UINT64_C(0)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_C_STATE_C_QUREADY UINT64_C(1)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_C_STATE_C_QUFAILED UINT64_C(2)
+/*
+ * error
+ * Initialization failure reported by firmware. A stuck CPU cannot report failure; Host must bound its wait. Runtime failures are not automatically converted into this field.
+ */
+#define C_FIRMWARE_C_QUBQUOQUOQUT_C_ERROR_C_QUNONE UINT64_C(0)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_C_ERROR_C_QUWINDOWQUSETUP UINT64_C(1)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_OFFSET UINT64_C(0)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_WIDTH UINT64_C(4)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_ACCESS C_FIRMWARE_ACCESS_READ_WRITE
+#define C_FIRMWARE_C_QUBQUOQUOQUT_RESET_KIND C_FIRMWARE_RESET_ZERO
+#define C_FIRMWARE_C_QUBQUOQUOQUT_RESET_VALUE UINT64_C(0)
+#define C_FIRMWARE_C_QUBQUOQUOQUT_WRITABLE_MASK UINT64_C(65539)
+
 /* Absolute bases for the relative management maps above. */
 #define PDMA_WINDOW_CONTROL_BASE UINT32_C(4294967040)
 #define PDMA_WINDOW_STATUS_BASE UINT32_C(4294967048)
+#define PDMA_FIRMWARE_STATUS_BASE UINT32_C(4294967056)
 
 #endif

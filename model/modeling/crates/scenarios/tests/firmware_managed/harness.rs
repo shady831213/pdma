@@ -8,7 +8,6 @@ use hardware_interface_runtime::{
 };
 use runtime::Managed;
 use std::{error::Error, io, sync::Arc};
-use tokio::sync::oneshot;
 
 pub use program::Input;
 /// Scenario setup or execution failure.
@@ -28,7 +27,6 @@ pub async fn run(input: Input<'_>) -> TestResult<Report> {
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
-    let (start, boot) = oneshot::channel();
     let execution = host.runtime.run_main(async |interrupts| {
         program::main(
             program::Ports {
@@ -38,13 +36,11 @@ pub async fn run(input: Input<'_>) -> TestResult<Report> {
                 interrupts,
             },
             input,
-            start,
         )
         .await
     });
     let hardware = async {
-        boot.await
-            .map_err(|_| io::Error::other("Host ended before startup"))?;
+        tokio::task::yield_now().await;
         system
             .run()
             .await

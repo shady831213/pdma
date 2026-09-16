@@ -14,10 +14,10 @@ pub use error::{BuildError, RunError};
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
-use pdma_model_contract::DeviceRegisters;
+use pdma_model_contract::{DeviceRegisters, FIRMWARE_STATUS_BASE};
 use pdma_model_dma::{CommandLoop, Device};
 use pdma_model_host::runtime::Irq;
-use pdma_model_hw_components::AccessWindow;
+use pdma_model_hw_components::{AccessWindow, FirmwareStatus, WindowConfigError};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
@@ -25,6 +25,7 @@ use tokio::sync::{Mutex, Notify};
 struct Hardware<M> {
     dma: Device<M>,
     window: AccessWindow,
+    firmware: FirmwareStatus,
 }
 
 #[derive(Debug)]
@@ -67,9 +68,17 @@ impl<M> Managed<M> {
         let pipeline = dma.command_loop();
         let extent = DeviceRegisters::extent(1).map_err(BuildError::Layout)?;
         let window = AccessWindow::new(extent).map_err(BuildError::Window)?;
+        let firmware = FirmwareStatus::new(
+            usize::try_from(FIRMWARE_STATUS_BASE)
+                .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
+        );
         let (interrupt, source) = pending_interrupt(Irq);
         let shared = Arc::new(Shared {
-            hardware: Mutex::new(Hardware { dma, window }),
+            hardware: Mutex::new(Hardware {
+                dma,
+                window,
+                firmware,
+            }),
             changed: Notify::new(),
             interrupt,
         });

@@ -1,6 +1,6 @@
 use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
-use pdma_model_contract::{ChannelId, RingError};
+use pdma_model_contract::{ChannelId, FirmwareBootError, RingError};
 use std::{error::Error as StdError, fmt};
 
 /// Software ring operation failure retaining its boundary cause.
@@ -29,6 +29,10 @@ pub enum Error<B> {
     Geometry,
     /// No command slot is currently available.
     Full,
+    /// Firmware reported an initialization failure through its status register.
+    FirmwareFailed(FirmwareBootError),
+    /// The Host's deadline expired before firmware reported readiness.
+    FirmwareTimeout,
 }
 
 impl<B: fmt::Display> fmt::Display for Error<B> {
@@ -50,6 +54,8 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             ),
             Self::Geometry => f.write_str("invalid host register address"),
             Self::Full => f.write_str("command ring is full"),
+            Self::FirmwareFailed(code) => write!(f, "firmware initialization failed: {code:?}"),
+            Self::FirmwareTimeout => f.write_str("timed out waiting for firmware readiness"),
         }
     }
 }
@@ -63,7 +69,11 @@ impl<B: StdError + 'static> StdError for Error<B> {
             Self::RegisterCodec(error) => Some(error),
             Self::Cpu(error) => Some(error),
             Self::Ring(error) => Some(error),
-            Self::Channel { .. } | Self::Geometry | Self::Full => None,
+            Self::Channel { .. }
+            | Self::Geometry
+            | Self::Full
+            | Self::FirmwareFailed(_)
+            | Self::FirmwareTimeout => None,
         }
     }
 }

@@ -7,8 +7,8 @@ use hardware_interface_runtime::{
     InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::{Response, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE};
-use pdma_model_host::runtime::Irq;
-use tokio::sync::oneshot;
+use pdma_model_host::{firmware, runtime::Irq};
+use std::time::Duration;
 
 use super::TestResult;
 
@@ -48,11 +48,7 @@ pub struct Outcome {
     pub(crate) destination: MemoryAddress,
 }
 
-pub(super) async fn main(
-    ports: Ports<'_>,
-    input: Input<'_>,
-    start: oneshot::Sender<()>,
-) -> TestResult<Outcome> {
+pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outcome> {
     let mut output = [0xa5; 4];
     let mut ready = [0; 4];
     let read = ports.bus.read(0, &mut output).await;
@@ -71,15 +67,14 @@ pub(super) async fn main(
         output,
         ready: u32::from_le_bytes(ready),
     };
-    start
-        .send(())
-        .map_err(|()| std::io::Error::other("system startup receiver closed"))?;
-    loop {
-        ports.bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
-        if u32::from_le_bytes(ready) == 1 {
-            break;
-        }
-        tokio::task::yield_now().await;
+    firmware::wait_ready(&ports.bus, Duration::from_secs(1)).await?;
+    ports.bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
+    if u32::from_le_bytes(ready) != 1 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "firmware ready but DMA access is not granted",
+        )
+        .into());
     }
     let after = [
         ports

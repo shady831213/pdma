@@ -127,6 +127,7 @@ version = "0.1.0"
 dependencies = [
  "hardware-interface-pipeline",
  "hardware-interface-runtime",
+ "hardware-interface-schema",
  "pdma-model-contract",
  "pdma-model-dma",
  "pdma-model-firmware",

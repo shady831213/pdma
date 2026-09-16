@@ -40,6 +40,8 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
 | `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
 | `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
+| `crates/hw-components/src/firmware_status.rs` | Firmware boot report, writable only through management access and readable by Host even with DMA closed. |
+| `crates/host/src/firmware.rs` | CPU-owned Host boot polling with distinct firmware failure and software timeout outcomes. |
 | `crates/firmware/src/lib.rs` | Async firmware initialization through management MMIO. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
 | `crates/hardware-interface-runtime/src/interrupt/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |

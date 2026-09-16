@@ -40,8 +40,9 @@ The standalone managed-runtime crate was removed after user review. Ordinary and
 managed transports share the framework's split pending-interrupt capabilities.
 DMA disables the framework's default async-runtime feature; its standalone normal
 dependency tree has no Tokio. This is not a separate memory-only interface crate.
-The managed MVP has one firmware-opened work window and a separate Host readiness
-view; it does not implement Function/PASID mapping or PCIe integration.
+The managed MVP has one firmware-opened work window, a derived window-permission
+view and independent firmware Booting/Ready/Failed status. Host waits for firmware
+with a software timeout; it does not implement Function/PASID mapping or PCIe integration.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 

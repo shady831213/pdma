@@ -1,7 +1,7 @@
 # Current PDMA contract header
 
 `pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`
-and `DeviceRegisters`, `WindowControl`, and `WindowStatus` schemas. It contains record sizes and byte accessors, MMIO
+and `DeviceRegisters`, `WindowControl`, `WindowStatus`, and `FirmwareRegisters` schemas. It contains record sizes and byte accessors, MMIO
 offsets and access/reset metadata, and schema descriptions as C comments. It is
 a C11 data contract, not a callable device API or the predecessor's ABI.
 
@@ -35,6 +35,14 @@ the Rust contract. Both maps occupy four bytes. Firmware alone may access contro
 whose writable bit zero opens the Host work window. Host readiness is read-only
 and remains accessible while the work window is closed. These maps are separate
 from the channel-count-dependent `C_PDMA_SIZE` extent.
+
+`C_FIRMWARE` describes the four-byte boot report at `PDMA_FIRMWARE_STATUS_BASE`
+(`0xffff_ff10`). Bits 0..=1 encode Booting (0), Ready (1), or Failed (2); bit 16
+encodes no error (0) or window setup failure (1). Firmware writes one complete
+report; Host may only read it. The read/write metadata describes firmware access,
+not Host permission. Subsystem reset clears the report to Booting/no error.
+DMA/channel reset does not reset firmware. Window readiness and firmware readiness
+are separate: the latter alone does not authorize DMA access.
 
 Both reset registers are read/write handshakes. Write one to request reset, then
 poll that same register until hardware clears it to zero. One means busy; zero

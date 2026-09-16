@@ -65,8 +65,11 @@ Keep the direct-DMA assembly available for ordinary tests.
 The DMA core lives in `crates/dma`. The `firmware_managed/harness/runtime` modules
 assemble the MVP over `hw-components::AccessWindow` and `firmware::main`.
 Host and firmware use separate software CPUs. Only Host needs an interrupt runtime
-in this MVP; firmware runs directly on its own CPU. Readiness derives from the window's
-open bit; no shadow channel registers or firmware writes in the harness are allowed.
+in this MVP; firmware runs directly on its own CPU. Firmware boot status is separate
+from window permission: Booting/Ready/Failed and a boot error are firmware-published
+in an always-on register. Window readiness still derives from its open bit.
+Host waits for firmware with a software deadline before checking DMA permission.
+No shadow channel registers or firmware writes in the harness are allowed.
 The managed MVP does not add Function/PASID or external transaction semantics.
 
 The generic runtime's default `async-runtime` feature gates CPU/interrupt execution

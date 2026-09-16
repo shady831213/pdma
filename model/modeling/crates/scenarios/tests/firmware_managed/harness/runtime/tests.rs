@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 use super::{AccessError, Managed};
 
+mod boot;
+
 #[tokio::test]
 async fn construction_leaves_host_closed() {
     // Given: an assembled but undriven system.

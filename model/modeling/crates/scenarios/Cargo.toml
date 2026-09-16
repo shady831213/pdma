@@ -16,6 +16,7 @@ pdma-model-firmware = { path = "../firmware" }
 pdma-model-hw-components = { path = "../hw-components" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
+hardware-interface-schema = { path = "../hardware-interface-schema" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [lints]

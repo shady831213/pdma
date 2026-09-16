@@ -9,6 +9,8 @@ _Static_assert(C_SEGMENT_SIZE == 16, "segment wire extent");
 _Static_assert(C_PDMA_SIZE == 228, "device MMIO extent");
 _Static_assert(PDMA_WINDOW_CONTROL_BASE == UINT32_C(0xffffff00), "firmware control address");
 _Static_assert(PDMA_WINDOW_STATUS_BASE == UINT32_C(0xffffff08), "host readiness address");
+_Static_assert(PDMA_FIRMWARE_STATUS_BASE == UINT32_C(0xffffff10), "firmware boot report address");
+_Static_assert(C_FIRMWARE_SIZE == 4, "atomic firmware boot report extent");
 _Static_assert(C_WINDOWCONTROL_SIZE == 4, "control map extent");
 _Static_assert(C_WINDOWSTATUS_SIZE == 4, "status map extent");
 _Static_assert(C_WINDOWCONTROL_C_QUOQUPQUEQUN_OFFSET == 0, "control map relative offset");

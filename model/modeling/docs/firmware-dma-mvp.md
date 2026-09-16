@@ -45,8 +45,9 @@ or Function reset. A successful build alone is not acceptance.
 2. Host attempts a channel access while the window is closed and observes an
    access error, with no forwarded channel side effect.
 3. Run the firmware async program on its own software CPU. Firmware initializes
-   the access window through management MMIO and publishes observable readiness.
-4. The same Host program observes readiness, configures its rings, submits an
+   the access window through management MMIO and publishes its independent boot report.
+4. The same Host program waits for firmware Ready within its software deadline,
+   verifies the separate window permission, configures its rings, submits an
    ordinary copy, receives the DMA notification and consumes the response.
 5. Check copied bytes, response and notification behavior; then end and join all
    actors through the concrete runtime/harness lifecycle boundary.
@@ -109,6 +110,10 @@ not a substitute for running the verification commands on the current checkout.
   remain rejected after the work window opens.
 - Firmware management access works while Host access is closed. Readiness becomes
   visible only after firmware performs the required configuration writes.
+- Firmware reports Booting, Ready or Failed independently of the window permission.
+  Host cannot forge this report. A reportable setup failure stays observable without
+  ending simulation; a stuck firmware is detected by Host timeout, not a fabricated
+  hardware error. CPU or status-transport failure remains an execution error.
 - After readiness, the same Host program performs a real DMA copy and observes
   exact destination bytes, a successful matching response and the expected Host
   notification using the existing interrupt runtime.
@@ -139,18 +144,32 @@ this access-window demonstration.
 - `contract::WindowStatus` is a Host-readable generated map at `WINDOW_STATUS_BASE`
   (`0xffff_ff08`). Its `ready` value is derived from the same open bit, not a
   second retained handshake state. It remains readable while work access is closed.
+- `contract::FirmwareRegisters` is an independent report at `FIRMWARE_STATUS_BASE`
+  (`0xffff_ff10`), owned by `hw-components::FirmwareStatus`. Firmware alone writes
+  its packed state/error word; Host can read it regardless of DMA permissions.
+  Reset initializes Booting/no error. Runtime construction represents subsystem
+  reset release; polling the firmware CPU starts the program without image loading
+  or validation. DMA and channel reset do not reset this subsystem-level state.
+  Live subsystem reboot, watchdog and a Host/firmware request protocol are not
+  implemented by this boot-status slice.
 - `hw-components::AccessWindow` protects the complete downstream DMA register
   extent, including rejection of spanning/overflowing accesses and Host attempts
   to access management registers. It owns no DMA register copy or software policy.
-- `firmware::main` performs the management write on its own software CPU and then
-  remains idle until simulation cancellation. No management interrupts are generated
-  in this MVP; it does not instantiate an interrupt runtime.
+- `firmware::main` performs the window setup on its own software CPU and publishes
+  Ready on success or Failed/WindowSetup on rejection. Either report remains idle
+  until simulation cancellation. If reporting itself fails, the transport error
+  reaches the supervisor instead. No runtime code fabricates a firmware report.
+  No management interrupts are generated; firmware has no interrupt runtime.
+- `host::firmware::wait_ready` runs on the Host CPU with a caller-selected deadline.
+  Timeout/cancellation does not reset hardware or stop firmware. It does not grant
+  DMA permission or load firmware; Host checks the window separately before use.
 - The harness's `runtime::Managed::new` returns an undriven system and Host capabilities.
   `run` scopes hardware and firmware futures. `run_until` additionally supervises
   a supplied Host execution; actor errors take priority over ready Host completion.
   No actor is spawned during construction, and neither run method detaches tasks.
-- The scenario harness delays system startup until the same Host program has
-  observed the closed window. This is test scheduling, not firmware emulation.
+- The scenario harness yields once before polling firmware so the same Host program
+  can first observe the closed window. Host has no startup sender or harness handshake;
+  its only firmware readiness input is the hardware status register.
   Concrete wiring belongs to the harness; firmware policy and hardware behavior
   remain in their production crates.
 

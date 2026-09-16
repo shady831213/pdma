@@ -2,6 +2,9 @@ use hardware_interface_schema::register_map;
 
 use crate::{ReadWord, Switch};
 
+mod firmware;
+pub use firmware::*;
+
 /// Firmware-only access-window control address.
 pub const WINDOW_CONTROL_BASE: u32 = 0xffff_ff00;
 /// Host-visible access-window readiness address.

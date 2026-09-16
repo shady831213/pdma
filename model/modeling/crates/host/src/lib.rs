@@ -2,6 +2,7 @@
 
 mod channel;
 mod error;
+pub mod firmware;
 mod ring;
 pub mod runtime;
 

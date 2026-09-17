@@ -161,8 +161,8 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
 }
 
 #[tokio::test]
-async fn response_space_lost_after_acceptance_is_a_protocol_error() -> TestResult {
-    // Given: release was accepted with response space and is waiting for hardware reset.
+async fn release_completion_waits_for_space_occupied_by_another_response() -> TestResult {
+    // Given: a release waits for reset while another acquisition fills the response ring.
     let (bus, memory) = fixture()?;
     publish(&memory, acquire(1), 1)?;
     let mut program = std::pin::pin!(run(&bus, memory.clone()));
@@ -189,26 +189,33 @@ async fn response_space_lost_after_acceptance_is_a_protocol_error() -> TestResul
         bus.registers.lock().unwrap().get(&reset),
         Some(&1_u32.to_le_bytes().to_vec())
     );
+    publish(&memory, acquire(3), 3)?;
+    bus.notification.raise();
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
+    }
+    assert_eq!(response(&memory)?.id, 3);
+    assert_eq!(
+        response(&memory)?.status,
+        pdma_model_contract::ControlResponseStatus::NoResources
+    );
     let writes = bus.writes.lock().unwrap().len();
-    // When: Host illegally rewinds its consumer before hardware finishes reset.
-    write_word(&memory, consumer, 0)?;
+    // When: hardware finishes reset while Host has not yet consumed the other response.
     bus.registers
         .lock()
         .unwrap()
         .insert(reset, 0_u32.to_le_bytes().to_vec());
-    let result = poll(program.as_mut());
-    // Then: firmware reports the violation instead of waiting or overwriting the old response.
-    assert!(
-        matches!(
-            result,
-            std::task::Poll::Ready(Err(pdma_model_firmware::Error::Ring(
-                pdma_model_contract::RingError::Pointers
-            )))
-        ),
-        "unexpected firmware result: {result:?}"
-    );
-    assert_eq!(read_word(&memory, producer)?, 1);
-    assert_eq!(response(&memory)?.id, 1);
+    assert!(poll(program.as_mut()).is_pending());
+    // Then: no response is overwritten; consuming and notifying allows exactly one release acknowledgement.
+    assert_eq!(read_word(&memory, producer)?, 2);
+    assert_eq!(response(&memory)?.id, 3);
     assert_eq!(bus.writes.lock().unwrap().len(), writes);
+    write_word(&memory, consumer, 2)?;
+    bus.notification.raise();
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
+    }
+    assert_eq!(read_word(&memory, producer)?, 3);
+    assert_eq!(response(&memory)?.id, 2);
     Ok(())
 }

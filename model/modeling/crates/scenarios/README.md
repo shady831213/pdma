@@ -61,7 +61,10 @@ the reported failure while DMA stays closed.
 The original assembly boundary tests now live beside this harness, with no path
 redirection or source duplication. Host notifications use the same framework
 pending-interrupt component as the direct DMA runtime. Firmware has its own
-software CPU and does not create an unused interrupt dispatcher.
+software CPU and management interrupt dispatcher. The multi-channel lifecycle case
+pipelines requests and releases one channel while peers continue DMA, then reuses
+the released channel through a fresh driver. Host software still owns allocation,
+ISR registration and channel use; the harness owns assembly and scoped execution.
 Further boundary cases cover cancellation before/after control pointer writes,
 response-slot reuse, request/result correlation, and release during an active
 copy followed by fresh acquisition and successful DMA. See
@@ -179,8 +182,8 @@ The cases cover:
 Every case checks the exact completion IDs and byte counts. Software also verifies
 that channel-count discovery rejects writes and preserves its instance value across reset.
 
-The software program receives memory-write notifications from a test-only forwarding
-memory capability. It waits for observable payload changes without inspecting device
+The software program polls payload memory with cooperative yields. It observes
+payload changes without synthetic harness notifications, inspecting device
 internals or using elapsed-time delays. `hardware.rs` assembles and drives hardware;
 `harness.rs` selects the backing and owns joined worker teardown; `software/` owns the
 complete program and application buffers; `cases.rs` owns acceptance assertions.

@@ -12,7 +12,7 @@ use pdma_model_contract::{
 #[test]
 fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std::error::Error>> {
     // Given: the generated device map with automatic placement.
-    let map = DeviceRegisters::resolve(3)?;
+    let map = DeviceRegisters::new(3)?.resolve()?;
     // When: nested register leaves are resolved.
     let leaves = map
         .registers()
@@ -55,7 +55,7 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
         );
     }
     assert_eq!(leaves, expected);
-    assert_eq!(DeviceRegisters::extent(3)?, 228);
+    assert_eq!(DeviceRegisters::new(3)?.extent(), 228);
     assert_eq!(DeviceRegisters::ALIGNMENT, 8);
     Ok(())
 }

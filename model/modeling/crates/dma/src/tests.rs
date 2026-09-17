@@ -41,7 +41,7 @@ fn channel_collection_preserves_miss_addresses_and_output() -> Result<(), Box<dy
     for address in [
         0,
         DeviceRegisters::CHANNELS_OFFSET - 1,
-        DeviceRegisters::extent(3)?,
+        DeviceRegisters::new(3)?.extent(),
         usize::MAX,
     ] {
         let mut out = [0xa5; 4];

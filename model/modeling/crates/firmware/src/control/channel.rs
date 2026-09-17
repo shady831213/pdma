@@ -10,7 +10,6 @@ use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 
 pub(super) struct Channel<'a, B, M> {
     bus: &'a B,
-    interrupt: &'a InterruptEvent,
     command: SoftRing<ControlRequest>,
     response: SoftRing<ControlResponse>,
     command_io: MemoryRingIo<'a, M>,
@@ -64,7 +63,6 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         }
         Ok(Self {
             bus,
-            interrupt,
             command: SoftRing::new(command).map_err(Error::Cpu)?,
             response: SoftRing::new(response).map_err(Error::Cpu)?,
             command_io: layout.command_io(memory),
@@ -72,37 +70,34 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         })
     }
 
-    pub(super) async fn receive(&mut self) -> Result<ControlRequest, Error<B::Error>> {
-        loop {
-            if self
-                .response
-                .has_space(&self.response_io)
+    pub(super) async fn has_response_space(&self) -> Result<bool, Error<B::Error>> {
+        self.response
+            .has_space(&self.response_io)
+            .await
+            .map_err(Error::SoftRing)
+    }
+
+    pub(super) async fn try_receive(&mut self) -> Result<Option<ControlRequest>, Error<B::Error>> {
+        let request = self
+            .command
+            .peek(&self.command_io)
+            .await
+            .map_err(Error::SoftRing)?;
+        if request.is_some() {
+            self.command
+                .consume(&self.command_io)
                 .await
-                .map_err(Error::SoftRing)?
-            {
-                if let Some(request) = self
-                    .command
-                    .peek(&self.command_io)
-                    .await
-                    .map_err(Error::SoftRing)?
-                {
-                    self.command
-                        .consume(&self.command_io)
-                        .await
-                        .map_err(Error::SoftRing)?;
-                    self.notify().await?;
-                    return Ok(request);
-                }
-            }
-            self.interrupt.wait().await;
+                .map_err(Error::SoftRing)?;
+            self.notify().await?;
         }
+        Ok(request)
     }
 
     pub(super) async fn respond(
         &mut self,
         response: ControlResponse,
     ) -> Result<(), Error<B::Error>> {
-        // receive checked space; this serial producer cannot fill it before responding.
+        // The service checked space before this publication; no other producer writes this ring.
         if !self
             .response
             .try_push(&self.response_io, response)

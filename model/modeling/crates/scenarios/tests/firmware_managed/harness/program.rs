@@ -1,6 +1,7 @@
 //! The complete Host program, including preboot access probes.
 
 mod interrupts;
+pub mod multi;
 pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};

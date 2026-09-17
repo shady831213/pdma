@@ -7,6 +7,6 @@ mod ring;
 pub mod runtime;
 
 pub use error::Error;
-pub use management::{Management, ManagementConfig, ManagementRings};
+pub use management::{Management, ManagementConfig, ManagementRequestId, ManagementRings};
 pub use pdma_model_software::dma::{Channel, ChannelConfig, Error as DmaError, Rings};
 pub use ring::RingConfig;

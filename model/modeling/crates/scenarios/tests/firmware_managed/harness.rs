@@ -1,5 +1,6 @@
 //! Scoped platform assembly and scheduling for managed system cases.
 
+pub mod multi;
 pub mod program;
 pub mod runtime;
 

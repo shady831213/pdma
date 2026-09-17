@@ -1,6 +1,7 @@
 use pdma_model_software::control::{ControlQueueLayout, InterruptEvent};
 use pdma_model_software::ring::SoftRing;
 mod pending;
+mod responses;
 mod transport;
 
 use crate::{Error, RingConfig};
@@ -9,8 +10,8 @@ use hardware_interface_runtime::{
 };
 use hardware_interface_schema::Encode;
 use pdma_model_contract::{
-    ChannelId, ControlQueue, ControlRegisters, ControlRequest, ControlRequestOpcode,
-    ControlResponse, ControlResponseStatus, ControlRingState, Ring,
+    ChannelId, ControlQueue, ControlRegisters, ControlRequest, ControlResponse,
+    ControlResponseStatus, ControlRingState, Ring,
 };
 
 /// Host-owned storage for the independent management queues.
@@ -34,17 +35,32 @@ pub struct ManagementConfig {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Pending {
+struct Submission {
     request: ControlRequest,
     published: bool,
-    consumed: bool,
-    response: Option<ControlResponse>,
 }
 
-/// CPU-local, single-outstanding Host endpoint of the management channel.
+#[derive(Debug, Clone, Copy)]
+struct Completion {
+    consumed: bool,
+    response: ControlResponse,
+}
+
+/// Correlation identity allocated when a management submission is accepted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ManagementRequestId(u64);
+
+impl ManagementRequestId {
+    /// Returns the identity encoded in the command and response records.
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// CPU-local Host endpoint with command-capacity-bounded outstanding requests.
 ///
 /// Keep the client and its backing memory alive across cancelled waits. A timeout
-/// does not retract a request; resume it with `wait_pending` before submitting again.
+/// does not retract a request; resume incomplete publication with `resume_submission`.
 #[derive(Debug)]
 pub struct Management<B, M> {
     bus: B,
@@ -54,7 +70,10 @@ pub struct Management<B, M> {
     interrupt: InterruptEvent,
     command: SoftRing<ControlRequest>,
     response: SoftRing<ControlResponse>,
-    pending: Option<Pending>,
+    submission: Option<Submission>,
+    completion: Option<Completion>,
+    outstanding: Vec<ControlRequest>,
+    capacity: usize,
     next_id: u64,
 }
 
@@ -77,7 +96,10 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             command: SoftRing::new(rings.command).map_err(Error::Cpu)?,
             response: SoftRing::new(rings.response).map_err(Error::Cpu)?,
             owner: CpuOwner::capture_active().map_err(Error::Cpu)?,
-            pending: None,
+            submission: None,
+            completion: None,
+            outstanding: Vec::new(),
+            capacity: usize::try_from(rings.command.capacity()).map_err(|_| Error::Geometry)?,
             next_id: 1,
         };
         if client.read(ControlRegisters::ENABLE.offset()).await? != 0 {
@@ -123,13 +145,15 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
 
     /// Requests a clean channel; firmware chooses its physical identifier.
     pub async fn acquire_channel(&mut self) -> Result<ChannelId, Error<B::Error>> {
-        self.begin(ControlRequestOpcode::AcquireChannel, 0).await?;
+        self.require_idle()?;
+        self.submit_acquire().await?;
         let response = self.wait_pending().await?;
         match response.status {
             ControlResponseStatus::Success => {}
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated) => return Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated
+            | ControlResponseStatus::Busy) => return Err(Error::ManagementStatus(status)),
         }
         Ok(ChannelId::new(
             usize::try_from(response.channel).map_err(|_| Error::Geometry)?,
@@ -141,23 +165,27 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Stop software ring/ISR use first. Success invalidates the old channel driver;
     /// application memory must remain valid until this response is collected.
     pub async fn release_channel(&mut self, channel: ChannelId) -> Result<(), Error<B::Error>> {
-        self.begin(
-            ControlRequestOpcode::ReleaseChannel,
-            u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
-        )
-        .await?;
+        self.require_idle()?;
+        self.submit_release(channel).await?;
         let response = self.wait_pending().await?;
         match response.status {
             ControlResponseStatus::Success => Ok(()),
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated
+            | ControlResponseStatus::Busy) => Err(Error::ManagementStatus(status)),
         }
     }
 
     /// Resumes publication or collection of the same request after cancellation.
     pub async fn wait_pending(&mut self) -> Result<ControlResponse, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner.scope(self.collect()).await.map_err(Error::Cpu)?
+        self.owner.validate_active().map_err(Error::Cpu)?;
+        if self.outstanding.is_empty() {
+            return Err(Error::ManagementIdle);
+        }
+        if self.submission.is_some() {
+            self.resume_submission().await?;
+        }
+        self.next_response().await
     }
 }

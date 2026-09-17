@@ -1,4 +1,4 @@
-use crate::ControlRegisters;
+use crate::{ChannelWindowBlock, ControlRegisters};
 use hardware_interface_schema::Access;
 
 /// Software domain whose static register permissions are exported.
@@ -11,6 +11,17 @@ pub enum RegisterView {
 }
 
 impl RegisterView {
+    /// Access to an exact register start within one channel permission block.
+    pub const fn window_access(self, offset: usize) -> Option<Access> {
+        match self {
+            Self::Host if offset == ChannelWindowBlock::STATUS.offset() => Some(Access::ReadOnly),
+            Self::Firmware if offset == ChannelWindowBlock::CONTROL.offset() => {
+                Some(Access::ReadWrite)
+            }
+            Self::Host | Self::Firmware => None,
+        }
+    }
+
     /// Access to the atomic firmware boot report.
     pub const fn boot_access(self) -> Access {
         match self {

@@ -784,6 +784,11 @@
 #define C_FDMA_C_QURQUEQUSQUEQUT__4_RESET_VALUE UINT64_C(0)
 #define C_FDMA_C_QURQUEQUSQUEQUT__4_WRITABLE_MASK UINT64_C(1)
 
+#define C_FDMA_C_CHANNELS_INDEX UINT64_C(0)
+#define C_FDMA_C_CHANNELS_BASE UINT64_C(16)
+#define C_FDMA_C_CHANNELS_COUNT UINT64_C(3)
+#define C_FDMA_C_CHANNELS_STRIDE UINT64_C(72)
+
 /*
  * Firmware lifecycle status
  * Always accessible independently of DMA window permissions. Firmware can read/write; hardware denies all Host writes.
@@ -875,16 +880,61 @@
 #define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Access-window management
- * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ * Channel permission windows
+ * One complete permission block per hardware channel. Host and firmware see filtered views of this same physical bank.
  */
-#define C_FWIN_SIZE UINT64_C(4)
+#define C_FWIN_SIZE UINT64_C(48)
 #define C_FWIN_ACCESS_READ_ONLY UINT32_C(0)
 #define C_FWIN_ACCESS_READ_WRITE UINT32_C(1)
 #define C_FWIN_ACCESS_WRITE_ONLY UINT32_C(2)
 #define C_FWIN_RESET_CONSTANT UINT32_C(0)
 #define C_FWIN_RESET_ZERO UINT32_C(1)
 #define C_FWIN_RESET_POST_RESET UINT32_C(2)
+/*
+ * ChannelWindowRegisters.windows[0]
+ * Channel permission block
+ * One channel's firmware permission control and Host readiness status. The complete sixteen-byte block owns its reserved gaps.
+ */
+/*
+ * ChannelWindowRegisters.windows[0].control
+ * Access-window management
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+/*
+ * ChannelWindowRegisters.windows[0].status
+ * Access-window readiness
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
+ */
+/*
+ * ChannelWindowRegisters.windows[1]
+ * Channel permission block
+ * One channel's firmware permission control and Host readiness status. The complete sixteen-byte block owns its reserved gaps.
+ */
+/*
+ * ChannelWindowRegisters.windows[1].control
+ * Access-window management
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+/*
+ * ChannelWindowRegisters.windows[1].status
+ * Access-window readiness
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
+ */
+/*
+ * ChannelWindowRegisters.windows[2]
+ * Channel permission block
+ * One channel's firmware permission control and Host readiness status. The complete sixteen-byte block owns its reserved gaps.
+ */
+/*
+ * ChannelWindowRegisters.windows[2].control
+ * Access-window management
+ * Firmware-only management registers, reachable while downstream access is closed. Host accesses to this map are always denied.
+ */
+/*
+ * ChannelWindowRegisters.windows[2].status
+ * Access-window readiness
+ * Host-readable status available while downstream access is closed. Hardware derives readiness directly from the management control without storing a separate handshake state.
+ */
 
 /*
  * Downstream access enable
@@ -895,14 +945,53 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FWIN_C_QUOQUPQUEQUN_OFFSET UINT64_C(0)
-#define C_FWIN_C_QUOQUPQUEQUN_WIDTH UINT64_C(4)
-#define C_FWIN_C_QUOQUPQUEQUN_ACCESS C_FWIN_ACCESS_READ_WRITE
-#define C_FWIN_C_QUOQUPQUEQUN_RESET_KIND C_FWIN_RESET_ZERO
-#define C_FWIN_C_QUOQUPQUEQUN_RESET_VALUE UINT64_C(0)
-#define C_FWIN_C_QUOQUPQUEQUN_WRITABLE_MASK UINT64_C(1)
+#define C_FWIN_C_QUOQUPQUEQUN__1_OFFSET UINT64_C(0)
+#define C_FWIN_C_QUOQUPQUEQUN__1_WIDTH UINT64_C(4)
+#define C_FWIN_C_QUOQUPQUEQUN__1_ACCESS C_FWIN_ACCESS_READ_WRITE
+#define C_FWIN_C_QUOQUPQUEQUN__1_RESET_KIND C_FWIN_RESET_ZERO
+#define C_FWIN_C_QUOQUPQUEQUN__1_RESET_VALUE UINT64_C(0)
+#define C_FWIN_C_QUOQUPQUEQUN__1_WRITABLE_MASK UINT64_C(1)
 
-#define PDMA_FIRMWARE_WINDOW_CONTROL_BASE UINT32_C(4294967040)
+/*
+ * Downstream access enable
+ * Bit zero opens downstream host access and publishes ready immediately. Zero closes access. Initially zero; other bits are reserved. Only firmware may read or write this control.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FWIN_C_QUOQUPQUEQUN__2_OFFSET UINT64_C(16)
+#define C_FWIN_C_QUOQUPQUEQUN__2_WIDTH UINT64_C(4)
+#define C_FWIN_C_QUOQUPQUEQUN__2_ACCESS C_FWIN_ACCESS_READ_WRITE
+#define C_FWIN_C_QUOQUPQUEQUN__2_RESET_KIND C_FWIN_RESET_ZERO
+#define C_FWIN_C_QUOQUPQUEQUN__2_RESET_VALUE UINT64_C(0)
+#define C_FWIN_C_QUOQUPQUEQUN__2_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Downstream access enable
+ * Bit zero opens downstream host access and publishes ready immediately. Zero closes access. Initially zero; other bits are reserved. Only firmware may read or write this control.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FWIN_C_QUOQUPQUEQUN__3_OFFSET UINT64_C(32)
+#define C_FWIN_C_QUOQUPQUEQUN__3_WIDTH UINT64_C(4)
+#define C_FWIN_C_QUOQUPQUEQUN__3_ACCESS C_FWIN_ACCESS_READ_WRITE
+#define C_FWIN_C_QUOQUPQUEQUN__3_RESET_KIND C_FWIN_RESET_ZERO
+#define C_FWIN_C_QUOQUPQUEQUN__3_RESET_VALUE UINT64_C(0)
+#define C_FWIN_C_QUOQUPQUEQUN__3_WRITABLE_MASK UINT64_C(1)
+
+#define C_FWIN_C_WINDOWS_INDEX UINT64_C(0)
+#define C_FWIN_C_WINDOWS_BASE UINT64_C(0)
+#define C_FWIN_C_WINDOWS_COUNT UINT64_C(3)
+#define C_FWIN_C_WINDOWS_STRIDE UINT64_C(16)
+
+#define PDMA_FIRMWARE_WINDOW_COUNT UINT32_C(3)
+#define PDMA_FIRMWARE_WINDOW_STRIDE UINT32_C(16)
+#define PDMA_FIRMWARE_WINDOW_BASE UINT32_C(4278190080)
 #define PDMA_FIRMWARE_BOOT_BASE UINT32_C(4294967056)
 #define PDMA_FIRMWARE_CONTROL_BASE UINT32_C(4294966784)
 #endif

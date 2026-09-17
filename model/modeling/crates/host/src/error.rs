@@ -21,7 +21,7 @@ pub enum Error<B> {
     Ring(RingError),
     /// A register address cannot be represented.
     Geometry,
-    /// No command slot is currently available.
+    /// The management command ring or outstanding-request capacity is full.
     Full,
     /// An accepted software ring publication must be resumed first.
     RingBusy,
@@ -33,7 +33,7 @@ pub enum Error<B> {
     FirmwareFailed(FirmwareBootError),
     /// The Host's deadline expired before firmware reported readiness.
     FirmwareTimeout,
-    /// The existing management request must be collected before another submission.
+    /// Resume incomplete publication first, or collect outstanding work before serial use.
     ManagementBusy,
     /// No management request is available to resume.
     ManagementIdle,
@@ -53,7 +53,7 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             Self::Cpu(error) => error.fmt(f),
             Self::Ring(error) => error.fmt(f),
             Self::Geometry => f.write_str("invalid host register address"),
-            Self::Full => f.write_str("command ring is full"),
+            Self::Full => f.write_str("management submission capacity is full"),
             Self::RingBusy => f.write_str("software ring publication is pending"),
             Self::RingIdle => f.write_str("no retained software ring operation"),
             Self::RingCursorChanged => f.write_str("software ring cursor changed unexpectedly"),

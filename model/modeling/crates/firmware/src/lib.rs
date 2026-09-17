@@ -28,6 +28,8 @@ pub enum Error<E> {
     Dma(pdma_model_software::dma::Error<E>),
     /// Firmware could not register its management interrupt handler.
     Registration(InterruptRegistrationError<()>),
+    /// Firmware could not allocate its hardware-discovered resource table.
+    Allocation(std::collections::TryReserveError),
 }
 
 impl<E: fmt::Display> fmt::Display for Error<E> {
@@ -41,6 +43,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
             Self::SoftRing(error) => error.fmt(formatter),
             Self::Dma(error) => error.fmt(formatter),
             Self::Registration(error) => error.fmt(formatter),
+            Self::Allocation(error) => error.fmt(formatter),
         }
     }
 }
@@ -56,6 +59,7 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
             Self::SoftRing(error) => Some(error),
             Self::Dma(error) => Some(error),
             Self::Registration(error) => Some(error),
+            Self::Allocation(error) => Some(error),
         }
     }
 }

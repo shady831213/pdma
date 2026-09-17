@@ -121,6 +121,8 @@ fn channel_count_is_required_before_export() -> Result<(), Box<dyn Error>> {
         vec!["--channels"],
         vec!["--channels", "zero"],
         vec!["--channels", "0"],
+        vec!["--channels", "1048545"],
+        vec!["--channels", "4294967296"],
         vec!["--channels", "18446744073709551615"],
     ] {
         // When: exporting the selected instance.

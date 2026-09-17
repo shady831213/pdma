@@ -19,9 +19,13 @@ struct DisabledBus(AtomicUsize);
 
 impl RegisterAccess for &DisabledBus {
     type Error = io::Error;
-    async fn read(&self, _: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        self.0.fetch_add(1, Ordering::SeqCst);
+    async fn read(&self, address: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
         bytes.fill(0);
+        if address == 0 {
+            bytes.copy_from_slice(&1_u32.to_le_bytes());
+        } else if address == pdma_model_contract::CONTROL_CHANNEL_BASE + 8 {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
         Ok(())
     }
     async fn write(&self, _: u32, _: &[u8]) -> Result<(), Self::Error> {

@@ -28,8 +28,8 @@ record_schema! {
         fields: {
             #[description = "Identifier copied unchanged from the corresponding control request."]
             id: u64,
-            #[description = "0: Success. 1: NoResources, all DMA channels are allocated. 2: InvalidChannel, release index is outside the device. 3: NotAllocated, release index is not allocated. Other values are invalid."]
-            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3 } },
+            #[description = "0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, release index is outside the device. 3: NotAllocated, release index is free. 4: Busy, that channel already has a release in progress. Other values are invalid."]
+            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, Busy = 4 } },
             #[description = "Allocated channel on successful acquisition, or the requested release index for release responses. Undefined for failed acquisition."]
             channel: u32,
         },

@@ -44,7 +44,7 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         pdma_model_contract::ControlRingState::SPEC.resolve()?,
         pdma_model_contract::ControlQueue::SPEC.resolve()?,
     ];
-    let registers = DeviceRegisters::resolve(3)?;
+    let registers = DeviceRegisters::new(3)?.resolve()?;
     let control = ControlRegisters::resolve()?;
 
     // When: the public generator emits its complete header.
@@ -138,7 +138,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     assert_eq!(command.to_bytes()?, command_bytes);
     assert_eq!(response.to_bytes()?, response_bytes);
     assert_eq!(segment.to_bytes()?, segment_bytes);
-    let resolved = DeviceRegisters::resolve(3)?;
+    let resolved = DeviceRegisters::new(3)?.resolve()?;
     let rust_offsets = resolved
         .registers()
         .iter()

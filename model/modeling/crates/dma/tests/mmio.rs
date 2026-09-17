@@ -25,7 +25,11 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
         (reset, &[2, 0, 0, 0][..], Error::ReservedBits),
         (count, &[1, 0, 0, 0][..], Error::Access),
         (count + 1, &[0; 4][..], Error::Unmapped),
-        (DeviceRegisters::extent(1)?, &[0; 4][..], Error::Unmapped),
+        (
+            DeviceRegisters::new(1)?.extent(),
+            &[0; 4][..],
+            Error::Unmapped,
+        ),
         (usize::MAX, &[0; 4][..], Error::Unmapped),
     ] {
         // When: a rejected root access carries a potential reset or another write.

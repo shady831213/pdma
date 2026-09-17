@@ -1,5 +1,6 @@
 use pdma_model_software::ring::SoftRingError;
 mod failures;
+mod multi;
 mod support;
 
 use pdma_model_contract::{

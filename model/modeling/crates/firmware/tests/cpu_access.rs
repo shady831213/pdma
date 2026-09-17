@@ -37,8 +37,11 @@ impl SuspendedBus {
 impl RegisterAccess for &SuspendedBus {
     type Error = io::Error;
 
-    async fn read(&self, _: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+    async fn read(&self, address: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
         bytes.fill(0);
+        if address == 0 {
+            bytes.copy_from_slice(&1_u32.to_le_bytes());
+        }
         Ok(())
     }
 

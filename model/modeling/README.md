@@ -208,7 +208,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
 ## Channel behavior
 
 - `Device::new(memory, channel_count)` fixes the population for that instance;
-  `DeviceRegisters::resolve(channel_count)` composes its generated register blocks.
+  `DeviceRegisters::new(channel_count)?.resolve()` resolves its generated register bank.
   `DeviceControl.channel_num` reports the actual count read-only; neither reset changes it.
   Different counts can coexist in the same program. Host `ChannelConfig { id, rings }` selects a
   channel after reading discovery; setup does not change the device-wide IRQ gate.

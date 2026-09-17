@@ -5,10 +5,9 @@ use hardware_interface_schema::{
     export::{Exporter, InMemoryArtifactSink},
 };
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, Command, ControlQueue, ControlRegisters, ControlRequest, ControlResponse,
-    ControlRingState, DeviceRegisters, Endpoint, FIRMWARE_STATUS_BASE, FirmwareRegisters,
-    RegisterView, Response, Segment, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl,
-    WindowStatus,
+    CONTROL_CHANNEL_BASE, ChannelId, ChannelWindowRegisters, Command, ControlQueue,
+    ControlRegisters, ControlRequest, ControlResponse, ControlRingState, DeviceRegisters, Endpoint,
+    FIRMWARE_STATUS_BASE, FirmwareRegisters, RegisterView, Response, Segment, WINDOW_BASE,
 };
 use std::{error::Error, io::Write};
 
@@ -16,7 +15,19 @@ type HeaderSet = Vec<(&'static str, Vec<u8>)>;
 
 /// Renders all role headers for one hardware channel count before file output.
 pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
-    let registers = DeviceRegisters::resolve(count)?;
+    let layout = DeviceRegisters::new(count)?;
+    u32::try_from(count)?;
+    u32::try_from(layout.extent())?;
+    let last = count
+        .checked_sub(1)
+        .ok_or("channel count must be positive")?;
+    if layout.extent() > usize::try_from(WINDOW_BASE)?
+        || ChannelId::new(last).window_status_address().is_none()
+    {
+        return Err("channel banks overlap reserved management addresses".into());
+    }
+    let windows = ChannelWindowRegisters::new(count)?;
+    let registers = layout.resolve()?;
     let mut common = InMemoryArtifactSink::new();
     for (name, record) in [
         ("segment", Segment::SPEC.resolve()?),
@@ -51,27 +62,28 @@ pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
             &ControlRegisters::resolve()?.project_access(|r| role.control_access(r.offset()))?,
             &mut sink,
         )?;
-        let (window_base, window_name) = match role {
-            RegisterView::Host => {
-                RegisterMapCHeaderExporter::new("window", "hwin")
-                    .export(&WindowStatus::resolve()?, &mut sink)?;
-                (WINDOW_STATUS_BASE, "STATUS")
-            }
-            RegisterView::Firmware => {
-                RegisterMapCHeaderExporter::new("window", "fwin")
-                    .export(&WindowControl::resolve()?, &mut sink)?;
-                (WINDOW_CONTROL_BASE, "CONTROL")
-            }
-        };
+        let window_view = windows.resolve()?.project_access(|register| {
+            let (_, offset) = windows.windows().locate_instance(register.offset())?;
+            role.window_access(offset)
+        })?;
+        RegisterMapCHeaderExporter::new("window", format!("{prefix}win"))
+            .export(&window_view, &mut sink)?;
         let mut bytes = wrap(guard, &sink, true);
         bytes.truncate(bytes.len() - b"#endif\n".len());
         let role_name = match role {
             RegisterView::Host => "HOST",
             RegisterView::Firmware => "FIRMWARE",
         };
+        let window = windows.windows();
         writeln!(
             bytes,
-            "#define PDMA_{role_name}_WINDOW_{window_name}_BASE UINT32_C({window_base})\n#define PDMA_{role_name}_BOOT_BASE UINT32_C({FIRMWARE_STATUS_BASE})\n#define PDMA_{role_name}_CONTROL_BASE UINT32_C({CONTROL_CHANNEL_BASE})\n#endif"
+            "#define PDMA_{role_name}_WINDOW_COUNT UINT32_C({})\n#define PDMA_{role_name}_WINDOW_STRIDE UINT32_C({})",
+            window.count(),
+            window.stride()
+        )?;
+        writeln!(
+            bytes,
+            "#define PDMA_{role_name}_WINDOW_BASE UINT32_C({WINDOW_BASE})\n#define PDMA_{role_name}_BOOT_BASE UINT32_C({FIRMWARE_STATUS_BASE})\n#define PDMA_{role_name}_CONTROL_BASE UINT32_C({CONTROL_CHANNEL_BASE})\n#endif"
         )?;
         headers.push((filename, bytes));
     }

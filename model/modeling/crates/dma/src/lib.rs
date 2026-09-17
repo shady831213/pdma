@@ -23,7 +23,7 @@ pub use execution::{
 pub use fetch::Fetch;
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_dispatch};
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, DeviceControl, DeviceFaultCode, DeviceRegisters, ResetValues,
+    ChannelId, DeviceControl, DeviceFaultCode, DeviceRegistersLayout, ResetValues,
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
@@ -34,6 +34,7 @@ pub use stages::{
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]
 pub struct Device<M> {
+    registers: DeviceRegistersLayout,
     channels: Vec<Channel>,
     /// Injected memory access capability, never a device-selected backend.
     pub memory: M,
@@ -150,10 +151,15 @@ impl<M> Device<M> {
         address: usize,
         destination: &mut [u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset) = self.channel_registers(address)?;
+        let bank = self.registers.channels();
         register_dispatch!(
-            channel.read(offset, destination),
-            Err(RegisterAccessError::InvalidOffset { offset }),
+            bank.route(address, |index, offset| {
+                self.channels
+                    .get_mut(index)
+                    .ok_or(RegisterAccessError::OutsideWindow { address })?
+                    .read(offset, destination)
+            }),
+            Err(bank.finish_access(address)),
         )
     }
 
@@ -162,32 +168,16 @@ impl<M> Device<M> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset) = self.channel_registers(address)?;
+        let bank = self.registers.channels();
         register_dispatch!(
-            channel.write(offset, source),
-            Err(RegisterAccessError::InvalidOffset { offset }),
+            bank.route(address, |index, offset| {
+                self.channels
+                    .get_mut(index)
+                    .ok_or(RegisterAccessError::OutsideWindow { address })?
+                    .write(offset, source)
+            }),
+            Err(bank.finish_access(address)),
         )
-    }
-
-    fn channel_registers(
-        &mut self,
-        address: usize,
-    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
-        let relative = address
-            .checked_sub(DeviceRegisters::CHANNELS_OFFSET)
-            .ok_or(RegisterAccessError::OutsideWindow { address })?;
-        let stride = DeviceRegisters::CHANNEL_STRIDE;
-        let index = relative / stride;
-        let offset = relative % stride;
-        let count = self.channels.len();
-        let channel = self
-            .channels
-            .get_mut(index)
-            .ok_or(RegisterAccessError::OutsideWindow { address })?;
-        if index + 1 == count && offset >= ChannelBlock::EXTENT {
-            return Err(RegisterAccessError::OutsideWindow { address });
-        }
-        Ok((channel, offset))
     }
 }
 

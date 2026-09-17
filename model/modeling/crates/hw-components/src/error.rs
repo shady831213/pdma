@@ -5,6 +5,8 @@ use hardware_interface_schema::RegisterAccessError;
 /// Invalid access-window address geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WindowConfigError {
+    /// The requested channel count has invalid or unrepresentable geometry.
+    InvalidChannelCount,
     /// Downstream storage reaches the reserved management addresses.
     ReservedAddressOverlap,
     /// The platform cannot represent the management addresses.
@@ -14,6 +16,7 @@ pub enum WindowConfigError {
 impl Display for WindowConfigError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::InvalidChannelCount => "invalid channel-window count",
             Self::ReservedAddressOverlap => "downstream overlaps management addresses",
             Self::AddressUnrepresentable => "management addresses cannot be represented",
         })

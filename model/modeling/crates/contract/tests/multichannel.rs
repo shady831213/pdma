@@ -14,7 +14,7 @@ fn channel_count_is_read_only_hardware_configuration_when_reset()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a freshly reset device and its schema metadata.
     let values = DeviceControlValues::default();
-    let map = DeviceRegisters::resolve(3)?;
+    let map = DeviceRegisters::new(3)?.resolve()?;
     // When: software discovers the count at the fixed first register.
     let count = DeviceControl::read_register(&values, 0);
     let definition = map

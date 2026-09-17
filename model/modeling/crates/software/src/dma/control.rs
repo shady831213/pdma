@@ -133,14 +133,20 @@ impl ChannelControl {
         &self,
         bus: &B,
     ) -> Result<(), Error<B::Error>> {
-        while self
-            .channel_read_word(bus, CHANNEL + ChannelRegisters::RESET.offset())
-            .await?
-            != 0
-        {
+        while self.reset_in_progress(bus).await? {
             tokio::task::yield_now().await;
         }
         Ok(())
+    }
+
+    /// Samples hardware reset busy without waiting or changing its request.
+    pub async fn reset_in_progress<B: RegisterAccess + Sync>(
+        &self,
+        bus: &B,
+    ) -> Result<bool, Error<B::Error>> {
+        self.channel_read_word(bus, CHANNEL + ChannelRegisters::RESET.offset())
+            .await
+            .map(|busy| busy != 0)
     }
 
     /// Reads the sticky device-wide fault, which channel reset cannot clear.

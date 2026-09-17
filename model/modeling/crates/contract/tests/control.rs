@@ -34,6 +34,7 @@ fn response_preserves_each_assigned_status() {
         (ControlResponseStatus::NoResources, 1),
         (ControlResponseStatus::InvalidChannel, 2),
         (ControlResponseStatus::NotAllocated, 3),
+        (ControlResponseStatus::Busy, 4),
     ] {
         let response = ControlResponse {
             id: 9,

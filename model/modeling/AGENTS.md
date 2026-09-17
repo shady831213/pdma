@@ -79,9 +79,12 @@ bootstrap/enable and bidirectional doorbells are hardware registers. Firmware ca
 validated geometry once; software owns cursor updates. `docs/control-channel.md`
 defines their ownership and cancellation contract. Hardware owns registers/permissions, firmware consumes and
 executes management requests, and Host owns ring memory. Runtime carries no resource
-policy. One Host/one managed DMA channel is supported, with serial firmware service.
-Release closes work access and waits for actual channel reset completion before its
-response. Do not turn simulation cancellation into reset/drain or reclaim ring memory.
+policy. One trusted Host manages an instance-configured channel count through bounded
+asynchronous submissions. Firmware retains per-channel Free/Allocated/Releasing state;
+waiting for one reset must not block unrelated requests. Release closes only its
+channel window and waits for actual reset completion before responding. Response
+backpressure retains releases without overwriting entries. Do not turn simulation
+cancellation into reset/drain or reclaim ring memory.
 No shadow channel registers or firmware writes in the harness are allowed.
 The managed MVP does not add Function/PASID or external transaction semantics.
 
@@ -100,6 +103,10 @@ and hardware-step wakeup decisions out of that generic component.
   Do not implement further slices without a user request.
 - The constructor fixes the channel count for each instance; software only reads it.
   Contract layout/export takes that count explicitly, with generated child register blocks.
+  Register banks repeat complete child blocks; their spacing derives from child extent
+  and alignment, with no placement stride override. Reserved gaps belong to their
+  enclosing block and cannot host sibling placements or interleaved banks. Group
+  related registers in one child block before repeating it.
   One shared execution pipeline processes whole commands selected by round-robin arbitration.
   Use Arbitrate (the singleton specialization of FanIn) over channel-bound Fetch ports,
   with the RoundRobin policy owned by dma. Ready checks do not consume commands,

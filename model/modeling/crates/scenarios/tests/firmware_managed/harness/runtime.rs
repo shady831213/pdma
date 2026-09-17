@@ -16,10 +16,10 @@ pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
-use pdma_model_contract::{CONTROL_CHANNEL_BASE, DeviceRegisters, FIRMWARE_STATUS_BASE};
+use pdma_model_contract::{CONTROL_CHANNEL_BASE, FIRMWARE_STATUS_BASE};
 use pdma_model_dma::{CommandLoop, Device};
 use pdma_model_host::runtime::Irq;
-use pdma_model_hw_components::{AccessWindow, ControlChannel, FirmwareStatus, WindowConfigError};
+use pdma_model_hw_components::{ChannelWindows, ControlChannel, FirmwareStatus, WindowConfigError};
 use pdma_model_software::control::ControlIrq;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
@@ -27,7 +27,7 @@ use tokio::sync::{Mutex, Notify};
 #[derive(Debug)]
 struct Hardware<M> {
     dma: Device<M>,
-    window: AccessWindow,
+    window: ChannelWindows,
     firmware: FirmwareStatus,
     control: ControlChannel,
 }
@@ -59,7 +59,7 @@ pub struct Host<M> {
     pub runtime: InterruptRuntime<HostInterrupts>,
 }
 
-/// One managed channel, driven only when its scoped run future is polled.
+/// An instance-configured managed DMA, driven only while its run future is polled.
 #[derive(Debug)]
 pub struct Managed<M> {
     shared: Arc<Shared<M>>,
@@ -72,10 +72,14 @@ pub struct Managed<M> {
 impl<M: Clone> Managed<M> {
     /// Assembles hardware and disjoint software views; starts no tasks or firmware.
     pub fn new(memory: M) -> Result<(Self, Host<M>), BuildError> {
-        let dma = Device::new(memory.clone(), 1).map_err(BuildError::Dma)?;
+        Self::with_channels(memory, 1)
+    }
+
+    /// Selects the hardware channel count without starting software or allocating its rings.
+    pub fn with_channels(memory: M, channel_count: usize) -> Result<(Self, Host<M>), BuildError> {
+        let dma = Device::new(memory.clone(), channel_count).map_err(BuildError::Dma)?;
         let pipeline = dma.command_loop();
-        let extent = DeviceRegisters::extent(1).map_err(BuildError::Layout)?;
-        let window = AccessWindow::new(extent).map_err(BuildError::Window)?;
+        let window = ChannelWindows::new(channel_count).map_err(BuildError::Window)?;
         let firmware = FirmwareStatus::new(
             usize::try_from(FIRMWARE_STATUS_BASE)
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,

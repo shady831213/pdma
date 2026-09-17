@@ -30,7 +30,7 @@ fn register_definitions_and_placements_have_complete_documentation()
         ChannelFault::SPEC,
     ];
     // When: the public metadata is resolved as a documentation generator would consume it.
-    let map = DeviceRegisters::resolve(3)?;
+    let map = DeviceRegisters::new(3)?.resolve()?;
     // Then: both descriptions exist at every definition, bit field, map and leaf placement.
     for definition in definitions {
         assert_documented(definition.name(), definition.documentation());

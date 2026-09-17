@@ -14,6 +14,28 @@ use std::{
 
 struct Bus(Mutex<Device<SharedMemoryAccess>>);
 
+#[tokio::test]
+async fn reset_status_query_does_not_wait_or_reset_peer() -> Result<(), Box<dyn std::error::Error>>
+{
+    // Given: channel one has requested reset on a real two-channel DMA core.
+    let bus = Bus::new()?;
+    SoftwareCpu::new()
+        .run_main(async {
+            let control =
+                pdma_model_software::dma::ChannelControl::discover(&bus, ChannelId::new(1)).await?;
+            control.request_reset(&bus).await?;
+            // When: firmware samples progress without waiting for cleanup.
+            assert!(control.reset_in_progress(&bus).await?);
+            // Then: the query leaves the request and peer intact until hardware finishes.
+            assert_eq!(bus.busy(0).await?, 0);
+            assert_eq!(bus.busy(1).await?, 1);
+            bus.finish_reset()?;
+            assert!(!control.reset_in_progress(&bus).await?);
+            Ok::<_, Box<dyn std::error::Error>>(())
+        })
+        .await
+}
+
 impl Bus {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self(Mutex::new(Device::new(

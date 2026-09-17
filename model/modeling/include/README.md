@@ -28,12 +28,26 @@ holes. Read-only projections have zero writable masks. Descriptions are preserve
 The role prefix is part of every register macro namespace. Absolute bases are
 `PDMA_HOST_BOOT_BASE` and `PDMA_FIRMWARE_BOOT_BASE` (0xffff_ff10),
 `PDMA_HOST_CONTROL_BASE` and `PDMA_FIRMWARE_CONTROL_BASE` (0xffff_fe00),
-`PDMA_HOST_WINDOW_STATUS_BASE` (0xffff_ff08), and
-`PDMA_FIRMWARE_WINDOW_CONTROL_BASE` (0xffff_ff00). Register offsets are
-relative to these bases; DMA offsets start at zero.
+`PDMA_HOST_WINDOW_BASE` and `PDMA_FIRMWARE_WINDOW_BASE` (0xff00_0000).
+Register offsets are relative to these bases; DMA offsets start at zero.
 
-Static visibility never grants Host work-window access. Hardware checks the window
-on every Host DMA transaction. Firmware Ready does not open that window.
+Each channel has an independent permission window. `ChannelWindowRegisters` declares
+one bank of `ChannelWindowBlock` children, each aligned to four bytes with a 16-byte
+extent, control at byte 0 and status at byte 8. Both role views filter this same
+bank and retain its full extent: 48 bytes for three channels, including hidden
+leaves and trailing padding. Firmware control offsets are 0, 16 and 32; Host
+readiness offsets are 8, 24 and 40. Their absolute addresses are unchanged.
+The role-specific `WINDOW_COUNT` and `WINDOW_STRIDE` macros describe the configured
+count and 16-byte spacing derived from the child layout; the schema DSL has no
+explicit stride. The permission-window bank and DMA channel bank use schema bank
+placements.
+Generated bank metadata also supplies base, count, stride and nested parent links;
+the role-specific aliases derive from those layouts rather than separate arithmetic.
+The base aliases refer to channel zero. Every window starts closed.
+Static visibility never grants Host work-window access. Hardware checks the selected
+channel window on every Host DMA transaction, rejecting transactions crossing an
+aperture boundary. Device-wide registers are reachable when any channel window is
+open. Firmware Ready does not open any window.
 The boot report and control transport remain accessible while DMA access is closed.
 The 20-byte control map retains bootstrap at byte 0, enable at 8, request at 12
 and response at 16, even though each role hides one doorbell. A doorbell write of

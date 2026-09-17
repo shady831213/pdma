@@ -6,8 +6,6 @@ use std::{convert::Infallible, fmt};
 pub enum BuildError {
     /// DMA construction failed.
     Dma(pdma_model_dma::BuildError),
-    /// DMA register layout failed.
-    Layout(pdma_model_contract::DeviceLayoutError),
     /// Work and management windows overlap.
     Window(pdma_model_hw_components::WindowConfigError),
 }

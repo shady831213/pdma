@@ -11,6 +11,7 @@ mod boot;
 mod client;
 mod control;
 mod interrupts;
+mod multi_channel;
 mod notifications;
 mod publication;
 

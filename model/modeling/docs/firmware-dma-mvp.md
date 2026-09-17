@@ -6,6 +6,9 @@ This records scope and observable acceptance; the broader goal remains separate.
 
 Parent direction: [firmware-managed DMA](firmware-dma-goal.md).
 Follow-on implementation: [independent control channel](control-channel.md).
+That follow-on now supports asynchronous multi-channel management by one trusted
+Host. The one-channel story below records the original architecture milestone;
+current lifecycle and per-channel window semantics are in the linked document.
 The current assembly uses explicit acquisition/release instead of opening DMA
 as a side effect of firmware readiness.
 
@@ -144,11 +147,18 @@ this access-window demonstration.
 
 ## Implemented interfaces and verification
 
-- `contract::WindowControl` is a firmware-only generated register map at
-  `WINDOW_CONTROL_BASE` (`0xffff_ff00`). Writing its `open` bit enables work access.
-- `contract::WindowStatus` is a Host-readable generated map at `WINDOW_STATUS_BASE`
-  (`0xffff_ff08`). Its `ready` value is derived from the same open bit, not a
-  second retained handshake state. It remains readable while work access is closed.
+- `contract::ChannelWindowRegisters` declares one bank of `ChannelWindowBlock`
+  children. Each child has alignment 4 and extent 16, with `WindowControl` at
+  byte 0 and `WindowStatus` at byte 8. Bank spacing derives from the child layout;
+  the schema has no explicit stride. Host and firmware projections filter this
+  same bank while retaining its full extent, including hidden leaves and padding.
+- `contract::WindowControl` is firmware-only, at `WINDOW_CONTROL_BASE`
+  (`0xff00_0000`) for channel zero. Writing its `open` bit enables only that
+  channel's work access.
+- `contract::WindowStatus` is Host-readable at `WINDOW_STATUS_BASE`
+  (`0xff00_0008`) for channel zero. Both leaves repeat every 16 bytes. Its `ready`
+  value is derived from the same open bit, not a second retained handshake state.
+  It remains readable while work access is closed.
 - `contract::FirmwareRegisters` is an independent report at `FIRMWARE_STATUS_BASE`
   (`0xffff_ff10`), owned by `hw-components::FirmwareStatus`. Firmware alone writes
   its packed state/error word; Host can read it regardless of DMA permissions.
@@ -157,13 +167,13 @@ this access-window demonstration.
   or validation. DMA and channel reset do not reset this subsystem-level state.
   Live subsystem reboot and watchdog remain outside the current implementation;
   Host/firmware requests now use the separate control rings.
-- `hw-components::AccessWindow` protects the complete downstream DMA register
-  extent, including rejection of spanning/overflowing accesses and Host attempts
+- `hw-components::ChannelWindows` composes `AccessWindow` over independent channel
+  apertures, including rejection of spanning/overflowing accesses and Host attempts
   to access management registers. It owns no DMA register copy or software policy.
 - `firmware::main` closes the work window on its own software CPU and publishes
   Ready on success or Failed/WindowSetup on rejection. After Ready it serves the
-  independent control rings, allocating channel zero on request and closing/resetting
-  it before confirming release. A boot failure remains idle; report or service
+  independent control rings, allocating a free channel on request and closing/resetting
+  it before confirming release without blocking requests for peer channels. A boot failure remains idle; report or service
   transport errors reach the supervisor. Runtime never fabricates a firmware report.
   Shared in-memory queue state is bootstrapped through always-on registers.
   Bidirectional doorbells generate management interrupts on publication and space
@@ -172,7 +182,8 @@ this access-window demonstration.
 - `host::firmware::wait_ready` runs on the Host CPU with a caller-selected deadline.
   Timeout/cancellation does not reset hardware or stop firmware. It does not grant
   DMA permission or load firmware; Host uses `Management` to request access.
-- The harness's `runtime::Managed::new` returns an undriven system and Host capabilities.
+- The harness's `runtime::Managed::with_channels` selects the count and returns an
+  undriven system and Host capabilities; `new` selects one channel.
   `run` scopes hardware and firmware futures. `run_until` additionally supervises
   a supplied Host execution; actor errors take priority over ready Host completion.
   No actor is spawned during construction, and neither run method detaches tasks.

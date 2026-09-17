@@ -4,6 +4,8 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{CompletionFlagsValues, Response, ResponseStatus};
 use std::sync::Arc;
 
+mod multi;
+
 #[tokio::test(flavor = "current_thread")]
 async fn firmware_opens_access_for_the_same_host_program_and_real_irq_copy() -> TestResult {
     // Given: an unbooted managed system and a nonzero, unaligned-length payload.

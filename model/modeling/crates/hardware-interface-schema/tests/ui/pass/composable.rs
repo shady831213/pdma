@@ -25,7 +25,7 @@ register_schema! { pub register Status {
     fields: {},
 } }
 register_map! { pub map ChannelMap {
-    alignment: 4,
+    alignment: 4, extent: 16,
     placements: [control: Control],
 } }
 register_map! { pub map DeviceMap {
@@ -33,7 +33,7 @@ register_map! { pub map DeviceMap {
     extent: 64,
     placements: [
         control: Control,
-        channel: ChannelMap { offset: 16, count: 2, stride: 16 },
+        channel: ChannelMap[2] { offset: 16 },
     ],
 } }
 
@@ -42,7 +42,10 @@ fn main() {
     let mut pair = PairViewMut::new(&mut records).unwrap();
     pair.left_mut().unwrap().set_sequence(0x1122_3344).unwrap();
     pair.right_mut().unwrap().set_flags(0x5566).unwrap();
-    assert_eq!(PairView::new(&records).unwrap().left().unwrap().sequence(), Ok(0x1122_3344));
+    assert_eq!(
+        PairView::new(&records).unwrap().left().unwrap().sequence(),
+        Ok(0x1122_3344)
+    );
 
     let mut registers = [0_u8; 64];
     DeviceMapViewMut::new(&mut registers)
@@ -51,6 +54,22 @@ fn main() {
         .unwrap()
         .set_enable(true)
         .unwrap();
-    assert_eq!(DeviceMapView::new(&registers).unwrap().control().unwrap().enable(), Ok(true));
-    assert_eq!(DeviceMapView::new(&registers).unwrap().channel(0).unwrap().control().unwrap().enable(), Ok(false));
+    assert_eq!(
+        DeviceMapView::new(&registers)
+            .unwrap()
+            .control()
+            .unwrap()
+            .enable(),
+        Ok(true)
+    );
+    assert_eq!(
+        DeviceMapView::new(&registers)
+            .unwrap()
+            .channel(0)
+            .unwrap()
+            .control()
+            .unwrap()
+            .enable(),
+        Ok(false)
+    );
 }

@@ -35,8 +35,9 @@ pub use hardware_interface_schema_macros::{
     bits_schema, record_schema, register_map, register_schema,
 };
 pub use layout::{
-    RecordLayout, RegisterLayout, RegisterMapLayout, checked_align_up, checked_placement_end,
-    inferred_align_up, inferred_field_id,
+    RecordLayout, RegisterBank, RegisterBankError, RegisterLayout, RegisterMapLayout,
+    RegisterShape, StaticRegisterLayout, checked_align_up, checked_bank_offset,
+    checked_placement_end, inferred_align_up, inferred_field_id,
 };
 pub use record::{
     FieldDefinition, FieldSpec, RecordGraphError, RecordPlacement, RecordSpec,
@@ -49,10 +50,10 @@ pub use register::{
 };
 pub use register_map::{
     OrderedRegisterMapSpec, RegisterAccessGroup, RegisterAccessLeaf, RegisterAccessPath,
-    RegisterCollection, RegisterLayoutGeometry, RegisterLocation, RegisterMapError,
-    RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError, RepeatedRegisterBank,
-    ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap, ResolvedRegisterMapPlacement,
-    append_register_leaf, finish_ordered_register_map,
+    RegisterBankInstance, RegisterCollection, RegisterLayoutGeometry, RegisterLocation,
+    RegisterMapError, RegisterMapPlacement, RegisterMapSpec, RegisterMapValidationError,
+    RepeatedRegisterBank, ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap,
+    ResolvedRegisterMapPlacement, append_register_leaf, finish_ordered_register_map,
 };
 pub use scalar::{Scalar, ScalarKind};
 

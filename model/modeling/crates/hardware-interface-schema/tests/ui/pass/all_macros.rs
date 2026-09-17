@@ -29,13 +29,13 @@ register_schema! { pub register PassData {
     width: 4, endian: Little, access: ReadWrite,
     reset: PostReset(0), writable_mask: 0xffff_ffff, fields: {},
 } }
-register_map! { pub map PassLane { alignment: 4, placements: [data: PassData], } }
+register_map! { pub map PassLane { alignment: 4, extent: 8, placements: [data: PassData], } }
 register_map! { pub map PassMap {
     alignment: 4,
     extent: 32,
     placements: [
         value: PassStatus,
-        lane: PassLane { offset: 8, count: 2, stride: 8 },
+        lane: PassLane[2] { offset: 8 },
     ],
 } }
 
@@ -45,7 +45,15 @@ fn main() {
     view.items_mut().unwrap().set_item1(0x1234).unwrap();
     let flags = PassBitsValues { enable: true };
     let mut control = [0_u8; 1];
-    PassControlViewMut::new(&mut control).unwrap().set_fields(flags).unwrap();
+    PassControlViewMut::new(&mut control)
+        .unwrap()
+        .set_fields(flags)
+        .unwrap();
     assert_eq!(PassInferredRecord { flags }.to_bytes().unwrap(), [1]);
-    assert!(matches!(PassMap::locate(16), Some(hardware_interface_schema::register_map::RegisterLocation::Repeated { instance: 1, .. })));
+    assert!(matches!(
+        PassMap::locate(16),
+        Some(
+            hardware_interface_schema::register_map::RegisterLocation::Repeated { instance: 1, .. }
+        )
+    ));
 }

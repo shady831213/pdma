@@ -6,6 +6,7 @@ pub(super) struct Geometry {
     pub(super) definition: syn::Path,
     pub(super) placement: syn::Ident,
     pub(super) count: usize,
+    pub(super) bank: bool,
 }
 
 pub(super) struct ExpansionContext<'a> {

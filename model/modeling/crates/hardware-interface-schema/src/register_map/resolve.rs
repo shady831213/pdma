@@ -30,6 +30,7 @@ pub(super) fn resolve<I: Copy + Eq + fmt::Debug + 'static, F: Copy + Eq + fmt::D
     super::layout::validate_layout(map, &declarations)?;
     let resolved = expand(map, &declarations, true)?;
     validate_overlaps(map, &resolved)?;
+    super::envelope::resolve(map)?;
     validate_paths(map, &resolved)?;
     Ok(ResolvedRegisterMap {
         placements: Vec::new(),

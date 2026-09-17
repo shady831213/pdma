@@ -36,3 +36,7 @@ path = "tests/record_type_language/mod.rs"
 [[test]]
 name = "register_layout_dsl"
 path = "tests/register_layout_dsl/mod.rs"
+
+[[test]]
+name = "instance_banks"
+path = "tests/instance_banks/mod.rs"

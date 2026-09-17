@@ -11,7 +11,35 @@ pub(super) fn validate(decl: &OrderedMapDecl) -> syn::Result<()> {
         ));
     }
     let mut symbols = HashSet::new();
+    let mut parameters = HashSet::new();
+    for parameter in &decl.parameters {
+        if !parameters.insert(parameter.to_string()) {
+            return Err(syn::Error::new(parameter.span(), "duplicate map parameter"));
+        }
+    }
     for placement in &decl.placements {
+        if let Some(parameter) = &placement.count_parameter {
+            if !parameters.contains(&parameter.to_string()) {
+                return Err(syn::Error::new(
+                    parameter.span(),
+                    "bank count must name a declared map parameter",
+                ));
+            }
+        }
+        for argument in placement.arguments.iter().flatten() {
+            if let syn::Expr::Path(path) = argument {
+                if !path
+                    .path
+                    .get_ident()
+                    .is_some_and(|name| parameters.contains(&name.to_string()))
+                {
+                    return Err(syn::Error::new_spanned(
+                        argument,
+                        "child argument must name a declared map parameter",
+                    ));
+                }
+            }
+        }
         if !symbols.insert(placement.symbol.to_string()) {
             return Err(syn::Error::new(
                 placement.symbol.span(),
@@ -22,12 +50,6 @@ pub(super) fn validate(decl: &OrderedMapDecl) -> syn::Result<()> {
             return Err(syn::Error::new(
                 placement.count.1,
                 "register map placement count must be nonzero",
-            ));
-        }
-        if placement.count.0 == 1 && placement.stride.is_some() {
-            return Err(syn::Error::new(
-                placement.stride.map_or(placement.count.1, |value| value.1),
-                "stride is not valid for a singleton placement",
             ));
         }
     }

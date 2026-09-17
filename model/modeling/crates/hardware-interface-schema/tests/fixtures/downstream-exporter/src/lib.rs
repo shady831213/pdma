@@ -114,7 +114,7 @@ register_map! {
         placements: [
             controller: TelemetryController { offset: 4 },
             status: TelemetryStatus { offset: 12 },
-            lane: TelemetryLaneMap { offset: 32, count: 2, stride: 32 },
+            lane: TelemetryLaneMap[2] { offset: 32 },
         ],
     }
 }
@@ -165,11 +165,7 @@ pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
 impl Exporter<TelemetryResolved> for TelemetryExporter {
     type Error = Infallible;
 
-    fn export<Sink>(
-        &self,
-        schema: &TelemetryResolved,
-        sink: &mut Sink,
-    ) -> Result<(), Self::Error>
+    fn export<Sink>(&self, schema: &TelemetryResolved, sink: &mut Sink) -> Result<(), Self::Error>
     where
         Sink: ArtifactSink<Error = Self::Error>,
     {
@@ -192,10 +188,8 @@ impl Exporter<TelemetryResolved> for TelemetryExporter {
             .registers()
             .iter()
             .map(|register| {
-                let path = register
-                    .path()
-                    .strip_prefix("TelemetryMap.")
-                    .unwrap_or(register.path());
+                let source = register.path();
+                let path = source.strip_prefix("TelemetryMap.").unwrap_or(source);
                 format!("{path}@{}", register.offset())
             })
             .collect::<Vec<_>>()
@@ -238,13 +232,18 @@ pub fn composable_output_line() -> Option<String> {
     let mut pair = DownPairViewMut::new(&mut nested).ok()?;
     pair.left_mut().ok()?.set_sequence(0x1122_3344).ok()?;
     pair.right_mut().ok()?.set_flags(0x5566).ok()?;
-    let left = DownPairView::new(&nested).ok()?.left().ok()?.sequence().ok()?;
+    let pair = DownPairView::new(&nested).ok()?;
+    let left = pair.left().ok()?.sequence().ok()?;
 
     let mut registers = [0_u8; 32];
     let mut map = DownMapViewMut::new(&mut registers).ok()?;
-    let flags = DownControlBitsValues { enable: true, mode: 2 };
+    let flags = DownControlBitsValues {
+        enable: true,
+        mode: 2,
+    };
     map.control_mut().ok()?.set_fields(flags).ok()?;
-    map.lane_mut().ok()?.status_mut().ok()?.set_value(0x1234).ok()?;
+    let mut lane = map.lane_mut().ok()?;
+    lane.status_mut().ok()?.set_value(0x1234).ok()?;
     let map = DownMapView::new(&registers).ok()?;
     let control = map.control().ok()?.fields().ok()?;
     let bits = DownControlRecord { flags }.to_bytes().ok()?;

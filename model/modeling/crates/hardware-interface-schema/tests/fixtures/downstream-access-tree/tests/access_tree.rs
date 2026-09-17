@@ -4,7 +4,7 @@ use his::{register_map, register_schema};
 
 register_schema! {
     pub register ConsumerControl {
-        width: 2, alignment: 2, endian: Little, access: ReadWrite,
+        width: 2, alignment: 4, endian: Little, access: ReadWrite,
         reset: Constant(0xa103), writable_mask: 0xff0f,
         fields: { enable: 0..1, mode: 1..4, tag: 8..16 },
     }
@@ -14,7 +14,7 @@ register_map! {
     pub map ConsumerMap {
         alignment: 8,
         extent: 24,
-        placements: [controls: ConsumerControl { offset: 8, count: 2, stride: 4 }],
+        placements: [controls: ConsumerControl[2] { offset: 8 }],
         access: [queues.command.control => controls],
     }
 }

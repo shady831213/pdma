@@ -18,7 +18,7 @@ pub(super) fn leaf_collectors(
         .placements
         .iter()
         .zip(geometry)
-        .flat_map(|(placement, geometry)| {
+        .map(|(placement, geometry)| {
             let definition = &geometry.definition;
             let placement_constant = &geometry.placement;
             let symbol = placement.symbol.to_string();
@@ -38,18 +38,24 @@ pub(super) fn leaf_collectors(
             };
             let output = if root { quote!(&mut registers) } else { quote!(output) };
             let placements = if root { quote!(&mut placements) } else { quote!(placements) };
-            (0..geometry.count)
+            let bank_node = geometry.bank.then(|| quote! {
+                (#placements).push(#facade::ResolvedRegisterMapPlacement::new(
+                    ::std::format!("{}.{}", #parent_path, #symbol),
+                    #facade::RegisterMapPlacement::new(#id, #symbol, #base + #marker::#placement_constant.offset(), #marker::#placement_constant.count(), #marker::#placement_constant.stride(),
+                        #facade::RegisterLayoutGeometry::new(<#definition as #facade::RegisterLayout>::ALIGNMENT, <#definition as #facade::RegisterLayout>::EXTENT))
+                        .as_bank().with_documentation(#marker::#placement_constant.documentation()),
+                ));
+            });
+            let instances = (0..geometry.count)
                 .map(move |instance| {
-                    let child_path = if geometry.count == 1 {
-                        quote!(::std::format!("{}.{}", #parent_path, #symbol))
-                    } else {
+                    let child_path = if geometry.bank {
                         quote!(::std::format!("{}.{}[{}]", #parent_path, #symbol, #instance))
-                    };
-                    let repeated = if geometry.count == 1 {
-                        if root { quote!(::core::option::Option::None) } else { quote!(repeated) }
                     } else {
-                        quote!(::core::option::Option::Some((#symbol, #instance)))
+                        quote!(::std::format!("{}.{}", #parent_path, #symbol))
                     };
+                    let repeated = if geometry.bank {
+                        quote!(::core::option::Option::Some((#symbol, #instance)))
+                    } else if root { quote!(::core::option::Option::None) } else { quote!(repeated) };
                     quote! {
                         <#definition as #facade::RegisterLayout>::append_registers(#facade::RegisterCollection {
                             documentation: #marker::#placement_constant.documentation(),
@@ -64,7 +70,8 @@ pub(super) fn leaf_collectors(
                         });
                     }
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            quote!(#bank_node #(#instances)*)
         });
     quote!(#(#calls)*)
 }

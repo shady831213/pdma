@@ -22,7 +22,7 @@ register_map! {
     #[short_description = "Reusable channel map"]
     pub map Channels {
         alignment: 4,
-        placements: [ status: Status { count: 2 } ],
+        placements: [ status: Status[2] ],
     }
 }
 
@@ -33,7 +33,7 @@ register_map! {
             #[short_description = "Primary channel group"]
             primary: Channels,
             #[description = "Repeated auxiliary channels"]
-            auxiliary: Channels { count: 2 },
+            auxiliary: Channels[2],
         ],
     }
 }
@@ -42,7 +42,7 @@ register_map! {
     pub map DeeplyNestedDeviceRegisterInterface {
         alignment: 4,
         placements: [
-            channels_with_independent_configuration: Device { count: 2 },
+            channels_with_independent_configuration: Device[2],
         ],
     }
 }

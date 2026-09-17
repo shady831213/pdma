@@ -1,6 +1,10 @@
 use crate::{
     Documentation, RegisterCollection, RegisterDefinition, SchemaCodecError, SchemaCoordinate,
 };
+mod bank;
+pub use bank::{
+    RegisterBank, RegisterBankError, RegisterShape, StaticRegisterLayout, checked_bank_offset,
+};
 
 /// Shared byte-layout contract implemented by generated records.
 pub trait RecordLayout {

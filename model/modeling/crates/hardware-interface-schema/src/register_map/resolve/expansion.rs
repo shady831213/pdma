@@ -26,6 +26,7 @@ pub(in crate::register_map) fn resolved_banks<
                 .collect::<Vec<_>>();
             members.sort_by_key(|member| member.index);
             ResolvedRegisterBank {
+                ordered: false,
                 documentation: bank.documentation(),
                 path: join(map.name(), bank.name()),
                 name: bank.name(),
@@ -69,6 +70,7 @@ pub(in crate::register_map) fn expand<I: Copy, F: Copy + Eq + fmt::Debug>(
                 continue;
             };
             registers.push(ResolvedRegister {
+                ancestors: Vec::new(),
                 path: declaration_path(map, declaration, instance),
                 offset,
                 declaration_index: declaration.index,

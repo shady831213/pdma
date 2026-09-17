@@ -21,7 +21,7 @@ register_schema! { pub register SurfaceControl {
 } }
 
 register_map! { pub map SurfaceChannelMap {
-    alignment: 4,
+    alignment: 4, extent: 8,
     placements: [control: SurfaceControl],
 } }
 
@@ -30,7 +30,7 @@ register_map! { pub map SurfaceComposableMap {
     extent: 32,
     placements: [
         control: SurfaceControl,
-        channel: SurfaceChannelMap { offset: 16, count: 2, stride: 8 },
+        channel: SurfaceChannelMap[2] { offset: 16 },
     ],
 } }
 

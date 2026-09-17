@@ -15,13 +15,13 @@ pub(super) fn expand(context: &ExpansionContext<'_>, geometry: &[Geometry]) -> T
         for instance in 0..item.count {
             let start =
                 quote!(#marker::#placement.offset() + #instance * #marker::#placement.stride());
-            let (shared, exclusive) = if item.count == 1 {
-                (quote!(&value.#symbol), quote!(&mut value.#symbol))
-            } else {
+            let (shared, exclusive) = if item.bank {
                 (
                     quote!(value.#symbol.get(#instance)?),
                     quote!(value.#symbol.get_mut(#instance)?),
                 )
+            } else {
+                (quote!(&value.#symbol), quote!(&mut value.#symbol))
             };
             reads.push(quote! {
                 if let ::core::option::Option::Some(relative) = offset.checked_sub(#start) {

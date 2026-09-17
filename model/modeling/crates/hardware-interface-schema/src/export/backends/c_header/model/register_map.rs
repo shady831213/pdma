@@ -89,6 +89,7 @@ impl<I: Copy, F: Copy> RegisterCHeaderModel<I, F> {
 /// One complete repeated register-bank model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegisterCHeaderBank<I, F: 'static = u16> {
+    path: String,
     name: &'static str,
     base: usize,
     count: usize,
@@ -100,6 +101,7 @@ pub struct RegisterCHeaderBank<I, F: 'static = u16> {
 impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
     fn from_resolved(bank: &ResolvedRegisterBank<I, F>) -> Self {
         Self {
+            path: bank.path().to_owned(),
             name: bank.name(),
             base: bank.base(),
             count: bank.count(),
@@ -117,6 +119,11 @@ impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
     /// Returns the bank name.
     pub const fn name(&self) -> &'static str {
         self.name
+    }
+
+    /// Returns the owned bank declaration's root-qualified path.
+    pub fn path(&self) -> &str {
+        &self.path
     }
 
     /// Returns the first instance base.
@@ -148,6 +155,7 @@ impl<I: Copy, F: Copy> RegisterCHeaderBank<I, F> {
 /// Complete ordered typed model for one register-map C fragment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegisterMapCHeaderModel<I, F: 'static = u16> {
+    expanded_banks: bool,
     size: usize,
     fixed: Vec<RegisterCHeaderModel<I, F>>,
     banks: Vec<RegisterCHeaderBank<I, F>>,
@@ -159,11 +167,13 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
     /// Projects a resolved register map into a complete typed C fragment model.
     #[must_use]
     pub fn from_resolved(schema: &ResolvedRegisterMap<I, F>) -> Self {
+        let expanded_banks = schema.banks().iter().any(|bank| bank.ordered);
         let fixed = schema
             .registers()
             .iter()
             .filter(|register| {
-                register.instance().is_none()
+                expanded_banks
+                    || register.instance().is_none()
                     || !schema.banks().iter().any(|bank| {
                         bank.expanded_registers()
                             .iter()
@@ -188,6 +198,7 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
             .map(RegisterCHeaderBank::from_resolved)
             .collect();
         Self {
+            expanded_banks,
             size: schema.size(),
             fixed,
             banks,
@@ -195,6 +206,7 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
             groups: schema
                 .placements()
                 .iter()
+                .filter(|node| !node.placement().is_bank())
                 .map(|placement| (placement.path().into(), placement.documentation()))
                 .collect(),
         }
@@ -223,5 +235,9 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> RegisterMapCHeader
     /// Returns nested map paths and their instance descriptions.
     pub fn groups(&self) -> &[(String, Documentation)] {
         &self.groups
+    }
+
+    pub(crate) const fn expanded_banks(&self) -> bool {
+        self.expanded_banks
     }
 }

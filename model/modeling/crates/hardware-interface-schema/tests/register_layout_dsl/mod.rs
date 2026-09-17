@@ -52,7 +52,7 @@ register_map! {
         extent: 64,
         placements: [
             header: ControlRegister,
-            lanes: LaneRegisters { count: 2 },
+            lanes: LaneRegisters[2],
             tail: ControlRegister { offset: 56 },
         ],
     }
@@ -62,7 +62,7 @@ register_map! {
     pub map LocatedChildMap {
         alignment: 4,
         placements: [
-            children: LocatedChild { count: 2 },
+            children: LocatedChild[2],
         ],
     }
 }
@@ -71,7 +71,7 @@ register_map! {
     pub map NestedLocatedChildMap {
         alignment: 4,
         placements: [
-            maps: LocatedChildMap { count: 2 },
+            maps: LocatedChildMap[2],
         ],
     }
 }

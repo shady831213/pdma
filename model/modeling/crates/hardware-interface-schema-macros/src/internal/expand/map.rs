@@ -3,6 +3,7 @@ use syn::parse2;
 
 use crate::internal::syntax::OrderedMapDecl;
 
+mod instance;
 mod ordered;
 
 pub(in crate::internal) fn run(input: TokenStream) -> TokenStream {

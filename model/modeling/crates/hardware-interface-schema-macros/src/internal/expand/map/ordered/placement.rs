@@ -42,16 +42,12 @@ pub(super) fn placement_geometry(
             quote!(#value)
         },
     );
-    let stride = placement.stride.map_or_else(
-        || quote!(match #facade::checked_align_up(<#definition as #facade::RegisterLayout>::EXTENT, <#definition as #facade::RegisterLayout>::ALIGNMENT) { Some(value) => value, None => 0 }),
-        |value| {
-            let value = value.0;
-            quote!(#value)
-        },
-    );
+    let stride = quote!(match #facade::checked_align_up(<#definition as #facade::RegisterLayout>::EXTENT, <#definition as #facade::RegisterLayout>::ALIGNMENT) { Some(value) => value, None => 0 });
     let id = quote!(#id_name::#item_variant);
     let name = symbol.to_string();
+    let bank = placement.bank.then(|| quote!(.as_bank()));
     let spec = quote!(#facade::RegisterMapPlacement::new(#id, #name, Self::#offset_name, #count, Self::#stride_name, #facade::RegisterLayoutGeometry::new(<#definition as #facade::RegisterLayout>::ALIGNMENT, <#definition as #facade::RegisterLayout>::EXTENT)).with_documentation((#documentation).with_fallback(<#definition as #facade::RegisterLayout>::DOCUMENTATION)));
+    let spec = quote!(#spec #bank);
     let internals = vec![
         quote!(const #offset_name: usize = #offset;),
         quote!(const #stride_name: usize = #stride;),
@@ -90,21 +86,8 @@ pub(super) fn placement_geometry(
     if placement.offset.is_none() {
         assertions.push(quote!(const _: () = assert!(#facade::checked_align_up(#cursor, <#definition as #facade::RegisterLayout>::ALIGNMENT).is_some(), "register map implicit offset overflows usize");));
     }
-    if placement.stride.is_none() {
-        assertions.push(quote!(const _: () = assert!(#facade::checked_align_up(<#definition as #facade::RegisterLayout>::EXTENT, <#definition as #facade::RegisterLayout>::ALIGNMENT).is_some(), "register map implicit stride overflows usize");));
-    }
-    if count == 1 && placement.stride.is_some() {
-        assertions.push(quote!(
-            const _: () = assert!(false, "stride is not valid for a singleton placement");
-        ));
-    }
-    let instances = (0..count)
-        .map(|instance| {
-            let start = quote!(#marker::#offset_name + #instance * #marker::#stride_name);
-            let end = quote!(#start + <#definition as #facade::RegisterLayout>::EXTENT);
-            (start, end)
-        })
-        .collect();
+    assertions.push(quote!(const _: () = assert!(#facade::checked_align_up(<#definition as #facade::RegisterLayout>::EXTENT, <#definition as #facade::RegisterLayout>::ALIGNMENT).is_some(), "register map implicit stride overflows usize");));
+    let instances = vec![(quote!(#marker::#offset_name), quote!(#marker::#end_name))];
     PlacementTokens {
         item_variant,
         internals,
@@ -118,6 +101,7 @@ pub(super) fn placement_geometry(
             definition: placement.definition.clone(),
             placement: constant,
             count,
+            bank: placement.bank,
         },
     }
 }

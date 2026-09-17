@@ -1,0 +1,7 @@
+error[E0080]: evaluation panicked: register map placements overlap
+  --> tests/ui/fail/map_block_hole_overlap.rs:10:1
+   |
+10 | / register_map! { pub map Overlap {
+11 | |     alignment: 4, placements: [blocks: Block[2], intruder: Word { offset: 4 }],
+12 | | } }
+   | |___^ evaluation of `_` failed here

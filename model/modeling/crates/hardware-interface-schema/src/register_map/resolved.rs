@@ -5,6 +5,7 @@ use crate::register::{RegisterDefinition, RegisterSpec};
 /// One resolved repeated-bank declaration and its ordered template members.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRegisterBank<I: 'static = u16, F: 'static = u16> {
+    pub(crate) ordered: bool,
     pub(super) documentation: Documentation,
     pub(super) path: String,
     pub(super) name: &'static str,
@@ -66,6 +67,7 @@ impl<I: Copy, F: Copy> ResolvedRegisterBank<I, F> {
 /// One fixed or repeated register instance with a deterministic path and absolute offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRegister<I: 'static = u16, F: 'static = u16> {
+    pub(super) ancestors: Vec<super::RegisterBankInstance>,
     pub(super) path: String,
     pub(super) offset: usize,
     pub(super) declaration_index: usize,
@@ -92,6 +94,7 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegister<I, F> {
         });
         Self {
             path,
+            ancestors: Vec::new(),
             offset,
             declaration_index,
             register,
@@ -139,6 +142,11 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegister<I, F> {
     pub const fn instance(&self) -> Option<usize> {
         self.instance
     }
+
+    /// Returns every enclosing bank instance from outermost to innermost.
+    pub fn bank_ancestry(&self) -> &[super::RegisterBankInstance] {
+        &self.ancestors
+    }
 }
 
 /// Fully validated register map in deterministic declaration and instance order.
@@ -157,6 +165,8 @@ impl<I: Copy, F: Copy + Eq + core::fmt::Debug> ResolvedRegisterMap<I, F> {
     #[must_use]
     pub fn with_placements(mut self, placements: Vec<ResolvedRegisterMapPlacement<I>>) -> Self {
         self.placements = placements;
+        self.collect_banks();
+        self.placements.retain(|node| !node.placement().is_bank());
         self
     }
 

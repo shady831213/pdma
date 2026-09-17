@@ -49,7 +49,7 @@ register_map! {
         extent: 48,
         placements: [
             header: PinControl,
-            lanes: PinLane { count: 2 },
+            lanes: PinLane[2],
             tail: PinControl { offset: 40 },
         ],
     }

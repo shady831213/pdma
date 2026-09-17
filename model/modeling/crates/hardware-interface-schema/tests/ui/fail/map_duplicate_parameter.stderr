@@ -1,0 +1,5 @@
+error: duplicate map parameter
+ --> tests/ui/fail/map_duplicate_parameter.rs:2:52
+  |
+2 | register_map! { pub map Duplicate(channels: usize, channels: usize) {
+  |                                                    ^^^^^^^^

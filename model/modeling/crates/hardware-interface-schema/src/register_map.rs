@@ -1,9 +1,12 @@
 mod access;
+mod envelope;
 mod error;
 mod layout;
 mod ordered;
 mod placement;
 mod projection;
+mod topology;
+pub use topology::RegisterBankInstance;
 mod resolve;
 mod resolved;
 mod validation;

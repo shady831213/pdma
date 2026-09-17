@@ -138,30 +138,7 @@ fn value_members(
         let placement = &item.placement;
         let rust_docs = &item.rust_docs;
         let count = item.count;
-        if count == 1 {
-            fields.push(quote!(
-                #rust_docs
-                #[doc = "Owned decoded child-layout value."]
-                #field_visibility #symbol: <#definition as #facade::RegisterLayout>::Value
-            ));
-            zero_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::ZERO));
-            default_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::DEFAULT));
-            decoded_fields.push(quote!(#symbol: {
-                let range = #marker::__placement_range(#marker::#placement, 0)?;
-                let start = range.start;
-                let end = range.end;
-                let child = bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
-                <#definition as #facade::RegisterLayout>::decode(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?
-            }));
-            encoded_fields.push(quote!({
-                let range = #marker::__placement_range(#marker::#placement, 0)?;
-                let start = range.start;
-                let end = range.end;
-                let actual = bytes.len();
-                let child = bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
-                <#definition as #facade::RegisterLayout>::encode(child, &value.#symbol).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?;
-            }));
-        } else {
+        if item.bank {
             fields.push(quote!(
                 #rust_docs
                 #[doc = "Owned decoded repeated child-layout values."]
@@ -199,6 +176,29 @@ fn value_members(
             encoded_fields.push(quote!({
                 let [#(#bindings),*] = &value.#symbol;
                 #(#writes)*
+            }));
+        } else {
+            fields.push(quote!(
+                #rust_docs
+                #[doc = "Owned decoded child-layout value."]
+                #field_visibility #symbol: <#definition as #facade::RegisterLayout>::Value
+            ));
+            zero_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::ZERO));
+            default_fields.push(quote!(#symbol: <#definition as #facade::RegisterLayout>::DEFAULT));
+            decoded_fields.push(quote!(#symbol: {
+                let range = #marker::__placement_range(#marker::#placement, 0)?;
+                let start = range.start;
+                let end = range.end;
+                let child = bytes.get(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual: bytes.len() })?;
+                <#definition as #facade::RegisterLayout>::decode(child).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?
+            }));
+            encoded_fields.push(quote!({
+                let range = #marker::__placement_range(#marker::#placement, 0)?;
+                let start = range.start;
+                let end = range.end;
+                let actual = bytes.len();
+                let child = bytes.get_mut(range).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
+                <#definition as #facade::RegisterLayout>::encode(child, &value.#symbol).map_err(|error| error.rebased(#facade::SchemaCoordinate::Byte(start)))?;
             }));
         }
     }

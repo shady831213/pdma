@@ -1,0 +1,5 @@
+error: expected one literal or map parameter
+ --> tests/ui/fail/map_count_expression.rs:3:59
+  |
+3 |     alignment: 4, placements: [children: Missing[channels + 1]],
+  |                                                           ^

@@ -126,8 +126,9 @@ Field IDs are inferred in declaration order. Undeclared bits are preserved by fi
 writable mask may not select an undeclared bit. `register_map!` declares an optional
 exact `extent`, ordered `placements: [...]`, and optional `access: [...]` tree. Access
 paths name existing placements and generate borrowed views of the root bytes. A
-placement may omit its offset; the macro aligns the high-water mark. `count` defaults
-to one; omitted repeated strides use the aligned child extent. Maps and registers share
+placement may omit its offset; the macro aligns the high-water mark. A placement without
+brackets is scalar; `[count]` declares an indexed bank, including `[1]`. Bank strides
+always use the aligned child extent. Maps and registers share
 one composable `RegisterLayout`; access namespaces define no layout, IDs, or storage.
 
 Scalar record enums and enum bit fields share declaration parsing, discriminant
@@ -266,7 +267,7 @@ hardware_interface_schema::register_map! {
         extent: 16,
         placements: [
             pub status: Status,
-            pub producer: Producer { count: 2 },
+            pub producer: Producer[2],
         ],
     }
 }
@@ -416,6 +417,47 @@ fn main() {}
 No Markdown, JSON, or PDF exporter is implemented. This crate does not provide `no_std`,
 a callable C API, native-layout ABI casts, PCIe/MSI-X behavior, SR-IOV, FLR, or
 hardware-specific effects.
+
+## Constructor-bound register banks
+
+Map placements use brackets for repetition: `pub channels: Channel[4]` or
+`pub channels: Channel[channel_count] { offset: 16 }`.
+Brackets preserve indexed identity even for `[1]`; the only placement option is
+`offset`. Counts are integer literals or declared `usize` parameters. Stride is
+always `align_up(child.extent(), child.alignment())`; declare reserved padding in
+the child block's extent. Neither the DSL nor `RegisterBank::new(child, base, count)`
+accepts a stride override.
+
+Declare parameters with `pub map Device(channel_count: usize) { ... }`.
+`Device::new(channel_count)` returns a checked, immutable `DeviceLayout`, containing
+geometry rather than aggregate hardware values. Its `extent()` and typed placement
+handles use the constructor-bound count. A child can receive parameters recursively:
+`pub groups: Group(lanes)[groups]`. Parameterized child placements always produce an
+instance layout, including literal arguments such as `Group(3)[1]`.
+
+Each handle exposes `base()`, `count()`, `stride()`, checked `offset(index)`,
+`locate(address)`, and `route(address, |index, child_offset| ...)`. Route closures
+borrow caller-owned hardware and use the existing `RegisterAccessError` and
+`register_dispatch!` protocol. A block reserves its complete address envelope,
+including internal holes. Sibling placements cannot overlap a child or bank envelope;
+group registers sharing one repeated slot inside a single child block. `locate` and
+`route` select a child aperture so its own validation handles reserved holes.
+`locate_instance` selects a configured
+stride slot, including its padding, before the caller checks permissions and aperture
+bounds; `finish_access` reports the terminal hole or
+outside-window error after sibling dispatch. `rebased(parent_base)` translates a
+bank into a parent address space without allocating hardware or metadata.
+
+Static prefixes retain inferred `MEMBER_OFFSET` and `MEMBER_STRIDE` constants.
+Fixed maps retain their `Copy` values, const extent, views and `RegisterWindow` API.
+Explicit `resolve()` collects owned bank templates, counts, strides, documentation
+and leaf ancestry. Access projection retains bank geometry when members are hidden.
+C exports preserve flattened leaf symbols and include bank geometry plus parent
+bank/instance links for nested banks.
+
+Low-level `RepeatedRegisterBank` metadata retains descriptive strides. Both
+`RegisterMapSpec::validate()` and `resolve()` reject overlap across complete bank
+envelopes, including a scalar or another bank placed in an internal hole.
 
 ## PDMA consumer
 

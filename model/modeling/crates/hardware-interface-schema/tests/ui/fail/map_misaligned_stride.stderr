@@ -1,7 +1,5 @@
-error[E0080]: evaluation panicked: register map placement stride is invalid
- --> tests/ui/fail/map_misaligned_stride.rs:4:1
+error: bank stride is inferred from the child layout; declare padding with its extent
+ --> tests/ui/fail/map_misaligned_stride.rs:5:21
   |
-4 | / register_map! { pub map Bad { alignment: 4, extent: 32, placements: [
-5 | |     lane: Word { count: 2, stride: 6 },
-6 | | ] } }
-  | |_____^ evaluation of `_` failed here
+5 |     lane: Word[2] { stride: 6 },
+  |                     ^^^^^^

@@ -15,6 +15,7 @@ impl RegisterLayoutGeometry {
 /// One ordered child-layout placement in a generated register map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterMapPlacement<I> {
+    bank: bool,
     documentation: crate::Documentation,
     id: I,
     name: &'static str,
@@ -37,6 +38,7 @@ impl<I: Copy> RegisterMapPlacement<I> {
     ) -> Self {
         Self {
             id,
+            bank: false,
             name,
             offset,
             count,
@@ -62,6 +64,18 @@ impl<I: Copy> RegisterMapPlacement<I> {
     /// Returns the generated placement identity.
     pub const fn id(self) -> I {
         self.id
+    }
+
+    /// Preserves explicit bank identity, including a count of one.
+    #[must_use]
+    pub const fn as_bank(mut self) -> Self {
+        self.bank = true;
+        self
+    }
+
+    /// Returns whether brackets declared this placement as a bank.
+    pub const fn is_bank(self) -> bool {
+        self.bank
     }
 
     /// Returns the placement name.

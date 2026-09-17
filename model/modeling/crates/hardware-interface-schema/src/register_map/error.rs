@@ -6,6 +6,13 @@ use crate::register::{RegisterDefinitionError, RegisterValidationError};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RegisterMapValidationError<I> {
+    /// Complete placement envelopes intersect, including reserved holes.
+    PlacementEnvelopeOverlap {
+        #[doc = "Earlier scalar or bank declaration name."]
+        first_name: &'static str,
+        #[doc = "Later scalar or bank declaration name."]
+        second_name: &'static str,
+    },
     /// Two declarations use the same typed or numeric identity.
     DuplicateRegisterId {
         #[doc = "Repeated identity."]
@@ -91,6 +98,17 @@ impl<I: fmt::Debug> std::error::Error for RegisterMapValidationError<I> {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RegisterMapError<I = u16, F = u16> {
+    /// Complete placement envelopes intersect, including reserved holes.
+    PlacementEnvelopeOverlap {
+        #[doc = "Root map name."]
+        root: &'static str,
+        #[doc = "Later scalar or bank declaration path."]
+        path: String,
+        #[doc = "Later declaration index."]
+        declaration_index: usize,
+        #[doc = "Earlier scalar or bank declaration path."]
+        first_path: String,
+    },
     /// Two placement declarations reuse an identity.
     DuplicatePlacementId {
         #[doc = "Root map name."]

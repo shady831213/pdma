@@ -1,0 +1,5 @@
+error: bank count must name a declared map parameter
+ --> tests/ui/fail/map_unknown_count.rs:3:50
+  |
+3 |     alignment: 4, placements: [children: Missing[channels]],
+  |                                                  ^^^^^^^^

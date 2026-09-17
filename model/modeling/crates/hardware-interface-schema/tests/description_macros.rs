@@ -38,7 +38,7 @@ register_map! {
     #[short_description = "Device map"]
     pub map Device { alignment: 1, placements: [
         #[description = "Repeated channel placement"]
-        pub channels: Channel { count: 2 },
+        pub channels: Channel[2],
         pub direct: Control,
     ] }
 }

@@ -1,5 +1,5 @@
 use syn::{
-    Ident, Path, Result, Token, Visibility, braced, bracketed,
+    Ident, Path, Result, Token, Visibility, braced, bracketed, parenthesized,
     parse::{Parse, ParseStream},
     spanned::Spanned,
 };
@@ -10,6 +10,7 @@ pub(in crate::internal) struct OrderedMapDecl {
     pub(in crate::internal) documentation: Documentation,
     pub(in crate::internal) visibility: Visibility,
     pub(in crate::internal) name: Ident,
+    pub(in crate::internal) parameters: Vec<Ident>,
     pub(in crate::internal) alignment: (usize, proc_macro2::Span),
     pub(in crate::internal) extent: Option<(usize, proc_macro2::Span)>,
     pub(in crate::internal) placements: Vec<OrderedPlacementDecl>,
@@ -29,7 +30,9 @@ pub(in crate::internal) struct OrderedPlacementDecl {
     pub(in crate::internal) definition: Path,
     pub(in crate::internal) offset: Option<(usize, proc_macro2::Span)>,
     pub(in crate::internal) count: (usize, proc_macro2::Span),
-    pub(in crate::internal) stride: Option<(usize, proc_macro2::Span)>,
+    pub(in crate::internal) bank: bool,
+    pub(in crate::internal) count_parameter: Option<Ident>,
+    pub(in crate::internal) arguments: Option<Vec<syn::Expr>>,
 }
 
 impl Parse for OrderedMapDecl {
@@ -38,6 +41,19 @@ impl Parse for OrderedMapDecl {
         let visibility = input.parse()?;
         keyword(input, "map")?;
         let name = input.parse()?;
+        let mut parameters = Vec::new();
+        if input.peek(syn::token::Paren) {
+            let args;
+            parenthesized!(args in input);
+            while !args.is_empty() {
+                parameters.push(args.parse()?);
+                args.parse::<Token![:]>()?;
+                keyword(&args, "usize")?;
+                if !args.is_empty() {
+                    args.parse::<Token![,]>()?;
+                }
+            }
+        }
         let body;
         braced!(body in input);
         key(&body, "alignment")?;
@@ -78,6 +94,7 @@ impl Parse for OrderedMapDecl {
             documentation,
             visibility,
             name,
+            parameters,
             alignment,
             extent,
             placements,
@@ -114,9 +131,36 @@ impl Parse for OrderedPlacementDecl {
         input.parse::<Token![:]>()?;
         let definition: Path = input.parse()?;
         let definition_span = definition.span();
+        let arguments = if input.peek(syn::token::Paren) {
+            let args;
+            parenthesized!(args in input);
+            Some(
+                args.parse_terminated(argument, Token![,])?
+                    .into_iter()
+                    .collect(),
+            )
+        } else {
+            None
+        };
+        let bank = input.peek(syn::token::Bracket);
+        let mut count_parameter = None;
+        let count = if bank {
+            let body;
+            bracketed!(body in input);
+            let value = if body.peek(Ident) {
+                count_parameter = Some(body.parse()?);
+                (1, definition_span)
+            } else {
+                usize_lit(&body)?
+            };
+            if !body.is_empty() {
+                return Err(body.error("expected one literal or map parameter"));
+            }
+            value
+        } else {
+            (1, definition_span)
+        };
         let mut offset = None;
-        let mut count = None;
-        let mut stride = None;
         if input.peek(syn::token::Brace) {
             let body;
             braced!(body in input);
@@ -126,9 +170,13 @@ impl Parse for OrderedPlacementDecl {
                 let value = usize_lit(&body)?;
                 match option.to_string().as_str() {
                     "offset" if offset.is_none() => offset = Some(value),
-                    "count" if count.is_none() => count = Some(value),
-                    "stride" if stride.is_none() => stride = Some(value),
-                    "offset" | "count" | "stride" => {
+                    "stride" => {
+                        return Err(syn::Error::new(
+                            option.span(),
+                            "bank stride is inferred from the child layout; declare padding with its extent",
+                        ));
+                    }
+                    "offset" => {
                         return Err(syn::Error::new(option.span(), "duplicate placement option"));
                     }
                     _ => return Err(syn::Error::new(option.span(), "unknown placement option")),
@@ -144,8 +192,21 @@ impl Parse for OrderedPlacementDecl {
             symbol,
             definition,
             offset,
-            count: count.unwrap_or((1, definition_span)),
-            stride,
+            count,
+            bank,
+            count_parameter,
+            arguments,
         })
+    }
+}
+
+fn argument(input: ParseStream<'_>) -> Result<syn::Expr> {
+    if input.peek(Ident) {
+        let name: Ident = input.parse()?;
+        Ok(syn::parse_quote!(#name))
+    } else {
+        let literal: syn::LitInt = input.parse()?;
+        literal.base10_parse::<usize>()?;
+        Ok(syn::parse_quote!(#literal))
     }
 }

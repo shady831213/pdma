@@ -24,6 +24,13 @@ use context::{ExpansionContext, Geometry};
 
 pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     validate(decl)?;
+    if !decl.parameters.is_empty() || decl.placements.iter().any(|p| p.arguments.is_some()) {
+        return super::instance::expand(decl);
+    }
+    expand_fixed(decl)
+}
+
+fn expand_fixed(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
     let facade = crate_path::facade()?;
     let visibility = &decl.visibility;
     let marker = &decl.name;

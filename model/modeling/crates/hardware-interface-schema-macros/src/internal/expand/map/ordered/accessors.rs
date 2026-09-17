@@ -22,14 +22,14 @@ pub(super) fn leaf_getters(
     let placement = &item.placement;
     let rust_docs = &item.rust_docs;
     let count = item.count;
-    let (parameters, check, instance) = if count == 1 {
-        (quote!(), quote!(), quote!(0usize))
-    } else {
+    let (parameters, check, instance) = if item.bank {
         (
             quote!(instance: usize),
             quote!(if instance >= #count { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count, actual: instance }); }),
             quote!(instance),
         )
+    } else {
+        (quote!(), quote!(), quote!(0usize))
     };
     GetterPair {
         immutable: quote! {

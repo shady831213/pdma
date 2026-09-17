@@ -1,0 +1,16 @@
+error[E0061]: this function takes 3 arguments but 4 arguments were supplied
+ --> tests/ui/fail/bank_custom_stride.rs:7:13
+  |
+7 |     let _ = RegisterBank::new(StaticRegisterLayout::<Word>::new(), 0, 2, 16);
+  |             ^^^^^^^^^^^^^^^^^                                            -- unexpected argument #4 of type `{integer}`
+  |
+note: associated function defined here
+ --> src/layout/bank.rs
+  |
+  |     pub fn new(child: L, base: usize, count: usize) -> Result<Self, RegisterBankError> {
+  |            ^^^
+help: remove the extra argument
+  |
+7 -     let _ = RegisterBank::new(StaticRegisterLayout::<Word>::new(), 0, 2, 16);
+7 +     let _ = RegisterBank::new(StaticRegisterLayout::<Word>::new(), 0, 2);
+  |

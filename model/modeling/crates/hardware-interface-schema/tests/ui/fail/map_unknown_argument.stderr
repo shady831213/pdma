@@ -1,0 +1,5 @@
+error: child argument must name a declared map parameter
+ --> tests/ui/fail/map_unknown_argument.rs:3:50
+  |
+3 |     alignment: 4, placements: [children: Missing(lanes)[channels]],
+  |                                                  ^^^^^

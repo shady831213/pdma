@@ -1,0 +1,5 @@
+error: bank stride is inferred from the child layout; declare padding with its extent
+ --> tests/ui/fail/map_explicit_stride.rs:7:52
+  |
+7 |     alignment: 4, placements: [children: Word[2] { stride: 8 }],
+  |                                                    ^^^^^^

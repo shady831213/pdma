@@ -7,7 +7,7 @@ use hardware_interface_schema::{
 register_schema! {
     pub register TreeControl {
         width: 2,
-        alignment: 2,
+        alignment: 4,
         endian: Little,
         access: ReadWrite,
         reset: Constant(0xa103),
@@ -34,7 +34,7 @@ register_map! {
         extent: 32,
         placements: [
             status: TreeStatus,
-            controls: TreeControl { offset: 8, count: 2, stride: 4 },
+            controls: TreeControl[2] { offset: 8 },
             tail: TreeControl { offset: 24 },
             direct: TreeControl { offset: 28 },
         ],

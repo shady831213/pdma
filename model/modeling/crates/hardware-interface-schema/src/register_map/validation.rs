@@ -19,7 +19,8 @@ impl<I: Copy + Eq + 'static> RegisterMapSpec<I> {
                 .map_err(RegisterMapValidationError::Register)?;
         }
         self.validate_layout()?;
-        self.validate_overlaps()
+        self.validate_overlaps()?;
+        super::envelope::validate(self)
     }
 
     fn declarations(self) -> impl Iterator<Item = RegisterSpec<I>> {

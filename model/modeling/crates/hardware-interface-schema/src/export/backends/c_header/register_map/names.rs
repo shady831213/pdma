@@ -10,7 +10,15 @@ pub(super) fn map_names<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug>
         model
             .banks()
             .iter()
-            .map(|bank| c_identifier(bank.name()))
+            .enumerate()
+            .map(|(index, bank)| {
+                let name = c_identifier(bank.name());
+                if model.expanded_banks() && name.len() > 32 {
+                    format!("BANK_{index}")
+                } else {
+                    name
+                }
+            })
             .collect(),
     );
     let mut bases = model

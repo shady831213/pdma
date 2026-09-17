@@ -31,12 +31,15 @@ register_schema! { pub register BeStatus {
     reset: Constant(0), writable_mask: 0xffff,
     fields: {},
 } }
+register_map! { pub map StatusBlock {
+    alignment: 2, extent: 16, placements: [pub status: BeStatus],
+} }
 register_map! { pub map ComposableMap {
     alignment: 4,
     extent: 64,
     placements: [
         control: Control,
-        channel_status: BeStatus { offset: 16, count: 2, stride: 16 },
+        channel_status: StatusBlock[2] { offset: 16 },
     ],
 } }
 
@@ -90,13 +93,18 @@ register_schema! {
 }
 
 register_map! {
+    pub map SensorChannel {
+        alignment: 4, extent: 16,
+        placements: [data: SensorData, flags: SensorFlags { offset: 8 }],
+    }
+}
+register_map! {
     pub map SensorMap {
         alignment: 4,
         extent: 64,
         placements: [
             status: StatusRegister,
-            channel_data: SensorData { offset: 16, count: 2, stride: 16 },
-            channel_flags: SensorFlags { offset: 24, count: 2, stride: 16 },
+            channels: SensorChannel[2] { offset: 16 },
         ],
     }
 }
@@ -135,14 +143,8 @@ fn record_accessors_when_nested_sequence_is_used() -> Result<(), SchemaCodecErro
 
 #[test]
 fn generated_ids_when_used_in_hash_and_order_sets() {
-    let hash = HashSet::from([
-        SensorMapRegisterId::ChannelFlags,
-        SensorMapRegisterId::Status,
-    ]);
-    let order = BTreeSet::from([
-        SensorMapRegisterId::ChannelData,
-        SensorMapRegisterId::Status,
-    ]);
+    let hash = HashSet::from([SensorMapRegisterId::Channels, SensorMapRegisterId::Status]);
+    let order = BTreeSet::from([SensorMapRegisterId::Channels, SensorMapRegisterId::Status]);
     assert_eq!(hash.len(), 2);
     assert_eq!(order.len(), 2);
 }
@@ -157,9 +159,11 @@ fn register_metadata_when_schema_is_generated() {
 #[test]
 fn map_lookup_when_fixed_repeated_interior_and_unmapped_offsets_are_used() {
     assert_eq!(
-        SensorMap::register(SensorMapRegisterId::ChannelFlags)
-            .map(hardware_interface_schema::RegisterSpec::name),
-        Some("CHANNEL_FLAGS")
+        SensorMap::resolve()
+            .unwrap()
+            .locate(24)
+            .map(hardware_interface_schema::ResolvedRegister::name),
+        Some("FLAGS")
     );
     assert!(matches!(
         SensorMap::locate(0),
@@ -210,14 +214,14 @@ fn register_map_views_when_le_and_be_definitions_are_placed_use_exact_bytes()
     let mut bytes = [0_u8; 64];
     let mut map = ComposableMapViewMut::new(&mut bytes)?;
     map.control_mut()?.set_enable(true)?;
-    map.channel_status_mut(0)?.set_value(0x1234)?;
-    map.channel_status_mut(1)?.set_value(0xabcd)?;
+    map.channel_status_mut(0)?.status_mut()?.set_value(0x1234)?;
+    map.channel_status_mut(1)?.status_mut()?.set_value(0xabcd)?;
     assert_eq!(&bytes[..4], &[1, 0, 0, 0]);
     assert_eq!(&bytes[16..18], &[0x12, 0x34]);
     assert_eq!(&bytes[32..34], &[0xab, 0xcd]);
     let map = ComposableMapView::new(&bytes)?;
     assert!(map.control()?.enable()?);
-    assert_eq!(map.channel_status(1)?.value()?, 0xabcd);
+    assert_eq!(map.channel_status(1)?.status()?.value()?, 0xabcd);
     Ok(())
 }
 

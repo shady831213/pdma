@@ -20,19 +20,19 @@ register_schema! { register Wide {
 } }
 
 register_map! { map Lane {
-    alignment: 8, extent: 24,
+    alignment: 8, extent: 32,
     placements: [byte: Byte, half: Half, word: Word, wide: Wide],
 } }
 register_map! { map Group {
-    alignment: 8, extent: 64,
-    placements: [lanes: Lane { offset: 8, count: 2, stride: 32 }],
+    alignment: 8, extent: 80,
+    placements: [lanes: Lane[2] { offset: 8 }],
 } }
 register_map! { map Device {
-    alignment: 8, extent: 176,
+    alignment: 8, extent: 184,
     placements: [
         head: Byte,
-        groups: Group { offset: 16, count: 2, stride: 80 },
-        tail: Word { offset: 168 },
+        groups: Group[2] { offset: 16 },
+        tail: Word { offset: 176 },
     ],
 } }
 
@@ -52,7 +52,7 @@ fn reads_exact_leaves_when_layouts_repeat_at_nested_offsets() {
         (138, 0x3456),
         (140, 0x789a_bcde),
         (144, 0x0123_4567_89ab_cdef),
-        (168, 0x789a_bcde),
+        (176, 0x789a_bcde),
     ];
 
     // When
@@ -126,7 +126,7 @@ fn rejects_reads_when_offsets_are_interiors_holes_or_outside_map() {
         152,
         160,
         172,
-        176,
+        184,
         usize::MAX,
     ];
 
@@ -153,7 +153,7 @@ fn preserves_all_values_when_write_offset_has_no_exact_leaf() {
         152,
         160,
         172,
-        176,
+        184,
         usize::MAX,
     ] {
         // Given

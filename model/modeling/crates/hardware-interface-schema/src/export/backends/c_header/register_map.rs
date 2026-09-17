@@ -94,9 +94,37 @@ fn render<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug>(
             register,
         );
     }
-    for (bank, names) in model.banks().iter().zip(&names.banks) {
+    for (index, (bank, names)) in model.banks().iter().zip(&names.banks).enumerate() {
         output.push('\n');
-        push_bank(&mut output, prefix, bank, names);
+        if model.expanded_banks() {
+            let name = format!("{prefix}_{}", names.name);
+            let _ = writeln!(output, "#define {name}_INDEX UINT64_C({index})");
+            if let Some((parent, instance)) = model
+                .banks()
+                .iter()
+                .enumerate()
+                .filter_map(|(parent, candidate)| {
+                    let suffix = bank
+                        .path()
+                        .strip_prefix(candidate.path())?
+                        .strip_prefix('[')?;
+                    let (instance, _) = suffix.split_once(']')?;
+                    Some((parent, instance))
+                })
+                .next_back()
+            {
+                let _ = writeln!(output, "#define {name}_PARENT_INDEX UINT64_C({parent})");
+                let _ = writeln!(
+                    output,
+                    "#define {name}_PARENT_INSTANCE UINT64_C({instance})"
+                );
+            }
+            let _ = writeln!(output, "#define {name}_BASE UINT64_C({})", bank.base());
+            let _ = writeln!(output, "#define {name}_COUNT UINT64_C({})", bank.count());
+            let _ = writeln!(output, "#define {name}_STRIDE UINT64_C({})", bank.stride());
+        } else {
+            push_bank(&mut output, prefix, bank, names);
+        }
     }
     output
 }

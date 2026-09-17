@@ -9,8 +9,8 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{ChannelId, DeviceControl, DeviceRegisters, Response};
 use pdma_model_host::{Channel, runtime::Irq};
-use std::{convert::Infallible, error::Error, sync::Arc};
-use tokio::sync::{Notify, mpsc};
+use std::{convert::Infallible, error::Error};
+use tokio::sync::mpsc;
 
 use crate::{Scenario, TestResult};
 use buffers::Buffers;
@@ -19,7 +19,6 @@ pub(super) struct Ports<'a, B> {
     pub(super) bus: B,
     pub(super) memory: SharedMemoryAccess,
     pub(super) allocator: SharedMemoryAllocator,
-    pub(super) memory_changed: Arc<Notify>,
     pub(super) interrupts: InterruptRegistration<'a, Irq, Handler>,
 }
 

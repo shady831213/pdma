@@ -52,7 +52,7 @@ where
         if ready {
             break;
         }
-        ports.memory_changed.notified().await;
+        tokio::task::yield_now().await;
     }
     match scenario {
         Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => Ok(None),

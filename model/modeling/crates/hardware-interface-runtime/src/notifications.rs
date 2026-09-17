@@ -19,7 +19,7 @@ impl Notifier {
 }
 
 /// Receives progress hints independently of interrupt dispatch.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Notifications(Arc<Notify>);
 
 impl NotificationWait for Notifications {

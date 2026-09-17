@@ -22,7 +22,9 @@ pub use access::{MemoryAccess, MemoryAccessError};
 pub use address::{MemoryAddress, MemoryAlignment};
 pub use allocator::{MemoryAllocationError, SharedMemoryAllocator};
 #[cfg(feature = "async-runtime")]
-pub use cpu::{CpuContextError, CpuLocal, CpuOwner, SoftwareCpu};
+pub use cpu::{
+    CpuAccessError, CpuContextError, CpuLocal, CpuOwner, CpuRegisterAccess, SoftwareCpu,
+};
 pub use error::{MemoryAlignmentError, MemoryError, MemoryRegionError};
 #[cfg(feature = "async-runtime")]
 pub use interrupt::{

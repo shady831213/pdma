@@ -64,3 +64,19 @@ async fn notification_destinations_are_independent() {
     );
     firmware.wait_notification().await;
 }
+#[tokio::test]
+async fn receiver_clones_share_one_consumable_hint() {
+    // Given: two handles to the same notification destination.
+    let (sender, receiver) = notifications();
+    let other = receiver.clone();
+    // When: one handle consumes the single emitted hint.
+    sender.notify();
+    other.wait_notification().await;
+    // Then: the original handle cannot consume that hint a second time.
+    let mut wait = pin!(receiver.wait_notification());
+    assert!(
+        wait.as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending()
+    );
+}

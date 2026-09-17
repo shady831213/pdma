@@ -81,6 +81,15 @@ Dropping the whole scoped `run_main` future cancels both software futures; it sp
 no background tasks. `CpuOwner::scope` checks ownership before every inner poll of a
 capability, including when an already-pending future is repolled from another CPU.
 
+`SoftwareCpu::bind_registers(bus)` creates a `CpuRegisterAccess<B>` tied to that
+explicit CPU, including when assembly runs outside any CPU context. For a `Sync`
+register transport, its `RegisterAccess` implementation checks ownership before
+constructing or polling each read/write operation through `CpuOwner::scope`.
+Main and ISR turns on the owner can use it; inactive or other CPU polls return
+`CpuAccessError::Cpu` before reaching the transport. Transport errors remain
+`CpuAccessError::Access` with their original source. Cloning a cloneable binding
+retains its owner. Cancellation retains the underlying transport's semantics.
+
 Observation reservations are affine committed state. Consumers reserve only after every
 fallible check, inside a non-awaiting commit section, then release effect locks and call
 `ObservationReservation::emit` in the same non-cancellable tail. Dropping a reservation,
@@ -104,4 +113,5 @@ Under `async-runtime`, `notifications()` creates a `Notifier` and `Notifications
 which implements `NotificationWait`. This is a coalescing progress hint without interrupt dispatch,
 payloads or handlers. Callers inspect shared state before waiting. One hint is retained
 before a waiter arrives, and cancelling a registered waiter preserves its unconsumed
-hint. Sender drop does not imply EOF; scoped runtime lifetime controls shutdown.
+hint. Cloned receivers share one consumable hint; this is not broadcast delivery.
+Sender drop does not imply EOF; scoped runtime lifetime controls shutdown.

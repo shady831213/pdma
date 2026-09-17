@@ -45,10 +45,14 @@ capability; CPU validation, handler tables and dispatcher lifecycle belong to th
 runtime. Do not expose registry freezing, startup handoff channels or dispatcher tasks
 to the software program. `host::runtime` owns PDMA transport, separate from the host
 channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-runtime`.
+Software entrypoints must not capture `CpuOwner` or manually scope their operations.
+Runtime assembly supplies CPU-bound register capabilities where needed; CPU-local
+driver guards remain internal. Host test programs observe software-visible memory
+and registers, not synthetic harness notifications of individual DMA writes.
 
-`include/pdma_model_abi.h` is generated from the current contract schemas by
+`include/pdma_common.h`, `include/pdma_host.h` and `include/pdma_firmware.h` are generated from the current contract schemas by
 `pdma-abi-header` with the optional `export-c-header` feature. Regenerate and check
-it using the commands in `include/README.md`; never edit it by hand. The old ABI
+them using the commands in `include/README.md`; never edit them by hand. The old ABI
 header is preserved on the backup branch, not in the active include directory.
 
 The obsolete architecture specification and version plans formerly under
@@ -64,8 +68,8 @@ in the scenario harness, superseding the earlier wiring placement requirement.
 Keep the direct-DMA assembly available for ordinary tests.
 The DMA core lives in `crates/dma`. The `firmware_managed/harness/runtime` modules
 assemble the MVP over `hw-components::AccessWindow` and `firmware::main`.
-Host and firmware use separate software CPUs. Only Host needs an interrupt runtime
-in this MVP; firmware runs directly on its own CPU. Firmware boot status is separate
+Host and firmware use separate software CPUs and interrupt runtimes. Each program
+registers its management ISR; Host has a separate DMA vector. Firmware boot status is separate
 from window permission: Booting/Ready/Failed and a boot error are firmware-published
 in an always-on register. Window readiness still derives from its open bit.
 Host waits for firmware with a software deadline before checking DMA permission.
@@ -138,8 +142,10 @@ and hardware-step wakeup decisions out of that generic component.
   PDMA entry geometry and pointer rules are protocol, even with an `Entry` parameter.
   `software::ring` owns `RingConfig`, `SoftRing` and their cursor I/O adapters;
   host retains its `RingConfig` reexport. Host and firmware share this PDMA software
-  crate, which depends on contract, generic runtime and schema, never host, firmware
-  or DMA. Generic schema/runtime expose no ring protocol or ring types and have no
+  crate, whose normal dependencies are contract, generic runtime and schema, never host, firmware
+  or DMA. Its `dma` module also owns the shared queue driver and register-only
+  `ChannelControl`; firmware uses the latter for reset without owning DMA rings.
+  Generic schema/runtime expose no ring protocol or ring types and have no
   normal dependency on PDMA crates. Transport, CPU and notification mechanics stay
   in the generic runtime. `SoftRing` supplies CPU-owned software operations with
   borrowed MMIO or memory cursors. Host/device

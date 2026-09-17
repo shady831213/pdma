@@ -2,7 +2,7 @@
 
 The managed assembly has independent Host-to-firmware command and firmware-to-Host
 response rings. Their geometry, producer/consumer cursors and entries live in memory.
-They are not DMA task rings. There is no event ring or management ISR.
+They are not DMA task rings. Both directions use management ISRs; there is no event ring.
 
 ## Ownership and startup
 
@@ -14,12 +14,19 @@ They are not DMA task rings. There is no event ring or management ISR.
   Subsequent operations access the independent cursor fields, not mutable geometry.
 - Hardware owns only bootstrap, enable and two doorbells. It has no memory capability,
   resource-allocation policy, queue arithmetic or software handlers.
-- Runtime connects each doorbell pulse to its destination's generic notification waiter.
+- Runtime connects each doorbell pulse to its destination's pending interrupt source.
+  Each software program registers its own ISR, which wakes the ring-processing task.
   The ordinary direct-DMA assembly remains independent.
 
-Firmware starts on subsystem reset release, closes DMA work access and publishes
+Firmware starts on subsystem reset release, registers its management ISR, closes DMA work access and publishes
 Ready. Host waits for Ready before setting up queues. Ready means firmware can serve
 requests, not that Host can access DMA.
+
+The managed harness supplies firmware with a register port bound by
+`SoftwareCpu::bind_registers`. Runtime checks CPU ownership before every underlying
+access poll, including resumed accesses. Firmware main performs ordinary register
+operations and ISR registration; it does not capture CPU identity or wrap its
+business flow in CPU scopes. Shared driver internals retain their CPU-local guards.
 
 The always-on `ControlRegisters` map at `CONTROL_CHANNEL_BASE` (`0xffff_fe00`)
 contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
@@ -53,10 +60,24 @@ Firmware rings the response doorbell after command consumption and response
 publication. Space-return notifications let a peer blocked by a full ring resume.
 Firmware checks response space before accepting another command.
 
+The firmware-local control endpoint owns attachment, receive/respond, and these
+notifications. Its service loop only receives, executes and responds. With one
+serial response producer, accepted work retains room for its response; a later
+full ring violates that protocol and reports a pointer error rather than waiting.
+
 Notification is a hint, not a count or payload. Endpoints check the shared ring,
 then wait if they cannot progress. A notification received before the wait is retained;
 repeated notifications coalesce. Spurious or retried doorbells are harmless. The
 two destinations do not share DMA interrupt causes, masks or handlers.
+
+The existing coalescing doorbell pulse becomes a platform-pending interrupt.
+`InterruptSource::claim` consumes it before dispatch; this slice adds no management
+cause/mask/ACK registers. Host dispatch distinguishes Control and DMA vectors.
+Firmware has its own control source, CPU and `InterruptRuntime`.
+`software::control::InterruptEvent` retains the ISR wake hint across an early
+interrupt or a cancelled wait. Clones share that hint, not a broadcast stream;
+each endpoint has one processing waiter. A missing ISR is a dispatcher error,
+never a fallback to direct bus notification.
 
 The current memory backend completes accesses synchronously and serializes shared
 storage. This is not a claim of PCIe cache coherence: a future backend/transport
@@ -73,6 +94,8 @@ allocates/configures ordinary DMA rings; firmware does not proxy DMA task descri
 for an unallocated channel. A valid release closes Host work MMIO, requests the
 existing DMA channel reset, waits for its actual busy register to clear, then frees
 the allocation and publishes Success. Runtime does not implement this policy.
+Both software domains use `software::dma::ChannelControl` for this register-only
+reset handshake. It does not construct or own DMA rings.
 
 Closing MMIO alone is not a drain. Host must stop its ring/ISR use before release
 and retain memory until completion. Reset does not undo completed external writes.
@@ -96,8 +119,11 @@ Neither Ring nor SoftRing knows management request IDs or allocation policy.
 Generic schema/runtime expose no ring protocol or ring types. Runtime supplies
 transport, CPU ownership and independent progress notifications to the software crate.
 
-`Management::setup(bus, memory, ManagementRings)` accepts the descriptor address
-and entry configurations. The client allows one outstanding request; firmware
+`Management::setup(bus, memory, ManagementConfig)` accepts `ManagementRings` and
+the processing task's `InterruptEvent`. Host registers `event.handler()` before setup.
+`software::control::ControlQueueLayout` supplies the shared cursor adapters after
+validating their addresses; initialization and attachment remain domain-specific.
+The client allows one outstanding request; firmware
 serves requests serially. Ring capacity is independently configurable.
 
 Cancelling `acquire_channel` or `release_channel` does not retract a request.
@@ -129,3 +155,6 @@ Acceptance covers actual IRQ-driven DMA after allocation, release/reset/reacquis
 full-ring backpressure, dormant firmware awakened through doorbells, malformed memory,
 retained operations across cancellation and independent notification destinations.
 C11 consumers verify exported descriptor bytes and bootstrap-register definitions.
+`pdma_common.h` contains shared wire records; `pdma_host.h` and `pdma_firmware.h`
+project the same register schemas into their visible access rights without changing
+offsets. The hardware still enforces dynamic work-window permissions.

@@ -13,13 +13,13 @@ reset completion. Function-aware ownership and external drain remain future work
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 
-## Agreed next steps: shared drivers and management interrupts
+## Implemented preparation: shared drivers and management interrupts
 
-Recorded: 2026-09-17. Both items below are pending, not implemented behavior.
-They are the next preparation work before extending the broader feature set.
-The current checkpoint already has `software::ring::SoftRing`, in-memory control
-queues and bidirectional doorbells, but software still waits directly on runtime
-notifications rather than receiving management interrupts.
+Recorded: 2026-09-17. The two items below are implemented alongside separate Host
+and Firmware header views. They prepare the broader feature set without adding
+virtualization. Shared DMA control lives in `software::dma`, control cursor layout
+and ISR wake events in `software::control`; both domains receive real management
+interrupts through their own `InterruptRuntime`.
 
 ### 1. Share PDMA software driver capabilities
 
@@ -64,9 +64,18 @@ and process the ring. Ring state remains authoritative; an interrupt is a hint.
 
 Acceptance must exercise actual ISR delivery in both directions, independence from
 DMA interrupts, notification-before-wait races, full-ring space return, cancellation,
-and coordinated shutdown. Interrupt cause/mask/acknowledgement details must be made
-explicit when implementing this path; this note does not invent those register semantics.
+and coordinated shutdown. The implementation retains coalesced doorbell pulses:
+the platform source's claim consumes pending before ISR dispatch. There are no
+additional management cause/mask/ACK registers.
 Neither item adds an event ring, Function/PASID support or PCIe integration.
+
+### 3. Separate C access views
+
+The contract projects one physical register schema into Host and Firmware views.
+`pdma_common.h` carries shared wire records, with `pdma_host.h` and
+`pdma_firmware.h` exposing only each domain's permitted registers and access modes.
+Offsets stay unchanged. Generic schema projection/export knows no PDMA roles;
+actual hardware permissions are checked against the projections in boundary tests.
 
 ## Objective
 
@@ -120,7 +129,7 @@ It accesses hardware through management capabilities/MMIO, not direct mutation o
 The agreed target is separate `dma`, `hw-components` and `firmware` crates, with
 shared soft/hard definitions in `contract` and Host software interfaces in `host`.
 Shared PDMA software algorithms now live in `software`, used by Host and firmware;
-the next steps above extend that boundary beyond the already shared ring operations.
+that boundary includes rings, DMA drivers and common control-queue access.
 `hw-components` is a collection of concrete hardware objects, not a generic bus
 fabric or a firmware policy controller. Each object owns its own registers/state.
 The core now lives in `crates/dma`; the first access window and firmware program
@@ -128,8 +137,8 @@ live in `crates/hw-components` and `crates/firmware` respectively.
 
 Firmware is an async program. Host and firmware reuse the existing software CPU
 implementation with separate CPU instances, CPU-local state and capability views.
-Each domain uses an interrupt runtime only when it has interrupt inputs; the MVP
-firmware currently needs none. Sharing an async executor does not mean sharing a
+Each domain now uses its own interrupt runtime for management delivery; Host also
+receives DMA interrupts. Sharing an async executor does not mean sharing a
 software CPU or granting access to the same hardware view.
 
 A distinct concrete runtime assembly connects and drives the firmware-managed

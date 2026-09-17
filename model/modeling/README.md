@@ -66,9 +66,9 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/dma/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
 | `crates/dma/src/execution/next.rs` | Select the next chunk across independent boundaries. |
 | `crates/dma/src/execution/copy.rs` | Composable chunk read/write transforms. |
-| `crates/host/src/channel.rs` | Software configuration, submit and response consumption. |
+| `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and response consumption; reexported by Host. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, worker wakeup and pending notification delivery. |
-| `crates/host/src/channel/control.rs` | CPU-checked software mask, cause and reset access. |
+| `crates/software/src/dma/control.rs` | Shared CPU-checked discovery, fault, IRQ and register-only reset access. |
 | `crates/dma/src/reset.rs` | Channel-bound task guards around the composed stages. |
 | `crates/dma/src/reset/control.rs` | Reset completion after affected accepted work retires. |
 | `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
@@ -191,13 +191,13 @@ asynchronous publication and consumption to `software::ring::SoftRing`, shared
 with firmware.
 It borrows register cursors for ordinary DMA and memory cursors for both control
 endpoints. Management request IDs and resource policy remain outside SoftRing.
-One private host register port retains the bus; `CpuOwner::scope` checks each poll.
+The shared DMA driver retains the bus; `CpuOwner::scope` checks each poll.
 Software reads current pointers through that bus; there is no second authoritative
 cursor store. `Channel::resume_submission` completes retained publication after
 cancellation; it never queues a second command. Control-channel doorbells are
-separate from DMA interrupt dispatch; see `docs/control-channel.md`.
+delivered through management ISRs, separate from the DMA vector; see `docs/control-channel.md`.
 The [shared software crate](crates/software/README.md) depends on contract, runtime
-and schema, with no dependency on host, firmware or DMA. An `Entry` parameter does
+and schema, with no normal dependency on host, firmware or DMA. An `Entry` parameter does
 not make PDMA cursor rules a framework concern. Generic schema/runtime expose no
 ring protocol or ring types and have no normal dependency on PDMA crates; generic
 transport, CPU and notification mechanics remain in runtime.

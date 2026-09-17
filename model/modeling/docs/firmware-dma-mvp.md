@@ -22,8 +22,8 @@ The follow-up keeps the behavior while changing ownership and reusable mechanics
 - `hardware-interface-runtime::pending_interrupt` supplies split emission and
   reception capabilities, reused by both ordinary and managed Host DMA delivery.
   This is not a new firmware communication protocol.
-- Firmware with no interrupt inputs runs directly through `SoftwareCpu::run_main`,
-  without an idle source, handler or dispatcher. Its CPU remains distinct from Host.
+- Firmware now receives management interrupts through its own `InterruptRuntime`.
+  Its program registers the ISR before Ready; its CPU remains distinct from Host.
 - The framework's default-on `async-runtime` feature gates CPU/interrupt execution
   and Tokio. DMA disables defaults and builds independently without a normal Tokio
   dependency. Synchronous interfaces and backend implementations remain in the same
@@ -85,8 +85,8 @@ must not make them depend on firmware or `hw-components`.
 ## Runtime and access boundaries
 
 - Host and firmware have independent `SoftwareCpu` instances and capability views.
-  Host uses `InterruptRuntime`; firmware currently has no interrupt inputs and
-  runs directly on its CPU. Reuse existing implementations and the async executor.
+  Both use `InterruptRuntime` for their independent interrupt inputs.
+  Reuse existing implementations and the async executor.
 - Host and firmware receive different port sets. Host cannot access window-control
   registers, and closing the work window does not disable firmware's management
   path. Do not pass either program a mutable DMA object or an unrestricted system
@@ -166,9 +166,9 @@ this access-window demonstration.
   it before confirming release. A boot failure remains idle; report or service
   transport errors reach the supervisor. Runtime never fabricates a firmware report.
   Shared in-memory queue state is bootstrapped through always-on registers.
-  Bidirectional doorbells wake software on publication and space return through
-  generic notification capabilities. No management interrupts are generated;
-  firmware has no interrupt runtime. See `control-channel.md`.
+  Bidirectional doorbells generate management interrupts on publication and space
+  return. Each program's registered ISR wakes its processing task. Host keeps DMA
+  delivery on a separate vector. See `control-channel.md`.
 - `host::firmware::wait_ready` runs on the Host CPU with a caller-selected deadline.
   Timeout/cancellation does not reset hardware or stop firmware. It does not grant
   DMA permission or load firmware; Host uses `Management` to request access.

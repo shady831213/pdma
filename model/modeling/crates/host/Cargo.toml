@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Software ring operations and minimal model assembly"
 
 [dependencies]
+pdma-model-software = { path = "../software" }
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }

@@ -70,8 +70,10 @@ from window permission: Booting/Ready/Failed and a boot error are firmware-publi
 in an always-on register. Window readiness still derives from its open bit.
 Host waits for firmware with a software deadline before checking DMA permission.
 Independent control command/response rings now carry channel acquisition/release;
-Ready does not grant access. `docs/control-channel.md` defines their ownership and
-cancellation contract. Hardware owns registers/permissions, firmware consumes and
+Ready does not grant access. Geometry, cursors and entries now live in memory;
+bootstrap/enable and bidirectional doorbells are hardware registers. Firmware caches
+validated geometry once; software owns cursor updates. `docs/control-channel.md`
+defines their ownership and cancellation contract. Hardware owns registers/permissions, firmware consumes and
 executes management requests, and Host owns ring memory. Runtime carries no resource
 policy. One Host/one managed DMA channel is supported, with serial firmware service.
 Release closes work access and waits for actual channel reset completion before its
@@ -132,7 +134,15 @@ and hardware-step wakeup decisions out of that generic component.
   driving only; it must not gain PDMA traversal, validation or copy policy.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.
-- The shared `Ring` trait's entry geometry and pointer rules belong to contract. Host/device
+- The shared `Ring`, `RingPointers` and `RingError` definitions live in `contract`;
+  PDMA entry geometry and pointer rules are protocol, even with an `Entry` parameter.
+  `software::ring` owns `RingConfig`, `SoftRing` and their cursor I/O adapters;
+  host retains its `RingConfig` reexport. Host and firmware share this PDMA software
+  crate, which depends on contract, generic runtime and schema, never host, firmware
+  or DMA. Generic schema/runtime expose no ring protocol or ring types and have no
+  normal dependency on PDMA crates. Transport, CPU and notification mechanics stay
+  in the generic runtime. `SoftRing` supplies CPU-owned software operations with
+  borrowed MMIO or memory cursors. Host/device
   keep side-specific memory/MMIO access and publish pointers only after successful
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.
 - Keep the model deterministic and step-based. No cycle timing or extra executors.

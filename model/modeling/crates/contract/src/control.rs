@@ -1,5 +1,5 @@
-use crate::{Address, Switch, Word};
-use hardware_interface_schema::{record_schema, register_map};
+use crate::{Address, Switch};
+use hardware_interface_schema::{record_schema, register_map, register_schema};
 
 /// Always-on firmware control channel, independent of DMA channel windows.
 pub const CONTROL_CHANNEL_BASE: u32 = 0xffff_fe00;
@@ -22,7 +22,7 @@ record_schema! {
 
 record_schema! {
     #[short_description = "Firmware control response"]
-    #[description = "Firmware-produced 16-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware stores only ring registers and does not implement channel allocation policy."]
+    #[description = "Firmware-produced 16-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware stores only bootstrap registers and does not implement channel allocation policy."]
     pub record ControlResponse {
         alignment: 8, endian: Little,
         fields: {
@@ -36,36 +36,64 @@ record_schema! {
     }
 }
 
-register_map! {
-    #[short_description = "Firmware control ring registers"]
-    #[description = "One software-to-software queue. Both domains may read every register. Host owns geometry; producer and consumer write permissions depend on command or response placement and are enforced by hardware."]
-    pub map ControlRingRegisters {
-        alignment: 8,
-        placements: [
-            #[description = "Host-configured eight-byte-aligned address. Sixteen-byte entries occupy the complete capacity. Locked after activation until subsystem reset."]
-            pub base: Address,
-            #[description = "Host-configured nonzero power-of-two entry capacity below 2^31. The complete memory extent must fit u64. Locked after activation until subsystem reset."]
-            pub capacity: Word,
-            #[description = "Wrapping published-entry count. Host writes command producer; firmware writes response producer, only after successful record storage. Active publication cannot exceed free capacity."]
-            pub producer: Word,
-            #[description = "Wrapping consumed-entry count. Firmware writes command consumer; Host writes response consumer, only after successful record reading. Active consumption cannot exceed published entries."]
-            pub consumer: Word,
-        ],
+record_schema! {
+    #[short_description = "Memory-resident control ring state"]
+    #[description = "Software-owned ring geometry and wrapping entry counts. The producer writes producer after storing an entry; the consumer writes consumer after reading an entry. Geometry remains stable while enabled."]
+    pub record ControlRingState {
+        alignment: 8, endian: Little,
+        fields: {
+            #[description = "Memory address of the entry buffer."]
+            base: u64,
+            #[description = "Nonzero power-of-two entry capacity below 2^31, validated by software."]
+            capacity: u32,
+            #[description = "Wrapping published-entry count, owned by the producer."]
+            producer: u32,
+            #[description = "Wrapping consumed-entry count, owned by the consumer."]
+            consumer: u32,
+        },
+    }
+}
+
+record_schema! {
+    #[short_description = "Memory-resident firmware control queue"]
+    #[description = "Host allocates and initializes both rings before publishing this record's address through bootstrap. Each software side updates only its owned cursor fields."]
+    pub record ControlQueue {
+        alignment: 8, endian: Little,
+        fields: {
+            #[description = "Host-produced and firmware-consumed control requests."]
+            command: ControlRingState,
+            #[description = "Firmware-produced and Host-consumed control responses."]
+            response: ControlRingState,
+        },
+    }
+}
+
+register_schema! {
+    #[short_description = "Coalescing notification doorbell"]
+    #[description = "Writing one emits a coalescing pulse; writing zero has no effect. The stored value returns to zero after every accepted write. Reads are forbidden and bits 1 through 31 are reserved."]
+    pub register Doorbell {
+        width: 4, endian: Little, access: WriteOnly, reset: Zero(0), writable_mask: 1,
+        fields: {
+            #[description = "Write one to notify the peer software domain."]
+            pulse: 0..=0,
+        },
     }
 }
 
 register_map! {
     #[short_description = "Independent firmware control channel"]
-    #[description = "Always-on Host/firmware control register composition outside DMA work windows. Hardware owns authoritative pointers but performs no memory operations or channel allocation. Pointer writes require activation, including unchanged zero; wrong-domain writes are always rejected."]
+    #[description = "Always-on bootstrap and software notification registers outside DMA work windows. Hardware performs no memory operations, ring validation or channel allocation."]
     pub map ControlRegisters {
         alignment: 8,
         placements: [
-            #[description = "Host-produced and firmware-consumed control requests."]
-            pub command: ControlRingRegisters,
-            #[description = "Firmware-produced and Host-consumed control responses."]
-            pub response: ControlRingRegisters,
-            #[description = "Host writes one after configuring both rings. Both geometries are validated atomically before activation. Activation locks geometry and prevents disabling until subsystem reset; there is no live reset register."]
+            #[description = "Host-owned address of the memory-resident ControlQueue. Both domains may read it. Changes are locked after activation; address zero has no special hardware meaning."]
+            pub bootstrap: Address,
+            #[description = "Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register."]
             pub enable: Switch,
+            #[description = "Host-only notification to firmware after publishing requests or freeing response space."]
+            pub request: Doorbell,
+            #[description = "Firmware-only notification to Host after publishing responses or freeing command space."]
+            pub response: Doorbell,
         ],
     }
 }

@@ -8,7 +8,8 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use pdma_model_contract::{
-    ControlRequest, ControlResponse, Response, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE,
+    ControlQueue, ControlRequest, ControlResponse, Response, WINDOW_CONTROL_BASE,
+    WINDOW_STATUS_BASE,
 };
 use pdma_model_host::{Management, ManagementRings, RingConfig, firmware, runtime::Irq};
 use std::time::Duration;
@@ -102,6 +103,10 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         ports.bus.clone(),
         ports.memory.clone(),
         ManagementRings {
+            state: ports.allocator.allocate(
+                u64::try_from(ControlQueue::RECORD_SIZE)?,
+                MemoryAlignment::try_new(u64::try_from(ControlQueue::RECORD_ALIGNMENT)?)?,
+            )?,
             command: RingConfig::new(command.raw(), 2)?,
             response: RingConfig::new(response.raw(), 2)?,
         },

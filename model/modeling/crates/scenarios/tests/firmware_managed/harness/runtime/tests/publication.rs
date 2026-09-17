@@ -1,13 +1,15 @@
-use super::{AccessError, Managed, control::rings};
+use super::{
+    AccessError, Managed,
+    control::{memory::QueueMemory, rings},
+};
 use crate::harness::TestResult;
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+    MemoryAccess, MemoryAddress, MemoryAlignment, NotificationWait, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use hardware_interface_schema::Encode;
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlRegisters, ControlResponse, ControlResponseStatus,
-    ControlRingRegisters, Ring,
+    CONTROL_CHANNEL_BASE, ControlRegisters, ControlResponse, ControlResponseStatus, Ring,
 };
 use pdma_model_host::{Management, firmware};
 use std::{
@@ -15,7 +17,7 @@ use std::{
     pin::pin,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     task::Poll,
     time::Duration,
@@ -31,7 +33,7 @@ enum Moment {
 struct Pause {
     address: u32,
     moment: Moment,
-    armed: AtomicBool,
+    remaining: AtomicUsize,
     hit: AtomicBool,
 }
 
@@ -49,7 +51,16 @@ impl<B: RegisterAccess<Error = AccessError> + Sync> RegisterAccess for PausingBu
     }
 
     async fn write(&self, address: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-        if address == self.pause.address && self.pause.armed.swap(false, Ordering::SeqCst) {
+        if address == self.pause.address
+            && self
+                .pause
+                .remaining
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                    remaining.checked_sub(1)
+                })
+                .ok()
+                == Some(1)
+        {
             match self.pause.moment {
                 Moment::Before => {}
                 Moment::After => self.inner.write(address, bytes).await?,
@@ -61,14 +72,10 @@ impl<B: RegisterAccess<Error = AccessError> + Sync> RegisterAccess for PausingBu
     }
 }
 
-async fn cursor(
-    bus: &(impl RegisterAccess<Error = AccessError> + Sync),
-    offset: usize,
-) -> TestResult<u32> {
-    let mut bytes = [0; 4];
-    bus.read(CONTROL_CHANNEL_BASE + u32::try_from(offset)?, &mut bytes)
-        .await?;
-    Ok(u32::from_le_bytes(bytes))
+impl<B: NotificationWait> NotificationWait for PausingBus<B> {
+    async fn wait_notification(&self) {
+        self.inner.wait_notification().await;
+    }
 }
 
 async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
@@ -77,19 +84,10 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
-    let command_producer =
-        ControlRegisters::COMMAND.offset() + ControlRingRegisters::PRODUCER.offset();
-    let response_consumer =
-        ControlRegisters::RESPONSE.offset() + ControlRingRegisters::CONSUMER.offset();
-    let offset = if response_ack {
-        response_consumer
-    } else {
-        command_producer
-    };
     let pause = Arc::new(Pause {
-        address: CONTROL_CHANNEL_BASE + u32::try_from(offset)?,
+        address: CONTROL_CHANNEL_BASE + u32::try_from(ControlRegisters::REQUEST.offset())?,
         moment,
-        armed: AtomicBool::new(true),
+        remaining: AtomicUsize::new(0),
         hit: AtomicBool::new(false),
     });
     let cpu = SoftwareCpu::new();
@@ -105,6 +103,10 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
             storage,
         )
         .await?;
+        pause
+            .remaining
+            .store(if response_ack { 2 } else { 1 }, Ordering::SeqCst);
+        let queue = QueueMemory::new(&memory, storage.state);
         {
             let mut request = pin!(management.acquire_channel());
             poll_fn(|cx| {
@@ -121,12 +123,9 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
             .await;
             // When: Host cancels its request at the selected publication boundary.
         }
-        let committed = match moment {
-            Moment::Before => 0,
-            Moment::After => 1,
-        };
-        assert_eq!(cursor(&host.bus, offset).await?, committed);
-        if response_ack && committed == 1 {
+        assert_eq!(queue.read()?.command.producer, 1);
+        assert_eq!(queue.read()?.response.consumer, u32::from(response_ack));
+        if response_ack {
             let replacement = ControlResponse {
                 id: 99,
                 status: ControlResponseStatus::NoResources,
@@ -143,35 +142,33 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
         assert_eq!(response.id, 1);
         assert_eq!(response.status, ControlResponseStatus::Success);
         assert_eq!(response.channel, 0);
-        for offset in [
-            command_producer,
-            ControlRegisters::COMMAND.offset() + ControlRingRegisters::CONSUMER.offset(),
-            ControlRegisters::RESPONSE.offset() + ControlRingRegisters::PRODUCER.offset(),
-            response_consumer,
-        ] {
-            assert_eq!(cursor(&host.bus, offset).await?, 1);
-        }
+        let state = queue.read()?;
+        assert_eq!(state.command.producer, 1);
+        assert_eq!(state.command.consumer, 1);
+        assert_eq!(state.response.producer, 1);
+        assert_eq!(state.response.consumer, 1);
         Ok(())
     }));
     tokio::time::timeout(Duration::from_secs(3), system.run_until(program)).await??
 }
 
 #[tokio::test]
-async fn publication_cancellation_before_command_producer() -> TestResult {
+async fn publication_cancellation_before_command_notification() -> TestResult {
     cancellation_case(false, Moment::Before).await
 }
 
 #[tokio::test]
-async fn publication_cancellation_after_command_producer() -> TestResult {
+async fn publication_cancellation_after_command_notification() -> TestResult {
     cancellation_case(false, Moment::After).await
 }
 
 #[tokio::test]
-async fn publication_cancellation_before_response_consumer() -> TestResult {
+async fn publication_cancellation_before_response_space_notification() -> TestResult {
     cancellation_case(true, Moment::Before).await
 }
 
 #[tokio::test]
-async fn publication_cancellation_after_response_consumer_uses_cached_result() -> TestResult {
+async fn publication_cancellation_after_response_space_notification_uses_cached_result()
+-> TestResult {
     cancellation_case(true, Moment::After).await
 }

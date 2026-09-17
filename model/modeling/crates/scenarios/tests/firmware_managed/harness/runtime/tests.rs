@@ -9,6 +9,7 @@ use super::{AccessError, Managed};
 mod backpressure;
 mod boot;
 mod control;
+mod notifications;
 mod publication;
 
 #[tokio::test]

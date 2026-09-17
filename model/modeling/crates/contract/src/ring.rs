@@ -92,7 +92,7 @@ pub trait Ring {
     }
 }
 
-/// A snapshot of the authoritative producer/consumer registers.
+/// A snapshot of the authoritative producer/consumer cursor storage.
 ///
 /// Returned updates are pure calculations. Each endpoint publishes the updated
 /// pointer only after its memory access succeeds; this type never publishes it.

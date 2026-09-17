@@ -12,7 +12,8 @@ pub use bus::HostBus;
 pub use error::{BuildError, RunError};
 
 use hardware_interface_runtime::{
-    InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
+    InterruptEmitter, InterruptRuntime, Notifications, Notifier, PendingInterrupt, SoftwareCpu,
+    notifications, pending_interrupt,
 };
 use pdma_model_contract::{CONTROL_CHANNEL_BASE, DeviceRegisters, FIRMWARE_STATUS_BASE};
 use pdma_model_dma::{CommandLoop, Device};
@@ -34,6 +35,10 @@ struct Shared<M> {
     hardware: Mutex<Hardware<M>>,
     changed: Notify,
     interrupt: InterruptEmitter,
+    to_firmware: Notifier,
+    firmware_notifications: Notifications,
+    to_host: Notifier,
+    host_notifications: Notifications,
 }
 
 #[derive(Debug)]
@@ -79,6 +84,8 @@ impl<M: Clone> Managed<M> {
             usize::try_from(CONTROL_CHANNEL_BASE)
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
         );
+        let (to_firmware, firmware_notifications) = notifications();
+        let (to_host, host_notifications) = notifications();
         let shared = Arc::new(Shared {
             hardware: Mutex::new(Hardware {
                 dma,
@@ -88,6 +95,10 @@ impl<M: Clone> Managed<M> {
             }),
             changed: Notify::new(),
             interrupt,
+            to_firmware,
+            firmware_notifications,
+            to_host,
+            host_notifications,
         });
         let host = Host {
             bus: HostBus {

@@ -1,6 +1,7 @@
 use crate::Error;
 use hardware_interface_runtime::{CpuOwner, RegisterAccess};
 use pdma_model_contract::{ChannelId, DeviceControl, DeviceRegisters};
+use pdma_model_software::ring::{RegisterRingIo, RingCursorRegisters};
 use std::future::Future;
 
 #[derive(Debug)]
@@ -36,6 +37,24 @@ impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
 
     pub(super) fn validate_active(&self) -> Result<(), Error<B::Error>> {
         self.owner.validate_active().map_err(Error::Cpu)
+    }
+
+    pub(super) fn ring_io<'a, M>(
+        &'a self,
+        memory: &'a M,
+        registers: RingCursorRegisters,
+    ) -> Result<RegisterRingIo<'a, B, M>, Error<B::Error>> {
+        self.validate_active()?;
+        let base = u32::try_from(self.channel_base).map_err(|_| Error::Geometry)?;
+        let registers = RingCursorRegisters {
+            producer: base
+                .checked_add(registers.producer)
+                .ok_or(Error::Geometry)?,
+            consumer: base
+                .checked_add(registers.consumer)
+                .ok_or(Error::Geometry)?,
+        };
+        Ok(RegisterRingIo::new(&self.bus, memory, registers))
     }
 
     pub(super) async fn channel_read_word(&self, offset: usize) -> Result<u32, Error<B::Error>> {

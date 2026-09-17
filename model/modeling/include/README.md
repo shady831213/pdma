@@ -1,7 +1,7 @@
 # Current PDMA contract header
 
 `pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`,
-`ControlRequest`, `ControlResponse`, `DeviceRegisters`, `WindowControl`, `WindowStatus`,
+`ControlRequest`, `ControlResponse`, `ControlRingState`, `ControlQueue`, `DeviceRegisters`, `WindowControl`, `WindowStatus`,
 `FirmwareRegisters`, and `ControlRegisters` schemas. It contains record sizes and byte accessors, MMIO
 offsets and access/reset metadata, and schema descriptions as C comments. It is
 a C11 data contract, not a callable device API or the predecessor's ABI.
@@ -45,13 +45,20 @@ not Host permission. Subsystem reset clears the report to Booting/no error.
 DMA/channel reset does not reset firmware. Window readiness and firmware readiness
 are separate: the latter alone does not authorize DMA access.
 
-`C_CONTROL` describes the independent 48-byte control channel at
-`PDMA_CONTROL_CHANNEL_BASE` (`0xffff_fe00`). Command and response ring blocks
-start at relative offsets 0 and 24; activation is at offset 44. Each ring has
-base, capacity, producer and consumer registers at relative offsets 0, 8, 12 and
-16. This always-on map is independent of DMA channel count and work windows.
-Register descriptions specify the Host/firmware ownership enforced by hardware;
-the generic read/write metadata alone does not encode those domain permissions.
+`C_CONTROL` describes the independent 20-byte control map at
+`PDMA_CONTROL_CHANNEL_BASE` (`0xffff_fe00`). The 64-bit bootstrap address is at
+offset 0, activation at 8, and write-only request/response doorbells at 12 and 16.
+Doorbells accept one to notify the peer and zero as a no-op; hardware retains no
+ring geometry or cursors. Register descriptions specify Host/firmware ownership;
+the generic access metadata alone does not encode those domain permissions.
+
+`C_CONTROLRINGSTATE` describes a 24-byte memory record containing base, capacity,
+producer and consumer at offsets 0, 8, 12 and 16. `C_CONTROLQQUEUE` describes the
+48-byte bootstrap descriptor, nesting command state at offset 0 and response
+state at offset 24. Both records have eight-byte alignment. Nested accessors
+address each cursor independently; software validates geometry and cursor
+movement. Host keeps geometry stable after activation and publishes the
+descriptor in memory before writing bootstrap and enabling the control map.
 
 `C_CONTROLREQQUEST` and `C_CONTROLRESPONSE` describe 16-byte little-endian records
 with eight-byte alignment. Both have a 64-bit identifier at byte 0 and a 32-bit

@@ -23,6 +23,10 @@ tokio = { version = "1.49", default-features = false, features = ["macros", "rt"
 workspace = true
 
 [[test]]
+name = "notifications"
+required-features = ["async-runtime"]
+
+[[test]]
 name = "interrupt_dispatch"
 path = "tests/interrupt_dispatch/mod.rs"
 required-features = ["async-runtime"]

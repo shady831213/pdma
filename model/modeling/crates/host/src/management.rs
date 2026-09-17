@@ -1,16 +1,22 @@
+use pdma_model_software::ring::SoftRing;
 mod pending;
 mod transport;
 
 use crate::{Error, RingConfig};
-use hardware_interface_runtime::{CpuOwner, MemoryAccess, RegisterAccess};
+use hardware_interface_runtime::{
+    CpuOwner, MemoryAccess, MemoryAddress, MemoryAlignment, NotificationWait, RegisterAccess,
+};
+use hardware_interface_schema::Encode;
 use pdma_model_contract::{
-    ChannelId, ControlRegisters, ControlRequest, ControlRequestOpcode, ControlResponse,
-    ControlResponseStatus, ControlRingRegisters, Ring,
+    ChannelId, ControlQueue, ControlRegisters, ControlRequest, ControlRequestOpcode,
+    ControlResponse, ControlResponseStatus, ControlRingState, Ring,
 };
 
 /// Host-owned storage for the independent management queues.
 #[derive(Debug, Clone, Copy)]
 pub struct ManagementRings {
+    /// Shared queue descriptor, kept alive with both entry buffers.
+    pub state: MemoryAddress,
     /// Host-produced firmware requests.
     pub command: RingConfig<ControlRequest>,
     /// Firmware-produced management results.
@@ -20,8 +26,8 @@ pub struct ManagementRings {
 #[derive(Debug, Clone, Copy)]
 struct Pending {
     request: ControlRequest,
-    producer: u32,
-    consumer: u32,
+    published: bool,
+    consumed: bool,
     response: Option<ControlResponse>,
 }
 
@@ -35,11 +41,13 @@ pub struct Management<B, M> {
     memory: M,
     owner: CpuOwner,
     rings: ManagementRings,
+    command: SoftRing<ControlRequest>,
+    response: SoftRing<ControlResponse>,
     pending: Option<Pending>,
     next_id: u64,
 }
 
-impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
+impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Configures empty control rings after firmware Ready, before any DMA grant.
     ///
     /// Geometry becomes immutable on enable. Interrupted setup may leave committed
@@ -49,38 +57,50 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             bus,
             memory,
             rings,
+            command: SoftRing::new(rings.command).map_err(Error::Cpu)?,
+            response: SoftRing::new(rings.response).map_err(Error::Cpu)?,
             owner: CpuOwner::capture_active().map_err(Error::Cpu)?,
             pending: None,
             next_id: 1,
         };
-        for (offset, base, capacity) in [
-            (
-                ControlRegisters::COMMAND.offset(),
-                rings.command.base(),
-                rings.command.capacity(),
-            ),
-            (
-                ControlRegisters::RESPONSE.offset(),
-                rings.response.base(),
-                rings.response.capacity(),
-            ),
-        ] {
-            client
-                .write(
-                    offset + ControlRingRegisters::BASE.offset(),
-                    &base.to_le_bytes(),
-                )
-                .await?;
-            client
-                .write(
-                    offset + ControlRingRegisters::CAPACITY.offset(),
-                    &capacity.to_le_bytes(),
-                )
-                .await?;
+        if client.read(ControlRegisters::ENABLE.offset()).await? != 0 {
+            return Err(Error::ManagementBusy);
         }
+        let state = ControlQueue {
+            command: ControlRingState {
+                base: rings.command.base(),
+                capacity: rings.command.capacity(),
+                producer: 0,
+                consumer: 0,
+            },
+            response: ControlRingState {
+                base: rings.response.base(),
+                capacity: rings.response.capacity(),
+                producer: 0,
+                consumer: 0,
+            },
+        };
+        client
+            .memory
+            .write_typed(
+                rings.state,
+                MemoryAlignment::try_new(
+                    u64::try_from(ControlQueue::RECORD_ALIGNMENT).map_err(|_| Error::Geometry)?,
+                )
+                .map_err(|_| Error::Geometry)?,
+                &state.encode().map_err(Error::Codec)?,
+            )
+            .map_err(Error::Memory)?;
+        client
+            .write(
+                ControlRegisters::BOOTSTRAP.offset(),
+                &rings.state.raw().to_le_bytes(),
+            )
+            .await?;
         client
             .write(ControlRegisters::ENABLE.offset(), &1_u32.to_le_bytes())
             .await?;
+        client.kick().await?;
         Ok(client)
     }
 

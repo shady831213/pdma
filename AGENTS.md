@@ -17,7 +17,7 @@ Do not restore their compatibility interfaces without a user request.
 
 Active work is under `model/modeling`; read its `AGENTS.md`.
 Its Cargo workspace contains the core `contract`, `dma` and `host` crates, the
-managed MVP's `hw-components` and `firmware`, system scenarios,
+managed MVP's `hw-components` and `firmware`, shared PDMA `software`, system scenarios,
 and four reusable building blocks:
 
 - `hardware-interface-pipeline`
@@ -41,7 +41,9 @@ managed transports share the framework's split pending-interrupt capabilities.
 DMA disables the framework's default async-runtime feature; its standalone normal
 dependency tree has no Tokio. This is not a separate memory-only interface crate.
 The managed assembly has one firmware-managed work window, independent boot status,
-and separate control command/response rings. Ready leaves DMA closed; Host requests
+and separate in-memory control command/response rings with bootstrap and bidirectional
+doorbell registers. Host and firmware share `software::ring::SoftRing`; doorbell waits
+are independent of DMA interrupt dispatch. Ready leaves DMA closed; Host requests
 a channel and releases it through firmware, which waits for real DMA reset before
 acknowledging release. See `model/modeling/docs/control-channel.md`. There is no
 event ring, Function/PASID mapping or PCIe integration.
@@ -59,6 +61,11 @@ recreate the old API surface to satisfy historical tests.
 - Use native Rust module paths. `#[path]` and conditional path redirection are forbidden;
   do not bypass this with `include!`, symlinks, or duplicate source trees.
 - Preserve retained building-block behavior and tests.
+- Keep PDMA wire/protocol rules in `contract` and shared software algorithms in
+  `software`. An `Entry` type parameter alone does not justify framework placement.
+  Generic schema/runtime crates expose no PDMA ring protocol or ring types and have
+  no normal dependency on PDMA crates; transport, CPU and notification mechanics
+  remain in the generic runtime.
 - Add failing behavioral tests before new model implementation.
 - Keep hardware behavior deterministic and step-based, without cycle timing.
 - Hardware never stores or invokes software interrupt handlers.

@@ -1,10 +1,16 @@
 use super::*;
-use hardware_interface_runtime::SoftwareCpu;
+use hardware_interface_runtime::{NotificationWait, SoftwareCpu};
 use pdma_model_contract::FIRMWARE_STATUS_BASE;
 use pdma_model_host::{Error, firmware};
 use std::{pin::pin, task::Poll, time::Duration};
 
 struct RejectWindow<B>(B);
+
+impl<B: NotificationWait> NotificationWait for RejectWindow<B> {
+    async fn wait_notification(&self) {
+        self.0.wait_notification().await;
+    }
+}
 
 impl<B: RegisterAccess<Error = AccessError> + Sync> RegisterAccess for RejectWindow<B> {
     type Error = AccessError;

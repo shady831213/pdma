@@ -53,8 +53,8 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
         let channel = Self {
             port: RegisterPort::new(bus, owner, id).await?,
             memory,
-            command: CommandRing::new(rings.command),
-            response: ResponseRing::new(rings.response),
+            command: CommandRing::new(rings.command).map_err(Error::Cpu)?,
+            response: ResponseRing::new(rings.response).map_err(Error::Cpu)?,
         };
         channel
             .port
@@ -104,15 +104,25 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
 
     /// Writes the descriptor before publishing its producer cursor.
     ///
-    /// Cancellation during the final bus write has the transport's commit semantics.
-    /// Read hardware cursors before deciding whether to retry that submission.
+    /// Cancellation retains an accepted command for `resume_submission`.
+    /// A new submission is rejected while that publication remains pending.
     pub async fn submit(&mut self, command: Command) -> Result<(), Error<B::Error>> {
         self.command.push(&self.port, &self.memory, command).await
     }
 
+    /// Whether an accepted command still needs publication reconciliation.
+    pub const fn has_pending_submission(&self) -> bool {
+        self.command.has_pending()
+    }
+
+    /// Completes an accepted submission without repeating a committed publication.
+    pub async fn resume_submission(&mut self) -> Result<(), Error<B::Error>> {
+        self.command.resume(&self.port, &self.memory).await
+    }
+
     /// Reads and decodes one response before advancing its consumer cursor.
     ///
-    /// Cancellation during the final bus write has the transport's commit semantics.
+    /// Cancellation retains the decoded response; another call reconciles consumption.
     pub async fn response(&mut self) -> Result<Option<Response>, Error<B::Error>> {
         self.response.pop(&self.port, &self.memory).await
     }

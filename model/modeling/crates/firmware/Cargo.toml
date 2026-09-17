@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Async software for the managed DMA configuration"
 
 [dependencies]
+pdma-model-software = { path = "../software" }
 pdma-model-contract = { path = "../contract" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }

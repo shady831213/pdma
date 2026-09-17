@@ -1,6 +1,7 @@
 use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
 use pdma_model_contract::{ChannelId, ControlResponseStatus, FirmwareBootError, RingError};
+use pdma_model_software::ring::SoftRingError;
 use std::{error::Error as StdError, fmt};
 
 /// Software ring operation failure retaining its boundary cause.
@@ -29,6 +30,12 @@ pub enum Error<B> {
     Geometry,
     /// No command slot is currently available.
     Full,
+    /// An accepted software ring publication must be resumed first.
+    RingBusy,
+    /// No retained software ring operation is available.
+    RingIdle,
+    /// The software-owned cursor changed during a retained operation.
+    RingCursorChanged,
     /// Firmware reported an initialization failure through its status register.
     FirmwareFailed(FirmwareBootError),
     /// The Host's deadline expired before firmware reported readiness.
@@ -62,6 +69,9 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             ),
             Self::Geometry => f.write_str("invalid host register address"),
             Self::Full => f.write_str("command ring is full"),
+            Self::RingBusy => f.write_str("software ring publication is pending"),
+            Self::RingIdle => f.write_str("no retained software ring operation"),
+            Self::RingCursorChanged => f.write_str("software ring cursor changed unexpectedly"),
             Self::FirmwareFailed(code) => write!(f, "firmware initialization failed: {code:?}"),
             Self::FirmwareTimeout => f.write_str("timed out waiting for firmware readiness"),
             Self::ManagementBusy => f.write_str("management request is still pending"),
@@ -84,12 +94,30 @@ impl<B: StdError + 'static> StdError for Error<B> {
             Self::Channel { .. }
             | Self::Geometry
             | Self::Full
+            | Self::RingBusy
+            | Self::RingIdle
+            | Self::RingCursorChanged
             | Self::FirmwareFailed(_)
             | Self::FirmwareTimeout
             | Self::ManagementBusy
             | Self::ManagementIdle
             | Self::ManagementProtocol
             | Self::ManagementStatus(_) => None,
+        }
+    }
+}
+
+impl<B> From<SoftRingError<B>> for Error<B> {
+    fn from(error: SoftRingError<B>) -> Self {
+        match error {
+            SoftRingError::Cursor(error) => Self::Bus(error),
+            SoftRingError::Memory(error) => Self::Memory(error),
+            SoftRingError::Codec(error) => Self::Codec(error),
+            SoftRingError::Ring(error) => Self::Ring(error),
+            SoftRingError::Cpu(error) => Self::Cpu(error),
+            SoftRingError::Busy => Self::RingBusy,
+            SoftRingError::Idle => Self::RingIdle,
+            SoftRingError::CursorChanged => Self::RingCursorChanged,
         }
     }
 }

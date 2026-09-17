@@ -1,10 +1,8 @@
+use super::memory::{QueueMemory, kick};
 use super::*;
 use hardware_interface_runtime::MemoryAccess;
 use hardware_interface_schema::{Decode, Encode};
-use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlRegisters, ControlRequestOpcode, ControlResponseRaw,
-    ControlRingRegisters, Ring,
-};
+use pdma_model_contract::{ControlRequestOpcode, ControlResponseRaw, Ring};
 
 #[tokio::test]
 async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
@@ -32,28 +30,10 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
                 &request.encode().unwrap(),
             )
             .unwrap();
-        let producer = CONTROL_CHANNEL_BASE
-            + u32::try_from(
-                ControlRegisters::COMMAND.offset() + ControlRingRegisters::PRODUCER.offset(),
-            )
-            .unwrap();
-        host.bus
-            .write(producer, &1_u32.to_le_bytes())
-            .await
-            .unwrap();
-        let producer = CONTROL_CHANNEL_BASE
-            + u32::try_from(
-                ControlRegisters::RESPONSE.offset() + ControlRingRegisters::PRODUCER.offset(),
-            )
-            .unwrap();
-        loop {
-            let mut bytes = [0; 4];
-            host.bus.read(producer, &mut bytes).await.unwrap();
-            if u32::from_le_bytes(bytes) == 1 {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
+        let queue = QueueMemory::new(&memory, rings.state);
+        queue.publish_command(1).unwrap();
+        kick(&host.bus).await.unwrap();
+        queue.wait_response(&host.bus, 1).await.unwrap();
         let response = memory
             .read_typed::<ControlResponseRaw>(
                 MemoryAddress::new(rings.response.entry(0).unwrap()),

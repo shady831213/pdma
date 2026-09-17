@@ -2,23 +2,18 @@ mod resources;
 mod rings;
 
 use crate::Error;
-use hardware_interface_runtime::{
-    CpuOwner, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess,
-};
-use hardware_interface_schema::{Decode, Encode};
+use hardware_interface_runtime::{CpuOwner, MemoryAccess, NotificationWait, RegisterAccess};
 use pdma_model_contract::{
-    ControlRegisters, ControlRequest, ControlRequestRaw, ControlResponse, ControlRingRegisters,
-    FIRMWARE_STATUS_BASE, FirmwareBootError, FirmwareBootState, FirmwareBootValues, Ring,
-    WINDOW_CONTROL_BASE,
+    ControlQueue, ControlRegisters, FIRMWARE_STATUS_BASE, FirmwareBootError, FirmwareBootState,
+    FirmwareBootValues, WINDOW_CONTROL_BASE,
 };
-use rings::Snapshot;
 use std::{convert::Infallible, future::pending};
 
 /// Boots with DMA access closed, then serves control rings on the firmware CPU.
 ///
 /// Cancelling this program stops software, not accepted DMA work or hardware reset.
 /// Retain all ring/application memory until the subsystem is safely stopped.
-pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
+pub async fn main<B: RegisterAccess + NotificationWait + Sync, M: MemoryAccess + Send + Sync>(
     bus: B,
     memory: M,
 ) -> Result<Infallible, Error<B::Error>> {
@@ -47,66 +42,56 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
     }
 }
 
-async fn serve<B: RegisterAccess + Sync, M: MemoryAccess + Sync>(
+async fn serve<B: RegisterAccess + NotificationWait + Sync, M: MemoryAccess + Sync>(
     bus: &B,
     memory: &M,
 ) -> Result<Infallible, Error<B::Error>> {
+    while rings::read_word(bus, ControlRegisters::ENABLE.offset()).await? == 0 {
+        bus.wait_notification().await;
+    }
+    let mut queues = rings::Queues::attach(bus, memory).await?;
+    let command_io = queues
+        .io(memory, ControlQueue::COMMAND_OFFSET)
+        .map_err(Error::Ring)?;
+    let response_io = queues
+        .io(memory, ControlQueue::RESPONSE_OFFSET)
+        .map_err(Error::Ring)?;
     let mut allocated = false;
     loop {
-        tokio::task::yield_now().await;
-        if rings::read_word(bus, ControlRegisters::ENABLE.offset()).await? == 0 {
+        if !queues
+            .response
+            .has_space(&response_io)
+            .await
+            .map_err(Error::SoftRing)?
+        {
+            bus.wait_notification().await;
             continue;
         }
-        let response =
-            Snapshot::<ControlResponse>::read(bus, ControlRegisters::RESPONSE.offset()).await?;
-        if response.pointers.pending() == response.capacity() {
+        let Some(request) = queues
+            .command
+            .peek(&command_io)
+            .await
+            .map_err(Error::SoftRing)?
+        else {
+            bus.wait_notification().await;
             continue;
-        }
-        let response_next = response
-            .advance_producer(response.pointers, 1)
-            .map_err(Error::Ring)?;
-        let command =
-            Snapshot::<ControlRequest>::read(bus, ControlRegisters::COMMAND.offset()).await?;
-        if command.pointers.is_empty() {
-            continue;
-        }
-        let command_next = command
-            .advance_consumer(command.pointers, 1)
-            .map_err(Error::Ring)?;
-        let address = MemoryAddress::new(
-            command
-                .entry(command.pointers.consumer)
-                .map_err(Error::Ring)?,
-        );
-        let request = memory
-            .read_typed::<ControlRequestRaw>(address, MemoryAlignment::ONE)
-            .map_err(Error::Memory)?
-            .decode()
-            .map_err(Error::Codec)?;
-        rings::write_word(
-            bus,
-            ControlRegisters::COMMAND.offset() + ControlRingRegisters::CONSUMER.offset(),
-            command_next.consumer,
-        )
-        .await?;
+        };
+        queues
+            .command
+            .consume(&command_io)
+            .await
+            .map_err(Error::SoftRing)?;
+        rings::notify(bus).await?;
         let result = resources::execute(bus, &mut allocated, request).await?;
-        let address = MemoryAddress::new(
-            response
-                .entry(response.pointers.producer)
-                .map_err(Error::Ring)?,
-        );
-        memory
-            .write_typed(
-                address,
-                MemoryAlignment::ONE,
-                &result.encode().map_err(Error::Codec)?,
-            )
-            .map_err(Error::Memory)?;
-        rings::write_word(
-            bus,
-            ControlRegisters::RESPONSE.offset() + ControlRingRegisters::PRODUCER.offset(),
-            response_next.producer,
-        )
-        .await?;
+        while !queues
+            .response
+            .try_push(&response_io, result)
+            .await
+            .map_err(Error::SoftRing)?
+        {
+            bus.wait_notification().await;
+        }
+        rings::notify(bus).await?;
+        tokio::task::yield_now().await;
     }
 }

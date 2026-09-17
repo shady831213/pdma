@@ -5,6 +5,7 @@ members = [
     "crates/firmware",
     "crates/hw-components",
     "crates/host",
+    "crates/software",
     "crates/scenarios",
     "crates/hardware-interface-pipeline",
     "crates/hardware-interface-runtime",

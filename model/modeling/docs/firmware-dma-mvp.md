@@ -165,7 +165,10 @@ this access-window demonstration.
   independent control rings, allocating channel zero on request and closing/resetting
   it before confirming release. A boot failure remains idle; report or service
   transport errors reach the supervisor. Runtime never fabricates a firmware report.
-  No management interrupts are generated; firmware has no interrupt runtime.
+  Shared in-memory queue state is bootstrapped through always-on registers.
+  Bidirectional doorbells wake software on publication and space return through
+  generic notification capabilities. No management interrupts are generated;
+  firmware has no interrupt runtime. See `control-channel.md`.
 - `host::firmware::wait_ready` runs on the Host CPU with a caller-selected deadline.
   Timeout/cancellation does not reset hardware or stop firmware. It does not grant
   DMA permission or load firmware; Host uses `Management` to request access.

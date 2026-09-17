@@ -1,10 +1,16 @@
 //! Firmware boot failures at the software CPU and management transport boundaries.
 
-use hardware_interface_runtime::{CpuContextError, RegisterAccess, SoftwareCpu};
+use hardware_interface_runtime::{CpuContextError, NotificationWait, RegisterAccess, SoftwareCpu};
 use std::{convert::Infallible, io};
 
 #[derive(Debug)]
 struct FailedBus;
+
+impl NotificationWait for FailedBus {
+    async fn wait_notification(&self) {
+        std::future::pending::<()>().await;
+    }
+}
 
 impl RegisterAccess for FailedBus {
     type Error = io::Error;

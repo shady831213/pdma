@@ -13,9 +13,9 @@ use hardware_interface_schema::{
     export::{Exporter, InMemoryArtifactSink},
 };
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, Command, ControlRegisters, ControlRequest, ControlResponse,
-    DeviceRegisters, Endpoint, FIRMWARE_STATUS_BASE, FirmwareRegisters, Response, Segment,
-    WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl, WindowStatus,
+    CONTROL_CHANNEL_BASE, Command, ControlQueue, ControlRegisters, ControlRequest, ControlResponse,
+    ControlRingState, DeviceRegisters, Endpoint, FIRMWARE_STATUS_BASE, FirmwareRegisters, Response,
+    Segment, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl, WindowStatus,
 };
 
 const HELP: &str = "Usage: pdma-abi-header --channels COUNT [--write PATH | --check PATH]\n\
@@ -84,6 +84,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .export(&ControlRequest::SPEC.resolve()?, &mut sink)?;
     RecordCHeaderExporter::new("control-response.h", "controlresponse")
         .export(&ControlResponse::SPEC.resolve()?, &mut sink)?;
+    RecordCHeaderExporter::new("control-ring-state.h", "controlringstate")
+        .export(&ControlRingState::SPEC.resolve()?, &mut sink)?;
+    RecordCHeaderExporter::new("control-queue.h", "controlqueue")
+        .export(&ControlQueue::SPEC.resolve()?, &mut sink)?;
     RegisterMapCHeaderExporter::new("registers.h", "pdma").export(&registers, &mut sink)?;
     RegisterMapCHeaderExporter::new("window-control.h", "windowcontrol")
         .export(&WindowControl::resolve()?, &mut sink)?;

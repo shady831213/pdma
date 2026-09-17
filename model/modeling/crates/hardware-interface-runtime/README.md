@@ -92,3 +92,16 @@ views; this crate supplies storage backends and generic memory/register/observat
 algorithms; `hardware-interface-pipeline` supplies drive policies; and the consuming
 device supplies its effects. None of these runtime facilities creates a second device
 execution core.
+
+## Progress notifications
+
+This crate exposes no ring protocol or ring types and has no normal dependency on
+PDMA crates. PDMA's shared software ring algorithms live in
+[`pdma-model-software`](../software/README.md), using this runtime's generic
+transport and CPU capabilities. `MemoryAccess` remains codec-neutral.
+
+Under `async-runtime`, `notifications()` creates a `Notifier` and `Notifications`,
+which implements `NotificationWait`. This is a coalescing progress hint without interrupt dispatch,
+payloads or handlers. Callers inspect shared state before waiting. One hint is retained
+before a waiter arrives, and cancelling a registered waiter preserves its unconsumed
+hint. Sender drop does not imply EOF; scoped runtime lifetime controls shutdown.

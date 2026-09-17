@@ -1,10 +1,16 @@
 use super::super::AccessError;
 use super::*;
-use hardware_interface_runtime::{InterruptHandler, RegisterAccess, SoftwareCpu};
+use hardware_interface_runtime::{InterruptHandler, NotificationWait, RegisterAccess, SoftwareCpu};
 use pdma_model_host::runtime::Irq;
 use std::{future::pending, pin::pin, task::Poll};
 
 struct FailedManagement;
+
+impl NotificationWait for FailedManagement {
+    async fn wait_notification(&self) {
+        pending::<()>().await;
+    }
+}
 
 struct TestHandler;
 

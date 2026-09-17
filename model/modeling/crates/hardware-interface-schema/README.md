@@ -28,6 +28,10 @@ placements. Applications own ring structure, entry publication, cursors, DMA, re
 epochs and IRQ behavior. Storage backends, bus observation, actors, concurrency and
 execution remain outside this crate.
 
+This crate exposes no ring protocol or ring types and has no normal dependency on
+PDMA crates. An entry type parameter does not make application cursor rules schema
+mechanics; PDMA defines those rules in its contract crate.
+
 ## Reuse
 
 The workspace marks this crate `publish = false`; this work does not deliver a crates.io
@@ -418,7 +422,9 @@ hardware-specific effects.
 PDMA uses generated layouts for an instance-configured channel count, independent
 command/response rings and device/channel controls. Its current contract generates
 the C header; historical register counts and layouts are not compatibility targets.
-DMA, ring validation, reset and IRQ behavior belong to the PDMA device and host.
+PDMA ring geometry and pointer rules belong to its contract crate; shared software
+ring algorithms belong to `pdma-model-software`. DMA, reset and IRQ behavior belong
+to the PDMA device and host.
 
 The resulting layer boundary is deliberate: this crate owns schema descriptors,
 codecs, checked views and generated-value register windows.

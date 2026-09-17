@@ -1,5 +1,11 @@
 use super::super::RunError;
-use super::{AccessError, Managed, control::rings};
+use super::{
+    AccessError, Managed,
+    control::{
+        memory::{QueueMemory, kick, poll_once},
+        rings,
+    },
+};
 use crate::harness::TestResult;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
@@ -7,20 +13,12 @@ use hardware_interface_runtime::{
 };
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlRegisters, ControlRequest, ControlRequestOpcode,
-    ControlResponseRaw, ControlResponseStatus, ControlRingRegisters, Ring, WINDOW_STATUS_BASE,
+    ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus, Ring,
+    WINDOW_STATUS_BASE,
 };
 use pdma_model_host::{Management, RingConfig};
-use std::{future::pending, sync::Arc, time::Duration};
-
-const COMMAND_PRODUCER: usize =
-    ControlRegisters::COMMAND.offset() + ControlRingRegisters::PRODUCER.offset();
-const COMMAND_CONSUMER: usize =
-    ControlRegisters::COMMAND.offset() + ControlRingRegisters::CONSUMER.offset();
-const RESPONSE_PRODUCER: usize =
-    ControlRegisters::RESPONSE.offset() + ControlRingRegisters::PRODUCER.offset();
-const RESPONSE_CONSUMER: usize =
-    ControlRegisters::RESPONSE.offset() + ControlRingRegisters::CONSUMER.offset();
+use pdma_model_software::ring::SoftRingError;
+use std::{future::pending, pin::pin, sync::Arc, time::Duration};
 
 async fn read_word(
     bus: &(impl RegisterAccess<Error = AccessError> + Sync),
@@ -31,10 +29,6 @@ async fn read_word(
     Ok(u32::from_le_bytes(bytes))
 }
 
-fn address(offset: usize) -> TestResult<u32> {
-    Ok(CONTROL_CHANNEL_BASE + u32::try_from(offset)?)
-}
-
 #[tokio::test]
 async fn backpressure_preserves_pending_request_until_host_releases_response_slot() -> TestResult {
     // Given: real firmware with a capacity-one response ring holding an acquisition result.
@@ -42,12 +36,15 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
+    let mut running = pin!(system.run());
+    assert!(poll_once(running.as_mut()).await.is_pending());
     let cpu = SoftwareCpu::new();
     let program = cpu.run_main(async {
         let mut storage = rings(&allocator)?;
         storage.command = RingConfig::new(storage.command.base(), 1)?;
         storage.response = RingConfig::new(storage.response.base(), 1)?;
         let _client = Management::setup(host.bus.clone(), memory.clone(), storage).await?;
+        let queue = QueueMemory::new(&memory, storage.state);
         memory.write_typed(
             MemoryAddress::new(storage.command.entry(0)?),
             MemoryAlignment::ONE,
@@ -58,11 +55,11 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
             }
             .encode()?,
         )?;
-        host.bus
-            .write(address(COMMAND_PRODUCER)?, &1_u32.to_le_bytes())
-            .await?;
-        while read_word(&host.bus, address(RESPONSE_PRODUCER)?).await? != 1 {
-            tokio::task::yield_now().await;
+        queue.publish_command(1)?;
+        kick(&host.bus).await?;
+        tokio::select! {
+            result = running.as_mut() => panic!("system stopped: {result:?}"),
+            result = queue.wait_response(&host.bus, 1) => result?,
         }
         let first = memory
             .read_typed::<ControlResponseRaw>(
@@ -85,21 +82,21 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
             }
             .encode()?,
         )?;
-        host.bus
-            .write(address(COMMAND_PRODUCER)?, &2_u32.to_le_bytes())
-            .await?;
-        for _ in 0..32 {
-            tokio::task::yield_now().await;
-        }
-        // Then: firmware neither consumes nor executes release until space is returned.
-        assert_eq!(read_word(&host.bus, address(COMMAND_CONSUMER)?).await?, 1);
-        assert_eq!(read_word(&host.bus, address(RESPONSE_PRODUCER)?).await?, 1);
+        queue.publish_command(2)?;
+        kick(&host.bus).await?;
+        assert!(poll_once(running.as_mut()).await.is_pending());
+        // Then: firmware neither consumes nor executes release until space and a kick arrive.
+        assert_eq!(queue.read()?.command.consumer, 1);
+        assert_eq!(queue.read()?.response.producer, 1);
         assert_eq!(read_word(&host.bus, WINDOW_STATUS_BASE).await?, 1);
-        host.bus
-            .write(address(RESPONSE_CONSUMER)?, &1_u32.to_le_bytes())
-            .await?;
-        while read_word(&host.bus, address(RESPONSE_PRODUCER)?).await? != 2 {
-            tokio::task::yield_now().await;
+        queue.consume_response(1)?;
+        assert!(poll_once(running.as_mut()).await.is_pending());
+        assert_eq!(queue.read()?.command.consumer, 1);
+        assert_eq!(queue.read()?.response.producer, 1);
+        kick(&host.bus).await?;
+        tokio::select! {
+            result = running.as_mut() => panic!("system stopped: {result:?}"),
+            result = queue.wait_response(&host.bus, 2) => result?,
         }
         let released = memory
             .read_typed::<ControlResponseRaw>(
@@ -111,12 +108,12 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
             (released.id, released.status, released.channel),
             (2, ControlResponseStatus::Success, 0)
         );
-        assert_eq!(read_word(&host.bus, address(COMMAND_CONSUMER)?).await?, 2);
-        assert_eq!(read_word(&host.bus, address(RESPONSE_CONSUMER)?).await?, 1);
+        assert_eq!(queue.read()?.command.consumer, 2);
+        assert_eq!(queue.read()?.response.consumer, 1);
         assert_eq!(read_word(&host.bus, WINDOW_STATUS_BASE).await?, 0);
         Ok(())
     });
-    tokio::time::timeout(Duration::from_secs(3), system.run_until(program)).await??
+    tokio::time::timeout(Duration::from_secs(3), program).await?
 }
 
 async fn rejected_command_case(unmapped: bool) -> TestResult {
@@ -125,44 +122,43 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
+    let mut storage = rings(&allocator)?;
+    if unmapped {
+        storage.command = RingConfig::new(0xdead_0000, 1)?;
+    } else {
+        memory.write(
+            MemoryAddress::new(storage.command.entry(0)?),
+            MemoryAlignment::ONE,
+            &[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0],
+        )?;
+    }
+    let queue = QueueMemory::new(&memory, storage.state);
     let cpu = SoftwareCpu::new();
     let program = cpu.run_main(async {
-        let mut storage = rings(&allocator)?;
-        if unmapped {
-            storage.command = RingConfig::new(0xdead_0000, 1)?;
-        } else {
-            memory.write(
-                MemoryAddress::new(storage.command.entry(0)?),
-                MemoryAlignment::ONE,
-                &[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0],
-            )?;
-        }
         let _client = Management::setup(host.bus.clone(), memory.clone(), storage).await?;
         // When: Host publishes the unreadable or malformed command for real firmware.
-        host.bus
-            .write(address(COMMAND_PRODUCER)?, &1_u32.to_le_bytes())
-            .await?;
+        queue.publish_command(1)?;
+        kick(&host.bus).await?;
         pending::<TestResult>().await
     });
     let result = tokio::time::timeout(Duration::from_secs(3), system.run_until(program)).await?;
     // Then: the exact firmware error leaves the command unconsumed and allocation closed.
     if unmapped {
-        assert!(
-            matches!(result, Err(RunError::Firmware(pdma_model_firmware::Error::Memory(
-            MemoryAccessError::Unmapped { address }
-        ))) if address == MemoryAddress::new(0xdead_0000))
-        );
+        assert!(matches!(result,
+            Err(RunError::Firmware(pdma_model_firmware::Error::SoftRing(SoftRingError::Memory(
+                MemoryAccessError::Unmapped { address }
+            )))) if address == MemoryAddress::new(0xdead_0000)));
     } else {
         assert!(matches!(
             result,
-            Err(RunError::Firmware(pdma_model_firmware::Error::Codec(
-                SchemaCodecError::UnknownTag { observed: 2, .. }
+            Err(RunError::Firmware(pdma_model_firmware::Error::SoftRing(
+                SoftRingError::Codec(SchemaCodecError::UnknownTag { observed: 2, .. })
             )))
         ));
     }
-    assert_eq!(read_word(&host.bus, address(COMMAND_PRODUCER)?).await?, 1);
-    assert_eq!(read_word(&host.bus, address(COMMAND_CONSUMER)?).await?, 0);
-    assert_eq!(read_word(&host.bus, address(RESPONSE_PRODUCER)?).await?, 0);
+    assert_eq!(queue.read()?.command.producer, 1);
+    assert_eq!(queue.read()?.command.consumer, 0);
+    assert_eq!(queue.read()?.response.producer, 0);
     assert_eq!(read_word(&host.bus, WINDOW_STATUS_BASE).await?, 0);
     Ok(())
 }

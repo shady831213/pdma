@@ -1,35 +1,23 @@
 use super::{COMMAND, RESPONSE, bus::RegisterPort};
 use crate::{Error, RingConfig};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
-use hardware_interface_schema::{Decode, Encode};
-use pdma_model_contract::{
-    Command, CommandRegisters, Response, ResponseRaw, ResponseRegisters, Ring, RingPointers,
-};
+use hardware_interface_runtime::{CpuContextError, MemoryAccess, RegisterAccess};
+use pdma_model_contract::{Command, CommandRegisters, Response, ResponseRegisters};
+use pdma_model_software::ring::{RingCursorRegisters, SoftRing};
 
 #[derive(Debug)]
-pub(super) struct CommandRing {
-    config: RingConfig<Command>,
-}
-
-impl Ring for CommandRing {
-    type Entry = Command;
-
-    fn base(&self) -> u64 {
-        self.config.base()
-    }
-
-    fn capacity(&self) -> u32 {
-        self.config.capacity()
-    }
-}
+pub(super) struct CommandRing(SoftRing<Command>);
 
 impl CommandRing {
-    pub(super) const fn new(config: RingConfig<Command>) -> Self {
-        Self { config }
+    pub(super) fn new(config: RingConfig<Command>) -> Result<Self, CpuContextError> {
+        SoftRing::new(config).map(Self)
+    }
+
+    pub(super) const fn has_pending(&self) -> bool {
+        self.0.has_pending_push()
     }
 
     pub(super) async fn push<B, M>(
-        &self,
+        &mut self,
         port: &RegisterPort<B>,
         memory: &M,
         command: Command,
@@ -38,58 +26,47 @@ impl CommandRing {
         B: RegisterAccess + Send + Sync,
         M: MemoryAccess + Send + Sync,
     {
-        port.validate_active()?;
-        let producer = port
-            .channel_read_word(COMMAND + CommandRegisters::PRODUCER.offset())
-            .await?;
-        let consumer = port
-            .channel_read_word(COMMAND + CommandRegisters::CONSUMER.offset())
-            .await?;
-        let pointers = RingPointers { producer, consumer };
-        if pointers.pending() >= self.capacity() {
-            return Err(Error::Full);
+        let io = port.ring_io(memory, command_registers()?)?;
+        if self.0.try_push(&io, command).await? {
+            Ok(())
+        } else {
+            Err(Error::Full)
         }
-        let next = self.advance_producer(pointers, 1).map_err(Error::Ring)?;
-        let address = MemoryAddress::new(self.entry(producer).map_err(Error::Ring)?);
-        memory
-            .write_typed(
-                address,
-                MemoryAlignment::ONE,
-                &command.encode().map_err(Error::Codec)?,
-            )
-            .map_err(Error::Memory)?;
-        port.channel_write(
-            COMMAND + CommandRegisters::PRODUCER.offset(),
-            &next.producer.to_le_bytes(),
-        )
-        .await
     }
+
+    pub(super) async fn resume<B, M>(
+        &mut self,
+        port: &RegisterPort<B>,
+        memory: &M,
+    ) -> Result<(), Error<B::Error>>
+    where
+        B: RegisterAccess + Send + Sync,
+        M: MemoryAccess + Send + Sync,
+    {
+        let io = port.ring_io(memory, command_registers()?)?;
+        self.0.resume_push(&io).await.map_err(Error::from)
+    }
+}
+
+fn command_registers<B>() -> Result<RingCursorRegisters, Error<B>> {
+    Ok(RingCursorRegisters {
+        producer: u32::try_from(COMMAND + CommandRegisters::PRODUCER.offset())
+            .map_err(|_| Error::Geometry)?,
+        consumer: u32::try_from(COMMAND + CommandRegisters::CONSUMER.offset())
+            .map_err(|_| Error::Geometry)?,
+    })
 }
 
 #[derive(Debug)]
-pub(super) struct ResponseRing {
-    config: RingConfig<Response>,
-}
-
-impl Ring for ResponseRing {
-    type Entry = Response;
-
-    fn base(&self) -> u64 {
-        self.config.base()
-    }
-
-    fn capacity(&self) -> u32 {
-        self.config.capacity()
-    }
-}
+pub(super) struct ResponseRing(SoftRing<Response>);
 
 impl ResponseRing {
-    pub(super) const fn new(config: RingConfig<Response>) -> Self {
-        Self { config }
+    pub(super) fn new(config: RingConfig<Response>) -> Result<Self, CpuContextError> {
+        SoftRing::new(config).map(Self)
     }
 
     pub(super) async fn pop<B, M>(
-        &self,
+        &mut self,
         port: &RegisterPort<B>,
         memory: &M,
     ) -> Result<Option<Response>, Error<B::Error>>
@@ -97,28 +74,17 @@ impl ResponseRing {
         B: RegisterAccess + Send + Sync,
         M: MemoryAccess + Send + Sync,
     {
-        port.validate_active()?;
-        let consumer = port
-            .channel_read_word(RESPONSE + ResponseRegisters::CONSUMER.offset())
-            .await?;
-        let producer = port
-            .channel_read_word(RESPONSE + ResponseRegisters::PRODUCER.offset())
-            .await?;
-        let pointers = RingPointers { producer, consumer };
-        if pointers.is_empty() {
+        let registers = RingCursorRegisters {
+            producer: u32::try_from(RESPONSE + ResponseRegisters::PRODUCER.offset())
+                .map_err(|_| Error::Geometry)?,
+            consumer: u32::try_from(RESPONSE + ResponseRegisters::CONSUMER.offset())
+                .map_err(|_| Error::Geometry)?,
+        };
+        let io = port.ring_io(memory, registers)?;
+        let Some(response) = self.0.peek(&io).await? else {
             return Ok(None);
-        }
-        let next = self.advance_consumer(pointers, 1).map_err(Error::Ring)?;
-        let address = MemoryAddress::new(self.entry(consumer).map_err(Error::Ring)?);
-        let raw = memory
-            .read_typed::<ResponseRaw>(address, MemoryAlignment::ONE)
-            .map_err(Error::Memory)?;
-        let response = raw.decode().map_err(Error::Codec)?;
-        port.channel_write(
-            RESPONSE + ResponseRegisters::CONSUMER.offset(),
-            &next.consumer.to_le_bytes(),
-        )
-        .await?;
+        };
+        self.0.consume(&io).await?;
         Ok(Some(response))
     }
 }

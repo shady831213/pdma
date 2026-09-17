@@ -7,6 +7,12 @@ impl<M> Shared<M> {
     pub(super) async fn access<T>(&self, access: impl FnOnce(&mut Hardware<M>) -> T) -> T {
         let mut hardware = self.hardware.lock().await;
         let result = access(&mut hardware);
+        if hardware.control.take_request_notification() {
+            self.to_firmware.notify();
+        }
+        if hardware.control.take_response_notification() {
+            self.to_host.notify();
+        }
         if hardware.dma.take_interrupt() {
             self.interrupt.raise();
         }

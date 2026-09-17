@@ -9,6 +9,8 @@ publish.workspace = true
 description = "System scenarios for the minimal PDMA channel"
 
 [dev-dependencies]
+pdma-model-software = { path = "../software" }
+trybuild = "1"
 pdma-model-contract = { path = "../contract" }
 pdma-model-dma = { path = "../dma" }
 pdma-model-host = { path = "../host" }

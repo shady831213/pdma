@@ -3,18 +3,23 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{
-    ChannelId, ControlRequest, ControlResponse, ControlResponseStatus, Ring,
+    ChannelId, ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus, Ring,
 };
 use pdma_model_host::{Error, Management, ManagementRings, RingConfig, firmware};
 use std::{future::Future, pin::pin, task::Poll, time::Duration};
 
 mod in_flight;
+pub(super) mod memory;
 mod raw;
 
 pub(super) fn rings(
     allocator: &SharedMemoryAllocator,
 ) -> crate::harness::TestResult<ManagementRings> {
     Ok(ManagementRings {
+        state: allocator.allocate(
+            u64::try_from(ControlQueue::RECORD_SIZE)?,
+            MemoryAlignment::try_new(u64::try_from(ControlQueue::RECORD_ALIGNMENT)?)?,
+        )?,
         command: ring::<ControlRequest>(allocator)?,
         response: ring::<ControlResponse>(allocator)?,
     })
@@ -81,7 +86,7 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
             Err(Error::ManagementStatus(ControlResponseStatus::NotAllocated))
         ));
     });
-    tokio::time::timeout(Duration::from_secs(3), system.run_until(program))
+    tokio::time::timeout(Duration::from_secs(3), system.run_until(Box::pin(program)))
         .await
         .unwrap()
         .unwrap();

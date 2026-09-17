@@ -9,6 +9,8 @@ mod cpu;
 mod error;
 #[cfg(feature = "async-runtime")]
 mod interrupt;
+#[cfg(feature = "async-runtime")]
+mod notifications;
 mod region;
 mod register;
 mod shared_access;
@@ -32,6 +34,8 @@ pub use interrupt::{
     InterruptSummary, NoopInterruptObserver, PendingInterrupt, SharedInterruptObserver,
     pending_interrupt,
 };
+#[cfg(feature = "async-runtime")]
+pub use notifications::{NotificationWait, Notifications, Notifier, notifications};
 pub use region::MemoryRegion;
 pub use register::{
     AccessKind, AccessOrigin, AddressedRegisterAccess, BlockingObservationBackend,

@@ -1,0 +1,9 @@
+error[E0432]: unresolved imports `hardware_interface_schema::Ring`, `hardware_interface_schema::RingConfig`, `hardware_interface_schema::RingError`, `hardware_interface_schema::RingPointers`
+ --> tests/architecture/schema_ring.rs:1:33
+  |
+1 | use hardware_interface_schema::{Ring, RingConfig, RingError, RingPointers};
+  |                                 ^^^^  ^^^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^^ no `RingPointers` in the root
+  |                                 |     |           |
+  |                                 |     |           no `RingError` in the root
+  |                                 |     no `RingConfig` in the root
+  |                                 no `Ring` in the root

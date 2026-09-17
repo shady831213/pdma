@@ -2,6 +2,8 @@
 
 #![cfg(feature = "export-c-header")]
 
+mod control_queue;
+
 use std::{
     error::Error,
     fs, io,
@@ -18,6 +20,10 @@ use pdma_model_contract::{
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
+const QUEUE_BYTES: [u8; 48] = [
+    0, 16, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0,
+    0, 4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+];
 const CONTROL_BYTES: [[u8; 16]; 4] = [
     [1, 2, 3, 4, 5, 6, 7, 8, 1, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
     [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -35,6 +41,8 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         Response::SPEC.resolve()?,
         ControlRequest::SPEC.resolve()?,
         ControlResponse::SPEC.resolve()?,
+        pdma_model_contract::ControlRingState::SPEC.resolve()?,
+        pdma_model_contract::ControlQueue::SPEC.resolve()?,
     ];
     let registers = DeviceRegisters::resolve(3)?;
     let control = ControlRegisters::resolve()?;
@@ -130,7 +138,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         .map(hardware_interface_schema::ResolvedRegister::offset)
         .collect::<Vec<_>>();
     assert_eq!(rust_offsets, offsets.map(usize::from));
-    let control_offsets = [0_u8, 8, 12, 16, 24, 32, 36, 40, 44];
+    let control_offsets = [0_u8, 8, 12, 16];
     assert_eq!(
         ControlRegisters::resolve()?
             .registers()
@@ -146,6 +154,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         offsets.as_slice(),
         CONTROL_BYTES.as_flattened(),
         control_offsets.as_slice(),
+        QUEUE_BYTES.as_slice(),
     ]
     .concat();
     assert_eq!(output.stdout, expected);

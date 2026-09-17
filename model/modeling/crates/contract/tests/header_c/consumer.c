@@ -49,10 +49,22 @@ _Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT == 3, "write fault status co
 _Static_assert(C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH == 4, "length mismatch status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULISTQUREADQUFAULT == 5, "list read fault status code");
 _Static_assert(PDMA_CONTROL_CHANNEL_BASE == UINT32_C(0xfffffe00), "independent control channel address");
-_Static_assert(C_CONTROL_SIZE == 48, "control channel extent");
-_Static_assert(C_CONTROL_C_QUBQUAQUSQUE__1_OFFSET == 0, "command ring address");
-_Static_assert(C_CONTROL_C_QUBQUAQUSQUE__2_OFFSET == 24, "response ring address");
-_Static_assert(C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET == 44, "activation address");
+_Static_assert(C_CONTROL_SIZE == 20, "control channel extent");
+_Static_assert(C_CONTROL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET == 0, "bootstrap address");
+_Static_assert(C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET == 8, "activation address");
+_Static_assert(C_CONTROL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request doorbell address");
+_Static_assert(C_CONTROL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "response doorbell address");
+_Static_assert(C_CONTROL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_CONTROL_ACCESS_WRITE_ONLY, "request doorbell is write-only");
+_Static_assert(C_CONTROL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK == 1, "response doorbell only accepts pulse bit");
+_Static_assert(C_CONTROLRINGSTATE_SIZE == 24, "ring state extent");
+_Static_assert(C_CONTROLQQUEUE_SIZE == 48, "queue extent");
+_Static_assert(C_CONTROLQQUEUE_ALIGNMENT == 8, "queue alignment");
+_Static_assert(C_CONTROLQQUEUE_C_COMMANDQX2EBASE_OFFSET == 0, "command base offset");
+_Static_assert(C_CONTROLQQUEUE_C_COMMANDQX2EPRODUCER_OFFSET == 12, "command producer offset");
+_Static_assert(C_CONTROLQQUEUE_C_COMMANDQX2ECONSUMER_OFFSET == 16, "command consumer offset");
+_Static_assert(C_CONTROLQQUEUE_C_RESPONSEQX2EBASE_OFFSET == 24, "response base offset");
+_Static_assert(C_CONTROLQQUEUE_C_RESPONSEQX2EPRODUCER_OFFSET == 36, "response producer offset");
+_Static_assert(C_CONTROLQQUEUE_C_RESPONSEQX2ECONSUMER_OFFSET == 40, "response consumer offset");
 _Static_assert(C_CONTROLREQQUEST_SIZE == 16, "control request extent");
 _Static_assert(C_CONTROLRESPONSE_SIZE == 16, "control response extent");
 _Static_assert(C_CONTROLREQQUEST_ALIGNMENT == 8, "control request alignment");
@@ -78,16 +90,12 @@ int main(void) {
     uint8_t acquire[C_CONTROLREQQUEST_SIZE] = {0};
     uint8_t granted[C_CONTROLRESPONSE_SIZE] = {0};
     uint8_t rejected[C_CONTROLRESPONSE_SIZE] = {0};
+    uint8_t queue[C_CONTROLQQUEUE_SIZE] = {0};
     const uint8_t control_offsets[] = {
-        C_CONTROL_C_QUBQUAQUSQUE__1_OFFSET,
-        C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET,
-        C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET,
-        C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET,
-        C_CONTROL_C_QUBQUAQUSQUE__2_OFFSET,
-        C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET,
-        C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET,
-        C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET,
+        C_CONTROL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET,
         C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET,
+        C_CONTROL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET,
+        C_CONTROL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET,
     };
     const uint8_t offsets[] = {
         C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET,
@@ -163,6 +171,22 @@ int main(void) {
     C_CONTROLRESPONSE_STORE_C_ID(rejected, UINT64_C(0x0807060504030201));
     C_CONTROLRESPONSE_STORE_C_STATUS(rejected, C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED);
     C_CONTROLRESPONSE_STORE_C_CHANNEL(rejected, UINT32_C(0x10203040));
+    C_CONTROLQQUEUE_STORE_C_COMMANDQX2EBASE(queue, UINT64_C(0x1000));
+    C_CONTROLQQUEUE_STORE_C_COMMANDQX2ECAPACITY(queue, UINT32_C(8));
+    C_CONTROLQQUEUE_STORE_C_COMMANDQX2EPRODUCER(queue, UINT32_C(3));
+    C_CONTROLQQUEUE_STORE_C_COMMANDQX2ECONSUMER(queue, UINT32_C(1));
+    C_CONTROLQQUEUE_STORE_C_RESPONSEQX2EBASE(queue, UINT64_C(0x2000));
+    C_CONTROLQQUEUE_STORE_C_RESPONSEQX2ECAPACITY(queue, UINT32_C(4));
+    C_CONTROLQQUEUE_STORE_C_RESPONSEQX2EPRODUCER(queue, UINT32_C(2));
+    C_CONTROLQQUEUE_STORE_C_RESPONSEQX2ECONSUMER(queue, UINT32_C(1));
+    if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2EBASE(queue) != UINT64_C(0x1000)) return 24;
+    if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2ECAPACITY(queue) != UINT32_C(8)) return 25;
+    if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2EPRODUCER(queue) != UINT32_C(3)) return 26;
+    if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2ECONSUMER(queue) != UINT32_C(1)) return 27;
+    if (C_CONTROLQQUEUE_LOAD_C_RESPONSEQX2EBASE(queue) != UINT64_C(0x2000)) return 28;
+    if (C_CONTROLQQUEUE_LOAD_C_RESPONSEQX2ECAPACITY(queue) != UINT32_C(4)) return 29;
+    if (C_CONTROLQQUEUE_LOAD_C_RESPONSEQX2EPRODUCER(queue) != UINT32_C(2)) return 30;
+    if (C_CONTROLQQUEUE_LOAD_C_RESPONSEQX2ECONSUMER(queue) != UINT32_C(1)) return 31;
     if (C_COMMAND_LOAD_C_ID(command) != UINT64_C(7)) return 1;
     if (C_COMMAND_LOAD_C_SOURCEQX2EMODE(command) != UINT32_C(0)) return 2;
     if (C_COMMAND_LOAD_C_SOURCEQX2EWORD0(command) != UINT64_C(0x100)) return 3;
@@ -186,5 +210,6 @@ int main(void) {
     if (fwrite(granted, 1, sizeof(granted), stdout) != sizeof(granted)) return 21;
     if (fwrite(rejected, 1, sizeof(rejected), stdout) != sizeof(rejected)) return 22;
     if (fwrite(control_offsets, 1, sizeof(control_offsets), stdout) != sizeof(control_offsets)) return 23;
+    if (fwrite(queue, 1, sizeof(queue), stdout) != sizeof(queue)) return 32;
     return 0;
 }

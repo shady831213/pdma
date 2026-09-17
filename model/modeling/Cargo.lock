@@ -99,6 +99,7 @@ dependencies = [
  "hardware-interface-runtime",
  "hardware-interface-schema",
  "pdma-model-contract",
+ "pdma-model-software",
  "tokio",
 ]
 
@@ -111,6 +112,7 @@ dependencies = [
  "hardware-interface-schema",
  "pdma-model-contract",
  "pdma-model-dma",
+ "pdma-model-software",
  "tokio",
 ]
 
@@ -134,6 +136,18 @@ dependencies = [
  "pdma-model-firmware",
  "pdma-model-host",
  "pdma-model-hw-components",
+ "pdma-model-software",
+ "tokio",
+ "trybuild",
+]
+
+[[package]]
+name = "pdma-model-software"
+version = "0.1.0"
+dependencies = [
+ "hardware-interface-runtime",
+ "hardware-interface-schema",
+ "pdma-model-contract",
  "tokio",
 ]
 

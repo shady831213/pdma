@@ -1,0 +1,20 @@
+[package]
+name = "pdma-model-software"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Shared PDMA software ring operations for Host and firmware"
+
+[dependencies]
+pdma-model-contract = { path = "../contract" }
+hardware-interface-runtime = { path = "../hardware-interface-runtime" }
+hardware-interface-schema = { path = "../hardware-interface-schema" }
+
+[dev-dependencies]
+tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
+
+[lints]
+workspace = true

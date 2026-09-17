@@ -41,8 +41,8 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/contract/src/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
 | `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
-| `crates/contract/src/control.rs` | Independent control request/response records and composed ring registers. |
-| `crates/hw-components/src/control_channel.rs` | Control ring state, access ownership and publication bounds, without memory or allocation policy. |
+| `crates/contract/src/control.rs` | Control records, in-memory queue descriptor and bootstrap/doorbell registers. |
+| `crates/hw-components/src/control_channel.rs` | Bootstrap ownership, activation lock and notification pulses, without queue memory or allocation policy. |
 | `crates/host/src/management.rs` | Host control-ring setup, channel requests and cancellation-safe response collection. |
 | `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
 | `crates/hw-components/src/firmware_status.rs` | Firmware boot report, writable only through management access and readable by Host even with DMA closed. |
@@ -50,7 +50,9 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
 | `crates/hardware-interface-runtime/src/interrupt/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
-| `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |
+| `crates/contract/src/ring.rs` | PDMA ring geometry, shared pointer rules and errors. |
+| `crates/software/src/ring.rs` | Shared PDMA software ring configuration and CPU-owned operations over borrowed MMIO or memory cursors. |
+| `crates/hardware-interface-runtime/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
 | `crates/dma/src/channel/mmio.rs` | Generated block routing and software-write effects. |
@@ -168,8 +170,9 @@ cause an extra recheck. The current register set has no read-clear behavior.
 `Ring` is a trait with an associated `Entry` schema. Implementations supply their
 base and capacity; default methods compute entry addresses and checked pointer
 updates. Entry stride follows the wire size/alignment, not `size_of::<Entry>()`.
-Host's `RingConfig<Entry>` holds software-selected storage configuration only;
-contract does not define or store software configuration.
+`Ring`, `RingPointers` and `RingError` are defined in `pdma-model-contract`.
+`RingConfig<Entry>` holds software-selected storage configuration only and lives
+in `software::ring` from `pdma-model-software`; host reexports it as `host::RingConfig`.
 `RingPointers` is a temporary snapshot acquired by the caller, not cached state.
 The trait neither performs I/O nor requires `push`/`pop` methods.
 
@@ -183,12 +186,22 @@ semantic records, then publish pointers only after successful access and decodin
 | Device | Read/decode entry, then advance its consumer register | Write entry, then advance its producer register |
 
 Device `CommandRing`/`ResponseRing` implement the trait directly over their own
-registers and expose inherent synchronous operations. Host concrete rings implement
-the same trait and expose inherent asynchronous operations; `Channel` delegates to
-them. One private host register port retains the bus and delegates per-poll CPU
-validation to the runtime's `CpuOwner::scope`.
+registers and expose inherent synchronous operations. Host concrete rings delegate
+asynchronous publication and consumption to `software::ring::SoftRing`, shared
+with firmware.
+It borrows register cursors for ordinary DMA and memory cursors for both control
+endpoints. Management request IDs and resource policy remain outside SoftRing.
+One private host register port retains the bus; `CpuOwner::scope` checks each poll.
 Software reads current pointers through that bus; there is no second authoritative
-cursor store. The separation follows
+cursor store. `Channel::resume_submission` completes retained publication after
+cancellation; it never queues a second command. Control-channel doorbells are
+separate from DMA interrupt dispatch; see `docs/control-channel.md`.
+The [shared software crate](crates/software/README.md) depends on contract, runtime
+and schema, with no dependency on host, firmware or DMA. An `Entry` parameter does
+not make PDMA cursor rules a framework concern. Generic schema/runtime expose no
+ring protocol or ring types and have no normal dependency on PDMA crates; generic
+transport, CPU and notification mechanics remain in runtime.
+The separation follows
 [etha_model's register-backed ring operations](https://github.com/shady831213/etha_model/blob/5270f00874a1ad390fbbce6f5395be24a52d0ec9/src/reg_if/ring.rs#L125-L182),
 without adopting its raw pointer dereferences or phase-bit pointer encoding.
 

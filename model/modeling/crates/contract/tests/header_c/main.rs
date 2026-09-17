@@ -48,13 +48,20 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
     let control = ControlRegisters::resolve()?;
 
     // When: the public generator emits its complete header.
+    let temp = TempDirectory::new()?;
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header"))
-        .args(["--channels", "3"])
+        .args(["--channels", "3", "--write-dir"])
+        .arg(&temp.0)
         .output()?;
 
     // Then: schema descriptions survive in the C artifact, including multiline status details.
     assert_success("header generator", &output);
-    let header = std::str::from_utf8(&output.stdout)?;
+    let headers = ["pdma_common.h", "pdma_host.h", "pdma_firmware.h"]
+        .map(|name| fs::read_to_string(temp.0.join(name)))
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?
+        .join("\n");
+    let header = headers.as_str();
     for record in records {
         assert_descriptions(header, record.documentation());
         for member in record.members() {
@@ -71,10 +78,10 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     // Given: a generated header and a C consumer using actual exported accessors.
     let temp = TempDirectory::new()?;
     let header = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header"))
-        .args(["--channels", "3"])
+        .args(["--channels", "3", "--write-dir"])
+        .arg(&temp.0)
         .output()?;
     assert_success("header generator", &header);
-    fs::write(temp.0.join("pdma_model_abi.h"), header.stdout)?;
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/header_c/consumer.c");
     let binary = temp.0.join("consumer");
     let compile = ProcessCommand::new("cc")

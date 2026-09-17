@@ -1,132 +1,58 @@
-//! Generates the current PDMA contract's C11 header from schema metadata.
+//! Generates coherent common, Host and firmware C11 headers.
 
-use std::{
-    error::Error,
-    ffi::OsString,
-    fs,
-    io::{self, Write},
-    path::PathBuf,
-};
+/// Schema-backed assembly of the generated header set.
+pub mod header;
 
-use hardware_interface_schema::{
-    export::backends::c_header::{RecordCHeaderExporter, RegisterMapCHeaderExporter},
-    export::{Exporter, InMemoryArtifactSink},
-};
-use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, Command, ControlQueue, ControlRegisters, ControlRequest, ControlResponse,
-    ControlRingState, DeviceRegisters, Endpoint, FIRMWARE_STATUS_BASE, FirmwareRegisters, Response,
-    Segment, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl, WindowStatus,
-};
+use std::{error::Error, ffi::OsStr, fs, io, path::PathBuf};
 
-const HELP: &str = "Usage: pdma-abi-header --channels COUNT [--write PATH | --check PATH]\n\
-       pdma-abi-header --help\n\
-Select the hardware instance channel count explicitly; otherwise write to stdout.\n\
-  --write PATH  Replace PATH with the generated header.\n\
-  --check PATH  Fail if PATH differs; never modify it.\n";
-
-#[derive(Debug)]
-enum Action {
-    Stdout,
-    Write(PathBuf),
-    Check(PathBuf),
-}
-
-impl Action {
-    fn parse(mut args: impl Iterator<Item = OsString>) -> io::Result<Self> {
-        let action = match args.next() {
-            None => Self::Stdout,
-            Some(flag) if flag == "--write" || flag == "--check" => {
-                let path = args
-                    .next()
-                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, HELP))?;
-                if flag == "--write" {
-                    Self::Write(path.into())
-                } else {
-                    Self::Check(path.into())
-                }
-            }
-            Some(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, HELP)),
-        };
-        if args.next().is_some() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, HELP));
-        }
-        Ok(action)
-    }
-}
+const HELP: &str = "Usage: pdma-abi-header --channels COUNT (--write-dir DIR | --check-dir DIR)\n\
+    pdma-abi-header --help\n\
+    Generates pdma_common.h, pdma_host.h and pdma_firmware.h.\n\
+    --write-dir DIR  Replace all three generated headers.\n\
+    --check-dir DIR  Fail on missing or stale headers without modifying files.\n";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args_os().skip(1);
     let first = args.next();
-    if first.as_deref() == Some(std::ffi::OsStr::new("--help")) && args.next().is_none() {
-        io::stdout().lock().write_all(HELP.as_bytes())?;
+    if first.as_deref() == Some(OsStr::new("--help")) && args.next().is_none() {
+        print!("{HELP}");
         return Ok(());
     }
-    if first.as_deref() != Some(std::ffi::OsStr::new("--channels")) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, HELP).into());
+    let invalid = || io::Error::new(io::ErrorKind::InvalidInput, HELP);
+    if first.as_deref() != Some(OsStr::new("--channels")) {
+        return Err(invalid().into());
     }
-    let channel_count = args
+    let count = args
         .next()
-        .and_then(|count| count.into_string().ok())
-        .and_then(|count| count.parse::<usize>().ok())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, HELP))?;
-    let action = Action::parse(args)?;
-    let registers = DeviceRegisters::resolve(channel_count)?;
-    let mut sink = InMemoryArtifactSink::new();
-    RecordCHeaderExporter::new("segment.h", "segment")
-        .export(&Segment::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("endpoint.h", "endpoint")
-        .export(&Endpoint::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("command.h", "command")
-        .export(&Command::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("response.h", "response")
-        .export(&Response::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("control-request.h", "controlrequest")
-        .export(&ControlRequest::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("control-response.h", "controlresponse")
-        .export(&ControlResponse::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("control-ring-state.h", "controlringstate")
-        .export(&ControlRingState::SPEC.resolve()?, &mut sink)?;
-    RecordCHeaderExporter::new("control-queue.h", "controlqueue")
-        .export(&ControlQueue::SPEC.resolve()?, &mut sink)?;
-    RegisterMapCHeaderExporter::new("registers.h", "pdma").export(&registers, &mut sink)?;
-    RegisterMapCHeaderExporter::new("window-control.h", "windowcontrol")
-        .export(&WindowControl::resolve()?, &mut sink)?;
-    RegisterMapCHeaderExporter::new("window-status.h", "windowstatus")
-        .export(&WindowStatus::resolve()?, &mut sink)?;
-    RegisterMapCHeaderExporter::new("firmware.h", "firmware")
-        .export(&FirmwareRegisters::resolve()?, &mut sink)?;
-    RegisterMapCHeaderExporter::new("control.h", "control")
-        .export(&ControlRegisters::resolve()?, &mut sink)?;
-    let mut header = String::from(
-        "/* Generated by pdma-abi-header from the current contract; do not edit. */\n\
-         #ifndef PDMA_MODEL_ABI_H\n#define PDMA_MODEL_ABI_H\n\n\
-         #include <stdint.h>\n\n",
-    )
-    .into_bytes();
-    for artifact in sink.artifacts() {
-        header.extend_from_slice(&artifact.contents);
-        header.push(b'\n');
+        .and_then(|arg| arg.into_string().ok())
+        .and_then(|arg| arg.parse::<usize>().ok())
+        .ok_or_else(invalid)?;
+    let action = args.next().ok_or_else(invalid)?;
+    let check = match action.to_str() {
+        Some("--write-dir") => false,
+        Some("--check-dir") => true,
+        _ => return Err(invalid().into()),
+    };
+    let directory = PathBuf::from(args.next().ok_or_else(invalid)?);
+    if args.next().is_some() {
+        return Err(invalid().into());
     }
-    writeln!(
-        header,
-        "/* Absolute bases for the relative management maps above. */\n\
-         #define PDMA_WINDOW_CONTROL_BASE UINT32_C({WINDOW_CONTROL_BASE})\n\
-         #define PDMA_WINDOW_STATUS_BASE UINT32_C({WINDOW_STATUS_BASE})\n\
-         #define PDMA_FIRMWARE_STATUS_BASE UINT32_C({FIRMWARE_STATUS_BASE})\n\
-         #define PDMA_CONTROL_CHANNEL_BASE UINT32_C({CONTROL_CHANNEL_BASE})\n"
-    )?;
-    header.extend_from_slice(b"#endif\n");
-    match action {
-        Action::Stdout => io::stdout().lock().write_all(&header)?,
-        Action::Write(path) => fs::write(path, header)?,
-        Action::Check(path) => {
-            if fs::read(&path)? != header {
+    let headers = header::generate(count)?;
+    if !check {
+        fs::create_dir_all(&directory)?;
+    }
+    for (name, bytes) in headers {
+        let path = directory.join(name);
+        if check {
+            if fs::read(&path)? != bytes {
                 return Err(io::Error::other(format!(
-                    "{} is stale; regenerate with --write",
+                    "{} is stale; regenerate with --write-dir",
                     path.display()
                 ))
                 .into());
             }
+        } else {
+            fs::write(path, bytes)?;
         }
     }
     Ok(())

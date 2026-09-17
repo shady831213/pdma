@@ -1,25 +1,25 @@
-#include "pdma_model_abi.h"
-#include "pdma_model_abi.h"
+#include "pdma_host.h"
+#include "pdma_firmware.h"
 #include <stdio.h>
 
 _Static_assert(C_COMMAND_SIZE == 64, "command wire extent");
 _Static_assert(C_RESPONSE_SIZE == 24, "response wire extent");
 _Static_assert(C_ENDPOINT_SIZE == 24, "endpoint wire extent");
 _Static_assert(C_SEGMENT_SIZE == 16, "segment wire extent");
-_Static_assert(C_PDMA_SIZE == 228, "device MMIO extent");
-_Static_assert(PDMA_WINDOW_CONTROL_BASE == UINT32_C(0xffffff00), "firmware control address");
-_Static_assert(PDMA_WINDOW_STATUS_BASE == UINT32_C(0xffffff08), "host readiness address");
-_Static_assert(PDMA_FIRMWARE_STATUS_BASE == UINT32_C(0xffffff10), "firmware boot report address");
-_Static_assert(C_FIRMWARE_SIZE == 4, "atomic firmware boot report extent");
-_Static_assert(C_WINDOWCONTROL_SIZE == 4, "control map extent");
-_Static_assert(C_WINDOWSTATUS_SIZE == 4, "status map extent");
-_Static_assert(C_WINDOWCONTROL_C_QUOQUPQUEQUN_OFFSET == 0, "control map relative offset");
-_Static_assert(C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_OFFSET == 0, "status map relative offset");
-_Static_assert(C_WINDOWCONTROL_C_QUOQUPQUEQUN_ACCESS == C_WINDOWCONTROL_ACCESS_READ_WRITE, "firmware can configure access");
-_Static_assert(C_WINDOWCONTROL_C_QUOQUPQUEQUN_WRITABLE_MASK == 1, "only access-enable bit is writable");
-_Static_assert(C_WINDOWCONTROL_C_QUOQUPQUEQUN_RESET_VALUE == 0, "window starts closed");
-_Static_assert(C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_ACCESS == C_WINDOWSTATUS_ACCESS_READ_ONLY, "readiness is read-only");
-_Static_assert(C_WINDOWSTATUS_C_QURQUEQUAQUDQUY_WRITABLE_MASK == 0, "readiness has no writable fields");
+_Static_assert(C_HDMA_SIZE == 228, "device MMIO extent");
+_Static_assert(PDMA_FIRMWARE_WINDOW_CONTROL_BASE == UINT32_C(0xffffff00), "firmware control address");
+_Static_assert(PDMA_HOST_WINDOW_STATUS_BASE == UINT32_C(0xffffff08), "host readiness address");
+_Static_assert(PDMA_HOST_BOOT_BASE == UINT32_C(0xffffff10), "firmware boot report address");
+_Static_assert(C_FBOOT_SIZE == 4, "atomic firmware boot report extent");
+_Static_assert(C_FWIN_SIZE == 4, "control map extent");
+_Static_assert(C_HWIN_SIZE == 4, "status map extent");
+_Static_assert(C_FWIN_C_QUOQUPQUEQUN_OFFSET == 0, "control map relative offset");
+_Static_assert(C_HWIN_C_QURQUEQUAQUDQUY_OFFSET == 0, "status map relative offset");
+_Static_assert(C_FWIN_C_QUOQUPQUEQUN_ACCESS == C_FWIN_ACCESS_READ_WRITE, "firmware can configure access");
+_Static_assert(C_FWIN_C_QUOQUPQUEQUN_WRITABLE_MASK == 1, "only access-enable bit is writable");
+_Static_assert(C_FWIN_C_QUOQUPQUEQUN_RESET_VALUE == 0, "window starts closed");
+_Static_assert(C_HWIN_C_QURQUEQUAQUDQUY_ACCESS == C_HWIN_ACCESS_READ_ONLY, "readiness is read-only");
+_Static_assert(C_HWIN_C_QURQUEQUAQUDQUY_WRITABLE_MASK == 0, "readiness has no writable fields");
 _Static_assert(C_COMMAND_C_FLAGS_OFFSET == 56, "command IOC offset");
 _Static_assert(C_RESPONSE_C_FLAGS_OFFSET == 12, "response IOC offset");
 _Static_assert(C_COMMAND_ALIGNMENT == 8, "command alignment");
@@ -28,34 +28,34 @@ _Static_assert(C_ENDPOINT_ALIGNMENT == 8, "endpoint alignment");
 _Static_assert(C_SEGMENT_ALIGNMENT == 8, "segment alignment");
 _Static_assert(C_ENDPOINT_C_MODE_C_QULINEAR == 0, "linear mode");
 _Static_assert(C_ENDPOINT_C_MODE_C_QUSCATTERQUGATHER == 1, "scatter gather mode");
-_Static_assert(C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET == 52, "first channel response producer");
-_Static_assert(C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET == 124, "second channel response producer");
-_Static_assert(C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET == 196, "third channel response producer");
-_Static_assert(C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_VALUE == 0, "channel count populated by hardware");
-_Static_assert(C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_KIND == C_PDMA_RESET_POST_RESET, "instance discovery initialized after reset");
-_Static_assert(C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_ACCESS == C_PDMA_ACCESS_READ_ONLY, "channel count is read-only");
-_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE == 0, "no channel fault code");
-_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUCOMMANDQUREAD == 1, "command fault code");
-_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QURESPONSEQUWRITE == 2, "response fault code");
-_Static_assert(C_PDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUINTERNAL == 1, "device internal fault code");
-_Static_assert(C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_ACCESS == C_PDMA_ACCESS_READ_ONLY, "causes are read-only");
-_Static_assert(C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK == 3, "two notification mask bits");
-_Static_assert(C_PDMA_C_QURQUEQUSQUEQUT__2_ACCESS == C_PDMA_ACCESS_READ_WRITE, "channel reset exposes busy state");
-_Static_assert(C_PDMA_C_QURQUEQUSQUEQUT__1_ACCESS == C_PDMA_ACCESS_READ_WRITE, "device reset exposes busy state");
+_Static_assert(C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET == 52, "first channel response producer");
+_Static_assert(C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET == 124, "second channel response producer");
+_Static_assert(C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET == 196, "third channel response producer");
+_Static_assert(C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_VALUE == 0, "channel count populated by hardware");
+_Static_assert(C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_KIND == C_HDMA_RESET_POST_RESET, "instance discovery initialized after reset");
+_Static_assert(C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_ACCESS == C_HDMA_ACCESS_READ_ONLY, "channel count is read-only");
+_Static_assert(C_HDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE == 0, "no channel fault code");
+_Static_assert(C_HDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUCOMMANDQUREAD == 1, "command fault code");
+_Static_assert(C_HDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QURESPONSEQUWRITE == 2, "response fault code");
+_Static_assert(C_HDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUINTERNAL == 1, "device internal fault code");
+_Static_assert(C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_ACCESS == C_HDMA_ACCESS_READ_ONLY, "causes are read-only");
+_Static_assert(C_HDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK == 3, "two notification mask bits");
+_Static_assert(C_HDMA_C_QURQUEQUSQUEQUT__2_ACCESS == C_HDMA_ACCESS_READ_WRITE, "channel reset exposes busy state");
+_Static_assert(C_HDMA_C_QURQUEQUSQUEQUT__1_ACCESS == C_HDMA_ACCESS_READ_WRITE, "device reset exposes busy state");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUSUCCESS == 0, "success status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH == 1, "invalid length status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUFAULT == 2, "read fault status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT == 3, "write fault status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH == 4, "length mismatch status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULISTQUREADQUFAULT == 5, "list read fault status code");
-_Static_assert(PDMA_CONTROL_CHANNEL_BASE == UINT32_C(0xfffffe00), "independent control channel address");
-_Static_assert(C_CONTROL_SIZE == 20, "control channel extent");
-_Static_assert(C_CONTROL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET == 0, "bootstrap address");
-_Static_assert(C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET == 8, "activation address");
-_Static_assert(C_CONTROL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request doorbell address");
-_Static_assert(C_CONTROL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "response doorbell address");
-_Static_assert(C_CONTROL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_CONTROL_ACCESS_WRITE_ONLY, "request doorbell is write-only");
-_Static_assert(C_CONTROL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK == 1, "response doorbell only accepts pulse bit");
+_Static_assert(PDMA_HOST_CONTROL_BASE == UINT32_C(0xfffffe00), "independent control channel address");
+_Static_assert(C_HCTL_SIZE == 20, "control channel extent");
+_Static_assert(C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET == 0, "bootstrap address");
+_Static_assert(C_HCTL_C_QUEQUNQUAQUBQULQUE_OFFSET == 8, "activation address");
+_Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request doorbell address");
+_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "response doorbell address");
+_Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_HCTL_ACCESS_WRITE_ONLY, "request doorbell is write-only");
+_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK == 1, "response doorbell only accepts pulse bit");
 _Static_assert(C_CONTROLRINGSTATE_SIZE == 24, "ring state extent");
 _Static_assert(C_CONTROLQQUEUE_SIZE == 48, "queue extent");
 _Static_assert(C_CONTROLQQUEUE_ALIGNMENT == 8, "queue alignment");
@@ -92,58 +92,58 @@ int main(void) {
     uint8_t rejected[C_CONTROLRESPONSE_SIZE] = {0};
     uint8_t queue[C_CONTROLQQUEUE_SIZE] = {0};
     const uint8_t control_offsets[] = {
-        C_CONTROL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET,
-        C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET,
-        C_CONTROL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET,
-        C_CONTROL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET,
+        C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET,
+        C_HCTL_C_QUEQUNQUAQUBQULQUE_OFFSET,
+        C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET,
+        C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET,
     };
     const uint8_t offsets[] = {
-        C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET,
-        C_PDMA_C_QUFQUAQUUQULQUT__1_OFFSET,
-        C_PDMA_C_QURQUEQUSQUEQUT__1_OFFSET,
-        C_PDMA_C_QUBQUAQUSQUE__1_OFFSET,
-        C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET,
-        C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET,
-        C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET,
-        C_PDMA_C_QUBQUAQUSQUE__2_OFFSET,
-        C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET,
-        C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET,
-        C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET,
-        C_PDMA_C_QUEQUNQUAQUBQULQUE__1_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET,
-        C_PDMA_C_QUFQUAQUUQULQUT__2_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_OFFSET,
-        C_PDMA_C_QURQUEQUSQUEQUT__2_OFFSET,
-        C_PDMA_C_QUBQUAQUSQUE__3_OFFSET,
-        C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_OFFSET,
-        C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_OFFSET,
-        C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_OFFSET,
-        C_PDMA_C_QUBQUAQUSQUE__4_OFFSET,
-        C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_OFFSET,
-        C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET,
-        C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_OFFSET,
-        C_PDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_OFFSET,
-        C_PDMA_C_QUFQUAQUUQULQUT__3_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_OFFSET,
-        C_PDMA_C_QURQUEQUSQUEQUT__3_OFFSET,
-        C_PDMA_C_QUBQUAQUSQUE__5_OFFSET,
-        C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_OFFSET,
-        C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_OFFSET,
-        C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_OFFSET,
-        C_PDMA_C_QUBQUAQUSQUE__6_OFFSET,
-        C_PDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_OFFSET,
-        C_PDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET,
-        C_PDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_OFFSET,
-        C_PDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_OFFSET,
-        C_PDMA_C_QUFQUAQUUQULQUT__4_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET,
-        C_PDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_OFFSET,
-        C_PDMA_C_QURQUEQUSQUEQUT__4_OFFSET,
+        C_HDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET,
+        C_HDMA_C_QUFQUAQUUQULQUT__1_OFFSET,
+        C_HDMA_C_QURQUEQUSQUEQUT__1_OFFSET,
+        C_HDMA_C_QUBQUAQUSQUE__1_OFFSET,
+        C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET,
+        C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET,
+        C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET,
+        C_HDMA_C_QUBQUAQUSQUE__2_OFFSET,
+        C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET,
+        C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET,
+        C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET,
+        C_HDMA_C_QUEQUNQUAQUBQULQUE__1_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET,
+        C_HDMA_C_QUFQUAQUUQULQUT__2_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_OFFSET,
+        C_HDMA_C_QURQUEQUSQUEQUT__2_OFFSET,
+        C_HDMA_C_QUBQUAQUSQUE__3_OFFSET,
+        C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__3_OFFSET,
+        C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__3_OFFSET,
+        C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__3_OFFSET,
+        C_HDMA_C_QUBQUAQUSQUE__4_OFFSET,
+        C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__4_OFFSET,
+        C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__4_OFFSET,
+        C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_OFFSET,
+        C_HDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_OFFSET,
+        C_HDMA_C_QUFQUAQUUQULQUT__3_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_OFFSET,
+        C_HDMA_C_QURQUEQUSQUEQUT__3_OFFSET,
+        C_HDMA_C_QUBQUAQUSQUE__5_OFFSET,
+        C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__5_OFFSET,
+        C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__5_OFFSET,
+        C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__5_OFFSET,
+        C_HDMA_C_QUBQUAQUSQUE__6_OFFSET,
+        C_HDMA_C_QUCQUAQUPQUAQUCQUIQUTQUY__6_OFFSET,
+        C_HDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET,
+        C_HDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_OFFSET,
+        C_HDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_OFFSET,
+        C_HDMA_C_QUFQUAQUUQULQUT__4_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET,
+        C_HDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_OFFSET,
+        C_HDMA_C_QURQUEQUSQUEQUT__4_OFFSET,
     };
     C_COMMAND_STORE_C_ID(command, UINT64_C(7));
     C_COMMAND_STORE_C_SOURCEQX2EMODE(command, C_COMMAND_C_SOURCEQX2EMODE_C_QULINEAR);

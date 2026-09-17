@@ -1,96 +1,75 @@
-# Current PDMA contract header
+# PDMA contract C headers
 
-`pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`,
-`ControlRequest`, `ControlResponse`, `ControlRingState`, `ControlQueue`, `DeviceRegisters`, `WindowControl`, `WindowStatus`,
-`FirmwareRegisters`, and `ControlRegisters` schemas. It contains record sizes and byte accessors, MMIO
-offsets and access/reset metadata, and schema descriptions as C comments. It is
-a C11 data contract, not a callable device API or the predecessor's ABI.
+The contract generates one shared wire header and two static register views:
 
-Enum fields export named discriminant constants and variant descriptions. For a
-bit field, these constants are unshifted values; its bit position determines
-where the encoded value belongs within the containing scalar.
+| Header | Register prefixes | Domain |
+| --- | --- | --- |
+| `pdma_common.h` | Existing record prefixes | Identical Host/firmware record sizes, encoding, enums and accessors |
+| `pdma_host.h` | `C_HDMA`, `C_HBOOT`, `C_HCTL`, `C_HWIN` | Host |
+| `pdma_firmware.h` | `C_FDMA`, `C_FBOOT`, `C_FCTL`, `C_FWIN` | Firmware |
 
-Endpoints use mode 0 for linear spans and mode 1 for scatter/gather lists. The
-existing exporter names the two union storage words `WORD0` and `WORD1`: these
-hold address/length for linear endpoints and list_address/count for list
-endpoints. Software keeps lists and buffers stable until command completion.
-The response carries a 64-bit `bytes_completed` count; transfer lengths have no
-fixed hardware limit.
+Both role headers include the common header and can coexist in one C11 translation
+unit. There is no mixed full-access public header. The schema exporter generates
+all record and register metadata from the original contract; PDMA's
+`RegisterView` supplies only access restrictions. Projection retains physical
+offsets, map extents, bank strides and instance indices. Hidden registers leave
+holes. Read-only projections have zero writable masks. Descriptions are preserved.
 
-Commands are 64 bytes and carry `CompletionFlags.ioc`; responses remain 24 bytes
-and echo the flags at byte 12. The checked-in header describes an explicitly
-selected three-channel example. Its 228-byte MMIO map starts with read-only
-`channel_num` at byte 0, followed by device IRQ enable, fatal state and reset at
-bytes 4, 8 and 12. Three independent channel blocks start at bytes 16, 88 and 160
-with a 72-byte stride. Each block contains command/response ring registers,
-non-empty/IOC masks, read-only causes and channel reset.
-Unmask does not replay notifications. Channel and device reset preserve external
-memory; device reset also preserves the hardware channel count. Each device
-instance selects its count at construction. The discovery register has post-reset
-initialization metadata because hardware supplies that instance's count.
+| Register | Host | Firmware |
+| --- | --- | --- |
+| DMA registers | Original leaf permissions, dynamically gated | Original leaf permissions |
+| Boot report | Read-only | Read/write |
+| Window control | Hidden | Read/write |
+| Window readiness | Read-only | Hidden (not mapped on management bus) |
+| Control bootstrap / enable | Read/write | Read-only |
+| Request doorbell | Write-only | Hidden |
+| Response doorbell | Hidden | Write-only |
 
-The management maps use separate `C_WINDOWCONTROL` and `C_WINDOWSTATUS` prefixes.
-Their offsets are relative to `PDMA_WINDOW_CONTROL_BASE` and
-`PDMA_WINDOW_STATUS_BASE`, respectively; these absolute base macros come from
-the Rust contract. Both maps occupy four bytes. Firmware alone may access control,
-whose writable bit zero opens the Host work window. Host readiness is read-only
-and remains accessible while the work window is closed. These maps are separate
-from the channel-count-dependent `C_PDMA_SIZE` extent.
+The role prefix is part of every register macro namespace. Absolute bases are
+`PDMA_HOST_BOOT_BASE` and `PDMA_FIRMWARE_BOOT_BASE` (0xffff_ff10),
+`PDMA_HOST_CONTROL_BASE` and `PDMA_FIRMWARE_CONTROL_BASE` (0xffff_fe00),
+`PDMA_HOST_WINDOW_STATUS_BASE` (0xffff_ff08), and
+`PDMA_FIRMWARE_WINDOW_CONTROL_BASE` (0xffff_ff00). Register offsets are
+relative to these bases; DMA offsets start at zero.
 
-`C_FIRMWARE` describes the four-byte boot report at `PDMA_FIRMWARE_STATUS_BASE`
-(`0xffff_ff10`). Bits 0..=1 encode Booting (0), Ready (1), or Failed (2); bit 16
-encodes no error (0) or window setup failure (1). Firmware writes one complete
-report; Host may only read it. The read/write metadata describes firmware access,
-not Host permission. Subsystem reset clears the report to Booting/no error.
-DMA/channel reset does not reset firmware. Window readiness and firmware readiness
-are separate: the latter alone does not authorize DMA access.
+Static visibility never grants Host work-window access. Hardware checks the window
+on every Host DMA transaction. Firmware Ready does not open that window.
+The boot report and control transport remain accessible while DMA access is closed.
+The 20-byte control map retains bootstrap at byte 0, enable at 8, request at 12
+and response at 16, even though each role hides one doorbell. A doorbell write of
+one notifies its peer; zero is a no-op. Hardware stores no ring geometry or cursors.
 
-`C_CONTROL` describes the independent 20-byte control map at
-`PDMA_CONTROL_CHANNEL_BASE` (`0xffff_fe00`). The 64-bit bootstrap address is at
-offset 0, activation at 8, and write-only request/response doorbells at 12 and 16.
-Doorbells accept one to notify the peer and zero as a no-op; hardware retains no
-ring geometry or cursors. Register descriptions specify Host/firmware ownership;
-the generic access metadata alone does not encode those domain permissions.
+The checked-in headers select three DMA channels: a 228-byte map with four device
+registers at bytes 0, 4, 8 and 12, followed by 72-byte channel blocks starting at
+16, 88 and 160. Both views retain read-only channel count and IRQ cause registers.
+Unmask does not replay old events. Reset is a read/write handshake: write one,
+retain affected memory, and wait for hardware to clear busy after old work drains.
+Platform-pending notifications survive reset.
 
-`C_CONTROLRINGSTATE` describes a 24-byte memory record containing base, capacity,
-producer and consumer at offsets 0, 8, 12 and 16. `C_CONTROLQQUEUE` describes the
-48-byte bootstrap descriptor, nesting command state at offset 0 and response
-state at offset 24. Both records have eight-byte alignment. Nested accessors
-address each cursor independently; software validates geometry and cursor
-movement. Host keeps geometry stable after activation and publishes the
-descriptor in memory before writing bootstrap and enabling the control map.
+Shared wire records retain their original sizes and byte layout: Segment is
+16 bytes, Endpoint 24, Command 64, Response 24, ControlRequest and ControlResponse
+16 each, ControlRingState 24, and ControlQueue 48. Enum bitfield constants are
+unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
+lists; WORD0/WORD1 hold address/length or list_address/count. Command IOC is at
+byte 56 and response IOC at byte 12. ControlQueue nests command state at byte 0
+and response state at byte 24; each ring stores base/capacity/producer/consumer
+at bytes 0/8/12/16.
 
-`C_CONTROLREQQUEST` and `C_CONTROLRESPONSE` describe 16-byte little-endian records
-with eight-byte alignment. Both have a 64-bit identifier at byte 0 and a 32-bit
-channel index at byte 12. Request opcode at byte 8 is AcquireChannel (0) or
-ReleaseChannel (1). Response status at byte 8 is Success (0), NoResources (1),
-InvalidChannel (2), or NotAllocated (3). Their generated accessors encode the
-control records without requiring native C structure layout.
-
-Both reset registers are read/write handshakes. Write one to request reset, then
-poll that same register until hardware clears it to zero. One means busy; zero
-writes have no effect, and repeated one writes while busy coalesce. Hardware
-rejects configuration writes for the affected scope until cleanup completes.
-Completion guarantees that all prior command-ring reads, SG-list reads, payload
-reads/writes and response-ring writes in that scope have drained and that no
-later access belongs to that work. Software must retain affected memory until
-completion, including when it cancels or times out its wait. Platform-pending
-interrupt notifications remain claimable after reset.
+Initialize record arrays to zero before using generated stores so reserved padding
+matches Rust encoding. Accessors encode bytes; they do not perform device I/O.
 
 Run from `model/modeling`:
 
 ```sh
-cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --write include/pdma_model_abi.h
-cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --check include/pdma_model_abi.h
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --write-dir include
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --check-dir include
 ```
 
-`--channels COUNT` is required and selects the concrete instance metadata; with
-no output option the generator writes to stdout. `--help` lists the options.
-The optional `export-c-header` feature composes the existing schema exporters;
-normal host/DMA builds do not enable it. Do not edit the header by hand.
+Both the explicit channel count and a directory action are required. Generation
+validates all three artifacts before writing; checking fails if any artifact is
+missing or stale and never modifies files. Unsupported options and role selectors
+fail before writing. `--help` lists the interface. Export remains default-off.
 
-Initialize record byte arrays to zero before storing fields so reserved padding
-matches the Rust wire encoding. The generated field accessors do not initialize
-padding or perform device I/O.
-
-The obsolete header remains recoverable on `backup/pdma-before-rebuild-20260909`.
+The strict C fixtures compile and run each role separately and both together with
+`cc -std=c11 -pedantic-errors -Wall -Wextra -Werror`; wire bytes are compared
+against independent fixtures and Rust encoding.

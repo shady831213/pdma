@@ -3,6 +3,7 @@ mod error;
 mod layout;
 mod ordered;
 mod placement;
+mod projection;
 mod resolve;
 mod resolved;
 mod validation;
@@ -15,6 +16,7 @@ pub use ordered::{
     append_register_leaf, finish_ordered_register_map,
 };
 pub use placement::ResolvedRegisterMapPlacement;
+pub use projection::AccessProjectionError;
 pub use resolved::{ResolvedRegister, ResolvedRegisterBank, ResolvedRegisterMap};
 
 /// One immutable repeated register-bank declaration.

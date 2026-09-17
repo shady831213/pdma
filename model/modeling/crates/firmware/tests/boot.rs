@@ -1,16 +1,14 @@
 //! Firmware boot failures at the software CPU and management transport boundaries.
 
-use hardware_interface_runtime::{CpuContextError, NotificationWait, RegisterAccess, SoftwareCpu};
-use std::{convert::Infallible, io};
+use hardware_interface_runtime::{
+    CpuContextError, InterruptRegistrationError, InterruptRuntime, RegisterAccess, SoftwareCpu,
+    pending_interrupt,
+};
+use pdma_model_software::control::{ControlIrq, ControlIsr};
+use std::{io, sync::Arc};
 
 #[derive(Debug)]
 struct FailedBus;
-
-impl NotificationWait for FailedBus {
-    async fn wait_notification(&self) {
-        std::future::pending::<()>().await;
-    }
-}
 
 impl RegisterAccess for FailedBus {
     type Error = io::Error;
@@ -27,27 +25,55 @@ impl RegisterAccess for FailedBus {
 #[tokio::test]
 async fn boot_reports_management_failure() {
     // Given: a software CPU and an unavailable management transport.
-    let cpu = SoftwareCpu::new();
+    let (_, source) = pending_interrupt(ControlIrq);
+    let cpu = Arc::new(SoftwareCpu::new());
+    let bus = cpu.bind_registers(FailedBus);
+    let runtime = InterruptRuntime::new(cpu, source);
     // When: firmware attempts initialization.
-    let result = cpu
-        .run_main(pdma_model_firmware::main(
-            FailedBus,
-            hardware_interface_runtime::SharedMemory::new(),
-        ))
+    let result = runtime
+        .run_main::<ControlIsr, _>(async |registration| {
+            pdma_model_firmware::main(
+                bus,
+                hardware_interface_runtime::SharedMemory::new(),
+                registration,
+            )
+            .await
+        })
         .await;
     // Then: transport failure reaches the supervisor instead of reporting readiness.
-    assert!(matches!(result, Err(pdma_model_firmware::Error::Bus(_))));
+    assert!(matches!(
+        result,
+        Ok((Err(pdma_model_firmware::Error::Bus(_)), _))
+    ));
 }
 
 #[tokio::test]
-async fn boot_requires_a_software_cpu() {
-    // Given: firmware is called without a modeled CPU execution domain.
+async fn boot_requires_its_interrupt_registration_cpu() {
+    // Given: firmware receives registration from a different software CPU.
+    let (_, source) = pending_interrupt(ControlIrq);
+    let cpu = Arc::new(SoftwareCpu::new());
+    let bus = cpu.bind_registers(FailedBus);
+    let runtime = InterruptRuntime::new(cpu, source);
     // When: the program starts.
-    let result: Result<Infallible, _> =
-        pdma_model_firmware::main(FailedBus, hardware_interface_runtime::SharedMemory::new()).await;
+    let result = runtime
+        .run_main::<ControlIsr, _>(async |registration| {
+            SoftwareCpu::new()
+                .run_main(pdma_model_firmware::main(
+                    bus,
+                    hardware_interface_runtime::SharedMemory::new(),
+                    registration,
+                ))
+                .await
+        })
+        .await;
     // Then: it cannot perform management accesses as unowned runtime code.
     assert!(matches!(
         result,
-        Err(pdma_model_firmware::Error::Cpu(CpuContextError::Inactive))
+        Ok((
+            Err(pdma_model_firmware::Error::Registration(
+                InterruptRegistrationError::Cpu(CpuContextError::Mismatch)
+            )),
+            _
+        ))
     ));
 }

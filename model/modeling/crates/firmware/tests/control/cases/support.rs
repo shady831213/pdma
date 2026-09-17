@@ -1,32 +1,63 @@
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, NotificationWait, RegisterAccess,
-    SharedMemory,
+    CpuAccessError, InterruptEmitter, InterruptRuntime, MemoryAccess, MemoryAddress,
+    MemoryAlignment, MemoryRegion, PendingInterrupt, RegisterAccess, SharedMemory, SoftwareCpu,
+    pending_interrupt,
 };
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::{
     CONTROL_CHANNEL_BASE, ControlQueue, ControlRegisters, ControlRequest, ControlResponse,
-    ControlResponseRaw, ControlRingState,
+    ControlResponseRaw, ControlRingState, DeviceControl, DeviceRegisters,
 };
+use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     collections::BTreeMap,
     future::Future,
     io,
     pin::Pin,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     task::{Context, Poll, Waker},
 };
-use tokio::sync::Notify;
 
 pub(super) const QUEUE: u64 = 0x1000;
 pub(super) const COMMAND: u64 = 0x1100;
 pub(super) const RESPONSE: u64 = 0x1200;
 
-#[derive(Default)]
 pub(super) struct Bus {
     pub(super) registers: Mutex<BTreeMap<u32, Vec<u8>>>,
     pub(super) writes: Mutex<Vec<(u32, Vec<u8>)>>,
-    pub(super) notification: Notify,
+    pub(super) notification: InterruptEmitter,
+    source: PendingInterrupt<ControlIrq>,
+}
+
+impl Default for Bus {
+    fn default() -> Self {
+        let (notification, source) = pending_interrupt(ControlIrq);
+        Self {
+            registers: Mutex::default(),
+            writes: Mutex::default(),
+            notification,
+            source,
+        }
+    }
+}
+
+pub(super) async fn run(
+    bus: &Bus,
+    memory: SharedMemory,
+) -> Result<std::convert::Infallible, pdma_model_firmware::Error<CpuAccessError<io::Error>>> {
+    let cpu = Arc::new(SoftwareCpu::new());
+    let bound = cpu.bind_registers(bus);
+    let runtime = InterruptRuntime::new(cpu, bus.source.clone());
+    let (result, _) = runtime
+        .run_main::<ControlIsr, _>(async |registration| {
+            pdma_model_firmware::main(bound, memory, registration).await
+        })
+        .await
+        .map_err(|error| {
+            pdma_model_firmware::Error::Bus(CpuAccessError::Access(io::Error::other(error)))
+        })?;
+    result
 }
 
 pub(super) fn register(offset: usize) -> TestResult<u32> {
@@ -60,14 +91,15 @@ impl RegisterAccess for &Bus {
     }
 }
 
-impl NotificationWait for &Bus {
-    async fn wait_notification(&self) {
-        self.notification.notified().await;
-    }
-}
-
 pub(super) fn fixture() -> TestResult<(Bus, SharedMemory)> {
     let bus = Bus::default();
+    bus.registers
+        .lock()
+        .map_err(|error| io::Error::other(error.to_string()))?
+        .insert(
+            u32::try_from(DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset())?,
+            1_u32.to_le_bytes().to_vec(),
+        );
     bus.registers
         .lock()
         .map_err(|error| io::Error::other(error.to_string()))?

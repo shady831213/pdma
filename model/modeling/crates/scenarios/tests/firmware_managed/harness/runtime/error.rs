@@ -23,7 +23,17 @@ impl std::error::Error for BuildError {}
 #[derive(Debug)]
 pub enum RunError {
     /// Firmware boot or control service failed.
-    Firmware(pdma_model_firmware::Error<super::AccessError>),
+    Firmware(
+        pdma_model_firmware::Error<hardware_interface_runtime::CpuAccessError<super::AccessError>>,
+    ),
+    /// Firmware interrupt delivery failed.
+    FirmwareInterrupt(
+        hardware_interface_runtime::InterruptDispatchError<
+            (),
+            tokio::sync::watch::error::RecvError,
+            Infallible,
+        >,
+    ),
     /// The hardware pipeline failed.
     Hardware(AsyncRunError<Infallible, pdma_model_dma::Error>),
     /// A persistent hardware operation unexpectedly completed.

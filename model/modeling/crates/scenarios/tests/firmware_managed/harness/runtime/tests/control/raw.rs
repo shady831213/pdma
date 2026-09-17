@@ -11,12 +11,15 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone()).unwrap();
-    let cpu = SoftwareCpu::new();
-    let program = cpu.run_main(async {
+    let program = client::run(host.runtime, async |interrupt| {
         let rings = rings(&allocator).unwrap();
-        let _client = Management::setup(host.bus.clone(), memory.clone(), rings)
-            .await
-            .unwrap();
+        let _client = Management::setup(
+            host.bus.clone(),
+            memory.clone(),
+            client::config(rings, &interrupt),
+        )
+        .await
+        .unwrap();
         let request = ControlRequest {
             id: 77,
             opcode: ControlRequestOpcode::AcquireChannel,
@@ -33,7 +36,7 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         let queue = QueueMemory::new(&memory, rings.state);
         queue.publish_command(1).unwrap();
         kick(&host.bus).await.unwrap();
-        queue.wait_response(&host.bus, 1).await.unwrap();
+        queue.wait_response(&interrupt, 1).await.unwrap();
         let response = memory
             .read_typed::<ControlResponseRaw>(
                 MemoryAddress::new(rings.response.entry(0).unwrap()),

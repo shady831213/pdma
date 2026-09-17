@@ -2,6 +2,7 @@
 
 mod bus;
 mod error;
+mod interrupts;
 mod run;
 mod transport;
 
@@ -10,15 +11,16 @@ mod tests;
 
 pub use bus::HostBus;
 pub use error::{BuildError, RunError};
+pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 
 use hardware_interface_runtime::{
-    InterruptEmitter, InterruptRuntime, Notifications, Notifier, PendingInterrupt, SoftwareCpu,
-    notifications, pending_interrupt,
+    InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
 use pdma_model_contract::{CONTROL_CHANNEL_BASE, DeviceRegisters, FIRMWARE_STATUS_BASE};
 use pdma_model_dma::{CommandLoop, Device};
 use pdma_model_host::runtime::Irq;
 use pdma_model_hw_components::{AccessWindow, ControlChannel, FirmwareStatus, WindowConfigError};
+use pdma_model_software::control::ControlIrq;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
@@ -35,10 +37,8 @@ struct Shared<M> {
     hardware: Mutex<Hardware<M>>,
     changed: Notify,
     interrupt: InterruptEmitter,
-    to_firmware: Notifier,
-    firmware_notifications: Notifications,
-    to_host: Notifier,
-    host_notifications: Notifications,
+    to_firmware: InterruptEmitter,
+    to_host: InterruptEmitter,
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ pub struct Host<M> {
     /// Restricted work bus and read-only readiness view.
     pub bus: HostBus<M>,
     /// The Host CPU's independent interrupt execution environment.
-    pub runtime: InterruptRuntime<PendingInterrupt<Irq>>,
+    pub runtime: InterruptRuntime<HostInterrupts>,
 }
 
 /// One managed channel, driven only when its scoped run future is polled.
@@ -64,6 +64,7 @@ pub struct Host<M> {
 pub struct Managed<M> {
     shared: Arc<Shared<M>>,
     pipeline: CommandLoop,
+    firmware_runtime: InterruptRuntime<PendingInterrupt<ControlIrq>>,
     firmware_cpu: Arc<SoftwareCpu>,
     firmware_memory: M,
 }
@@ -79,13 +80,13 @@ impl<M: Clone> Managed<M> {
             usize::try_from(FIRMWARE_STATUS_BASE)
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
         );
-        let (interrupt, source) = pending_interrupt(Irq);
+        let (interrupt, dma_source) = pending_interrupt(HostIrq::Dma(Irq));
         let control = ControlChannel::new(
             usize::try_from(CONTROL_CHANNEL_BASE)
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
         );
-        let (to_firmware, firmware_notifications) = notifications();
-        let (to_host, host_notifications) = notifications();
+        let (to_firmware, firmware_source) = pending_interrupt(ControlIrq);
+        let (to_host, control_source) = pending_interrupt(HostIrq::Control(ControlIrq));
         let shared = Arc::new(Shared {
             hardware: Mutex::new(Hardware {
                 dma,
@@ -96,21 +97,28 @@ impl<M: Clone> Managed<M> {
             changed: Notify::new(),
             interrupt,
             to_firmware,
-            firmware_notifications,
             to_host,
-            host_notifications,
         });
         let host = Host {
             bus: HostBus {
                 shared: Arc::clone(&shared),
             },
-            runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source),
+            runtime: InterruptRuntime::new(
+                Arc::new(SoftwareCpu::new()),
+                HostInterrupts {
+                    dma: dma_source,
+                    control: control_source,
+                    next: HostVector::Dma,
+                },
+            ),
         };
+        let firmware_cpu = Arc::new(SoftwareCpu::new());
         Ok((
             Self {
                 shared,
                 pipeline,
-                firmware_cpu: Arc::new(SoftwareCpu::new()),
+                firmware_runtime: InterruptRuntime::new(Arc::clone(&firmware_cpu), firmware_source),
+                firmware_cpu,
                 firmware_memory: memory,
             },
             host,

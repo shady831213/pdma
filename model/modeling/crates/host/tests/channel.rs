@@ -78,7 +78,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
     // Then: codec rejection leaves the entry and IRQ pending; repairing it allows consumption.
     assert!(matches!(
         result,
-        Err(pdma_model_host::Error::Codec(
+        Err(pdma_model_host::DmaError::Codec(
             hardware_interface_schema::SchemaCodecError::UnknownTag { observed: 255, .. }
         ))
     ));

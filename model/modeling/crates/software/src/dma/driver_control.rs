@@ -1,23 +1,14 @@
-use super::{CHANNEL, Channel};
-use crate::Error;
+use super::Channel;
+use super::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
 use pdma_model_contract::{
-    ChannelFaultCode, ChannelFaultValues, ChannelIrqCauseValues, ChannelIrqMaskValues,
-    ChannelRegisters, DeviceControl, DeviceFaultCode, DeviceFaultValues, DeviceRegisters,
+    ChannelFaultCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DeviceFaultCode,
 };
-
-const CONTROL: usize = DeviceRegisters::CONTROL.offset();
 
 impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
     /// Reads the hardware's sticky channel fault code.
     pub async fn fault(&self) -> Result<ChannelFaultCode, Error<B::Error>> {
-        let raw = self
-            .port
-            .channel_read_word(CHANNEL + ChannelRegisters::FAULT.offset())
-            .await?;
-        ChannelFaultValues::new(raw)
-            .code()
-            .map_err(Error::RegisterCodec)
+        self.port.control.fault(&self.port.bus).await
     }
 
     /// Enables or masks all channel interrupt notifications.
@@ -25,10 +16,8 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Enabling does not replay masked events; inspect causes and pending responses.
     pub async fn set_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
-            .channel_write(
-                CHANNEL + ChannelRegisters::IRQ_ENABLE.offset(),
-                &u32::from(enabled).to_le_bytes(),
-            )
+            .control
+            .set_irq_enabled(&self.port.bus, enabled)
             .await
     }
 
@@ -36,20 +25,12 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     ///
     /// Clearing a mask does not replay events; inspect causes and pending responses.
     pub async fn set_irq_mask(&self, mask: ChannelIrqMaskValues) -> Result<(), Error<B::Error>> {
-        self.port
-            .channel_write(
-                CHANNEL + ChannelRegisters::IRQ_MASK.offset(),
-                &mask.raw().to_le_bytes(),
-            )
-            .await
+        self.port.control.set_irq_mask(&self.port.bus, mask).await
     }
 
     /// Reads channel causes regardless of interrupt masks without acknowledging them.
     pub async fn irq_cause(&self) -> Result<ChannelIrqCauseValues, Error<B::Error>> {
-        self.port
-            .channel_read_word(CHANNEL + ChannelRegisters::IRQ_CAUSE.offset())
-            .await
-            .map(ChannelIrqCauseValues::new)
+        self.port.control.irq_cause(&self.port.bus).await
     }
 
     /// Requests channel reset and waits for disabled, unconfigured hardware.
@@ -62,32 +43,12 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Dropping this future, including through a caller timeout, does not cancel an accepted
     /// hardware request. A timeout is not completion: keep its memory valid until reset reads zero.
     pub async fn reset(self) -> Result<(), Error<B::Error>> {
-        self.port
-            .channel_write(
-                CHANNEL + ChannelRegisters::RESET.offset(),
-                &1_u32.to_le_bytes(),
-            )
-            .await?;
-        while self
-            .port
-            .channel_read_word(CHANNEL + ChannelRegisters::RESET.offset())
-            .await?
-            != 0
-        {
-            tokio::task::yield_now().await;
-        }
-        Ok(())
+        self.port.control.reset(&self.port.bus).await
     }
 
     /// Reads the sticky device-wide fault, which channel reset cannot clear.
     pub async fn device_fault(&self) -> Result<DeviceFaultCode, Error<B::Error>> {
-        let raw = self
-            .port
-            .read_word(CONTROL + DeviceControl::FAULT.offset())
-            .await?;
-        DeviceFaultValues::new(raw)
-            .code()
-            .map_err(Error::RegisterCodec)
+        self.port.control.device_fault(&self.port.bus).await
     }
 
     /// Enables or masks device-fatal notifications independently of the channel gate.
@@ -95,10 +56,8 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Enabling does not replay masked events; inspect the device fault afterward.
     pub async fn set_device_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
-            .write(
-                CONTROL + DeviceControl::IRQ_ENABLE.offset(),
-                &u32::from(enabled).to_le_bytes(),
-            )
+            .control
+            .set_device_irq_enabled(&self.port.bus, enabled)
             .await
     }
 
@@ -113,20 +72,6 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// owned by hardware. Keep all affected memory valid until device reset reads zero.
     /// A timeout never indicates successful reset completion.
     pub async fn reset_device(self) -> Result<(), Error<B::Error>> {
-        self.port
-            .write(
-                CONTROL + DeviceControl::RESET.offset(),
-                &1_u32.to_le_bytes(),
-            )
-            .await?;
-        while self
-            .port
-            .read_word(CONTROL + DeviceControl::RESET.offset())
-            .await?
-            != 0
-        {
-            tokio::task::yield_now().await;
-        }
-        Ok(())
+        self.port.control.reset_device(&self.port.bus).await
     }
 }

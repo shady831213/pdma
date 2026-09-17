@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::{ChannelFaultCode, ChannelId, Command, Response, Segment};
 use pdma_model_host::{
-    Channel, ChannelConfig, Error as HostError, RingConfig, Rings, runtime::Irq,
+    Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };
 use std::error::Error;
 use tokio::sync::oneshot;

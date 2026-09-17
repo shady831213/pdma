@@ -1,11 +1,11 @@
 use super::{
-    AccessError, Managed,
+    AccessError, Managed, client,
     control::{memory::QueueMemory, rings},
 };
 use crate::harness::TestResult;
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, NotificationWait, RegisterAccess, SharedMemory,
-    SharedMemoryAllocator, SoftwareCpu,
+    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
+    SharedMemoryAllocator,
 };
 use hardware_interface_schema::Encode;
 use pdma_model_contract::{
@@ -72,12 +72,6 @@ impl<B: RegisterAccess<Error = AccessError> + Sync> RegisterAccess for PausingBu
     }
 }
 
-impl<B: NotificationWait> NotificationWait for PausingBus<B> {
-    async fn wait_notification(&self) {
-        self.inner.wait_notification().await;
-    }
-}
-
 async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
     // Given: real control hardware and firmware, with one Host write paused at its boundary.
     let allocator =
@@ -90,8 +84,7 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
         remaining: AtomicUsize::new(0),
         hit: AtomicBool::new(false),
     });
-    let cpu = SoftwareCpu::new();
-    let program = Box::pin(cpu.run_main(async {
+    let program = Box::pin(client::run(host.runtime, async |interrupt| {
         firmware::wait_ready(&host.bus, Duration::from_secs(1)).await?;
         let storage = rings(&allocator)?;
         let mut management = Management::setup(
@@ -100,7 +93,7 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
                 pause: Arc::clone(&pause),
             },
             memory.clone(),
-            storage,
+            client::config(storage, &interrupt),
         )
         .await?;
         pause

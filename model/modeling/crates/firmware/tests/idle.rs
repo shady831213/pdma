@@ -1,10 +1,16 @@
 //! Firmware suspension before Host activates its control queue.
 
-use hardware_interface_runtime::{NotificationWait, RegisterAccess, SharedMemory, SoftwareCpu};
+use hardware_interface_runtime::{
+    InterruptRuntime, RegisterAccess, SharedMemory, SoftwareCpu, pending_interrupt,
+};
+use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     future::Future,
     io,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     task::{Context, Waker},
 };
 
@@ -23,19 +29,17 @@ impl RegisterAccess for &DisabledBus {
     }
 }
 
-impl NotificationWait for &DisabledBus {
-    async fn wait_notification(&self) {
-        std::future::pending::<()>().await;
-    }
-}
-
 #[tokio::test]
 async fn disabled_control_waits_without_repeated_register_reads() {
     // Given: boot succeeds but Host has not activated the queue.
     let bus = DisabledBus::default();
-    let cpu = SoftwareCpu::new();
-    let mut program =
-        std::pin::pin!(cpu.run_main(pdma_model_firmware::main(&bus, SharedMemory::new())));
+    let (_, source) = pending_interrupt(ControlIrq);
+    let cpu = Arc::new(SoftwareCpu::new());
+    let bound = cpu.bind_registers(&bus);
+    let runtime = InterruptRuntime::new(cpu, source);
+    let mut program = std::pin::pin!(runtime.run_main::<ControlIsr, _>(async |registration| {
+        pdma_model_firmware::main(bound, SharedMemory::new(), registration).await
+    }));
     let mut context = Context::from_waker(Waker::noop());
     // When: the executor polls the idle program repeatedly without a doorbell.
     for _ in 0..8 {

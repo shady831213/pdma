@@ -1,5 +1,5 @@
 use super::{acquire, support::*};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SoftwareCpu};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::{
     ChannelBlock, ChannelRegisters, ControlQueue, ControlRequest, ControlRequestOpcode,
     ControlRingState, DeviceRegisters, WINDOW_CONTROL_BASE,
@@ -21,8 +21,7 @@ async fn misaligned_bootstrap_descriptor_is_rejected() -> TestResult {
         register(pdma_model_contract::ControlRegisters::BOOTSTRAP.offset()).unwrap(),
         (QUEUE + 1).to_le_bytes().to_vec(),
     );
-    let cpu = SoftwareCpu::new();
-    let mut program = std::pin::pin!(cpu.run_main(pdma_model_firmware::main(&bus, memory)));
+    let mut program = std::pin::pin!(run(&bus, memory));
     // When: firmware attaches through that bootstrap address.
     let result = poll(program.as_mut());
     // Then: attachment rejects the schema alignment violation.
@@ -46,9 +45,7 @@ async fn malformed_request_remains_unconsumed() -> TestResult {
         )
         .unwrap();
     // When: firmware decodes that request.
-    let result = SoftwareCpu::new()
-        .run_main(pdma_model_firmware::main(&bus, memory.clone()))
-        .await;
+    let result = run(&bus, memory.clone()).await;
     // Then: decoding fails before ownership or command consumption changes.
     assert!(matches!(
         result,
@@ -88,9 +85,7 @@ async fn attachment_rejects_nonzero_firmware_owned_cursor() -> TestResult {
         1,
     )?;
     // When: firmware attaches.
-    let result = SoftwareCpu::new()
-        .run_main(pdma_model_firmware::main(&bus, memory))
-        .await;
+    let result = run(&bus, memory).await;
     // Then: a valid distance does not authorize Host to initialize firmware progress.
     assert!(matches!(result, Err(pdma_model_firmware::Error::Ring(_))));
     Ok(())
@@ -101,8 +96,7 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
     // Given: acquisition succeeded and Host submitted release after freeing response space.
     let (bus, memory) = fixture()?;
     publish(&memory, acquire(1), 1)?;
-    let cpu = SoftwareCpu::new();
-    let mut program = std::pin::pin!(cpu.run_main(pdma_model_firmware::main(&bus, memory.clone())));
+    let mut program = std::pin::pin!(run(&bus, memory.clone()));
     assert!(poll(program.as_mut()).is_pending());
     write_word(
         &memory,
@@ -163,5 +157,58 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
         2
     );
     assert_eq!(response(&memory)?.id, 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn response_space_lost_after_acceptance_is_a_protocol_error() -> TestResult {
+    // Given: release was accepted with response space and is waiting for hardware reset.
+    let (bus, memory) = fixture()?;
+    publish(&memory, acquire(1), 1)?;
+    let mut program = std::pin::pin!(run(&bus, memory.clone()));
+    assert!(poll(program.as_mut()).is_pending());
+    let consumer = ControlQueue::RESPONSE_OFFSET + ControlRingState::CONSUMER_OFFSET;
+    let producer = ControlQueue::RESPONSE_OFFSET + ControlRingState::PRODUCER_OFFSET;
+    write_word(&memory, consumer, 1)?;
+    publish(
+        &memory,
+        ControlRequest {
+            id: 2,
+            opcode: ControlRequestOpcode::ReleaseChannel,
+            channel: 0,
+        },
+        2,
+    )?;
+    assert!(poll(program.as_mut()).is_pending());
+    let reset = u32::try_from(
+        DeviceRegisters::CHANNELS_OFFSET
+            + ChannelBlock::CONTROL.offset()
+            + ChannelRegisters::RESET.offset(),
+    )?;
+    assert_eq!(
+        bus.registers.lock().unwrap().get(&reset),
+        Some(&1_u32.to_le_bytes().to_vec())
+    );
+    let writes = bus.writes.lock().unwrap().len();
+    // When: Host illegally rewinds its consumer before hardware finishes reset.
+    write_word(&memory, consumer, 0)?;
+    bus.registers
+        .lock()
+        .unwrap()
+        .insert(reset, 0_u32.to_le_bytes().to_vec());
+    let result = poll(program.as_mut());
+    // Then: firmware reports the violation instead of waiting or overwriting the old response.
+    assert!(
+        matches!(
+            result,
+            std::task::Poll::Ready(Err(pdma_model_firmware::Error::Ring(
+                pdma_model_contract::RingError::Pointers
+            )))
+        ),
+        "unexpected firmware result: {result:?}"
+    );
+    assert_eq!(read_word(&memory, producer)?, 1);
+    assert_eq!(response(&memory)?.id, 1);
+    assert_eq!(bus.writes.lock().unwrap().len(), writes);
     Ok(())
 }

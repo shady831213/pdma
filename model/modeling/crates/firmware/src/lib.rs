@@ -4,7 +4,7 @@ use pdma_model_software::ring::SoftRingError;
 mod control;
 pub use control::main;
 
-use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
+use hardware_interface_runtime::{CpuContextError, InterruptRegistrationError, MemoryAccessError};
 use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::RingError;
 use std::{error, fmt};
@@ -24,6 +24,10 @@ pub enum Error<E> {
     Ring(RingError),
     /// A memory-backed software ring operation failed.
     SoftRing(SoftRingError<MemoryAccessError>),
+    /// A shared DMA control operation failed.
+    Dma(pdma_model_software::dma::Error<E>),
+    /// Firmware could not register its management interrupt handler.
+    Registration(InterruptRegistrationError<()>),
 }
 
 impl<E: fmt::Display> fmt::Display for Error<E> {
@@ -35,6 +39,8 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
             Self::Codec(error) => error.fmt(formatter),
             Self::Ring(error) => error.fmt(formatter),
             Self::SoftRing(error) => error.fmt(formatter),
+            Self::Dma(error) => error.fmt(formatter),
+            Self::Registration(error) => error.fmt(formatter),
         }
     }
 }
@@ -48,6 +54,8 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
             Self::Codec(error) => Some(error),
             Self::Ring(error) => Some(error),
             Self::SoftRing(error) => Some(error),
+            Self::Dma(error) => Some(error),
+            Self::Registration(error) => Some(error),
         }
     }
 }

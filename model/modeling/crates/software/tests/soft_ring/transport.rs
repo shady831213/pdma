@@ -3,7 +3,7 @@ use hardware_interface_runtime::{
 };
 use std::{
     future::pending,
-    sync::atomic::{AtomicU8, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
 };
 
 #[derive(Debug, Default)]
@@ -11,6 +11,8 @@ use std::{
 pub struct CursorBus {
     pub(super) memory: SharedMemory,
     pub(super) pause: AtomicU8,
+    pub(super) pause_read: AtomicBool,
+    pub(super) reads: AtomicUsize,
     pub(super) writes: AtomicUsize,
 }
 
@@ -19,6 +21,10 @@ impl RegisterAccess for CursorBus {
     async fn read(&self, offset: u32, response: &mut [u8]) -> Result<(), Self::Error> {
         assert!(offset == 0 || offset == 4);
         assert_eq!(response.len(), 4);
+        if self.pause_read.swap(false, Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+        self.reads.fetch_add(1, Ordering::SeqCst);
         self.memory.read(
             MemoryAddress::new(u64::from(offset)),
             MemoryAlignment::ONE,

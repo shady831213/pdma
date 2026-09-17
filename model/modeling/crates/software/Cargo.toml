@@ -6,14 +6,17 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-description = "Shared PDMA software ring operations for Host and firmware"
+description = "Shared PDMA software drivers and rings for Host and firmware"
 
 [dependencies]
+tokio = { version = "1.49", default-features = false, features = ["rt"] }
 pdma-model-contract = { path = "../contract" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
 hardware-interface-schema = { path = "../hardware-interface-schema" }
 
 [dev-dependencies]
+pdma-model-dma = { path = "../dma" }
+hardware-interface-pipeline = { path = "../hardware-interface-pipeline" }
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }
 
 [lints]

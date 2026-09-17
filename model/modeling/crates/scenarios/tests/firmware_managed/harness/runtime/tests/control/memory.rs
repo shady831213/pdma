@@ -1,8 +1,7 @@
 use super::super::AccessError;
 use crate::harness::TestResult;
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, NotificationWait, RegisterAccess,
-    SharedMemoryAccess,
+    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
 };
 use hardware_interface_schema::Decode;
 use pdma_model_contract::{
@@ -64,11 +63,11 @@ impl<'a> QueueMemory<'a> {
 
     pub(in super::super) async fn wait_response(
         &self,
-        bus: &impl NotificationWait,
+        interrupt: &pdma_model_software::control::InterruptEvent,
         producer: u32,
     ) -> TestResult {
         while self.read()?.response.producer != producer {
-            bus.wait_notification().await;
+            interrupt.wait().await;
         }
         Ok(())
     }

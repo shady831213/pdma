@@ -1,13 +1,10 @@
-use super::{
-    Management, Pending,
-    transport::{ring_error, ring_io},
-};
+use super::{Management, Pending, transport::ring_error};
 use crate::Error;
-use hardware_interface_runtime::{MemoryAccess, NotificationWait, RegisterAccess};
-use pdma_model_contract::{ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponse};
-use pdma_model_software::ring::SoftRingIo;
+use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
+use pdma_model_contract::{ControlRequest, ControlRequestOpcode, ControlResponse};
+use pdma_model_software::ring::SoftRingError;
 
-impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Management<B, M> {
+impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     pub(super) async fn begin(
         &mut self,
         opcode: ControlRequestOpcode,
@@ -17,14 +14,21 @@ impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Manage
         if self.pending.is_some() {
             return Err(Error::ManagementBusy);
         }
-        for offset in [ControlQueue::COMMAND_OFFSET, ControlQueue::RESPONSE_OFFSET] {
-            let io = ring_io(&self.memory, self.rings.state, offset)?;
-            let producer = io.read_producer().await.map_err(Error::Memory)?;
-            let consumer = io.read_consumer().await.map_err(Error::Memory)?;
-            if producer != consumer {
-                return Err(Error::ManagementProtocol);
-            }
-        }
+        let require_empty = |result| match result {
+            Ok(true) => Ok(()),
+            Ok(false) | Err(SoftRingError::Ring(_)) => Err(Error::ManagementProtocol),
+            Err(error) => Err(ring_error(error)),
+        };
+        require_empty(
+            self.command
+                .is_empty(&self.layout.command_io(&self.memory))
+                .await,
+        )?;
+        require_empty(
+            self.response
+                .is_empty(&self.layout.response_io(&self.memory))
+                .await,
+        )?;
         let id = self.next_id;
         self.next_id = id.checked_add(1).ok_or(Error::ManagementProtocol)?;
         self.pending = Some(Pending {
@@ -43,7 +47,7 @@ impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Manage
     pub(super) async fn collect(&mut self) -> Result<ControlResponse, Error<B::Error>> {
         let mut pending = self.pending.ok_or(Error::ManagementIdle)?;
         if !pending.published {
-            let io = ring_io(&self.memory, self.rings.state, ControlQueue::COMMAND_OFFSET)?;
+            let io = self.layout.command_io(&self.memory);
             if self.command.has_pending_push() {
                 self.command.resume_push(&io).await.map_err(ring_error)?;
             } else if !self
@@ -61,11 +65,7 @@ impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Manage
         let response = match pending.response {
             Some(response) => response,
             None => loop {
-                let io = ring_io(
-                    &self.memory,
-                    self.rings.state,
-                    ControlQueue::RESPONSE_OFFSET,
-                )?;
+                let io = self.layout.response_io(&self.memory);
                 if let Some(response) = self.response.peek(&io).await.map_err(ring_error)? {
                     if response.id != pending.request.id {
                         return Err(Error::ManagementProtocol);
@@ -74,15 +74,11 @@ impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Manage
                     self.pending = Some(pending);
                     break response;
                 }
-                self.bus.wait_notification().await;
+                self.interrupt.wait().await;
             },
         };
         if !pending.consumed {
-            let io = ring_io(
-                &self.memory,
-                self.rings.state,
-                ControlQueue::RESPONSE_OFFSET,
-            )?;
+            let io = self.layout.response_io(&self.memory);
             self.response.consume(&io).await.map_err(ring_error)?;
             pending.consumed = true;
             self.pending = Some(pending);

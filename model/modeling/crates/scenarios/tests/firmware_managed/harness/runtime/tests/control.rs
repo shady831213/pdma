@@ -1,7 +1,6 @@
+use super::client;
 use super::*;
-use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, SharedMemoryAllocator, SoftwareCpu,
-};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, SharedMemoryAllocator};
 use pdma_model_contract::{
     ChannelId, ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus, Ring,
 };
@@ -45,9 +44,8 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let (system, host) = Managed::new(allocator.memory_access()).unwrap();
-    let cpu = SoftwareCpu::new();
     // When: Host uses the independent management rings while the DMA gate starts closed.
-    let program = cpu.run_main(async {
+    let program = client::run(host.runtime, async |interrupt| {
         firmware::wait_ready(&host.bus, Duration::from_secs(1))
             .await
             .unwrap();
@@ -57,7 +55,7 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
         let mut management = Management::setup(
             host.bus.clone(),
             allocator.memory_access(),
-            rings(&allocator).unwrap(),
+            client::config(rings(&allocator).unwrap(), &interrupt),
         )
         .await
         .unwrap();
@@ -104,12 +102,11 @@ async fn cancelling_host_wait_retains_one_request_and_resumes_its_response() {
             .await
             .is_pending()
     );
-    let cpu = SoftwareCpu::new();
-    cpu.run_main(async {
+    client::run(host.runtime, async |interrupt| {
         let mut management = Management::setup(
             host.bus.clone(),
             allocator.memory_access(),
-            rings(&allocator).unwrap(),
+            client::config(rings(&allocator).unwrap(), &interrupt),
         )
         .await
         .unwrap();

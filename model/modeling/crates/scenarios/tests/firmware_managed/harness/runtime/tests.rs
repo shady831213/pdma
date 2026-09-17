@@ -8,7 +8,9 @@ use super::{AccessError, Managed};
 
 mod backpressure;
 mod boot;
+mod client;
 mod control;
+mod interrupts;
 mod notifications;
 mod publication;
 

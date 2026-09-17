@@ -40,6 +40,8 @@ async fn push_after_cancel(pause: u8) -> Result<(), Box<dyn std::error::Error>> 
                 ring.try_push(&io, Item { value: 99 }).await,
                 Err(SoftRingError::Busy)
             ));
+            assert_eq!(ring.is_empty(&io).await?, pause == 1);
+            assert!(ring.has_pending_push());
             ring.resume_push(&io).await?;
             assert!(!ring.has_pending_push());
             assert_eq!(io.read_producer().await?, 1);
@@ -96,6 +98,7 @@ async fn cached_peek_survives_slot_reuse_after_consumer_commit()
             bus.memory
                 .write(16.into(), MemoryAlignment::ONE, &88u32.to_le_bytes())?;
             // Then: retry sees cached data and acknowledges the committed consume once.
+            assert!(ring.is_empty(&io).await?);
             assert_eq!(ring.peek(&io).await?, Some(Item { value: 11 }));
             ring.consume(&io).await?;
             assert_eq!(io.read_consumer().await?, 1);

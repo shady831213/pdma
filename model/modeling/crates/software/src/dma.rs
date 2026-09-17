@@ -1,8 +1,15 @@
+//! CPU-local PDMA channel driver and register-only control.
+
 mod bus;
 mod control;
+mod driver_control;
+mod error;
+pub use control::ChannelControl;
+pub use error::Error;
+mod registers;
 mod rings;
 
-use crate::{Error, RingConfig};
+use crate::ring::RingConfig;
 use bus::RegisterPort;
 use hardware_interface_runtime::{CpuOwner, MemoryAccess, RegisterAccess};
 use pdma_model_contract::{

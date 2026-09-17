@@ -1,6 +1,6 @@
 use super::super::RunError;
 use super::{
-    AccessError, Managed,
+    AccessError, Managed, client,
     control::{
         memory::{QueueMemory, kick, poll_once},
         rings,
@@ -9,7 +9,7 @@ use super::{
 use crate::harness::TestResult;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
-    SharedMemoryAllocator, SoftwareCpu,
+    SharedMemoryAllocator,
 };
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::{
@@ -38,12 +38,16 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
     let (system, host) = Managed::new(memory.clone())?;
     let mut running = pin!(system.run());
     assert!(poll_once(running.as_mut()).await.is_pending());
-    let cpu = SoftwareCpu::new();
-    let program = cpu.run_main(async {
+    let program = client::run(host.runtime, async |interrupt| {
         let mut storage = rings(&allocator)?;
         storage.command = RingConfig::new(storage.command.base(), 1)?;
         storage.response = RingConfig::new(storage.response.base(), 1)?;
-        let _client = Management::setup(host.bus.clone(), memory.clone(), storage).await?;
+        let _client = Management::setup(
+            host.bus.clone(),
+            memory.clone(),
+            client::config(storage, &interrupt),
+        )
+        .await?;
         let queue = QueueMemory::new(&memory, storage.state);
         memory.write_typed(
             MemoryAddress::new(storage.command.entry(0)?),
@@ -59,7 +63,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
         kick(&host.bus).await?;
         tokio::select! {
             result = running.as_mut() => panic!("system stopped: {result:?}"),
-            result = queue.wait_response(&host.bus, 1) => result?,
+            result = queue.wait_response(&interrupt, 1) => result?,
         }
         let first = memory
             .read_typed::<ControlResponseRaw>(
@@ -85,6 +89,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
         queue.publish_command(2)?;
         kick(&host.bus).await?;
         assert!(poll_once(running.as_mut()).await.is_pending());
+        assert!(poll_once(running.as_mut()).await.is_pending());
         // Then: firmware neither consumes nor executes release until space and a kick arrive.
         assert_eq!(queue.read()?.command.consumer, 1);
         assert_eq!(queue.read()?.response.producer, 1);
@@ -96,7 +101,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
         kick(&host.bus).await?;
         tokio::select! {
             result = running.as_mut() => panic!("system stopped: {result:?}"),
-            result = queue.wait_response(&host.bus, 2) => result?,
+            result = queue.wait_response(&interrupt, 2) => result?,
         }
         let released = memory
             .read_typed::<ControlResponseRaw>(
@@ -133,9 +138,13 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
         )?;
     }
     let queue = QueueMemory::new(&memory, storage.state);
-    let cpu = SoftwareCpu::new();
-    let program = cpu.run_main(async {
-        let _client = Management::setup(host.bus.clone(), memory.clone(), storage).await?;
+    let program = client::run(host.runtime, async |interrupt| {
+        let _client = Management::setup(
+            host.bus.clone(),
+            memory.clone(),
+            client::config(storage, &interrupt),
+        )
+        .await?;
         // When: Host publishes the unreadable or malformed command for real firmware.
         queue.publish_command(1)?;
         kick(&host.bus).await?;

@@ -1,17 +1,20 @@
 //! The complete Host program, including preboot access probes.
 
+mod interrupts;
 pub mod transfer;
 
-use super::runtime::{AccessError, HostBus};
+use super::runtime::{AccessError, HostBus, HostIrq, HostVector};
 use hardware_interface_runtime::{
     InterruptRegistration, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
+use interrupts::Handler;
 use pdma_model_contract::{
     ControlQueue, ControlRequest, ControlResponse, Response, WINDOW_CONTROL_BASE,
     WINDOW_STATUS_BASE,
 };
-use pdma_model_host::{Management, ManagementRings, RingConfig, firmware, runtime::Irq};
+use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig, firmware};
+use pdma_model_software::control::InterruptEvent;
 use std::time::Duration;
 
 use super::TestResult;
@@ -29,7 +32,7 @@ pub(super) struct Ports<'a> {
     pub(super) bus: HostBus<SharedMemoryAccess>,
     pub(super) memory: SharedMemoryAccess,
     pub(super) allocator: SharedMemoryAllocator,
-    pub(super) interrupts: InterruptRegistration<'a, Irq, transfer::Handler>,
+    pub(super) interrupts: InterruptRegistration<'a, HostIrq, Handler>,
 }
 
 /// Host observations collected before polling firmware execution.
@@ -51,6 +54,7 @@ pub struct Outcome {
     pub(crate) response: Response,
     pub(crate) destination: MemoryAddress,
     pub(crate) released: u32,
+    pub(crate) dma_interrupts: usize,
 }
 
 pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outcome> {
@@ -99,16 +103,23 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         2 * u64::try_from(ControlResponse::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(ControlResponse::RECORD_ALIGNMENT)?)?,
     )?;
+    let interrupt = InterruptEvent::new();
+    ports
+        .interrupts
+        .register(HostVector::Control, Handler::Control(interrupt.handler()))?;
     let mut management = Management::setup(
         ports.bus.clone(),
         ports.memory.clone(),
-        ManagementRings {
-            state: ports.allocator.allocate(
-                u64::try_from(ControlQueue::RECORD_SIZE)?,
-                MemoryAlignment::try_new(u64::try_from(ControlQueue::RECORD_ALIGNMENT)?)?,
-            )?,
-            command: RingConfig::new(command.raw(), 2)?,
-            response: RingConfig::new(response.raw(), 2)?,
+        ManagementConfig {
+            interrupt,
+            rings: ManagementRings {
+                state: ports.allocator.allocate(
+                    u64::try_from(ControlQueue::RECORD_SIZE)?,
+                    MemoryAlignment::try_new(u64::try_from(ControlQueue::RECORD_ALIGNMENT)?)?,
+                )?,
+                command: RingConfig::new(command.raw(), 2)?,
+                response: RingConfig::new(response.raw(), 2)?,
+            },
         },
     )
     .await?;
@@ -128,7 +139,7 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
             .await,
     ];
     let bus = ports.bus.clone();
-    let (response, destination) = transfer::run(ports, payload, channel).await?;
+    let (response, destination, dma_interrupts) = transfer::run(ports, payload, channel).await?;
     management.release_channel(channel).await?;
     bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
     Ok(Outcome {
@@ -137,5 +148,6 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         response,
         destination,
         released: u32::from_le_bytes(ready),
+        dma_interrupts: dma_interrupts.load(std::sync::atomic::Ordering::SeqCst),
     })
 }

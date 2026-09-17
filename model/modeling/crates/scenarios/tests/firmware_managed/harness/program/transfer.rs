@@ -5,7 +5,11 @@ use hardware_interface_runtime::{
     InterruptHandler, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
 use pdma_model_contract::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
-use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Irq};
+use pdma_model_host::{Channel, ChannelConfig, DmaError, RingConfig, Rings, runtime::Irq};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use tokio::sync::oneshot;
 
 use super::{Ports, TestResult};
@@ -15,12 +19,14 @@ use super::{Ports, TestResult};
 pub struct Handler {
     channel: Channel<HostBus<SharedMemoryAccess>, SharedMemoryAccess>,
     completed: Option<oneshot::Sender<Response>>,
+    deliveries: Arc<AtomicUsize>,
 }
 
 impl InterruptHandler<Irq> for Handler {
-    type Error = Error<AccessError>;
+    type Error = DmaError<AccessError>;
 
     async fn handle(&mut self, _: &Irq) -> Result<(), Self::Error> {
+        self.deliveries.fetch_add(1, Ordering::SeqCst);
         if let Some(response) = self.channel.response().await? {
             if let Some(completed) = self.completed.take() {
                 let _closed = completed.send(response);
@@ -34,7 +40,7 @@ pub(super) async fn run(
     ports: Ports<'_>,
     payload: &[u8],
     id: ChannelId,
-) -> TestResult<(Response, MemoryAddress)> {
+) -> TestResult<(Response, MemoryAddress, Arc<AtomicUsize>)> {
     let command = ports.allocator.allocate(
         u64::try_from(2 * Command::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
@@ -71,12 +77,14 @@ pub(super) async fn run(
         })
         .await?;
     let (completed, received) = oneshot::channel();
+    let deliveries = Arc::new(AtomicUsize::new(0));
     ports.interrupts.register(
-        (),
-        Handler {
+        super::HostVector::Dma,
+        super::Handler::Dma(Box::new(Handler {
             channel,
             completed: Some(completed),
-        },
+            deliveries: Arc::clone(&deliveries),
+        })),
     )?;
-    Ok((received.await?, destination))
+    Ok((received.await?, destination, deliveries))
 }

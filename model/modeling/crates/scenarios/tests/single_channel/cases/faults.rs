@@ -50,9 +50,9 @@ async fn software_setup_failure_stops_interrupt_runtime() -> TestResult {
     // Then: the original software error returns and no dispatcher waits indefinitely.
     assert!(matches!(
         report.program.as_ref().err().and_then(
-            |error| error.downcast_ref::<pdma_model_host::Error<pdma_model_dma::Error>>()
+            |error| error.downcast_ref::<pdma_model_host::DmaError<pdma_model_dma::Error>>()
         ),
-        Some(pdma_model_host::Error::Memory(_))
+        Some(pdma_model_host::DmaError::Memory(_))
     ));
     assert_eq!(report.summary.deliveries(), 0);
     assert!(report.worker.is_cancelled());

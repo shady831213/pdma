@@ -15,7 +15,9 @@ use pdma_model_contract::{
 use pdma_model_dma::{
     CheckLengths, Device, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
 };
-use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
+use pdma_model_host::{
+    Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
+};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},

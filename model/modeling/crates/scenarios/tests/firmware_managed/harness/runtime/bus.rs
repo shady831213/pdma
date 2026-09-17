@@ -1,5 +1,5 @@
 use super::{AccessError, Hardware, ManagementBus, Shared};
-use hardware_interface_runtime::{NotificationWait, RegisterAccess};
+use hardware_interface_runtime::RegisterAccess;
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
 use std::sync::Arc;
 
@@ -14,18 +14,6 @@ impl<M> Clone for HostBus<M> {
         Self {
             shared: Arc::clone(&self.shared),
         }
-    }
-}
-
-impl<M: Send> NotificationWait for HostBus<M> {
-    async fn wait_notification(&self) {
-        self.shared.host_notifications.wait_notification().await;
-    }
-}
-
-impl<M: Send> NotificationWait for ManagementBus<M> {
-    async fn wait_notification(&self) {
-        self.0.firmware_notifications.wait_notification().await;
     }
 }
 

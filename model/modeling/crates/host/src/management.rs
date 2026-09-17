@@ -1,10 +1,11 @@
+use pdma_model_software::control::{ControlQueueLayout, InterruptEvent};
 use pdma_model_software::ring::SoftRing;
 mod pending;
 mod transport;
 
 use crate::{Error, RingConfig};
 use hardware_interface_runtime::{
-    CpuOwner, MemoryAccess, MemoryAddress, MemoryAlignment, NotificationWait, RegisterAccess,
+    CpuOwner, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess,
 };
 use hardware_interface_schema::Encode;
 use pdma_model_contract::{
@@ -21,6 +22,15 @@ pub struct ManagementRings {
     pub command: RingConfig<ControlRequest>,
     /// Firmware-produced management results.
     pub response: RingConfig<ControlResponse>,
+}
+
+/// Control storage and the work event served by the program's registered ISR.
+#[derive(Debug)]
+pub struct ManagementConfig {
+    /// Caller-owned control queue storage.
+    pub rings: ManagementRings,
+    /// Register its handler before enabling the control channel.
+    pub interrupt: InterruptEvent,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,23 +50,30 @@ pub struct Management<B, M> {
     bus: B,
     memory: M,
     owner: CpuOwner,
-    rings: ManagementRings,
+    layout: ControlQueueLayout,
+    interrupt: InterruptEvent,
     command: SoftRing<ControlRequest>,
     response: SoftRing<ControlResponse>,
     pending: Option<Pending>,
     next_id: u64,
 }
 
-impl<B: RegisterAccess + NotificationWait, M: MemoryAccess + Send + Sync> Management<B, M> {
+impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Configures empty control rings after firmware Ready, before any DMA grant.
     ///
     /// Geometry becomes immutable on enable. Interrupted setup may leave committed
     /// configuration: retain ring storage until the subsystem is stopped/reset.
-    pub async fn setup(bus: B, memory: M, rings: ManagementRings) -> Result<Self, Error<B::Error>> {
+    pub async fn setup(
+        bus: B,
+        memory: M,
+        config: ManagementConfig,
+    ) -> Result<Self, Error<B::Error>> {
+        let ManagementConfig { rings, interrupt } = config;
         let client = Self {
             bus,
             memory,
-            rings,
+            layout: ControlQueueLayout::new(rings.state).map_err(Error::Ring)?,
+            interrupt,
             command: SoftRing::new(rings.command).map_err(Error::Cpu)?,
             response: SoftRing::new(rings.response).map_err(Error::Cpu)?,
             owner: CpuOwner::capture_active().map_err(Error::Cpu)?,

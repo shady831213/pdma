@@ -48,11 +48,20 @@ pub trait Ring {
         Ok(self.base() + u64::from(pointer % self.capacity()) * self.entry_stride()?)
     }
 
+    /// Checks snapshot occupancy against capacity, without publishing or validating history.
+    fn validate_pointers(&self, pointers: RingPointers) -> Result<(), RingError> {
+        if pointers.pending() > self.capacity() {
+            return Err(RingError::Pointers);
+        }
+        Ok(())
+    }
+
     /// Checks a producer publication against this ring's current capacity.
     fn with_producer(&self, pointers: RingPointers, next: u32) -> Result<RingPointers, RingError> {
+        self.validate_pointers(pointers)?;
         let pending = pointers.pending();
         let capacity = self.capacity();
-        if pending > capacity || next.wrapping_sub(pointers.producer) > capacity - pending {
+        if next.wrapping_sub(pointers.producer) > capacity - pending {
             return Err(RingError::Pointers);
         }
         Ok(RingPointers {
@@ -63,8 +72,9 @@ pub trait Ring {
 
     /// Checks that a consumer publication removes only published entries.
     fn with_consumer(&self, pointers: RingPointers, next: u32) -> Result<RingPointers, RingError> {
+        self.validate_pointers(pointers)?;
         let pending = pointers.pending();
-        if pending > self.capacity() || next.wrapping_sub(pointers.consumer) > pending {
+        if next.wrapping_sub(pointers.consumer) > pending {
             return Err(RingError::Pointers);
         }
         Ok(RingPointers {

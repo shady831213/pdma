@@ -1,16 +1,10 @@
 use super::*;
-use hardware_interface_runtime::{NotificationWait, SoftwareCpu};
+use hardware_interface_runtime::SoftwareCpu;
 use pdma_model_contract::FIRMWARE_STATUS_BASE;
 use pdma_model_host::{Error, firmware};
 use std::{pin::pin, task::Poll, time::Duration};
 
 struct RejectWindow<B>(B);
-
-impl<B: NotificationWait> NotificationWait for RejectWindow<B> {
-    async fn wait_notification(&self) {
-        self.0.wait_notification().await;
-    }
-}
 
 impl<B: RegisterAccess<Error = AccessError> + Sync> RegisterAccess for RejectWindow<B> {
     type Error = AccessError;
@@ -56,11 +50,10 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     let (system, host) =
         Managed::new(SharedMemoryAccess::from(Arc::new(SharedMemory::new()))).unwrap();
     let bus = RejectWindow(super::super::ManagementBus(Arc::clone(&system.shared)));
-    let mut running = pin!(
-        system
-            .firmware_cpu
-            .run_main(pdma_model_firmware::main(bus, system.firmware_memory))
-    );
+    let bus = system.firmware_cpu.bind_registers(bus);
+    let mut running = pin!(system.firmware_runtime.run_main(async |registration| {
+        pdma_model_firmware::main(bus, system.firmware_memory, registration).await
+    }));
     // When: firmware initializes on its own CPU.
     let outcome = std::future::poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))).await;
     // Then: it stays quiescent and Host reads its reported failure, not a supervisor error.

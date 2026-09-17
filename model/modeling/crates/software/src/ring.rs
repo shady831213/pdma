@@ -50,6 +50,14 @@ where
         self.pending.is_some()
     }
 
+    /// Queries validated published cursors without reading entries or changing retained operations.
+    pub async fn is_empty<I: SoftRingIo>(&self, io: &I) -> Result<bool, SoftRingError<I::Error>> {
+        self.owner
+            .scope(async { self.pointers(io).await.map(RingPointers::is_empty) })
+            .await
+            .map_err(SoftRingError::Cpu)?
+    }
+
     /// Checks available storage without retaining an entry.
     pub async fn has_space<I: SoftRingIo>(&self, io: &I) -> Result<bool, SoftRingError<I::Error>> {
         self.owner
@@ -214,7 +222,8 @@ where
         let producer = io.read_producer().await.map_err(SoftRingError::Cursor)?;
         let pointers = RingPointers { producer, consumer };
         self.config
-            .advance_consumer(pointers, 0)
-            .map_err(SoftRingError::Ring)
+            .validate_pointers(pointers)
+            .map_err(SoftRingError::Ring)?;
+        Ok(pointers)
     }
 }

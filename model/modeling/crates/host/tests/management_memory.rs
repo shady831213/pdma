@@ -1,12 +1,13 @@
 //! Management bootstrap publishes shared state before its first doorbell.
 
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAddress, MemoryAlignment, NotificationWait, RegisterAccess, SharedMemory,
-    SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
+    MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
+    SharedMemoryAllocator, SoftwareCpu,
 };
 use hardware_interface_schema::Decode;
 use pdma_model_contract::{CONTROL_CHANNEL_BASE, ControlQueue, ControlQueueRaw, ControlRegisters};
-use pdma_model_host::{Management, ManagementRings, RingConfig};
+use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig};
+use pdma_model_software::control::InterruptEvent;
 use std::{
     io,
     sync::{Arc, Mutex},
@@ -48,11 +49,6 @@ impl RegisterAccess for &Bus {
         Ok(())
     }
 }
-impl NotificationWait for &Bus {
-    async fn wait_notification(&self) {
-        std::future::pending::<()>().await;
-    }
-}
 
 #[tokio::test]
 async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() {
@@ -83,10 +79,13 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
             let _client = Management::setup(
                 &bus,
                 allocator.memory_access(),
-                ManagementRings {
-                    state,
-                    command: RingConfig::new(command.raw(), 2).unwrap(),
-                    response: RingConfig::new(response.raw(), 2).unwrap(),
+                ManagementConfig {
+                    rings: ManagementRings {
+                        state,
+                        command: RingConfig::new(command.raw(), 2).unwrap(),
+                        response: RingConfig::new(response.raw(), 2).unwrap(),
+                    },
+                    interrupt: InterruptEvent::new(),
                 },
             )
             .await
@@ -132,10 +131,13 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
         .run_main(Management::setup(
             &bus,
             memory.clone(),
-            ManagementRings {
-                state,
-                command: RingConfig::new(0x2000, 2).unwrap(),
-                response: RingConfig::new(0x3000, 2).unwrap(),
+            ManagementConfig {
+                rings: ManagementRings {
+                    state,
+                    command: RingConfig::new(0x2000, 2).unwrap(),
+                    response: RingConfig::new(0x3000, 2).unwrap(),
+                },
+                interrupt: InterruptEvent::new(),
             },
         ))
         .await;
@@ -150,4 +152,69 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
         .unwrap();
     assert_eq!(observed, original);
     assert!(bus.writes.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
+-> Result<(), Box<dyn std::error::Error>> {
+    use pdma_model_contract::ControlRingState;
+    use pdma_model_host::Error;
+    // Given: initialized cursors with unmapped entry storage and no outstanding request.
+    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let state = allocator.allocate(
+        u64::try_from(ControlQueue::RECORD_SIZE)?,
+        MemoryAlignment::try_new(8)?,
+    )?;
+    let memory = allocator.memory_access();
+    let bus = Bus {
+        memory: memory.clone(),
+        state,
+        writes: Mutex::new(Vec::new()),
+        enabled: false,
+    };
+    SoftwareCpu::new()
+        .run_main(async {
+            let mut client = Management::setup(
+                &bus,
+                memory.clone(),
+                ManagementConfig {
+                    rings: ManagementRings {
+                        state,
+                        command: RingConfig::new(0x2000, 2)?,
+                        response: RingConfig::new(0x3000, 2)?,
+                    },
+                    interrupt: InterruptEvent::new(),
+                },
+            )
+            .await?;
+            let writes = bus.writes.lock().unwrap().len();
+            for offset in [ControlQueue::COMMAND_OFFSET, ControlQueue::RESPONSE_OFFSET] {
+                let producer = MemoryAddress::new(
+                    state.raw() + u64::try_from(offset + ControlRingState::PRODUCER_OFFSET)?,
+                );
+                let consumer = MemoryAddress::new(
+                    state.raw() + u64::try_from(offset + ControlRingState::CONSUMER_OFFSET)?,
+                );
+                for (p, c) in [(1_u32, 0_u32), (3, 0), (0, 1)] {
+                    memory.write(producer, MemoryAlignment::ONE, &p.to_le_bytes())?;
+                    memory.write(consumer, MemoryAlignment::ONE, &c.to_le_bytes())?;
+                    // When: starting a request with a nonempty or malformed ring.
+                    let result = client.acquire_channel().await;
+                    // Then: classification remains a protocol error, with no publication or pending request.
+                    assert!(
+                        matches!(result, Err(Error::ManagementProtocol)),
+                        "{result:?}"
+                    );
+                    assert!(matches!(
+                        client.wait_pending().await,
+                        Err(Error::ManagementIdle)
+                    ));
+                    assert_eq!(bus.writes.lock().unwrap().len(), writes);
+                }
+                memory.write(producer, MemoryAlignment::ONE, &0_u32.to_le_bytes())?;
+                memory.write(consumer, MemoryAlignment::ONE, &0_u32.to_le_bytes())?;
+            }
+            Ok::<_, Box<dyn std::error::Error>>(())
+        })
+        .await
 }

@@ -8,10 +8,10 @@ impl<M> Shared<M> {
         let mut hardware = self.hardware.lock().await;
         let result = access(&mut hardware);
         if hardware.control.take_request_notification() {
-            self.to_firmware.notify();
+            self.to_firmware.raise();
         }
         if hardware.control.take_response_notification() {
-            self.to_host.notify();
+            self.to_host.raise();
         }
         if hardware.dma.take_interrupt() {
             self.interrupt.raise();

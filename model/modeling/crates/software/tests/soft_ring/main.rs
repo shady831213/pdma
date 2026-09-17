@@ -9,6 +9,7 @@ mod cancellation;
 mod codec;
 mod consume;
 mod memory_cursor;
+mod query;
 mod transport;
 pub use transport::CursorBus;
 

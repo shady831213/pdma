@@ -1,23 +1,20 @@
 use super::super::AccessError;
+use super::super::HostIrq;
 use super::*;
-use hardware_interface_runtime::{InterruptHandler, NotificationWait, RegisterAccess, SoftwareCpu};
-use pdma_model_host::runtime::Irq;
+use hardware_interface_runtime::{
+    InterruptHandler, InterruptRuntime, RegisterAccess, SoftwareCpu, pending_interrupt,
+};
+use pdma_model_software::control::ControlIrq;
 use std::{future::pending, pin::pin, task::Poll};
 
 struct FailedManagement;
 
-impl NotificationWait for FailedManagement {
-    async fn wait_notification(&self) {
-        pending::<()>().await;
-    }
-}
-
 struct TestHandler;
 
-impl InterruptHandler<Irq> for TestHandler {
+impl InterruptHandler<HostIrq> for TestHandler {
     type Error = Infallible;
 
-    async fn handle(&mut self, _: &Irq) -> Result<(), Infallible> {
+    async fn handle(&mut self, _: &HostIrq) -> Result<(), Infallible> {
         Ok(())
     }
 }
@@ -80,15 +77,24 @@ async fn initialization_error_drops_other_scoped_actors() {
         drop(hardware_guard);
         result
     };
-    let firmware = async {
-        SoftwareCpu::new()
-            .run_main(pdma_model_firmware::main(
-                FailedManagement,
-                hardware_interface_runtime::SharedMemory::new(),
-            ))
+    let firmware = Box::pin(async {
+        let (_, source) = pending_interrupt(ControlIrq);
+        let cpu = Arc::new(SoftwareCpu::new());
+        let bus = cpu.bind_registers(FailedManagement);
+        InterruptRuntime::new(cpu, source)
+            .run_main(async |registration| {
+                pdma_model_firmware::main(
+                    bus,
+                    hardware_interface_runtime::SharedMemory::new(),
+                    registration,
+                )
+                .await
+            })
             .await
+            .map_err(RunError::FirmwareInterrupt)?
+            .0
             .map_err(RunError::Firmware)
-    };
+    });
     let system = async { supervise(hardware, firmware).await? };
     // When: initialization fails while the Host and hardware remain pending.
     let result = supervise(system, async move {
@@ -100,7 +106,7 @@ async fn initialization_error_drops_other_scoped_actors() {
     assert!(matches!(
         result,
         Err(RunError::Firmware(pdma_model_firmware::Error::Bus(
-            AccessError::Unmapped
+            hardware_interface_runtime::CpuAccessError::Access(AccessError::Unmapped)
         )))
     ));
     assert_eq!(Arc::strong_count(&hardware_owned), 1);

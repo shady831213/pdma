@@ -27,7 +27,7 @@ pub async fn run(input: Input<'_>) -> TestResult<Report> {
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
     let (system, host) = Managed::new(memory.clone())?;
-    let execution = host.runtime.run_main(async |interrupts| {
+    let execution = Box::pin(host.runtime.run_main(async |interrupts| {
         program::main(
             program::Ports {
                 bus: host.bus,
@@ -38,7 +38,7 @@ pub async fn run(input: Input<'_>) -> TestResult<Report> {
             input,
         )
         .await
-    });
+    }));
     let hardware = async {
         tokio::task::yield_now().await;
         system

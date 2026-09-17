@@ -8,7 +8,9 @@ use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, DeviceControl, DeviceRegisters,
 };
 use pdma_model_dma::{Device, ResetControl};
-use pdma_model_host::{Channel, ChannelConfig, Error, RingConfig, Rings, runtime::Model};
+use pdma_model_host::{
+    Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
+};
 use std::{
     future::{Future, poll_fn},
     sync::{

@@ -57,12 +57,14 @@ async fn release_during_copy_drains_old_work_before_response_and_reacquisition()
         writes: Arc::new(AtomicUsize::new(0)),
     };
     let (system, host) = Managed::new(observed.clone()).unwrap();
-    let cpu = SoftwareCpu::new();
-    let program = Box::pin(cpu.run_main(async {
-        let mut management =
-            Management::setup(host.bus.clone(), memory.clone(), rings(&allocator).unwrap())
-                .await
-                .unwrap();
+    let program = Box::pin(client::run(host.runtime, async |interrupt| {
+        let mut management = Management::setup(
+            host.bus.clone(),
+            memory.clone(),
+            client::config(rings(&allocator).unwrap(), &interrupt),
+        )
+        .await
+        .unwrap();
         let id = management.acquire_channel().await.unwrap();
         let command = ring::<Command>(&allocator).unwrap();
         let response = ring::<Response>(&allocator).unwrap();

@@ -69,6 +69,13 @@ in this MVP; firmware runs directly on its own CPU. Firmware boot status is sepa
 from window permission: Booting/Ready/Failed and a boot error are firmware-published
 in an always-on register. Window readiness still derives from its open bit.
 Host waits for firmware with a software deadline before checking DMA permission.
+Independent control command/response rings now carry channel acquisition/release;
+Ready does not grant access. `docs/control-channel.md` defines their ownership and
+cancellation contract. Hardware owns registers/permissions, firmware consumes and
+executes management requests, and Host owns ring memory. Runtime carries no resource
+policy. One Host/one managed DMA channel is supported, with serial firmware service.
+Release closes work access and waits for actual channel reset completion before its
+response. Do not turn simulation cancellation into reset/drain or reclaim ring memory.
 No shadow channel registers or firmware writes in the harness are allowed.
 The managed MVP does not add Function/PASID or external transaction semantics.
 

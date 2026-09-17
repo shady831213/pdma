@@ -5,6 +5,9 @@ Status: implemented first milestone, awaiting user architectural review.
 This records scope and observable acceptance; the broader goal remains separate.
 
 Parent direction: [firmware-managed DMA](firmware-dma-goal.md).
+Follow-on implementation: [independent control channel](control-channel.md).
+The current assembly uses explicit acquisition/release instead of opening DMA
+as a side effect of firmware readiness.
 
 ## Review follow-up: 2026-09-16
 
@@ -45,11 +48,13 @@ or Function reset. A successful build alone is not acceptance.
 2. Host attempts a channel access while the window is closed and observes an
    access error, with no forwarded channel side effect.
 3. Run the firmware async program on its own software CPU. Firmware initializes
-   the access window through management MMIO and publishes its independent boot report.
+   the closed access window through management MMIO and publishes its independent boot report.
 4. The same Host program waits for firmware Ready within its software deadline,
-   verifies the separate window permission, configures its rings, submits an
+   allocates control rings and requests a channel. After the grant it configures
+   its DMA rings, submits an
    ordinary copy, receives the DMA notification and consumes the response.
-5. Check copied bytes, response and notification behavior; then end and join all
+5. Release through firmware, waiting for DMA reset completion. Check copied bytes,
+   response, notification and closed-window behavior; then end and join all
    actors through the concrete runtime/harness lifecycle boundary.
 
 Host allocates and initializes application buffers through the supplied allocator.
@@ -65,7 +70,7 @@ without requiring access to the closed channel window.
 | `contract` | Minimal shared management/work register definitions and observable access outcomes. No context selector or PCIe ABI additions yet. |
 | `dma` | Core renamed from `device` without changing ordinary behavior; retains its channel state and shared copy pipeline. |
 | `hw-components` | Implement one real access-window hardware object with firmware-owned configuration access; reject or forward Host MMIO to the original channel state. |
-| `firmware` | Implement the async initialization program using supplied management access and software execution capabilities, not DMA internals. |
+| `firmware` | Boot and service management requests using supplied memory/MMIO capabilities; sequence allocation and real channel reset without accessing DMA internals. |
 | Host software | Use only its work/readiness/memory/interrupt capabilities; reuse the existing channel driver where applicable. |
 | Concrete runtime assembly | Connect hardware and software ports, drive hardware and firmware, and define startup/error/shutdown propagation in the scenario harness using existing runtime components. |
 | `scenarios` | Keep an isolated `firmware_managed` test suite with cases and concrete assembly/harness support, not production hardware behavior, firmware policy or generic runtime mechanisms. |
@@ -114,7 +119,7 @@ not a substitute for running the verification commands on the current checkout.
   Host cannot forge this report. A reportable setup failure stays observable without
   ending simulation; a stuck firmware is detected by Host timeout, not a fabricated
   hardware error. CPU or status-transport failure remains an execution error.
-- After readiness, the same Host program performs a real DMA copy and observes
+- After readiness and explicit acquisition, the same Host program performs a real DMA copy and observes
   exact destination bytes, a successful matching response and the expected Host
   notification using the existing interrupt runtime.
 - CPU ownership and interrupt dispatch remain separate between software domains;
@@ -150,19 +155,20 @@ this access-window demonstration.
   Reset initializes Booting/no error. Runtime construction represents subsystem
   reset release; polling the firmware CPU starts the program without image loading
   or validation. DMA and channel reset do not reset this subsystem-level state.
-  Live subsystem reboot, watchdog and a Host/firmware request protocol are not
-  implemented by this boot-status slice.
+  Live subsystem reboot and watchdog remain outside the current implementation;
+  Host/firmware requests now use the separate control rings.
 - `hw-components::AccessWindow` protects the complete downstream DMA register
   extent, including rejection of spanning/overflowing accesses and Host attempts
   to access management registers. It owns no DMA register copy or software policy.
-- `firmware::main` performs the window setup on its own software CPU and publishes
-  Ready on success or Failed/WindowSetup on rejection. Either report remains idle
-  until simulation cancellation. If reporting itself fails, the transport error
-  reaches the supervisor instead. No runtime code fabricates a firmware report.
+- `firmware::main` closes the work window on its own software CPU and publishes
+  Ready on success or Failed/WindowSetup on rejection. After Ready it serves the
+  independent control rings, allocating channel zero on request and closing/resetting
+  it before confirming release. A boot failure remains idle; report or service
+  transport errors reach the supervisor. Runtime never fabricates a firmware report.
   No management interrupts are generated; firmware has no interrupt runtime.
 - `host::firmware::wait_ready` runs on the Host CPU with a caller-selected deadline.
   Timeout/cancellation does not reset hardware or stop firmware. It does not grant
-  DMA permission or load firmware; Host checks the window separately before use.
+  DMA permission or load firmware; Host uses `Management` to request access.
 - The harness's `runtime::Managed::new` returns an undriven system and Host capabilities.
   `run` scopes hardware and firmware futures. `run_until` additionally supervises
   a supplied Host execution; actor errors take priority over ready Host completion.

@@ -4,10 +4,13 @@ pub mod transfer;
 
 use super::runtime::{AccessError, HostBus};
 use hardware_interface_runtime::{
-    InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
+    InterruptRegistration, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
+    SharedMemoryAllocator,
 };
-use pdma_model_contract::{Response, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE};
-use pdma_model_host::{firmware, runtime::Irq};
+use pdma_model_contract::{
+    ControlRequest, ControlResponse, Response, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE,
+};
+use pdma_model_host::{Management, ManagementRings, RingConfig, firmware, runtime::Irq};
 use std::time::Duration;
 
 use super::TestResult;
@@ -46,6 +49,7 @@ pub struct Outcome {
     pub(crate) after: [Result<(), AccessError>; 3],
     pub(crate) response: Response,
     pub(crate) destination: MemoryAddress,
+    pub(crate) released: u32,
 }
 
 pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outcome> {
@@ -69,13 +73,41 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
     };
     firmware::wait_ready(&ports.bus, Duration::from_secs(1)).await?;
     ports.bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
-    if u32::from_le_bytes(ready) != 1 {
+    if u32::from_le_bytes(ready) != 0 {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "firmware ready but DMA access is not granted",
+            std::io::ErrorKind::InvalidData,
+            "firmware readiness unexpectedly granted DMA access",
         )
         .into());
     }
+    let payload = match input {
+        Input::Copy(payload) => payload,
+        Input::StopAfterReady => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Host stopped after firmware readiness",
+            )
+            .into());
+        }
+    };
+    let command = ports.allocator.allocate(
+        2 * u64::try_from(ControlRequest::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(ControlRequest::RECORD_ALIGNMENT)?)?,
+    )?;
+    let response = ports.allocator.allocate(
+        2 * u64::try_from(ControlResponse::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(ControlResponse::RECORD_ALIGNMENT)?)?,
+    )?;
+    let mut management = Management::setup(
+        ports.bus.clone(),
+        ports.memory.clone(),
+        ManagementRings {
+            command: RingConfig::new(command.raw(), 2)?,
+            response: RingConfig::new(response.raw(), 2)?,
+        },
+    )
+    .await?;
+    let channel = management.acquire_channel().await?;
     let after = [
         ports
             .bus
@@ -90,21 +122,15 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
             .write(WINDOW_STATUS_BASE, &0_u32.to_le_bytes())
             .await,
     ];
-    let payload = match input {
-        Input::Copy(payload) => payload,
-        Input::StopAfterReady => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "Host stopped after firmware readiness",
-            )
-            .into());
-        }
-    };
-    let (response, destination) = transfer::run(ports, payload).await?;
+    let bus = ports.bus.clone();
+    let (response, destination) = transfer::run(ports, payload, channel).await?;
+    management.release_channel(channel).await?;
+    bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
     Ok(Outcome {
         before,
         after,
         response,
         destination,
+        released: u32::from_le_bytes(ready),
     })
 }

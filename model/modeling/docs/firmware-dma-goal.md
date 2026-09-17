@@ -7,6 +7,9 @@ This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
 First milestone: the [firmware-managed DMA architecture MVP](firmware-dma-mvp.md).
+The subsequent [control channel](control-channel.md) implements independent
+command/response rings for single-channel acquisition/release, including local
+reset completion. Function-aware ownership and external drain remain future work.
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 
@@ -165,9 +168,9 @@ and speculative collections of policy generics.
   determine the access needed to fetch that command itself.
 - Exact management access permissions, stop/rebind interlocks and ownership of
   local-completion, external-drain and release observations.
-- Firmware management event protocol, management reset domain and recovery when
-  firmware is unavailable. Async execution with independent software CPU/interrupt
-  instances is already agreed.
+- Asynchronous management events, management reset domain and recovery when
+  firmware is unavailable. The current polled control command/response protocol
+  does not include an event ring or Function lifecycle protocol.
 - Scheduling policy when an accepted task waits on memory. Retaining one shared
   engine does not automatically provide cross-Function progress while it waits;
   do not silently introduce per-channel suspended execution or preemption.

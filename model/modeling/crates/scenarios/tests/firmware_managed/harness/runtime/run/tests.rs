@@ -76,7 +76,10 @@ async fn initialization_error_drops_other_scoped_actors() {
     };
     let firmware = async {
         SoftwareCpu::new()
-            .run_main(pdma_model_firmware::main(FailedManagement))
+            .run_main(pdma_model_firmware::main(
+                FailedManagement,
+                hardware_interface_runtime::SharedMemory::new(),
+            ))
             .await
             .map_err(RunError::Firmware)
     };
@@ -100,7 +103,7 @@ async fn initialization_error_drops_other_scoped_actors() {
 
 #[tokio::test]
 async fn cancellation_drops_running_hardware_and_firmware() {
-    // Given: firmware has opened a real system and all actor futures remain scoped.
+    // Given: firmware initialized a real system and all actor futures remain scoped.
     let memory = hardware_interface_runtime::SharedMemoryAccess::from(Arc::new(
         hardware_interface_runtime::SharedMemory::new(),
     ));
@@ -117,7 +120,7 @@ async fn cancellation_drops_running_hardware_and_firmware() {
             .read(pdma_model_contract::WINDOW_STATUS_BASE, &mut ready)
             .await
             .unwrap();
-        assert_eq!(ready, 1u32.to_le_bytes());
+        assert_eq!(ready, 0u32.to_le_bytes());
         // When: simulation is cancelled by dropping its scoped future.
     }
     // Then: only the explicitly retained probe and Host bus own the hardware.

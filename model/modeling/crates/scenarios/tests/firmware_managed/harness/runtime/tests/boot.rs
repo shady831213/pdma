@@ -50,7 +50,11 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     let (system, host) =
         Managed::new(SharedMemoryAccess::from(Arc::new(SharedMemory::new()))).unwrap();
     let bus = RejectWindow(super::super::ManagementBus(Arc::clone(&system.shared)));
-    let mut running = pin!(system.firmware_cpu.run_main(pdma_model_firmware::main(bus)));
+    let mut running = pin!(
+        system
+            .firmware_cpu
+            .run_main(pdma_model_firmware::main(bus, system.firmware_memory))
+    );
     // When: firmware initializes on its own CPU.
     let outcome = std::future::poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))).await;
     // Then: it stays quiescent and Host reads its reported failure, not a supervisor error.

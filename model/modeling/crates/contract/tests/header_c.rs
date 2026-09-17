@@ -10,12 +10,20 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use hardware_interface_schema::Documentation;
+use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::{
-    Command, CompletionFlagsValues, DeviceRegisters, Endpoint, Response, ResponseStatus, Segment,
+    Command, CompletionFlagsValues, ControlRegisters, ControlRequest, ControlRequestOpcode,
+    ControlResponse, ControlResponseStatus, DeviceRegisters, Endpoint, Response, ResponseStatus,
+    Segment,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
+const CONTROL_BYTES: [[u8; 16]; 4] = [
+    [1, 2, 3, 4, 5, 6, 7, 8, 1, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
+    [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
+    [1, 2, 3, 4, 5, 6, 7, 8, 3, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
+];
 
 #[test]
 fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
@@ -25,8 +33,11 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         Endpoint::SPEC.resolve()?,
         Command::SPEC.resolve()?,
         Response::SPEC.resolve()?,
+        ControlRequest::SPEC.resolve()?,
+        ControlResponse::SPEC.resolve()?,
     ];
     let registers = DeviceRegisters::resolve(3)?;
+    let control = ControlRegisters::resolve()?;
 
     // When: the public generator emits its complete header.
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_pdma-abi-header"))
@@ -42,16 +53,8 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
             assert_descriptions(header, member.documentation());
         }
     }
-    assert_descriptions(header, registers.documentation());
-    for placement in registers.placements() {
-        assert_descriptions(header, placement.documentation());
-    }
-    for register in registers.registers() {
-        assert_descriptions(header, register.documentation());
-        for field in register.definition().fields() {
-            assert_descriptions(header, field.documentation());
-        }
-    }
+    assert_map_descriptions(header, &registers);
+    assert_map_descriptions(header, &control);
     Ok(())
 }
 
@@ -127,15 +130,74 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         .map(hardware_interface_schema::ResolvedRegister::offset)
         .collect::<Vec<_>>();
     assert_eq!(rust_offsets, offsets.map(usize::from));
+    let control_offsets = [0_u8, 8, 12, 16, 24, 32, 36, 40, 44];
+    assert_eq!(
+        ControlRegisters::resolve()?
+            .registers()
+            .iter()
+            .map(hardware_interface_schema::ResolvedRegister::offset)
+            .collect::<Vec<_>>(),
+        control_offsets.map(usize::from)
+    );
     let expected = [
         command_bytes.as_slice(),
         response_bytes.as_slice(),
         segment_bytes.as_slice(),
         offsets.as_slice(),
+        CONTROL_BYTES.as_flattened(),
+        control_offsets.as_slice(),
     ]
     .concat();
     assert_eq!(output.stdout, expected);
     Ok(())
+}
+
+#[test]
+fn rust_control_records_match_c_consumer_fixtures() -> TestResult {
+    // Given: independent wire bytes for acquisition, release and their responses.
+    // When: the Rust contract encodes the same records used by the C consumer.
+    let control_records = [
+        ControlRequest {
+            id: 0x0807_0605_0403_0201,
+            opcode: ControlRequestOpcode::ReleaseChannel,
+            channel: 0x1020_3040,
+        }
+        .to_bytes()?,
+        ControlRequest {
+            id: 9,
+            opcode: ControlRequestOpcode::AcquireChannel,
+            channel: 0,
+        }
+        .to_bytes()?,
+        ControlResponse {
+            id: 9,
+            status: ControlResponseStatus::Success,
+            channel: 2,
+        }
+        .to_bytes()?,
+        ControlResponse {
+            id: 0x0807_0605_0403_0201,
+            status: ControlResponseStatus::NotAllocated,
+            channel: 0x1020_3040,
+        }
+        .to_bytes()?,
+    ];
+    // Then: Rust matches the independently specified C acceptance fixtures.
+    assert_eq!(control_records, CONTROL_BYTES);
+    Ok(())
+}
+
+fn assert_map_descriptions<I: Copy>(header: &str, registers: &ResolvedRegisterMap<I>) {
+    assert_descriptions(header, registers.documentation());
+    for placement in registers.placements() {
+        assert_descriptions(header, placement.documentation());
+    }
+    for register in registers.registers() {
+        assert_descriptions(header, register.documentation());
+        for field in register.definition().fields() {
+            assert_descriptions(header, field.documentation());
+        }
+    }
 }
 
 fn assert_descriptions(header: &str, documentation: Documentation) {

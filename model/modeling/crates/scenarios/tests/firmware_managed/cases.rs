@@ -36,6 +36,7 @@ async fn firmware_opens_access_for_the_same_host_program_and_real_irq_copy() -> 
         .read(outcome.destination, MemoryAlignment::ONE, &mut copied)?;
     assert_eq!(copied, payload);
     assert_eq!(report.summary.deliveries(), 1);
+    assert_eq!(outcome.released, 0);
     assert_eq!(Arc::strong_count(&report.storage), 1);
     Ok(())
 }

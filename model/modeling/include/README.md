@@ -1,7 +1,8 @@
 # Current PDMA contract header
 
-`pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`
-and `DeviceRegisters`, `WindowControl`, `WindowStatus`, and `FirmwareRegisters` schemas. It contains record sizes and byte accessors, MMIO
+`pdma_model_abi.h` is generated from the current contract's `Segment`, `Endpoint`, `Command`, `Response`,
+`ControlRequest`, `ControlResponse`, `DeviceRegisters`, `WindowControl`, `WindowStatus`,
+`FirmwareRegisters`, and `ControlRegisters` schemas. It contains record sizes and byte accessors, MMIO
 offsets and access/reset metadata, and schema descriptions as C comments. It is
 a C11 data contract, not a callable device API or the predecessor's ABI.
 
@@ -43,6 +44,21 @@ report; Host may only read it. The read/write metadata describes firmware access
 not Host permission. Subsystem reset clears the report to Booting/no error.
 DMA/channel reset does not reset firmware. Window readiness and firmware readiness
 are separate: the latter alone does not authorize DMA access.
+
+`C_CONTROL` describes the independent 48-byte control channel at
+`PDMA_CONTROL_CHANNEL_BASE` (`0xffff_fe00`). Command and response ring blocks
+start at relative offsets 0 and 24; activation is at offset 44. Each ring has
+base, capacity, producer and consumer registers at relative offsets 0, 8, 12 and
+16. This always-on map is independent of DMA channel count and work windows.
+Register descriptions specify the Host/firmware ownership enforced by hardware;
+the generic read/write metadata alone does not encode those domain permissions.
+
+`C_CONTROLREQQUEST` and `C_CONTROLRESPONSE` describe 16-byte little-endian records
+with eight-byte alignment. Both have a 64-bit identifier at byte 0 and a 32-bit
+channel index at byte 12. Request opcode at byte 8 is AcquireChannel (0) or
+ReleaseChannel (1). Response status at byte 8 is Success (0), NoResources (1),
+InvalidChannel (2), or NotAllocated (3). Their generated accessors encode the
+control records without requiring native C structure layout.
 
 Both reset registers are read/write handshakes. Write one to request reset, then
 poll that same register until hardware clears it to zero. One means busy; zero

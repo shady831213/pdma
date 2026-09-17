@@ -22,7 +22,7 @@ impl std::error::Error for BuildError {}
 /// Failure of a supervised hardware or firmware actor.
 #[derive(Debug)]
 pub enum RunError {
-    /// Firmware initialization failed.
+    /// Firmware boot or control service failed.
     Firmware(pdma_model_firmware::Error<super::AccessError>),
     /// The hardware pipeline failed.
     Hardware(AsyncRunError<Infallible, pdma_model_dma::Error>),

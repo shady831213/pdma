@@ -418,6 +418,134 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 }
 
 /*
+ * Firmware control request
+ * Host-produced 16-byte little-endian request, eight-byte aligned. Firmware interprets this independent control queue; DMA hardware never fetches these records.
+ */
+#define C_CONTROLREQQUEST_SIZE UINT64_C(16)
+#define C_CONTROLREQQUEST_ALIGNMENT UINT64_C(8)
+#define C_CONTROLREQQUEST_ENDIAN_LITTLE UINT32_C(0)
+#define C_CONTROLREQQUEST_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Host-selected request identifier echoed unchanged in the response.
+ */
+#define C_CONTROLREQQUEST_C_ID_OFFSET UINT64_C(0)
+#define C_CONTROLREQQUEST_C_ID_WIDTH UINT64_C(8)
+#define C_CONTROLREQQUEST_C_ID_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint64_t C_CONTROLREQQUEST_LOAD_C_ID(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET] | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_ID(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint64_t value) {
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * 0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel releases the channel field. Other values are invalid.
+ */
+#define C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL UINT64_C(0)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL UINT64_C(1)
+#define C_CONTROLREQQUEST_C_OPCODE_OFFSET UINT64_C(8)
+#define C_CONTROLREQQUEST_C_OPCODE_WIDTH UINT64_C(4)
+#define C_CONTROLREQQUEST_C_OPCODE_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLREQQUEST_LOAD_C_OPCODE(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET] | ((uint32_t)bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_OPCODE(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint32_t value) {
+    bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_OPCODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * DMA channel index for ReleaseChannel; ignored for AcquireChannel.
+ */
+#define C_CONTROLREQQUEST_C_CHANNEL_OFFSET UINT64_C(12)
+#define C_CONTROLREQQUEST_C_CHANNEL_WIDTH UINT64_C(4)
+#define C_CONTROLREQQUEST_C_CHANNEL_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLREQQUEST_LOAD_C_CHANNEL(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET] | ((uint32_t)bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_CHANNEL(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint32_t value) {
+    bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_CHANNEL_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Firmware control response
+ * Firmware-produced 16-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware stores only ring registers and does not implement channel allocation policy.
+ */
+#define C_CONTROLRESPONSE_SIZE UINT64_C(16)
+#define C_CONTROLRESPONSE_ALIGNMENT UINT64_C(8)
+#define C_CONTROLRESPONSE_ENDIAN_LITTLE UINT32_C(0)
+#define C_CONTROLRESPONSE_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Identifier copied unchanged from the corresponding control request.
+ */
+#define C_CONTROLRESPONSE_C_ID_OFFSET UINT64_C(0)
+#define C_CONTROLRESPONSE_C_ID_WIDTH UINT64_C(8)
+#define C_CONTROLRESPONSE_C_ID_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
+static inline uint64_t C_CONTROLRESPONSE_LOAD_C_ID(const uint8_t bytes[C_CONTROLRESPONSE_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET] | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_SIZE], uint64_t value) {
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_ID_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * 0: Success. 1: NoResources, all DMA channels are allocated. 2: InvalidChannel, release index is outside the device. 3: NotAllocated, release index is not allocated. Other values are invalid.
+ */
+#define C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES UINT64_C(1)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCHANNEL UINT64_C(2)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED UINT64_C(3)
+#define C_CONTROLRESPONSE_C_STATUS_OFFSET UINT64_C(8)
+#define C_CONTROLRESPONSE_C_STATUS_WIDTH UINT64_C(4)
+#define C_CONTROLRESPONSE_C_STATUS_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLRESPONSE_LOAD_C_STATUS(const uint8_t bytes[C_CONTROLRESPONSE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET] | ((uint32_t)bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLRESPONSE_STORE_C_STATUS(uint8_t bytes[C_CONTROLRESPONSE_SIZE], uint32_t value) {
+    bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_STATUS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Allocated channel on successful acquisition, or the requested release index for release responses. Undefined for failed acquisition.
+ */
+#define C_CONTROLRESPONSE_C_CHANNEL_OFFSET UINT64_C(12)
+#define C_CONTROLRESPONSE_C_CHANNEL_WIDTH UINT64_C(4)
+#define C_CONTROLRESPONSE_C_CHANNEL_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLRESPONSE_LOAD_C_CHANNEL(const uint8_t bytes[C_CONTROLRESPONSE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET] | ((uint32_t)bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLRESPONSE_STORE_C_CHANNEL(uint8_t bytes[C_CONTROLRESPONSE_SIZE], uint32_t value) {
+    bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
  * PDMA device registers
  * Device-wide discovery and recovery controls followed by the instance's independent channel blocks. Register transactions use little-endian bytes and must match an exact register start and width; layout gaps are not registers.
  */
@@ -1285,9 +1413,136 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 #define C_FIRMWARE_C_QUBQUOQUOQUT_RESET_VALUE UINT64_C(0)
 #define C_FIRMWARE_C_QUBQUOQUOQUT_WRITABLE_MASK UINT64_C(65539)
 
+/*
+ * Independent firmware control channel
+ * Always-on Host/firmware control register composition outside DMA work windows. Hardware owns authoritative pointers but performs no memory operations or channel allocation. Pointer writes require activation, including unchanged zero; wrong-domain writes are always rejected.
+ */
+#define C_CONTROL_SIZE UINT64_C(48)
+#define C_CONTROL_ACCESS_READ_ONLY UINT32_C(0)
+#define C_CONTROL_ACCESS_READ_WRITE UINT32_C(1)
+#define C_CONTROL_ACCESS_WRITE_ONLY UINT32_C(2)
+#define C_CONTROL_RESET_CONSTANT UINT32_C(0)
+#define C_CONTROL_RESET_ZERO UINT32_C(1)
+#define C_CONTROL_RESET_POST_RESET UINT32_C(2)
+/*
+ * ControlRegisters.command
+ * Firmware control ring registers
+ * Host-produced and firmware-consumed control requests.
+ */
+/*
+ * ControlRegisters.response
+ * Firmware control ring registers
+ * Firmware-produced and Host-consumed control responses.
+ */
+
+/*
+ * Memory address
+ * Host-configured eight-byte-aligned address. Sixteen-byte entries occupy the complete capacity. Locked after activation until subsystem reset.
+ */
+#define C_CONTROL_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(0)
+#define C_CONTROL_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
+#define C_CONTROL_C_QUBQUAQUSQUE__1_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUBQUAQUSQUE__1_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUBQUAQUSQUE__1_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUBQUAQUSQUE__1_WRITABLE_MASK UINT64_C(18446744073709551615)
+
+/*
+ * Read/write word
+ * Host-configured nonzero power-of-two entry capacity below 2^31. The complete memory extent must fit u64. Locked after activation until subsystem reset.
+ */
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET UINT64_C(8)
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Wrapping published-entry count. Host writes command producer; firmware writes response producer, only after successful record storage. Active publication cannot exceed free capacity.
+ */
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET UINT64_C(12)
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Wrapping consumed-entry count. Firmware writes command consumer; Host writes response consumer, only after successful record reading. Active consumption cannot exceed published entries.
+ */
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET UINT64_C(16)
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Memory address
+ * Host-configured eight-byte-aligned address. Sixteen-byte entries occupy the complete capacity. Locked after activation until subsystem reset.
+ */
+#define C_CONTROL_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(24)
+#define C_CONTROL_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)
+#define C_CONTROL_C_QUBQUAQUSQUE__2_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUBQUAQUSQUE__2_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUBQUAQUSQUE__2_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUBQUAQUSQUE__2_WRITABLE_MASK UINT64_C(18446744073709551615)
+
+/*
+ * Read/write word
+ * Host-configured nonzero power-of-two entry capacity below 2^31. The complete memory extent must fit u64. Locked after activation until subsystem reset.
+ */
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET UINT64_C(32)
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Wrapping published-entry count. Host writes command producer; firmware writes response producer, only after successful record storage. Active publication cannot exceed free capacity.
+ */
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET UINT64_C(36)
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Wrapping consumed-entry count. Firmware writes command consumer; Host writes response consumer, only after successful record reading. Active consumption cannot exceed published entries.
+ */
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET UINT64_C(40)
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Enable control
+ * Host writes one after configuring both rings. Both geometries are validated atomically before activation. Activation locks geometry and prevents disabling until subsystem reset; there is no live reset register.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET UINT64_C(44)
+#define C_CONTROL_C_QUEQUNQUAQUBQULQUE_WIDTH UINT64_C(4)
+#define C_CONTROL_C_QUEQUNQUAQUBQULQUE_ACCESS C_CONTROL_ACCESS_READ_WRITE
+#define C_CONTROL_C_QUEQUNQUAQUBQULQUE_RESET_KIND C_CONTROL_RESET_ZERO
+#define C_CONTROL_C_QUEQUNQUAQUBQULQUE_RESET_VALUE UINT64_C(0)
+#define C_CONTROL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(1)
+
 /* Absolute bases for the relative management maps above. */
 #define PDMA_WINDOW_CONTROL_BASE UINT32_C(4294967040)
 #define PDMA_WINDOW_STATUS_BASE UINT32_C(4294967048)
 #define PDMA_FIRMWARE_STATUS_BASE UINT32_C(4294967056)
+#define PDMA_CONTROL_CHANNEL_BASE UINT32_C(4294966784)
 
 #endif

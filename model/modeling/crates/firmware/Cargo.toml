@@ -11,6 +11,8 @@ description = "Async software for the managed DMA configuration"
 [dependencies]
 pdma-model-contract = { path = "../contract" }
 hardware-interface-runtime = { path = "../hardware-interface-runtime" }
+hardware-interface-schema = { path = "../hardware-interface-schema" }
+tokio = { version = "1.49", default-features = false, features = ["rt"] }
 
 [dev-dependencies]
 tokio = { version = "1.49", default-features = false, features = ["macros", "rt", "sync"] }

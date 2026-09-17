@@ -97,6 +97,7 @@ name = "pdma-model-firmware"
 version = "0.1.0"
 dependencies = [
  "hardware-interface-runtime",
+ "hardware-interface-schema",
  "pdma-model-contract",
  "tokio",
 ]

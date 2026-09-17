@@ -49,18 +49,23 @@ both routine notification sources and proves error notification still arrives.
 `tests/firmware_managed` contains cases and harness support. Its `harness/runtime`
 modules assemble the production `dma`, `hw-components` access window and `firmware`
 program, without implementing their hardware behavior or firmware policy. One Host program probes denied
-access before boot, waits for firmware readiness, allocates its own buffers and
-performs a real IRQ-driven copy. A second case ends with an early Host error and
+access before boot, waits for firmware readiness, allocates control rings and
+requests a channel before performing a real IRQ-driven copy, then releases the
+channel through firmware. A second case ends with an early Host error and
 checks that no system actor retains memory ownership. The harness yields once
 before starting firmware so the preboot probes can run; Host sends no startup
-signal. It waits on the real firmware status with its own deadline, then checks
-the separate DMA permission. Firmware alone publishes Ready/Failed and opens the
-window. Boundary tests inject a rejected window setup and verify that Host sees
+signal. It waits on the real firmware status with its own deadline; DMA remains
+closed until the acquisition response. Firmware alone publishes Ready/Failed and
+changes the work window. Boundary tests inject a rejected window setup and verify that Host sees
 the reported failure while DMA stays closed.
 The original assembly boundary tests now live beside this harness, with no path
 redirection or source duplication. Host notifications use the same framework
 pending-interrupt component as the direct DMA runtime. Firmware has its own
 software CPU and does not create an unused interrupt dispatcher.
+Further boundary cases cover cancellation before/after control pointer writes,
+response-slot reuse, request/result correlation, and release during an active
+copy followed by fresh acquisition and successful DMA. See
+[control channel semantics](../../docs/control-channel.md).
 
 ```sh
 cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture

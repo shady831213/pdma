@@ -4,8 +4,10 @@ Next major goal: [firmware-managed DMA](docs/firmware-dma-goal.md), preparing
 SR-IOV, PASID and Function reset boundaries while preserving the ordinary
 configuration. This is a recorded direction, not implemented functionality.
 The implemented first milestone is the [architecture MVP](docs/firmware-dma-mvp.md): an
-independent firmware-managed assembly that opens a Host access window and runs
-one real copy, while retaining the current direct-DMA scenarios.
+independent firmware-managed assembly that runs a real copy while retaining the
+direct-DMA scenarios. Its [control channel](docs/control-channel.md) now carries
+Host acquisition/release requests over separate rings; firmware Ready alone leaves
+the DMA work window closed.
 
 Run from this directory:
 
@@ -39,10 +41,13 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/contract/src/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
 | `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
 | `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
+| `crates/contract/src/control.rs` | Independent control request/response records and composed ring registers. |
+| `crates/hw-components/src/control_channel.rs` | Control ring state, access ownership and publication bounds, without memory or allocation policy. |
+| `crates/host/src/management.rs` | Host control-ring setup, channel requests and cancellation-safe response collection. |
 | `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
 | `crates/hw-components/src/firmware_status.rs` | Firmware boot report, writable only through management access and readable by Host even with DMA closed. |
 | `crates/host/src/firmware.rs` | CPU-owned Host boot polling with distinct firmware failure and software timeout outcomes. |
-| `crates/firmware/src/lib.rs` | Async firmware initialization through management MMIO. |
+| `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
 | `crates/hardware-interface-runtime/src/interrupt/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
 | `crates/contract/src/ring.rs` | Entry-typed ring geometry and shared pointer rules. |

@@ -14,10 +14,10 @@ pub use error::{BuildError, RunError};
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
-use pdma_model_contract::{DeviceRegisters, FIRMWARE_STATUS_BASE};
+use pdma_model_contract::{CONTROL_CHANNEL_BASE, DeviceRegisters, FIRMWARE_STATUS_BASE};
 use pdma_model_dma::{CommandLoop, Device};
 use pdma_model_host::runtime::Irq;
-use pdma_model_hw_components::{AccessWindow, FirmwareStatus, WindowConfigError};
+use pdma_model_hw_components::{AccessWindow, ControlChannel, FirmwareStatus, WindowConfigError};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
@@ -26,6 +26,7 @@ struct Hardware<M> {
     dma: Device<M>,
     window: AccessWindow,
     firmware: FirmwareStatus,
+    control: ControlChannel,
 }
 
 #[derive(Debug)]
@@ -59,12 +60,13 @@ pub struct Managed<M> {
     shared: Arc<Shared<M>>,
     pipeline: CommandLoop,
     firmware_cpu: Arc<SoftwareCpu>,
+    firmware_memory: M,
 }
 
-impl<M> Managed<M> {
+impl<M: Clone> Managed<M> {
     /// Assembles hardware and disjoint software views; starts no tasks or firmware.
     pub fn new(memory: M) -> Result<(Self, Host<M>), BuildError> {
-        let dma = Device::new(memory, 1).map_err(BuildError::Dma)?;
+        let dma = Device::new(memory.clone(), 1).map_err(BuildError::Dma)?;
         let pipeline = dma.command_loop();
         let extent = DeviceRegisters::extent(1).map_err(BuildError::Layout)?;
         let window = AccessWindow::new(extent).map_err(BuildError::Window)?;
@@ -73,11 +75,16 @@ impl<M> Managed<M> {
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
         );
         let (interrupt, source) = pending_interrupt(Irq);
+        let control = ControlChannel::new(
+            usize::try_from(CONTROL_CHANNEL_BASE)
+                .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
+        );
         let shared = Arc::new(Shared {
             hardware: Mutex::new(Hardware {
                 dma,
                 window,
                 firmware,
+                control,
             }),
             changed: Notify::new(),
             interrupt,
@@ -93,6 +100,7 @@ impl<M> Managed<M> {
                 shared,
                 pipeline,
                 firmware_cpu: Arc::new(SoftwareCpu::new()),
+                firmware_memory: memory,
             },
             host,
         ))

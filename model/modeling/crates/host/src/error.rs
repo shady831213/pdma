@@ -1,6 +1,6 @@
 use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
-use pdma_model_contract::{ChannelId, FirmwareBootError, RingError};
+use pdma_model_contract::{ChannelId, ControlResponseStatus, FirmwareBootError, RingError};
 use std::{error::Error as StdError, fmt};
 
 /// Software ring operation failure retaining its boundary cause.
@@ -33,6 +33,14 @@ pub enum Error<B> {
     FirmwareFailed(FirmwareBootError),
     /// The Host's deadline expired before firmware reported readiness.
     FirmwareTimeout,
+    /// The existing management request must be collected before another submission.
+    ManagementBusy,
+    /// No management request is available to resume.
+    ManagementIdle,
+    /// Ring ownership or response correlation was violated.
+    ManagementProtocol,
+    /// Firmware rejected a completed management operation.
+    ManagementStatus(ControlResponseStatus),
 }
 
 impl<B: fmt::Display> fmt::Display for Error<B> {
@@ -56,6 +64,10 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             Self::Full => f.write_str("command ring is full"),
             Self::FirmwareFailed(code) => write!(f, "firmware initialization failed: {code:?}"),
             Self::FirmwareTimeout => f.write_str("timed out waiting for firmware readiness"),
+            Self::ManagementBusy => f.write_str("management request is still pending"),
+            Self::ManagementIdle => f.write_str("no pending management request"),
+            Self::ManagementProtocol => f.write_str("management protocol mismatch"),
+            Self::ManagementStatus(status) => write!(f, "management operation: {status:?}"),
         }
     }
 }
@@ -73,7 +85,11 @@ impl<B: StdError + 'static> StdError for Error<B> {
             | Self::Geometry
             | Self::Full
             | Self::FirmwareFailed(_)
-            | Self::FirmwareTimeout => None,
+            | Self::FirmwareTimeout
+            | Self::ManagementBusy
+            | Self::ManagementIdle
+            | Self::ManagementProtocol
+            | Self::ManagementStatus(_) => None,
         }
     }
 }

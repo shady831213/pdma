@@ -30,7 +30,11 @@ impl InterruptHandler<Irq> for Handler {
     }
 }
 
-pub(super) async fn run(ports: Ports<'_>, payload: &[u8]) -> TestResult<(Response, MemoryAddress)> {
+pub(super) async fn run(
+    ports: Ports<'_>,
+    payload: &[u8],
+    id: ChannelId,
+) -> TestResult<(Response, MemoryAddress)> {
     let command = ports.allocator.allocate(
         u64::try_from(2 * Command::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?,
@@ -50,7 +54,7 @@ pub(super) async fn run(ports: Ports<'_>, payload: &[u8]) -> TestResult<(Respons
         ports.bus,
         ports.memory,
         ChannelConfig {
-            id: ChannelId::new(0),
+            id,
             rings: Rings {
                 command: RingConfig::new(command.raw(), 2)?,
                 response: RingConfig::new(response.raw(), 2)?,

@@ -23,7 +23,12 @@ async fn boot_reports_management_failure() {
     // Given: a software CPU and an unavailable management transport.
     let cpu = SoftwareCpu::new();
     // When: firmware attempts initialization.
-    let result = cpu.run_main(pdma_model_firmware::main(FailedBus)).await;
+    let result = cpu
+        .run_main(pdma_model_firmware::main(
+            FailedBus,
+            hardware_interface_runtime::SharedMemory::new(),
+        ))
+        .await;
     // Then: transport failure reaches the supervisor instead of reporting readiness.
     assert!(matches!(result, Err(pdma_model_firmware::Error::Bus(_))));
 }
@@ -32,7 +37,8 @@ async fn boot_reports_management_failure() {
 async fn boot_requires_a_software_cpu() {
     // Given: firmware is called without a modeled CPU execution domain.
     // When: the program starts.
-    let result: Result<Infallible, _> = pdma_model_firmware::main(FailedBus).await;
+    let result: Result<Infallible, _> =
+        pdma_model_firmware::main(FailedBus, hardware_interface_runtime::SharedMemory::new()).await;
     // Then: it cannot perform management accesses as unowned runtime code.
     assert!(matches!(
         result,

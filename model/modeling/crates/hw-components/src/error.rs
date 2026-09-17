@@ -33,6 +33,8 @@ pub enum AccessError<E> {
     Unmapped,
     /// Generated status-register validation rejected the transaction.
     Register(RegisterAccessError),
+    /// The independent control channel rejected a register transaction.
+    Control(RegisterAccessError<crate::ControlError>),
     /// The downstream hardware rejected the transaction.
     Downstream(E),
 }
@@ -44,6 +46,7 @@ impl<E: Display> Display for AccessError<E> {
             Self::Denied => formatter.write_str("host management access denied"),
             Self::Unmapped => formatter.write_str("transaction outside downstream window"),
             Self::Register(error) => Display::fmt(error, formatter),
+            Self::Control(error) => Display::fmt(error, formatter),
             Self::Downstream(error) => Display::fmt(error, formatter),
         }
     }
@@ -53,6 +56,7 @@ impl<E: core::error::Error + 'static> core::error::Error for AccessError<E> {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Register(error) => Some(error),
+            Self::Control(error) => Some(error),
             Self::Downstream(error) => Some(error),
             Self::Closed | Self::Denied | Self::Unmapped => None,
         }

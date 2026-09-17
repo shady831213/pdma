@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use super::{AccessError, Managed};
 
+mod backpressure;
 mod boot;
+mod control;
+mod publication;
 
 #[tokio::test]
 async fn construction_leaves_host_closed() {
@@ -37,7 +40,7 @@ async fn host_cannot_program_management_before_boot() {
 }
 
 #[tokio::test]
-async fn firmware_opens_access_without_owning_host_cpu() {
+async fn firmware_ready_does_not_grant_dma_access() {
     // Given: independently running firmware and Host software domains.
     let (system, host) =
         Managed::new(SharedMemoryAccess::from(Arc::new(SharedMemory::new()))).unwrap();
@@ -46,7 +49,10 @@ async fn firmware_opens_access_without_owning_host_cpu() {
         .run_until(async {
             let mut word = [0; 4];
             for _ in 0..10_000 {
-                host.bus.read(WINDOW_STATUS_BASE, &mut word).await.unwrap();
+                host.bus
+                    .read(pdma_model_contract::FIRMWARE_STATUS_BASE, &mut word)
+                    .await
+                    .unwrap();
                 if u32::from_le_bytes(word) == 1 {
                     break;
                 }
@@ -57,11 +63,15 @@ async fn firmware_opens_access_without_owning_host_cpu() {
                 1,
                 "firmware did not publish readiness"
             );
-            host.bus.read(0, &mut word).await.unwrap();
+            assert!(matches!(
+                host.bus.read(0, &mut word).await,
+                Err(AccessError::Closed)
+            ));
+            host.bus.read(WINDOW_STATUS_BASE, &mut word).await.unwrap();
             word
         })
         .await
         .unwrap();
-    // Then: the same underlying DMA reports its one channel.
-    assert_eq!(u32::from_le_bytes(result), 1);
+    // Then: readiness alone leaves work access closed until a management request.
+    assert_eq!(u32::from_le_bytes(result), 0);
 }

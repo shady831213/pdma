@@ -28,7 +28,12 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      dma,
                      window,
                      firmware,
+                     control,
                  }| {
+                    match control.host_read(address, bytes) {
+                        Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                        result => return result.map_err(AccessError::Control),
+                    }
                     match firmware.read(address, bytes) {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {
                             window.read(address, bytes, |address, bytes| dma.read(address, bytes))
@@ -48,7 +53,12 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      dma,
                      window,
                      firmware,
+                     control,
                  }| {
+                    match control.host_write(address, bytes) {
+                        Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                        result => return result.map_err(AccessError::Control),
+                    }
                     match firmware.host_write(address, bytes) {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {
                             window.write(address, bytes, |address, bytes| dma.write(address, bytes))
@@ -68,11 +78,20 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.0
             .access(|hardware| {
-                register_dispatch!(
+                match hardware.control.firmware_read(address, bytes) {
+                    Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                    result => return result.map_err(AccessError::Control),
+                }
+                match register_dispatch!(
                     hardware.firmware.read(address, bytes),
                     hardware.window.management_read(address, bytes),
-                )
-                .map_err(AccessError::Register)
+                ) {
+                    Err(RegisterAccessError::OutsideWindow { .. }) => hardware
+                        .dma
+                        .read(address, bytes)
+                        .map_err(AccessError::Downstream),
+                    result => result.map_err(AccessError::Register),
+                }
             })
             .await
     }
@@ -81,11 +100,20 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.0
             .access(|hardware| {
-                register_dispatch!(
+                match hardware.control.firmware_write(address, bytes) {
+                    Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                    result => return result.map_err(AccessError::Control),
+                }
+                match register_dispatch!(
                     hardware.firmware.management_write(address, bytes),
                     hardware.window.management_write(address, bytes),
-                )
-                .map_err(AccessError::Register)
+                ) {
+                    Err(RegisterAccessError::OutsideWindow { .. }) => hardware
+                        .dma
+                        .write(address, bytes)
+                        .map_err(AccessError::Downstream),
+                    result => result.map_err(AccessError::Register),
+                }
             })
             .await
     }

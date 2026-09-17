@@ -6,7 +6,7 @@ use std::{convert::Infallible, future::Future, sync::Arc};
 #[cfg(test)]
 mod tests;
 
-impl<M: MemoryAccess + Send + 'static> Managed<M> {
+impl<M: MemoryAccess + Send + Sync + 'static> Managed<M> {
     /// Runs hardware and firmware until an actor fails or the caller cancels simulation.
     ///
     /// All actor futures are scoped here; cancellation leaves no spawned tasks.
@@ -15,7 +15,7 @@ impl<M: MemoryAccess + Send + 'static> Managed<M> {
         let management = ManagementBus(Arc::clone(&self.shared));
         let firmware = async {
             self.firmware_cpu
-                .run_main(pdma_model_firmware::main(management))
+                .run_main(pdma_model_firmware::main(management, self.firmware_memory))
                 .await
                 .map_err(RunError::Firmware)
         };

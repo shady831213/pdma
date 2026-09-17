@@ -48,11 +48,47 @@ _Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUFAULT == 2, "read fault status code
 _Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT == 3, "write fault status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH == 4, "length mismatch status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULISTQUREADQUFAULT == 5, "list read fault status code");
+_Static_assert(PDMA_CONTROL_CHANNEL_BASE == UINT32_C(0xfffffe00), "independent control channel address");
+_Static_assert(C_CONTROL_SIZE == 48, "control channel extent");
+_Static_assert(C_CONTROL_C_QUBQUAQUSQUE__1_OFFSET == 0, "command ring address");
+_Static_assert(C_CONTROL_C_QUBQUAQUSQUE__2_OFFSET == 24, "response ring address");
+_Static_assert(C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET == 44, "activation address");
+_Static_assert(C_CONTROLREQQUEST_SIZE == 16, "control request extent");
+_Static_assert(C_CONTROLRESPONSE_SIZE == 16, "control response extent");
+_Static_assert(C_CONTROLREQQUEST_ALIGNMENT == 8, "control request alignment");
+_Static_assert(C_CONTROLRESPONSE_ALIGNMENT == 8, "control response alignment");
+_Static_assert(C_CONTROLREQQUEST_C_ID_OFFSET == 0, "control request id offset");
+_Static_assert(C_CONTROLREQQUEST_C_OPCODE_OFFSET == 8, "control request opcode offset");
+_Static_assert(C_CONTROLREQQUEST_C_CHANNEL_OFFSET == 12, "control request channel offset");
+_Static_assert(C_CONTROLRESPONSE_C_ID_OFFSET == 0, "control response id offset");
+_Static_assert(C_CONTROLRESPONSE_C_STATUS_OFFSET == 8, "control response status offset");
+_Static_assert(C_CONTROLRESPONSE_C_CHANNEL_OFFSET == 12, "control response channel offset");
+_Static_assert(C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL == 0, "acquire opcode");
+_Static_assert(C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL == 1, "release opcode");
+_Static_assert(C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS == 0, "control success status");
+_Static_assert(C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES == 1, "no resources status");
+_Static_assert(C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCHANNEL == 2, "invalid channel status");
+_Static_assert(C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED == 3, "not allocated status");
 
 int main(void) {
     uint8_t command[C_COMMAND_SIZE] = {0};
     uint8_t response[C_RESPONSE_SIZE] = {0};
     uint8_t segment[C_SEGMENT_SIZE] = {0};
+    uint8_t release[C_CONTROLREQQUEST_SIZE] = {0};
+    uint8_t acquire[C_CONTROLREQQUEST_SIZE] = {0};
+    uint8_t granted[C_CONTROLRESPONSE_SIZE] = {0};
+    uint8_t rejected[C_CONTROLRESPONSE_SIZE] = {0};
+    const uint8_t control_offsets[] = {
+        C_CONTROL_C_QUBQUAQUSQUE__1_OFFSET,
+        C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__1_OFFSET,
+        C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__1_OFFSET,
+        C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__1_OFFSET,
+        C_CONTROL_C_QUBQUAQUSQUE__2_OFFSET,
+        C_CONTROL_C_QUCQUAQUPQUAQUCQUIQUTQUY__2_OFFSET,
+        C_CONTROL_C_QUPQURQUOQUDQUUQUCQUEQUR__2_OFFSET,
+        C_CONTROL_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET,
+        C_CONTROL_C_QUEQUNQUAQUBQULQUE_OFFSET,
+    };
     const uint8_t offsets[] = {
         C_PDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET,
         C_PDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET,
@@ -115,6 +151,18 @@ int main(void) {
     C_RESPONSE_STORE_C_BYTESQSCOMPLETED(response, UINT64_C(8));
     C_SEGMENT_STORE_C_ADDRESS(segment, UINT64_C(0x300));
     C_SEGMENT_STORE_C_LENGTH(segment, UINT64_C(8));
+    C_CONTROLREQQUEST_STORE_C_ID(release, UINT64_C(0x0807060504030201));
+    C_CONTROLREQQUEST_STORE_C_OPCODE(release, C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL);
+    C_CONTROLREQQUEST_STORE_C_CHANNEL(release, UINT32_C(0x10203040));
+    C_CONTROLREQQUEST_STORE_C_ID(acquire, UINT64_C(9));
+    C_CONTROLREQQUEST_STORE_C_OPCODE(acquire, C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL);
+    C_CONTROLREQQUEST_STORE_C_CHANNEL(acquire, UINT32_C(0));
+    C_CONTROLRESPONSE_STORE_C_ID(granted, UINT64_C(9));
+    C_CONTROLRESPONSE_STORE_C_STATUS(granted, C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS);
+    C_CONTROLRESPONSE_STORE_C_CHANNEL(granted, UINT32_C(2));
+    C_CONTROLRESPONSE_STORE_C_ID(rejected, UINT64_C(0x0807060504030201));
+    C_CONTROLRESPONSE_STORE_C_STATUS(rejected, C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED);
+    C_CONTROLRESPONSE_STORE_C_CHANNEL(rejected, UINT32_C(0x10203040));
     if (C_COMMAND_LOAD_C_ID(command) != UINT64_C(7)) return 1;
     if (C_COMMAND_LOAD_C_SOURCEQX2EMODE(command) != UINT32_C(0)) return 2;
     if (C_COMMAND_LOAD_C_SOURCEQX2EWORD0(command) != UINT64_C(0x100)) return 3;
@@ -133,5 +181,10 @@ int main(void) {
     if (fwrite(response, 1, sizeof(response), stdout) != sizeof(response)) return 8;
     if (fwrite(segment, 1, sizeof(segment), stdout) != sizeof(segment)) return 16;
     if (fwrite(offsets, 1, sizeof(offsets), stdout) != sizeof(offsets)) return 9;
+    if (fwrite(release, 1, sizeof(release), stdout) != sizeof(release)) return 19;
+    if (fwrite(acquire, 1, sizeof(acquire), stdout) != sizeof(acquire)) return 20;
+    if (fwrite(granted, 1, sizeof(granted), stdout) != sizeof(granted)) return 21;
+    if (fwrite(rejected, 1, sizeof(rejected), stdout) != sizeof(rejected)) return 22;
+    if (fwrite(control_offsets, 1, sizeof(control_offsets), stdout) != sizeof(control_offsets)) return 23;
     return 0;
 }

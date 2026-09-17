@@ -13,6 +13,61 @@ reset completion. Function-aware ownership and external drain remain future work
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 
+## Agreed next steps: shared drivers and management interrupts
+
+Recorded: 2026-09-17. Both items below are pending, not implemented behavior.
+They are the next preparation work before extending the broader feature set.
+The current checkpoint already has `software::ring::SoftRing`, in-memory control
+queues and bidirectional doorbells, but software still waits directly on runtime
+notifications rather than receiving management interrupts.
+
+### 1. Share PDMA software driver capabilities
+
+- Move reusable DMA driver capabilities from `host` into `software::dma`.
+  Separate register control (discovery, faults, IRQ control and reset) from the
+  queue-owning driver (configuration, submission and response consumption).
+- Reuse the channel reset request/completion handshake in both Host and firmware.
+  Firmware release must not construct a queue-owning `Channel` merely to reset it.
+  Preserve Host `Channel::reset(self)` invalidation, per-poll CPU ownership and
+  each domain's bus permission checks. Timeout/cancellation is not drain completion.
+- Share control-queue layout access in `software::control`, including the repeated
+  producer/consumer address calculation and cursor adapter construction. Keep Host
+  initialization/request correlation and firmware attachment/service roles distinct.
+- Split errors with their owning responsibilities; do not move the whole mixed
+  `host::Error` into a new common catch-all enum.
+- Keep Host management-client semantics and firmware boot observation in Host.
+  Keep allocation, window closure and release/reset sequencing in firmware.
+  `host::runtime::Model` is a runtime adapter, not shared software driver code.
+
+Acceptance must show both domains using the same reset handshake, ordinary DMA
+remaining usable, real release during a transfer still draining before acknowledgement,
+and no software dependency being introduced into hardware or generic framework crates.
+
+### 2. Deliver doorbells through management interrupts
+
+The agreed path is: publish a ring update, write its doorbell, emit a management
+interrupt, run the receiving domain's ISR, wake its processing task, then inspect
+and process the ring. Ring state remains authoritative; an interrupt is a hint.
+
+- Provide Host-to-firmware and firmware-to-Host management interrupt delivery
+  independently of DMA interrupts. Do not reuse DMA causes or its notification vector.
+- Host and firmware register their own ISRs as part of their software programs.
+  An ISR wakes the processing task; it need not execute management requests itself.
+- Preserve notifications for returned queue space as well as published entries,
+  so a peer blocked by a full ring can resume. Preserve coalescing and tolerate
+  spurious notifications; establish a wait protocol that cannot lose a wakeup.
+- Reuse the existing `InterruptRuntime` for each domain's separate software CPU.
+  Concrete wiring and scoped actor lifetime stay in the scenario harness. Hardware
+  emits interrupts but never stores or invokes software handlers.
+- Remove direct use of `wait_notification()` from business software. Generic
+  notification primitives may remain runtime-internal implementation tools.
+
+Acceptance must exercise actual ISR delivery in both directions, independence from
+DMA interrupts, notification-before-wait races, full-ring space return, cancellation,
+and coordinated shutdown. Interrupt cause/mask/acknowledgement details must be made
+explicit when implementing this path; this note does not invent those register semantics.
+Neither item adds an event ring, Function/PASID support or PCIe integration.
+
 ## Objective
 
 Use firmware plus the existing shared DMA hardware as the primary architecture
@@ -64,6 +119,8 @@ It accesses hardware through management capabilities/MMIO, not direct mutation o
 
 The agreed target is separate `dma`, `hw-components` and `firmware` crates, with
 shared soft/hard definitions in `contract` and Host software interfaces in `host`.
+Shared PDMA software algorithms now live in `software`, used by Host and firmware;
+the next steps above extend that boundary beyond the already shared ring operations.
 `hw-components` is a collection of concrete hardware objects, not a generic bus
 fabric or a firmware policy controller. Each object owns its own registers/state.
 The core now lives in `crates/dma`; the first access window and firmware program
@@ -169,7 +226,7 @@ and speculative collections of policy generics.
 - Exact management access permissions, stop/rebind interlocks and ownership of
   local-completion, external-drain and release observations.
 - Asynchronous management events, management reset domain and recovery when
-  firmware is unavailable. The current polled control command/response protocol
+  firmware is unavailable. The current in-memory control command/response protocol
   does not include an event ring or Function lifecycle protocol.
 - Scheduling policy when an accepted task waits on memory. Retaining one shared
   engine does not automatically provide cross-Function progress while it waits;

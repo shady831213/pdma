@@ -17,7 +17,9 @@ holes. Read-only projections have zero writable masks. Descriptions are preserve
 
 | Register | Host | Firmware |
 | --- | --- | --- |
-| DMA registers | Original leaf permissions, dynamically gated | Original leaf permissions |
+| DMA discovery | Read-only, always available | Read-only |
+| DMA global control and channel admin | Hidden | Original leaf permissions |
+| DMA channel data | Original leaf permissions, dynamically gated | Original leaf permissions |
 | Boot report | Read-only | Read/write |
 | Window control | Hidden | Read/write |
 | Window readiness | Read-only | Hidden (not mapped on management bus) |
@@ -25,40 +27,40 @@ holes. Read-only projections have zero writable masks. Descriptions are preserve
 | Request doorbell | Write-only | Hidden |
 | Response doorbell | Hidden | Write-only |
 
-The role prefix is part of every register macro namespace. Absolute bases are
-`PDMA_HOST_BOOT_BASE` and `PDMA_FIRMWARE_BOOT_BASE` (0xffff_ff10),
-`PDMA_HOST_CONTROL_BASE` and `PDMA_FIRMWARE_CONTROL_BASE` (0xffff_fe00),
-`PDMA_HOST_WINDOW_BASE` and `PDMA_FIRMWARE_WINDOW_BASE` (0xff00_0000).
-Register offsets are relative to these bases; DMA offsets start at zero.
+The role prefix is part of every register macro namespace. All offsets are relative
+to platform-supplied bases; the contract exports no absolute base macros. Host and
+firmware may use different bus views of the same hardware.
 
-Each channel has an independent permission window. `ChannelWindowRegisters` declares
-one bank of `ChannelWindowBlock` children, each aligned to four bytes with a 16-byte
-extent, control at byte 0 and status at byte 8. Both role views filter this same
-bank and retain its full extent: 48 bytes for three channels, including hidden
-leaves and trailing padding. Firmware control offsets are 0, 16 and 32; Host
-readiness offsets are 8, 24 and 40. Their absolute addresses are unchanged.
-The role-specific `WINDOW_COUNT` and `WINDOW_STRIDE` macros describe the configured
-count and 16-byte spacing derived from the child layout; the schema DSL has no
-explicit stride. The permission-window bank and DMA channel bank use schema bank
-placements.
-Generated bank metadata also supplies base, count, stride and nested parent links;
-the role-specific aliases derive from those layouts rather than separate arithmetic.
-The base aliases refer to channel zero. Every window starts closed.
-Static visibility never grants Host work-window access. Hardware checks the selected
-channel window on every Host DMA transaction, rejecting transactions crossing an
-aperture boundary. Device-wide registers are reachable when any channel window is
-open. Firmware Ready does not open any window.
-The boot report and control transport remain accessible while DMA access is closed.
-The 20-byte control map retains bootstrap at byte 0, enable at 8, request at 12
-and response at 16, even though each role hides one doorbell. A doorbell write of
-one notifies its peer; zero is a no-op. Hardware stores no ring geometry or cursors.
+Each channel has an independent permission window. `ChannelWindowRegisters`
+repeats `ChannelWindowBlock` with alignment four and inferred extent/stride eight:
+control at zero and status at four. Both projections retain the complete bank:
+24 bytes for three channels. Firmware control offsets are 0, 8 and 16; Host status
+offsets are 4, 12 and 20. WINDOW_COUNT and WINDOW_STRIDE describe this generated
+geometry. There is no explicit bank stride or interleaving.
 
-The checked-in headers select three DMA channels: a 228-byte map with four device
-registers at bytes 0, 4, 8 and 12, followed by 72-byte channel blocks starting at
-16, 88 and 160. Both views retain read-only channel count and IRQ cause registers.
-Unmask does not replay old events. Reset is a read/write handshake: write one,
-retain affected memory, and wait for hardware to clear busy after old work drains.
-Platform-pending notifications survive reset.
+Static visibility never grants data access. Hardware checks the selected channel's
+window on each transaction and rejects crossing accesses. Discovery remains
+readable before boot; global and channel administration remain inaccessible to
+managed Host even when all channels are granted. Leaf access rules still apply.
+Firmware Ready opens no data window. Boot reporting and the independent control
+transport remain available while data access is closed.
+
+The checked-in headers select three channels: a 16384-byte DMA map with discovery at
+zero and one contiguous administration block at four. Its global control registers
+are at 4, 8 and 12; channel reset registers are at 16, 20 and 24. Data apertures
+start at 4096, 8192 and 12288, each owning a complete 4096-byte page. The page size
+is MMIO layout geometry, not an assumption about the Host OS page size. If the
+administration bank grows beyond the first page, schema placement moves the data
+bank to the next aligned page. Host projection hides administration
+without compressing addresses or extent. Direct-DMA software using privileged
+register access can use the full DMA definitions in the firmware header; the Host
+header specifically describes the managed Host view.
+
+Reset remains a write-one/request, read-busy handshake. Retain memory until hardware
+clears busy after old work drains. Managed Host uses ResetChannel/ReleaseChannel
+requests instead of writing administrative registers. Platform-pending notifications
+survive reset. The control map remains 20 bytes: bootstrap at zero, enable at eight,
+request doorbell at 12 and response doorbell at 16.
 
 Shared wire records retain their original sizes and byte layout: Segment is
 16 bytes, Endpoint 24, Command 64, Response 24, ControlRequest and ControlResponse

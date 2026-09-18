@@ -1,7 +1,9 @@
-use hardware_interface_schema::{RegisterAccessError, RegisterBank, StaticRegisterLayout};
+use core::ops::Range;
+use hardware_interface_schema::{
+    RegisterAccessError, RegisterBank, RegisterShape, StaticRegisterLayout,
+};
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelWindowBlock, ChannelWindowRegisters, DeviceRegisters,
-    WINDOW_BASE,
+    ChannelBlock, ChannelWindowBlock, ChannelWindowRegisters, DmaDiscovery, DmaRegisters,
 };
 
 use crate::{AccessError, AccessWindow, WindowConfigError};
@@ -12,52 +14,67 @@ pub struct ChannelWindows {
     windows: Vec<AccessWindow>,
     work: RegisterBank<StaticRegisterLayout<ChannelBlock>>,
     permissions: RegisterBank<StaticRegisterLayout<ChannelWindowBlock>>,
+    discovery: Range<usize>,
+    dma: Range<usize>,
 }
 
 impl ChannelWindows {
-    /// Creates closed channel windows, rejecting invalid or reserved-space geometry.
-    pub fn new(channel_count: usize) -> Result<Self, WindowConfigError> {
-        let layout = DeviceRegisters::new(channel_count)
-            .map_err(|_| WindowConfigError::InvalidChannelCount)?;
-        if layout.extent()
-            > usize::try_from(WINDOW_BASE).map_err(|_| WindowConfigError::AddressUnrepresentable)?
-        {
-            return Err(WindowConfigError::ReservedAddressOverlap);
+    /// Places closed data windows and their permission bank in platform address space.
+    pub fn new(
+        channel_count: usize,
+        dma_base: u32,
+        window_base: u32,
+    ) -> Result<Self, WindowConfigError> {
+        let layout =
+            DmaRegisters::new(channel_count).map_err(|_| WindowConfigError::InvalidChannelCount)?;
+        let dma_base =
+            usize::try_from(dma_base).map_err(|_| WindowConfigError::AddressUnrepresentable)?;
+        let window_base =
+            usize::try_from(window_base).map_err(|_| WindowConfigError::AddressUnrepresentable)?;
+        if dma_base % layout.alignment() != 0 {
+            return Err(WindowConfigError::AddressUnrepresentable);
         }
-        if ChannelId::new(channel_count - 1)
-            .window_status_address()
-            .is_none()
-        {
-            return Err(WindowConfigError::ReservedAddressOverlap);
-        }
-        let work = layout.channels().clone();
+        let dma_end = dma_base
+            .checked_add(layout.extent())
+            .ok_or(WindowConfigError::AddressUnrepresentable)?;
+        let work = layout
+            .channels()
+            .rebased(dma_base)
+            .map_err(|_| WindowConfigError::AddressUnrepresentable)?;
         let permissions = ChannelWindowRegisters::new(channel_count)
             .map_err(|_| WindowConfigError::InvalidChannelCount)?
             .windows()
-            .rebased(
-                usize::try_from(WINDOW_BASE)
-                    .map_err(|_| WindowConfigError::AddressUnrepresentable)?,
-            )
+            .rebased(window_base)
             .map_err(|_| WindowConfigError::AddressUnrepresentable)?;
-        let windows = (0..channel_count)
-            .map(|index| {
-                let start = work
-                    .offset(index)
-                    .ok_or(WindowConfigError::AddressUnrepresentable)?;
-                let base = permissions
-                    .offset(index)
-                    .ok_or(WindowConfigError::AddressUnrepresentable)?;
-                Ok(AccessWindow::channel(
-                    start..start + ChannelBlock::EXTENT,
-                    base + ChannelWindowBlock::CONTROL.offset(),
-                    base + ChannelWindowBlock::STATUS.offset(),
-                ))
-            })
-            .collect::<Result<_, _>>()?;
+        if dma_base < permissions.end() && permissions.base() < dma_end {
+            return Err(WindowConfigError::ReservedAddressOverlap);
+        }
+        u32::try_from(dma_end - 1).map_err(|_| WindowConfigError::AddressUnrepresentable)?;
+        u32::try_from(permissions.end() - 1)
+            .map_err(|_| WindowConfigError::AddressUnrepresentable)?;
+        let mut windows = Vec::new();
+        windows
+            .try_reserve_exact(channel_count)
+            .map_err(|_| WindowConfigError::InvalidChannelCount)?;
+        for index in 0..channel_count {
+            let start = work
+                .offset(index)
+                .ok_or(WindowConfigError::AddressUnrepresentable)?;
+            let base = permissions
+                .offset(index)
+                .ok_or(WindowConfigError::AddressUnrepresentable)?;
+            windows.push(AccessWindow::new(
+                start..start + ChannelBlock::EXTENT,
+                base,
+            )?);
+        }
+        let discovery = dma_base + DmaRegisters::DISCOVERY.offset();
         Ok(Self {
             windows,
             work,
             permissions,
+            discovery: discovery..discovery + DmaDiscovery::EXTENT,
+            dma: dma_base..dma_end,
         })
     }
 
@@ -81,30 +98,35 @@ impl ChannelWindows {
             .management_write(address, bytes)
     }
 
-    /// Reads readiness or forwards one wholly authorized Host transaction.
+    /// Reads public discovery, readiness or a granted data block.
     pub fn read<E>(
         &self,
         address: usize,
         out: &mut [u8],
         downstream: impl FnOnce(usize, &mut [u8]) -> Result<(), E>,
     ) -> Result<(), AccessError<E>> {
-        match self.route(address, out.len())? {
-            Some(window) => window.read(address, out, downstream),
-            None => downstream(address, out).map_err(AccessError::Downstream),
+        let end = address
+            .checked_add(out.len())
+            .filter(|_| !out.is_empty())
+            .ok_or(AccessError::Unmapped)?;
+        if self.discovery.contains(&address) && end <= self.discovery.end {
+            return downstream(address, out).map_err(AccessError::Downstream);
         }
+        self.route(address)?.read(address, out, downstream)
     }
 
-    /// Forwards writes only within one independently granted aperture.
+    /// Grants writes only to the selected open data block.
     pub fn write<E>(
         &self,
         address: usize,
         bytes: &[u8],
         downstream: impl FnOnce(usize, &[u8]) -> Result<(), E>,
     ) -> Result<(), AccessError<E>> {
-        match self.route(address, bytes.len())? {
-            Some(window) => window.write(address, bytes, downstream),
-            None => downstream(address, bytes).map_err(AccessError::Downstream),
-        }
+        address
+            .checked_add(bytes.len())
+            .filter(|_| !bytes.is_empty())
+            .ok_or(AccessError::Unmapped)?;
+        self.route(address)?.write(address, bytes, downstream)
     }
 
     fn management_window(
@@ -113,46 +135,23 @@ impl ChannelWindows {
     ) -> Result<&mut AccessWindow, RegisterAccessError> {
         let (index, _) = self
             .permissions
-            .locate_instance(address)
+            .locate(address)
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
         self.windows
             .get_mut(index)
             .ok_or(RegisterAccessError::OutsideWindow { address })
     }
 
-    fn route<E>(
-        &self,
-        address: usize,
-        width: usize,
-    ) -> Result<Option<&AccessWindow>, AccessError<E>> {
-        let end = address
-            .checked_add(width)
-            .filter(|_| width != 0)
-            .ok_or(AccessError::Unmapped)?;
-        if let Some((index, _)) = self.permissions.locate_instance(address) {
-            return self
-                .windows
-                .get(index)
-                .map(Some)
-                .ok_or(AccessError::Unmapped);
+    fn route<E>(&self, address: usize) -> Result<&AccessWindow, AccessError<E>> {
+        if let Some((index, _)) = self.permissions.locate(address) {
+            return self.windows.get(index).ok_or(AccessError::Unmapped);
         }
-        if address < self.work.base() {
-            if end > self.work.base() {
-                return Err(AccessError::Unmapped);
-            }
-            return if self.windows.iter().any(AccessWindow::is_open) {
-                Ok(None)
-            } else {
-                Err(AccessError::Closed)
-            };
+        if let Some((index, _)) = self.work.locate(address) {
+            return self.windows.get(index).ok_or(AccessError::Unmapped);
         }
-        let (index, _) = self
-            .work
-            .locate_instance(address)
-            .ok_or(AccessError::Unmapped)?;
-        self.windows
-            .get(index)
-            .map(Some)
-            .ok_or(AccessError::Unmapped)
+        if self.dma.contains(&address) {
+            return Err(AccessError::Denied);
+        }
+        Err(AccessError::Unmapped)
     }
 }

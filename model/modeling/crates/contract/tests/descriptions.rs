@@ -2,7 +2,7 @@
 
 use hardware_interface_schema::Documentation;
 use pdma_model_contract::{
-    Address, ChannelFault, ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint,
+    Address, ChannelFault, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint,
     ReadWord, Response, ResponseRegisters, Segment, Switch, Word,
 };
 
@@ -30,7 +30,7 @@ fn register_definitions_and_placements_have_complete_documentation()
         ChannelFault::SPEC,
     ];
     // When: the public metadata is resolved as a documentation generator would consume it.
-    let map = DeviceRegisters::new(3)?.resolve()?;
+    let map = DmaRegisters::new(3)?.resolve()?;
     // Then: both descriptions exist at every definition, bit field, map and leaf placement.
     for definition in definitions {
         assert_documented(definition.name(), definition.documentation());
@@ -39,7 +39,7 @@ fn register_definitions_and_placements_have_complete_documentation()
         }
     }
     for docs in [
-        DeviceRegisters::DOCUMENTATION,
+        DmaRegisters::DOCUMENTATION,
         CommandRegisters::SPEC.documentation(),
         ResponseRegisters::SPEC.documentation(),
         ChannelRegisters::SPEC.documentation(),

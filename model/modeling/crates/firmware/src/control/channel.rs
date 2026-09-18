@@ -2,14 +2,15 @@ use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
 use hardware_interface_schema::Decode;
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlQueueRaw, ControlRegisters, ControlRequest, ControlResponse, Ring,
-    RingError, RingPointers,
+    ControlQueueRaw, ControlRegisters, ControlRequest, ControlResponse, Ring, RingError,
+    RingPointers,
 };
 use pdma_model_software::control::{ControlQueueLayout, InterruptEvent};
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 
 pub(super) struct Channel<'a, B, M> {
     bus: &'a B,
+    base: u32,
     command: SoftRing<ControlRequest>,
     response: SoftRing<ControlResponse>,
     command_io: MemoryRingIo<'a, M>,
@@ -21,21 +22,23 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         bus: &'a B,
         memory: &'a M,
         interrupt: &'a InterruptEvent,
+        base: u32,
     ) -> Result<Self, Error<B::Error>> {
-        while read_word(bus, ControlRegisters::ENABLE.offset()).await? == 0 {
+        while read_word(bus, base, ControlRegisters::ENABLE.offset()).await? == 0 {
             interrupt.wait().await;
         }
         let mut bytes = [0; 8];
         bus.read(
-            address(ControlRegisters::BOOTSTRAP.offset()).map_err(Error::Ring)?,
+            address(base, ControlRegisters::BOOTSTRAP.offset()).map_err(Error::Ring)?,
             &mut bytes,
         )
         .await
         .map_err(Error::Bus)?;
-        let base = u64::from_le_bytes(bytes);
-        let layout = ControlQueueLayout::new(MemoryAddress::new(base)).map_err(Error::Ring)?;
+        let queue_base = u64::from_le_bytes(bytes);
+        let layout =
+            ControlQueueLayout::new(MemoryAddress::new(queue_base)).map_err(Error::Ring)?;
         let queue = memory
-            .read_typed::<ControlQueueRaw>(MemoryAddress::new(base), MemoryAlignment::ONE)
+            .read_typed::<ControlQueueRaw>(MemoryAddress::new(queue_base), MemoryAlignment::ONE)
             .map_err(Error::Memory)?
             .decode()
             .map_err(Error::Codec)?;
@@ -63,6 +66,7 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         }
         Ok(Self {
             bus,
+            base,
             command: SoftRing::new(command).map_err(Error::Cpu)?,
             response: SoftRing::new(response).map_err(Error::Cpu)?,
             command_io: layout.command_io(memory),
@@ -112,7 +116,7 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
     async fn notify(&self) -> Result<(), Error<B::Error>> {
         self.bus
             .write(
-                address(ControlRegisters::RESPONSE.offset()).map_err(Error::Ring)?,
+                address(self.base, ControlRegisters::RESPONSE.offset()).map_err(Error::Ring)?,
                 &1_u32.to_le_bytes(),
             )
             .await
@@ -120,18 +124,18 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
     }
 }
 
-fn address(offset: usize) -> Result<u32, RingError> {
-    CONTROL_CHANNEL_BASE
-        .checked_add(u32::try_from(offset).map_err(|_| RingError::Geometry)?)
+fn address(base: u32, offset: usize) -> Result<u32, RingError> {
+    base.checked_add(u32::try_from(offset).map_err(|_| RingError::Geometry)?)
         .ok_or(RingError::Geometry)
 }
 
 async fn read_word<B: RegisterAccess + Sync>(
     bus: &B,
+    base: u32,
     offset: usize,
 ) -> Result<u32, Error<B::Error>> {
     let mut bytes = [0; 4];
-    bus.read(address(offset).map_err(Error::Ring)?, &mut bytes)
+    bus.read(address(base, offset).map_err(Error::Ring)?, &mut bytes)
         .await
         .map_err(Error::Bus)?;
     Ok(u32::from_le_bytes(bytes))

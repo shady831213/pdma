@@ -6,10 +6,10 @@ pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
-    ResponseRegisters, ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
+    ResponseStatus,
 };
-use pdma_model_dma::{Device, Fault, Pipeline};
+use pdma_model_dma::{Dma, Fault, Pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]
@@ -46,7 +46,7 @@ fn copy_publishes_response_before_notification_is_taken() -> TestResult {
     assert!(device.irq());
     assert!(device.take_interrupt());
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + pdma_model_contract::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
@@ -68,7 +68,7 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FAULT.offset()
         )?,
@@ -77,14 +77,14 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset()
         )?,
         0
     );
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + pdma_model_contract::ChannelBlock::CONTROL.offset()
             + ChannelRegisters::IRQ_ENABLE.offset(),
         &0_u32.to_le_bytes(),
@@ -95,7 +95,7 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CONSUMER.offset()
         )?,
@@ -129,7 +129,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FAULT.offset()
         )?,
@@ -151,13 +151,13 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     )?;
     memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[2; 4])?;
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + pdma_model_contract::ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
     let mut hardware = support::single_command(&device);
-    let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
+    let mut operation = Operation::<Pipeline, Dma<SharedMemory>>::new(());
     // When
     let mut stalled = false;
     for _ in 0..32 {
@@ -174,7 +174,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CONSUMER.offset()
         )?,
@@ -185,7 +185,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
         [0; 4]
     );
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + pdma_model_contract::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
@@ -218,7 +218,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     assert_eq!(
         read_word(
             &mut device,
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FAULT.offset()
         )?,

@@ -13,7 +13,7 @@ where
     let base = buffer
         .config
         .id
-        .register_offset()
+        .register_offset(3)
         .ok_or("missing channel registers")?;
     read_word(
         &ports.bus,
@@ -60,7 +60,7 @@ where
             let base = first
                 .config
                 .id
-                .register_offset()
+                .register_offset(3)
                 .ok_or("missing channel registers")?;
             let producer = read_word(
                 &ports.bus,

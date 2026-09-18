@@ -10,10 +10,10 @@ use hardware_interface_runtime::{
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{
-    ChannelId, Command, CompletionFlagsValues, DeviceControl, DeviceRegisters, Endpoint, Response,
+    ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
 };
 use pdma_model_dma::{
-    CheckLengths, Device, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
+    CheckLengths, Dma, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
 };
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -24,7 +24,8 @@ use std::sync::{
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
-const COUNT: usize = DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset();
+const COUNT: usize =
+    DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
 
 async fn with_idle_hardware<F: std::future::Future>(
     model: &Model<SharedMemoryAccess>,
@@ -107,7 +108,7 @@ async fn discovery_rejects_unavailable_channels_before_any_configuration_write()
     // Given: the bus advertises two channels despite a three-channel backing device.
     let allocator = allocator();
     let memory = allocator.memory_access();
-    let model = Model::new(Device::new(memory.clone(), 3)?);
+    let model = Model::new(Dma::new(memory.clone(), 3)?);
     let cpu = SoftwareCpu::new();
     for index in [2, 3, usize::MAX] {
         let writes = Arc::new(AtomicUsize::new(0));
@@ -142,7 +143,7 @@ async fn setup_requires_a_cpu_before_channel_discovery() -> TestResult {
     let reads = Arc::new(AtomicUsize::new(0));
     let writes = Arc::new(AtomicUsize::new(0));
     let bus = ObservedBus {
-        model: Model::new(Device::new(memory.clone(), 3)?),
+        model: Model::new(Dma::new(memory.clone(), 3)?),
         available: 3,
         reads: Arc::clone(&reads),
         writes: Arc::clone(&writes),
@@ -161,7 +162,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     // Given: three configured channels with independent ring storage and queued commands.
     let allocator = allocator();
     let memory = allocator.memory_access();
-    let device = Device::new(memory.clone(), 3)?;
+    let device = Dma::new(memory.clone(), 3)?;
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
     let execution = Then::new(CheckLengths, Repeat::new(chunk));
     let mut hardware = Then::new(
@@ -216,7 +217,7 @@ async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResu
     // Given: software discovers a configured three-channel device.
     let allocator = allocator();
     let memory = allocator.memory_access();
-    let model = Model::new(Device::new(memory.clone(), 3)?);
+    let model = Model::new(Dma::new(memory.clone(), 3)?);
     let cpu = SoftwareCpu::new();
     let mut bytes = [0; 4];
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
@@ -245,7 +246,7 @@ async fn channel_count_is_read_only_and_survives_both_reset_scopes() -> TestResu
     with_idle_hardware(&model, cpu.run_main(first.reset())).await?;
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);
-    with_idle_hardware(&model, cpu.run_main(second.reset_device())).await?;
+    with_idle_hardware(&model, cpu.run_main(second.reset_dma())).await?;
     // Then: immutable hardware discovery remains available after device reset.
     model.read(u32::try_from(COUNT)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 3);

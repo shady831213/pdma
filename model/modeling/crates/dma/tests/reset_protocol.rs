@@ -5,15 +5,19 @@ pub mod support;
 
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DeviceControl, DeviceRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     ResponseRegisters,
 };
-use pdma_model_dma::{Device, Error, ResetControl};
+use pdma_model_dma::{Dma, Error, ResetControl};
 use support::{TestResult, command, read_word, setup, submit};
 
-const CHANNEL: usize = DeviceRegisters::CHANNELS_OFFSET + ChannelBlock::CONTROL.offset();
-const RESET: usize = CHANNEL + ChannelRegisters::RESET.offset();
-const DEVICE_RESET: usize = DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset();
+const CHANNEL: usize =
+    pdma_model_contract::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
+const RESET: usize =
+    pdma_model_contract::DmaDiscovery::EXTENT + pdma_model_contract::DmaAdmin::CHANNELS_OFFSET;
+const DEVICE_RESET: usize = (pdma_model_contract::DmaDiscovery::EXTENT
+    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+    + DmaControl::RESET.offset();
 
 #[test]
 fn rejected_response_port_does_not_retire_the_command() -> TestResult {
@@ -67,7 +71,7 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     let mut hardware = device.command_loop();
     let command = &mut hardware.upstream.stage;
     let mut operation = Operation::new(());
-    let producer = DeviceRegisters::CHANNELS_OFFSET
+    let producer = pdma_model_contract::ChannelBlock::ALIGNMENT
         + ChannelBlock::RESPONSE.offset()
         + ResponseRegisters::PRODUCER.offset();
     for _ in 0..128 {
@@ -135,7 +139,7 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
     submit(&mut device, &memory, command())?;
     let mut hardware = device.command_loop();
     let mut operation = Operation::new(());
-    let consumer = DeviceRegisters::CHANNELS_OFFSET
+    let consumer = pdma_model_contract::ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();
     for _ in 0..32 {
@@ -181,19 +185,15 @@ fn repeated_and_zero_requests_do_not_cancel_or_complete_reset() -> TestResult {
 #[test]
 fn device_reset_subsumes_channel_reset_and_preserves_discovery() -> TestResult {
     // Given: three idle channels, one with a pending channel reset.
-    let mut device = Device::new((), 3)?;
-    let reset = ChannelId::new(1).register_offset().ok_or("offset")?
-        + ChannelBlock::CONTROL.offset()
-        + ChannelRegisters::RESET.offset();
+    let mut device = Dma::new((), 3)?;
+    let reset = ChannelId::new(1).admin_offset(3).ok_or("offset")?;
     device.write(reset, &1_u32.to_le_bytes())?;
     // When: software also requests device reset and tries to clear it.
     device.write(DEVICE_RESET, &1_u32.to_le_bytes())?;
     device.write(DEVICE_RESET, &0_u32.to_le_bytes())?;
     // Then: all scopes remain busy until hardware completes the device reset.
     for index in 0..3 {
-        let address = ChannelId::new(index).register_offset().ok_or("offset")?
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset();
+        let address = ChannelId::new(index).admin_offset(3).ok_or("offset")?;
         let mut out = [0; 4];
         device.read(address, &mut out)?;
         assert_eq!(u32::from_le_bytes(out), 1);
@@ -203,7 +203,7 @@ fn device_reset_subsumes_channel_reset_and_preserves_discovery() -> TestResult {
     device.read(DEVICE_RESET, &mut out)?;
     assert_eq!(u32::from_le_bytes(out), 0);
     device.read(
-        DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset(),
+        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset(),
         &mut out,
     )?;
     assert_eq!(u32::from_le_bytes(out), 3);

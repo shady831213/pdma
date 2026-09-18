@@ -7,6 +7,7 @@ use super::{
     },
 };
 use crate::harness::TestResult;
+use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator,
@@ -14,7 +15,6 @@ use hardware_interface_runtime::{
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::{
     ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus, Ring,
-    WINDOW_STATUS_BASE,
 };
 use pdma_model_host::{Management, RingConfig};
 use pdma_model_software::ring::SoftRingError;
@@ -134,7 +134,7 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
         memory.write(
             MemoryAddress::new(storage.command.entry(0)?),
             MemoryAlignment::ONE,
-            &[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0],
+            &[1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0],
         )?;
     }
     let queue = QueueMemory::new(&memory, storage.state);
@@ -161,7 +161,7 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
         assert!(matches!(
             result,
             Err(RunError::Firmware(pdma_model_firmware::Error::SoftRing(
-                SoftRingError::Codec(SchemaCodecError::UnknownTag { observed: 2, .. })
+                SoftRingError::Codec(SchemaCodecError::UnknownTag { observed: 3, .. })
             )))
         ));
     }

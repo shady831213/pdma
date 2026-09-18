@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus};
-use pdma_model_dma::Device;
+use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
@@ -43,7 +43,7 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"original")?;
-    let device = Device::new(memory.clone(), 1)?;
+    let device = Dma::new(memory.clone(), 1)?;
     let mut stage = support::single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();

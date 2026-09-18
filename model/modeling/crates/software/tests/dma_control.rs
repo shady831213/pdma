@@ -4,15 +4,73 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     CpuContextError, RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu,
 };
-use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters};
-use pdma_model_dma::{Device, ResetControl};
+use pdma_model_contract::ChannelId;
+use pdma_model_dma::{Dma, ResetControl};
 use std::{
     future::{Future, poll_fn},
     sync::{Arc, Mutex},
     task::Poll,
 };
 
-struct Bus(Mutex<Device<SharedMemoryAccess>>);
+struct Bus(Mutex<Dma<SharedMemoryAccess>>);
+
+struct Relocated(Bus);
+
+impl RegisterAccess for Relocated {
+    type Error = pdma_model_dma::Error;
+
+    async fn read(&self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        self.0
+            .read(
+                offset.checked_sub(0x4000).ok_or(Self::Error::Unmapped)?,
+                bytes,
+            )
+            .await
+    }
+
+    async fn write(&self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.0
+            .write(
+                offset.checked_sub(0x4000).ok_or(Self::Error::Unmapped)?,
+                bytes,
+            )
+            .await
+    }
+}
+
+#[tokio::test]
+async fn relocated_discovery_routes_data_admin_and_global_controls()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: a two-channel DMA aperture at a nonzero bus address.
+    let bus = Relocated(Bus::new()?);
+    SoftwareCpu::new()
+        .run_main(async {
+            let control = pdma_model_software::dma::ChannelControl::discover_at(
+                &bus,
+                ChannelId::new(1),
+                0x4000,
+            )
+            .await?;
+            // When: software controls the selected data, administration and global apertures.
+            control.set_irq_enabled(&bus, true).await?;
+            control.set_dma_irq_enabled(&bus, true).await?;
+            control.request_reset(&bus).await?;
+            bus.0.0.lock().map_err(|_| "poisoned DMA")?.signal_fatal();
+            // Then: the cached addresses select the intended scope and preserve its peer.
+            assert!(control.reset_in_progress(&bus).await?);
+            assert_eq!(bus.0.busy(0).await?, 0);
+            assert_eq!(bus.0.busy(1).await?, 1);
+            assert_eq!(
+                control.dma_fault(&bus).await?,
+                pdma_model_contract::DmaFaultCode::Internal
+            );
+            assert!(bus.0.0.lock().map_err(|_| "poisoned DMA")?.take_interrupt());
+            bus.0.finish_reset()?;
+            assert!(!control.reset_in_progress(&bus).await?);
+            Ok::<_, Box<dyn std::error::Error>>(())
+        })
+        .await
+}
 
 #[tokio::test]
 async fn reset_status_query_does_not_wait_or_reset_peer() -> Result<(), Box<dyn std::error::Error>>
@@ -38,7 +96,7 @@ async fn reset_status_query_does_not_wait_or_reset_peer() -> Result<(), Box<dyn 
 
 impl Bus {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self(Mutex::new(Device::new(
+        Ok(Self(Mutex::new(Dma::new(
             SharedMemoryAccess::from(Arc::new(SharedMemory::new())),
             2,
         )?)))
@@ -57,10 +115,8 @@ impl Bus {
 
     async fn busy(&self, channel: usize) -> Result<u32, Box<dyn std::error::Error>> {
         let offset = ChannelId::new(channel)
-            .register_offset()
-            .ok_or("channel offset overflow")?
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset();
+            .admin_offset(2)
+            .ok_or("channel offset overflow")?;
         let mut bytes = [0; 4];
         self.read(u32::try_from(offset)?, &mut bytes).await?;
         Ok(u32::from_le_bytes(bytes))

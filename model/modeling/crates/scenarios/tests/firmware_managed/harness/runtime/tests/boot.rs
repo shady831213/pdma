@@ -1,6 +1,6 @@
 use super::*;
+use crate::harness::runtime::platform::FIRMWARE_STATUS_BASE;
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::FIRMWARE_STATUS_BASE;
 use pdma_model_host::{Error, firmware};
 use std::{pin::pin, task::Poll, time::Duration};
 
@@ -33,7 +33,12 @@ async fn boot_state_is_visible_before_firmware_starts() {
     // Then: it observes Booting without access to DMA or firmware write permissions.
     assert_eq!(word, [0; 4]);
     assert!(matches!(
-        host.bus.read(0, &mut word).await,
+        host.bus
+            .read(
+                u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                &mut word
+            )
+            .await,
         Err(AccessError::Closed)
     ));
     assert!(
@@ -52,14 +57,24 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     let bus = RejectWindow(super::super::ManagementBus(Arc::clone(&system.shared)));
     let bus = system.firmware_cpu.bind_registers(bus);
     let mut running = pin!(system.firmware_runtime.run_main(async |registration| {
-        pdma_model_firmware::main(bus, system.firmware_memory, registration).await
+        pdma_model_firmware::main(
+            bus,
+            system.firmware_memory,
+            registration,
+            crate::harness::runtime::platform::ADDRESSES,
+        )
+        .await
     }));
     // When: firmware initializes on its own CPU.
     let outcome = std::future::poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))).await;
     // Then: it stays quiescent and Host reads its reported failure, not a supervisor error.
     assert!(outcome.is_pending());
     let result = SoftwareCpu::new()
-        .run_main(firmware::wait_ready(&host.bus, Duration::from_secs(1)))
+        .run_main(firmware::wait_ready(
+            &host.bus,
+            host.bus.addresses().firmware,
+            Duration::from_secs(1),
+        ))
         .await;
     assert!(matches!(
         result,
@@ -71,7 +86,12 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     host.bus.read(WINDOW_STATUS_BASE, &mut word).await.unwrap();
     assert_eq!(word, [0; 4]);
     assert!(matches!(
-        host.bus.read(0, &mut word).await,
+        host.bus
+            .read(
+                u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                &mut word
+            )
+            .await,
         Err(AccessError::Closed)
     ));
 }

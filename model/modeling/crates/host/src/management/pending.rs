@@ -31,6 +31,21 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             .map_err(Error::Cpu)?
     }
 
+    /// Publishes reset while retaining allocation; keep channel memory until its response.
+    pub async fn submit_reset(
+        &mut self,
+        channel: ChannelId,
+    ) -> Result<ManagementRequestId, Error<B::Error>> {
+        let owner = self.owner.clone();
+        owner
+            .scope(self.submit(
+                ControlRequestOpcode::ResetChannel,
+                u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
+            ))
+            .await
+            .map_err(Error::Cpu)?
+    }
+
     /// Finishes the retained publication and notification, returning the same identity.
     pub async fn resume_submission(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
         let owner = self.owner.clone();

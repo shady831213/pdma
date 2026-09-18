@@ -19,12 +19,11 @@ _Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_ACCESS == C_FCTL_ACCESS_WRITE_O
 _Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "hidden request retains response offset");
 _Static_assert(C_FCTL_SIZE == 20, "firmware control physical extent");
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_ACCESS == C_FWIN_ACCESS_READ_WRITE, "firmware window ownership");
-_Static_assert(PDMA_FIRMWARE_WINDOW_BASE == UINT32_C(0xff000000), "window bank physical base");
-_Static_assert(C_FWIN_SIZE == 48, "firmware view retains the whole window bank");
+_Static_assert(C_FWIN_SIZE == 24, "firmware view retains the whole window bank");
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_OFFSET == 0, "control bank relative offset");
-_Static_assert(PDMA_FIRMWARE_WINDOW_BASE + C_FWIN_C_QUOQUPQUEQUN__1_OFFSET == UINT32_C(0xff000000), "control physical address");
-_Static_assert(PDMA_FIRMWARE_CONTROL_BASE == UINT32_C(0xfffffe00), "control physical base");
-_Static_assert(PDMA_FIRMWARE_BOOT_BASE == UINT32_C(0xffffff10), "boot physical base");
+#if defined(PDMA_FIRMWARE_WINDOW_BASE) || defined(PDMA_FIRMWARE_CONTROL_BASE) || defined(PDMA_FIRMWARE_BOOT_BASE)
+#error Platform base addresses must not be fixed by the contract
+#endif
 int main(void) {
     uint8_t bytes[C_CONTROLRESPONSE_SIZE] = {0};
     C_CONTROLRESPONSE_STORE_C_ID(bytes, UINT64_C(0x12345678));

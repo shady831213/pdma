@@ -1,7 +1,9 @@
 //! Managed work-view behavior through real runtime transports.
+use crate::harness::runtime::platform::{
+    FIRMWARE_STATUS_BASE, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE,
+};
 
 use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess};
-use pdma_model_contract::{WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE};
 use std::sync::Arc;
 
 use super::{AccessError, Managed};
@@ -13,6 +15,7 @@ mod control;
 mod interrupts;
 mod multi_channel;
 mod notifications;
+mod permissions;
 mod publication;
 
 #[tokio::test]
@@ -25,7 +28,7 @@ async fn construction_leaves_host_closed() {
     let discovery = host.bus.read(0, &mut value).await;
     host.bus.read(WINDOW_STATUS_BASE, &mut value).await.unwrap();
     // Then: construction did not run firmware or open the hardware window.
-    assert!(matches!(discovery, Err(AccessError::Closed)));
+    assert!(discovery.is_ok());
     assert_eq!(value, [0; 4]);
 }
 
@@ -54,7 +57,7 @@ async fn firmware_ready_does_not_grant_dma_access() {
             let mut word = [0; 4];
             for _ in 0..10_000 {
                 host.bus
-                    .read(pdma_model_contract::FIRMWARE_STATUS_BASE, &mut word)
+                    .read(FIRMWARE_STATUS_BASE, &mut word)
                     .await
                     .unwrap();
                 if u32::from_le_bytes(word) == 1 {
@@ -68,7 +71,12 @@ async fn firmware_ready_does_not_grant_dma_access() {
                 "firmware did not publish readiness"
             );
             assert!(matches!(
-                host.bus.read(0, &mut word).await,
+                host.bus
+                    .read(
+                        u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                        &mut word
+                    )
+                    .await,
                 Err(AccessError::Closed)
             ));
             host.bus.read(WINDOW_STATUS_BASE, &mut word).await.unwrap();

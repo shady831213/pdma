@@ -1,4 +1,7 @@
 //! Firmware boot failures at the software CPU and management transport boundaries.
+#[doc = "Test platform register placement."]
+pub mod platform;
+use platform::ADDRESSES;
 
 use hardware_interface_runtime::{
     CpuContextError, InterruptRegistrationError, InterruptRuntime, RegisterAccess, SoftwareCpu,
@@ -36,6 +39,7 @@ async fn boot_reports_management_failure() {
                 bus,
                 hardware_interface_runtime::SharedMemory::new(),
                 registration,
+                ADDRESSES,
             )
             .await
         })
@@ -62,6 +66,7 @@ async fn boot_requires_its_interrupt_registration_cpu() {
                     bus,
                     hardware_interface_runtime::SharedMemory::new(),
                     registration,
+                    ADDRESSES,
                 ))
                 .await
         })

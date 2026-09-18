@@ -5,9 +5,9 @@ use hardware_interface_schema::{
     export::{Exporter, InMemoryArtifactSink},
 };
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ChannelId, ChannelWindowRegisters, Command, ControlQueue,
-    ControlRegisters, ControlRequest, ControlResponse, ControlRingState, DeviceRegisters, Endpoint,
-    FIRMWARE_STATUS_BASE, FirmwareRegisters, RegisterView, Response, Segment, WINDOW_BASE,
+    ChannelWindowRegisters, Command, ControlQueue, ControlRegisters, ControlRequest,
+    ControlResponse, ControlRingState, DmaRegisters, Endpoint, FirmwareRegisters, RegisterView,
+    Response, Segment,
 };
 use std::{error::Error, io::Write};
 
@@ -15,17 +15,9 @@ type HeaderSet = Vec<(&'static str, Vec<u8>)>;
 
 /// Renders all role headers for one hardware channel count before file output.
 pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
-    let layout = DeviceRegisters::new(count)?;
+    let layout = DmaRegisters::new(count)?;
     u32::try_from(count)?;
     u32::try_from(layout.extent())?;
-    let last = count
-        .checked_sub(1)
-        .ok_or("channel count must be positive")?;
-    if layout.extent() > usize::try_from(WINDOW_BASE)?
-        || ChannelId::new(last).window_status_address().is_none()
-    {
-        return Err("channel banks overlap reserved management addresses".into());
-    }
     let windows = ChannelWindowRegisters::new(count)?;
     let registers = layout.resolve()?;
     let mut common = InMemoryArtifactSink::new();
@@ -52,8 +44,10 @@ pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
         ),
     ] {
         let mut sink = InMemoryArtifactSink::new();
-        RegisterMapCHeaderExporter::new("dma", format!("{prefix}dma"))
-            .export(&registers, &mut sink)?;
+        RegisterMapCHeaderExporter::new("dma", format!("{prefix}dma")).export(
+            &registers.project_access(|r| role.dma_access(r.id(), r.definition().access()))?,
+            &mut sink,
+        )?;
         RegisterMapCHeaderExporter::new("boot", format!("{prefix}boot")).export(
             &FirmwareRegisters::resolve()?.project_access(|_| Some(role.boot_access()))?,
             &mut sink,
@@ -81,10 +75,7 @@ pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
             window.count(),
             window.stride()
         )?;
-        writeln!(
-            bytes,
-            "#define PDMA_{role_name}_WINDOW_BASE UINT32_C({WINDOW_BASE})\n#define PDMA_{role_name}_BOOT_BASE UINT32_C({FIRMWARE_STATUS_BASE})\n#define PDMA_{role_name}_CONTROL_BASE UINT32_C({CONTROL_CHANNEL_BASE})\n#endif"
-        )?;
+        writeln!(bytes, "#endif")?;
         headers.push((filename, bytes));
     }
     Ok(headers)

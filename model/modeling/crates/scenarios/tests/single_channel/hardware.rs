@@ -6,12 +6,12 @@ use crate::harness::TestResult;
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Operation};
 use hardware_interface_runtime::MemoryAccess;
 use hardware_interface_runtime::SharedMemoryAccess;
-use pdma_model_dma::{BuildError, CommandLoop, Device};
+use pdma_model_dma::{BuildError, CommandLoop, Dma};
 use pdma_model_host::runtime::Model;
 
 /// Assemble the existing hardware state and stage graph over injected memory.
-pub fn assemble<M: MemoryAccess>(memory: M) -> Result<(Device<M>, CommandLoop), BuildError> {
-    let device = Device::new(memory, 1)?;
+pub fn assemble<M: MemoryAccess>(memory: M) -> Result<(Dma<M>, CommandLoop), BuildError> {
+    let device = Dma::new(memory, 1)?;
     let command_loop = device.command_loop();
     Ok((device, command_loop))
 }

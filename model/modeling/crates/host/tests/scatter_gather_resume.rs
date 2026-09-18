@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus, Segment};
-use pdma_model_dma::Device;
+use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
 
@@ -66,7 +66,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     let (destination, [destination_first, destination_second]) =
         scatter_gather(&allocator, [&[0; 2], &[0; 6]])?;
     let memory = allocator.memory_access();
-    let device = Device::new(memory.clone(), 1)?;
+    let device = Dma::new(memory.clone(), 1)?;
     let mut stage = support::single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();

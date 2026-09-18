@@ -4,8 +4,8 @@ use hardware_interface_runtime::{
     CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, CommandRegisters, DeviceRegisters, Endpoint, Response};
-use pdma_model_dma::Device;
+use pdma_model_contract::{Command, CommandRegisters, Endpoint, Response};
+use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
 };
@@ -62,7 +62,7 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
             1,
         )?,
     };
-    let model = Model::new(Device::new(allocator.memory_access(), 1)?);
+    let model = Model::new(Dma::new(allocator.memory_access(), 1)?);
     let delay = Arc::new(AtomicBool::new(false));
     let paused = Arc::new(Notify::new());
     let resume = Arc::new(Notify::new());
@@ -112,7 +112,7 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
     model
         .read(
             u32::try_from(
-                (DeviceRegisters::CHANNELS_OFFSET
+                (pdma_model_contract::ChannelBlock::ALIGNMENT
                     + pdma_model_contract::ChannelBlock::COMMAND.offset())
                     + CommandRegisters::PRODUCER.offset(),
             )?,

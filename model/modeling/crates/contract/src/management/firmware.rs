@@ -1,8 +1,5 @@
 use hardware_interface_schema::{register_map, register_schema};
 
-/// Always-on firmware boot report, outside the DMA register window.
-pub const FIRMWARE_STATUS_BASE: u32 = 0xffff_ff10;
-
 register_schema! {
     #[short_description = "Firmware boot report"]
     #[description = "Firmware publishes state and error atomically. Host may only read this register. Reset restores Booting with no error; DMA resets do not reset firmware. This register does not grant DMA access."]

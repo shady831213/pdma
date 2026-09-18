@@ -1,16 +1,47 @@
-use crate::{Device, Error};
+use crate::{Dma, Error};
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DeviceControl, DeviceRegisters,
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
 };
+
+#[test]
+fn nested_admin_bank_preserves_selection_and_absolute_misses()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: administration crosses the first page in a 1021-channel instance.
+    let mut device = Dma::new((), 1021)?;
+    // When: the last channel's reset is requested through its administrative aperture.
+    device.write_admin(4096, &1_u32.to_le_bytes())?;
+    // Then: only that channel is busy, and misses retain the root address and output.
+    for (address, expected) in [(16, 0), (4092, 0), (4096, 1)] {
+        let mut out = [0; 4];
+        device.read_admin(address, &mut out)?;
+        assert_eq!(u32::from_le_bytes(out), expected);
+    }
+    for address in [0, 4, 12, 4100, 8192, usize::MAX] {
+        let mut out = [0xa5; 4];
+        assert_eq!(
+            device.read_admin(address, &mut out),
+            Err(RegisterAccessError::OutsideWindow { address })
+        );
+        assert_eq!(
+            device.write_admin(address, &1_u32.to_le_bytes()),
+            Err(RegisterAccessError::OutsideWindow { address })
+        );
+        assert_eq!(out, [0xa5; 4]);
+    }
+    Ok(())
+}
 
 #[test]
 fn channel_collection_miss_allows_control_in_either_order() -> Result<(), Box<dyn std::error::Error>>
 {
     // Given: three channels and a control address outside their collection.
-    let mut device = Device::new((), 3)?;
-    let count = DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset();
-    let enable = DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset();
+    let mut device = Dma::new((), 3)?;
+    let count =
+        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
+    let enable = (pdma_model_contract::DmaDiscovery::EXTENT
+        + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        + DmaControl::IRQ_ENABLE.offset();
     let mut out = [0; 4];
     // When: collection is attempted before control, the reverse of the public path.
     register_dispatch!(
@@ -20,7 +51,7 @@ fn channel_collection_miss_allows_control_in_either_order() -> Result<(), Box<dy
     register_dispatch!(
         device.read_channels(count, &mut out),
         device
-            .control
+            .discovery
             .read(count, &mut out)
             .map_err(RegisterAccessError::widen::<Error>),
     )?;
@@ -37,11 +68,11 @@ fn channel_collection_miss_allows_control_in_either_order() -> Result<(), Box<dy
 fn channel_collection_preserves_miss_addresses_and_output() -> Result<(), Box<dyn std::error::Error>>
 {
     // Given: an instance with three channels and sentinel output.
-    let mut device = Device::new((), 3)?;
+    let mut device = Dma::new((), 3)?;
     for address in [
         0,
-        DeviceRegisters::CHANNELS_OFFSET - 1,
-        DeviceRegisters::new(3)?.extent(),
+        pdma_model_contract::ChannelBlock::ALIGNMENT - 1,
+        DmaRegisters::new(3)?.extent(),
         usize::MAX,
     ] {
         let mut out = [0xa5; 4];
@@ -60,9 +91,9 @@ fn channel_collection_preserves_miss_addresses_and_output() -> Result<(), Box<dy
 fn collection_indexes_channels_and_preserves_terminal_errors()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: each channel has a distinct IRQ-enable state.
-    let mut device = Device::new((), 3)?;
+    let mut device = Dma::new((), 3)?;
     let offset = ChannelBlock::CONTROL.offset() + ChannelRegisters::IRQ_ENABLE.offset();
-    let selected = ChannelId::new(2).register_offset().ok_or("offset")? + offset;
+    let selected = ChannelId::new(2).register_offset(3).ok_or("offset")? + offset;
     device.write(selected, &1_u32.to_le_bytes())?;
     // When: accesses are dispatched through the repeated window.
     let rejected = device.write_channels(selected, &2_u32.to_le_bytes());
@@ -74,7 +105,7 @@ fn collection_indexes_channels_and_preserves_terminal_errors()
     for index in 0..3 {
         let mut out = [0; 4];
         device.read(
-            ChannelId::new(index).register_offset().ok_or("offset")? + offset,
+            ChannelId::new(index).register_offset(3).ok_or("offset")? + offset,
             &mut out,
         )?;
         assert_eq!(u32::from_le_bytes(out), u32::from(index == 2));
@@ -85,9 +116,9 @@ fn collection_indexes_channels_and_preserves_terminal_errors()
 #[test]
 fn collection_padding_is_terminal_inside_its_extent() -> Result<(), Box<dyn std::error::Error>> {
     // Given: padding between child maps and between adjacent channel blocks.
-    let mut device = Device::new((), 3)?;
-    for offset in [CommandRegisters::EXTENT, ChannelBlock::EXTENT] {
-        let address = DeviceRegisters::CHANNELS_OFFSET + offset;
+    let mut device = Dma::new((), 3)?;
+    for offset in [CommandRegisters::EXTENT, CommandRegisters::EXTENT + 1] {
+        let address = pdma_model_contract::ChannelBlock::ALIGNMENT + offset;
         let mut out = [0xa5; 4];
         // When: an access hits padding inside the channel collection.
         let read = device.read_channels(address, &mut out);

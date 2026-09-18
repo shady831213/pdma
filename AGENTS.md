@@ -44,9 +44,9 @@ The managed assembly has independently firmware-managed channel windows, indepen
 and separate in-memory control command/response rings with bootstrap and bidirectional
 doorbell registers. Host and firmware share `software::ring::SoftRing`; doorbell waits
 are independent of DMA interrupt dispatch. Ready leaves DMA closed; Host requests
-a channel and releases it through firmware, which waits for real DMA reset before
-acknowledging release while continuing other channel requests. One trusted Host
-can pipeline bounded asynchronous requests and correlate out-of-order responses.
+a channel and releases it through firmware, which serially awaits real DMA reset before
+acknowledging reset or release. One trusted Host
+can pipeline bounded asynchronous requests and correlate responses by identity.
 See `model/modeling/docs/control-channel.md`. There is no
 event ring, Function/PASID mapping or PCIe integration.
 The generated header under `model/modeling/include` describes the current contract.

@@ -1,9 +1,6 @@
 use super::{acquire, support::*};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{
-    ChannelBlock, ChannelRegisters, ControlQueue, ControlRequest, ControlRequestOpcode,
-    ControlRingState, DeviceRegisters, WINDOW_CONTROL_BASE,
-};
+use pdma_model_contract::{ControlQueue, ControlRequest, ControlRequestOpcode, ControlRingState};
 use pdma_model_software::ring::SoftRingError;
 
 #[tokio::test]
@@ -114,9 +111,9 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
     )?;
     assert!(poll(program.as_mut()).is_pending());
     let reset = u32::try_from(
-        DeviceRegisters::CHANNELS_OFFSET
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
+        pdma_model_contract::ChannelId::new(0)
+            .admin_offset(1)
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -124,7 +121,7 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
         Some(&1_u32.to_le_bytes().to_vec())
     );
     assert_eq!(
-        bus.registers.lock().unwrap().get(&WINDOW_CONTROL_BASE),
+        bus.registers.lock().unwrap().get(&ADDRESSES.windows),
         Some(&0_u32.to_le_bytes().to_vec())
     );
     assert_eq!(
@@ -161,8 +158,8 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
 }
 
 #[tokio::test]
-async fn release_completion_waits_for_space_occupied_by_another_response() -> TestResult {
-    // Given: a release waits for reset while another acquisition fills the response ring.
+async fn release_response_backpressure_preserves_queued_acquisition() -> TestResult {
+    // Given: a release is resetting while another acquisition is queued.
     let (bus, memory) = fixture()?;
     publish(&memory, acquire(1), 1)?;
     let mut program = std::pin::pin!(run(&bus, memory.clone()));
@@ -180,42 +177,54 @@ async fn release_completion_waits_for_space_occupied_by_another_response() -> Te
         2,
     )?;
     assert!(poll(program.as_mut()).is_pending());
-    let reset = u32::try_from(
-        DeviceRegisters::CHANNELS_OFFSET
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
-    )?;
-    assert_eq!(
-        bus.registers.lock().unwrap().get(&reset),
-        Some(&1_u32.to_le_bytes().to_vec())
-    );
     publish(&memory, acquire(3), 3)?;
     bus.notification.raise();
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
     }
-    assert_eq!(response(&memory)?.id, 3);
-    assert_eq!(
-        response(&memory)?.status,
-        pdma_model_contract::ControlResponseStatus::NoResources
-    );
-    let writes = bus.writes.lock().unwrap().len();
-    // When: hardware finishes reset while Host has not yet consumed the other response.
+    assert_eq!(read_word(&memory, producer)?, 1);
+    let reset = u32::try_from(
+        pdma_model_contract::ChannelId::new(0)
+            .admin_offset(1)
+            .ok_or("admin offset")?,
+    )?;
+    // When: hardware finishes reset and its response fills the ring.
     bus.registers
         .lock()
         .unwrap()
         .insert(reset, 0_u32.to_le_bytes().to_vec());
-    assert!(poll(program.as_mut()).is_pending());
-    // Then: no response is overwritten; consuming and notifying allows exactly one release acknowledgement.
-    assert_eq!(read_word(&memory, producer)?, 2);
-    assert_eq!(response(&memory)?.id, 3);
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
+    }
+    // Then: the queued request waits for response space and cannot overwrite the release response.
+    assert_eq!(
+        (read_word(&memory, producer)?, response(&memory)?.id),
+        (2, 2)
+    );
+    assert_eq!(
+        read_word(
+            &memory,
+            ControlQueue::COMMAND_OFFSET + ControlRingState::CONSUMER_OFFSET
+        )?,
+        2
+    );
+    let writes = bus.writes.lock().unwrap().len();
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
+    }
     assert_eq!(bus.writes.lock().unwrap().len(), writes);
     write_word(&memory, consumer, 2)?;
     bus.notification.raise();
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
     }
-    assert_eq!(read_word(&memory, producer)?, 3);
-    assert_eq!(response(&memory)?.id, 2);
+    assert_eq!(
+        (read_word(&memory, producer)?, response(&memory)?.id),
+        (3, 3)
+    );
+    assert_eq!(
+        response(&memory)?.status,
+        pdma_model_contract::ControlResponseStatus::Success
+    );
     Ok(())
 }

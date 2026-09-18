@@ -1,7 +1,9 @@
 //! Access permission boundaries against a real downstream register map.
+const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
+const WINDOW_STATUS_BASE: u32 = 0x0010_0004;
 
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_map};
-use pdma_model_contract::{WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, Word};
+use pdma_model_contract::Word;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -15,7 +17,8 @@ register_map! {
 #[test]
 fn closed_window_preserves_downstream_and_output() -> TestResult {
     // Given: closed hardware in front of ordinary register storage.
-    let window = pdma_model_hw_components::AccessWindow::new(8)?;
+    let window =
+        pdma_model_hw_components::AccessWindow::new(0..8, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     let mut registers = RegisterWindow::<Downstream>::new(0);
     registers.write(0, &17_u32.to_le_bytes())?;
     let mut output = [0xa5; 4];
@@ -37,7 +40,8 @@ fn closed_window_preserves_downstream_and_output() -> TestResult {
 #[test]
 fn open_window_forwards_real_register_access() -> TestResult {
     // Given: firmware opens a window containing two register leaves.
-    let mut window = pdma_model_hw_components::AccessWindow::new(8)?;
+    let mut window =
+        pdma_model_hw_components::AccessWindow::new(0..8, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     window.management_write(usize::try_from(WINDOW_CONTROL_BASE)?, &1_u32.to_le_bytes())?;
     let mut registers = RegisterWindow::<Downstream>::new(0);
     registers.write(0, &17_u32.to_le_bytes())?;
@@ -58,7 +62,8 @@ fn open_window_forwards_real_register_access() -> TestResult {
 #[test]
 fn readiness_tracks_firmware_control_without_host_authority() -> TestResult {
     // Given: the same real downstream window for both access states.
-    let mut window = pdma_model_hw_components::AccessWindow::new(8)?;
+    let mut window =
+        pdma_model_hw_components::AccessWindow::new(0..8, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     let mut registers = RegisterWindow::<Downstream>::new(0);
     let control = usize::try_from(WINDOW_CONTROL_BASE)?;
     let status = usize::try_from(WINDOW_STATUS_BASE)?;
@@ -100,7 +105,8 @@ fn readiness_tracks_firmware_control_without_host_authority() -> TestResult {
 #[test]
 fn malformed_downstream_access_retains_its_original_error() -> TestResult {
     // Given: open access to real generated register validation.
-    let mut window = pdma_model_hw_components::AccessWindow::new(8)?;
+    let mut window =
+        pdma_model_hw_components::AccessWindow::new(0..8, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     window.management_write(usize::try_from(WINDOW_CONTROL_BASE)?, &1_u32.to_le_bytes())?;
     let mut registers = RegisterWindow::<Downstream>::new(0);
     // When: host writes fewer bytes than the selected leaf requires.

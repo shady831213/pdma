@@ -1,25 +1,24 @@
 //! CPU-owned host interrupt controls and explicit reset recovery.
 
-use hardware_interface_pipeline::{
-    AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{
     CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{
-    ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DeviceControl,
-    DeviceFaultCode, DeviceRegisters, Endpoint, Response,
+    ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DmaControl,
+    DmaFaultCode, Endpoint, Response,
 };
-use pdma_model_dma::{
-    CheckLengths, Device, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
-};
+use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
 };
 use std::sync::Arc;
 
+#[doc = "Test hardware composition."]
+pub mod hardware;
 mod reset;
+use hardware::single_command;
 
 async fn with_idle_hardware<F: std::future::Future>(
     model: &Model<SharedMemoryAccess>,
@@ -42,24 +41,12 @@ async fn with_idle_hardware<F: std::future::Future>(
     }
 }
 
-fn single_command<M>(device: &Device<M>) -> Pipeline {
-    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckLengths, Repeat::new(chunk));
-    Then::new(
-        Then::new(
-            device.intake(),
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
-        ),
-        device.responses(),
-    )
-}
-
 fn fixture()
--> Result<(Device<SharedMemoryAccess>, SharedMemoryAccess, Rings), Box<dyn std::error::Error>> {
+-> Result<(Dma<SharedMemoryAccess>, SharedMemoryAccess, Rings), Box<dyn std::error::Error>> {
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let device = Device::new(memory.clone(), 1)?;
+    let device = Dma::new(memory.clone(), 1)?;
     let rings = Rings {
         command: RingConfig::new(
             allocator
@@ -104,7 +91,11 @@ async fn setup_preserves_the_device_interrupt_mask() -> Result<(), Box<dyn std::
     let mut bytes = [0; 4];
     model
         .read(
-            u32::try_from(DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset())?,
+            u32::try_from(
+                (pdma_model_contract::DmaDiscovery::EXTENT
+                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                    + DmaControl::IRQ_ENABLE.offset(),
+            )?,
             &mut bytes,
         )
         .await?;
@@ -130,12 +121,15 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
             },
         ))
         .await?;
-    cpu.run_main(channel.set_device_irq_enabled(true)).await?;
+    cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
     // Then: both independent interrupt gates are enabled.
     for offset in [
-        (DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset())
+        (pdma_model_contract::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::ChannelBlock::CONTROL.offset())
             + ChannelRegisters::IRQ_ENABLE.offset(),
-        DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset(),
+        (pdma_model_contract::DmaDiscovery::EXTENT
+            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            + DmaControl::IRQ_ENABLE.offset(),
     ] {
         let mut bytes = [0; 4];
         model.read(u32::try_from(offset)?, &mut bytes).await?;
@@ -215,8 +209,8 @@ async fn control_operations_reject_a_different_cpu() -> Result<(), Box<dyn std::
             [
                 channel.set_irq_mask(ChannelIrqMaskValues::new(3)).await,
                 channel.irq_cause().await.map(|_| ()),
-                channel.device_fault().await.map(|_| ()),
-                channel.set_device_irq_enabled(false).await,
+                channel.dma_fault().await.map(|_| ()),
+                channel.set_dma_irq_enabled(false).await,
             ]
         })
         .await;
@@ -228,7 +222,7 @@ async fn control_operations_reject_a_different_cpu() -> Result<(), Box<dyn std::
 }
 
 #[tokio::test]
-async fn device_fault_is_visible_after_unmask_without_replaying_notification()
+async fn dma_fault_is_visible_after_unmask_without_replaying_notification()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: software has masked the independent device-fatal gate.
     let (device, memory, rings) = fixture()?;
@@ -244,7 +238,7 @@ async fn device_fault_is_visible_after_unmask_without_replaying_notification()
             },
         ))
         .await?;
-    cpu.run_main(channel.set_device_irq_enabled(false)).await?;
+    cpu.run_main(channel.set_dma_irq_enabled(false)).await?;
     // When: hardware signals a fatal fault and software unmasks that gate.
     let outcome = model
         .interact(|device| {
@@ -253,14 +247,14 @@ async fn device_fault_is_visible_after_unmask_without_replaying_notification()
         })
         .await?;
     assert!(matches!(outcome, StepOutcome::Complete(Ok(()))));
-    cpu.run_main(channel.set_device_irq_enabled(true)).await?;
+    cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
     // Then: the sticky fault is visible without replay and device reset permits recovery.
     assert!(!model.irq());
     assert_eq!(
-        cpu.run_main(channel.device_fault()).await?,
-        DeviceFaultCode::Internal
+        cpu.run_main(channel.dma_fault()).await?,
+        DmaFaultCode::Internal
     );
-    with_idle_hardware(&model, cpu.run_main(channel.reset_device())).await?;
+    with_idle_hardware(&model, cpu.run_main(channel.reset_dma())).await?;
     let channel = cpu
         .run_main(Channel::setup(
             model,
@@ -271,9 +265,6 @@ async fn device_fault_is_visible_after_unmask_without_replaying_notification()
             },
         ))
         .await?;
-    assert_eq!(
-        cpu.run_main(channel.device_fault()).await?,
-        DeviceFaultCode::None
-    );
+    assert_eq!(cpu.run_main(channel.dma_fault()).await?, DmaFaultCode::None);
     Ok(())
 }

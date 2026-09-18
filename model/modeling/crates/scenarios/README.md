@@ -99,7 +99,7 @@ Paths below are relative to `tests/single_channel/`.
 | --- | --- | --- |
 | `main.rs` | Declare suite modules. | Contains no setup or test logic. |
 | `cases/` | Select inputs and assert observable outcomes. | Calls the harness; contains no platform or actor assembly. |
-| `hardware.rs` | Assemble `Device` and its existing pipeline. | Receives a memory capability; knows no software CPU, driver or handler. |
+| `hardware.rs` | Assemble `Dma` and its existing pipeline. | Receives a memory capability; knows no software CPU, driver or handler. |
 | `software/mod.rs` | Allocate rings and payload buffers, initialize data, configure queues, submit, register the ISR and await its result. | Receives allocator, bus/memory access and ISR registration; has no device core, executor or dispatcher access. |
 | `software/buffers.rs` | Build either endpoint from its requested buffer layout. | Software allocates and initializes byte-aligned payload spans and aligned, schema-encoded SG lists. |
 | `harness/mod.rs` | Select backing and allocation service, drive hardware, run software and collect results. | Owns actor cleanup; does not allocate application buffers or construct a handler registry. |

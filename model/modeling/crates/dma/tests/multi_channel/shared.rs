@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
-use pdma_model_dma::Device;
+use pdma_model_dma::Dma;
 
 #[test]
 fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResult {
@@ -15,7 +15,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         0x3000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(memory.clone(), 3)?;
+    let mut device = Dma::new(memory.clone(), 3)?;
     for index in 0..3 {
         configure(&mut device, index)?;
         memory.write(
@@ -43,7 +43,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
     assert_eq!(
         word(
             &mut device,
-            ChannelId::new(0).register_offset().ok_or("offset")?
+            ChannelId::new(0).register_offset(3).ok_or("offset")?
                 + ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset()
         )?,
@@ -54,7 +54,7 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
         assert_eq!(
             word(
                 &mut device,
-                ChannelId::new(index).register_offset().ok_or("offset")?
+                ChannelId::new(index).register_offset(3).ok_or("offset")?
                     + ChannelBlock::COMMAND.offset()
                     + CommandRegisters::CONSUMER.offset()
             )?,

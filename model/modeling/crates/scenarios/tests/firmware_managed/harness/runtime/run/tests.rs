@@ -1,6 +1,7 @@
 use super::super::AccessError;
 use super::super::HostIrq;
 use super::*;
+use crate::harness::runtime::platform::WINDOW_STATUS_BASE;
 use hardware_interface_runtime::{
     InterruptHandler, InterruptRuntime, RegisterAccess, SoftwareCpu, pending_interrupt,
 };
@@ -87,6 +88,7 @@ async fn initialization_error_drops_other_scoped_actors() {
                     bus,
                     hardware_interface_runtime::SharedMemory::new(),
                     registration,
+                    crate::harness::runtime::platform::ADDRESSES,
                 )
                 .await
             })
@@ -128,10 +130,7 @@ async fn cancellation_drops_running_hardware_and_firmware() {
         let state = std::future::poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx))).await;
         assert!(state.is_pending());
         let mut ready = [0; 4];
-        host_bus
-            .read(pdma_model_contract::WINDOW_STATUS_BASE, &mut ready)
-            .await
-            .unwrap();
+        host_bus.read(WINDOW_STATUS_BASE, &mut ready).await.unwrap();
         assert_eq!(ready, 0u32.to_le_bytes());
         // When: simulation is cancelled by dropping its scoped future.
     }

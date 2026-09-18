@@ -29,8 +29,6 @@ fn management_maps_define_distinct_control_and_status() -> Result<(), Box<dyn st
         }))
         .collect::<Vec<_>>();
     // Then: firmware controls bit zero, while host readiness is read-only.
-    assert_eq!(pdma_model_contract::WINDOW_CONTROL_BASE, 0xff00_0000);
-    assert_eq!(pdma_model_contract::WINDOW_STATUS_BASE, 0xff00_0008);
     assert_eq!(
         leaves,
         [(0, 4, Access::ReadWrite, 1), (0, 4, Access::ReadOnly, 0)]
@@ -39,38 +37,33 @@ fn management_maps_define_distinct_control_and_status() -> Result<(), Box<dyn st
 }
 
 #[test]
-fn management_control_resets_closed_and_rejects_reserved_bits()
--> Result<(), Box<dyn std::error::Error>> {
+fn management_control_resets_closed_and_rejects_reserved_bits() {
     // Given: an ordinary generated window at the management base.
-    let base = usize::try_from(pdma_model_contract::WINDOW_CONTROL_BASE)?;
+    let base = 0x2800;
     let mut control = RegisterWindow::<pdma_model_contract::WindowControl>::new(base);
     // When: a malformed enable attempts to change a reserved bit.
     let result = control.write(base, &3_u32.to_le_bytes());
     // Then: the generated access checks reject it without opening the window.
     assert!(result.is_err());
     assert!(!control.values.open.enabled());
-    Ok(())
 }
 
 #[test]
-fn channel_window_addresses_stop_before_always_on_control() {
-    // Given: the first, last admissible and first overlapping selections.
-    let count =
-        (pdma_model_contract::CONTROL_CHANNEL_BASE - pdma_model_contract::WINDOW_CONTROL_BASE) / 16;
-    // When: channel selections resolve their management addresses.
+fn channel_window_offsets_are_relative_and_checked() {
+    // Given: two channel selections and an overflowing selection.
     let first = pdma_model_contract::ChannelId::new(0);
-    let last = pdma_model_contract::ChannelId::new(usize::try_from(count - 1).unwrap());
-    let outside = pdma_model_contract::ChannelId::new(usize::try_from(count).unwrap());
-    // Then: every complete slot fits below always-on control, with overflow rejected.
-    assert_eq!(first.window_control_address(), Some(0xff00_0000));
-    assert_eq!(first.window_status_address(), Some(0xff00_0008));
+    let second = pdma_model_contract::ChannelId::new(1);
+    // When: resolving offsets independently of platform placement.
+    let offsets = [
+        first.window_control_offset(),
+        first.window_status_offset(),
+        second.window_control_offset(),
+        second.window_status_offset(),
+    ];
+    // Then: complete compact blocks repeat without absolute address assumptions.
+    assert_eq!(offsets, [Some(0), Some(4), Some(8), Some(12)]);
     assert_eq!(
-        last.window_status_address(),
-        Some(pdma_model_contract::CONTROL_CHANNEL_BASE - 8)
-    );
-    assert_eq!(outside.window_control_address(), None);
-    assert_eq!(
-        pdma_model_contract::ChannelId::new(usize::MAX).window_status_address(),
+        pdma_model_contract::ChannelId::new(usize::MAX).window_status_offset(),
         None
     );
 }
@@ -83,7 +76,7 @@ fn repeated_window_metadata_matches_configured_count_and_role()
     for count in [1, 2, 7] {
         let layout = ChannelWindowRegisters::new(count)?;
         for (role, access, first) in [
-            (RegisterView::Host, Access::ReadOnly, 8),
+            (RegisterView::Host, Access::ReadOnly, 4),
             (RegisterView::Firmware, Access::ReadWrite, 0),
         ] {
             // When: filtering one complete physical bank for this role.
@@ -104,11 +97,11 @@ fn assert_window_metadata<I: Copy>(
     (count, stride, first): (usize, usize, usize),
     access: Access,
 ) {
-    assert_eq!(stride, 16);
-    assert_eq!(map.size(), count * 16);
+    assert_eq!(stride, 8);
+    assert_eq!(map.size(), count * 8);
     assert_eq!(map.registers().len(), count);
     for (index, leaf) in map.registers().iter().enumerate() {
-        assert_eq!(leaf.offset(), index * 16 + first);
+        assert_eq!(leaf.offset(), index * 8 + first);
         assert_eq!(leaf.definition().access(), access);
         assert_eq!(leaf.definition().width(), 4);
     }

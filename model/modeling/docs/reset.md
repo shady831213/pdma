@@ -38,13 +38,13 @@ reset does not retract them.
 
 ## How the current model reaches completion
 
-`Device::command_loop()` composes
+`Dma::command_loop()` composes
 `AfterEach<Repeat<RunCommand>, ResetControl>`. `Fetch` gates resetting channels and
 device reset before accepting commands. Accepted work records its channel and generation in
-`Device.active`; the command, SG-list, payload and response paths check reset before
-further memory access. `RunCommand` alone clears `Device.active` when the complete
+`Dma.active`; the command, SG-list, payload and response paths check reset before
+further memory access. `RunCommand` alone clears `Dma.active` when the complete
 pipeline terminates, covering success, reset and errors at any stage. Its retained
-`Operation<S, Device<M>>` discards child state before ownership is released, including
+`Operation<S, Dma<M>>` discards child state before ownership is released, including
 for custom child stages that do not clear their own state. Response publication
 can precede that outcome by additional composition steps; ownership remains held during
 those steps, so reset cannot acknowledge cleanup early. Neither response ports nor
@@ -66,7 +66,7 @@ is an additional stale-task guard, not the reset acknowledgment predicate.
 
 Custom command graphs must preserve the single shared execution path, wrap the
 assembled pipeline in `RunCommand<S>`, and drive `ResetControl`. The child must implement
-`Stage<Device<M>, Input = (), Output = (), Error = Error, Wait = ()>`; its internal
+`Stage<Dma<M>, Input = (), Output = (), Error = Error, Wait = ()>`; its internal
 composition and arbitration policy need not match the default `Pipeline`. Merely
 dropping a software waiter or abandoning an accepted `Operation` does not flush
 hardware. The complete-loop guarantee does not claim that arbitrary externally
@@ -75,7 +75,7 @@ reset guard before side effects.
 
 ## Software waiting and memory lifetime
 
-Host `Channel::reset(self)` and `Channel::reset_device(self)` consume the driver,
+Direct-DMA Host `Channel::reset(self)` and `Channel::reset_dma(self)` consume the driver,
 write the request and repeatedly read the same reset register until zero. Each bus
 poll uses the existing CPU ownership check; busy polls cooperatively yield so the
 independently driven hardware can progress. A successful return means hardware
@@ -86,6 +86,23 @@ cancel an accepted hardware request, and a timeout or failed poll does not estab
 completion. Keep affected command rings, SG lists, payload buffers and response
 rings valid until reset completion is observed. For device reset, this applies to
 every channel. No timeout value is modeled as a hardware cleanup duration.
+
+## Managed lifecycle authority
+
+`DmaRegisters` separates read-only discovery, a contiguous `DmaAdmin` block containing
+global controls and the channel-reset bank, and page-aligned channel data blocks.
+Channel objects still own their reset state.
+Managed Host cannot access the administration block. It submits `ResetChannel`
+or `ReleaseChannel` to firmware; only firmware writes reset registers in this mode.
+Direct-DMA assembly exposes the complete hardware map.
+
+Firmware closes the selected data window before reset and awaits actual completion.
+ResetChannel retains allocation and reopens disabled/unconfigured data access.
+ReleaseChannel frees allocation and leaves access closed. Host must stop old ring/ISR
+use and preserve memory until the successful management response, then construct
+a fresh driver. Ordinary management processing is serial; peer DMA remains driven.
+A future VF FLR will enter lifecycle handling independently of control-ring traffic,
+with a distinct PCIe completion handshake. Neither FLR nor its coordinator is implemented.
 
 ## Real hardware comparison
 

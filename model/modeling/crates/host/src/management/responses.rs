@@ -52,7 +52,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
                 .ok_or(Error::ManagementProtocol)?;
             match request.opcode {
                 ControlRequestOpcode::AcquireChannel => {}
-                ControlRequestOpcode::ReleaseChannel => {
+                ControlRequestOpcode::ReleaseChannel | ControlRequestOpcode::ResetChannel => {
                     if response.channel != request.channel {
                         return Err(Error::ManagementProtocol);
                     }

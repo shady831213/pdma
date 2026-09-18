@@ -5,18 +5,17 @@ use hardware_interface_schema::{
     register::{Access, ResetKind},
 };
 use pdma_model_contract::{
-    ChannelBlock, ChannelBlockValues, ChannelId, DeviceControl, DeviceControlValues,
-    DeviceRegisters,
+    ChannelBlock, ChannelBlockValues, ChannelId, DmaDiscovery, DmaDiscoveryValues, DmaRegisters,
 };
 
 #[test]
 fn channel_count_is_read_only_hardware_configuration_when_reset()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a freshly reset device and its schema metadata.
-    let values = DeviceControlValues::default();
-    let map = DeviceRegisters::new(3)?.resolve()?;
+    let values = DmaDiscoveryValues::default();
+    let map = DmaRegisters::new(3)?.resolve()?;
     // When: software discovers the count at the fixed first register.
-    let count = DeviceControl::read_register(&values, 0);
+    let count = DmaDiscovery::read_register(&values, 0);
     let definition = map
         .registers()
         .first()
@@ -32,15 +31,15 @@ fn channel_count_is_read_only_hardware_configuration_when_reset()
 }
 
 #[test]
-fn channel_ids_follow_generated_stride_without_assuming_discovered_bounds() {
+fn channel_ids_follow_generated_stride_and_discovered_bounds() {
     // Given: valid selections and the first index beyond the current device.
     let selections = [0, 1, 2, 3].map(ChannelId::new);
     // When: translating selections into register block addresses.
-    let addresses = selections.map(ChannelId::register_offset);
-    // Then: address calculation is separate from hardware discovery validation.
+    let addresses = selections.map(|id| id.register_offset(3));
+    // Then: the selected instance bounds its page-aligned channel apertures.
     assert_eq!(selections.map(ChannelId::index), [0, 1, 2, 3]);
-    assert_eq!(addresses, [Some(16), Some(88), Some(160), Some(232)]);
-    assert_eq!(ChannelId::new(usize::MAX).register_offset(), None);
+    assert_eq!(addresses, [Some(4096), Some(8192), Some(12288), None]);
+    assert_eq!(ChannelId::new(usize::MAX).register_offset(1), None);
 }
 
 #[test]

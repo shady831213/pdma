@@ -1,4 +1,4 @@
-use pdma_model_software::control::{ControlQueueLayout, InterruptEvent};
+use pdma_model_software::control::{ControlQueueLayout, InterruptEvent, ManagementAddresses};
 use pdma_model_software::ring::SoftRing;
 mod pending;
 mod responses;
@@ -28,6 +28,8 @@ pub struct ManagementRings {
 /// Control storage and the work event served by the program's registered ISR.
 #[derive(Debug)]
 pub struct ManagementConfig {
+    /// Register placement supplied by the integration platform.
+    pub addresses: ManagementAddresses,
     /// Caller-owned control queue storage.
     pub rings: ManagementRings,
     /// Register its handler before enabling the control channel.
@@ -63,6 +65,7 @@ impl ManagementRequestId {
 /// does not retract a request; resume incomplete publication with `resume_submission`.
 #[derive(Debug)]
 pub struct Management<B, M> {
+    addresses: ManagementAddresses,
     bus: B,
     memory: M,
     owner: CpuOwner,
@@ -87,8 +90,13 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         memory: M,
         config: ManagementConfig,
     ) -> Result<Self, Error<B::Error>> {
-        let ManagementConfig { rings, interrupt } = config;
+        let ManagementConfig {
+            rings,
+            interrupt,
+            addresses,
+        } = config;
         let client = Self {
+            addresses,
             bus,
             memory,
             layout: ControlQueueLayout::new(rings.state).map_err(Error::Ring)?,
@@ -152,8 +160,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             ControlResponseStatus::Success => {}
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated
-            | ControlResponseStatus::Busy) => return Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated) => return Err(Error::ManagementStatus(status)),
         }
         Ok(ChannelId::new(
             usize::try_from(response.channel).map_err(|_| Error::Geometry)?,
@@ -172,8 +179,20 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             ControlResponseStatus::Success => Ok(()),
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated
-            | ControlResponseStatus::Busy) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated) => Err(Error::ManagementStatus(status)),
+        }
+    }
+
+    /// Resets an allocated channel, retaining its grant after hardware cleanup.
+    /// Stop ring and ISR use first; after success, configure a fresh DMA driver.
+    pub async fn reset_channel(&mut self, channel: ChannelId) -> Result<(), Error<B::Error>> {
+        self.require_idle()?;
+        self.submit_reset(channel).await?;
+        match self.wait_pending().await?.status {
+            ControlResponseStatus::Success => Ok(()),
+            status @ (ControlResponseStatus::NoResources
+            | ControlResponseStatus::InvalidChannel
+            | ControlResponseStatus::NotAllocated) => Err(Error::ManagementStatus(status)),
         }
     }
 

@@ -1,7 +1,7 @@
 use super::Channel;
 use crate::Error;
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
-use pdma_model_contract::{ChannelRegisters, ResetValues, Ring};
+use pdma_model_contract::{ResetValues, Ring};
 
 impl Channel {
     pub(crate) fn read(
@@ -45,18 +45,17 @@ impl Channel {
         bytes: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
         let resetting = self.resetting();
-        let mut requested = false;
         let command = &self.command;
         let response = &self.response;
         let configured = &mut self.configured;
         self.registers.write_with(
             address,
             bytes,
-            |offset, _, next| {
-                if resetting && offset != ChannelRegisters::RESET.offset() {
+            |_, _, next| {
+                if resetting {
                     return Err(Error::ResetInProgress);
                 }
-                if next.reset.raw() == 0 && next.enable.raw() != 0 {
+                if next.enable.raw() != 0 {
                     command
                         .validate_geometry()
                         .map_err(|_| Error::Configuration)?;
@@ -66,13 +65,29 @@ impl Channel {
                 }
                 Ok(())
             },
-            |offset, next| {
-                if offset == ChannelRegisters::RESET.offset() {
-                    requested = next.reset.request();
-                    next.reset = ResetValues::new(u32::from(resetting));
-                } else if next.enable.raw() != 0 {
+            |_, next| {
+                if next.enable.raw() != 0 {
                     *configured = true;
                 }
+            },
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn write_admin(
+        &mut self,
+        address: usize,
+        bytes: &[u8],
+    ) -> Result<(), RegisterAccessError<Error>> {
+        let resetting = self.resetting();
+        let mut requested = false;
+        self.admin.write_with(
+            address,
+            bytes,
+            |_, _, _| Ok(()),
+            |_, next| {
+                requested = next.reset.request();
+                next.reset = ResetValues::new(u32::from(resetting));
             },
         )?;
         if requested {

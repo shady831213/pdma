@@ -445,10 +445,11 @@ static inline void C_CONTROLREQQUEST_STORE_C_ID(uint8_t bytes[C_CONTROLREQQUEST_
 }
 
 /*
- * 0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel releases the channel field. Other values are invalid.
+ * 0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel resets and frees the selected channel. 2: ResetChannel resets the selected channel while retaining its allocation. Other values are invalid.
  */
 #define C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL UINT64_C(0)
 #define C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL UINT64_C(1)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QURESETQUCHANNEL UINT64_C(2)
 #define C_CONTROLREQQUEST_C_OPCODE_OFFSET UINT64_C(8)
 #define C_CONTROLREQQUEST_C_OPCODE_WIDTH UINT64_C(4)
 #define C_CONTROLREQQUEST_C_OPCODE_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
@@ -463,7 +464,7 @@ static inline void C_CONTROLREQQUEST_STORE_C_OPCODE(uint8_t bytes[C_CONTROLREQQU
 }
 
 /*
- * DMA channel index for ReleaseChannel; ignored for AcquireChannel.
+ * DMA channel index for release or reset; ignored for acquisition.
  */
 #define C_CONTROLREQQUEST_C_CHANNEL_OFFSET UINT64_C(12)
 #define C_CONTROLREQQUEST_C_CHANNEL_WIDTH UINT64_C(4)
@@ -508,13 +509,12 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 }
 
 /*
- * 0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, release index is outside the device. 3: NotAllocated, release index is free. 4: Busy, that channel already has a release in progress. Other values are invalid.
+ * 0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. Other values are invalid.
  */
 #define C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES UINT64_C(1)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCHANNEL UINT64_C(2)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED UINT64_C(3)
-#define C_CONTROLRESPONSE_C_STATUS_C_QUBUSY UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_CONTROLRESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
@@ -529,7 +529,7 @@ static inline void C_CONTROLRESPONSE_STORE_C_STATUS(uint8_t bytes[C_CONTROLRESPO
 }
 
 /*
- * Allocated channel on successful acquisition, or the requested release index for release responses. Undefined for failed acquisition.
+ * Allocated channel on successful acquisition, or the selected channel for release/reset responses. Undefined for failed acquisition.
  */
 #define C_CONTROLRESPONSE_C_CHANNEL_OFFSET UINT64_C(12)
 #define C_CONTROLRESPONSE_C_CHANNEL_WIDTH UINT64_C(4)

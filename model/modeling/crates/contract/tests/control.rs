@@ -22,7 +22,7 @@ fn request_encodes_little_endian_and_rejects_unknown_opcode() {
     );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
     assert_eq!(ControlRequest::SPEC.alignment(), 8);
-    bytes[8] = 2;
+    bytes[8] = 3;
     assert!(ControlRequest::from_bytes(&bytes).is_err());
 }
 
@@ -34,7 +34,6 @@ fn response_preserves_each_assigned_status() {
         (ControlResponseStatus::NoResources, 1),
         (ControlResponseStatus::InvalidChannel, 2),
         (ControlResponseStatus::NotAllocated, 3),
-        (ControlResponseStatus::Busy, 4),
     ] {
         let response = ControlResponse {
             id: 9,
@@ -48,6 +47,21 @@ fn response_preserves_each_assigned_status() {
         assert_eq!(ControlResponse::from_bytes(&bytes).unwrap(), response);
         assert_eq!(ControlResponse::SPEC.alignment(), 8);
     }
+}
+
+#[test]
+fn reset_request_has_its_own_wire_opcode() {
+    // Given: reset retains the selected channel's allocation.
+    let request = ControlRequest {
+        id: 7,
+        opcode: ControlRequestOpcode::ResetChannel,
+        channel: 3,
+    };
+    // When: encoding it independently of release.
+    let bytes = request.to_bytes().unwrap();
+    // Then: opcode two and the selected identity survive the wire boundary.
+    assert_eq!(bytes, [7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
+    assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
 }
 
 #[test]

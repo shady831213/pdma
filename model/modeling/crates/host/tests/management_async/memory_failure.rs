@@ -65,6 +65,12 @@ async fn publication_and_consumption_memory_failures_preserve_original_work() {
                 &fixture.bus,
                 memory.clone(),
                 ManagementConfig {
+                    addresses: pdma_model_software::control::ManagementAddresses {
+                        dma: 0,
+                        windows: 0x2000,
+                        control: 0x3000,
+                        firmware: 0x4000,
+                    },
                     rings: fixture.rings,
                     interrupt: fixture.event.clone(),
                 },

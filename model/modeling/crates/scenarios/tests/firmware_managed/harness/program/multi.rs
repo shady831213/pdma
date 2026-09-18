@@ -30,7 +30,12 @@ pub struct Outcome {
 }
 
 pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
-    firmware::wait_ready(&ports.bus, Duration::from_secs(1)).await?;
+    firmware::wait_ready(
+        &ports.bus,
+        ports.bus.addresses().firmware,
+        Duration::from_secs(1),
+    )
+    .await?;
     let interrupt = InterruptEvent::new();
     ports
         .interrupts
@@ -98,20 +103,7 @@ pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
         tokio::task::yield_now().await;
     }
     let old_after = buffers::read(&ports.memory, old_destination, 65_536)?;
-    let mut final_status = [0; 3];
-    for (index, status) in final_status.iter_mut().enumerate() {
-        let mut bytes = [0; 4];
-        ports
-            .bus
-            .read(
-                ChannelId::new(index)
-                    .window_status_address()
-                    .ok_or("status address")?,
-                &mut bytes,
-            )
-            .await?;
-        *status = u32::from_le_bytes(bytes);
-    }
+    let final_status = statuses(&ports.bus).await?;
     Ok(Outcome {
         granted: [a.channel, b.channel, c.channel, regrant.channel],
         management: correlations,
@@ -130,7 +122,7 @@ pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
 }
 
 async fn probe(ports: &Ports<'_>, id: ChannelId) -> TestResult<Result<(), AccessError>> {
-    let address = u32::try_from(id.register_offset().ok_or("channel address")?)?;
+    let address = super::channel_address(&ports.bus, id).await?;
     Ok(ports.bus.read(address, &mut [0; 8]).await)
 }
 
@@ -157,4 +149,20 @@ async fn release_all(
         responses.push((requests.remove(index), response));
     }
     Ok(responses)
+}
+
+async fn statuses(bus: &HostBus<SharedMemoryAccess>) -> TestResult<[u32; 3]> {
+    let mut final_status = [0; 3];
+    for (index, status) in final_status.iter_mut().enumerate() {
+        let mut bytes = [0; 4];
+        bus.read(
+            bus.addresses()
+                .window_status(ChannelId::new(index))
+                .ok_or("status address")?,
+            &mut bytes,
+        )
+        .await?;
+        *status = u32::from_le_bytes(bytes);
+    }
+    Ok(final_status)
 }

@@ -8,19 +8,19 @@ mod run_command {
 
 use hardware_interface_pipeline::{AfterEach, Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{
-    ChannelBlock, ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters,
-};
+use pdma_model_contract::{ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters};
 use pdma_model_dma::{Error, ResetControl, RunCommand};
 use std::ops::ControlFlow;
 use support::{TestResult, command, read_word, setup, single_command, submit};
 
-const CONTROL: usize = DeviceRegisters::CHANNELS_OFFSET + ChannelBlock::CONTROL.offset();
-const RESET: usize = CONTROL + ChannelRegisters::RESET.offset();
-const CONSUMER: usize = DeviceRegisters::CHANNELS_OFFSET
+const CONTROL: usize =
+    pdma_model_contract::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
+const RESET: usize =
+    pdma_model_contract::DmaDiscovery::EXTENT + pdma_model_contract::DmaAdmin::CHANNELS_OFFSET;
+const CONSUMER: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
     + ChannelBlock::COMMAND.offset()
     + CommandRegisters::CONSUMER.offset();
-const PRODUCER: usize = DeviceRegisters::CHANNELS_OFFSET
+const PRODUCER: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
     + ChannelBlock::RESPONSE.offset()
     + ResponseRegisters::PRODUCER.offset();
 
@@ -117,7 +117,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
         ),
     ] {
         device.write(
-            DeviceRegisters::CHANNELS_OFFSET + offset,
+            pdma_model_contract::ChannelBlock::ALIGNMENT + offset,
             &value.to_le_bytes(),
         )?;
     }
@@ -132,7 +132,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
         ),
     ] {
         device.write(
-            DeviceRegisters::CHANNELS_OFFSET + offset,
+            pdma_model_contract::ChannelBlock::ALIGNMENT + offset,
             &value.to_le_bytes(),
         )?;
     }

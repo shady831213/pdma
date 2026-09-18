@@ -80,10 +80,15 @@ validated geometry once; software owns cursor updates. `docs/control-channel.md`
 defines their ownership and cancellation contract. Hardware owns registers/permissions, firmware consumes and
 executes management requests, and Host owns ring memory. Runtime carries no resource
 policy. One trusted Host manages an instance-configured channel count through bounded
-asynchronous submissions. Firmware retains per-channel Free/Allocated/Releasing state;
-waiting for one reset must not block unrelated requests. Release closes only its
-channel window and waits for actual reset completion before responding. Response
-backpressure retains releases without overwriting entries. Do not turn simulation
+asynchronous submissions. Firmware retains per-channel allocation state and serves ordinary management requests serially.
+ResetChannel closes its data window, awaits hardware reset, then reopens unconfigured data
+access without releasing ownership. ReleaseChannel awaits reset before freeing ownership.
+Later management requests wait; independently driven peer DMA continues. Resource lifecycle
+methods stay separate from control-ring receive/respond. Future FLR needs independent ingress
+and completion, not dependence on Host response consumption; FLR is not implemented.
+Discovery is always readable, global/channel administration is firmware-only in managed mode,
+and grants expose only complete schema-defined channel data blocks. Platform assembly supplies
+register bases and validates disjoint apertures. Response backpressure stops request admission. Do not turn simulation
 cancellation into reset/drain or reclaim ring memory.
 No shadow channel registers or firmware writes in the harness are allowed.
 The managed MVP does not add Function/PASID or external transaction semantics.
@@ -113,7 +118,7 @@ and hardware-step wakeup decisions out of that generic component.
   and PDMA eligibility rules belong to Fetch, not the generic combinators.
   Route tagged responses through Dispatch (the singleton FanOut specialization) to
   channel-bound publication ports.
-  Complete hardware assembly uses Device::command_loop(); scenarios drive one retained
+  Complete hardware assembly uses Dma::command_loop(); scenarios drive one retained
   operation and abort/join it after software finishes. Do not recreate command-local
   completion/reset/fault recovery in a scenario-side loop. Single-command boundary
   tests may assemble existing stages in test fixtures, not a production factory.

@@ -7,6 +7,31 @@ use std::sync::Arc;
 mod multi;
 
 #[tokio::test(flavor = "current_thread")]
+async fn relocated_platform_runs_the_same_host_and_firmware_programs() -> TestResult {
+    // Given: every register block has a different platform-selected base.
+    let addresses = pdma_model_software::control::ManagementAddresses {
+        dma: 0x8000,
+        windows: 0x5000,
+        control: 0x100,
+        firmware: 0x7000,
+    };
+    let payload = b"relocated-dma";
+    // When: the ordinary software programs run on that placement.
+    let report = harness::run_at(Input::Copy(payload), addresses).await?;
+    let outcome = report.program?;
+    let mut copied = vec![0; payload.len()];
+    report
+        .storage
+        .read(outcome.destination, MemoryAlignment::ONE, &mut copied)?;
+    // Then: boot, grant, IRQ-driven copy and release all use the supplied addresses.
+    assert_eq!(copied, payload);
+    assert_eq!(outcome.response.status, ResponseStatus::Success);
+    assert_eq!(outcome.released, 0);
+    assert_eq!(outcome.dma_interrupts, 1);
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn firmware_opens_access_for_the_same_host_program_and_real_irq_copy() -> TestResult {
     // Given: an unbooted managed system and a nonzero, unaligned-length payload.
     let payload = b"firmware-managed-copy";

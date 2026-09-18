@@ -14,8 +14,9 @@ impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
         bus: B,
         owner: CpuOwner,
         id: ChannelId,
+        dma_base: u32,
     ) -> Result<Self, Error<B::Error>> {
-        let control = ChannelControl::discover_owned(&bus, owner, id).await?;
+        let control = ChannelControl::discover_owned(&bus, owner, id, dma_base).await?;
         Ok(Self { bus, control })
     }
 

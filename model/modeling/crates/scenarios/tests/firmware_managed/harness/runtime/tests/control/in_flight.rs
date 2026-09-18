@@ -47,6 +47,15 @@ impl MemoryAccess for ObservedMemory {
 
 #[tokio::test]
 async fn release_during_copy_drains_old_work_before_response_and_reacquisition() {
+    reset_case(true).await;
+}
+
+#[tokio::test]
+async fn reset_during_copy_drains_old_work_and_preserves_allocation() {
+    reset_case(false).await;
+}
+
+async fn reset_case(release: bool) {
     // Given: a real shared DMA engine with observation of its old destination writes.
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
@@ -68,18 +77,7 @@ async fn release_during_copy_drains_old_work_before_response_and_reacquisition()
         let id = management.acquire_channel().await.unwrap();
         let command = ring::<Command>(&allocator).unwrap();
         let response = ring::<Response>(&allocator).unwrap();
-        let source = allocator
-            .allocate(u64::try_from(LENGTH).unwrap(), MemoryAlignment::ONE)
-            .unwrap();
-        let destination = allocator
-            .allocate(u64::try_from(LENGTH).unwrap(), MemoryAlignment::ONE)
-            .unwrap();
-        observed
-            .destination
-            .store(destination.raw(), Ordering::SeqCst);
-        memory
-            .write(source, MemoryAlignment::ONE, &vec![0x6d; LENGTH])
-            .unwrap();
+        let (source, destination) = prepare_copy(&allocator, &observed);
         let config = ChannelConfig {
             id,
             rings: Rings { command, response },
@@ -89,12 +87,11 @@ async fn release_during_copy_drains_old_work_before_response_and_reacquisition()
             .unwrap();
         channel.set_irq_enabled(false).await.unwrap();
         channel
-            .submit(Command {
-                id: 101,
-                source: Endpoint::linear(source.raw(), u64::try_from(LENGTH).unwrap()),
-                destination: Endpoint::linear(destination.raw(), u64::try_from(LENGTH).unwrap()),
-                flags: CompletionFlagsValues::default(),
-            })
+            .submit(copy(
+                101,
+                (source, destination),
+                u64::try_from(LENGTH).unwrap(),
+            ))
             .await
             .unwrap();
         while observed.writes.load(Ordering::SeqCst) == 0 {
@@ -102,7 +99,11 @@ async fn release_during_copy_drains_old_work_before_response_and_reacquisition()
         }
         // When: Host releases the channel after actual payload writes have started.
         drop(channel);
-        management.release_channel(id).await.unwrap();
+        if release {
+            management.release_channel(id).await.unwrap();
+        } else {
+            management.reset_channel(id).await.unwrap();
+        }
         let old_writes = observed.writes.load(Ordering::SeqCst);
         for _ in 0..64 {
             tokio::task::yield_now().await;
@@ -110,19 +111,30 @@ async fn release_during_copy_drains_old_work_before_response_and_reacquisition()
         // Then: the release response is a drain boundary, and a fresh grant works.
         assert!(old_writes > 0 && old_writes < LENGTH / pdma_model_dma::COPY_CHUNK_BYTES);
         assert_eq!(observed.writes.load(Ordering::SeqCst), old_writes);
-        assert_eq!(management.acquire_channel().await.unwrap(), id);
+        if release {
+            assert_eq!(management.acquire_channel().await.unwrap(), id);
+        } else {
+            assert!(matches!(
+                management.acquire_channel().await,
+                Err(Error::ManagementStatus(ControlResponseStatus::NoResources))
+            ));
+            let address = u32::try_from(
+                id.register_offset(1).unwrap()
+                    + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                    + pdma_model_contract::ChannelRegisters::ENABLE.offset(),
+            )
+            .unwrap();
+            let mut enabled = [0xff; 4];
+            host.bus.read(address, &mut enabled).await.unwrap();
+            assert_eq!(enabled, [0; 4]);
+        }
         let destination = allocator.allocate(5, MemoryAlignment::ONE).unwrap();
         let mut channel = Channel::setup(host.bus.clone(), memory.clone(), config)
             .await
             .unwrap();
         channel.set_irq_enabled(false).await.unwrap();
         channel
-            .submit(Command {
-                id: 202,
-                source: Endpoint::linear(source.raw(), 5),
-                destination: Endpoint::linear(destination.raw(), 5),
-                flags: CompletionFlagsValues::default(),
-            })
+            .submit(copy(202, (source, destination), 5))
             .await
             .unwrap();
         let completion = loop {
@@ -144,4 +156,33 @@ async fn release_during_copy_drains_old_work_before_response_and_reacquisition()
         .await
         .unwrap()
         .unwrap();
+}
+
+fn prepare_copy(
+    allocator: &SharedMemoryAllocator,
+    observed: &ObservedMemory,
+) -> (MemoryAddress, MemoryAddress) {
+    let source = allocator
+        .allocate(u64::try_from(LENGTH).unwrap(), MemoryAlignment::ONE)
+        .unwrap();
+    let destination = allocator
+        .allocate(u64::try_from(LENGTH).unwrap(), MemoryAlignment::ONE)
+        .unwrap();
+    observed
+        .destination
+        .store(destination.raw(), Ordering::SeqCst);
+    observed
+        .memory
+        .write(source, MemoryAlignment::ONE, &vec![0x6d; LENGTH])
+        .unwrap();
+    (source, destination)
+}
+
+fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: u64) -> Command {
+    Command {
+        id,
+        source: Endpoint::linear(source.raw(), length),
+        destination: Endpoint::linear(destination.raw(), length),
+        flags: CompletionFlagsValues::default(),
+    }
 }

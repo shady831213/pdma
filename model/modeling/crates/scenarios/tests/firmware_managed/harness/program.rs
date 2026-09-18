@@ -10,10 +10,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use interrupts::Handler;
-use pdma_model_contract::{
-    ControlQueue, ControlRequest, ControlResponse, Response, WINDOW_CONTROL_BASE,
-    WINDOW_STATUS_BASE,
-};
+use pdma_model_contract::{ControlQueue, ControlRequest, ControlResponse, Response};
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig, firmware};
 use pdma_model_software::control::InterruptEvent;
 use std::time::Duration;
@@ -59,16 +56,19 @@ pub struct Outcome {
 }
 
 pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outcome> {
+    let addresses = ports.bus.addresses();
+    let first = pdma_model_contract::ChannelId::new(0);
+    let window_control = addresses.window_control(first).ok_or("window address")?;
+    let window_status = addresses.window_status(first).ok_or("window address")?;
+    let channel_control = channel_address(&ports.bus, first).await?
+        + u32::try_from(pdma_model_contract::ChannelBlock::CONTROL.offset())?;
     let mut output = [0xa5; 4];
     let mut ready = [0; 4];
-    let read = ports.bus.read(0, &mut output).await;
-    let write = ports.bus.write(4, &1_u32.to_le_bytes()).await;
-    let control_read = ports.bus.read(WINDOW_CONTROL_BASE, &mut [0; 4]).await;
-    let control_write = ports
-        .bus
-        .write(WINDOW_CONTROL_BASE, &1_u32.to_le_bytes())
-        .await;
-    ports.bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
+    let read = ports.bus.read(channel_control, &mut output).await;
+    let write = ports.bus.write(channel_control, &1_u32.to_le_bytes()).await;
+    let control_read = ports.bus.read(window_control, &mut [0; 4]).await;
+    let control_write = ports.bus.write(window_control, &1_u32.to_le_bytes()).await;
+    ports.bus.read(window_status, &mut ready).await?;
     let before = Before {
         read,
         write,
@@ -77,8 +77,13 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         output,
         ready: u32::from_le_bytes(ready),
     };
-    firmware::wait_ready(&ports.bus, Duration::from_secs(1)).await?;
-    ports.bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
+    firmware::wait_ready(
+        &ports.bus,
+        ports.bus.addresses().firmware,
+        Duration::from_secs(1),
+    )
+    .await?;
+    ports.bus.read(window_status, &mut ready).await?;
     if u32::from_le_bytes(ready) != 0 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -112,6 +117,7 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         ports.bus.clone(),
         ports.memory.clone(),
         ManagementConfig {
+            addresses,
             interrupt,
             rings: ManagementRings {
                 state: ports.allocator.allocate(
@@ -126,23 +132,14 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
     .await?;
     let channel = management.acquire_channel().await?;
     let after = [
-        ports
-            .bus
-            .write(WINDOW_CONTROL_BASE, &0_u32.to_le_bytes())
-            .await,
-        ports
-            .bus
-            .write(WINDOW_CONTROL_BASE, &1_u32.to_le_bytes())
-            .await,
-        ports
-            .bus
-            .write(WINDOW_STATUS_BASE, &0_u32.to_le_bytes())
-            .await,
+        ports.bus.write(window_control, &0_u32.to_le_bytes()).await,
+        ports.bus.write(window_control, &1_u32.to_le_bytes()).await,
+        ports.bus.write(window_status, &0_u32.to_le_bytes()).await,
     ];
     let bus = ports.bus.clone();
     let (response, destination, dma_interrupts) = transfer::run(ports, payload, channel).await?;
     management.release_channel(channel).await?;
-    bus.read(WINDOW_STATUS_BASE, &mut ready).await?;
+    bus.read(window_status, &mut ready).await?;
     Ok(Outcome {
         before,
         after,
@@ -151,4 +148,28 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         released: u32::from_le_bytes(ready),
         dma_interrupts: dma_interrupts.load(std::sync::atomic::Ordering::SeqCst),
     })
+}
+
+async fn channel_address(
+    bus: &HostBus<SharedMemoryAccess>,
+    id: pdma_model_contract::ChannelId,
+) -> TestResult<u32> {
+    let mut count = [0; 4];
+    bus.read(
+        bus.addresses().dma
+            + u32::try_from(
+                pdma_model_contract::DmaRegisters::DISCOVERY.offset()
+                    + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset(),
+            )?,
+        &mut count,
+    )
+    .await?;
+    let count = usize::try_from(u32::from_le_bytes(count))?;
+    Ok(bus
+        .addresses()
+        .dma
+        .checked_add(u32::try_from(
+            id.register_offset(count).ok_or("channel address")?,
+        )?)
+        .ok_or("channel address overflow")?)
 }

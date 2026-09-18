@@ -6,16 +6,16 @@ use hardware_interface_runtime::{
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseStatus,
 };
-use pdma_model_dma::{Device, Error, Fetch, ResetControl, RoundRobin};
+use pdma_model_dma::{Dma, Error, Fetch, ResetControl, RoundRobin};
 
-fn device() -> TestResult<Device<SharedMemory>> {
+fn device() -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),
         0x3000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(memory, 3)?;
+    let mut device = Dma::new(memory, 3)?;
     for index in 0..3 {
         configure(&mut device, index)?;
         submit(&mut device, index, u64::try_from(index)?)?;
@@ -23,10 +23,10 @@ fn device() -> TestResult<Device<SharedMemory>> {
     Ok(device)
 }
 
-fn consumer(device: &mut Device<SharedMemory>, index: usize) -> TestResult<u32> {
+fn consumer(device: &mut Dma<SharedMemory>, index: usize) -> TestResult<u32> {
     word(
         device,
-        ChannelId::new(index).register_offset().ok_or("offset")?
+        ChannelId::new(index).register_offset(3).ok_or("offset")?
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::CONSUMER.offset(),
     )
@@ -111,8 +111,16 @@ fn invalid_fetch_target_reports_an_error_without_consuming_valid_inputs() -> Tes
 #[test]
 fn reset_or_disable_before_acceptance_rearbitrates_without_consuming_the_selection() -> TestResult {
     for (register, value) in [
-        (ChannelRegisters::RESET.offset(), 1_u32),
-        (ChannelRegisters::ENABLE.offset(), 0),
+        (
+            ChannelId::new(0).admin_offset(3).ok_or("admin offset")?,
+            1_u32,
+        ),
+        (
+            ChannelId::new(0).register_offset(3).ok_or("offset")?
+                + ChannelBlock::CONTROL.offset()
+                + ChannelRegisters::ENABLE.offset(),
+            0,
+        ),
     ] {
         // Given: A is selected, but no command has been accepted.
         let mut device = device()?;
@@ -124,12 +132,7 @@ fn reset_or_disable_before_acceptance_rearbitrates_without_consuming_the_selecti
         ));
         assert_eq!(consumer(&mut device, 0)?, 0);
         // When: software makes A ineligible before the acceptance step.
-        device.write(
-            ChannelId::new(0).register_offset().ok_or("offset")?
-                + ChannelBlock::CONTROL.offset()
-                + register,
-            &value.to_le_bytes(),
-        )?;
+        device.write(register, &value.to_le_bytes())?;
         let selected = (0..32)
             .find_map(|_| match operation.step(&mut intake, &mut device) {
                 StepOutcome::Complete(result) => Some(result),
@@ -158,14 +161,10 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
     assert_eq!(consumer(&mut device, 0)?, 0);
     // When: software resets A and publishes a replacement command before acceptance.
     device.write(
-        ChannelId::new(0).register_offset().ok_or("offset")?
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
+        ChannelId::new(0).admin_offset(3).ok_or("offset")?,
         &1_u32.to_le_bytes(),
     )?;
-    let reset = ChannelId::new(0).register_offset().ok_or("offset")?
-        + ChannelBlock::CONTROL.offset()
-        + ChannelRegisters::RESET.offset();
+    let reset = ChannelId::new(0).admin_offset(3).ok_or("offset")?;
     assert_eq!(word(&mut device, reset)?, 1);
     let _ = Operation::new(()).step(&mut ResetControl, &mut device);
     assert_eq!(word(&mut device, reset)?, 0);

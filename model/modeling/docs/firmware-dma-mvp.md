@@ -148,19 +148,19 @@ this access-window demonstration.
 ## Implemented interfaces and verification
 
 - `contract::ChannelWindowRegisters` declares one bank of `ChannelWindowBlock`
-  children. Each child has alignment 4 and extent 16, with `WindowControl` at
-  byte 0 and `WindowStatus` at byte 8. Bank spacing derives from the child layout;
+  children. Each child has alignment 4 and extent 8, with `WindowControl` at
+  byte 0 and `WindowStatus` at byte 4. Bank spacing derives from the child layout;
   the schema has no explicit stride. Host and firmware projections filter this
-  same bank while retaining its full extent, including hidden leaves and padding.
-- `contract::WindowControl` is firmware-only, at `WINDOW_CONTROL_BASE`
-  (`0xff00_0000`) for channel zero. Writing its `open` bit enables only that
+  same bank while retaining its full extent, including hidden leaves.
+- `contract::WindowControl` is firmware-only, at its platform-selected permission-bank base
+  plus the generated per-channel control offset. Writing its `open` bit enables only that
   channel's work access.
-- `contract::WindowStatus` is Host-readable at `WINDOW_STATUS_BASE`
-  (`0xff00_0008`) for channel zero. Both leaves repeat every 16 bytes. Its `ready`
+- `contract::WindowStatus` is Host-readable at its generated status offset
+  within each platform-placed permission block. Both leaves repeat every eight bytes. Its `ready`
   value is derived from the same open bit, not a second retained handshake state.
   It remains readable while work access is closed.
-- `contract::FirmwareRegisters` is an independent report at `FIRMWARE_STATUS_BASE`
-  (`0xffff_ff10`), owned by `hw-components::FirmwareStatus`. Firmware alone writes
+- `contract::FirmwareRegisters` is an independent report at a platform-selected base,
+  owned by `hw-components::FirmwareStatus`. Firmware alone writes
   its packed state/error word; Host can read it regardless of DMA permissions.
   Reset initializes Booting/no error. Runtime construction represents subsystem
   reset release; polling the firmware CPU starts the program without image loading
@@ -173,7 +173,8 @@ this access-window demonstration.
 - `firmware::main` closes the work window on its own software CPU and publishes
   Ready on success or Failed/WindowSetup on rejection. After Ready it serves the
   independent control rings, allocating a free channel on request and closing/resetting
-  it before confirming release without blocking requests for peer channels. A boot failure remains idle; report or service
+  it before confirming release. Ordinary management requests are served serially;
+  independently driven peer DMA is unaffected. A boot failure remains idle; report or service
   transport errors reach the supervisor. Runtime never fabricates a firmware report.
   Shared in-memory queue state is bootstrapped through always-on registers.
   Bidirectional doorbells generate management interrupts on publication and space

@@ -4,13 +4,15 @@
 pub mod support;
 
 use pdma_model_contract::{
-    ChannelBlock, ChannelRegisters, DeviceControl, DeviceRegisters, ResponseRegisters,
+    ChannelBlock, ChannelRegisters, DmaControl, DmaRegisters, ResponseRegisters,
 };
 use pdma_model_dma::Error;
 use support::{TestResult, command, read_word, run, setup, submit};
 
-const CONTROL: usize = DeviceRegisters::CHANNELS_OFFSET + ChannelBlock::CONTROL.offset();
-const RESPONSE: usize = DeviceRegisters::CHANNELS_OFFSET + ChannelBlock::RESPONSE.offset();
+const CONTROL: usize =
+    pdma_model_contract::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
+const RESPONSE: usize =
+    pdma_model_contract::ChannelBlock::ALIGNMENT + ChannelBlock::RESPONSE.offset();
 
 #[test]
 fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
@@ -18,18 +20,17 @@ fn rejected_root_access_preserves_channels_and_pending_irq() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     run(&mut device)?;
-    let reset = DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset();
-    let count = DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset();
+    let reset = (pdma_model_contract::DmaDiscovery::EXTENT
+        + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        + DmaControl::RESET.offset();
+    let count =
+        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
     for (offset, bytes, expected) in [
         (reset, &[1_u8][..], Error::Width),
         (reset, &[2, 0, 0, 0][..], Error::ReservedBits),
         (count, &[1, 0, 0, 0][..], Error::Access),
         (count + 1, &[0; 4][..], Error::Unmapped),
-        (
-            DeviceRegisters::new(1)?.extent(),
-            &[0; 4][..],
-            Error::Unmapped,
-        ),
+        (DmaRegisters::new(1)?.extent(), &[0; 4][..], Error::Unmapped),
         (usize::MAX, &[0; 4][..], Error::Unmapped),
     ] {
         // When: a rejected root access carries a potential reset or another write.
@@ -56,7 +57,13 @@ fn rejected_reads_preserve_destination_and_pending_notification() -> TestResult 
     submit(&mut device, &memory, command())?;
     run(&mut device)?;
     for (offset, width, expected) in [
-        (CONTROL + ChannelRegisters::RESET.offset(), 1, Error::Width),
+        (
+            pdma_model_contract::ChannelId::new(0)
+                .admin_offset(1)
+                .ok_or("admin offset")?,
+            1,
+            Error::Width,
+        ),
         (RESPONSE + ResponseRegisters::BASE.offset(), 4, Error::Width),
         (RESPONSE + 1, 4, Error::Unmapped),
         (usize::MAX, 4, Error::Unmapped),

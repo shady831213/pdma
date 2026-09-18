@@ -15,7 +15,7 @@ use std::{
 use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::{
     Command, CompletionFlagsValues, ControlRegisters, ControlRequest, ControlRequestOpcode,
-    ControlResponse, ControlResponseStatus, DeviceRegisters, Endpoint, Response, ResponseStatus,
+    ControlResponse, ControlResponseStatus, DmaRegisters, Endpoint, Response, ResponseStatus,
     Segment,
 };
 
@@ -44,7 +44,7 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         pdma_model_contract::ControlRingState::SPEC.resolve()?,
         pdma_model_contract::ControlQueue::SPEC.resolve()?,
     ];
-    let registers = DeviceRegisters::new(3)?.resolve()?;
+    let registers = DmaRegisters::new(3)?.resolve()?;
     let control = ControlRegisters::resolve()?;
 
     // When: the public generator emits its complete header.
@@ -115,9 +115,10 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     ];
     let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
     let offsets = [
-        0_u8, 4, 8, 12, 16, 24, 28, 32, 40, 48, 52, 56, 60, 64, 68, 72, 76, 80, 88, 96, 100, 104,
-        112, 120, 124, 128, 132, 136, 140, 144, 148, 152, 160, 168, 172, 176, 184, 192, 196, 200,
-        204, 208, 212, 216, 220, 224,
+        0_u32, 4, 8, 12, 16, 20, 24, 4096, 4104, 4108, 4112, 4120, 4128, 4132, 4136, 4140, 4144,
+        4148, 4152, 4156, 8192, 8200, 8204, 8208, 8216, 8224, 8228, 8232, 8236, 8240, 8244, 8248,
+        8252, 12288, 12296, 12300, 12304, 12312, 12320, 12324, 12328, 12332, 12336, 12340, 12344,
+        12348,
     ];
     let command = Command {
         flags: CompletionFlagsValues { ioc: true },
@@ -138,13 +139,16 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     assert_eq!(command.to_bytes()?, command_bytes);
     assert_eq!(response.to_bytes()?, response_bytes);
     assert_eq!(segment.to_bytes()?, segment_bytes);
-    let resolved = DeviceRegisters::new(3)?.resolve()?;
+    let resolved = DmaRegisters::new(3)?.resolve()?;
     let rust_offsets = resolved
         .registers()
         .iter()
         .map(hardware_interface_schema::ResolvedRegister::offset)
         .collect::<Vec<_>>();
-    assert_eq!(rust_offsets, offsets.map(usize::from));
+    assert_eq!(
+        rust_offsets,
+        offsets.map(|offset| usize::try_from(offset).unwrap())
+    );
     let control_offsets = [0_u8, 8, 12, 16];
     assert_eq!(
         ControlRegisters::resolve()?
@@ -154,11 +158,12 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
             .collect::<Vec<_>>(),
         control_offsets.map(usize::from)
     );
+    let offset_bytes: Vec<_> = offsets.into_iter().flat_map(u32::to_le_bytes).collect();
     let expected = [
         command_bytes.as_slice(),
         response_bytes.as_slice(),
         segment_bytes.as_slice(),
-        offsets.as_slice(),
+        offset_bytes.as_slice(),
         CONTROL_BYTES.as_flattened(),
         control_offsets.as_slice(),
         QUEUE_BYTES.as_slice(),

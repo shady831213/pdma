@@ -23,7 +23,7 @@ pub use execution::{
 pub use fetch::Fetch;
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_dispatch};
 use pdma_model_contract::{
-    ChannelId, DeviceControl, DeviceFaultCode, DeviceRegistersLayout, ResetValues,
+    ChannelId, DmaControl, DmaDiscovery, DmaFaultCode, DmaRegistersLayout, ResetValues,
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
@@ -33,17 +33,18 @@ pub use stages::{
 
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]
-pub struct Device<M> {
-    registers: DeviceRegistersLayout,
+pub struct Dma<M> {
+    layout: DmaRegistersLayout,
+    discovery: RegisterWindow<DmaDiscovery>,
     channels: Vec<Channel>,
     /// Injected memory access capability, never a device-selected backend.
     pub memory: M,
-    control: RegisterWindow<DeviceControl>,
+    control: RegisterWindow<DmaControl>,
     interrupt: bool,
     active: Option<(ChannelId, u64)>,
 }
 
-impl<M> Device<M> {
+impl<M> Dma<M> {
     /// Whether hardware has emitted a notification not yet taken by the platform.
     pub fn irq(&self) -> bool {
         self.channels.iter().any(|channel| channel.irq) || self.interrupt
@@ -60,18 +61,14 @@ impl<M> Device<M> {
 
     /// Signals a device-wide internal hardware fault, never a software bus command.
     pub fn signal_fatal(&mut self) {
-        if self.control.values.fault.code() == Ok(DeviceFaultCode::None) {
-            self.control.values.fault = self
-                .control
-                .values
-                .fault
-                .with_code(DeviceFaultCode::Internal);
+        if self.control.values.fault.code() == Ok(DmaFaultCode::None) {
+            self.control.values.fault = self.control.values.fault.with_code(DmaFaultCode::Internal);
             self.interrupt |= self.control.values.irq_enable.raw() != 0;
         }
     }
 
     pub(crate) fn halted(&self) -> bool {
-        self.control.values.fault.code() != Ok(DeviceFaultCode::None)
+        self.control.values.fault.code() != Ok(DmaFaultCode::None)
     }
 
     pub(crate) fn resetting(&self) -> bool {
@@ -100,10 +97,14 @@ impl<M> Device<M> {
     /// Reads a register and applies the owning channel's immediate side effects.
     pub fn read(&mut self, offset: usize, destination: &mut [u8]) -> Result<(), Error> {
         register_dispatch!(
+            self.discovery
+                .read(offset, destination)
+                .map_err(RegisterAccessError::widen),
             self.control
                 .read(offset, destination)
                 .map_err(RegisterAccessError::widen),
             self.read_channels(offset, destination),
+            self.read_admin(offset, destination),
         )
         .map_err(Error::from)
     }
@@ -111,8 +112,12 @@ impl<M> Device<M> {
     /// Writes a register and applies the owning channel's immediate side effects.
     pub fn write(&mut self, offset: usize, source: &[u8]) -> Result<(), Error> {
         register_dispatch!(
+            self.discovery
+                .write(offset, source)
+                .map_err(RegisterAccessError::widen),
             self.write_control(offset, source),
             self.write_channels(offset, source),
+            self.write_admin(offset, source),
         )
         .map_err(Error::from)
     }
@@ -128,13 +133,13 @@ impl<M> Device<M> {
             address,
             source,
             |offset, _, _| {
-                if resetting && offset != DeviceControl::RESET.offset() {
+                if resetting && offset != DmaControl::RESET.offset() {
                     return Err(Error::ResetInProgress);
                 }
                 Ok(())
             },
             |offset, next| {
-                if offset == DeviceControl::RESET.offset() {
+                if offset == DmaControl::RESET.offset() {
                     requested = next.reset.request();
                     next.reset = ResetValues::new(u32::from(resetting));
                 }
@@ -151,15 +156,10 @@ impl<M> Device<M> {
         address: usize,
         destination: &mut [u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let bank = self.registers.channels();
+        let (channel, offset) = self.locate_channel(address)?;
         register_dispatch!(
-            bank.route(address, |index, offset| {
-                self.channels
-                    .get_mut(index)
-                    .ok_or(RegisterAccessError::OutsideWindow { address })?
-                    .read(offset, destination)
-            }),
-            Err(bank.finish_access(address)),
+            channel.read(offset, destination),
+            Err(RegisterAccessError::InvalidOffset { offset }),
         )
     }
 
@@ -168,16 +168,64 @@ impl<M> Device<M> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let bank = self.registers.channels();
+        let (channel, offset) = self.locate_channel(address)?;
         register_dispatch!(
-            bank.route(address, |index, offset| {
-                self.channels
-                    .get_mut(index)
-                    .ok_or(RegisterAccessError::OutsideWindow { address })?
-                    .write(offset, source)
-            }),
-            Err(bank.finish_access(address)),
+            channel.write(offset, source),
+            Err(RegisterAccessError::InvalidOffset { offset }),
         )
+    }
+
+    fn read_admin(
+        &mut self,
+        address: usize,
+        destination: &mut [u8],
+    ) -> Result<(), RegisterAccessError<Error>> {
+        let (channel, offset) = self.locate_admin(address)?;
+        channel
+            .admin
+            .read(offset, destination)
+            .map_err(RegisterAccessError::widen)
+    }
+
+    fn write_admin(
+        &mut self,
+        address: usize,
+        source: &[u8],
+    ) -> Result<(), RegisterAccessError<Error>> {
+        let (channel, offset) = self.locate_admin(address)?;
+        channel.write_admin(offset, source)
+    }
+
+    fn locate_channel(
+        &mut self,
+        address: usize,
+    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
+        let (index, offset) = self
+            .layout
+            .channels()
+            .locate(address)
+            .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        let channel = self
+            .channels
+            .get_mut(index)
+            .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        Ok((channel, offset))
+    }
+
+    fn locate_admin(
+        &mut self,
+        address: usize,
+    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
+        let admin = self.layout.admin();
+        let (index, offset) = admin
+            .locate(address)
+            .and_then(|(_, offset)| admin.child().channels().locate(offset))
+            .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        let channel = self
+            .channels
+            .get_mut(index)
+            .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        Ok((channel, offset))
     }
 }
 

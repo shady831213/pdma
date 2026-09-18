@@ -1,7 +1,7 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
-    CpuContextError, DeviceControl, DeviceFaultCode, DeviceRegisters, Endpoint, Error, Model,
-    Operation, RegisterAccess, SoftwareCpu, fixture, single_command, with_idle_hardware,
+    CpuContextError, DmaControl, DmaFaultCode, Endpoint, Error, Model, Operation, RegisterAccess,
+    SoftwareCpu, fixture, single_command, with_idle_hardware,
 };
 
 #[tokio::test]
@@ -35,7 +35,7 @@ async fn reset_operations_reject_a_different_cpu() -> Result<(), Box<dyn std::er
         .await?;
     // When: the other CPU requests either reset scope.
     let results = other
-        .run_main(async { [channel.reset().await, device.reset_device().await] })
+        .run_main(async { [channel.reset().await, device.reset_dma().await] })
         .await;
     // Then: neither reset crosses the ownership boundary.
     for result in results {
@@ -125,15 +125,19 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
         ))
         .await?;
     // When: software requests whole-device reset.
-    cpu.run_main(channel.set_device_irq_enabled(true)).await?;
-    with_idle_hardware(&model, cpu.run_main(channel.reset_device())).await?;
+    cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
+    with_idle_hardware(&model, cpu.run_main(channel.reset_dma())).await?;
     // Then: both scopes are disabled and a fresh driver sees healthy hardware.
     for offset in [
-        (DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset())
+        (pdma_model_contract::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::ChannelBlock::CONTROL.offset())
             + ChannelRegisters::ENABLE.offset(),
-        (DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset())
+        (pdma_model_contract::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::ChannelBlock::CONTROL.offset())
             + ChannelRegisters::IRQ_ENABLE.offset(),
-        DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset(),
+        (pdma_model_contract::DmaDiscovery::EXTENT
+            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            + DmaControl::IRQ_ENABLE.offset(),
     ] {
         let mut bytes = [0; 4];
         model.read(u32::try_from(offset)?, &mut bytes).await?;
@@ -149,9 +153,6 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
             },
         ))
         .await?;
-    assert_eq!(
-        cpu.run_main(channel.device_fault()).await?,
-        DeviceFaultCode::None
-    );
+    assert_eq!(cpu.run_main(channel.dma_fault()).await?, DmaFaultCode::None);
     Ok(())
 }

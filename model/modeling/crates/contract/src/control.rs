@@ -1,9 +1,6 @@
 use crate::{Address, Switch};
 use hardware_interface_schema::{record_schema, register_map, register_schema};
 
-/// Always-on firmware control channel, independent of DMA channel windows.
-pub const CONTROL_CHANNEL_BASE: u32 = 0xffff_fe00;
-
 record_schema! {
     #[short_description = "Firmware control request"]
     #[description = "Host-produced 16-byte little-endian request, eight-byte aligned. Firmware interprets this independent control queue; DMA hardware never fetches these records."]
@@ -12,9 +9,9 @@ record_schema! {
         fields: {
             #[description = "Host-selected request identifier echoed unchanged in the response."]
             id: u64,
-            #[description = "0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel releases the channel field. Other values are invalid."]
-            opcode: enum(u32) { variants: { AcquireChannel = 0, ReleaseChannel = 1 } },
-            #[description = "DMA channel index for ReleaseChannel; ignored for AcquireChannel."]
+            #[description = "0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel resets and frees the selected channel. 2: ResetChannel resets the selected channel while retaining its allocation. Other values are invalid."]
+            opcode: enum(u32) { variants: { AcquireChannel = 0, ReleaseChannel = 1, ResetChannel = 2 } },
+            #[description = "DMA channel index for release or reset; ignored for acquisition."]
             channel: u32,
         },
     }
@@ -28,9 +25,9 @@ record_schema! {
         fields: {
             #[description = "Identifier copied unchanged from the corresponding control request."]
             id: u64,
-            #[description = "0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, release index is outside the device. 3: NotAllocated, release index is free. 4: Busy, that channel already has a release in progress. Other values are invalid."]
-            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, Busy = 4 } },
-            #[description = "Allocated channel on successful acquisition, or the requested release index for release responses. Undefined for failed acquisition."]
+            #[description = "0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. Other values are invalid."]
+            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3 } },
+            #[description = "Allocated channel on successful acquisition, or the selected channel for release/reset responses. Undefined for failed acquisition."]
             channel: u32,
         },
     }

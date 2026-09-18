@@ -55,10 +55,20 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Cancellation may leave partial setup; request channel reset through the bus and
     /// wait for its reset register to read zero before retrying.
     pub async fn setup(bus: B, memory: M, config: ChannelConfig) -> Result<Self, Error<B::Error>> {
+        Self::setup_at(bus, memory, config, 0).await
+    }
+
+    /// Programs a channel in a DMA block placed in the caller's register bus.
+    pub async fn setup_at(
+        bus: B,
+        memory: M,
+        config: ChannelConfig,
+        dma_base: u32,
+    ) -> Result<Self, Error<B::Error>> {
         let owner = CpuOwner::capture_active().map_err(Error::Cpu)?;
         let ChannelConfig { id, rings } = config;
         let channel = Self {
-            port: RegisterPort::new(bus, owner, id).await?,
+            port: RegisterPort::new(bus, owner, id, dma_base).await?,
             memory,
             command: CommandRing::new(rings.command).map_err(Error::Cpu)?,
             response: ResponseRing::new(rings.response).map_err(Error::Cpu)?,

@@ -1,6 +1,6 @@
 use crate::{
-    ChannelContext, CheckLengths, Device, Error, Fetch, NextChunk, ReadCopy, ResetControl,
-    Resettable, ResponsePort, RoundRobin, RouteResponse, WriteCopy,
+    ChannelContext, CheckLengths, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
+    ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
     AfterEach, Arbitrate, BranchError, Dispatch, MapError, Operation, Repeat, Stage, StepOutcome,
@@ -86,15 +86,15 @@ impl<S> RunCommand<S> {
     }
 }
 
-impl<M, S> Stage<Device<M>> for RunCommand<S>
+impl<M, S> Stage<Dma<M>> for RunCommand<S>
 where
-    S: Stage<Device<M>, Input = (), Output = (), Error = Error, Wait = ()>,
+    S: Stage<Dma<M>, Input = (), Output = (), Error = Error, Wait = ()>,
 {
     type Input = ();
     type Output = ControlFlow<(), ()>;
     type Error = Error;
     type Wait = ();
-    type State = Operation<S, Device<M>>;
+    type State = Operation<S, Dma<M>>;
 
     fn start((): ()) -> Self::State {
         Operation::new(())
@@ -102,7 +102,7 @@ where
 
     fn step(
         &mut self,
-        device: &mut Device<M>,
+        device: &mut Dma<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
         if state.is_complete() {
@@ -143,7 +143,7 @@ pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>
 /// Continuously executes commands through one shared pipeline.
 pub type CommandLoop = AfterEach<Repeat<RunCommand>, ResetControl>;
 
-impl<M> Device<M> {
+impl<M> Dma<M> {
     /// Builds this device's lightweight command input ports for custom compositions.
     pub fn fetches(&self) -> Vec<Fetch> {
         (0..self.channels.len())

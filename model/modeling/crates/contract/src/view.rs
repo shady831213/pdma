@@ -11,6 +11,19 @@ pub enum RegisterView {
 }
 
 impl RegisterView {
+    /// Projects the DMA layout without exposing administrative blocks to managed Host software.
+    pub const fn dma_access(
+        self,
+        id: crate::DmaRegistersRegisterId,
+        access: Access,
+    ) -> Option<Access> {
+        use crate::DmaRegistersRegisterId::{Admin, Channels, Discovery};
+        match (self, id) {
+            (Self::Firmware, _) | (Self::Host, Discovery | Channels) => Some(access),
+            (Self::Host, Admin) => None,
+        }
+    }
+
     /// Access to an exact register start within one channel permission block.
     pub const fn window_access(self, offset: usize) -> Option<Access> {
         match self {

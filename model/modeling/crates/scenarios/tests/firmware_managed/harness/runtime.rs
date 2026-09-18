@@ -3,6 +3,8 @@
 mod bus;
 mod error;
 mod interrupts;
+/// Scenario-owned register placement and integration validation.
+pub mod platform;
 mod run;
 mod transport;
 
@@ -16,17 +18,16 @@ pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
-use pdma_model_contract::{CONTROL_CHANNEL_BASE, FIRMWARE_STATUS_BASE};
-use pdma_model_dma::{CommandLoop, Device};
+use pdma_model_dma::{CommandLoop, Dma};
 use pdma_model_host::runtime::Irq;
 use pdma_model_hw_components::{ChannelWindows, ControlChannel, FirmwareStatus, WindowConfigError};
-use pdma_model_software::control::ControlIrq;
+use pdma_model_software::control::{ControlIrq, ManagementAddresses};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
 #[derive(Debug)]
 struct Hardware<M> {
-    dma: Device<M>,
+    dma: Dma<M>,
     window: ChannelWindows,
     firmware: FirmwareStatus,
     control: ControlChannel,
@@ -34,6 +35,7 @@ struct Hardware<M> {
 
 #[derive(Debug)]
 struct Shared<M> {
+    addresses: ManagementAddresses,
     hardware: Mutex<Hardware<M>>,
     changed: Notify,
     interrupt: InterruptEmitter,
@@ -77,21 +79,33 @@ impl<M: Clone> Managed<M> {
 
     /// Selects the hardware channel count without starting software or allocating its rings.
     pub fn with_channels(memory: M, channel_count: usize) -> Result<(Self, Host<M>), BuildError> {
-        let dma = Device::new(memory.clone(), channel_count).map_err(BuildError::Dma)?;
+        Self::with_addresses(memory, channel_count, platform::ADDRESSES)
+    }
+
+    /// Assembles disjoint register blocks at platform-selected addresses.
+    pub fn with_addresses(
+        memory: M,
+        channel_count: usize,
+        addresses: ManagementAddresses,
+    ) -> Result<(Self, Host<M>), BuildError> {
+        platform::validate(addresses, channel_count)?;
+        let dma = Dma::new(memory.clone(), channel_count).map_err(BuildError::Dma)?;
         let pipeline = dma.command_loop();
-        let window = ChannelWindows::new(channel_count).map_err(BuildError::Window)?;
+        let window = ChannelWindows::new(channel_count, addresses.dma, addresses.windows)
+            .map_err(BuildError::Window)?;
         let firmware = FirmwareStatus::new(
-            usize::try_from(FIRMWARE_STATUS_BASE)
+            usize::try_from(addresses.firmware)
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
         );
         let (interrupt, dma_source) = pending_interrupt(HostIrq::Dma(Irq));
         let control = ControlChannel::new(
-            usize::try_from(CONTROL_CHANNEL_BASE)
+            usize::try_from(addresses.control)
                 .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
         );
         let (to_firmware, firmware_source) = pending_interrupt(ControlIrq);
         let (to_host, control_source) = pending_interrupt(HostIrq::Control(ControlIrq));
         let shared = Arc::new(Shared {
+            addresses,
             hardware: Mutex::new(Hardware {
                 dma,
                 window,

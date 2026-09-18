@@ -29,8 +29,7 @@ access poll, including resumed accesses. Firmware main performs ordinary registe
 operations and ISR registration; it does not capture CPU identity or wrap its
 business flow in CPU scopes. Shared driver internals retain their CPU-local guards.
 
-The always-on `ControlRegisters` map at `CONTROL_CHANNEL_BASE` (`0xffff_fe00`)
-contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
+The always-on `ControlRegisters` map has a platform-selected base and contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
 and response doorbell at 16, for an extent of 20 bytes.
 Host owns bootstrap/enable/request writes; firmware owns response writes. Wrong-owner
 writes are rejected even if the value would not change. Doorbells are write-only:
@@ -61,14 +60,13 @@ Firmware rings the response doorbell after command consumption and response
 publication. Space-return notifications let a peer blocked by a full ring resume.
 Firmware checks response space before accepting another command.
 
-The firmware-local control endpoint owns attachment, nonblocking receive, response
-publication and notifications. One software service owns both ring cursors. It
-samples pending channel resets, accepts new requests and publishes available
-results. A release waiting on hardware does not block unrelated requests.
-Responses can therefore complete out of submission order; their IDs are authoritative.
-When response storage is full, firmware stops accepting commands and retains
-release state until Host returns space. It does not reserve a response slot for
-the lifetime of each reset or grow an unbounded response backlog.
+The firmware-local control endpoint owns attachment, receive/consume, response
+publication and notifications. Resources serves ordinary requests serially:
+check response space, receive one request, await its resource operation, publish
+the response. A reset holds up later management requests, not independently driven
+hardware or peer DMA. Host can still submit bounded asynchronous requests and
+correlate responses by ID. Full response storage stops command admission; the
+single firmware producer cannot lose the slot checked before starting an operation.
 
 Notification is a hint, not a count or payload. Endpoints check the shared ring,
 then wait if they cannot progress. A notification received before the wait is retained;
@@ -91,42 +89,59 @@ must provide the required release/acquire ordering and visibility before doorbel
 ## Requests and lifecycle
 
 This slice has one trusted Host and an instance-configured number of DMA channels.
-`AcquireChannel` ignores the request's channel field. Firmware selects the lowest
-free channel, opens only its work window and returns Success with that identifier.
-If every channel is allocated or releasing it returns NoResources. Host then
-allocates/configures ordinary DMA rings; firmware does not proxy DMA task descriptors.
+`AcquireChannel` selects the lowest free channel, opens its data window and
+returns its identifier. NoResources means all channels are allocated.
 
-`ReleaseChannel` returns InvalidChannel for an out-of-range identifier, NotAllocated
-for a free channel, or Busy for an already releasing channel. A valid release
-closes only that channel's Host MMIO and requests its existing DMA reset. Firmware
-retains the release request while servicing other channels. It publishes Success
-and makes the channel available again only after hardware clears reset busy and
-response storage is available. Runtime does not implement this policy.
-Both software domains use `software::dma::ChannelControl` for this register-only
-reset handshake. It does not construct or own DMA rings.
+`ResetChannel` closes the allocated channel's data window, awaits the hardware
+reset handshake and reopens the now-disabled, unconfigured data block. Allocation
+is retained. Host must retire its old driver and configure fresh rings before use.
+`ReleaseChannel` closes the window, awaits the same reset and marks the channel
+free without reopening it. Both reject out-of-range and unallocated identifiers
+with InvalidChannel and NotAllocated. A queued duplicate release is processed
+after its predecessor and observes NotAllocated; there is no Releasing scan or
+Busy result.
 
-The firmware resource states are Free, Allocated and Releasing(request). There is
-one entry per hardware channel, not one async task/executor per channel.
-`ChannelControl::reset_in_progress` samples the same register used by the blocking
-reset helper; it neither requests reset nor fabricates completion. While resets
-are pending the firmware service cooperatively polls them. Otherwise it sleeps
-on its ISR event, including when response backpressure prevents progress.
+Resource methods accept channel identity, not control request IDs or ring cursors.
+The serve loop translates request/response records; reset and allocation operations
+remain independent of that transport. Firmware is the only lifecycle issuer in
+managed mode. Direct-DMA software retains privileged register access through the
+same shared `software::dma::ChannelControl` handshake.
 
-`hw-components::ChannelWindows` composes existing access windows over each DMA
-channel register block. Firmware controls channel N at `0xff00_0000 + 16*N`;
-Host reads its readiness at `0xff00_0008 + 16*N`. `ChannelId` supplies checked
-addresses, and `ChannelWindowRegisters` exports the same repeated geometry.
-Readiness is derived from each gate, never a shadow allocation table.
-Cross-channel transactions are rejected even when both gates are open. Shared
-device registers are accessible while any channel is granted, preserving the
-single-channel case. A trusted Host must coordinate device-wide reset/IRQ settings:
-this is not isolation between mutually untrusted Functions or virtual machines.
+The DMA schema groups read-only discovery, one contiguous DmaAdmin block containing
+global control and channel reset registers, then page-aligned channel data blocks.
+Each data block owns 4096 bytes including reserved space; base and stride are
+derived by schema placement. Software discovers the channel count before calculating
+data addresses; hardware caches instance geometry during construction. Discovery remains
+readable before firmware boot and regardless of grants. Host cannot read or write
+global control or channel-admin blocks; granting any data window does not grant
+administration. Each data block has its own gate. Cross-aperture transactions are
+rejected even when adjacent gates are open; leaf read-only rules still apply.
 
-Closing MMIO alone is not a drain. Host must stop its ring/ISR use before release
-and retain memory until completion. Reset does not undo completed external writes.
-A new grant needs a fresh channel driver/setup. Already platform-pending DMA
-notifications remain associated with their original Host. Function reassignment,
-external bus drain and PCIe lifecycle release remain outside this slice.
+`ChannelWindowRegisters` repeats compact eight-byte permission blocks: control
+at offset zero and readiness at offset four. Contract provides only relative
+geometry. `software::control::ManagementAddresses` carries platform-selected DMA,
+permission-bank, boot and control-channel bases to software. The scenario harness
+places these blocks, checks alignment/overflow/overlap, and performs bus address
+translation. Hardware readiness derives from each gate, not a shadow allocation
+table.
+
+Closing MMIO alone is not a drain. Host must stop ring/ISR use before reset or
+release and retain memory until completion. Reset does not undo completed external
+writes. Platform-pending DMA notifications remain associated with their original
+Host. Runtime implements no allocation/reset policy.
+
+### Future FLR ingress (not implemented)
+
+A PCIe FLR notification may trigger firmware's Function-to-channels cleanup without
+using the Host control ring. The lifecycle operations can be reused; receiving and
+acknowledging FLR remains separate from control-ring request/response transport.
+A future coordinator must serialize conflicting scopes, let independent Function
+operations progress, and never depend on Host response-ring consumption to finish
+FLR. The current serial control service is not that multi-ingress coordinator.
+Application cleanup, ATS/transaction drain, DWC active/done, controller release
+and later software readiness are distinct boundaries. Firmware and its management
+access must remain outside the reset VF scope. No FLR, Function mapping, PASID or
+generic event merger is introduced here.
 
 Malformed opcodes, invalid pointers and memory/bus failures stay typed errors.
 The supervisor reports firmware execution failures; partial side effects are not
@@ -144,11 +159,11 @@ Neither Ring nor SoftRing knows management request IDs or allocation policy.
 Generic schema/runtime expose no ring protocol or ring types. Runtime supplies
 transport, CPU ownership and independent progress notifications to the software crate.
 
-`Management::setup(bus, memory, ManagementConfig)` accepts `ManagementRings` and
+`Management::setup(bus, memory, ManagementConfig)` accepts platform `ManagementAddresses`, `ManagementRings` and
 the processing task's `InterruptEvent`. Host registers `event.handler()` before setup.
 `software::control::ControlQueueLayout` supplies the shared cursor adapters after
 validating their addresses; initialization and attachment remain domain-specific.
-`submit_acquire` and `submit_release` publish a request and notify firmware,
+`submit_acquire`, `submit_reset` and `submit_release` publish a request and notify firmware,
 returning `ManagementRequestId` without waiting for execution. `try_response`
 collects an available result, or returns None without waiting for firmware;
 `next_response` waits on ISR hints until a result is available. Notification MMIO
@@ -159,14 +174,14 @@ software program. One CPU-local client owns both cursors.
 The outstanding ledger is bounded by command-ring capacity, including requests
 whose commands firmware has consumed but whose responses Host has not collected.
 Full means software must collect results before submitting more. Response-ring
-capacity is independent. Unknown/duplicate IDs or a release result naming the wrong
+capacity is independent. Unknown/duplicate IDs or a reset/release result naming the wrong
 channel are protocol errors; the offending response is not consumed.
 
 Cancelled submission retains the same ID and publication state. Call
 `resume_submission` before another submit/collection; it finishes publication and
 notification without duplicating the command. Cancelling response collection keeps
 the request outstanding; retry `try_response` or `next_response`. The serial
-`acquire_channel`/`release_channel` conveniences require an idle client and use this
+`acquire_channel`/`reset_channel`/`release_channel` conveniences require an idle client and use this
 same path; `wait_pending` resumes an interrupted submission and collects a result.
 Cancellation never retracts a request or releases a channel.
 SoftRing retains an interrupted publication or decoded entry, reconciling committed
@@ -191,7 +206,7 @@ cargo test -p pdma-model-scenarios --test firmware_managed
 cargo test -p pdma-model-contract --features export-c-header --test header_c
 ```
 
-Acceptance covers pipelined acquisition, out-of-order management completions,
+Acceptance covers pipelined acquisition, correlated management completions,
 independent access grants, peer DMA during release, actual IRQ-driven DMA after allocation, release/reset/reacquisition,
 full-ring backpressure, dormant firmware awakened through doorbells, malformed memory,
 retained operations across cancellation and independent notification destinations.

@@ -1,14 +1,17 @@
 use super::Management;
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccessError, RegisterAccess};
-use pdma_model_contract::{CONTROL_CHANNEL_BASE, ControlRegisters};
+use pdma_model_contract::ControlRegisters;
 use pdma_model_software::ring::SoftRingError;
 
 impl<B: RegisterAccess + Sync, M: Sync> Management<B, M> {
     pub(super) async fn read(&self, offset: usize) -> Result<u32, Error<B::Error>> {
         let mut bytes = [0; 4];
         self.owner
-            .scope(self.bus.read(address(offset)?, &mut bytes))
+            .scope(
+                self.bus
+                    .read(address(self.addresses.control, offset)?, &mut bytes),
+            )
             .await
             .map_err(Error::Cpu)?
             .map_err(Error::Bus)?;
@@ -17,7 +20,10 @@ impl<B: RegisterAccess + Sync, M: Sync> Management<B, M> {
 
     pub(super) async fn write(&self, offset: usize, bytes: &[u8]) -> Result<(), Error<B::Error>> {
         self.owner
-            .scope(self.bus.write(address(offset)?, bytes))
+            .scope(
+                self.bus
+                    .write(address(self.addresses.control, offset)?, bytes),
+            )
             .await
             .map_err(Error::Cpu)?
             .map_err(Error::Bus)
@@ -29,9 +35,8 @@ impl<B: RegisterAccess + Sync, M: Sync> Management<B, M> {
     }
 }
 
-fn address<B>(offset: usize) -> Result<u32, Error<B>> {
-    CONTROL_CHANNEL_BASE
-        .checked_add(u32::try_from(offset).map_err(|_| Error::Geometry)?)
+fn address<B>(base: u32, offset: usize) -> Result<u32, Error<B>> {
+    base.checked_add(u32::try_from(offset).map_err(|_| Error::Geometry)?)
         .ok_or(Error::Geometry)
 }
 

@@ -4,10 +4,8 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, DeviceControl, DeviceRegisters, ResponseRegisters,
-};
-use pdma_model_dma::{Device, Error, ResetControl};
+use pdma_model_contract::{ChannelBlock, ChannelId, DmaControl, DmaRegisters, ResponseRegisters};
+use pdma_model_dma::{Dma, Error, ResetControl};
 
 mod fairness;
 mod fan_in_inputs;
@@ -22,20 +20,19 @@ use support::{TestResult, configure, submit, word};
 #[test]
 fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
     // Given
-    let mut device = Device::new(SharedMemory::new(), 3)?;
-    let count = DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset();
+    let mut device = Dma::new(SharedMemory::new(), 3)?;
+    let count =
+        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
     assert_eq!(word(&mut device, count)?, 3);
     // When
     let write = device.write(count, &1_u32.to_le_bytes());
     // Then
     assert_eq!(write, Err(Error::Access));
     for reset in [
-        ChannelId::new(1)
-            .register_offset()
-            .ok_or("channel offset")?
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
-        DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset(),
+        ChannelId::new(1).admin_offset(3).ok_or("channel offset")?,
+        (pdma_model_contract::DmaDiscovery::EXTENT
+            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            + DmaControl::RESET.offset(),
     ] {
         device.write(reset, &1_u32.to_le_bytes())?;
         assert_eq!(word(&mut device, reset)?, 1);
@@ -44,10 +41,7 @@ fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
         assert_eq!(word(&mut device, count)?, 3);
     }
     assert_eq!(
-        device.read(
-            ChannelId::new(3).register_offset().ok_or("offset")?,
-            &mut [0; 8]
-        ),
+        device.read(DmaRegisters::new(3)?.extent(), &mut [0; 8]),
         Err(Error::Unmapped)
     );
     Ok(())
@@ -62,7 +56,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         0x3000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(memory.clone(), 3)?;
+    let mut device = Dma::new(memory.clone(), 3)?;
     for index in 0..3 {
         configure(&mut device, index)?;
         memory.write(
@@ -85,14 +79,10 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     assert!(committed);
     // When: A is reset while B and C retain their progress.
     device.write(
-        ChannelId::new(0).register_offset().ok_or("offset")?
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
+        ChannelId::new(0).admin_offset(3).ok_or("offset")?,
         &1_u32.to_le_bytes(),
     )?;
-    let reset = ChannelId::new(0).register_offset().ok_or("offset")?
-        + ChannelBlock::CONTROL.offset()
-        + ChannelRegisters::RESET.offset();
+    let reset = ChannelId::new(0).admin_offset(3).ok_or("offset")?;
     assert_eq!(word(&mut device, reset)?, 1);
     for _ in 0..512 {
         assert!(!matches!(
@@ -113,7 +103,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
         assert_eq!(
             word(
                 &mut device,
-                ChannelId::new(index).register_offset().ok_or("offset")?
+                ChannelId::new(index).register_offset(3).ok_or("offset")?
                     + ChannelBlock::RESPONSE.offset()
                     + ResponseRegisters::PRODUCER.offset()
             )?,
@@ -129,7 +119,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     assert_eq!(
         word(
             &mut device,
-            ChannelId::new(0).register_offset().ok_or("offset")?
+            ChannelId::new(0).register_offset(3).ok_or("offset")?
                 + ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset()
         )?,
@@ -143,7 +133,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     assert_eq!(
         word(
             &mut device,
-            ChannelId::new(0).register_offset().ok_or("offset")?
+            ChannelId::new(0).register_offset(3).ok_or("offset")?
                 + ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset()
         )?,

@@ -3,11 +3,11 @@
 pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{DeviceRegisters, Response, ResponseRegisters, ResponseStatus};
-use pdma_model_dma::Device;
+use pdma_model_contract::{Response, ResponseRegisters, ResponseStatus};
+use pdma_model_dma::Dma;
 use pdma_model_dma::Pipeline;
 use support::{TestResult, command, read_word, setup, submit};
-const RESPONSE_PRODUCER: usize = DeviceRegisters::CHANNELS_OFFSET
+const RESPONSE_PRODUCER: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
     + pdma_model_contract::ChannelBlock::RESPONSE.offset()
     + ResponseRegisters::PRODUCER.offset();
 
@@ -17,7 +17,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = support::single_command(&device);
-    let mut operation = Operation::<Pipeline, Device<SharedMemory>>::new(());
+    let mut operation = Operation::<Pipeline, Dma<SharedMemory>>::new(());
     // When
     for _ in 0..32 {
         let outcome = StepExecutor::new()

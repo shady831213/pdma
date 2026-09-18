@@ -64,7 +64,7 @@ pub async fn run(injection: FaultInjection, input: software::Input<'_>) -> TestR
     let (device, stage) = hardware::assemble(access.clone())?;
     let model = Model::new(device);
     let channel_base = ChannelId::new(0)
-        .register_offset()
+        .register_offset(1)
         .ok_or("channel zero missing")?;
     let base_register = match injection {
         FaultInjection::ResponseWrite => Some(u32::try_from(

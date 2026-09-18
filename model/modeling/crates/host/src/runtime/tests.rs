@@ -2,8 +2,8 @@ use super::Model;
 mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
-use pdma_model_contract::{ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters};
-use pdma_model_dma::{Device, Error, Fault};
+use pdma_model_contract::{ChannelRegisters, CommandRegisters, ResponseRegisters};
+use pdma_model_dma::{Dma, Error, Fault};
 use std::{
     future::Future,
     pin::{Pin, pin},
@@ -15,7 +15,7 @@ use std::{
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-const IRQ_ENABLE: usize = (DeviceRegisters::CHANNELS_OFFSET
+const IRQ_ENABLE: usize = (pdma_model_contract::ChannelBlock::ALIGNMENT
     + pdma_model_contract::ChannelBlock::CONTROL.offset())
     + ChannelRegisters::IRQ_ENABLE.offset();
 
@@ -36,7 +36,7 @@ fn poll_once<F: Future>(future: Pin<&mut F>, flag: &Arc<WakeFlag>) -> Poll<F::Ou
 #[tokio::test]
 async fn write_wakes_a_parked_worker_and_preserves_register_value() -> TestResult {
     // Given: a worker parked before a register transaction.
-    let model = Model::new(Device::new((), 1)?);
+    let model = Model::new(Dma::new((), 1)?);
     let flag = Arc::new(WakeFlag::default());
     let mut wait = pin!(model.wait(()));
     assert!(poll_once(wait.as_mut(), &flag).is_pending());
@@ -57,7 +57,7 @@ async fn write_wakes_a_parked_worker_and_preserves_register_value() -> TestResul
 #[tokio::test]
 async fn read_wakes_a_parked_worker_and_returns_register_value() -> TestResult {
     // Given: a worker parked on a fresh channel, with no earlier notification.
-    let model = Model::new(Device::new((), 1)?);
+    let model = Model::new(Dma::new((), 1)?);
     let flag = Arc::new(WakeFlag::default());
     let mut wait = pin!(model.wait(()));
     assert!(poll_once(wait.as_mut(), &flag).is_pending());
@@ -74,7 +74,7 @@ async fn read_wakes_a_parked_worker_and_returns_register_value() -> TestResult {
 #[tokio::test]
 async fn read_notification_survives_the_wait_registration_gap() -> TestResult {
     // Given: a fresh channel and a worker that has not yet registered its wait.
-    let model = Model::new(Device::new((), 1)?);
+    let model = Model::new(Dma::new((), 1)?);
     let flag = Arc::new(WakeFlag::default());
     // When: the read commits before the worker begins waiting.
     model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;
@@ -89,7 +89,7 @@ async fn read_notification_survives_the_wait_registration_gap() -> TestResult {
 #[tokio::test]
 async fn rejected_read_preserves_the_bus_error_and_notifies() -> TestResult {
     // Given: an invalid transaction width and a parked worker.
-    let model = Model::new(Device::new((), 1)?);
+    let model = Model::new(Dma::new((), 1)?);
     let flag = Arc::new(WakeFlag::default());
     let mut wait = pin!(model.wait(()));
     assert!(poll_once(wait.as_mut(), &flag).is_pending());
@@ -107,23 +107,23 @@ async fn rejected_read_preserves_the_bus_error_and_notifies() -> TestResult {
 #[tokio::test]
 async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestResult {
     // Given: a real fault notification created beneath the transport.
-    let device = Device::new(SharedMemory::new(), 1)?;
+    let device = Dma::new(SharedMemory::new(), 1)?;
     let mut hardware = device.intake();
     let mut model = Model::new(device);
     {
         let mut device = model.device.lock().await;
         for offset in [
             IRQ_ENABLE,
-            (DeviceRegisters::CHANNELS_OFFSET
+            (pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::COMMAND.offset())
                 + CommandRegisters::CAPACITY.offset(),
-            (DeviceRegisters::CHANNELS_OFFSET
+            (pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::RESPONSE.offset())
                 + ResponseRegisters::CAPACITY.offset(),
-            (DeviceRegisters::CHANNELS_OFFSET
+            (pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::CONTROL.offset())
                 + ChannelRegisters::ENABLE.offset(),
-            (DeviceRegisters::CHANNELS_OFFSET
+            (pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::COMMAND.offset())
                 + CommandRegisters::PRODUCER.offset(),
         ] {

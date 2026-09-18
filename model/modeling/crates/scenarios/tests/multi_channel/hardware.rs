@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{AsyncExecutor, AsyncRunError, Operation};
 use hardware_interface_runtime::SharedMemoryAccess;
-use pdma_model_dma::{CommandLoop, Device};
+use pdma_model_dma::{CommandLoop, Dma};
 use pdma_model_host::runtime::Model;
 
 use crate::TestResult;
@@ -10,7 +10,7 @@ use crate::TestResult;
 pub(super) fn assemble(
     memory: SharedMemoryAccess,
 ) -> TestResult<(Model<SharedMemoryAccess>, CommandLoop)> {
-    let device = Device::new(memory, 3)?;
+    let device = Dma::new(memory, 3)?;
     let stage = device.command_loop();
     Ok((Model::new(device), stage))
 }

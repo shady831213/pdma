@@ -42,7 +42,7 @@ impl Transfer {
         ports
             .memory
             .write(destination, MemoryAlignment::ONE, &vec![0; payload.len()])?;
-        let driver = Channel::setup(
+        let driver = Channel::setup_at(
             ports.bus.clone(),
             ports.memory.clone(),
             ChannelConfig {
@@ -52,6 +52,7 @@ impl Transfer {
                     response: RingConfig::new(response.raw(), 2)?,
                 },
             },
+            ports.bus.addresses().dma,
         )
         .await?;
         driver.set_irq_enabled(false).await?;
@@ -139,6 +140,7 @@ pub(super) async fn management(
         ports.bus.clone(),
         ports.memory.clone(),
         ManagementConfig {
+            addresses: ports.bus.addresses(),
             interrupt,
             rings: ManagementRings {
                 state,

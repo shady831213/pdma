@@ -17,10 +17,19 @@ impl<M> Clone for HostBus<M> {
     }
 }
 
+impl<M> HostBus<M> {
+    /// Supplies the software program's platform register locations.
+    pub fn addresses(&self) -> pdma_model_software::control::ManagementAddresses {
+        self.shared.addresses
+    }
+}
+
 impl<M: Send> RegisterAccess for HostBus<M> {
     type Error = AccessError;
 
     async fn read(&self, address: u32, bytes: &mut [u8]) -> Result<(), AccessError> {
+        let dma_base =
+            usize::try_from(self.shared.addresses.dma).map_err(|_| AccessError::Unmapped)?;
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.shared
             .access(
@@ -36,7 +45,14 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                     }
                     match firmware.read(address, bytes) {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {
-                            window.read(address, bytes, |address, bytes| dma.read(address, bytes))
+                            window.read(address, bytes, |address, bytes| {
+                                dma.read(
+                                    address
+                                        .checked_sub(dma_base)
+                                        .ok_or(pdma_model_dma::Error::Unmapped)?,
+                                    bytes,
+                                )
+                            })
                         }
                         result => result.map_err(AccessError::Register),
                     }
@@ -46,6 +62,8 @@ impl<M: Send> RegisterAccess for HostBus<M> {
     }
 
     async fn write(&self, address: u32, bytes: &[u8]) -> Result<(), AccessError> {
+        let dma_base =
+            usize::try_from(self.shared.addresses.dma).map_err(|_| AccessError::Unmapped)?;
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.shared
             .access(
@@ -61,7 +79,14 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                     }
                     match firmware.host_write(address, bytes) {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {
-                            window.write(address, bytes, |address, bytes| dma.write(address, bytes))
+                            window.write(address, bytes, |address, bytes| {
+                                dma.write(
+                                    address
+                                        .checked_sub(dma_base)
+                                        .ok_or(pdma_model_dma::Error::Unmapped)?,
+                                    bytes,
+                                )
+                            })
                         }
                         result => result.map_err(AccessError::Register),
                     }
@@ -75,6 +100,7 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
     type Error = AccessError;
 
     async fn read(&self, address: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        let dma_base = usize::try_from(self.0.addresses.dma).map_err(|_| AccessError::Unmapped)?;
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.0
             .access(|hardware| {
@@ -88,7 +114,10 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
                 ) {
                     Err(RegisterAccessError::OutsideWindow { .. }) => hardware
                         .dma
-                        .read(address, bytes)
+                        .read(
+                            address.checked_sub(dma_base).ok_or(AccessError::Unmapped)?,
+                            bytes,
+                        )
                         .map_err(AccessError::Downstream),
                     result => result.map_err(AccessError::Register),
                 }
@@ -97,6 +126,7 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
     }
 
     async fn write(&self, address: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        let dma_base = usize::try_from(self.0.addresses.dma).map_err(|_| AccessError::Unmapped)?;
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.0
             .access(|hardware| {
@@ -110,7 +140,10 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
                 ) {
                     Err(RegisterAccessError::OutsideWindow { .. }) => hardware
                         .dma
-                        .write(address, bytes)
+                        .write(
+                            address.checked_sub(dma_base).ok_or(AccessError::Unmapped)?,
+                            bytes,
+                        )
                         .map_err(AccessError::Downstream),
                     result => result.map_err(AccessError::Register),
                 }

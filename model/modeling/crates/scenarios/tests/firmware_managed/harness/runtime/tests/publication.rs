@@ -3,14 +3,13 @@ use super::{
     control::{memory::QueueMemory, rings},
 };
 use crate::harness::TestResult;
+use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator,
 };
 use hardware_interface_schema::Encode;
-use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlRegisters, ControlResponse, ControlResponseStatus, Ring,
-};
+use pdma_model_contract::{ControlRegisters, ControlResponse, ControlResponseStatus, Ring};
 use pdma_model_host::{Management, firmware};
 use std::{
     future::{Future, pending, poll_fn},
@@ -85,7 +84,12 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
         hit: AtomicBool::new(false),
     });
     let program = Box::pin(client::run(host.runtime, async |interrupt| {
-        firmware::wait_ready(&host.bus, Duration::from_secs(1)).await?;
+        firmware::wait_ready(
+            &host.bus,
+            host.bus.addresses().firmware,
+            Duration::from_secs(1),
+        )
+        .await?;
         let storage = rings(&allocator)?;
         let mut management = Management::setup(
             PausingBus {

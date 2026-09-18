@@ -46,9 +46,13 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
     let (system, host) = Managed::new(allocator.memory_access()).unwrap();
     // When: Host uses the independent management rings while the DMA gate starts closed.
     let program = client::run(host.runtime, async |interrupt| {
-        firmware::wait_ready(&host.bus, Duration::from_secs(1))
-            .await
-            .unwrap();
+        firmware::wait_ready(
+            &host.bus,
+            host.bus.addresses().firmware,
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
         let mut word = [0; 4];
         host.bus.read(WINDOW_STATUS_BASE, &mut word).await.unwrap();
         assert_eq!(word, [0; 4]);
@@ -68,7 +72,12 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
             ));
             management.release_channel(channel).await.unwrap();
             assert!(matches!(
-                host.bus.read(0, &mut word).await,
+                host.bus
+                    .read(
+                        u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                        &mut word
+                    )
+                    .await,
                 Err(AccessError::Closed)
             ));
         }

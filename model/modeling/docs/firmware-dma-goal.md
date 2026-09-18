@@ -122,7 +122,7 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 
 Device firmware is a real modeled software actor with its own execution context.
 It accesses hardware through management capabilities/MMIO, not direct mutation of
-`Device` internals. Firmware does not replace the hardware DMA data path.
+`Dma` internals. Firmware does not replace the hardware DMA data path.
 
 ### Code and assembly boundaries
 

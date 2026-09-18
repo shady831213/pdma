@@ -24,10 +24,18 @@ pub struct Report {
 
 /// Drives one Host program with production hardware and firmware within a scheduling budget.
 pub async fn run(input: Input<'_>) -> TestResult<Report> {
+    run_at(input, runtime::platform::ADDRESSES).await
+}
+
+/// Runs the same software programs with an alternate platform register placement.
+pub async fn run_at(
+    input: Input<'_>,
+    addresses: pdma_model_software::control::ManagementAddresses,
+) -> TestResult<Report> {
     let storage = Arc::new(SharedMemory::new());
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let (system, host) = Managed::new(memory.clone())?;
+    let (system, host) = Managed::with_addresses(memory.clone(), 1, addresses)?;
     let execution = Box::pin(host.runtime.run_main(async |interrupts| {
         program::main(
             program::Ports {

@@ -1,12 +1,11 @@
 use super::super::AccessError;
 use crate::harness::TestResult;
+use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
 };
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlQueue, ControlQueueRaw, ControlRegisters, ControlRingState,
-};
+use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRegisters, ControlRingState};
 use std::{
     future::{Future, poll_fn},
     pin::Pin,

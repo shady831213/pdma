@@ -1,6 +1,6 @@
 use super::{Driver, Hardware, Shared};
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use pdma_model_dma::Device;
+use pdma_model_dma::Dma;
 use std::convert::Infallible;
 
 impl<M> Shared<M> {
@@ -22,14 +22,14 @@ impl<M> Shared<M> {
     }
 }
 
-impl<M: Send> AsyncInteractionBackend<Device<M>, ()> for Driver<M> {
+impl<M: Send> AsyncInteractionBackend<Dma<M>, ()> for Driver<M> {
     type Error = Infallible;
 
     async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Device<M>) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Dma<M>) -> StepOutcome<O, E, ()> + Send,
     {
         tokio::task::yield_now().await;
         let mut hardware = self.0.hardware.lock().await;

@@ -2,7 +2,7 @@ mod control;
 
 pub use control::ResetControl;
 
-use crate::{ChannelContext, Device, Error};
+use crate::{ChannelContext, Dma, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use pdma_model_contract::ChannelId;
 
@@ -56,7 +56,7 @@ impl<S> Resettable<S> {
     }
 }
 
-impl<M, S, I, O, W, T> Stage<Device<M>> for Resettable<S>
+impl<M, S, I, O, W, T> Stage<Dma<M>> for Resettable<S>
 where
     for<'a> S:
         Stage<ChannelContext<'a, M>, Input = I, Output = O, Wait = W, State = T, Error = Error>,
@@ -73,7 +73,7 @@ where
 
     fn step(
         &mut self,
-        context: &mut Device<M>,
+        context: &mut Dma<M>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, W> {
         if self.channel.is_some_and(|channel| channel != state.channel) {

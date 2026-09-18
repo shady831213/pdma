@@ -24,7 +24,7 @@ fn reset_discards_ready_and_failure_reports() {
 #[test]
 fn ready_does_not_open_the_dma_window() {
     // Given: an independent closed DMA gate and boot-status register.
-    let window = AccessWindow::new(16).unwrap();
+    let window = AccessWindow::new(0..16, 0x0010_0000).unwrap();
     let mut status = FirmwareStatus::new(0x100);
     // When: firmware publishes Ready.
     status

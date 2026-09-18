@@ -1,11 +1,12 @@
 //! Management bootstrap publishes shared state before its first doorbell.
+const CONTROL_CHANNEL_BASE: u32 = 0x3000;
 
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{CONTROL_CHANNEL_BASE, ControlQueue, ControlQueueRaw, ControlRegisters};
+use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRegisters};
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig};
 use pdma_model_software::control::InterruptEvent;
 use std::{
@@ -80,6 +81,12 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
                 &bus,
                 allocator.memory_access(),
                 ManagementConfig {
+                    addresses: pdma_model_software::control::ManagementAddresses {
+                        dma: 0,
+                        windows: 0x2000,
+                        control: 0x3000,
+                        firmware: 0x4000,
+                    },
                     rings: ManagementRings {
                         state,
                         command: RingConfig::new(command.raw(), 2).unwrap(),
@@ -132,6 +139,12 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
             &bus,
             memory.clone(),
             ManagementConfig {
+                addresses: pdma_model_software::control::ManagementAddresses {
+                    dma: 0,
+                    windows: 0x2000,
+                    control: 0x3000,
+                    firmware: 0x4000,
+                },
                 rings: ManagementRings {
                     state,
                     command: RingConfig::new(0x2000, 2).unwrap(),
@@ -178,6 +191,12 @@ async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
                 &bus,
                 memory.clone(),
                 ManagementConfig {
+                    addresses: pdma_model_software::control::ManagementAddresses {
+                        dma: 0,
+                        windows: 0x2000,
+                        control: 0x3000,
+                        firmware: 0x4000,
+                    },
                     rings: ManagementRings {
                         state,
                         command: RingConfig::new(0x2000, 2)?,

@@ -5,10 +5,10 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use observed::Observed;
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
-    DeviceControl, DeviceRegisters, Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
+    ChannelBlock, ChannelId, Command, CommandRegisters, CompletionFlagsValues, DmaControl,
+    Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
 };
-use pdma_model_dma::Device;
+use pdma_model_dma::Dma;
 
 #[derive(Clone, Copy, Debug)]
 enum Boundary {
@@ -31,14 +31,14 @@ impl Boundary {
     }
 }
 
-fn setup() -> TestResult<Device<Observed>> {
+fn setup() -> TestResult<Dma<Observed>> {
     let memory = Observed::default();
     memory.memory.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),
         0x1000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(memory, 1)?;
+    let mut device = Dma::new(memory, 1)?;
     configure(&mut device, 0)?;
     device
         .memory
@@ -69,14 +69,14 @@ fn setup() -> TestResult<Device<Observed>> {
     Ok(device)
 }
 
-fn publish(device: &mut Device<Observed>, command: Command) -> TestResult {
+fn publish(device: &mut Dma<Observed>, command: Command) -> TestResult {
     device.memory.memory.write(
         MemoryAddress::new(0x1000),
         MemoryAlignment::ONE,
         &command.to_bytes()?,
     )?;
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &1_u32.to_le_bytes(),
@@ -84,7 +84,7 @@ fn publish(device: &mut Device<Observed>, command: Command) -> TestResult {
     Ok(())
 }
 
-fn snapshot(device: &Device<Observed>, address: u64) -> TestResult<[u8; 512]> {
+fn snapshot(device: &Dma<Observed>, address: u64) -> TestResult<[u8; 512]> {
     let mut bytes = [0; 512];
     device.memory.memory.read(
         MemoryAddress::new(address),
@@ -104,10 +104,10 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
         Boundary::PayloadWritten,
     ] {
         for reset in [
-            ChannelId::new(0).register_offset().ok_or("offset")?
-                + ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::RESET.offset(),
-            DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset(),
+            ChannelId::new(0).admin_offset(1).ok_or("offset")?,
+            (pdma_model_contract::DmaDiscovery::EXTENT
+                + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                + DmaControl::RESET.offset(),
         ] {
             // Given: an SG command paused at an observed list, payload or publication boundary.
             let mut device = setup()?;
@@ -150,7 +150,7 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             // Then: no old memory access resumes, and fresh work still completes once.
             assert_eq!(device.memory.interactions.get(), accesses);
             assert_eq!(snapshot(&device, 0x1400)?, before);
-            let producer = DeviceRegisters::CHANNELS_OFFSET
+            let producer = pdma_model_contract::ChannelBlock::ALIGNMENT
                 + ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset();
             assert_eq!(word(&mut device, producer)?, 0);

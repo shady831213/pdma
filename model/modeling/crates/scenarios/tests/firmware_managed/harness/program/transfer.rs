@@ -56,7 +56,8 @@ pub(super) async fn run(
     ports
         .memory
         .write(destination, MemoryAlignment::ONE, &vec![0; payload.len()])?;
-    let mut channel = Channel::setup(
+    let dma_base = ports.bus.addresses().dma;
+    let mut channel = Channel::setup_at(
         ports.bus,
         ports.memory,
         ChannelConfig {
@@ -66,6 +67,7 @@ pub(super) async fn run(
                 response: RingConfig::new(response.raw(), 2)?,
             },
         },
+        dma_base,
     )
     .await?;
     channel

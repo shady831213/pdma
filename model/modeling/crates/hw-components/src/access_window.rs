@@ -1,7 +1,5 @@
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
-use pdma_model_contract::{
-    ReadWordValues, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl, WindowStatus,
-};
+use pdma_model_contract::{ChannelWindowBlock, ReadWordValues, WindowControl, WindowStatus};
 
 use crate::{AccessError, WindowConfigError};
 
@@ -15,33 +13,23 @@ pub struct AccessWindow {
 }
 
 impl AccessWindow {
-    /// Creates closed access to `[0, extent)`, excluding reserved management addresses.
-    pub fn new(extent: usize) -> Result<Self, WindowConfigError> {
-        let base = usize::try_from(WINDOW_CONTROL_BASE)
-            .map_err(|_| WindowConfigError::AddressUnrepresentable)?;
-        if extent > base {
+    /// Creates one closed aperture and its separately placed permission block.
+    pub fn new(range: core::ops::Range<usize>, base: usize) -> Result<Self, WindowConfigError> {
+        let end = base
+            .checked_add(ChannelWindowBlock::EXTENT)
+            .ok_or(WindowConfigError::AddressUnrepresentable)?;
+        if range.start > range.end || base % ChannelWindowBlock::ALIGNMENT != 0 {
+            return Err(WindowConfigError::AddressUnrepresentable);
+        }
+        if range.start < end && base < range.end {
             return Err(WindowConfigError::ReservedAddressOverlap);
         }
         Ok(Self {
-            control: RegisterWindow::new(base),
-            extent,
-            start: 0,
-            status_base: usize::try_from(WINDOW_STATUS_BASE)
-                .map_err(|_| WindowConfigError::AddressUnrepresentable)?,
-        })
-    }
-
-    pub(crate) const fn channel(
-        range: core::ops::Range<usize>,
-        control: usize,
-        status: usize,
-    ) -> Self {
-        Self {
-            control: RegisterWindow::new(control),
+            control: RegisterWindow::new(base + ChannelWindowBlock::CONTROL.offset()),
             start: range.start,
             extent: range.end,
-            status_base: status,
-        }
+            status_base: base + ChannelWindowBlock::STATUS.offset(),
+        })
     }
 
     /// Reads the firmware-only control map even while downstream access is closed.

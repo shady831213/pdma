@@ -1,4 +1,5 @@
 //! Host boot polling outcomes.
+const FIRMWARE_STATUS_BASE: u32 = 0x4000;
 
 use hardware_interface_runtime::{RegisterAccess, SoftwareCpu};
 use pdma_model_host::{Error, firmware};
@@ -9,7 +10,7 @@ struct StatusBus(u32);
 impl RegisterAccess for StatusBus {
     type Error = io::Error;
     async fn read(&self, address: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        assert_eq!(address, pdma_model_contract::FIRMWARE_STATUS_BASE);
+        assert_eq!(address, FIRMWARE_STATUS_BASE);
         bytes.copy_from_slice(&self.0.to_le_bytes());
         Ok(())
     }
@@ -27,7 +28,11 @@ async fn ready_allows_host_to_continue() {
     let bus = StatusBus(1);
     // When: Host waits through its owning CPU.
     let result = SoftwareCpu::new()
-        .run_main(firmware::wait_ready(&bus, Duration::from_secs(1)))
+        .run_main(firmware::wait_ready(
+            &bus,
+            FIRMWARE_STATUS_BASE,
+            Duration::from_secs(1),
+        ))
         .await;
     // Then: it can proceed without modifying hardware.
     assert!(result.is_ok());
@@ -39,7 +44,11 @@ async fn failed_reports_the_firmware_error_code() {
     let bus = StatusBus(2 | (1 << 16));
     // When: Host waits for readiness.
     let result = SoftwareCpu::new()
-        .run_main(firmware::wait_ready(&bus, Duration::from_secs(1)))
+        .run_main(firmware::wait_ready(
+            &bus,
+            FIRMWARE_STATUS_BASE,
+            Duration::from_secs(1),
+        ))
         .await;
     // Then: the reported failure is not confused with a timeout.
     assert!(matches!(
@@ -57,7 +66,11 @@ async fn booting_does_not_mean_ready_and_host_can_time_out() {
     // When: the Host's deadline expires, using virtual time.
     let waiting = async {
         SoftwareCpu::new()
-            .run_main(firmware::wait_ready(&bus, Duration::from_secs(1)))
+            .run_main(firmware::wait_ready(
+                &bus,
+                FIRMWARE_STATUS_BASE,
+                Duration::from_secs(1),
+            ))
             .await
     };
     let clock = async {
@@ -75,7 +88,11 @@ async fn invalid_firmware_state_is_rejected() {
     let bus = StatusBus(3);
     // When: Host decodes the report.
     let result = SoftwareCpu::new()
-        .run_main(firmware::wait_ready(&bus, Duration::from_secs(1)))
+        .run_main(firmware::wait_ready(
+            &bus,
+            FIRMWARE_STATUS_BASE,
+            Duration::from_secs(1),
+        ))
         .await;
     // Then: invalid data cannot be interpreted as Ready.
     assert!(matches!(result, Err(Error::RegisterCodec(_))));

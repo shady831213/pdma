@@ -12,13 +12,20 @@ impl<M: MemoryAccess + Send + Sync + 'static> Managed<M> {
     /// All actor futures are scoped here; cancellation leaves no spawned tasks.
     /// It does not acknowledge hardware reset or authorize memory reuse.
     pub async fn run(self) -> Result<Infallible, RunError> {
+        let addresses = self.shared.addresses;
         let management = self
             .firmware_cpu
             .bind_registers(ManagementBus(Arc::clone(&self.shared)));
         let firmware = Box::pin(async {
             self.firmware_runtime
                 .run_main(async |registration| {
-                    pdma_model_firmware::main(management, self.firmware_memory, registration).await
+                    pdma_model_firmware::main(
+                        management,
+                        self.firmware_memory,
+                        registration,
+                        addresses,
+                    )
+                    .await
                 })
                 .await
                 .map_err(RunError::FirmwareInterrupt)?

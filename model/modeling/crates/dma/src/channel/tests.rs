@@ -1,9 +1,8 @@
 use super::*;
-use crate::Device;
+use crate::Dma;
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::{
-    ChannelRegisters, CompletionFlagsValues, DeviceRegisters, ReadWordValues, ResponseRegisters,
-    WordValues,
+    ChannelRegisters, CompletionFlagsValues, ReadWordValues, ResponseRegisters, WordValues,
 };
 
 #[test]
@@ -33,15 +32,15 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
         256,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(memory, 1)?;
+    let mut device = Dma::new(memory, 1)?;
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + pdma_model_contract::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::BASE.offset(),
         &0x1000_u64.to_le_bytes(),
     )?;
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + pdma_model_contract::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CAPACITY.offset(),
         &4_u32.to_le_bytes(),
@@ -87,7 +86,7 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
     // When: consumer crosses each IOC, including the boundary at zero.
     for (consumer, expected) in [(u32::MAX, 3_u32), (0, 1), (1, 0)] {
         device.write(
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::CONSUMER.offset(),
             &consumer.to_le_bytes(),
@@ -95,7 +94,7 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
         // Then: non-empty and IOC causes follow the actual remaining entries.
         let mut bytes = [0; 4];
         device.read(
-            DeviceRegisters::CHANNELS_OFFSET
+            pdma_model_contract::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::IRQ_CAUSE.offset(),
             &mut bytes,

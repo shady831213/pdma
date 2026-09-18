@@ -5,14 +5,14 @@ use hardware_interface_schema::{
     register::{Access, ResetKind},
 };
 use pdma_model_contract::{
-    ChannelBlock, ChannelBlockValues, ChannelIrqMaskValues, ChannelRegisters, DeviceControl,
-    DeviceRegisters,
+    ChannelBlock, ChannelBlockValues, ChannelIrqMaskValues, ChannelRegisters, DmaControl,
+    DmaRegisters,
 };
 
 #[test]
 fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std::error::Error>> {
     // Given: the generated device map with automatic placement.
-    let map = DeviceRegisters::new(3)?.resolve()?;
+    let map = DmaRegisters::new(3)?.resolve()?;
     // When: nested register leaves are resolved.
     let leaves = map
         .registers()
@@ -20,15 +20,18 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
         .map(|register| (register.path().to_owned(), register.offset()))
         .collect::<Vec<_>>();
     // Then: device discovery precedes three aligned, independent channel maps.
-    let mut expected = [
-        ("channel_num", 0),
-        ("irq_enable", 4),
-        ("fault", 8),
-        ("reset", 12),
-    ]
-    .map(|(name, offset)| (format!("DeviceRegisters.control.{name}"), offset))
-    .to_vec();
-    for (index, base) in [(0, 16), (1, 88), (2, 160)] {
+    let mut expected = vec![("DmaRegisters.discovery.channel_num".to_owned(), 0)];
+    expected.extend(
+        [("irq_enable", 4), ("fault", 8), ("reset", 12)]
+            .map(|(name, offset)| (format!("DmaRegisters.admin.control.{name}"), offset)),
+    );
+    expected.extend((0..3).map(|index| {
+        (
+            format!("DmaRegisters.admin.channels[{index}].reset"),
+            16 + index * 4,
+        )
+    }));
+    for (index, base) in [(0, 4096), (1, 8192), (2, 12288)] {
         expected.extend(
             [
                 ("command.base", 0),
@@ -44,19 +47,18 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("control.fault", 52),
                 ("control.irq_cause", 56),
                 ("control.irq_mask", 60),
-                ("control.reset", 64),
             ]
             .map(|(name, offset)| {
                 (
-                    format!("DeviceRegisters.channels[{index}].{name}"),
+                    format!("DmaRegisters.channels[{index}].{name}"),
                     base + offset,
                 )
             }),
         );
     }
     assert_eq!(leaves, expected);
-    assert_eq!(DeviceRegisters::new(3)?.extent(), 228);
-    assert_eq!(DeviceRegisters::ALIGNMENT, 8);
+    assert_eq!(DmaRegisters::new(3)?.extent(), 16384);
+    assert_eq!(DmaRegisters::ALIGNMENT, 4096);
     Ok(())
 }
 
@@ -76,10 +78,10 @@ fn generated_access_updates_selected_leaf_when_registers_are_nested() {
 }
 
 #[test]
-fn interrupt_and_reset_metadata_define_software_access() -> Result<(), Box<dyn std::error::Error>> {
+fn channel_control_metadata_defines_software_access() -> Result<(), Box<dyn std::error::Error>> {
     // Given: the final nested channel register map.
     let map = ChannelRegisters::resolve()?;
-    // When: software inspects the interrupt and recovery register definitions.
+    // When: software inspects the channel interrupt register definitions.
     let metadata = map
         .registers()
         .iter()
@@ -94,7 +96,7 @@ fn interrupt_and_reset_metadata_define_software_access() -> Result<(), Box<dyn s
             )
         })
         .collect::<Vec<_>>();
-    // Then: causes are read-only, reset exposes busy state, and reserved bits are unwritable.
+    // Then: causes are read-only and reserved bits are unwritable.
     assert_eq!(
         metadata,
         [
@@ -103,7 +105,6 @@ fn interrupt_and_reset_metadata_define_software_access() -> Result<(), Box<dyn s
             (8, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (12, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (16, Access::ReadWrite, 3, ResetKind::Zero, 0),
-            (20, Access::ReadWrite, 1, ResetKind::Zero, 0),
         ]
     );
     Ok(())
@@ -127,12 +128,11 @@ fn response_notification_masks_have_independent_wire_bits() -> Result<(), Box<dy
 fn device_recovery_metadata_defines_independent_software_access()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: device-wide control registers independent of each channel.
-    let map = DeviceControl::resolve()?;
+    let map = DmaControl::resolve()?;
     // When: software inspects interrupt and recovery metadata after discovery.
     let metadata = map
         .registers()
         .iter()
-        .skip(1)
         .map(|register| {
             let definition = register.definition();
             (
@@ -148,9 +148,9 @@ fn device_recovery_metadata_defines_independent_software_access()
     assert_eq!(
         metadata,
         [
-            (4, Access::ReadWrite, 1, ResetKind::Zero, 0),
-            (8, Access::ReadOnly, 0, ResetKind::Zero, 0),
-            (12, Access::ReadWrite, 1, ResetKind::Zero, 0),
+            (0, Access::ReadWrite, 1, ResetKind::Zero, 0),
+            (4, Access::ReadOnly, 0, ResetKind::Zero, 0),
+            (8, Access::ReadWrite, 1, ResetKind::Zero, 0),
         ]
     );
     Ok(())

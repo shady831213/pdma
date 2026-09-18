@@ -4,8 +4,8 @@ use crate::{
 };
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{ChannelBlock, Command, CommandRegisters, DeviceRegisters};
-use pdma_model_dma::{ChannelTask, Device, Error, Fault, Intake, ResetControl, RunCommand};
+use pdma_model_contract::{ChannelBlock, Command, CommandRegisters};
+use pdma_model_dma::{ChannelTask, Dma, Error, Fault, Intake, ResetControl, RunCommand};
 use std::{cell::Cell, ops::ControlFlow, rc::Rc};
 
 struct DropWitness(Rc<Cell<usize>>);
@@ -17,7 +17,7 @@ impl Drop for DropWitness {
 }
 
 struct Retained {
-    intake: Operation<Intake, Device<SharedMemory>>,
+    intake: Operation<Intake, Dma<SharedMemory>>,
     task: Option<ChannelTask<Command>>,
     witness: Option<DropWitness>,
 }
@@ -29,7 +29,7 @@ struct RetainingChild {
     terminal: StepOutcome<(), Error, ()>,
 }
 
-impl Stage<Device<SharedMemory>> for RetainingChild {
+impl Stage<Dma<SharedMemory>> for RetainingChild {
     type Input = ();
     type Output = ();
     type Error = Error;
@@ -46,7 +46,7 @@ impl Stage<Device<SharedMemory>> for RetainingChild {
 
     fn step(
         &mut self,
-        device: &mut Device<SharedMemory>,
+        device: &mut Dma<SharedMemory>,
         state: &mut Retained,
     ) -> StepOutcome<(), Error, ()> {
         self.calls.set(self.calls.get() + 1);
@@ -98,7 +98,7 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
             calls: Rc::clone(&calls),
             terminal,
         });
-        let mut state = <RunCommand<RetainingChild> as Stage<Device<SharedMemory>>>::start(());
+        let mut state = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
         let mut accepted = false;
         for _ in 0..32 {
             if matches!(
@@ -144,7 +144,7 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         calls: Rc::new(Cell::new(0)),
         terminal: StepOutcome::Complete(Ok(())),
     });
-    let mut old = <RunCommand<RetainingChild> as Stage<Device<SharedMemory>>>::start(());
+    let mut old = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
     let mut completed = false;
     for _ in 0..32 {
         if matches!(
@@ -162,7 +162,7 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         &command().to_bytes()?,
     )?;
     device.write(
-        DeviceRegisters::CHANNELS_OFFSET
+        pdma_model_contract::ChannelBlock::ALIGNMENT
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
@@ -173,7 +173,7 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         calls: Rc::new(Cell::new(0)),
         terminal: StepOutcome::Complete(Err(Error::Reset)),
     });
-    let mut current = <RunCommand<RetainingChild> as Stage<Device<SharedMemory>>>::start(());
+    let mut current = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
     let mut accepted = false;
     for _ in 0..32 {
         if matches!(

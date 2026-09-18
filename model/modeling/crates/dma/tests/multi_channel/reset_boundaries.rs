@@ -6,10 +6,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use observed::Observed;
-use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseRegisters,
-};
-use pdma_model_dma::Device;
+use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, Response, ResponseRegisters};
+use pdma_model_dma::Dma;
 use std::cell::Cell;
 
 #[derive(Clone, Copy, Debug)]
@@ -22,7 +20,7 @@ enum Boundary {
 
 fn register(index: usize, offset: usize) -> TestResult<usize> {
     Ok(ChannelId::new(index)
-        .register_offset()
+        .register_offset(3)
         .ok_or("channel offset")?
         + offset)
 }
@@ -37,14 +35,14 @@ fn bytes(memory: &SharedMemory, address: u64) -> TestResult<[u8; 512]> {
     Ok(bytes)
 }
 
-fn setup() -> TestResult<Device<Observed>> {
+fn setup() -> TestResult<Dma<Observed>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),
         0x3000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(
+    let mut device = Dma::new(
         Observed {
             memory: memory.clone(),
             payload_read: Cell::new(false),
@@ -63,7 +61,7 @@ fn setup() -> TestResult<Device<Observed>> {
     Ok(device)
 }
 
-fn reached(device: &mut Device<Observed>, boundary: Boundary) -> TestResult<bool> {
+fn reached(device: &mut Dma<Observed>, boundary: Boundary) -> TestResult<bool> {
     let payload = bytes(&device.memory.memory, 0x1400)?;
     Ok(match boundary {
         Boundary::Fetched => {
@@ -137,10 +135,9 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
                 }
             };
             // When: hardware completes reset before software reconfigures and submits fresh work.
-            let reset = register(
-                reset_index,
-                ChannelBlock::CONTROL.offset() + ChannelRegisters::RESET.offset(),
-            )?;
+            let reset = ChannelId::new(reset_index)
+                .admin_offset(3)
+                .ok_or("admin offset")?;
             device.write(reset, &1_u32.to_le_bytes())?;
             assert_eq!(word(&mut device, reset)?, 1);
             for _ in 0..32 {
@@ -174,7 +171,7 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
     Ok(())
 }
 
-fn assert_responses(device: &mut Device<Observed>, reset_index: usize) -> TestResult {
+fn assert_responses(device: &mut Dma<Observed>, reset_index: usize) -> TestResult {
     for index in 0..3 {
         assert_eq!(
             word(
@@ -207,7 +204,7 @@ fn assert_responses(device: &mut Device<Observed>, reset_index: usize) -> TestRe
     Ok(())
 }
 
-fn replace(device: &mut Device<Observed>, reset_index: usize) -> TestResult<u64> {
+fn replace(device: &mut Dma<Observed>, reset_index: usize) -> TestResult<u64> {
     configure(device, reset_index)?;
     let memory_base = 0x1000 + u64::try_from(reset_index)? * 0x1000;
     let fresh = pdma_model_contract::Command {

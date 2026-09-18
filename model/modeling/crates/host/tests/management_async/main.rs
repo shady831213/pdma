@@ -2,6 +2,7 @@
 
 mod cancellation;
 mod memory_failure;
+mod reset;
 pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;

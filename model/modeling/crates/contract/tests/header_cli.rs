@@ -121,7 +121,7 @@ fn channel_count_is_required_before_export() -> Result<(), Box<dyn Error>> {
         vec!["--channels"],
         vec!["--channels", "zero"],
         vec!["--channels", "0"],
-        vec!["--channels", "1048545"],
+        vec!["--channels", "100000000"],
         vec!["--channels", "4294967296"],
         vec!["--channels", "18446744073709551615"],
     ] {
@@ -143,7 +143,7 @@ fn c_consumers_observe_each_selected_instance_extent() -> Result<(), Box<dyn Err
     use std::{io::Write, process::Stdio};
     // Given: independent extents for three distinct instance counts.
     let temp = TempDirectory::new()?;
-    for (count, extent) in [(1, 84), (3, 228), (5, 372)] {
+    for (count, extent) in [(1, 8192), (3, 16384), (5, 24576)] {
         generate(&temp, count)?;
         // When: both role headers compile together under strict C11.
         let mut compiler = Command::new("cc")

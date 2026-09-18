@@ -2,7 +2,7 @@ use super::Channel;
 use super::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
 use pdma_model_contract::{
-    ChannelFaultCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DeviceFaultCode,
+    ChannelFaultCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaFaultCode,
 };
 
 impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
@@ -47,17 +47,17 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     }
 
     /// Reads the sticky device-wide fault, which channel reset cannot clear.
-    pub async fn device_fault(&self) -> Result<DeviceFaultCode, Error<B::Error>> {
-        self.port.control.device_fault(&self.port.bus).await
+    pub async fn dma_fault(&self) -> Result<DmaFaultCode, Error<B::Error>> {
+        self.port.control.dma_fault(&self.port.bus).await
     }
 
     /// Enables or masks device-fatal notifications independently of the channel gate.
     ///
     /// Enabling does not replay masked events; inspect the device fault afterward.
-    pub async fn set_device_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
+    pub async fn set_dma_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
             .control
-            .set_device_irq_enabled(&self.port.bus, enabled)
+            .set_dma_irq_enabled(&self.port.bus, enabled)
             .await
     }
 
@@ -71,7 +71,7 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     /// Dropping this future, including through a caller timeout, leaves an accepted request
     /// owned by hardware. Keep all affected memory valid until device reset reads zero.
     /// A timeout never indicates successful reset completion.
-    pub async fn reset_device(self) -> Result<(), Error<B::Error>> {
-        self.port.control.reset_device(&self.port.bus).await
+    pub async fn reset_dma(self) -> Result<(), Error<B::Error>> {
+        self.port.control.reset_dma(&self.port.bus).await
     }
 }

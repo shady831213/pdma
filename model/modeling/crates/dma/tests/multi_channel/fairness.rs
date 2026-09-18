@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_dma::Device;
+use pdma_model_dma::Dma;
 
 #[test]
 fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
@@ -21,10 +21,10 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
             length,
             MemoryAlignment::ONE,
         )?])?;
-        let mut device = Device::new(memory, 3)?;
+        let mut device = Dma::new(memory, 3)?;
         configure(&mut device, 0)?;
         let base = ChannelId::new(0)
-            .register_offset()
+            .register_offset(3)
             .ok_or("channel offset")?;
         if fatal {
             device.write(
@@ -53,7 +53,7 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
             assert_eq!(
                 word(
                     &mut device,
-                    ChannelId::new(index).register_offset().ok_or("offset")?
+                    ChannelId::new(index).register_offset(3).ok_or("offset")?
                         + ChannelBlock::RESPONSE.offset()
                         + ResponseRegisters::PRODUCER.offset()
                 )?,
@@ -81,7 +81,7 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
     Ok(())
 }
 
-fn fill_response_ring(device: &mut Device<SharedMemory>, base: usize) -> TestResult {
+fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
     let command = pdma_model_contract::Command {
         id: 1,
         flags: pdma_model_contract::CompletionFlagsValues::default(),

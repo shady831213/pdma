@@ -5,18 +5,18 @@ pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::{
-    ChannelRegisters, Command, CommandRegisters, DeviceRegisters, Endpoint, Response,
-    ResponseRegisters, ResponseStatus,
+    ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
+    ResponseStatus,
 };
-use pdma_model_dma::{Device, Error, Fault};
+use pdma_model_dma::{Dma, Error, Fault};
 use support::{TestResult, command, read_word, run, setup, submit};
 
-const COMMAND: usize =
-    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::COMMAND.offset();
-const RESPONSE: usize =
-    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::RESPONSE.offset();
-const CHANNEL: usize =
-    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset();
+const COMMAND: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::ChannelBlock::COMMAND.offset();
+const RESPONSE: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::ChannelBlock::RESPONSE.offset();
+const CHANNEL: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::ChannelBlock::CONTROL.offset();
 const ENABLE: usize = CHANNEL + ChannelRegisters::ENABLE.offset();
 const IRQ_ENABLE: usize = CHANNEL + ChannelRegisters::IRQ_ENABLE.offset();
 const FAULT: usize = CHANNEL + ChannelRegisters::FAULT.offset();
@@ -25,8 +25,8 @@ const CONSUMER: usize = RESPONSE + ResponseRegisters::CONSUMER.offset();
 const COMMAND_CONSUMER: usize = COMMAND + CommandRegisters::CONSUMER.offset();
 const RESPONSE_PRODUCER: usize = RESPONSE + ResponseRegisters::PRODUCER.offset();
 
-fn disabled(base: u64, capacity: u32) -> Result<Device<SharedMemory>, Box<dyn std::error::Error>> {
-    let mut device = Device::new(SharedMemory::new(), 1)?;
+fn disabled(base: u64, capacity: u32) -> Result<Dma<SharedMemory>, Box<dyn std::error::Error>> {
+    let mut device = Dma::new(SharedMemory::new(), 1)?;
     device.write(
         COMMAND + CommandRegisters::BASE.offset(),
         &base.to_le_bytes(),

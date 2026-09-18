@@ -8,14 +8,14 @@ use hardware_interface_runtime::{
     InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, RegisterAccess,
     pending_interrupt,
 };
-use pdma_model_dma::{Device, Error};
+use pdma_model_dma::{Dma, Error};
 use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, Notify, watch};
 
 /// Shared async transport for one device, driven by one retained worker operation.
 #[derive(Debug)]
 pub struct Model<M> {
-    device: Arc<Mutex<Device<M>>>,
+    device: Arc<Mutex<Dma<M>>>,
     changed: Arc<Notify>,
     emitter: InterruptEmitter,
     pending: PendingInterrupt<Irq>,
@@ -34,7 +34,7 @@ impl<M> Clone for Model<M> {
 
 impl<M> Model<M> {
     /// Wraps externally assembled hardware without selecting its memory backend.
-    pub fn new(mut device: Device<M>) -> Self {
+    pub fn new(mut device: Dma<M>) -> Self {
         let (emitter, pending) = pending_interrupt(Irq);
         if device.take_interrupt() {
             emitter.raise();
@@ -62,7 +62,7 @@ impl<M> Model<M> {
 impl<M: Send> Model<M> {
     async fn access(
         &self,
-        access: impl FnOnce(&mut Device<M>) -> Result<(), Error> + Send,
+        access: impl FnOnce(&mut Dma<M>) -> Result<(), Error> + Send,
     ) -> Result<(), Error> {
         let result = {
             let mut device = self.device.lock().await;
@@ -89,14 +89,14 @@ impl<M: Send> RegisterAccess for Model<M> {
     }
 }
 
-impl<M: Send> AsyncInteractionBackend<Device<M>, ()> for Model<M> {
+impl<M: Send> AsyncInteractionBackend<Dma<M>, ()> for Model<M> {
     type Error = Infallible;
 
     async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Device<M>) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Dma<M>) -> StepOutcome<O, E, ()> + Send,
     {
         tokio::task::yield_now().await;
         let mut device = self.device.lock().await;

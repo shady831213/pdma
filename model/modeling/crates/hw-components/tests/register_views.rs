@@ -1,9 +1,9 @@
 //! Static contract views match hardware domain permissions.
+const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
+const WINDOW_STATUS_BASE: u32 = 0x0010_0004;
 
 use hardware_interface_schema::Access;
-use pdma_model_contract::{
-    ControlRegisters, FirmwareRegisters, RegisterView, WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE,
-};
+use pdma_model_contract::{ControlRegisters, FirmwareRegisters, RegisterView};
 use pdma_model_hw_components::{AccessWindow, ControlChannel, FirmwareStatus};
 
 #[test]
@@ -73,7 +73,8 @@ fn boot_view_permissions_match_real_hardware_transactions() {
 #[test]
 fn window_views_match_the_two_hardware_entry_points() {
     // Given: a closed access window with management control and Host readiness.
-    let mut window = AccessWindow::new(256).unwrap();
+    let mut window =
+        AccessWindow::new(0..256, usize::try_from(WINDOW_CONTROL_BASE).unwrap()).unwrap();
     let control = usize::try_from(WINDOW_CONTROL_BASE).unwrap();
     let status = usize::try_from(WINDOW_STATUS_BASE).unwrap();
     let mut bytes = [0; 4];

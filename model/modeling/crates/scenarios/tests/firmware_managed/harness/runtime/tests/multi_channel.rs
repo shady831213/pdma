@@ -34,7 +34,7 @@ async fn outstanding_acquisitions_and_release_preserve_peer_permissions() {
         );
         let mut bytes = [0; 8];
         let address =
-            |index| u32::try_from(ChannelId::new(index).register_offset().unwrap()).unwrap();
+            |index| u32::try_from(ChannelId::new(index).register_offset(3).unwrap()).unwrap();
         host.bus.read(address(0), &mut bytes).await.unwrap();
         host.bus.read(address(1), &mut bytes).await.unwrap();
         assert!(matches!(

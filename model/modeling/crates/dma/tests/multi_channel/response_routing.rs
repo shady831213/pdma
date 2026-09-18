@@ -2,16 +2,16 @@ use super::support::{TestResult, configure, submit, word};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_dma::{Device, Error, Publish, Resettable};
+use pdma_model_dma::{Dma, Error, Publish, Resettable};
 
-fn setup() -> TestResult<Device<SharedMemory>> {
+fn setup() -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),
         0x2000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Device::new(memory, 2)?;
+    let mut device = Dma::new(memory, 2)?;
     for index in 0..2 {
         configure(&mut device, index)?;
         submit(&mut device, index, u64::try_from(index)?)?;
@@ -37,7 +37,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         let mut destinations = device.responses();
         if suspend_publication {
             device.write(
-                ChannelId::new(0).register_offset().ok_or("offset")?
+                ChannelId::new(0).register_offset(2).ok_or("offset")?
                     + ChannelBlock::CONTROL.offset()
                     + ChannelRegisters::ENABLE.offset(),
                 &0_u32.to_le_bytes(),
@@ -50,9 +50,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         }
         // When: software requests reset while the old publication remains retained.
         device.write(
-            ChannelId::new(0).register_offset().ok_or("offset")?
-                + ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::RESET.offset(),
+            ChannelId::new(0).admin_offset(2).ok_or("offset")?,
             &1_u32.to_le_bytes(),
         )?;
         let outcome = (0..8)
@@ -64,9 +62,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         assert_eq!(
             word(
                 &mut device,
-                ChannelId::new(0).register_offset().ok_or("offset")?
-                    + ChannelBlock::CONTROL.offset()
-                    + ChannelRegisters::RESET.offset()
+                ChannelId::new(0).admin_offset(2).ok_or("offset")?
             )?,
             1
         );
@@ -74,7 +70,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
             assert_eq!(
                 word(
                     &mut device,
-                    ChannelId::new(index).register_offset().ok_or("offset")?
+                    ChannelId::new(index).register_offset(2).ok_or("offset")?
                         + ChannelBlock::RESPONSE.offset()
                         + ResponseRegisters::PRODUCER.offset()
                 )?,
@@ -109,7 +105,7 @@ fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
         assert_eq!(
             word(
                 &mut device,
-                ChannelId::new(index).register_offset().ok_or("offset")?
+                ChannelId::new(index).register_offset(2).ok_or("offset")?
                     + ChannelBlock::RESPONSE.offset()
                     + ResponseRegisters::PRODUCER.offset()
             )?,

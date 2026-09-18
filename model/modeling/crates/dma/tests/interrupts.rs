@@ -4,15 +4,15 @@
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{ChannelRegisters, CommandRegisters, DeviceRegisters, ResponseRegisters};
+use pdma_model_contract::{ChannelRegisters, CommandRegisters, ResponseRegisters};
 use support::{TestResult, command, read_word, run, setup, submit};
 
-const CONTROL: usize =
-    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::CONTROL.offset();
-const COMMAND: usize =
-    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::COMMAND.offset();
-const RESPONSE: usize =
-    DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::RESPONSE.offset();
+const CONTROL: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::ChannelBlock::CONTROL.offset();
+const COMMAND: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::ChannelBlock::COMMAND.offset();
+const RESPONSE: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::ChannelBlock::RESPONSE.offset();
 
 #[test]
 fn each_response_source_obeys_only_its_own_mask() -> TestResult {

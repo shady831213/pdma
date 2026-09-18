@@ -22,6 +22,7 @@ pub(super) async fn run<T>(
 
 pub(super) fn config(rings: ManagementRings, interrupt: &InterruptEvent) -> ManagementConfig {
     ManagementConfig {
+        addresses: crate::harness::runtime::platform::ADDRESSES,
         rings,
         interrupt: interrupt.clone(),
     }

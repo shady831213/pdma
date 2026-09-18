@@ -1,5 +1,5 @@
 use super::{
-    Arc, AtomicUsize, COUNT, Channel, ChannelId, Device, Error, Model, Ordering, RegisterAccess,
+    Arc, AtomicUsize, COUNT, Channel, ChannelId, Dma, Error, Model, Ordering, RegisterAccess,
     SharedMemoryAccess, SoftwareCpu, TestResult, allocator, config, with_idle_hardware,
 };
 
@@ -27,8 +27,9 @@ async fn setup_uses_each_instances_discovered_channel_range() -> TestResult {
     let allocator = allocator();
     let memory = allocator.memory_access();
     let instances = [
-        (1, Model::new(Device::new(memory.clone(), 1)?)),
-        (5, Model::new(Device::new(memory.clone(), 5)?)),
+        (1, Model::new(Dma::new(memory.clone(), 1)?)),
+        (5, Model::new(Dma::new(memory.clone(), 5)?)),
+        (1021, Model::new(Dma::new(memory.clone(), 1021)?)),
     ];
     let cpu = SoftwareCpu::new();
     cpu.run_main(async {
@@ -72,8 +73,8 @@ async fn instance_channel_counts_survive_channel_and_device_resets() -> TestResu
     let allocator = allocator();
     let memory = allocator.memory_access();
     let instances = [
-        (1, Model::new(Device::new(memory.clone(), 1)?)),
-        (5, Model::new(Device::new(memory.clone(), 5)?)),
+        (1, Model::new(Dma::new(memory.clone(), 1)?)),
+        (5, Model::new(Dma::new(memory.clone(), 5)?)),
     ];
     let cpu = SoftwareCpu::new();
     for (count, model) in instances {
@@ -88,7 +89,7 @@ async fn instance_channel_counts_survive_channel_and_device_resets() -> TestResu
                 model.read(u32::try_from(COUNT)?, &mut bytes).await?;
                 assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);
                 let channel = Channel::setup(model.clone(), memory.clone(), config).await?;
-                channel.reset_device().await?;
+                channel.reset_dma().await?;
                 // Then: reset retains discovery and permits fresh setup of the highest channel.
                 model.read(u32::try_from(COUNT)?, &mut bytes).await?;
                 assert_eq!(u32::from_le_bytes(bytes), u32::try_from(count)?);

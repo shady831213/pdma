@@ -72,6 +72,12 @@ impl Fixture {
             &self.bus,
             self.memory.clone(),
             ManagementConfig {
+                addresses: pdma_model_software::control::ManagementAddresses {
+                    dma: 0,
+                    windows: 0x2000,
+                    control: 0x3000,
+                    firmware: 0x4000,
+                },
                 rings: self.rings,
                 interrupt: self.event.clone(),
             },

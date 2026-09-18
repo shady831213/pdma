@@ -5,8 +5,8 @@ use hardware_interface_runtime::{
     SoftwareCpu,
 };
 use hardware_interface_schema::RegisterCodecError;
-use pdma_model_contract::{ChannelRegisters, DeviceRegisters};
-use pdma_model_dma::Device;
+use pdma_model_contract::ChannelRegisters;
+use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
 };
@@ -21,7 +21,7 @@ impl RegisterAccess for CorruptFaultBus {
         self.0.read(offset, response).await?;
         if usize::try_from(offset).ok()
             == Some(
-                (DeviceRegisters::CHANNELS_OFFSET
+                (pdma_model_contract::ChannelBlock::ALIGNMENT
                     + pdma_model_contract::ChannelBlock::CONTROL.offset())
                     + ChannelRegisters::FAULT.offset(),
             )
@@ -42,7 +42,7 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let bus = CorruptFaultBus(Model::new(Device::new(memory.clone(), 1)?));
+    let bus = CorruptFaultBus(Model::new(Dma::new(memory.clone(), 1)?));
     let rings = Rings {
         command: RingConfig::new(0x1000, 1)?,
         response: RingConfig::new(0x2000, 1)?,

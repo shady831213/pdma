@@ -1,4 +1,4 @@
-use crate::{ChannelTask, Device, Error, Publish, Resettable, UpdateIrq};
+use crate::{ChannelTask, Dma, Error, Publish, Resettable, UpdateIrq};
 use hardware_interface_pipeline::{AfterEach, Route};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::Response;
@@ -10,10 +10,10 @@ pub type ResponsePort = Resettable<AfterEach<Publish, UpdateIrq>>;
 #[derive(Debug)]
 pub struct RouteResponse;
 
-impl<M: MemoryAccess> Route<Device<M>, ResponsePort> for RouteResponse {
+impl<M: MemoryAccess> Route<Dma<M>, ResponsePort> for RouteResponse {
     type Input = ChannelTask<Response>;
 
-    fn route(&mut self, _: &Device<M>, input: Self::Input) -> Result<(usize, Self::Input), Error> {
+    fn route(&mut self, _: &Dma<M>, input: Self::Input) -> Result<(usize, Self::Input), Error> {
         Ok((input.channel().index(), input))
     }
 }

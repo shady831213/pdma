@@ -7,10 +7,8 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{
-    Command, CommandRegisters, DeviceRegisters, Endpoint, Response, ResponseStatus,
-};
-use pdma_model_dma::Device;
+use pdma_model_contract::{Command, CommandRegisters, Endpoint, Response, ResponseStatus};
+use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
@@ -45,7 +43,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"retained")?;
-    let device = Device::new(memory.clone(), 1)?;
+    let device = Dma::new(memory.clone(), 1)?;
     let mut stage = support::single_command(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
@@ -69,7 +67,8 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());
     let consumer_offset = u32::try_from(
-        (DeviceRegisters::CHANNELS_OFFSET + pdma_model_contract::ChannelBlock::COMMAND.offset())
+        (pdma_model_contract::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::ChannelBlock::COMMAND.offset())
             + CommandRegisters::CONSUMER.offset(),
     )?;
 

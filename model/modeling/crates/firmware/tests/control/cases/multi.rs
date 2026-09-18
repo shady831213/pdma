@@ -1,17 +1,18 @@
 use super::{acquire, support::*};
 use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, ControlQueue, ControlRequest, ControlRequestOpcode,
-    ControlResponseStatus, ControlRingState,
+    ChannelId, ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponseStatus,
+    ControlRingState,
 };
 
 #[tokio::test]
-async fn releasing_channel_is_neither_free_nor_released_twice() -> TestResult {
-    // Given: the only channel is allocated and its release is waiting for reset.
+async fn duplicate_release_waits_then_reports_not_allocated() -> TestResult {
+    // Given: the only allocation is being released while its hardware reset is busy.
     let (bus, memory) = fixture()?;
     publish(&memory, acquire(1), 1)?;
     let mut program = std::pin::pin!(run(&bus, memory.clone()));
     assert!(poll(program.as_mut()).is_pending());
     let consumer = ControlQueue::RESPONSE_OFFSET + ControlRingState::CONSUMER_OFFSET;
+    let producer = ControlQueue::RESPONSE_OFFSET + ControlRingState::PRODUCER_OFFSET;
     write_word(&memory, consumer, 1)?;
     let release = ControlRequest {
         id: 2,
@@ -23,36 +24,19 @@ async fn releasing_channel_is_neither_free_nor_released_twice() -> TestResult {
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
     }
-    // When: Host submits a duplicate release followed by another allocation request.
-    for (request, status) in [
-        (
-            ControlRequest { id: 3, ..release },
-            ControlResponseStatus::Busy,
-        ),
-        (acquire(4), ControlResponseStatus::NoResources),
-    ] {
-        publish(&memory, request, u32::try_from(request.id)?)?;
-        bus.notification.raise();
-        for _ in 0..4 {
-            assert!(poll(program.as_mut()).is_pending());
-        }
-        // Then: each request is rejected independently and the original release is still retained.
-        assert_eq!(
-            (response(&memory)?.id, response(&memory)?.status),
-            (request.id, status)
-        );
-        write_word(&memory, consumer, u32::try_from(request.id - 1)?)?;
+    // When: a duplicate release queues behind the pending lifecycle call.
+    publish(&memory, ControlRequest { id: 3, ..release }, 3)?;
+    bus.notification.raise();
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
     }
-    let reset = u32::try_from(
-        ChannelId::new(0).register_offset().unwrap()
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
-    )?;
+    // Then: it waits, observes the completed release, and cannot release the channel twice.
+    assert_eq!(read_word(&memory, producer)?, 1);
+    let reset = u32::try_from(ChannelId::new(0).admin_offset(1).ok_or("admin offset")?)?;
     bus.registers
         .lock()
         .unwrap()
         .insert(reset, 0_u32.to_le_bytes().to_vec());
-    bus.notification.raise();
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
     }
@@ -60,8 +44,17 @@ async fn releasing_channel_is_neither_free_nor_released_twice() -> TestResult {
         (response(&memory)?.id, response(&memory)?.status),
         (2, ControlResponseStatus::Success)
     );
-    write_word(&memory, consumer, 4)?;
-    publish(&memory, acquire(5), 5)?;
+    write_word(&memory, consumer, 2)?;
+    bus.notification.raise();
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
+    }
+    assert_eq!(
+        (response(&memory)?.id, response(&memory)?.status),
+        (3, ControlResponseStatus::NotAllocated)
+    );
+    write_word(&memory, consumer, 3)?;
+    publish(&memory, acquire(4), 4)?;
     bus.notification.raise();
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
@@ -72,13 +65,13 @@ async fn releasing_channel_is_neither_free_nor_released_twice() -> TestResult {
             response(&memory)?.status,
             response(&memory)?.channel
         ),
-        (5, ControlResponseStatus::Success, 0)
+        (4, ControlResponseStatus::Success, 0)
     );
     Ok(())
 }
 
 #[tokio::test]
-async fn reset_of_one_channel_does_not_block_acquisition_of_another() -> TestResult {
+async fn management_waits_for_reset_before_consuming_the_next_request() -> TestResult {
     // Given: two firmware-managed channels, and a reset bus that stays busy until explicitly completed.
     let (bus, memory) = fixture()?;
     bus.registers
@@ -105,11 +98,7 @@ async fn reset_of_one_channel_does_not_block_acquisition_of_another() -> TestRes
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
     }
-    let reset = u32::try_from(
-        ChannelId::new(0).register_offset().unwrap()
-            + ChannelBlock::CONTROL.offset()
-            + ChannelRegisters::RESET.offset(),
-    )?;
+    let reset = u32::try_from(ChannelId::new(0).admin_offset(2).unwrap())?;
     assert_eq!(
         bus.registers.lock().unwrap().get(&reset),
         Some(&1_u32.to_le_bytes().to_vec())
@@ -120,18 +109,19 @@ async fn reset_of_one_channel_does_not_block_acquisition_of_another() -> TestRes
     for _ in 0..8 {
         assert!(poll(program.as_mut()).is_pending());
     }
-    // Then: the new acquisition completes first, without claiming the old reset completed.
-    assert_eq!(read_word(&memory, producer)?, 2);
-    let result = response(&memory)?;
+    // Then: neither a response nor consumption of the next request claims reset completion.
+    assert_eq!(read_word(&memory, producer)?, 1);
     assert_eq!(
-        (result.id, result.status, result.channel),
-        (3, ControlResponseStatus::Success, 1)
+        read_word(
+            &memory,
+            ControlQueue::COMMAND_OFFSET + ControlRingState::CONSUMER_OFFSET
+        )?,
+        2
     );
     assert_eq!(
         bus.registers.lock().unwrap().get(&reset),
         Some(&1_u32.to_le_bytes().to_vec())
     );
-    write_word(&memory, consumer, 2)?;
     bus.registers
         .lock()
         .unwrap()
@@ -141,5 +131,11 @@ async fn reset_of_one_channel_does_not_block_acquisition_of_another() -> TestRes
         assert!(poll(program.as_mut()).is_pending());
     }
     assert_eq!(response(&memory)?.id, 2);
+    write_word(&memory, consumer, 2)?;
+    bus.notification.raise();
+    for _ in 0..4 {
+        assert!(poll(program.as_mut()).is_pending());
+    }
+    assert_eq!(response(&memory)?.id, 3);
     Ok(())
 }

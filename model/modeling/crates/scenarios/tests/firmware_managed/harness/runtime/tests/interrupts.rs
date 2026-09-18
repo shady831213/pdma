@@ -1,10 +1,11 @@
 use super::super::{HostIrq, HostVector, Managed, ManagementBus};
 use super::control::memory::{kick, poll_once};
+use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
 use hardware_interface_runtime::{
     CpuContextError, CpuOwner, InterruptDispatchError, InterruptEnvelope, InterruptHandler,
     InterruptSource, RegisterAccess, SharedMemory, SharedMemoryAccess,
 };
-use pdma_model_contract::{CONTROL_CHANNEL_BASE, ControlRegisters};
+use pdma_model_contract::ControlRegisters;
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{convert::Infallible, future::pending, pin::pin, sync::Arc};
 

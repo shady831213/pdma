@@ -4,10 +4,8 @@ use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcom
 use hardware_interface_runtime::{
     CpuContextError, RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu,
 };
-use pdma_model_contract::{
-    ChannelBlock, ChannelId, ChannelRegisters, DeviceControl, DeviceRegisters,
-};
-use pdma_model_dma::{Device, ResetControl};
+use pdma_model_contract::{ChannelId, DmaControl};
+use pdma_model_dma::{Dma, ResetControl};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
 };
@@ -51,7 +49,7 @@ async fn fixture(
     Box<dyn std::error::Error>,
 > {
     let memory = SharedMemoryAccess::from(Arc::new(SharedMemory::new()));
-    let model = Model::new(Device::new(memory.clone(), 2)?);
+    let model = Model::new(Dma::new(memory.clone(), 2)?);
     let fail = Arc::new(AtomicBool::new(false));
     let channel = cpu
         .run_main(Channel::setup(
@@ -81,7 +79,7 @@ async fn reset_stays_pending_after_write_acknowledgement() -> Result<(), Box<dyn
         let (channel, _model, _fail) = fixture(&cpu).await?;
         let reset = async move {
             if whole_device {
-                channel.reset_device().await
+                channel.reset_dma().await
             } else {
                 channel.reset().await
             }
@@ -111,7 +109,7 @@ async fn reset_read_failure_is_returned_to_software() -> Result<(), Box<dyn std:
         let result = cpu
             .run_main(async move {
                 if whole_device {
-                    channel.reset_device().await
+                    channel.reset_dma().await
                 } else {
                     channel.reset().await
                 }
@@ -135,7 +133,7 @@ async fn reset_wait_rejects_repoll_on_another_cpu() -> Result<(), Box<dyn std::e
         let (channel, _model, _fail) = fixture(&owner).await?;
         let reset = async move {
             if whole_device {
-                channel.reset_device().await
+                channel.reset_dma().await
             } else {
                 channel.reset().await
             }
@@ -165,7 +163,7 @@ async fn cancelling_reset_wait_preserves_hardware_request() -> Result<(), Box<dy
         {
             let reset = async move {
                 if whole_device {
-                    channel.reset_device().await
+                    channel.reset_dma().await
                 } else {
                     channel.reset().await
                 }
@@ -180,13 +178,13 @@ async fn cancelling_reset_wait_preserves_hardware_request() -> Result<(), Box<dy
         }
         // Then: cancellation does not clear the hardware-owned busy bit.
         let offset = if whole_device {
-            DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset()
+            (pdma_model_contract::DmaDiscovery::EXTENT
+                + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                + DmaControl::RESET.offset()
         } else {
             ChannelId::new(1)
-                .register_offset()
+                .admin_offset(2)
                 .ok_or("channel offset overflow")?
-                + ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::RESET.offset()
         };
         let mut bytes = [0; 4];
         model.read(u32::try_from(offset)?, &mut bytes).await?;
@@ -204,7 +202,7 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
         let (channel, model, _fail) = fixture(&cpu).await?;
         let reset = async move {
             if whole_device {
-                channel.reset_device().await
+                channel.reset_dma().await
             } else {
                 channel.reset().await
             }

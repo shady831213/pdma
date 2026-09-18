@@ -3,13 +3,12 @@ use hardware_interface_schema::register_map;
 
 register_map! {
     #[short_description = "Channel permission block"]
-    #[description = "One channel's firmware permission control and Host readiness status. The complete sixteen-byte block owns its reserved gaps."]
+    #[description = "One channel's firmware permission control followed by its Host readiness status. Bank spacing derives from this complete block."]
     pub map ChannelWindowBlock {
         alignment: 4,
-        extent: 16,
         placements: [
             pub control: WindowControl,
-            pub status: WindowStatus { offset: 8 },
+            pub status: WindowStatus,
         ],
     }
 }

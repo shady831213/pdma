@@ -1,4 +1,4 @@
-use crate::{ChannelTask, Device, Error};
+use crate::{ChannelTask, Dma, Error};
 use hardware_interface_pipeline::{ReadyStage, Stage, StepOutcome};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::{ChannelId, Command, Ring};
@@ -16,8 +16,8 @@ impl Fetch {
     }
 }
 
-impl<M: MemoryAccess> ReadyStage<Device<M>> for Fetch {
-    fn ready(&self, device: &Device<M>) -> bool {
+impl<M: MemoryAccess> ReadyStage<Dma<M>> for Fetch {
+    fn ready(&self, device: &Dma<M>) -> bool {
         if device.halted() || device.resetting() {
             return false;
         }
@@ -34,7 +34,7 @@ impl<M: MemoryAccess> ReadyStage<Device<M>> for Fetch {
     }
 }
 
-impl<M: MemoryAccess> Stage<Device<M>> for Fetch {
+impl<M: MemoryAccess> Stage<Dma<M>> for Fetch {
     type Input = ();
     type Output = ChannelTask<Command>;
     type Error = Error;
@@ -43,11 +43,7 @@ impl<M: MemoryAccess> Stage<Device<M>> for Fetch {
 
     fn start((): ()) {}
 
-    fn step(
-        &mut self,
-        device: &mut Device<M>,
-        (): &mut (),
-    ) -> StepOutcome<Self::Output, Error, ()> {
+    fn step(&mut self, device: &mut Dma<M>, (): &mut ()) -> StepOutcome<Self::Output, Error, ()> {
         if !self.ready(device) {
             return StepOutcome::Pending(());
         }

@@ -6,10 +6,10 @@ use hardware_interface_runtime::{
 };
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::{
-    CONTROL_CHANNEL_BASE, ControlQueue, ControlRegisters, ControlRequest, ControlResponse,
-    ControlResponseRaw, ControlRingState, DeviceControl, DeviceRegisters,
+    ControlQueue, ControlRegisters, ControlRequest, ControlResponse, ControlResponseRaw,
+    ControlRingState, DmaDiscovery, DmaRegisters,
 };
-use pdma_model_software::control::{ControlIrq, ControlIsr};
+use pdma_model_software::control::{ControlIrq, ControlIsr, ManagementAddresses};
 use std::{
     collections::BTreeMap,
     future::Future,
@@ -22,6 +22,12 @@ use std::{
 pub(super) const QUEUE: u64 = 0x1000;
 pub(super) const COMMAND: u64 = 0x1100;
 pub(super) const RESPONSE: u64 = 0x1200;
+pub(super) const ADDRESSES: ManagementAddresses = ManagementAddresses {
+    dma: 0,
+    windows: 0x2000,
+    control: 0x3000,
+    firmware: 0x4000,
+};
 
 pub(super) struct Bus {
     pub(super) registers: Mutex<BTreeMap<u32, Vec<u8>>>,
@@ -51,7 +57,7 @@ pub(super) async fn run(
     let runtime = InterruptRuntime::new(cpu, bus.source.clone());
     let (result, _) = runtime
         .run_main::<ControlIsr, _>(async |registration| {
-            pdma_model_firmware::main(bound, memory, registration).await
+            pdma_model_firmware::main(bound, memory, registration, ADDRESSES).await
         })
         .await
         .map_err(|error| {
@@ -61,7 +67,7 @@ pub(super) async fn run(
 }
 
 pub(super) fn register(offset: usize) -> TestResult<u32> {
-    Ok(CONTROL_CHANNEL_BASE + u32::try_from(offset)?)
+    Ok(ADDRESSES.control + u32::try_from(offset)?)
 }
 
 impl RegisterAccess for &Bus {
@@ -97,7 +103,10 @@ pub(super) fn fixture() -> TestResult<(Bus, SharedMemory)> {
         .lock()
         .map_err(|error| io::Error::other(error.to_string()))?
         .insert(
-            u32::try_from(DeviceRegisters::CONTROL.offset() + DeviceControl::CHANNEL_NUM.offset())?,
+            ADDRESSES.dma
+                + u32::try_from(
+                    DmaRegisters::DISCOVERY.offset() + DmaDiscovery::CHANNEL_NUM.offset(),
+                )?,
             1_u32.to_le_bytes().to_vec(),
         );
     bus.registers

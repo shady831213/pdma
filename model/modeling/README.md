@@ -39,7 +39,9 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | Location | Responsibility |
 | --- | --- |
 | `crates/contract/src/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
-| `crates/contract/src/registers.rs` | Composed command, response and channel register blocks. |
+| `crates/contract/src/register.rs` | Register types shared by DMA and management hardware. |
+| `crates/contract/src/dma.rs` | DMA discovery and contiguous administration, followed by page-aligned channel data blocks. |
+| `crates/contract/src/dma/{channel,queue}.rs` | Channel-owned contracts and command/response ring registers. |
 | `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
 | `crates/contract/src/control.rs` | Control records, in-memory queue descriptor and bootstrap/doorbell registers. |
 | `crates/hw-components/src/control_channel.rs` | Bootstrap ownership, activation lock and notification pulses, without queue memory or allocation policy. |
@@ -154,7 +156,7 @@ program finishes, then abort and join the hardware task. Command-local terminati
 is handled inside the device, not by a scenario-side retry loop. Boundary tests that
 need a single command assemble the existing stages in test fixtures.
 
-`Device<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
+`Dma<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles shared memory and its allocation service
 externally; software allocates its own rings and payload buffers through that service.
 `dma/tests/flat_memory.rs` runs the same graph on an independent flat array.
@@ -207,9 +209,9 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
 
 ## Channel behavior
 
-- `Device::new(memory, channel_count)` fixes the population for that instance;
-  `DeviceRegisters::new(channel_count)?.resolve()` resolves its generated register bank.
-  `DeviceControl.channel_num` reports the actual count read-only; neither reset changes it.
+- `Dma::new(memory, channel_count)` fixes the population for that instance;
+  `DmaRegisters::new(channel_count)?.resolve()` resolves its generated register bank.
+  `DmaDiscovery.channel_num` reports the actual count read-only; neither reset changes it.
   Different counts can coexist in the same program. Host `ChannelConfig { id, rings }` selects a
   channel after reading discovery; setup does not change the device-wide IRQ gate.
   All channels share one notification output, so software checks every channel's
@@ -283,7 +285,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   make another command, SG-list, payload or response memory access. The model's memory
   calls finish synchronously within a step; it models no outstanding bus transactions
   or timed drain. See [reset semantics and hardware comparison](docs/reset.md).
-- `Device::signal_fatal()` represents a device-wide internal hardware fault input.
+- `Dma::signal_fatal()` represents a device-wide internal hardware fault input.
   It stops all execution and uses the device control block's independent IRQ enable.
   Only device reset clears it; channel reset does not. The minimal model has no
   autonomous shared-engine fault source, and memory-backend diagnostics are not

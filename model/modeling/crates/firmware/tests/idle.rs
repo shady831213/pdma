@@ -1,4 +1,7 @@
 //! Firmware suspension before Host activates its control queue.
+#[doc = "Test platform register placement."]
+pub mod platform;
+use platform::ADDRESSES;
 
 use hardware_interface_runtime::{
     InterruptRuntime, RegisterAccess, SharedMemory, SoftwareCpu, pending_interrupt,
@@ -23,7 +26,7 @@ impl RegisterAccess for &DisabledBus {
         bytes.fill(0);
         if address == 0 {
             bytes.copy_from_slice(&1_u32.to_le_bytes());
-        } else if address == pdma_model_contract::CONTROL_CHANNEL_BASE + 8 {
+        } else if address == ADDRESSES.control + 8 {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
         Ok(())
@@ -42,7 +45,7 @@ async fn disabled_control_waits_without_repeated_register_reads() {
     let bound = cpu.bind_registers(&bus);
     let runtime = InterruptRuntime::new(cpu, source);
     let mut program = std::pin::pin!(runtime.run_main::<ControlIsr, _>(async |registration| {
-        pdma_model_firmware::main(bound, SharedMemory::new(), registration).await
+        pdma_model_firmware::main(bound, SharedMemory::new(), registration, ADDRESSES).await
     }));
     let mut context = Context::from_waker(Waker::noop());
     // When: the executor polls the idle program repeatedly without a doorbell.

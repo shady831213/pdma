@@ -1,7 +1,9 @@
 //! Complete-transaction validation and firmware management isolation.
+const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
+const WINDOW_STATUS_BASE: u32 = 0x0010_0004;
 
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
-use pdma_model_contract::{WINDOW_CONTROL_BASE, WINDOW_STATUS_BASE, WindowControl};
+use pdma_model_contract::WindowControl;
 use pdma_model_hw_components::{AccessError, AccessWindow, WindowConfigError};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -12,10 +14,10 @@ fn constructor_rejects_overlap_with_reserved_addresses() -> TestResult {
     let control = usize::try_from(WINDOW_CONTROL_BASE)?;
     // When: downstream extents end before, at, or beyond that address.
     for extent in [0, 4, control] {
-        assert!(AccessWindow::new(extent).is_ok());
+        assert!(AccessWindow::new(0..extent, usize::try_from(WINDOW_CONTROL_BASE)?).is_ok());
     }
-    let overlap = AccessWindow::new(control + 1);
-    let overflow = AccessWindow::new(usize::MAX);
+    let overlap = AccessWindow::new(0..control + 1, usize::try_from(WINDOW_CONTROL_BASE)?);
+    let overflow = AccessWindow::new(0..usize::MAX, usize::try_from(WINDOW_CONTROL_BASE)?);
     // Then: only overlapping extents fail with the typed configuration error.
     assert!(matches!(
         overlap,
@@ -31,7 +33,7 @@ fn constructor_rejects_overlap_with_reserved_addresses() -> TestResult {
 #[test]
 fn malformed_management_transactions_preserve_readiness() -> TestResult {
     // Given: firmware can manage an otherwise closed window.
-    let mut window = AccessWindow::new(4)?;
+    let mut window = AccessWindow::new(0..4, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     let control = usize::try_from(WINDOW_CONTROL_BASE)?;
     let status = usize::try_from(WINDOW_STATUS_BASE)?;
     for ready in [0_u32, 1] {
@@ -67,7 +69,7 @@ fn malformed_management_transactions_preserve_readiness() -> TestResult {
 #[test]
 fn complete_downstream_bounds_are_checked_before_forwarding() -> TestResult {
     // Given: real downstream storage extends beyond the permitted aperture.
-    let mut window = AccessWindow::new(3)?;
+    let mut window = AccessWindow::new(0..3, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     window.management_write(usize::try_from(WINDOW_CONTROL_BASE)?, &1_u32.to_le_bytes())?;
     let mut registers = RegisterWindow::<WindowControl>::new(0);
     // When: accesses cross the extent, start outside it, or overflow.
@@ -93,7 +95,7 @@ fn complete_downstream_bounds_are_checked_before_forwarding() -> TestResult {
 #[test]
 fn malformed_status_reads_preserve_output_and_ready() -> TestResult {
     // Given: open hardware and downstream storage unrelated to status.
-    let mut window = AccessWindow::new(4)?;
+    let mut window = AccessWindow::new(0..4, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     window.management_write(usize::try_from(WINDOW_CONTROL_BASE)?, &1_u32.to_le_bytes())?;
     let status = usize::try_from(WINDOW_STATUS_BASE)?;
     let mut registers = RegisterWindow::<WindowControl>::new(0);
@@ -114,7 +116,7 @@ fn malformed_status_reads_preserve_output_and_ready() -> TestResult {
 #[test]
 fn closing_blocks_further_downstream_transactions() -> TestResult {
     // Given: host has already written downstream while access is open.
-    let mut window = AccessWindow::new(4)?;
+    let mut window = AccessWindow::new(0..4, usize::try_from(WINDOW_CONTROL_BASE)?)?;
     let control = usize::try_from(WINDOW_CONTROL_BASE)?;
     let mut registers = RegisterWindow::<WindowControl>::new(0);
     window.management_write(control, &1_u32.to_le_bytes())?;

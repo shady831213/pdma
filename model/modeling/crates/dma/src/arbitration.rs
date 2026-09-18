@@ -1,4 +1,4 @@
-use crate::{Device, Error, Fetch};
+use crate::{Dma, Error, Fetch};
 use hardware_interface_pipeline::{Arbitration, ReadyStage, StepOutcome};
 use hardware_interface_runtime::MemoryAccess;
 
@@ -8,7 +8,7 @@ pub struct RoundRobin {
     next: usize,
 }
 
-impl<M: MemoryAccess> Arbitration<Device<M>, Fetch> for RoundRobin {
+impl<M: MemoryAccess> Arbitration<Dma<M>, Fetch> for RoundRobin {
     type State = usize;
 
     fn start() -> usize {
@@ -17,7 +17,7 @@ impl<M: MemoryAccess> Arbitration<Device<M>, Fetch> for RoundRobin {
 
     fn select_index(
         &mut self,
-        context: &Device<M>,
+        context: &Dma<M>,
         sources: &[Fetch],
         visited: &mut usize,
     ) -> StepOutcome<usize, Error, ()> {

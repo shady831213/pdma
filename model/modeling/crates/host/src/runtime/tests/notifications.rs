@@ -1,15 +1,17 @@
 use super::{Model, TestResult};
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{InterruptSource, RegisterAccess};
-use pdma_model_contract::{DeviceControl, DeviceRegisters};
-use pdma_model_dma::{Device, ResetControl};
+use pdma_model_contract::DmaControl;
+use pdma_model_dma::{Dma, ResetControl};
 
 #[tokio::test]
 async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> TestResult {
     // Given: the platform has accepted a hardware error notification.
-    let mut device = Device::new((), 1)?;
+    let mut device = Dma::new((), 1)?;
     device.write(
-        DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset(),
+        (pdma_model_contract::DmaDiscovery::EXTENT
+            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            + DmaControl::IRQ_ENABLE.offset(),
         &1_u32.to_le_bytes(),
     )?;
     device.signal_fatal();
@@ -18,7 +20,11 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
     // When: software resets the device before the interrupt dispatcher claims it.
     model
         .write(
-            u32::try_from(DeviceRegisters::CONTROL.offset() + DeviceControl::RESET.offset())?,
+            u32::try_from(
+                (pdma_model_contract::DmaDiscovery::EXTENT
+                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                    + DmaControl::RESET.offset(),
+            )?,
             &1_u32.to_le_bytes(),
         )
         .await?;
@@ -42,13 +48,17 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
 #[tokio::test]
 async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResult {
     // Given: a fatal event occurred with device notifications disabled.
-    let mut device = Device::new((), 1)?;
+    let mut device = Dma::new((), 1)?;
     device.signal_fatal();
     let mut model = Model::new(device);
     // When: software enables notifications after the event.
     model
         .write(
-            u32::try_from(DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset())?,
+            u32::try_from(
+                (pdma_model_contract::DmaDiscovery::EXTENT
+                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                    + DmaControl::IRQ_ENABLE.offset(),
+            )?,
             &1_u32.to_le_bytes(),
         )
         .await?;
@@ -56,7 +66,11 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
     let mut bytes = [0; 4];
     model
         .read(
-            u32::try_from(DeviceRegisters::CONTROL.offset() + DeviceControl::FAULT.offset())?,
+            u32::try_from(
+                (pdma_model_contract::DmaDiscovery::EXTENT
+                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                    + DmaControl::FAULT.offset(),
+            )?,
             &mut bytes,
         )
         .await?;
@@ -68,8 +82,10 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
 #[tokio::test]
 async fn masking_preserves_emitted_notification_across_model_clones() -> TestResult {
     // Given: a fatal notification emitted before the platform claims it.
-    let mut device = Device::new((), 1)?;
-    let irq_enable = DeviceRegisters::CONTROL.offset() + DeviceControl::IRQ_ENABLE.offset();
+    let mut device = Dma::new((), 1)?;
+    let irq_enable = (pdma_model_contract::DmaDiscovery::EXTENT
+        + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        + DmaControl::IRQ_ENABLE.offset();
     device.write(irq_enable, &1_u32.to_le_bytes())?;
     device.signal_fatal();
     let mut first = Model::new(device);

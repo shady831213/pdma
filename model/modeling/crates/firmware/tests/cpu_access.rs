@@ -1,10 +1,12 @@
 //! Runtime-bound MMIO protects firmware without application-side CPU guards.
+#[doc = "Test platform register placement."]
+pub mod platform;
+use platform::ADDRESSES;
 
 use hardware_interface_runtime::{
     CpuAccessError, CpuContextError, InterruptRuntime, RegisterAccess, SharedMemory, SoftwareCpu,
     pending_interrupt,
 };
-use pdma_model_contract::{FIRMWARE_STATUS_BASE, WINDOW_CONTROL_BASE};
 use pdma_model_software::control::{ControlIrq, ControlIsr};
 use std::{
     future::{Future, poll_fn},
@@ -50,7 +52,7 @@ impl RegisterAccess for &SuspendedBus {
             tokio::task::yield_now().await;
         }
         self.writes.fetch_add(1, Ordering::SeqCst);
-        if address == FIRMWARE_STATUS_BASE {
+        if address == ADDRESSES.firmware {
             self.report.store(
                 u32::from_le_bytes(bytes.try_into().map_err(io::Error::other)?),
                 Ordering::SeqCst,
@@ -72,7 +74,8 @@ async fn rejects_migrated_access(pause_at: u32, committed: usize) -> TestResult 
             let mut firmware = std::pin::pin!(pdma_model_firmware::main(
                 bound,
                 SharedMemory::new(),
-                registration
+                registration,
+                ADDRESSES,
             ));
             assert!(
                 poll_fn(|cx| Poll::Ready(firmware.as_mut().poll(cx)))
@@ -101,24 +104,24 @@ async fn rejects_migrated_access(pause_at: u32, committed: usize) -> TestResult 
 
 #[tokio::test]
 async fn migrated_window_write_is_rejected_by_the_runtime_port() -> TestResult {
-    rejects_migrated_access(WINDOW_CONTROL_BASE, 0).await
+    rejects_migrated_access(ADDRESSES.windows, 0).await
 }
 
 #[tokio::test]
 async fn migrated_ready_write_is_rejected_by_the_runtime_port() -> TestResult {
-    rejects_migrated_access(FIRMWARE_STATUS_BASE, 1).await
+    rejects_migrated_access(ADDRESSES.firmware, 1).await
 }
 
 #[tokio::test]
 async fn runtime_reestablishes_the_firmware_cpu_on_every_poll() -> TestResult {
     // Given: firmware whose Ready publication suspends once.
-    let bus = SuspendedBus::new(FIRMWARE_STATUS_BASE);
+    let bus = SuspendedBus::new(ADDRESSES.firmware);
     let cpu = Arc::new(SoftwareCpu::new());
     let bound = cpu.bind_registers(&bus);
     let (_, source) = pending_interrupt(ControlIrq);
     let runtime = InterruptRuntime::new(cpu, source);
     let mut running = std::pin::pin!(runtime.run_main::<ControlIsr, _>(async |registration| {
-        pdma_model_firmware::main(bound, SharedMemory::new(), registration).await
+        pdma_model_firmware::main(bound, SharedMemory::new(), registration, ADDRESSES).await
     }));
     assert!(
         poll_fn(|cx| Poll::Ready(running.as_mut().poll(cx)))

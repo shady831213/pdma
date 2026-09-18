@@ -1,13 +1,13 @@
-use crate::Device;
+use crate::Dma;
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use pdma_model_contract::{ChannelId, DeviceControlValues};
+use pdma_model_contract::{ChannelId, DmaControlValues};
 use std::convert::Infallible;
 
 /// Completes requested resets only after accepted work has retired.
 #[derive(Debug, Default)]
 pub struct ResetControl;
 
-impl<M> Stage<Device<M>> for ResetControl {
+impl<M> Stage<Dma<M>> for ResetControl {
     type Input = ();
     type Output = Infallible;
     type Error = Infallible;
@@ -18,7 +18,7 @@ impl<M> Stage<Device<M>> for ResetControl {
 
     fn step(
         &mut self,
-        device: &mut Device<M>,
+        device: &mut Dma<M>,
         (): &mut (),
     ) -> StepOutcome<Infallible, Infallible, Infallible> {
         if device.resetting() {
@@ -26,10 +26,7 @@ impl<M> Stage<Device<M>> for ResetControl {
                 for channel in &mut device.channels {
                     channel.finish_reset();
                 }
-                device.control.values = DeviceControlValues {
-                    channel_num: device.control.values.channel_num,
-                    ..DeviceControlValues::default()
-                };
+                device.control.values = DmaControlValues::default();
                 device.interrupt = false;
             }
         } else {

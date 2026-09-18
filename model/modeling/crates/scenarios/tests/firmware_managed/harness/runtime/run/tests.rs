@@ -30,14 +30,18 @@ async fn assembled_host_and_firmware_have_distinct_cpu_ownership() {
     let (owner, _) = host
         .runtime
         .run_main::<TestHandler, _>(async |_| {
-            hardware_interface_runtime::CpuOwner::capture_active().unwrap()
+            hardware_interface_runtime::CpuLocal::capture_active(0_u32).unwrap()
         })
         .await
         .unwrap();
     // When: firmware tries to use a Host-owned capability.
     let result = system
         .firmware_cpu
-        .run_main(async { owner.validate_active() })
+        .run_main(async {
+            owner.with(|value| {
+                *value += 1;
+            })
+        })
         .await;
     // Then: sharing the async executor did not merge the software CPU identities.
     assert_eq!(

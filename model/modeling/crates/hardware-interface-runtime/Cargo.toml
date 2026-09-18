@@ -36,10 +36,6 @@ name = "cpu_context"
 required-features = ["async-runtime"]
 
 [[test]]
-name = "cpu_scope"
-required-features = ["async-runtime"]
-
-[[test]]
 name = "interrupt_freeze_contract"
 required-features = ["async-runtime"]
 

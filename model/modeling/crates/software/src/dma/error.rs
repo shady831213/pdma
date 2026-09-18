@@ -1,5 +1,5 @@
 use crate::ring::SoftRingError;
-use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
+use hardware_interface_runtime::MemoryAccessError;
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
 use pdma_model_contract::{ChannelId, RingError};
 use std::{error::Error as StdError, fmt};
@@ -15,8 +15,6 @@ pub enum Error<B> {
     Codec(SchemaCodecError),
     /// A register field contains an invalid encoding.
     RegisterCodec(RegisterCodecError),
-    /// The owning software CPU is not active.
-    Cpu(CpuContextError),
     /// A shared ring pointer update is invalid.
     Ring(RingError),
     /// The selected channel is outside the hardware-advertised channel count.
@@ -45,7 +43,6 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             Self::Memory(error) => error.fmt(f),
             Self::Codec(error) => error.fmt(f),
             Self::RegisterCodec(error) => error.fmt(f),
-            Self::Cpu(error) => error.fmt(f),
             Self::Ring(error) => error.fmt(f),
             Self::Channel {
                 requested,
@@ -71,7 +68,6 @@ impl<B: StdError + 'static> StdError for Error<B> {
             Self::Memory(error) => Some(error),
             Self::Codec(error) => Some(error),
             Self::RegisterCodec(error) => Some(error),
-            Self::Cpu(error) => Some(error),
             Self::Ring(error) => Some(error),
             Self::Channel { .. }
             | Self::Geometry
@@ -90,7 +86,6 @@ impl<B> From<SoftRingError<B>> for Error<B> {
             SoftRingError::Memory(error) => Self::Memory(error),
             SoftRingError::Codec(error) => Self::Codec(error),
             SoftRingError::Ring(error) => Self::Ring(error),
-            SoftRingError::Cpu(error) => Self::Cpu(error),
             SoftRingError::Busy => Self::RingBusy,
             SoftRingError::Idle => Self::RingIdle,
             SoftRingError::CursorChanged => Self::RingCursorChanged,

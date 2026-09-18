@@ -45,7 +45,7 @@ impl<S: InterruptSource> InterruptRuntime<S> {
     {
         let registry = Mutex::new(HandlerRegistry::new());
         let registration = InterruptRegistration {
-            owner: self.cpu.owner(),
+            cpu: &self.cpu,
             registry: &registry,
         };
         let (shutdown, receiver) = InterruptDispatcher::shutdown_channel();

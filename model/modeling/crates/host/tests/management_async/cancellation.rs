@@ -26,7 +26,7 @@ async fn cancelled_submission_retains_identity_and_publishes_only_once() {
             fixture.bus.blocked.store(false, Ordering::SeqCst);
             let id = client.resume_submission().await.unwrap();
             // Then: the same request record survives, without a duplicate publication.
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
             assert_eq!(fixture.take(&mut commands).await.unwrap().id, id.raw());
             assert_eq!(fixture.state().unwrap().command.producer, 1);
             assert_eq!(client.submit_acquire().await.unwrap().raw(), id.raw() + 1);
@@ -43,7 +43,7 @@ async fn cancelled_space_notification_retains_consumed_response() {
             let mut client = fixture.setup().await.unwrap();
             let first = client.submit_acquire().await.unwrap();
             let second = client.submit_acquire().await.unwrap();
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut responses = SoftRing::new(fixture.rings.response);
             fixture
                 .respond(&mut responses, response(second.raw(), 1))
                 .await
@@ -74,33 +74,46 @@ async fn cancelled_space_notification_retains_consumed_response() {
 }
 
 #[tokio::test]
-async fn waiting_response_repoll_on_wrong_cpu_rejects_before_consumption() {
+async fn waiting_response_can_complete_on_another_cpu() {
     let fixture = Fixture::new().unwrap();
-    let owner = SoftwareCpu::new();
-    let mut client = owner.run_main(fixture.setup()).await.unwrap();
-    let id = owner.run_main(client.submit_acquire()).await.unwrap();
-    // Given: a response wait suspended on its owning CPU.
+    let first = SoftwareCpu::new();
+    let mut client = first.run_main(fixture.setup()).await.unwrap();
+    let id = first.run_main(client.submit_acquire()).await.unwrap();
+    // Given: a response wait suspended before firmware has produced a completion.
     let mut future = Box::pin(client.next_response());
-    owner
+    first
         .run_main(poll_fn(|cx| {
             assert!(future.as_mut().poll(cx).is_pending());
             Poll::Ready(())
         }))
         .await;
-    // When: another CPU tries to resume the same future.
-    let result = SoftwareCpu::new().run_main(future).await;
-    // Then: CPU ownership rejects the poll and the request remains recoverable.
-    assert!(matches!(result, Err(Error::Cpu(_))));
-    owner
+    first
         .run_main(async {
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut responses = SoftRing::new(fixture.rings.response);
             fixture
                 .respond(&mut responses, response(id.raw(), 0))
                 .await
                 .unwrap();
-            assert_eq!(client.next_response().await.unwrap(), response(id.raw(), 0));
+            fixture.event.handler().handle(&ControlIrq).await.unwrap();
         })
         .await;
+    // When: another CPU continues the same software operation.
+    let result = SoftwareCpu::new().run_main(future).await.unwrap();
+    // Then: the matching completion is consumed once.
+    assert_eq!(result, response(id.raw(), 0));
+    assert_eq!(fixture.state().unwrap().response.consumer, 1);
+}
+
+#[tokio::test]
+async fn management_setup_needs_no_modeled_cpu_context() {
+    // Given: injected memory and a register transport with no CPU affinity.
+    let fixture = Fixture::new().unwrap();
+    // When: ordinary software configures the control channel directly.
+    let mut client = fixture.setup().await.unwrap();
+    let id = client.submit_acquire().await.unwrap();
+    // Then: the request is published using the supplied capabilities.
+    assert_eq!(id.raw(), 1);
+    assert_eq!(fixture.state().unwrap().command.producer, 1);
 }
 
 #[tokio::test]
@@ -113,9 +126,9 @@ async fn next_response_wakes_from_isr_and_wait_pending_recovers_submission() {
             fixture.bus.blocked.store(true, Ordering::SeqCst);
             pending_once(client.submit_acquire()).await;
             fixture.bus.blocked.store(false, Ordering::SeqCst);
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
             let request = fixture.take(&mut commands).await.unwrap();
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut responses = SoftRing::new(fixture.rings.response);
             // When: compatibility recovery waits, and firmware publishes then invokes the ISR.
             let mut wait = Box::pin(client.wait_pending());
             poll_fn(|cx| {

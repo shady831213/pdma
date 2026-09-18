@@ -11,8 +11,8 @@ async fn reset_submission_correlates_the_selected_channel() {
     SoftwareCpu::new()
         .run_main(async {
             let mut client = fixture.setup().await.unwrap();
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
+            let mut responses = SoftRing::new(fixture.rings.response);
             // When: Host requests reset of channel seven.
             let id = client.submit_reset(ChannelId::new(7)).await.unwrap();
             let request = fixture.take(&mut commands).await.unwrap();
@@ -40,8 +40,8 @@ async fn reset_completion_preserves_request_identity() {
     SoftwareCpu::new()
         .run_main(async {
             let mut client = fixture.setup().await.unwrap();
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
+            let mut responses = SoftRing::new(fixture.rings.response);
             let id = client.submit_reset(ChannelId::new(2)).await.unwrap();
             fixture.take(&mut commands).await.unwrap();
             // When: firmware publishes that reset's completion.

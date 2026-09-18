@@ -45,9 +45,13 @@ capability; CPU validation, handler tables and dispatcher lifecycle belong to th
 runtime. Do not expose registry freezing, startup handoff channels or dispatcher tasks
 to the software program. `host::runtime` owns PDMA transport, separate from the host
 channel driver; generic CPU/interrupt mechanics stay in `hardware-interface-runtime`.
-Software entrypoints must not capture `CpuOwner` or manually scope their operations.
-Runtime assembly supplies CPU-bound register capabilities where needed; CPU-local
-driver guards remain internal. Host test programs observe software-visible memory
+`CpuOwner` is runtime-private. Software entrypoints and ordinary drivers must not
+capture CPU ownership tokens or bind their state to the CPU that created them.
+Management clients, rings and DMA drivers follow normal Rust ownership and borrowing;
+their retained operations may continue on another CPU when the supplied capabilities
+permit it. Explicit CPU-local state and CPU-specific register capabilities keep their
+runtime checks. Main/ISR scheduling and registration remain runtime responsibilities.
+Host test programs observe software-visible memory
 and registers, not synthetic harness notifications of individual DMA writes.
 
 `include/pdma_common.h`, `include/pdma_host.h` and `include/pdma_firmware.h` are generated from the current contract schemas by
@@ -159,7 +163,7 @@ and hardware-step wakeup decisions out of that generic component.
   `ChannelControl`; firmware uses the latter for reset without owning DMA rings.
   Generic schema/runtime expose no ring protocol or ring types and have no
   normal dependency on PDMA crates. Transport, CPU and notification mechanics stay
-  in the generic runtime. `SoftRing` supplies CPU-owned software operations with
+  in the generic runtime. `SoftRing` supplies exclusively borrowed software operations with
   borrowed MMIO or memory cursors. Host/device
   keep side-specific memory/MMIO access and publish pointers only after successful
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.

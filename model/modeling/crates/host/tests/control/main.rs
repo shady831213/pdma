@@ -1,20 +1,19 @@
-//! CPU-owned host interrupt controls and explicit reset recovery.
+//! Host interrupt controls and explicit reset recovery.
 
 use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{
-    CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
-    SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
+    SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{
     ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DmaControl,
     DmaFaultCode, Endpoint, Response,
 };
 use pdma_model_dma::Dma;
-use pdma_model_host::{
-    Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
-};
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
 
+mod capabilities;
 #[doc = "Test hardware composition."]
 pub mod hardware;
 mod reset;
@@ -183,41 +182,6 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
             .map(|response| response.id),
         Some(7)
     );
-    Ok(())
-}
-
-#[tokio::test]
-async fn control_operations_reject_a_different_cpu() -> Result<(), Box<dyn std::error::Error>> {
-    // Given: a driver owned by one CPU.
-    let (device, memory, rings) = fixture()?;
-    let model = Model::new(device);
-    let owner = SoftwareCpu::new();
-    let other = SoftwareCpu::new();
-    let channel = owner
-        .run_main(Channel::setup(
-            model,
-            memory,
-            ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
-                rings,
-            },
-        ))
-        .await?;
-    // When: a different CPU attempts every new non-consuming control operation.
-    let results = other
-        .run_main(async {
-            [
-                channel.set_irq_mask(ChannelIrqMaskValues::new(3)).await,
-                channel.irq_cause().await.map(|_| ()),
-                channel.dma_fault().await.map(|_| ()),
-                channel.set_dma_irq_enabled(false).await,
-            ]
-        })
-        .await;
-    // Then: each operation rejects the caller at the CPU boundary.
-    for result in results {
-        assert!(matches!(result, Err(Error::Cpu(CpuContextError::Mismatch))));
-    }
     Ok(())
 }
 

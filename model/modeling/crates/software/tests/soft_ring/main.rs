@@ -1,7 +1,5 @@
 //! Shared software FIFO using actual memory storage.
-use hardware_interface_runtime::{
-    MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SoftwareCpu,
-};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use hardware_interface_schema::record_schema;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 mod boundaries;
@@ -26,29 +24,25 @@ record_schema! {
 }
 
 #[tokio::test]
-async fn fifo_when_memory_cursors_are_shared() -> Result<(), Box<dyn std::error::Error>> {
+async fn fifo_without_cpu_context() -> Result<(), Box<dyn std::error::Error>> {
     // Given: independent software endpoints over one memory-backed FIFO.
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(0.into(), 64, MemoryAlignment::ONE)?])?;
     let io = MemoryRingIo::new(&memory, MemoryAddress::new(0), MemoryAddress::new(4));
-    SoftwareCpu::new()
-        .run_main(async {
-            let mut producer = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
-            let mut consumer = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
-            // When: fill, drain, then reuse the ring.
-            assert_eq!(consumer.peek(&io).await?, None);
-            assert!(producer.try_push(&io, Item { value: 7 }).await?);
-            assert!(producer.try_push(&io, Item { value: 8 }).await?);
-            assert!(!producer.try_push(&io, Item { value: 9 }).await?);
-            // Then: full does not retain data and values arrive in FIFO order.
-            assert!(!producer.has_pending_push());
-            assert_eq!(consumer.peek(&io).await?, Some(Item { value: 7 }));
-            consumer.consume(&io).await?;
-            assert_eq!(consumer.peek(&io).await?, Some(Item { value: 8 }));
-            consumer.consume(&io).await?;
-            assert!(producer.try_push(&io, Item { value: 9 }).await?);
-            assert_eq!(consumer.peek(&io).await?, Some(Item { value: 9 }));
-            Ok::<_, Box<dyn std::error::Error>>(())
-        })
-        .await
+    let mut producer = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
+    let mut consumer = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
+    // When: fill, drain, then reuse the ring.
+    assert_eq!(consumer.peek(&io).await?, None);
+    assert!(producer.try_push(&io, Item { value: 7 }).await?);
+    assert!(producer.try_push(&io, Item { value: 8 }).await?);
+    assert!(!producer.try_push(&io, Item { value: 9 }).await?);
+    // Then: full does not retain data and values arrive in FIFO order.
+    assert!(!producer.has_pending_push());
+    assert_eq!(consumer.peek(&io).await?, Some(Item { value: 7 }));
+    consumer.consume(&io).await?;
+    assert_eq!(consumer.peek(&io).await?, Some(Item { value: 8 }));
+    consumer.consume(&io).await?;
+    assert!(producer.try_push(&io, Item { value: 9 }).await?);
+    assert_eq!(consumer.peek(&io).await?, Some(Item { value: 9 }));
+    Ok(())
 }

@@ -1,7 +1,5 @@
 use crate::{CursorBus, Item};
-use hardware_interface_runtime::{
-    CpuContextError, MemoryAlignment, MemoryRegion, SharedMemory, SoftwareCpu,
-};
+use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory, SoftwareCpu};
 use pdma_model_contract::RingError;
 use pdma_model_software::ring::{
     MemoryRingIo, RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingError,
@@ -23,7 +21,7 @@ async fn empty_query_reads_only_cursors_and_handles_wrap() -> TestResult {
     let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
     SoftwareCpu::new()
         .run_main(async {
-            let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             for (producer, consumer, empty) in [
                 (0, 0, true),
                 (1, 0, false),
@@ -53,7 +51,7 @@ async fn empty_query_rejects_invalid_snapshots() -> TestResult {
     let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
     SoftwareCpu::new()
         .run_main(async {
-            let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             for (producer, consumer) in [(3, 0), (0, 1)] {
                 io.write_producer(producer).await?;
                 io.write_consumer(consumer).await?;
@@ -71,9 +69,11 @@ async fn empty_query_rejects_invalid_snapshots() -> TestResult {
 }
 
 #[tokio::test]
-async fn empty_query_rechecks_cpu_after_a_suspended_read() -> TestResult {
+async fn empty_query_completes_outside_cpu_after_a_suspended_read() -> TestResult {
     // Given: an empty query suspended before reading its first cursor.
     let bus = CursorBus::default();
+    bus.memory
+        .add_regions(&[MemoryRegion::try_new(0.into(), 8, MemoryAlignment::ONE)?])?;
     let io = RegisterRingIo::new(
         &bus,
         &bus.memory,
@@ -84,7 +84,7 @@ async fn empty_query_rechecks_cpu_after_a_suspended_read() -> TestResult {
     );
     let owner = SoftwareCpu::new();
     let config = RingConfig::<Item>::new(16, 2)?;
-    let ring = owner.run_main(async { SoftRing::new(config) }).await?;
+    let ring = owner.run_main(async { SoftRing::new(config) }).await;
     bus.pause_read.store(true, Ordering::SeqCst);
     let mut query = std::pin::pin!(ring.is_empty(&io));
     assert!(
@@ -93,14 +93,11 @@ async fn empty_query_rechecks_cpu_after_a_suspended_read() -> TestResult {
             .await
             .is_pending()
     );
-    // When: another CPU resumes the same query.
-    let result = SoftwareCpu::new().run_main(query).await;
-    // Then: rejection precedes any cursor read, even though the first poll had ownership.
-    assert!(matches!(
-        result,
-        Err(SoftRingError::Cpu(CpuContextError::Mismatch))
-    ));
-    assert_eq!(bus.reads.load(Ordering::SeqCst), 0);
+    // When: the same query completes without a modeled CPU.
+    assert!(query.await?);
+    // Then: each cursor was read once and no write occurred.
+    assert_eq!(bus.reads.load(Ordering::SeqCst), 2);
+    assert_eq!(bus.writes.load(Ordering::SeqCst), 0);
     Ok(())
 }
 
@@ -120,7 +117,7 @@ async fn cancelled_empty_query_leaves_the_ring_usable() -> TestResult {
     );
     SoftwareCpu::new()
         .run_main(async {
-            let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             bus.pause_read.store(true, Ordering::SeqCst);
             {
                 let mut query = std::pin::pin!(ring.is_empty(&io));

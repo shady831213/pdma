@@ -67,8 +67,8 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         Ok(Self {
             bus,
             base,
-            command: SoftRing::new(command).map_err(Error::Cpu)?,
-            response: SoftRing::new(response).map_err(Error::Cpu)?,
+            command: SoftRing::new(command),
+            response: SoftRing::new(response),
             command_io: layout.command_io(memory),
             response_io: layout.response_io(memory),
         })

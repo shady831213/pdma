@@ -38,6 +38,9 @@ impl RegisterAccess for CursorBus {
         if pause == 1 {
             pending::<()>().await;
         }
+        if pause == 3 {
+            tokio::task::yield_now().await;
+        }
         self.memory.write(
             MemoryAddress::new(u64::from(offset)),
             MemoryAlignment::ONE,

@@ -1,7 +1,5 @@
 use crate::{CursorBus, Item};
-use hardware_interface_runtime::{
-    CpuContextError, MemoryAccess, MemoryAlignment, MemoryRegion, SoftwareCpu,
-};
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, MemoryRegion, SoftwareCpu};
 use pdma_model_software::ring::{
     RegisterRingIo, RingConfig, RingCursorRegisters, SoftRing, SoftRingError, SoftRingIo,
 };
@@ -26,7 +24,7 @@ async fn push_after_cancel(pause: u8) -> Result<(), Box<dyn std::error::Error>> 
     );
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             bus.pause.store(pause, Ordering::SeqCst);
             {
                 let mut push = std::pin::pin!(ring.try_push(&io, Item { value: 23 }));
@@ -82,7 +80,7 @@ async fn cached_peek_survives_slot_reuse_after_consumer_commit()
     );
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 1)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 1)?);
             ring.try_push(&io, Item { value: 11 }).await?;
             assert_eq!(ring.peek(&io).await?, Some(Item { value: 11 }));
             bus.pause.store(2, Ordering::SeqCst);
@@ -110,9 +108,9 @@ async fn cached_peek_survives_slot_reuse_after_consumer_commit()
 }
 
 #[tokio::test]
-async fn resumed_future_rejects_wrong_cpu_before_publication()
--> Result<(), Box<dyn std::error::Error>> {
-    // Given: a push suspended before its cursor publication on its owning CPU.
+async fn suspended_publication_completes_on_another_cpu() -> Result<(), Box<dyn std::error::Error>>
+{
+    // Given: a push suspended before publication on one CPU.
     let bus = CursorBus::default();
     bus.memory
         .add_regions(&[MemoryRegion::try_new(0.into(), 64, MemoryAlignment::ONE)?])?;
@@ -126,21 +124,71 @@ async fn resumed_future_rejects_wrong_cpu_before_publication()
     );
     let cpu = SoftwareCpu::new();
     let config = RingConfig::<Item>::new(16, 2)?;
-    let mut ring = cpu.run_main(async { SoftRing::new(config) }).await?;
+    let mut ring = cpu.run_main(async { SoftRing::new(config) }).await;
+    bus.pause.store(3, Ordering::SeqCst);
+    {
+        let mut push = std::pin::pin!(ring.try_push(&io, Item { value: 1 }));
+        assert!(
+            cpu.run_main(poll_fn(|cx| Poll::Ready(push.as_mut().poll(cx))))
+                .await
+                .is_pending()
+        );
+        // When: a different CPU completes the same future.
+        assert!(SoftwareCpu::new().run_main(push).await?);
+    }
+    // Then: exactly one entry was published; cached data and consumption work outside a CPU.
+    assert!(!ring.has_pending_push());
+    assert_eq!(ring.peek(&io).await?, Some(Item { value: 1 }));
+    assert_eq!(ring.peek(&io).await?, Some(Item { value: 1 }));
+    ring.consume(&io).await?;
+    let bytes: [u8; 4] = bus.memory.read_typed(16.into(), MemoryAlignment::ONE)?;
+    assert_eq!(u32::from_le_bytes(bytes), 1);
+    assert_eq!(io.read_producer().await?, 1);
+    assert_eq!(io.read_consumer().await?, 1);
+    assert_eq!(bus.writes.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn cancelled_publication_rejects_an_unrelated_producer_cursor()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: publication was canceled after writing its entry but before its cursor.
+    let bus = CursorBus::default();
+    bus.memory
+        .add_regions(&[MemoryRegion::try_new(0.into(), 64, MemoryAlignment::ONE)?])?;
+    let io = RegisterRingIo::new(
+        &bus,
+        &bus.memory,
+        RingCursorRegisters {
+            producer: 0,
+            consumer: 4,
+        },
+    );
+    let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
     bus.pause.store(1, Ordering::SeqCst);
-    let mut push = std::pin::pin!(ring.try_push(&io, Item { value: 1 }));
-    cpu.run_main(poll_fn(|cx| {
-        assert!(push.as_mut().poll(cx).is_pending());
-        Poll::Ready(())
-    }))
-    .await;
-    // When: another CPU resumes that same future.
-    let result = SoftwareCpu::new().run_main(push).await;
-    // Then: the CPU guard rejects it before the inner transport is polled.
+    {
+        let mut push = std::pin::pin!(ring.try_push(&io, Item { value: 23 }));
+        assert!(
+            poll_fn(|cx| Poll::Ready(push.as_mut().poll(cx)))
+                .await
+                .is_pending()
+        );
+    }
+    // When: another producer changes the retained operation's cursor.
+    io.write_producer(7).await?;
+    // Then: resume rejects stale state without overwriting that cursor or accepting new data.
     assert!(matches!(
-        result,
-        Err(SoftRingError::Cpu(CpuContextError::Mismatch))
+        ring.resume_push(&io).await,
+        Err(SoftRingError::CursorChanged)
     ));
-    assert_eq!(bus.writes.load(Ordering::SeqCst), 0);
+    assert!(matches!(
+        ring.try_push(&io, Item { value: 99 }).await,
+        Err(SoftRingError::Busy)
+    ));
+    assert!(ring.has_pending_push());
+    assert_eq!(io.read_producer().await?, 7);
+    assert_eq!(bus.writes.load(Ordering::SeqCst), 1);
+    let bytes: [u8; 4] = bus.memory.read_typed(16.into(), MemoryAlignment::ONE)?;
+    assert_eq!(u32::from_le_bytes(bytes), 23);
     Ok(())
 }

@@ -7,30 +7,23 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Collects one available response without waiting for firmware or an interrupt.
     /// Bus notification may suspend; cancellation retains the response until retried.
     pub async fn try_response(&mut self) -> Result<Option<ControlResponse>, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner.scope(self.collect()).await.map_err(Error::Cpu)?
+        self.collect().await
     }
 
     /// Waits on ISR hints until any outstanding request completes, in response order.
     pub async fn next_response(&mut self) -> Result<ControlResponse, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(async {
-                loop {
-                    if let Some(response) = self.collect().await? {
-                        return Ok(response);
-                    }
-                    if self.outstanding.is_empty() {
-                        return Err(Error::ManagementIdle);
-                    }
-                    self.interrupt.wait().await;
-                }
-            })
-            .await
-            .map_err(Error::Cpu)?
+        loop {
+            if let Some(response) = self.collect().await? {
+                return Ok(response);
+            }
+            if self.outstanding.is_empty() {
+                return Err(Error::ManagementIdle);
+            }
+            self.interrupt.wait().await;
+        }
     }
 
-    async fn collect(&mut self) -> Result<Option<ControlResponse>, Error<B::Error>> {
+    pub(super) async fn collect(&mut self) -> Result<Option<ControlResponse>, Error<B::Error>> {
         if self.submission.is_some() {
             return Err(Error::ManagementBusy);
         }

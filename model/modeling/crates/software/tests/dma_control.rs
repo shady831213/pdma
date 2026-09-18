@@ -1,9 +1,7 @@
 //! Register-only DMA reset without software ring ownership.
 
 use hardware_interface_pipeline::{Operation, StepOutcome};
-use hardware_interface_runtime::{
-    CpuContextError, RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu,
-};
+use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
 use pdma_model_contract::ChannelId;
 use pdma_model_dma::{Dma, ResetControl};
 use std::{
@@ -200,8 +198,8 @@ async fn cancelling_register_only_reset_does_not_fake_drain()
 }
 
 #[tokio::test]
-async fn register_only_reset_rejects_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
-    // Given: a reset wait suspended on its captured CPU.
+async fn register_only_reset_completes_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
+    // Given: a reset wait suspended on the first CPU.
     let bus = Bus::new()?;
     let owner = SoftwareCpu::new();
     let other = SoftwareCpu::new();
@@ -219,16 +217,12 @@ async fn register_only_reset_rejects_another_cpu() -> Result<(), Box<dyn std::er
             .await
             .is_pending()
     );
-    // When: a different CPU polls the retained reset.
-    let result = other.run_main(reset).await;
-    // Then: CPU validation prevents further access and leaves hardware busy.
-    assert!(matches!(
-        result,
-        Err(pdma_model_software::dma::Error::Cpu(
-            CpuContextError::Mismatch
-        ))
-    ));
-    assert_eq!(bus.busy(1).await?, 1);
+    // When: hardware completes and a different CPU polls the retained reset.
+    bus.finish_reset()?;
+    other.run_main(reset).await?;
+    // Then: reset completion is visible outside a CPU and the peer stayed idle.
+    assert!(!control.reset_in_progress(&bus).await?);
+    assert_eq!(bus.busy(0).await?, 0);
     Ok(())
 }
 
@@ -237,14 +231,11 @@ async fn discovery_rejects_a_channel_outside_the_hardware_count()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: two advertised hardware channels.
     let bus = Bus::new()?;
-    let cpu = SoftwareCpu::new();
-    // When: firmware selects the first unavailable channel.
-    let result = cpu
-        .run_main(pdma_model_software::dma::ChannelControl::discover(
-            &bus,
-            ChannelId::new(2),
-        ))
-        .await;
+    // When: firmware discovers an available channel without a modeled CPU.
+    let control =
+        pdma_model_software::dma::ChannelControl::discover(&bus, ChannelId::new(1)).await?;
+    assert!(!control.reset_in_progress(&bus).await?);
+    let result = pdma_model_software::dma::ChannelControl::discover(&bus, ChannelId::new(2)).await;
     // Then: discovery reports the advertised limit before reset is written.
     assert!(matches!(
         result,

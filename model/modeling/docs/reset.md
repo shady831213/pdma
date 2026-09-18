@@ -76,8 +76,9 @@ reset guard before side effects.
 ## Software waiting and memory lifetime
 
 Direct-DMA Host `Channel::reset(self)` and `Channel::reset_dma(self)` consume the driver,
-write the request and repeatedly read the same reset register until zero. Each bus
-poll uses the existing CPU ownership check; busy polls cooperatively yield so the
+write the request and repeatedly read the same reset register until zero. Reset waits
+have no driver-imposed CPU affinity; the supplied bus enforces any resource-specific
+access restriction. Busy polls cooperatively yield so the
 independently driven hardware can progress. A successful return means hardware
 completion was observed. Reuse requires fresh channel setup.
 

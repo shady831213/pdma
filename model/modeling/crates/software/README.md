@@ -4,7 +4,7 @@
 It depends on the PDMA contract and the generic runtime/schema building blocks,
 with no normal dependency on host, firmware or DMA. Tests use DMA as a behavioral oracle.
 
-`dma::ChannelControl` provides CPU-owned discovery, faults, IRQ control and reset
+`dma::ChannelControl` provides discovery, faults, IRQ control and reset
 over a borrowed bus without owning rings. Firmware release uses that same reset
 handshake as the queue-owning `dma::Channel` driver. Host reexports the driver and
 its error as `host::DmaError`; management/boot errors remain in Host.
@@ -20,7 +20,7 @@ The public `ring` module owns `RingConfig<Entry>`, `SoftRing<Entry>`, `SoftRingI
 host reexports it as `host::RingConfig`. The `Ring`, `RingPointers` and `RingError`
 definitions and PDMA pointer rules belong to `pdma-model-contract`.
 
-`SoftRing` supplies CPU-owned `try_push`, `resume_push`, `peek`, `consume` and
+`SoftRing` supplies `try_push`, `resume_push`, `peek`, `consume` and
 `is_empty`. The empty query reads validated published cursors without entry access
 or changes to retained operations; it need not agree with a cached entry or an
 unpublished push. Snapshot occupancy validation is the contract's
@@ -32,6 +32,11 @@ of its backing. The endpoint retains interrupted publication and decoded entries
 awaiting consumption, without an authoritative cursor cache. Keep the ring and
 transport stable across retained operations.
 
+Ordinary drivers use Rust ownership and borrowing without capturing a modeled CPU.
+They can be constructed outside a CPU context, and suspended operations may resume
+on another CPU or outside one. Any CPU restrictions belong to the supplied
+capability, such as `CpuRegisterAccess`, or to CPU-local interrupt state.
+
 Encoding precedes producer publication; decoding precedes consumer publication.
 `peek` allows protocol validation before a slot is released. Retried cursor writes
 reconcile publication that already committed. Management request correlation,
@@ -39,7 +44,7 @@ resource allocation and reset policy belong to the caller.
 
 An `Entry` parameter does not make PDMA ring protocol a framework responsibility.
 Generic schema/runtime expose no ring protocol or ring types and have no normal
-dependency on PDMA crates. Runtime provides transport, CPU ownership and generic
+dependency on PDMA crates. Runtime provides transport, CPU-specific capabilities and generic
 progress notifications. See the [control-channel contract](../../docs/control-channel.md)
 for ordering, cancellation and memory lifetime requirements.
 

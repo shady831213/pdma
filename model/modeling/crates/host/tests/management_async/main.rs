@@ -17,8 +17,8 @@ async fn submits_multiple_without_firmware_and_collects_out_of_order() {
         .run_main(async {
             // Given: no firmware is running.
             let mut client = fixture.setup().await.unwrap();
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
+            let mut responses = SoftRing::new(fixture.rings.response);
             // When: two submissions complete before any firmware response exists.
             let first = client.submit_acquire().await.unwrap();
             let second = client.submit_acquire().await.unwrap();
@@ -56,7 +56,7 @@ async fn outstanding_bound_survives_firmware_consuming_all_commands() {
         .run_main(async {
             // Given: two outstanding requests whose command slots firmware has freed.
             let mut client = fixture.setup().await.unwrap();
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
             let first = client.submit_acquire().await.unwrap();
             client.submit_acquire().await.unwrap();
             fixture.take(&mut commands).await.unwrap();
@@ -65,7 +65,7 @@ async fn outstanding_bound_survives_firmware_consuming_all_commands() {
             assert!(matches!(client.submit_acquire().await, Err(Error::Full)));
             // Then: it published nothing and did not allocate an ID.
             assert_eq!(fixture.state().unwrap().command.producer, 2);
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut responses = SoftRing::new(fixture.rings.response);
             fixture
                 .respond(&mut responses, response(first.raw(), 0))
                 .await
@@ -92,7 +92,7 @@ async fn unmatched_or_duplicate_response_is_never_consumed() {
                 // Given: a response with either an unknown or an already completed ID.
                 let mut client = fixture.setup().await.unwrap();
                 let id = client.submit_acquire().await.unwrap();
-                let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+                let mut responses = SoftRing::new(fixture.rings.response);
                 if duplicate {
                     fixture
                         .respond(&mut responses, response(id.raw(), 0))
@@ -131,7 +131,7 @@ async fn wrong_release_channel_is_never_consumed() {
                 .submit_release(pdma_model_contract::ChannelId::new(1))
                 .await
                 .unwrap();
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut responses = SoftRing::new(fixture.rings.response);
             fixture
                 .respond(&mut responses, response(id.raw(), 0))
                 .await

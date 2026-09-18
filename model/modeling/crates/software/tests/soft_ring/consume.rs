@@ -26,7 +26,7 @@ async fn cancelled_consume_before_commit_retains_entry() -> Result<(), Box<dyn s
     );
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 1)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 1)?);
             ring.try_push(&io, Item { value: 29 }).await?;
             assert_eq!(ring.peek(&io).await?, Some(Item { value: 29 }));
             bus.pause.store(1, Ordering::SeqCst);

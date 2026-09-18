@@ -1,12 +1,12 @@
 use super::{HandlerRegistry, InterruptEnvelope, InterruptHandler};
-use crate::{CpuContextError, CpuOwner};
+use crate::{CpuContextError, SoftwareCpu};
 use std::{error::Error, fmt};
 use tokio::sync::Mutex;
 
 /// Software's ISR registration capability, borrowed for one runtime invocation.
 #[derive(Debug)]
 pub struct InterruptRegistration<'a, N: InterruptEnvelope, H> {
-    pub(super) owner: CpuOwner,
+    pub(super) cpu: &'a SoftwareCpu,
     pub(super) registry: &'a Mutex<HandlerRegistry<N::Vector, N, H>>,
 }
 
@@ -48,7 +48,7 @@ impl<N: InterruptEnvelope, H: InterruptHandler<N>> InterruptRegistration<'_, N, 
         vector: N::Vector,
         handler: H,
     ) -> Result<(), InterruptRegistrationError<N::Vector>> {
-        self.owner
+        self.cpu
             .validate_active()
             .map_err(InterruptRegistrationError::Cpu)?;
         self.registry
@@ -62,7 +62,6 @@ impl<N: InterruptEnvelope, H: InterruptHandler<N>> InterruptRegistration<'_, N, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SoftwareCpu;
     use std::convert::Infallible;
 
     struct Notice;
@@ -84,8 +83,9 @@ mod tests {
     async fn registration_requires_the_active_runtime_cpu() {
         // Given: a registration capability bound to an inactive CPU.
         let registry = Mutex::new(HandlerRegistry::new());
+        let cpu = SoftwareCpu::new();
         let registration = InterruptRegistration {
-            owner: SoftwareCpu::new().owner(),
+            cpu: &cpu,
             registry: &registry,
         };
         // When: registration is attempted outside that CPU.

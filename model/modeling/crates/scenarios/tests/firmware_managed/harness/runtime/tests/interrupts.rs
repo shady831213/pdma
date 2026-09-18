@@ -2,7 +2,7 @@ use super::super::{HostIrq, HostVector, Managed, ManagementBus};
 use super::control::memory::{kick, poll_once};
 use crate::harness::runtime::platform::CONTROL_CHANNEL_BASE;
 use hardware_interface_runtime::{
-    CpuContextError, CpuOwner, InterruptDispatchError, InterruptEnvelope, InterruptHandler,
+    CpuContextError, CpuLocal, InterruptDispatchError, InterruptEnvelope, InterruptHandler,
     InterruptSource, RegisterAccess, SharedMemory, SharedMemoryAccess,
 };
 use pdma_model_contract::ControlRegisters;
@@ -109,8 +109,8 @@ async fn simultaneous_dma_and_control_pending_survive_cancelled_wait_and_are_fai
 }
 
 struct OwnershipHandler {
-    firmware: CpuOwner,
-    host: CpuOwner,
+    firmware: CpuLocal<u32>,
+    host: CpuLocal<u32>,
     event: ControlIsr,
 }
 
@@ -145,8 +145,17 @@ impl InterruptHandler<ControlIrq> for OwnershipHandler {
     type Error = Infallible;
 
     async fn handle(&mut self, irq: &ControlIrq) -> Result<(), Infallible> {
-        self.firmware.validate_active().unwrap();
-        assert_eq!(self.host.validate_active(), Err(CpuContextError::Mismatch));
+        self.firmware
+            .with(|count| {
+                *count += 1;
+            })
+            .unwrap();
+        assert_eq!(
+            self.host.with(|count| {
+                *count += 1;
+            }),
+            Err(CpuContextError::Mismatch)
+        );
         self.event.handle(irq).await
     }
 }
@@ -157,7 +166,7 @@ async fn request_doorbell_isr_runs_on_firmware_cpu() {
     let (system, host) = Managed::new(memory()).unwrap();
     let (owner, _) = host
         .runtime
-        .run_main::<ControlIsr, _>(async |_| CpuOwner::capture_active().unwrap())
+        .run_main::<ControlIsr, _>(async |_| CpuLocal::capture_active(0).unwrap())
         .await
         .unwrap();
     // When: a request doorbell is dispatched on firmware's runtime.
@@ -170,7 +179,7 @@ async fn request_doorbell_isr_runs_on_firmware_cpu() {
                 .register(
                     (),
                     OwnershipHandler {
-                        firmware: CpuOwner::capture_active().unwrap(),
+                        firmware: CpuLocal::capture_active(0).unwrap(),
                         host: owner,
                         event: event.handler(),
                     },

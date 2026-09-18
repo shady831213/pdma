@@ -1,45 +1,52 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
-    CpuContextError, DmaControl, DmaFaultCode, Endpoint, Error, Model, Operation, RegisterAccess,
-    SoftwareCpu, fixture, single_command, with_idle_hardware,
+    DmaControl, DmaFaultCode, Endpoint, Model, Operation, RegisterAccess, SoftwareCpu, fixture,
+    single_command, with_idle_hardware,
 };
 
 #[tokio::test]
-async fn reset_operations_reject_a_different_cpu() -> Result<(), Box<dyn std::error::Error>> {
-    // Given: two independent drivers owned by one CPU.
-    let owner = SoftwareCpu::new();
-    let other = SoftwareCpu::new();
-    let (device, memory, rings) = fixture()?;
-    let model = Model::new(device);
-    let channel = owner
-        .run_main(Channel::setup(
-            model,
-            memory,
-            ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
-                rings,
-            },
-        ))
+async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
+    for whole_dma in [false, true] {
+        // Given: a driver created on one CPU and independently driven reset hardware.
+        let owner = SoftwareCpu::new();
+        let other = SoftwareCpu::new();
+        let (device, memory, rings) = fixture()?;
+        let model = Model::new(device);
+        let channel = owner
+            .run_main(Channel::setup(
+                model.clone(),
+                memory,
+                ChannelConfig {
+                    id: pdma_model_contract::ChannelId::new(0),
+                    rings,
+                },
+            ))
+            .await?;
+        // When: another CPU requests reset and waits for hardware cleanup.
+        with_idle_hardware(
+            &model,
+            other.run_main(async {
+                if whole_dma {
+                    channel.reset_dma().await
+                } else {
+                    channel.reset().await
+                }
+            }),
+        )
         .await?;
-    let (device, memory, rings) = fixture()?;
-    let model = Model::new(device);
-    let device = owner
-        .run_main(Channel::setup(
-            model,
-            memory,
-            ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
-                rings,
-            },
-        ))
-        .await?;
-    // When: the other CPU requests either reset scope.
-    let results = other
-        .run_main(async { [channel.reset().await, device.reset_dma().await] })
-        .await;
-    // Then: neither reset crosses the ownership boundary.
-    for result in results {
-        assert!(matches!(result, Err(Error::Cpu(CpuContextError::Mismatch))));
+        // Then: both reset scopes leave disabled hardware ready for fresh configuration.
+        let mut enable = [0; 4];
+        model
+            .read(
+                u32::try_from(
+                    pdma_model_contract::ChannelBlock::ALIGNMENT
+                        + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                        + ChannelRegisters::ENABLE.offset(),
+                )?,
+                &mut enable,
+            )
+            .await?;
+        assert_eq!(u32::from_le_bytes(enable), 0);
     }
     Ok(())
 }

@@ -8,6 +8,9 @@ use std::{
     task::Poll,
 };
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug)]
 pub(super) struct CpuToken;
 
@@ -40,20 +43,20 @@ impl Error for CpuContextError {}
 
 /// Opaque captured ownership used to preflight later nested polls.
 #[derive(Debug, Clone)]
-pub struct CpuOwner {
+pub(super) struct CpuOwner {
     token: Arc<CpuToken>,
 }
 
 impl CpuOwner {
     /// Captures the software CPU active for the current inner poll.
-    pub fn capture_active() -> Result<Self, CpuContextError> {
+    pub(super) fn capture_active() -> Result<Self, CpuContextError> {
         current_token()
             .map(|token| Self { token })
             .ok_or(CpuContextError::Inactive)
     }
 
     /// Checks that this owner is active for the current inner poll.
-    pub fn validate_active(&self) -> Result<(), CpuContextError> {
+    pub(super) fn validate_active(&self) -> Result<(), CpuContextError> {
         let active = current_token().ok_or(CpuContextError::Inactive)?;
         if Arc::ptr_eq(&active, &self.token) {
             Ok(())
@@ -63,7 +66,10 @@ impl CpuOwner {
     }
 
     /// Checks CPU ownership before every poll of an asynchronous capability.
-    pub async fn scope<F: Future>(&self, operation: F) -> Result<F::Output, CpuContextError> {
+    pub(super) async fn scope<F: Future>(
+        &self,
+        operation: F,
+    ) -> Result<F::Output, CpuContextError> {
         let mut operation = pin!(operation);
         poll_fn(|context| {
             if let Err(error) = self.validate_active() {

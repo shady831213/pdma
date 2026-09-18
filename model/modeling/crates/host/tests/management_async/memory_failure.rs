@@ -97,10 +97,10 @@ async fn publication_and_consumption_memory_failures_preserve_original_work() {
             ));
             let id = client.resume_submission().await.unwrap();
             // Then: the original command is published exactly once with its retained ID.
-            let mut commands = SoftRing::new(fixture.rings.command).unwrap();
+            let mut commands = SoftRing::new(fixture.rings.command);
             assert_eq!(fixture.take(&mut commands).await.unwrap().id, id.raw());
             assert_eq!(fixture.state().unwrap().command.producer, 1);
-            let mut responses = SoftRing::new(fixture.rings.response).unwrap();
+            let mut responses = SoftRing::new(fixture.rings.response);
             fixture
                 .respond(&mut responses, response(id.raw(), 0))
                 .await

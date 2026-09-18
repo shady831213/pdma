@@ -1,5 +1,5 @@
 use super::{
-    context::{ActiveCpu, CpuOwner, CpuToken},
+    context::{ActiveCpu, CpuContextError, CpuOwner, CpuToken},
     local::CpuLocal,
 };
 use std::{
@@ -33,7 +33,11 @@ impl SoftwareCpu {
         CpuLocal::new(CpuOwner::from_token(Arc::clone(&self.token)), value)
     }
 
-    pub(crate) fn owner(&self) -> CpuOwner {
+    pub(crate) fn validate_active(&self) -> Result<(), CpuContextError> {
+        self.owner().validate_active()
+    }
+
+    pub(super) fn owner(&self) -> CpuOwner {
         CpuOwner::from_token(Arc::clone(&self.token))
     }
 

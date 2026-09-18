@@ -28,8 +28,8 @@ interrupts through their own `InterruptRuntime`.
   queue-owning driver (configuration, submission and response consumption).
 - Reuse the channel reset request/completion handshake in both Host and firmware.
   Firmware release must not construct a queue-owning `Channel` merely to reset it.
-  Preserve Host `Channel::reset(self)` invalidation, per-poll CPU ownership and
-  each domain's bus permission checks. Timeout/cancellation is not drain completion.
+  Preserve Host `Channel::reset(self)` invalidation and each domain's bus permission
+  checks without imposing CPU affinity on the driver. Timeout/cancellation is not drain completion.
 - Share control-queue layout access in `software::control`, including the repeated
   producer/consumer address calculation and cursor adapter construction. Keep Host
   initialization/request correlation and firmware attachment/service roles distinct.

@@ -26,7 +26,7 @@ async fn malformed_entry_is_not_consumed() -> Result<(), Box<dyn std::error::Err
     io.write_producer(1).await?;
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Tagged>::new(16, 2)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Tagged>::new(16, 2)?);
             // When: decoding fails and the caller tries to consume.
             let decoded = ring.peek(&io).await;
             let consumed = ring.consume(&io).await;

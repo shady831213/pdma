@@ -1,9 +1,7 @@
 //! Reset completion belongs to hardware even when software stops waiting.
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
-use hardware_interface_runtime::{
-    CpuContextError, RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu,
-};
+use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
 use pdma_model_contract::{ChannelId, DmaControl};
 use pdma_model_dma::{Dma, ResetControl};
 use pdma_model_host::{
@@ -125,12 +123,13 @@ async fn reset_read_failure_is_returned_to_software() -> Result<(), Box<dyn std:
 }
 
 #[tokio::test]
-async fn reset_wait_rejects_repoll_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
+async fn reset_wait_can_migrate_but_still_requires_hardware_completion()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: a reset future suspended after its owning CPU requested reset.
     for whole_device in [false, true] {
         let owner = SoftwareCpu::new();
         let other = SoftwareCpu::new();
-        let (channel, _model, _fail) = fixture(&owner).await?;
+        let (channel, model, _fail) = fixture(&owner).await?;
         let reset = async move {
             if whole_device {
                 channel.reset_dma().await
@@ -146,9 +145,26 @@ async fn reset_wait_rejects_repoll_on_another_cpu() -> Result<(), Box<dyn std::e
                 .is_pending()
         );
         // When: another CPU polls the retained future.
-        let result = other.run_main(reset).await;
-        // Then: the next register read enforces the original CPU ownership.
-        assert!(matches!(result, Err(Error::Cpu(CpuContextError::Mismatch))));
+        assert!(
+            other
+                .run_main(poll_fn(|cx| Poll::Ready(reset.as_mut().poll(cx))))
+                .await
+                .is_pending()
+        );
+        let mut control = ResetControl;
+        let mut operation = Operation::new(());
+        let Ok(cleanup) = model
+            .interact(|dma| {
+                assert!(matches!(
+                    operation.step(&mut control, dma),
+                    StepOutcome::Progressed
+                ));
+                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+            })
+            .await;
+        assert!(matches!(cleanup, StepOutcome::Progressed));
+        // Then: switching CPU cannot finish reset early; actual hardware cleanup does.
+        other.run_main(reset).await?;
     }
     Ok(())
 }

@@ -1,17 +1,15 @@
 //! PDMA software ring operations shared by Host and firmware.
 
-use hardware_interface_runtime::{
-    CpuContextError, CpuOwner, MemoryAccess, MemoryAddress, MemoryAlignment,
-};
-use hardware_interface_schema::{Decode, Encode, RecordLayout};
-use pdma_model_contract::{Ring, RingPointers};
-
 mod config;
 mod error;
 mod io;
 pub use config::RingConfig;
 pub use error::SoftRingError;
 pub use io::{MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRingIo};
+
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use hardware_interface_schema::{Decode, Encode, RecordLayout};
+use pdma_model_contract::{Ring, RingPointers};
 
 #[derive(Debug)]
 struct PendingPush<E> {
@@ -20,12 +18,10 @@ struct PendingPush<E> {
     stored: bool,
 }
 
-/// CPU-owned software endpoint with resumable publication and cached consumption.
-/// Keep the same ring and cursor transport throughout each retained operation.
+/// Software ring storage with resumable publication and cached consumption.
 #[derive(Debug)]
 pub struct SoftRing<E> {
     config: RingConfig<E>,
-    owner: CpuOwner,
     pending: Option<PendingPush<E>>,
     cached: Option<(u32, E)>,
 }
@@ -35,14 +31,13 @@ where
     E: RecordLayout + Encode + Copy + Send + Sync,
     E::Encoded: Default + AsMut<[u8]> + AsRef<[u8]> + Decode<Decoded = E> + Send,
 {
-    /// Captures the active software CPU for validated ring storage.
-    pub fn new(config: RingConfig<E>) -> Result<Self, CpuContextError> {
-        Ok(Self {
+    /// Creates an endpoint for validated ring storage.
+    pub const fn new(config: RingConfig<E>) -> Self {
+        Self {
             config,
-            owner: CpuOwner::capture_active()?,
             pending: None,
             cached: None,
-        })
+        }
     }
 
     /// Whether an earlier push still needs completion.
@@ -52,24 +47,16 @@ where
 
     /// Queries validated published cursors without reading entries or changing retained operations.
     pub async fn is_empty<I: SoftRingIo>(&self, io: &I) -> Result<bool, SoftRingError<I::Error>> {
-        self.owner
-            .scope(async { self.pointers(io).await.map(RingPointers::is_empty) })
-            .await
-            .map_err(SoftRingError::Cpu)?
+        self.pointers(io).await.map(RingPointers::is_empty)
     }
 
     /// Checks available storage without retaining an entry.
     pub async fn has_space<I: SoftRingIo>(&self, io: &I) -> Result<bool, SoftRingError<I::Error>> {
-        self.owner
-            .scope(async {
-                if self.pending.is_some() {
-                    return Err(SoftRingError::Busy);
-                }
-                let pointers = self.pointers(io).await?;
-                Ok(pointers.pending() < self.config.capacity())
-            })
-            .await
-            .map_err(SoftRingError::Cpu)?
+        if self.pending.is_some() {
+            return Err(SoftRingError::Busy);
+        }
+        let pointers = self.pointers(io).await?;
+        Ok(pointers.pending() < self.config.capacity())
     }
 
     /// Pushes one entry, or returns false without retaining it when full.
@@ -79,29 +66,23 @@ where
         io: &I,
         entry: E,
     ) -> Result<bool, SoftRingError<I::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(async {
-                if self.pending.is_some() {
-                    return Err(SoftRingError::Busy);
-                }
-                let pointers = self.pointers(io).await?;
-                if pointers.pending() == self.config.capacity() {
-                    return Ok(false);
-                }
-                self.config
-                    .advance_producer(pointers, 1)
-                    .map_err(SoftRingError::Ring)?;
-                self.pending = Some(PendingPush {
-                    entry,
-                    cursor: pointers.producer,
-                    stored: false,
-                });
-                self.publish(io).await?;
-                Ok(true)
-            })
-            .await
-            .map_err(SoftRingError::Cpu)?
+        if self.pending.is_some() {
+            return Err(SoftRingError::Busy);
+        }
+        let pointers = self.pointers(io).await?;
+        if pointers.pending() == self.config.capacity() {
+            return Ok(false);
+        }
+        self.config
+            .advance_producer(pointers, 1)
+            .map_err(SoftRingError::Ring)?;
+        self.pending = Some(PendingPush {
+            entry,
+            cursor: pointers.producer,
+            stored: false,
+        });
+        self.publish(io).await?;
+        Ok(true)
     }
 
     /// Completes the retained push, reconciling an already committed cursor write.
@@ -109,11 +90,7 @@ where
         &mut self,
         io: &I,
     ) -> Result<(), SoftRingError<I::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(self.publish(io))
-            .await
-            .map_err(SoftRingError::Cpu)?
+        self.publish(io).await
     }
 
     async fn publish<I: SoftRingIo>(&mut self, io: &I) -> Result<(), SoftRingError<I::Error>> {
@@ -159,59 +136,47 @@ where
         &mut self,
         io: &I,
     ) -> Result<Option<E>, SoftRingError<I::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(async {
-                if let Some((_, entry)) = self.cached {
-                    return Ok(Some(entry));
-                }
-                let pointers = self.pointers(io).await?;
-                if pointers.is_empty() {
-                    return Ok(None);
-                }
-                let address = self
-                    .config
-                    .entry(pointers.consumer)
-                    .map_err(SoftRingError::Ring)?;
-                let encoded: E::Encoded = io
-                    .memory()
-                    .read_typed(MemoryAddress::new(address), MemoryAlignment::ONE)
-                    .map_err(SoftRingError::Memory)?;
-                let entry = encoded.decode().map_err(SoftRingError::Codec)?;
-                self.cached = Some((pointers.consumer, entry));
-                Ok(Some(entry))
-            })
-            .await
-            .map_err(SoftRingError::Cpu)?
+        if let Some((_, entry)) = self.cached {
+            return Ok(Some(entry));
+        }
+        let pointers = self.pointers(io).await?;
+        if pointers.is_empty() {
+            return Ok(None);
+        }
+        let address = self
+            .config
+            .entry(pointers.consumer)
+            .map_err(SoftRingError::Ring)?;
+        let encoded: E::Encoded = io
+            .memory()
+            .read_typed(MemoryAddress::new(address), MemoryAlignment::ONE)
+            .map_err(SoftRingError::Memory)?;
+        let entry = encoded.decode().map_err(SoftRingError::Codec)?;
+        self.cached = Some((pointers.consumer, entry));
+        Ok(Some(entry))
     }
 
     /// Consumes the cached entry; retry reconciles a committed consumer write.
     pub async fn consume<I: SoftRingIo>(&mut self, io: &I) -> Result<(), SoftRingError<I::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(async {
-                let (cursor, _) = self.cached.ok_or(SoftRingError::Idle)?;
-                let consumer = io.read_consumer().await.map_err(SoftRingError::Cursor)?;
-                let next = cursor.wrapping_add(1);
-                if consumer == next {
-                    self.cached = None;
-                    return Ok(());
-                }
-                if consumer != cursor {
-                    return Err(SoftRingError::CursorChanged);
-                }
-                let producer = io.read_producer().await.map_err(SoftRingError::Cursor)?;
-                self.config
-                    .advance_consumer(RingPointers { producer, consumer }, 1)
-                    .map_err(SoftRingError::Ring)?;
-                io.write_consumer(next)
-                    .await
-                    .map_err(SoftRingError::Cursor)?;
-                self.cached = None;
-                Ok(())
-            })
+        let (cursor, _) = self.cached.ok_or(SoftRingError::Idle)?;
+        let consumer = io.read_consumer().await.map_err(SoftRingError::Cursor)?;
+        let next = cursor.wrapping_add(1);
+        if consumer == next {
+            self.cached = None;
+            return Ok(());
+        }
+        if consumer != cursor {
+            return Err(SoftRingError::CursorChanged);
+        }
+        let producer = io.read_producer().await.map_err(SoftRingError::Cursor)?;
+        self.config
+            .advance_consumer(RingPointers { producer, consumer }, 1)
+            .map_err(SoftRingError::Ring)?;
+        io.write_consumer(next)
             .await
-            .map_err(SoftRingError::Cpu)?
+            .map_err(SoftRingError::Cursor)?;
+        self.cached = None;
+        Ok(())
     }
 
     async fn pointers<I: SoftRingIo>(

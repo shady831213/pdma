@@ -15,7 +15,7 @@ async fn wraps_cursors_without_losing_fifo_order() -> Result<(), Box<dyn std::er
     io.write_consumer(u32::MAX).await?;
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             // When: an entry crosses the monotonic cursor boundary.
             ring.try_push(&io, Item { value: 42 }).await?;
             assert_eq!(ring.peek(&io).await?, Some(Item { value: 42 }));
@@ -38,7 +38,7 @@ async fn overrun_is_rejected_without_accessing_entries() -> Result<(), Box<dyn s
     io.write_producer(3).await?;
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             // When/Then: the ring reports pointer failure before entry-memory failure.
             assert!(matches!(
                 ring.peek(&io).await,
@@ -58,7 +58,7 @@ async fn failed_entry_write_does_not_publish() -> Result<(), Box<dyn std::error:
     let io = MemoryRingIo::new(&memory, 0.into(), 4.into());
     SoftwareCpu::new()
         .run_main(async {
-            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?)?;
+            let mut ring = SoftRing::new(RingConfig::<Item>::new(16, 2)?);
             // When: the synchronous data write fails.
             assert!(matches!(
                 ring.try_push(&io, Item { value: 7 }).await,

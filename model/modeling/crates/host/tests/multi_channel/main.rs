@@ -6,8 +6,8 @@ use hardware_interface_pipeline::{
     AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, StepOutcome, Then,
 };
 use hardware_interface_runtime::{
-    CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
-    SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
+    SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{
     ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
@@ -136,7 +136,7 @@ async fn discovery_rejects_unavailable_channels_before_any_configuration_write()
 }
 
 #[tokio::test]
-async fn setup_requires_a_cpu_before_channel_discovery() -> TestResult {
+async fn setup_uses_supplied_bus_without_cpu_affinity() -> TestResult {
     // Given: a setup request outside a software CPU context.
     let allocator = allocator();
     let memory = allocator.memory_access();
@@ -150,10 +150,10 @@ async fn setup_requires_a_cpu_before_channel_discovery() -> TestResult {
     };
     // When: software tries to construct a channel driver.
     let result = Channel::setup(bus, memory, config(&allocator, 0)?).await;
-    // Then: CPU rejection precedes both discovery and configuration.
-    assert!(matches!(result, Err(Error::Cpu(CpuContextError::Inactive))));
-    assert_eq!(reads.load(Ordering::SeqCst), 0);
-    assert_eq!(writes.load(Ordering::SeqCst), 0);
+    // Then: discovery and configuration complete through the supplied bus.
+    result?;
+    assert!(reads.load(Ordering::SeqCst) > 0);
+    assert!(writes.load(Ordering::SeqCst) > 0);
     Ok(())
 }
 

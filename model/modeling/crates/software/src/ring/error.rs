@@ -1,4 +1,4 @@
-use hardware_interface_runtime::{CpuContextError, MemoryAccessError};
+use hardware_interface_runtime::MemoryAccessError;
 use hardware_interface_schema::SchemaCodecError;
 use pdma_model_contract::RingError;
 use std::{error::Error, fmt};
@@ -14,8 +14,6 @@ pub enum SoftRingError<E> {
     Codec(SchemaCodecError),
     /// Ring geometry or cursor movement is invalid.
     Ring(RingError),
-    /// Operation was polled outside its owning CPU.
-    Cpu(CpuContextError),
     /// A prior push must be resumed first.
     Busy,
     /// No retained operation is available.
@@ -31,7 +29,6 @@ impl<E: Error> fmt::Display for SoftRingError<E> {
             Self::Memory(error) => error.fmt(f),
             Self::Codec(error) => error.fmt(f),
             Self::Ring(error) => error.fmt(f),
-            Self::Cpu(error) => error.fmt(f),
             Self::Busy => f.write_str("software ring push is pending"),
             Self::Idle => f.write_str("software ring has no retained operation"),
             Self::CursorChanged => f.write_str("software ring cursor changed unexpectedly"),
@@ -45,7 +42,6 @@ impl<E: Error + 'static> Error for SoftRingError<E> {
             Self::Memory(error) => Some(error),
             Self::Codec(error) => Some(error),
             Self::Ring(error) => Some(error),
-            Self::Cpu(error) => Some(error),
             Self::Busy | Self::Idle | Self::CursorChanged => None,
         }
     }

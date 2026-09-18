@@ -1,4 +1,4 @@
-//! CPU-local PDMA channel driver and register-only control.
+//! PDMA channel driver and register-only control.
 
 mod bus;
 mod control;
@@ -11,7 +11,7 @@ mod rings;
 
 use crate::ring::RingConfig;
 use bus::RegisterPort;
-use hardware_interface_runtime::{CpuOwner, MemoryAccess, RegisterAccess};
+use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
 use pdma_model_contract::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Response,
     ResponseRegisters, Ring,
@@ -40,7 +40,7 @@ pub struct ChannelConfig {
     pub rings: Rings,
 }
 
-/// Sole software ring cursor owner, bound to its setup CPU.
+/// Sole software ring cursor owner.
 #[derive(Debug)]
 pub struct Channel<B, M> {
     port: RegisterPort<B>,
@@ -65,13 +65,12 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
         config: ChannelConfig,
         dma_base: u32,
     ) -> Result<Self, Error<B::Error>> {
-        let owner = CpuOwner::capture_active().map_err(Error::Cpu)?;
         let ChannelConfig { id, rings } = config;
         let channel = Self {
-            port: RegisterPort::new(bus, owner, id, dma_base).await?,
+            port: RegisterPort::new(bus, id, dma_base).await?,
             memory,
-            command: CommandRing::new(rings.command).map_err(Error::Cpu)?,
-            response: ResponseRing::new(rings.response).map_err(Error::Cpu)?,
+            command: CommandRing::new(rings.command),
+            response: ResponseRing::new(rings.response),
         };
         channel
             .port

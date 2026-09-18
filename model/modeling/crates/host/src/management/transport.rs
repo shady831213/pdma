@@ -7,25 +7,17 @@ use pdma_model_software::ring::SoftRingError;
 impl<B: RegisterAccess + Sync, M: Sync> Management<B, M> {
     pub(super) async fn read(&self, offset: usize) -> Result<u32, Error<B::Error>> {
         let mut bytes = [0; 4];
-        self.owner
-            .scope(
-                self.bus
-                    .read(address(self.addresses.control, offset)?, &mut bytes),
-            )
+        self.bus
+            .read(address(self.addresses.control, offset)?, &mut bytes)
             .await
-            .map_err(Error::Cpu)?
             .map_err(Error::Bus)?;
         Ok(u32::from_le_bytes(bytes))
     }
 
     pub(super) async fn write(&self, offset: usize, bytes: &[u8]) -> Result<(), Error<B::Error>> {
-        self.owner
-            .scope(
-                self.bus
-                    .write(address(self.addresses.control, offset)?, bytes),
-            )
+        self.bus
+            .write(address(self.addresses.control, offset)?, bytes)
             .await
-            .map_err(Error::Cpu)?
             .map_err(Error::Bus)
     }
 
@@ -45,7 +37,6 @@ pub(super) const fn ring_error<B>(error: SoftRingError<MemoryAccessError>) -> Er
         SoftRingError::Cursor(error) | SoftRingError::Memory(error) => Error::Memory(error),
         SoftRingError::Codec(error) => Error::Codec(error),
         SoftRingError::Ring(error) => Error::Ring(error),
-        SoftRingError::Cpu(error) => Error::Cpu(error),
         SoftRingError::Busy => Error::RingBusy,
         SoftRingError::Idle => Error::RingIdle,
         SoftRingError::CursorChanged => Error::RingCursorChanged,

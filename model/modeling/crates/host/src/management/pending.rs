@@ -8,11 +8,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Publishes an acquisition and rings the doorbell without waiting for firmware.
     /// Cancellation retains its identity; call `resume_submission` before submitting again.
     pub async fn submit_acquire(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(self.submit(ControlRequestOpcode::AcquireChannel, 0))
-            .await
-            .map_err(Error::Cpu)?
+        self.submit(ControlRequestOpcode::AcquireChannel, 0).await
     }
 
     /// Publishes a release without waiting for reset completion or firmware's response.
@@ -21,14 +17,11 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         channel: ChannelId,
     ) -> Result<ManagementRequestId, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(self.submit(
-                ControlRequestOpcode::ReleaseChannel,
-                u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
-            ))
-            .await
-            .map_err(Error::Cpu)?
+        self.submit(
+            ControlRequestOpcode::ReleaseChannel,
+            u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
+        )
+        .await
     }
 
     /// Publishes reset while retaining allocation; keep channel memory until its response.
@@ -36,31 +29,26 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         channel: ChannelId,
     ) -> Result<ManagementRequestId, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner
-            .scope(self.submit(
-                ControlRequestOpcode::ResetChannel,
-                u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
-            ))
-            .await
-            .map_err(Error::Cpu)?
+        self.submit(
+            ControlRequestOpcode::ResetChannel,
+            u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
+        )
+        .await
     }
 
     /// Finishes the retained publication and notification, returning the same identity.
     pub async fn resume_submission(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
-        let owner = self.owner.clone();
-        owner.scope(self.publish()).await.map_err(Error::Cpu)?
+        self.publish().await
     }
 
     pub(super) fn require_idle(&self) -> Result<(), Error<B::Error>> {
-        self.owner.validate_active().map_err(Error::Cpu)?;
         if !self.outstanding.is_empty() {
             return Err(Error::ManagementBusy);
         }
         Ok(())
     }
 
-    async fn submit(
+    pub(super) async fn submit(
         &mut self,
         opcode: ControlRequestOpcode,
         channel: u32,
@@ -111,7 +99,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         self.publish().await
     }
 
-    async fn publish(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
+    pub(super) async fn publish(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
         let mut submission = self.submission.ok_or(Error::ManagementIdle)?;
         if !submission.published {
             let io = self.layout.command_io(&self.memory);

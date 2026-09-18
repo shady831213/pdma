@@ -53,8 +53,16 @@ and timing remain consumer policy.
 
 `SoftwareCpu` treats each real main `Poll::Pending` as a segment boundary while retaining
 FIFO position during gate acquisition. `run_handler_turn` holds that gate for one complete
-handler future. `CpuOwner` and `CpuLocal<T>` expose opaque validation and synchronous state
-access without exposing CPU identity, locks, or await-spanning borrows.
+handler future. `CpuLocal<T>` provides clone-shared CPU-local state with synchronous
+scoped access that cannot leak references. Ordinary driver state has no implicit CPU
+affinity; CPU-specific checks belong to explicit register capabilities, CPU-local
+state, and interrupt registration.
+
+Ownership tokens are runtime implementation details, not software capabilities:
+
+```compile_fail
+use hardware_interface_runtime::CpuOwner;
+```
 
 `InterruptRuntime::run_main` runs a complete software program with a borrowed
 `InterruptRegistration` capability. Software registers persistent ISRs directly;
@@ -78,13 +86,13 @@ a queue for per-message payloads. It is provided by the default `async-runtime` 
 Program return requests cooperative dispatch shutdown; an accepted ISR finishes first.
 Source/handler failure cancels the waiting program and returns the concrete error.
 Dropping the whole scoped `run_main` future cancels both software futures; it spawns
-no background tasks. `CpuOwner::scope` checks ownership before every inner poll of a
-capability, including when an already-pending future is repolled from another CPU.
+no background tasks. CPU-bound register operations check ownership before every inner poll,
+including when an already-pending future is repolled from another CPU.
 
 `SoftwareCpu::bind_registers(bus)` creates a `CpuRegisterAccess<B>` tied to that
 explicit CPU, including when assembly runs outside any CPU context. For a `Sync`
 register transport, its `RegisterAccess` implementation checks ownership before
-constructing or polling each read/write operation through `CpuOwner::scope`.
+constructing or polling each read/write operation inside the runtime.
 Main and ISR turns on the owner can use it; inactive or other CPU polls return
 `CpuAccessError::Cpu` before reaching the transport. Transport errors remain
 `CpuAccessError::Access` with their original source. Cloning a cloneable binding

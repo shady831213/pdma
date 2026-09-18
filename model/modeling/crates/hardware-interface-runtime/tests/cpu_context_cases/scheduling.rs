@@ -1,13 +1,5 @@
-use super::{CpuContextError, CpuOwner, SoftwareCpu, poll_once};
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    task::{Context, Poll},
-};
+use super::{SoftwareCpu, poll_once};
+use std::task::Poll;
 use tokio::sync::oneshot;
 
 #[tokio::test(flavor = "current_thread")]
@@ -71,63 +63,4 @@ async fn cancelling_pending_main_and_handler_releases_gate() {
     drop(handler);
     assert_eq!(cpu.run_main(async { 23_u8 }).await, 23);
     assert_eq!(cpu.run_handler_turn(async { 29_u8 }).await, 29);
-}
-
-struct DriverLikeFuture {
-    owner: CpuOwner,
-    commits: Arc<AtomicUsize>,
-    pending: bool,
-}
-
-impl Future for DriverLikeFuture {
-    type Output = Result<(), CpuContextError>;
-
-    fn poll(mut self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Err(error) = self.owner.validate_active() {
-            return Poll::Ready(Err(error));
-        }
-        if self.pending {
-            self.pending = false;
-            return Poll::Pending;
-        }
-        self.commits.fetch_add(1, Ordering::SeqCst);
-        Poll::Ready(Ok(()))
-    }
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn inactive_and_wrong_cpu_repoll_fail_before_inner_commit() {
-    let owner_cpu = SoftwareCpu::new();
-    let wrong_cpu = SoftwareCpu::new();
-    let owner = owner_cpu
-        .run_main(async { CpuOwner::capture_active() })
-        .await
-        .expect("owner CPU is active");
-    let inactive_commits = Arc::new(AtomicUsize::new(0));
-    let mut inactive_operation = Box::pin(DriverLikeFuture {
-        owner: owner.clone(),
-        commits: Arc::clone(&inactive_commits),
-        pending: true,
-    });
-    owner_cpu
-        .run_main(async { assert_eq!(poll_once(inactive_operation.as_mut()), Poll::Pending) })
-        .await;
-    assert_eq!(
-        poll_once(inactive_operation.as_mut()),
-        Poll::Ready(Err(CpuContextError::Inactive))
-    );
-    assert_eq!(inactive_commits.load(Ordering::SeqCst), 0);
-
-    let wrong_commits = Arc::new(AtomicUsize::new(0));
-    let mut operation = Box::pin(DriverLikeFuture {
-        owner,
-        commits: Arc::clone(&wrong_commits),
-        pending: true,
-    });
-    owner_cpu
-        .run_main(async { assert_eq!(poll_once(operation.as_mut()), Poll::Pending) })
-        .await;
-    let result = wrong_cpu.run_main(operation.as_mut()).await;
-    assert_eq!(result, Err(CpuContextError::Mismatch));
-    assert_eq!(wrong_commits.load(Ordering::SeqCst), 0);
 }

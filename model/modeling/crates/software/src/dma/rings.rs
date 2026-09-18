@@ -2,15 +2,15 @@ use super::Error;
 use super::{COMMAND, RESPONSE, bus::RegisterPort};
 use crate::ring::RingConfig;
 use crate::ring::{RingCursorRegisters, SoftRing};
-use hardware_interface_runtime::{CpuContextError, MemoryAccess, RegisterAccess};
+use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
 use pdma_model_contract::{Command, CommandRegisters, Response, ResponseRegisters};
 
 #[derive(Debug)]
 pub(super) struct CommandRing(SoftRing<Command>);
 
 impl CommandRing {
-    pub(super) fn new(config: RingConfig<Command>) -> Result<Self, CpuContextError> {
-        SoftRing::new(config).map(Self)
+    pub(super) const fn new(config: RingConfig<Command>) -> Self {
+        Self(SoftRing::new(config))
     }
 
     pub(super) const fn has_pending(&self) -> bool {
@@ -62,8 +62,8 @@ fn command_registers<B>() -> Result<RingCursorRegisters, Error<B>> {
 pub(super) struct ResponseRing(SoftRing<Response>);
 
 impl ResponseRing {
-    pub(super) fn new(config: RingConfig<Response>) -> Result<Self, CpuContextError> {
-        SoftRing::new(config).map(Self)
+    pub(super) const fn new(config: RingConfig<Response>) -> Self {
+        Self(SoftRing::new(config))
     }
 
     pub(super) async fn pop<B, M>(

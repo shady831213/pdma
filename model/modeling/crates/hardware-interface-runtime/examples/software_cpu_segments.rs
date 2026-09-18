@@ -1,14 +1,10 @@
 //! Demonstrates segmented main execution and an atomic pending handler turn.
 
-use hardware_interface_runtime::{CpuContextError, CpuOwner, SoftwareCpu};
+use hardware_interface_runtime::{CpuContextError, SoftwareCpu};
 use std::{
     error::Error,
     future::Future,
     pin::Pin,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
     task::{Context, Poll},
 };
 use tokio::sync::oneshot;
@@ -19,28 +15,6 @@ where
 {
     let mut context = Context::from_waker(std::task::Waker::noop());
     future.poll(&mut context)
-}
-
-struct PreflightOperation {
-    owner: CpuOwner,
-    inner_commits: Arc<AtomicUsize>,
-    first_poll: bool,
-}
-
-impl Future for PreflightOperation {
-    type Output = Result<(), CpuContextError>;
-
-    fn poll(mut self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Err(error) = self.owner.validate_active() {
-            return Poll::Ready(Err(error));
-        }
-        if self.first_poll {
-            self.first_poll = false;
-            return Poll::Pending;
-        }
-        self.inner_commits.fetch_add(1, Ordering::SeqCst);
-        Poll::Ready(Ok(()))
-    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -91,19 +65,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err("software CPU event order changed".into());
     }
 
-    let owner = cpu.run_main(async { CpuOwner::capture_active() }).await?;
-    let off_context = owner.validate_active();
-    let inner_commits = Arc::new(AtomicUsize::new(0));
-    let mut operation = Box::pin(PreflightOperation {
-        owner,
-        inner_commits: Arc::clone(&inner_commits),
-        first_poll: true,
+    let inner_commits = cpu.local(0_usize);
+    let off_context = inner_commits.with(|commits| *commits);
+    let mut operation = Box::pin(async {
+        tokio::task::yield_now().await;
+        inner_commits.with(|commits| *commits += 1)
     });
     cpu.run_main(async { assert_pending(operation.as_mut()) })
         .await?;
     let wrong_cpu = SoftwareCpu::new();
     let wrong_repoll = wrong_cpu.run_main(operation.as_mut()).await;
-    let commit_count = inner_commits.load(Ordering::SeqCst);
+    let commit_count = cpu
+        .run_main(async { inner_commits.with(|commits| *commits) })
+        .await?;
     if wrong_repoll != Err(CpuContextError::Mismatch)
         || off_context != Err(CpuContextError::Inactive)
         || commit_count != 0

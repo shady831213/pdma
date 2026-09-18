@@ -27,7 +27,8 @@ The managed harness supplies firmware with a register port bound by
 `SoftwareCpu::bind_registers`. Runtime checks CPU ownership before every underlying
 access poll, including resumed accesses. Firmware main performs ordinary register
 operations and ISR registration; it does not capture CPU identity or wrap its
-business flow in CPU scopes. Shared driver internals retain their CPU-local guards.
+business flow in CPU scopes. Ordinary shared drivers impose no additional CPU
+affinity: register capability checks, where explicitly configured, remain authoritative.
 
 The always-on `ControlRegisters` map has a platform-selected base and contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
 and response doorbell at 16, for an extent of 20 bytes.
@@ -152,12 +153,13 @@ rolled back or automatically replayed. Recovery of a failed subsystem is not add
 `pdma-model-contract` defines `Ring`, `RingPointers` and `RingError` as PDMA
 protocol rules. The shared [PDMA software crate](../crates/software/README.md) owns
 `ring::RingConfig<Entry>` and `ring::SoftRing<Entry>`; `host::RingConfig` reexports
-the configuration type. `SoftRing` adds CPU-owned asynchronous push/peek/consume using
+the configuration type. `SoftRing` adds asynchronous push/peek/consume using
 borrowed cursor I/O. `RegisterRingIo` supports ordinary Host DMA rings;
 `MemoryRingIo` supports both control endpoints. Memory ownership stays with callers.
 Neither Ring nor SoftRing knows management request IDs or allocation policy.
 Generic schema/runtime expose no ring protocol or ring types. Runtime supplies
-transport, CPU ownership and independent progress notifications to the software crate.
+transport and independent progress notifications to the software crate; CPU-local
+resources and main/ISR execution remain separate runtime services.
 
 `Management::setup(bus, memory, ManagementConfig)` accepts platform `ManagementAddresses`, `ManagementRings` and
 the processing task's `InterruptEvent`. Host registers `event.handler()` before setup.
@@ -169,7 +171,10 @@ collects an available result, or returns None without waiting for firmware;
 `next_response` waits on ISR hints until a result is available. Notification MMIO
 itself may still suspend. The application correlates `response.id` with `id.raw()`.
 No hidden background task drains responses and the management ISR only wakes the
-software program. One CPU-local client owns both cursors.
+software program. One client owns both cursors; mutable operations require exclusive
+Rust borrowing, not a fixed modeled CPU identity. Construction and pending-state
+queries need no active CPU. Migrating execution does not duplicate publications or
+discard retained responses, and cancellation obligations remain unchanged.
 
 The outstanding ledger is bounded by command-ring capacity, including requests
 whose commands firmware has consumed but whose responses Host has not collected.

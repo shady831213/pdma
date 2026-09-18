@@ -1,22 +1,24 @@
-use super::{CHANNEL, Error};
-use hardware_interface_runtime::{CpuOwner, RegisterAccess};
+use super::{
+    CHANNEL, Error,
+    registers::{read_word, write},
+};
+use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::{
     ChannelAdmin, ChannelFaultCode, ChannelFaultValues, ChannelId, ChannelIrqCauseValues,
     ChannelIrqMaskValues, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery, DmaFaultCode,
     DmaFaultValues, DmaRegisters,
 };
 
-/// CPU-bound register control without DMA ring ownership or allocation.
+/// Register control without DMA ring ownership or allocation.
 #[derive(Debug)]
 pub struct ChannelControl {
-    pub(super) owner: CpuOwner,
-    pub(super) channel_base: usize,
-    admin_base: usize,
-    control_base: usize,
+    pub(super) channel: usize,
+    admin: usize,
+    global: usize,
 }
 
 impl ChannelControl {
-    /// Discovers a hardware channel on the active software CPU.
+    /// Discovers a hardware channel through the supplied register capability.
     pub async fn discover<B: RegisterAccess + Sync>(
         bus: &B,
         id: ChannelId,
@@ -30,29 +32,17 @@ impl ChannelControl {
         id: ChannelId,
         dma_base: u32,
     ) -> Result<Self, Error<B::Error>> {
-        let owner = CpuOwner::capture_active().map_err(Error::Cpu)?;
-        Self::discover_owned(bus, owner, id, dma_base).await
-    }
-
-    pub(super) async fn discover_owned<B: RegisterAccess + Sync>(
-        bus: &B,
-        owner: CpuOwner,
-        id: ChannelId,
-        dma_base: u32,
-    ) -> Result<Self, Error<B::Error>> {
-        let dma_base = usize::try_from(dma_base).map_err(|_| Error::Geometry)?;
         let mut control = Self {
-            owner,
-            channel_base: 0,
-            admin_base: 0,
-            control_base: 0,
+            channel: 0,
+            admin: 0,
+            global: 0,
         };
-        let available = control
-            .read_word(
-                bus,
-                dma_base + DmaRegisters::DISCOVERY.offset() + DmaDiscovery::CHANNEL_NUM.offset(),
-            )
-            .await?;
+        let dma_base = usize::try_from(dma_base).map_err(|_| Error::Geometry)?;
+        let available = read_word(
+            bus,
+            dma_base + DmaRegisters::DISCOVERY.offset() + DmaDiscovery::CHANNEL_NUM.offset(),
+        )
+        .await?;
         let count = usize::try_from(available).map_err(|_| Error::Geometry)?;
         if id.index() >= count {
             return Err(Error::Channel {
@@ -61,7 +51,7 @@ impl ChannelControl {
             });
         }
         let layout = DmaRegisters::new(count).map_err(|_| Error::Geometry)?;
-        control.channel_base = dma_base
+        control.channel = dma_base
             .checked_add(
                 layout
                     .channels()
@@ -69,10 +59,10 @@ impl ChannelControl {
                     .ok_or(Error::Geometry)?,
             )
             .ok_or(Error::Geometry)?;
-        let admin_base = dma_base
+        let admin = dma_base
             .checked_add(layout.admin().base())
             .ok_or(Error::Geometry)?;
-        control.admin_base = admin_base
+        control.admin = admin
             .checked_add(
                 layout
                     .admin()
@@ -82,14 +72,10 @@ impl ChannelControl {
                     .ok_or(Error::Geometry)?,
             )
             .ok_or(Error::Geometry)?;
-        control.control_base = admin_base
+        control.global = admin
             .checked_add(DmaAdmin::CONTROL.offset())
             .ok_or(Error::Geometry)?;
-        for address in [
-            control.channel_base,
-            control.admin_base,
-            control.control_base,
-        ] {
+        for address in [control.channel, control.admin, control.global] {
             u32::try_from(address).map_err(|_| Error::Geometry)?;
         }
         Ok(control)
@@ -169,9 +155,9 @@ impl ChannelControl {
         &self,
         bus: &B,
     ) -> Result<(), Error<B::Error>> {
-        self.write(
+        write(
             bus,
-            self.admin_base + ChannelAdmin::RESET.offset(),
+            self.admin + ChannelAdmin::RESET.offset(),
             &1_u32.to_le_bytes(),
         )
         .await
@@ -193,7 +179,7 @@ impl ChannelControl {
         &self,
         bus: &B,
     ) -> Result<bool, Error<B::Error>> {
-        self.read_word(bus, self.admin_base + ChannelAdmin::RESET.offset())
+        read_word(bus, self.admin + ChannelAdmin::RESET.offset())
             .await
             .map(|busy| busy != 0)
     }
@@ -203,9 +189,7 @@ impl ChannelControl {
         &self,
         bus: &B,
     ) -> Result<DmaFaultCode, Error<B::Error>> {
-        let raw = self
-            .read_word(bus, self.control_base + DmaControl::FAULT.offset())
-            .await?;
+        let raw = read_word(bus, self.global + DmaControl::FAULT.offset()).await?;
         DmaFaultValues::new(raw)
             .code()
             .map_err(Error::RegisterCodec)
@@ -219,9 +203,9 @@ impl ChannelControl {
         bus: &B,
         enabled: bool,
     ) -> Result<(), Error<B::Error>> {
-        self.write(
+        write(
             bus,
-            self.control_base + DmaControl::IRQ_ENABLE.offset(),
+            self.global + DmaControl::IRQ_ENABLE.offset(),
             &u32::from(enabled).to_le_bytes(),
         )
         .await
@@ -241,17 +225,13 @@ impl ChannelControl {
         &self,
         bus: &B,
     ) -> Result<(), Error<B::Error>> {
-        self.write(
+        write(
             bus,
-            self.control_base + DmaControl::RESET.offset(),
+            self.global + DmaControl::RESET.offset(),
             &1_u32.to_le_bytes(),
         )
         .await?;
-        while self
-            .read_word(bus, self.control_base + DmaControl::RESET.offset())
-            .await?
-            != 0
-        {
+        while read_word(bus, self.global + DmaControl::RESET.offset()).await? != 0 {
             tokio::task::yield_now().await;
         }
         Ok(())

@@ -71,7 +71,9 @@ recreate the old API surface to satisfy historical tests.
 - Add failing behavioral tests before new model implementation.
 - Keep hardware behavior deterministic and step-based, without cycle timing.
 - Hardware never stores or invokes software interrupt handlers.
-- Keep software CPU-local and interrupt-dispatch safety guarantees intact.
+- Keep explicit CPU-local resource and interrupt-dispatch safety guarantees intact.
+- Do not impose CPU affinity on ordinary drivers or rings. CPU-specific resource
+  checks and main/ISR scheduling belong to runtime; queue ownership is not CPU identity.
 - Keep memory ownership and backend selection outside hardware behavior.
 - Keep Rust files below 250 pure LOC and use the workspace lint configuration.
 - Do not add unsafe code or weaken tests to pass validation.

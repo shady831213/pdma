@@ -1,14 +1,12 @@
-//! CPU ownership across a suspended register transaction.
+//! Submission continuity across modeled CPU changes.
 
 use hardware_interface_runtime::{
-    CpuContextError, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
-    SharedMemoryAccess, SharedMemoryAllocator, SoftwareCpu,
+    MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
+    SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::{Command, CommandRegisters, Endpoint, Response};
 use pdma_model_dma::Dma;
-use pdma_model_host::{
-    Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
-};
+use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -37,8 +35,7 @@ impl RegisterAccess for DelayedBus {
 }
 
 #[tokio::test]
-async fn suspended_submission_rejects_repoll_on_another_cpu()
--> Result<(), Box<dyn std::error::Error>> {
+async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a submission suspended just before publishing its producer cursor.
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
@@ -106,8 +103,8 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
     resume.notify_one();
     let result = other.run_main(&mut submission).await;
 
-    // Then: CPU ownership rejects it before the register commit.
-    assert!(matches!(result, Err(Error::Cpu(CpuContextError::Mismatch))));
+    // Then: the same submission publishes its producer exactly once.
+    result?;
     let mut producer = [0; 4];
     model
         .read(
@@ -119,6 +116,6 @@ async fn suspended_submission_rejects_repoll_on_another_cpu()
             &mut producer,
         )
         .await?;
-    assert_eq!(u32::from_le_bytes(producer), 0);
+    assert_eq!(u32::from_le_bytes(producer), 1);
     Ok(())
 }

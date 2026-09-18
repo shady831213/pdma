@@ -1,6 +1,6 @@
 use super::{ChannelControl, Error};
 use crate::ring::{RegisterRingIo, RingCursorRegisters};
-use hardware_interface_runtime::{CpuOwner, RegisterAccess};
+use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::ChannelId;
 
 #[derive(Debug)]
@@ -10,18 +10,9 @@ pub(super) struct RegisterPort<B> {
 }
 
 impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
-    pub(super) async fn new(
-        bus: B,
-        owner: CpuOwner,
-        id: ChannelId,
-        dma_base: u32,
-    ) -> Result<Self, Error<B::Error>> {
-        let control = ChannelControl::discover_owned(&bus, owner, id, dma_base).await?;
+    pub(super) async fn new(bus: B, id: ChannelId, dma_base: u32) -> Result<Self, Error<B::Error>> {
+        let control = ChannelControl::discover_at(&bus, id, dma_base).await?;
         Ok(Self { bus, control })
-    }
-
-    pub(super) fn validate_active(&self) -> Result<(), Error<B::Error>> {
-        self.control.owner.validate_active().map_err(Error::Cpu)
     }
 
     pub(super) fn ring_io<'a, M>(
@@ -29,8 +20,7 @@ impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
         memory: &'a M,
         registers: RingCursorRegisters,
     ) -> Result<RegisterRingIo<'a, B, M>, Error<B::Error>> {
-        self.validate_active()?;
-        let base = u32::try_from(self.control.channel_base).map_err(|_| Error::Geometry)?;
+        let base = u32::try_from(self.control.channel).map_err(|_| Error::Geometry)?;
         let registers = RingCursorRegisters {
             producer: base
                 .checked_add(registers.producer)

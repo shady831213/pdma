@@ -48,12 +48,12 @@ its address cursor only after installation succeeds. Hardware still receives onl
 | `crates/host/src/management.rs` | Host control-ring setup, channel requests and cancellation-safe response collection. |
 | `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
 | `crates/hw-components/src/firmware_status.rs` | Firmware boot report, writable only through management access and readable by Host even with DMA closed. |
-| `crates/host/src/firmware.rs` | CPU-owned Host boot polling with distinct firmware failure and software timeout outcomes. |
+| `crates/host/src/firmware.rs` | Host boot polling with distinct firmware failure and software timeout outcomes. |
 | `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
 | `crates/hardware-interface-runtime/src/interrupt/pending.rs` | Shared coalesced notification source with separate emission and claim capabilities. |
 | `crates/contract/src/ring.rs` | PDMA ring geometry, shared pointer rules and errors. |
-| `crates/software/src/ring.rs` | Shared PDMA software ring configuration and CPU-owned operations over borrowed MMIO or memory cursors. |
+| `crates/software/src/ring.rs` | Shared PDMA software ring configuration and operations over borrowed MMIO or memory cursors. |
 | `crates/hardware-interface-runtime/src/notifications.rs` | Coalesced progress hints independent of interrupt dispatch. |
 | `crates/contract/src/bin/pdma-abi-header.rs` | Current C11 header generation through schema exporters. |
 | `crates/dma/src/channel.rs` | Ring-owned register values, push/pop and channel IRQ state. |
@@ -193,7 +193,11 @@ asynchronous publication and consumption to `software::ring::SoftRing`, shared
 with firmware.
 It borrows register cursors for ordinary DMA and memory cursors for both control
 endpoints. Management request IDs and resource policy remain outside SoftRing.
-The shared DMA driver retains the bus; `CpuOwner::scope` checks each poll.
+The shared DMA driver retains the bus. Drivers and rings use ordinary Rust ownership;
+their state is not bound to the CPU used during construction. Suspended operations
+may resume on another CPU or directly through the executor, subject to the supplied
+bus/memory capabilities. CPU-specific capabilities and ISR scheduling remain runtime
+responsibilities, and CPU ownership tokens stay private to runtime.
 Software reads current pointers through that bus; there is no second authoritative
 cursor store. `Channel::resume_submission` completes retained publication after
 cancellation; it never queues a second command. Control-channel doorbells are

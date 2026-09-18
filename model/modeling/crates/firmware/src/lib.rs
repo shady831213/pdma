@@ -1,7 +1,9 @@
 //! Device-side management software over injected register access.
 
 use pdma_model_software::ring::SoftRingError;
+mod configuration;
 mod control;
+pub use configuration::Configuration;
 pub use control::main;
 
 use hardware_interface_runtime::{InterruptRegistrationError, MemoryAccessError};

@@ -2,14 +2,16 @@
 
 Recorded: 2026-09-15.
 Status: broader architectural direction; the first architecture MVP is implemented,
-while virtualization, context selection and Function lifecycle features remain future work.
+with Function-scoped channel management now implemented; PCIe virtualization, context
+selection and Function-level reset remain future work.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
 First milestone: the [firmware-managed DMA architecture MVP](firmware-dma-mvp.md).
 The subsequent [control channel](control-channel.md) implements independent
-command/response rings for single-channel acquisition/release, including local
-reset completion. Function-aware ownership and external drain remain future work.
+command/response rings for multi-channel acquisition/reset/release, including local
+reset completion. [Function-aware ownership](function-isolation.md) now covers MMIO,
+management and notification routing. External drain and address-space isolation remain future work.
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 

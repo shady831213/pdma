@@ -509,12 +509,13 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 }
 
 /*
- * 0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. Other values are invalid.
+ * 0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. 4: PermissionDenied, selected channel belongs to another Function. Other values are invalid.
  */
 #define C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES UINT64_C(1)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCHANNEL UINT64_C(2)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED UINT64_C(3)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUPERMISSIONQUDENIED UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_CONTROLRESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE

@@ -913,7 +913,7 @@
  * Channel permission windows
  * One complete permission block per hardware channel. Host and firmware see filtered views of this same physical bank.
  */
-#define C_FWIN_SIZE UINT64_C(24)
+#define C_FWIN_SIZE UINT64_C(36)
 #define C_FWIN_ACCESS_READ_ONLY UINT32_C(0)
 #define C_FWIN_ACCESS_READ_WRITE UINT32_C(1)
 #define C_FWIN_ACCESS_WRITE_ONLY UINT32_C(2)
@@ -983,6 +983,17 @@
 #define C_FWIN_C_QUOQUPQUEQUN__1_WRITABLE_MASK UINT64_C(1)
 
 /*
+ * Read/write word
+ * Function authorized to access this channel and receive its notifications. Firmware may change this binding only while the window is closed, after draining old channel work. Zero is the ordinary single-Host identity.
+ */
+#define C_FWIN_C_QUOQUWQUNQUEQUR__1_OFFSET UINT64_C(4)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__1_WIDTH UINT64_C(4)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__1_ACCESS C_FWIN_ACCESS_READ_WRITE
+#define C_FWIN_C_QUOQUWQUNQUEQUR__1_RESET_KIND C_FWIN_RESET_ZERO
+#define C_FWIN_C_QUOQUWQUNQUEQUR__1_RESET_VALUE UINT64_C(0)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
  * Downstream access enable
  * Bit zero opens downstream host access and publishes ready immediately. Zero closes access. Initially zero; other bits are reserved. Only firmware may read or write this control.
  */
@@ -991,7 +1002,7 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FWIN_C_QUOQUPQUEQUN__2_OFFSET UINT64_C(8)
+#define C_FWIN_C_QUOQUPQUEQUN__2_OFFSET UINT64_C(12)
 #define C_FWIN_C_QUOQUPQUEQUN__2_WIDTH UINT64_C(4)
 #define C_FWIN_C_QUOQUPQUEQUN__2_ACCESS C_FWIN_ACCESS_READ_WRITE
 #define C_FWIN_C_QUOQUPQUEQUN__2_RESET_KIND C_FWIN_RESET_ZERO
@@ -999,6 +1010,17 @@
 #define C_FWIN_C_QUOQUPQUEQUN__2_WRITABLE_MASK UINT64_C(1)
 
 /*
+ * Read/write word
+ * Function authorized to access this channel and receive its notifications. Firmware may change this binding only while the window is closed, after draining old channel work. Zero is the ordinary single-Host identity.
+ */
+#define C_FWIN_C_QUOQUWQUNQUEQUR__2_OFFSET UINT64_C(16)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__2_WIDTH UINT64_C(4)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__2_ACCESS C_FWIN_ACCESS_READ_WRITE
+#define C_FWIN_C_QUOQUWQUNQUEQUR__2_RESET_KIND C_FWIN_RESET_ZERO
+#define C_FWIN_C_QUOQUWQUNQUEQUR__2_RESET_VALUE UINT64_C(0)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
  * Downstream access enable
  * Bit zero opens downstream host access and publishes ready immediately. Zero closes access. Initially zero; other bits are reserved. Only firmware may read or write this control.
  */
@@ -1007,18 +1029,30 @@
  * Enabled
  * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
  */
-#define C_FWIN_C_QUOQUPQUEQUN__3_OFFSET UINT64_C(16)
+#define C_FWIN_C_QUOQUPQUEQUN__3_OFFSET UINT64_C(24)
 #define C_FWIN_C_QUOQUPQUEQUN__3_WIDTH UINT64_C(4)
 #define C_FWIN_C_QUOQUPQUEQUN__3_ACCESS C_FWIN_ACCESS_READ_WRITE
 #define C_FWIN_C_QUOQUPQUEQUN__3_RESET_KIND C_FWIN_RESET_ZERO
 #define C_FWIN_C_QUOQUPQUEQUN__3_RESET_VALUE UINT64_C(0)
 #define C_FWIN_C_QUOQUPQUEQUN__3_WRITABLE_MASK UINT64_C(1)
 
+/*
+ * Read/write word
+ * Function authorized to access this channel and receive its notifications. Firmware may change this binding only while the window is closed, after draining old channel work. Zero is the ordinary single-Host identity.
+ */
+#define C_FWIN_C_QUOQUWQUNQUEQUR__3_OFFSET UINT64_C(28)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__3_WIDTH UINT64_C(4)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__3_ACCESS C_FWIN_ACCESS_READ_WRITE
+#define C_FWIN_C_QUOQUWQUNQUEQUR__3_RESET_KIND C_FWIN_RESET_ZERO
+#define C_FWIN_C_QUOQUWQUNQUEQUR__3_RESET_VALUE UINT64_C(0)
+#define C_FWIN_C_QUOQUWQUNQUEQUR__3_WRITABLE_MASK UINT64_C(4294967295)
+
 #define C_FWIN_C_WINDOWS_INDEX UINT64_C(0)
 #define C_FWIN_C_WINDOWS_BASE UINT64_C(0)
 #define C_FWIN_C_WINDOWS_COUNT UINT64_C(3)
-#define C_FWIN_C_WINDOWS_STRIDE UINT64_C(8)
+#define C_FWIN_C_WINDOWS_STRIDE UINT64_C(12)
 
 #define PDMA_FIRMWARE_WINDOW_COUNT UINT32_C(3)
-#define PDMA_FIRMWARE_WINDOW_STRIDE UINT32_C(8)
+#define PDMA_FIRMWARE_WINDOW_STRIDE UINT32_C(12)
+#define PDMA_FIRMWARE_CONTROL_STRIDE UINT32_C(24)
 #endif

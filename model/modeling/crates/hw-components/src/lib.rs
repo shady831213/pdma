@@ -5,9 +5,11 @@ mod channel_windows;
 mod control_channel;
 mod error;
 mod firmware_status;
+mod function_controls;
+pub use function_controls::FunctionControls;
 
 pub use access_window::AccessWindow;
-pub use channel_windows::ChannelWindows;
+pub use channel_windows::{ChannelWindows, FunctionWindows};
 pub use control_channel::{ControlChannel, ControlError};
 pub use error::{AccessError, WindowConfigError};
 pub use firmware_status::FirmwareStatus;

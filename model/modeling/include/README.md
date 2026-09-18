@@ -32,10 +32,10 @@ to platform-supplied bases; the contract exports no absolute base macros. Host a
 firmware may use different bus views of the same hardware.
 
 Each channel has an independent permission window. `ChannelWindowRegisters`
-repeats `ChannelWindowBlock` with alignment four and inferred extent/stride eight:
-control at zero and status at four. Both projections retain the complete bank:
-24 bytes for three channels. Firmware control offsets are 0, 8 and 16; Host status
-offsets are 4, 12 and 20. WINDOW_COUNT and WINDOW_STRIDE describe this generated
+repeats `ChannelWindowBlock` with alignment four and inferred extent/stride twelve:
+open at zero, firmware-only Function owner at four and status at eight. Both projections
+retain 36 bytes for three channels. Firmware open offsets are 0, 12 and 24; owner offsets
+are 4, 16 and 28; Host status offsets are 8, 20 and 32. WINDOW_COUNT and WINDOW_STRIDE describe this generated
 geometry. There is no explicit bank stride or interleaving.
 
 Static visibility never grants data access. Hardware checks the selected channel's
@@ -61,6 +61,8 @@ clears busy after old work drains. Managed Host uses ResetChannel/ReleaseChannel
 requests instead of writing administrative registers. Platform-pending notifications
 survive reset. The control map remains 20 bytes: bootstrap at zero, enable at eight,
 request doorbell at 12 and response doorbell at 16.
+`CONTROL_STRIDE` is 24: each Function gets a complete eight-byte-aligned control
+block. Headers describe the per-Function template, not a fixed platform Function count.
 
 Shared wire records retain their original sizes and byte layout: Segment is
 16 bytes, Endpoint 24, Command 64, Response 24, ControlRequest and ControlResponse

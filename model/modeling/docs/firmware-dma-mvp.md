@@ -6,8 +6,8 @@ This records scope and observable acceptance; the broader goal remains separate.
 
 Parent direction: [firmware-managed DMA](firmware-dma-goal.md).
 Follow-on implementation: [independent control channel](control-channel.md).
-That follow-on now supports asynchronous multi-channel management by one trusted
-Host. The one-channel story below records the original architecture milestone;
+That follow-on now supports asynchronous multi-channel management and independent
+[Function-scoped Host ports](function-isolation.md). The one-channel story below records the original architecture milestone;
 current lifecycle and per-channel window semantics are in the linked document.
 The current assembly uses explicit acquisition/release instead of opening DMA
 as a side effect of firmware readiness.
@@ -148,17 +148,17 @@ this access-window demonstration.
 ## Implemented interfaces and verification
 
 - `contract::ChannelWindowRegisters` declares one bank of `ChannelWindowBlock`
-  children. Each child has alignment 4 and extent 8, with `WindowControl` at
-  byte 0 and `WindowStatus` at byte 4. Bank spacing derives from the child layout;
+  children. Each child has alignment 4 and extent 12, with `WindowControl` at
+  byte 0 (open and Function owner) and `WindowStatus` at byte 8. Bank spacing derives from the child layout;
   the schema has no explicit stride. Host and firmware projections filter this
   same bank while retaining its full extent, including hidden leaves.
 - `contract::WindowControl` is firmware-only, at its platform-selected permission-bank base
   plus the generated per-channel control offset. Writing its `open` bit enables only that
   channel's work access.
 - `contract::WindowStatus` is Host-readable at its generated status offset
-  within each platform-placed permission block. Both leaves repeat every eight bytes. Its `ready`
+  within each platform-placed permission block. Blocks repeat every twelve bytes. Its `ready`
   value is derived from the same open bit, not a second retained handshake state.
-  It remains readable while work access is closed.
+  It remains readable by the bound Function while work access is closed.
 - `contract::FirmwareRegisters` is an independent report at a platform-selected base,
   owned by `hw-components::FirmwareStatus`. Firmware alone writes
   its packed state/error word; Host can read it regardless of DMA permissions.

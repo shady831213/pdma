@@ -1,6 +1,6 @@
 //! Host-owned concurrent management and real DMA lifecycle exercise.
 
-mod buffers;
+use super::buffers;
 
 use super::{Handler, HostVector, Ports, TestResult};
 use crate::harness::runtime::{AccessError, HostBus};

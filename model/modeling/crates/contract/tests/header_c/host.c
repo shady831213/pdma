@@ -17,8 +17,9 @@ _Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_HCTL_ACCESS_WRITE_ONLY
 _Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request physical offset");
 _Static_assert(C_HCTL_SIZE == 20, "hidden response retains extent");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS == C_HWIN_ACCESS_READ_ONLY, "Host readiness");
-_Static_assert(C_HWIN_SIZE == 24, "Host view retains the whole window bank");
-_Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET == 4, "hidden control retains readiness offset");
+_Static_assert(C_HWIN_SIZE == 36, "Host view retains the whole window bank");
+_Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET == 8, "hidden control retains readiness offset");
+_Static_assert(PDMA_HOST_CONTROL_STRIDE == 24, "complete aligned Function control block");
 #if defined(PDMA_HOST_WINDOW_BASE) || defined(PDMA_HOST_CONTROL_BASE) || defined(PDMA_HOST_BOOT_BASE)
 #error Platform base addresses must not be fixed by the contract
 #endif

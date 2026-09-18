@@ -4,6 +4,7 @@ use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{CompletionFlagsValues, Response, ResponseStatus};
 use std::sync::Arc;
 
+mod functions;
 mod multi;
 
 #[tokio::test(flavor = "current_thread")]

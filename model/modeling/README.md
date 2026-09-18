@@ -8,6 +8,9 @@ independent firmware-managed assembly that runs a real copy while retaining the
 direct-DMA scenarios. Its [control channel](docs/control-channel.md) now carries
 Host acquisition/release requests over separate rings; firmware Ready alone leaves
 the DMA work window closed.
+The [Function-isolation slice](docs/function-isolation.md) adds independent control
+ingress, firmware-owned channel allocation, MMIO permissions and interrupt destinations
+for multiple Functions sharing that same DMA. DMA memory address spaces are not yet isolated.
 
 Run from this directory:
 

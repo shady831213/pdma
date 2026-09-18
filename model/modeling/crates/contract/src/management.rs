@@ -1,6 +1,22 @@
 use hardware_interface_schema::register_map;
 
-use crate::{ReadWord, Switch};
+use crate::{ReadWord, Switch, Word};
+
+/// Platform-assigned Function identity, never supplied by a management request.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FunctionId(u32);
+
+impl FunctionId {
+    /// Constructs an identity in the platform's Function namespace.
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the register encoding.
+    pub const fn raw(self) -> u32 {
+        self.0
+    }
+}
 
 mod firmware;
 pub use firmware::*;
@@ -39,6 +55,8 @@ register_map! {
             #[short_description = "Downstream access enable"]
             #[description = "Bit zero opens downstream host access and publishes ready immediately. Zero closes access. Initially zero; other bits are reserved. Only firmware may read or write this control."]
             pub open: Switch,
+            #[description = "Function authorized to access this channel and receive its notifications. Firmware may change this binding only while the window is closed, after draining old channel work. Zero is the ordinary single-Host identity."]
+            pub owner: Word,
         ],
     }
 }

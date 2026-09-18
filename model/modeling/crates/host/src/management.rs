@@ -86,7 +86,10 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             ControlResponseStatus::Success => {}
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated) => return Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated
+            | ControlResponseStatus::PermissionDenied) => {
+                return Err(Error::ManagementStatus(status));
+            }
         }
         Ok(ChannelId::new(
             usize::try_from(response.channel).map_err(|_| Error::Geometry)?,
@@ -109,7 +112,8 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             ControlResponseStatus::Success => Ok(()),
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated
+            | ControlResponseStatus::PermissionDenied) => Err(Error::ManagementStatus(status)),
         }
     }
 
@@ -126,7 +130,8 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             ControlResponseStatus::Success => Ok(()),
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
-            | ControlResponseStatus::NotAllocated) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::NotAllocated
+            | ControlResponseStatus::PermissionDenied) => Err(Error::ManagementStatus(status)),
         }
     }
 

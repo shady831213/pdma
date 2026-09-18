@@ -7,6 +7,9 @@ use pdma_model_contract::{
 };
 
 use crate::{AccessError, AccessWindow, WindowConfigError};
+use pdma_model_contract::{ChannelId, FunctionId};
+mod function;
+pub use function::FunctionWindows;
 
 /// Independent firmware-controlled Host apertures for one configured DMA instance.
 #[derive(Debug)]
@@ -19,6 +22,18 @@ pub struct ChannelWindows {
 }
 
 impl ChannelWindows {
+    /// Binds transactions to their platform-supplied requester identity.
+    pub const fn for_function(&self, function: FunctionId) -> FunctionWindows<'_> {
+        FunctionWindows {
+            windows: self,
+            function,
+        }
+    }
+
+    /// Captures a channel notification's destination before any later reassignment.
+    pub fn interrupt_target(&self, channel: ChannelId) -> Option<FunctionId> {
+        self.windows.get(channel.index()).map(AccessWindow::owner)
+    }
     /// Places closed data windows and their permission bank in platform address space.
     pub fn new(
         channel_count: usize,

@@ -1,4 +1,4 @@
-use super::super::{Ports, TestResult};
+use super::{Ports, TestResult};
 use crate::harness::runtime::HostBus;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
@@ -120,7 +120,7 @@ pub(super) fn read(
     Ok(bytes)
 }
 
-pub(super) async fn management(
+pub(in crate::harness::program) async fn management(
     ports: &Ports<'_>,
     interrupt: InterruptEvent,
 ) -> TestResult<Management<HostBus<SharedMemoryAccess>, SharedMemoryAccess>> {

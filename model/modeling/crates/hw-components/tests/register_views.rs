@@ -1,6 +1,6 @@
 //! Static contract views match hardware domain permissions.
 const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
-const WINDOW_STATUS_BASE: u32 = 0x0010_0004;
+const WINDOW_STATUS_BASE: u32 = 0x0010_0008;
 
 use hardware_interface_schema::Access;
 use pdma_model_contract::{ControlRegisters, FirmwareRegisters, RegisterView};

@@ -83,8 +83,10 @@ bootstrap/enable and bidirectional doorbells are hardware registers. Firmware ca
 validated geometry once; software owns cursor updates. `docs/control-channel.md`
 defines their ownership and cancellation contract. Hardware owns registers/permissions, firmware consumes and
 executes management requests, and Host owns ring memory. Runtime carries no resource
-policy. One trusted Host manages an instance-configured channel count through bounded
-asynchronous submissions. Firmware retains per-channel allocation state and serves ordinary management requests serially.
+policy. Function-bound Host ports manage an instance-configured channel count through bounded
+asynchronous submissions over independent control rings. Firmware retains per-channel owner
+allocation state and serves ordinary management requests serially. Control-bank identity is
+platform-provided, never a Host request field; unopened/full peer rings do not block scanning.
 ResetChannel closes its data window, awaits hardware reset, then reopens unconfigured data
 access without releasing ownership. ReleaseChannel awaits reset before freeing ownership.
 Later management requests wait; independently driven peer DMA continues. Resource lifecycle
@@ -95,7 +97,10 @@ and grants expose only complete schema-defined channel data blocks. Platform ass
 register bases and validates disjoint apertures. Response backpressure stops request admission. Do not turn simulation
 cancellation into reset/drain or reclaim ring memory.
 No shadow channel registers or firmware writes in the harness are allowed.
-The managed MVP does not add Function/PASID or external transaction semantics.
+The Function-isolation follow-on is documented in `docs/function-isolation.md`.
+DMA remains Function-unaware; peripherals enforce MMIO bindings and identify interrupt
+destinations before reassignment. Pending messages stay with their original destination.
+This adds no DMA memory isolation, PASID, Function reset/FLR or external transaction semantics.
 
 The generic runtime's default `async-runtime` feature gates CPU/interrupt execution
 and its Tokio dependency. DMA selects `default-features = false`; synchronous

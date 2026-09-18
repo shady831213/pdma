@@ -23,7 +23,10 @@ impl<M: MemoryAccess + Send + Sync + 'static> Managed<M> {
                         management,
                         self.firmware_memory,
                         registration,
-                        addresses,
+                        pdma_model_firmware::Configuration {
+                            addresses,
+                            function_count: self.function_count,
+                        },
                     )
                     .await
                 })

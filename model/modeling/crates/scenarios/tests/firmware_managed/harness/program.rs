@@ -1,5 +1,7 @@
 //! The complete Host program, including preboot access probes.
 
+mod buffers;
+pub mod functions;
 mod interrupts;
 pub mod multi;
 pub mod transfer;

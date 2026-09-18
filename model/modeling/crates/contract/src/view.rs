@@ -28,7 +28,12 @@ impl RegisterView {
     pub const fn window_access(self, offset: usize) -> Option<Access> {
         match self {
             Self::Host if offset == ChannelWindowBlock::STATUS.offset() => Some(Access::ReadOnly),
-            Self::Firmware if offset == ChannelWindowBlock::CONTROL.offset() => {
+            Self::Firmware
+                if offset == ChannelWindowBlock::CONTROL.offset()
+                    || offset
+                        == ChannelWindowBlock::CONTROL.offset()
+                            + crate::WindowControl::OWNER.offset() =>
+            {
                 Some(Access::ReadWrite)
             }
             Self::Host | Self::Firmware => None,

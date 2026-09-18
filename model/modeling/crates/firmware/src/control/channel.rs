@@ -5,7 +5,7 @@ use pdma_model_contract::{
     ControlQueueRaw, ControlRegisters, ControlRequest, ControlResponse, Ring, RingError,
     RingPointers,
 };
-use pdma_model_software::control::{ControlQueueLayout, InterruptEvent};
+use pdma_model_software::control::ControlQueueLayout;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 
 pub(super) struct Channel<'a, B, M> {
@@ -18,14 +18,13 @@ pub(super) struct Channel<'a, B, M> {
 }
 
 impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
-    pub(super) async fn attach(
+    pub(super) async fn try_attach(
         bus: &'a B,
         memory: &'a M,
-        interrupt: &'a InterruptEvent,
         base: u32,
-    ) -> Result<Self, Error<B::Error>> {
-        while read_word(bus, base, ControlRegisters::ENABLE.offset()).await? == 0 {
-            interrupt.wait().await;
+    ) -> Result<Option<Self>, Error<B::Error>> {
+        if read_word(bus, base, ControlRegisters::ENABLE.offset()).await? == 0 {
+            return Ok(None);
         }
         let mut bytes = [0; 8];
         bus.read(
@@ -64,14 +63,14 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         {
             return Err(Error::Ring(RingError::Pointers));
         }
-        Ok(Self {
+        Ok(Some(Self {
             bus,
             base,
             command: SoftRing::new(command),
             response: SoftRing::new(response),
             command_io: layout.command_io(memory),
             response_io: layout.response_io(memory),
-        })
+        }))
     }
 
     pub(super) async fn has_response_space(&self) -> Result<bool, Error<B::Error>> {

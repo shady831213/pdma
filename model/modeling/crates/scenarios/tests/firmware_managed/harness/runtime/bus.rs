@@ -7,20 +7,24 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct HostBus<M> {
     pub(super) shared: Arc<Shared<M>>,
+    pub(super) function: pdma_model_contract::FunctionId,
+    pub(super) addresses: pdma_model_software::control::ManagementAddresses,
 }
 
 impl<M> Clone for HostBus<M> {
     fn clone(&self) -> Self {
         Self {
             shared: Arc::clone(&self.shared),
+            function: self.function,
+            addresses: self.addresses,
         }
     }
 }
 
 impl<M> HostBus<M> {
     /// Supplies the software program's platform register locations.
-    pub fn addresses(&self) -> pdma_model_software::control::ManagementAddresses {
-        self.shared.addresses
+    pub const fn addresses(&self) -> pdma_model_software::control::ManagementAddresses {
+        self.addresses
     }
 }
 
@@ -39,21 +43,21 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      firmware,
                      control,
                  }| {
-                    match control.host_read(address, bytes) {
+                    match control.host_read(self.function, address, bytes) {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {}
                         result => return result.map_err(AccessError::Control),
                     }
                     match firmware.read(address, bytes) {
-                        Err(RegisterAccessError::OutsideWindow { .. }) => {
-                            window.read(address, bytes, |address, bytes| {
+                        Err(RegisterAccessError::OutsideWindow { .. }) => window
+                            .for_function(self.function)
+                            .read(address, bytes, |address, bytes| {
                                 dma.read(
                                     address
                                         .checked_sub(dma_base)
                                         .ok_or(pdma_model_dma::Error::Unmapped)?,
                                     bytes,
                                 )
-                            })
-                        }
+                            }),
                         result => result.map_err(AccessError::Register),
                     }
                 },
@@ -73,21 +77,21 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      firmware,
                      control,
                  }| {
-                    match control.host_write(address, bytes) {
+                    match control.host_write(self.function, address, bytes) {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {}
                         result => return result.map_err(AccessError::Control),
                     }
                     match firmware.host_write(address, bytes) {
-                        Err(RegisterAccessError::OutsideWindow { .. }) => {
-                            window.write(address, bytes, |address, bytes| {
+                        Err(RegisterAccessError::OutsideWindow { .. }) => window
+                            .for_function(self.function)
+                            .write(address, bytes, |address, bytes| {
                                 dma.write(
                                     address
                                         .checked_sub(dma_base)
                                         .ok_or(pdma_model_dma::Error::Unmapped)?,
                                     bytes,
                                 )
-                            })
-                        }
+                            }),
                         result => result.map_err(AccessError::Register),
                     }
                 },

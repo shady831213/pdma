@@ -1,12 +1,13 @@
 mod channel;
 mod resources;
+mod service;
 
-use crate::Error;
+use crate::{Configuration, Error};
 use hardware_interface_runtime::{InterruptRegistration, MemoryAccess, RegisterAccess};
 use pdma_model_contract::{
     FirmwareBootError, FirmwareBootState, FirmwareBootValues, FirmwareRegisters, RingError,
 };
-use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent, ManagementAddresses};
+use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{convert::Infallible, future::pending};
 
 /// Boots with DMA access closed, then serves control rings on the firmware CPU.
@@ -17,8 +18,10 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
     bus: B,
     memory: M,
     registration: InterruptRegistration<'_, ControlIrq, ControlIsr>,
-    addresses: ManagementAddresses,
+    config: impl Into<Configuration>,
 ) -> Result<Infallible, Error<B::Error>> {
+    let config = config.into();
+    let addresses = config.addresses;
     let interrupt = InterruptEvent::new();
     registration
         .register((), interrupt.handler())
@@ -44,9 +47,14 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
     .map_err(Error::Bus)?;
     match setup {
         Ok(resources) => {
-            resources
-                .serve(&bus, &memory, &interrupt, addresses.control)
-                .await
+            service::Service {
+                bus: &bus,
+                memory: &memory,
+                interrupt: &interrupt,
+                config,
+            }
+            .run(resources)
+            .await
         }
         Err(_) => pending().await,
     }

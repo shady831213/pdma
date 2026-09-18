@@ -25,11 +25,19 @@ record_schema! {
         fields: {
             #[description = "Identifier copied unchanged from the corresponding control request."]
             id: u64,
-            #[description = "0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. Other values are invalid."]
-            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3 } },
+            #[description = "0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. 4: PermissionDenied, selected channel belongs to another Function. Other values are invalid."]
+            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, PermissionDenied = 4 } },
             #[description = "Allocated channel on successful acquisition, or the selected channel for release/reset responses. Undefined for failed acquisition."]
             channel: u32,
         },
+    }
+}
+
+register_map! {
+    #[description = "One complete bootstrap and doorbell block per platform Function. Function identity comes from the bank index, never the request payload."]
+    pub map FunctionControlRegisters(function_count: usize) {
+        alignment: 8,
+        placements: [pub functions: ControlRegisters[function_count]],
     }
 }
 

@@ -1,6 +1,6 @@
 # Firmware control channel
 
-The managed assembly has independent Host-to-firmware command and firmware-to-Host
+Each Function has independent Host-to-firmware command and firmware-to-Host
 response rings. Their geometry, producer/consumer cursors and entries live in memory.
 They are not DMA task rings. Both directions use management ISRs; there is no event ring.
 
@@ -89,7 +89,9 @@ must provide the required release/acquire ordering and visibility before doorbel
 
 ## Requests and lifecycle
 
-This slice has one trusted Host and an instance-configured number of DMA channels.
+The managed platform supports independent Function-bound Host ports and an instance-configured
+number of DMA channels. See [Function isolation](function-isolation.md) for identity,
+ownership, interrupt routing and the remaining shared-memory trust boundary.
 `AcquireChannel` selects the lowest free channel, opens its data window and
 returns its identifier. NoResources means all channels are allocated.
 
@@ -118,8 +120,8 @@ global control or channel-admin blocks; granting any data window does not grant
 administration. Each data block has its own gate. Cross-aperture transactions are
 rejected even when adjacent gates are open; leaf read-only rules still apply.
 
-`ChannelWindowRegisters` repeats compact eight-byte permission blocks: control
-at offset zero and readiness at offset four. Contract provides only relative
+`ChannelWindowRegisters` repeats compact twelve-byte permission blocks: open
+at offset zero, firmware-only Function owner at four and readiness at eight. Contract provides only relative
 geometry. `software::control::ManagementAddresses` carries platform-selected DMA,
 permission-bank, boot and control-channel bases to software. The scenario harness
 places these blocks, checks alignment/overflow/overlap, and performs bus address
@@ -141,7 +143,7 @@ operations progress, and never depend on Host response-ring consumption to finis
 FLR. The current serial control service is not that multi-ingress coordinator.
 Application cleanup, ATS/transaction drain, DWC active/done, controller release
 and later software readiness are distinct boundaries. Firmware and its management
-access must remain outside the reset VF scope. No FLR, Function mapping, PASID or
+access must remain outside the reset VF scope. No FLR, PCIe Function provisioning, PASID or
 generic event merger is introduced here.
 
 Malformed opcodes, invalid pointers and memory/bus failures stay typed errors.

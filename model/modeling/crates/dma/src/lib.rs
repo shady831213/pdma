@@ -59,6 +59,18 @@ impl<M> Dma<M> {
         pending
     }
 
+    /// Takes only this channel's coalesced pulse for platform-specific routing.
+    pub fn take_channel_interrupt(&mut self, id: ChannelId) -> bool {
+        self.channels
+            .get_mut(id.index())
+            .is_some_and(|channel| std::mem::take(&mut channel.irq))
+    }
+
+    /// Takes the device-wide source independently of channel notifications.
+    pub fn take_device_interrupt(&mut self) -> bool {
+        std::mem::take(&mut self.interrupt)
+    }
+
     /// Signals a device-wide internal hardware fault, never a software bus command.
     pub fn signal_fatal(&mut self) {
         if self.control.values.fault.code() == Ok(DmaFaultCode::None) {

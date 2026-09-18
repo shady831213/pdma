@@ -1,25 +1,20 @@
-use super::channel;
 use crate::Error;
-use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
+use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::{
-    ChannelId, ControlRequestOpcode, ControlResponse, ControlResponseStatus, DmaDiscovery,
-    DmaRegisters, RingError,
+    ChannelId, DmaDiscovery, DmaRegisters, FunctionId, RingError, WindowControl,
 };
-use pdma_model_software::{
-    control::{InterruptEvent, ManagementAddresses},
-    dma::ChannelControl,
-};
-use std::convert::Infallible;
+use pdma_model_software::{control::ManagementAddresses, dma::ChannelControl};
 
 #[derive(Clone, Copy)]
-enum ResourceError {
+pub(super) enum ResourceError {
     InvalidChannel,
     NotAllocated,
+    PermissionDenied,
 }
 
 struct Channel {
     control: ChannelControl,
-    allocated: bool,
+    owner: Option<FunctionId>,
 }
 
 pub(super) struct Resources {
@@ -59,7 +54,7 @@ impl Resources {
                 control: ChannelControl::discover_at(bus, id, addresses.dma)
                     .await
                     .map_err(Error::Dma)?,
-                allocated: false,
+                owner: None,
             });
         }
         Ok(Self {
@@ -68,34 +63,46 @@ impl Resources {
         })
     }
 
-    async fn acquire<B: RegisterAccess + Sync>(
+    pub(super) async fn acquire<B: RegisterAccess + Sync>(
         &mut self,
         bus: &B,
+        function: FunctionId,
     ) -> Result<Option<ChannelId>, Error<B::Error>> {
         let Some((index, channel)) = self
             .channels
             .iter_mut()
             .enumerate()
-            .find(|(_, channel)| !channel.allocated)
+            .find(|(_, channel)| channel.owner.is_none())
         else {
             return Ok(None);
         };
         let id = ChannelId::new(index);
+        let owner = self
+            .addresses
+            .window_control(id)
+            .and_then(|base| base.checked_add(u32::try_from(WindowControl::OWNER.offset()).ok()?))
+            .ok_or(Error::Ring(RingError::Geometry))?;
+        bus.write(owner, &function.raw().to_le_bytes())
+            .await
+            .map_err(Error::Bus)?;
         Self::set_window(bus, self.addresses, id, true).await?;
-        channel.allocated = true;
+        channel.owner = Some(function);
         Ok(Some(id))
     }
 
-    async fn reset<B: RegisterAccess + Sync>(
+    pub(super) async fn reset<B: RegisterAccess + Sync>(
         &mut self,
         bus: &B,
-        id: ChannelId,
+        (function, id): (FunctionId, ChannelId),
     ) -> Result<Result<(), ResourceError>, Error<B::Error>> {
         let Some(channel) = self.channels.get_mut(id.index()) else {
             return Ok(Err(ResourceError::InvalidChannel));
         };
-        if !channel.allocated {
+        if channel.owner.is_none() {
             return Ok(Err(ResourceError::NotAllocated));
+        }
+        if channel.owner != Some(function) {
+            return Ok(Err(ResourceError::PermissionDenied));
         }
         Self::set_window(bus, self.addresses, id, false).await?;
         channel.control.reset(bus).await.map_err(Error::Dma)?;
@@ -103,20 +110,23 @@ impl Resources {
         Ok(Ok(()))
     }
 
-    async fn release<B: RegisterAccess + Sync>(
+    pub(super) async fn release<B: RegisterAccess + Sync>(
         &mut self,
         bus: &B,
-        id: ChannelId,
+        (function, id): (FunctionId, ChannelId),
     ) -> Result<Result<(), ResourceError>, Error<B::Error>> {
         let Some(channel) = self.channels.get_mut(id.index()) else {
             return Ok(Err(ResourceError::InvalidChannel));
         };
-        if !channel.allocated {
+        if channel.owner.is_none() {
             return Ok(Err(ResourceError::NotAllocated));
+        }
+        if channel.owner != Some(function) {
+            return Ok(Err(ResourceError::PermissionDenied));
         }
         Self::set_window(bus, self.addresses, id, false).await?;
         channel.control.reset(bus).await.map_err(Error::Dma)?;
-        channel.allocated = false;
+        channel.owner = None;
         Ok(Ok(()))
     }
 
@@ -134,60 +144,5 @@ impl Resources {
         )
         .await
         .map_err(Error::Bus)
-    }
-}
-
-impl Resources {
-    pub(super) async fn serve<B: RegisterAccess + Sync, M: MemoryAccess + Sync>(
-        mut self,
-        bus: &B,
-        memory: &M,
-        interrupt: &InterruptEvent,
-        control_base: u32,
-    ) -> Result<Infallible, Error<B::Error>> {
-        let mut channel = channel::Channel::attach(bus, memory, interrupt, control_base).await?;
-        loop {
-            if !channel.has_response_space().await? {
-                interrupt.wait().await;
-                continue;
-            }
-            let Some(request) = channel.try_receive().await? else {
-                interrupt.wait().await;
-                continue;
-            };
-            let id = ChannelId::new(
-                usize::try_from(request.channel).map_err(|_| Error::Ring(RingError::Geometry))?,
-            );
-            let mut response = ControlResponse {
-                id: request.id,
-                status: ControlResponseStatus::Success,
-                channel: request.channel,
-            };
-            match request.opcode {
-                ControlRequestOpcode::AcquireChannel => match self.acquire(bus).await? {
-                    Some(id) => {
-                        response.channel = u32::try_from(id.index())
-                            .map_err(|_| Error::Ring(RingError::Geometry))?;
-                    }
-                    None => response.status = ControlResponseStatus::NoResources,
-                },
-                ControlRequestOpcode::ReleaseChannel => {
-                    response.status = resource_status(self.release(bus, id).await?);
-                }
-                ControlRequestOpcode::ResetChannel => {
-                    response.status = resource_status(self.reset(bus, id).await?);
-                }
-            }
-            channel.respond(response).await?;
-            tokio::task::yield_now().await;
-        }
-    }
-}
-
-const fn resource_status(result: Result<(), ResourceError>) -> ControlResponseStatus {
-    match result {
-        Ok(()) => ControlResponseStatus::Success,
-        Err(ResourceError::InvalidChannel) => ControlResponseStatus::InvalidChannel,
-        Err(ResourceError::NotAllocated) => ControlResponseStatus::NotAllocated,
     }
 }

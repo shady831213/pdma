@@ -820,7 +820,7 @@
  * Channel permission windows
  * One complete permission block per hardware channel. Host and firmware see filtered views of this same physical bank.
  */
-#define C_HWIN_SIZE UINT64_C(24)
+#define C_HWIN_SIZE UINT64_C(36)
 #define C_HWIN_ACCESS_READ_ONLY UINT32_C(0)
 #define C_HWIN_ACCESS_READ_WRITE UINT32_C(1)
 #define C_HWIN_ACCESS_WRITE_ONLY UINT32_C(2)
@@ -877,7 +877,7 @@
  * Downstream access ready
  * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
  */
-#define C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET UINT64_C(4)
+#define C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET UINT64_C(8)
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_WIDTH UINT64_C(4)
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS C_HWIN_ACCESS_READ_ONLY
 #define C_HWIN_C_QURQUEQUAQUDQUY__1_RESET_KIND C_HWIN_RESET_ZERO
@@ -888,7 +888,7 @@
  * Downstream access ready
  * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
  */
-#define C_HWIN_C_QURQUEQUAQUDQUY__2_OFFSET UINT64_C(12)
+#define C_HWIN_C_QURQUEQUAQUDQUY__2_OFFSET UINT64_C(20)
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_WIDTH UINT64_C(4)
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_ACCESS C_HWIN_ACCESS_READ_ONLY
 #define C_HWIN_C_QURQUEQUAQUDQUY__2_RESET_KIND C_HWIN_RESET_ZERO
@@ -899,7 +899,7 @@
  * Downstream access ready
  * One means downstream host access is open; zero means closed. Hardware derives the value from the firmware open control. Host writes are always denied.
  */
-#define C_HWIN_C_QURQUEQUAQUDQUY__3_OFFSET UINT64_C(20)
+#define C_HWIN_C_QURQUEQUAQUDQUY__3_OFFSET UINT64_C(32)
 #define C_HWIN_C_QURQUEQUAQUDQUY__3_WIDTH UINT64_C(4)
 #define C_HWIN_C_QURQUEQUAQUDQUY__3_ACCESS C_HWIN_ACCESS_READ_ONLY
 #define C_HWIN_C_QURQUEQUAQUDQUY__3_RESET_KIND C_HWIN_RESET_ZERO
@@ -909,8 +909,9 @@
 #define C_HWIN_C_WINDOWS_INDEX UINT64_C(0)
 #define C_HWIN_C_WINDOWS_BASE UINT64_C(0)
 #define C_HWIN_C_WINDOWS_COUNT UINT64_C(3)
-#define C_HWIN_C_WINDOWS_STRIDE UINT64_C(8)
+#define C_HWIN_C_WINDOWS_STRIDE UINT64_C(12)
 
 #define PDMA_HOST_WINDOW_COUNT UINT32_C(3)
-#define PDMA_HOST_WINDOW_STRIDE UINT32_C(8)
+#define PDMA_HOST_WINDOW_STRIDE UINT32_C(12)
+#define PDMA_HOST_CONTROL_STRIDE UINT32_C(24)
 #endif

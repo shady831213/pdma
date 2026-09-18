@@ -31,7 +31,11 @@ fn management_maps_define_distinct_control_and_status() -> Result<(), Box<dyn st
     // Then: firmware controls bit zero, while host readiness is read-only.
     assert_eq!(
         leaves,
-        [(0, 4, Access::ReadWrite, 1), (0, 4, Access::ReadOnly, 0)]
+        [
+            (0, 4, Access::ReadWrite, 1),
+            (4, 4, Access::ReadWrite, 0xffff_ffff),
+            (0, 4, Access::ReadOnly, 0)
+        ]
     );
     Ok(())
 }
@@ -61,7 +65,7 @@ fn channel_window_offsets_are_relative_and_checked() {
         second.window_status_offset(),
     ];
     // Then: complete compact blocks repeat without absolute address assumptions.
-    assert_eq!(offsets, [Some(0), Some(4), Some(8), Some(12)]);
+    assert_eq!(offsets, [Some(0), Some(8), Some(12), Some(20)]);
     assert_eq!(
         pdma_model_contract::ChannelId::new(usize::MAX).window_status_offset(),
         None
@@ -76,7 +80,7 @@ fn repeated_window_metadata_matches_configured_count_and_role()
     for count in [1, 2, 7] {
         let layout = ChannelWindowRegisters::new(count)?;
         for (role, access, first) in [
-            (RegisterView::Host, Access::ReadOnly, 4),
+            (RegisterView::Host, Access::ReadOnly, 8),
             (RegisterView::Firmware, Access::ReadWrite, 0),
         ] {
             // When: filtering one complete physical bank for this role.
@@ -97,11 +101,15 @@ fn assert_window_metadata<I: Copy>(
     (count, stride, first): (usize, usize, usize),
     access: Access,
 ) {
-    assert_eq!(stride, 8);
-    assert_eq!(map.size(), count * 8);
-    assert_eq!(map.registers().len(), count);
+    assert_eq!(stride, 12);
+    assert_eq!(map.size(), count * 12);
+    let leaves = if access == Access::ReadWrite { 2 } else { 1 };
+    assert_eq!(map.registers().len(), count * leaves);
     for (index, leaf) in map.registers().iter().enumerate() {
-        assert_eq!(leaf.offset(), index * 8 + first);
+        assert_eq!(
+            leaf.offset(),
+            (index / leaves) * 12 + first + (index % leaves) * 4
+        );
         assert_eq!(leaf.definition().access(), access);
         assert_eq!(leaf.definition().width(), 4);
     }

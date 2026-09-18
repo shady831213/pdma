@@ -118,7 +118,13 @@ struct OwnershipHandler {
 async fn simultaneous_host_vectors_dispatch_to_separate_registered_events() {
     // Given: both platform destinations are pending on one actual Host runtime.
     let (system, host) = Managed::new(memory()).unwrap();
-    system.shared.interrupt.raise();
+    system
+        .shared
+        .destinations
+        .first()
+        .unwrap()
+        .interrupt
+        .raise();
     response(&ManagementBus(Arc::clone(&system.shared))).await;
     // When: software registers independent handlers and waits for both.
     let ((), summary) = host

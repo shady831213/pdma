@@ -45,10 +45,15 @@ and separate in-memory control command/response rings with bootstrap and bidirec
 doorbell registers. Host and firmware share `software::ring::SoftRing`; doorbell waits
 are independent of DMA interrupt dispatch. Ready leaves DMA closed; Host requests
 a channel and releases it through firmware, which serially awaits real DMA reset before
-acknowledging reset or release. One trusted Host
-can pipeline bounded asynchronous requests and correlate responses by identity.
-See `model/modeling/docs/control-channel.md`. There is no
-event ring, Function/PASID mapping or PCIe integration.
+acknowledging reset or release. Independent Function-bound Host ports can pipeline
+bounded asynchronous requests over separate control rings. Firmware owns Function-to-channel
+allocation; peripheral registers enforce MMIO ownership and route channel notifications.
+See `model/modeling/docs/{control-channel,function-isolation}.md`. DMA memory remains
+shared: no PASID/address-space isolation, Function reset/FLR, event ring or PCIe integration.
+The next agreed revision is PF-only firmware management: one control channel, with
+PF requests naming target Functions; keep per-Function work MMIO and IRQ isolation.
+This is not implemented in the current checkpoint. See the decision at the top of
+`model/modeling/docs/function-isolation.md`; defer implementation until the user resumes.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 

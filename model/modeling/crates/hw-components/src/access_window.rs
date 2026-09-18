@@ -1,5 +1,7 @@
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
-use pdma_model_contract::{ChannelWindowBlock, ReadWordValues, WindowControl, WindowStatus};
+use pdma_model_contract::{
+    ChannelWindowBlock, FunctionId, ReadWordValues, WindowControl, WindowStatus,
+};
 
 use crate::{AccessError, WindowConfigError};
 
@@ -47,12 +49,22 @@ impl AccessWindow {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError> {
+        if address == self.control.base() + WindowControl::OWNER.offset() && self.is_open() {
+            return Err(RegisterAccessError::WriteForbidden {
+                offset: WindowControl::OWNER.offset(),
+            });
+        }
         self.control.write(address, source)
     }
 
     /// Returns the authoritative firmware control bit.
     pub fn is_open(&self) -> bool {
         self.control.values.open.enabled()
+    }
+
+    /// Returns the binding even while closed, so reset-time IRQs keep their owner.
+    pub const fn owner(&self) -> FunctionId {
+        FunctionId::new(self.control.values.owner.raw())
     }
 
     /// Reads host status or forwards a complete permitted downstream transaction.

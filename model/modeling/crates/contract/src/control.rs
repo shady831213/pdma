@@ -3,7 +3,7 @@ use hardware_interface_schema::{record_schema, register_map, register_schema};
 
 record_schema! {
     #[short_description = "Firmware control request"]
-    #[description = "Host-produced 16-byte little-endian request, eight-byte aligned. Firmware interprets this independent control queue; DMA hardware never fetches these records."]
+    #[description = "PF-produced 24-byte little-endian request, eight-byte aligned. The privileged management ingress authorizes the explicit target Function. DMA hardware never fetches these records."]
     pub record ControlRequest {
         alignment: 8, endian: Little,
         fields: {
@@ -11,6 +11,8 @@ record_schema! {
             id: u64,
             #[description = "0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel resets and frees the selected channel. 2: ResetChannel resets the selected channel while retaining its allocation. Other values are invalid."]
             opcode: enum(u32) { variants: { AcquireChannel = 0, ReleaseChannel = 1, ResetChannel = 2 } },
+            #[description = "Target Function in the platform-configured namespace. Only the PF management ingress may submit requests; this field is not the MMIO requester's identity."]
+            function: u32,
             #[description = "DMA channel index for release or reset; ignored for acquisition."]
             channel: u32,
         },
@@ -25,19 +27,11 @@ record_schema! {
         fields: {
             #[description = "Identifier copied unchanged from the corresponding control request."]
             id: u64,
-            #[description = "0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. 4: PermissionDenied, selected channel belongs to another Function. Other values are invalid."]
-            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, PermissionDenied = 4 } },
+            #[description = "0: Success. 1: NoResources. 2: InvalidChannel. 3: NotAllocated. 4: PermissionDenied, channel does not belong to the target Function. 5: InvalidFunction, target is outside the configured namespace. Other values are invalid."]
+            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, PermissionDenied = 4, InvalidFunction = 5 } },
             #[description = "Allocated channel on successful acquisition, or the selected channel for release/reset responses. Undefined for failed acquisition."]
             channel: u32,
         },
-    }
-}
-
-register_map! {
-    #[description = "One complete bootstrap and doorbell block per platform Function. Function identity comes from the bank index, never the request payload."]
-    pub map FunctionControlRegisters(function_count: usize) {
-        alignment: 8,
-        placements: [pub functions: ControlRegisters[function_count]],
     }
 }
 

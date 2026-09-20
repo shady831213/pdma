@@ -6,6 +6,7 @@ mod reset;
 pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;
+use pdma_model_contract::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::ring::SoftRing;
 use support::{Fixture, response};
@@ -20,8 +21,8 @@ async fn submits_multiple_without_firmware_and_collects_out_of_order() {
             let mut commands = SoftRing::new(fixture.rings.command);
             let mut responses = SoftRing::new(fixture.rings.response);
             // When: two submissions complete before any firmware response exists.
-            let first = client.submit_acquire().await.unwrap();
-            let second = client.submit_acquire().await.unwrap();
+            let first = client.submit_acquire(FunctionId::new(0)).await.unwrap();
+            let second = client.submit_acquire(FunctionId::new(0)).await.unwrap();
             // Then: both real memory records are published with distinct IDs.
             assert_ne!(first, second);
             assert_eq!(fixture.state().unwrap().command.producer, 2);
@@ -57,12 +58,15 @@ async fn outstanding_bound_survives_firmware_consuming_all_commands() {
             // Given: two outstanding requests whose command slots firmware has freed.
             let mut client = fixture.setup().await.unwrap();
             let mut commands = SoftRing::new(fixture.rings.command);
-            let first = client.submit_acquire().await.unwrap();
-            client.submit_acquire().await.unwrap();
+            let first = client.submit_acquire(FunctionId::new(0)).await.unwrap();
+            client.submit_acquire(FunctionId::new(0)).await.unwrap();
             fixture.take(&mut commands).await.unwrap();
             fixture.take(&mut commands).await.unwrap();
             // When: a third submission exceeds the configured bound.
-            assert!(matches!(client.submit_acquire().await, Err(Error::Full)));
+            assert!(matches!(
+                client.submit_acquire(FunctionId::new(0)).await,
+                Err(Error::Full)
+            ));
             // Then: it published nothing and did not allocate an ID.
             assert_eq!(fixture.state().unwrap().command.producer, 2);
             let mut responses = SoftRing::new(fixture.rings.response);
@@ -72,11 +76,15 @@ async fn outstanding_bound_survives_firmware_consuming_all_commands() {
                 .unwrap();
             client.next_response().await.unwrap();
             assert_eq!(
-                client.submit_acquire().await.unwrap().raw(),
+                client
+                    .submit_acquire(FunctionId::new(0))
+                    .await
+                    .unwrap()
+                    .raw(),
                 first.raw() + 2
             );
             assert!(matches!(
-                client.acquire_channel().await,
+                client.acquire_channel(FunctionId::new(0)).await,
                 Err(Error::ManagementBusy)
             ));
         })
@@ -91,7 +99,7 @@ async fn unmatched_or_duplicate_response_is_never_consumed() {
             .run_main(async {
                 // Given: a response with either an unknown or an already completed ID.
                 let mut client = fixture.setup().await.unwrap();
-                let id = client.submit_acquire().await.unwrap();
+                let id = client.submit_acquire(FunctionId::new(0)).await.unwrap();
                 let mut responses = SoftRing::new(fixture.rings.response);
                 if duplicate {
                     fixture
@@ -128,7 +136,7 @@ async fn wrong_release_channel_is_never_consumed() {
             // Given: a release response that names another channel.
             let mut client = fixture.setup().await.unwrap();
             let id = client
-                .submit_release(pdma_model_contract::ChannelId::new(1))
+                .submit_release(FunctionId::new(0), pdma_model_contract::ChannelId::new(1))
                 .await
                 .unwrap();
             let mut responses = SoftRing::new(fixture.rings.response);

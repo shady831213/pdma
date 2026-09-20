@@ -1,13 +1,15 @@
 //! Software programs coordinating an active channel reset with peer DMA.
-use super::super::{Handler, HostVector, Ports, TestResult, buffers};
+use super::super::{Ports, TestResult, buffers};
+use super::Grant;
 use pdma_model_contract::Response;
-use pdma_model_software::control::InterruptEvent;
 use tokio::sync::oneshot;
 
 pub(in crate::harness) struct ResetSignals {
     pub(crate) started: oneshot::Sender<()>,
     pub(crate) submitted: oneshot::Receiver<()>,
     pub(crate) completed: oneshot::Receiver<()>,
+    pub(crate) reset: oneshot::Sender<()>,
+    pub(crate) reset_done: oneshot::Receiver<()>,
 }
 
 pub(in crate::harness) struct PeerSignals {
@@ -28,21 +30,21 @@ pub struct Outcome {
 
 pub(in crate::harness) async fn resetting(
     ports: Ports<'_>,
+    grant: Grant,
     signals: ResetSignals,
 ) -> TestResult<Outcome> {
-    let event = InterruptEvent::new();
-    ports
-        .interrupts
-        .register(HostVector::Control, Handler::Control(event.handler()))?;
-    let mut management = buffers::management(&ports, event).await?;
-    let id = management.acquire_channel().await?;
+    let id = grant.channel.await?;
     let mut old = buffers::Transfer::new(&ports, id, &vec![0x6d; 65_536]).await?;
     old.start(100).await?;
     let before_reset = old.wait_started(&ports.memory).await?;
     signals.started.send(()).map_err(|()| "peer stopped")?;
     signals.submitted.await?;
     let destination = old.retire();
-    management.reset_channel(id).await?;
+    signals
+        .reset
+        .send(())
+        .map_err(|()| "PF stopped before reset")?;
+    signals.reset_done.await?;
     let at_reset = buffers::read(&ports.memory, destination, 65_536)?;
     signals.completed.await?;
     let after_peer = buffers::read(&ports.memory, destination, 65_536)?;
@@ -51,7 +53,10 @@ pub(in crate::harness) async fn resetting(
     let response = fresh.completed().await?;
     let fresh_bytes = fresh.bytes(&ports.memory)?;
     drop(fresh);
-    management.release_channel(id).await?;
+    grant
+        .finished
+        .send(())
+        .map_err(|()| "PF stopped before release")?;
     Ok(Outcome {
         before_reset,
         at_reset,
@@ -63,14 +68,10 @@ pub(in crate::harness) async fn resetting(
 
 pub(in crate::harness) async fn peer(
     ports: Ports<'_>,
+    grant: Grant,
     signals: PeerSignals,
 ) -> TestResult<(Response, Vec<u8>)> {
-    let event = InterruptEvent::new();
-    ports
-        .interrupts
-        .register(HostVector::Control, Handler::Control(event.handler()))?;
-    let mut management = buffers::management(&ports, event).await?;
-    let id = management.acquire_channel().await?;
+    let id = grant.channel.await?;
     let mut transfer = buffers::Transfer::new(&ports, id, b"peer-function-copy").await?;
     signals.started.await?;
     transfer.start(200).await?;
@@ -85,6 +86,9 @@ pub(in crate::harness) async fn peer(
         .send(())
         .map_err(|()| "reset program stopped")?;
     drop(transfer);
-    management.release_channel(id).await?;
+    grant
+        .finished
+        .send(())
+        .map_err(|()| "PF stopped before release")?;
     Ok((response, bytes))
 }

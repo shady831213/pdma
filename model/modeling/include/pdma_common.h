@@ -417,9 +417,9 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 
 /*
  * Firmware control request
- * Host-produced 16-byte little-endian request, eight-byte aligned. Firmware interprets this independent control queue; DMA hardware never fetches these records.
+ * PF-produced 24-byte little-endian request, eight-byte aligned. The privileged management ingress authorizes the explicit target Function. DMA hardware never fetches these records.
  */
-#define C_CONTROLREQQUEST_SIZE UINT64_C(16)
+#define C_CONTROLREQQUEST_SIZE UINT64_C(24)
 #define C_CONTROLREQQUEST_ALIGNMENT UINT64_C(8)
 #define C_CONTROLREQQUEST_ENDIAN_LITTLE UINT32_C(0)
 #define C_CONTROLREQQUEST_ENDIAN_BIG UINT32_C(1)
@@ -464,9 +464,25 @@ static inline void C_CONTROLREQQUEST_STORE_C_OPCODE(uint8_t bytes[C_CONTROLREQQU
 }
 
 /*
+ * Target Function in the platform-configured namespace. Only the PF management ingress may submit requests; this field is not the MMIO requester's identity.
+ */
+#define C_CONTROLREQQUEST_C_FUNCTION_OFFSET UINT64_C(12)
+#define C_CONTROLREQQUEST_C_FUNCTION_WIDTH UINT64_C(4)
+#define C_CONTROLREQQUEST_C_FUNCTION_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLREQQUEST_LOAD_C_FUNCTION(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET] | ((uint32_t)bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_FUNCTION(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint32_t value) {
+    bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_FUNCTION_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
  * DMA channel index for release or reset; ignored for acquisition.
  */
-#define C_CONTROLREQQUEST_C_CHANNEL_OFFSET UINT64_C(12)
+#define C_CONTROLREQQUEST_C_CHANNEL_OFFSET UINT64_C(16)
 #define C_CONTROLREQQUEST_C_CHANNEL_WIDTH UINT64_C(4)
 #define C_CONTROLREQQUEST_C_CHANNEL_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
 static inline uint32_t C_CONTROLREQQUEST_LOAD_C_CHANNEL(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
@@ -509,13 +525,14 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 }
 
 /*
- * 0: Success. 1: NoResources, no channel is free. 2: InvalidChannel, selected index is outside the DMA. 3: NotAllocated, selected channel is free. 4: PermissionDenied, selected channel belongs to another Function. Other values are invalid.
+ * 0: Success. 1: NoResources. 2: InvalidChannel. 3: NotAllocated. 4: PermissionDenied, channel does not belong to the target Function. 5: InvalidFunction, target is outside the configured namespace. Other values are invalid.
  */
 #define C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES UINT64_C(1)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCHANNEL UINT64_C(2)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED UINT64_C(3)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUPERMISSIONQUDENIED UINT64_C(4)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUFUNCTION UINT64_C(5)
 #define C_CONTROLRESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_CONTROLRESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE

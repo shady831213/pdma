@@ -4,14 +4,14 @@ use crate::{
 };
 use pdma_model_contract::{
     ChannelId, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
-    FunctionId, RingError,
+    RingError,
 };
 
 impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
     pub(super) async fn execute(
         &self,
         resources: &mut Resources,
-        (function, request): (FunctionId, ControlRequest),
+        request: ControlRequest,
     ) -> Result<ControlResponse, Error<B::Error>> {
         let id = ChannelId::new(
             usize::try_from(request.channel).map_err(|_| Error::Ring(RingError::Geometry))?,
@@ -20,6 +20,13 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
             id: request.id,
             status: ControlResponseStatus::Success,
             channel: request.channel,
+        };
+        let function = match resources.function(request.function) {
+            Ok(function) => function,
+            Err(error) => {
+                response.status = resource_status(Err(error));
+                return Ok(response);
+            }
         };
         match request.opcode {
             ControlRequestOpcode::AcquireChannel => {
@@ -49,5 +56,6 @@ const fn resource_status(result: Result<(), ResourceError>) -> ControlResponseSt
         Err(ResourceError::InvalidChannel) => ControlResponseStatus::InvalidChannel,
         Err(ResourceError::NotAllocated) => ControlResponseStatus::NotAllocated,
         Err(ResourceError::PermissionDenied) => ControlResponseStatus::PermissionDenied,
+        Err(ResourceError::InvalidFunction) => ControlResponseStatus::InvalidFunction,
     }
 }

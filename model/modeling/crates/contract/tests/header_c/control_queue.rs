@@ -1,4 +1,7 @@
-use pdma_model_contract::{ControlQueue, ControlRingState};
+use pdma_model_contract::{
+    ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
+    ControlRingState,
+};
 
 #[test]
 fn rust_nested_queue_matches_independent_c_fixture() -> super::TestResult {
@@ -21,5 +24,46 @@ fn rust_nested_queue_matches_independent_c_fixture() -> super::TestResult {
     let bytes = queue.to_bytes()?;
     // Then: it matches the independent little-endian fixture including both padding spans.
     assert_eq!(bytes, super::QUEUE_BYTES);
+    Ok(())
+}
+
+#[test]
+fn rust_control_records_match_c_consumer_fixtures() -> super::TestResult {
+    // Given: independent wire bytes for acquisition, release and their responses.
+    // When: the Rust contract encodes the same records used by the C consumer.
+    let control_records = [
+        ControlRequest {
+            id: 0x0807_0605_0403_0201,
+            function: 7,
+            opcode: ControlRequestOpcode::ReleaseChannel,
+            channel: 0x1020_3040,
+        }
+        .to_bytes()?
+        .to_vec(),
+        ControlRequest {
+            id: 9,
+            function: 2,
+            opcode: ControlRequestOpcode::AcquireChannel,
+            channel: 0,
+        }
+        .to_bytes()?
+        .to_vec(),
+        ControlResponse {
+            id: 9,
+            status: ControlResponseStatus::Success,
+            channel: 2,
+        }
+        .to_bytes()?
+        .to_vec(),
+        ControlResponse {
+            id: 0x0807_0605_0403_0201,
+            status: ControlResponseStatus::NotAllocated,
+            channel: 0x1020_3040,
+        }
+        .to_bytes()?
+        .to_vec(),
+    ];
+    // Then: Rust matches the independently specified C acceptance fixtures.
+    assert_eq!(control_records.concat(), super::CONTROL_BYTES.concat());
     Ok(())
 }

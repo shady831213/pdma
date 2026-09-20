@@ -6,10 +6,32 @@ use pdma_model_contract::{
 };
 
 #[test]
+fn pf_request_encodes_the_target_function_independently_of_the_channel() {
+    // Given: distinct request, Function and channel identifiers.
+    let request = ControlRequest {
+        id: 7,
+        opcode: ControlRequestOpcode::ResetChannel,
+        function: 9,
+        channel: 3,
+    };
+    // When: the PF request crosses the wire boundary.
+    let bytes = request.to_bytes().unwrap();
+    // Then: the target Function survives as its own field, not as ingress identity.
+    assert_eq!(
+        bytes,
+        [
+            7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 9, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0
+        ]
+    );
+    assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
+}
+
+#[test]
 fn request_encodes_little_endian_and_rejects_unknown_opcode() {
     // Given: a release request with distinguishable fields.
     let request = ControlRequest {
         id: 0x0102_0304_0506_0708,
+        function: 0,
         opcode: ControlRequestOpcode::ReleaseChannel,
         channel: 0x1122_3344,
     };
@@ -18,7 +40,9 @@ fn request_encodes_little_endian_and_rejects_unknown_opcode() {
     // Then: its fixed layout is exact and unknown operations are rejected.
     assert_eq!(
         bytes,
-        [8, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0x44, 0x33, 0x22, 0x11]
+        [
+            8, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0
+        ]
     );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
     assert_eq!(ControlRequest::SPEC.alignment(), 8);
@@ -35,6 +59,7 @@ fn response_preserves_each_assigned_status() {
         (ControlResponseStatus::InvalidChannel, 2),
         (ControlResponseStatus::NotAllocated, 3),
         (ControlResponseStatus::PermissionDenied, 4),
+        (ControlResponseStatus::InvalidFunction, 5),
     ] {
         let response = ControlResponse {
             id: 9,
@@ -55,13 +80,19 @@ fn reset_request_has_its_own_wire_opcode() {
     // Given: reset retains the selected channel's allocation.
     let request = ControlRequest {
         id: 7,
+        function: 0,
         opcode: ControlRequestOpcode::ResetChannel,
         channel: 3,
     };
     // When: encoding it independently of release.
     let bytes = request.to_bytes().unwrap();
     // Then: opcode two and the selected identity survive the wire boundary.
-    assert_eq!(bytes, [7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
+    assert_eq!(
+        bytes,
+        [
+            7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0
+        ]
+    );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
 }
 

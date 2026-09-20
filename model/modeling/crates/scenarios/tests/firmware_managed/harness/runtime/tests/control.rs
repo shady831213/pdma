@@ -2,7 +2,8 @@ use super::client;
 use super::*;
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, SharedMemoryAllocator};
 use pdma_model_contract::{
-    ChannelId, ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus, Ring,
+    ChannelId, ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus, FunctionId,
+    Ring,
 };
 use pdma_model_host::{Error, Management, ManagementRings, RingConfig, firmware};
 use std::{future::Future, pin::pin, task::Poll, time::Duration};
@@ -64,13 +65,19 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
         .await
         .unwrap();
         for _ in 0..3 {
-            let channel = management.acquire_channel().await.unwrap();
+            let channel = management
+                .acquire_channel(FunctionId::new(0))
+                .await
+                .unwrap();
             assert_eq!(channel, ChannelId::new(0));
             assert!(matches!(
-                management.acquire_channel().await,
+                management.acquire_channel(FunctionId::new(0)).await,
                 Err(Error::ManagementStatus(ControlResponseStatus::NoResources))
             ));
-            management.release_channel(channel).await.unwrap();
+            management
+                .release_channel(FunctionId::new(0), channel)
+                .await
+                .unwrap();
             assert!(matches!(
                 host.bus
                     .read(
@@ -83,13 +90,17 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
         }
         // Then: invalid releases are responses, not firmware crashes or opened windows.
         assert!(matches!(
-            management.release_channel(ChannelId::new(7)).await,
+            management
+                .release_channel(FunctionId::new(0), ChannelId::new(7))
+                .await,
             Err(Error::ManagementStatus(
                 ControlResponseStatus::InvalidChannel
             ))
         ));
         assert!(matches!(
-            management.release_channel(ChannelId::new(0)).await,
+            management
+                .release_channel(FunctionId::new(0), ChannelId::new(0))
+                .await,
             Err(Error::ManagementStatus(ControlResponseStatus::NotAllocated))
         ));
     });
@@ -120,7 +131,7 @@ async fn cancelling_host_wait_retains_one_request_and_resumes_its_response() {
         .await
         .unwrap();
         {
-            let mut request = pin!(management.acquire_channel());
+            let mut request = pin!(management.acquire_channel(FunctionId::new(0)));
             assert!(
                 std::future::poll_fn(|cx| Poll::Ready(request.as_mut().poll(cx)))
                     .await
@@ -130,7 +141,7 @@ async fn cancelling_host_wait_retains_one_request_and_resumes_its_response() {
         }
         // Then: another request is rejected; driving firmware completes the retained one.
         assert!(matches!(
-            management.acquire_channel().await,
+            management.acquire_channel(FunctionId::new(0)).await,
             Err(Error::ManagementBusy)
         ));
         assert!(

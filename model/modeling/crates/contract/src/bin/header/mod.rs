@@ -6,8 +6,8 @@ use hardware_interface_schema::{
 };
 use pdma_model_contract::{
     ChannelWindowRegisters, Command, ControlQueue, ControlRegisters, ControlRequest,
-    ControlResponse, ControlRingState, DmaRegisters, Endpoint, FirmwareRegisters,
-    FunctionControlRegisters, RegisterView, Response, Segment,
+    ControlResponse, ControlRingState, DmaRegisters, Endpoint, FirmwareRegisters, RegisterView,
+    Response, Segment,
 };
 use std::{error::Error, io::Write};
 
@@ -75,11 +75,7 @@ pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
             window.count(),
             window.stride()
         )?;
-        writeln!(
-            bytes,
-            "#define PDMA_{role_name}_CONTROL_STRIDE UINT32_C({})\n#endif",
-            FunctionControlRegisters::FUNCTIONS_STRIDE
-        )?;
+        writeln!(bytes, "#endif")?;
         headers.push((filename, bytes));
     }
     Ok(headers)

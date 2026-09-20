@@ -6,7 +6,7 @@ use super::{Handler, HostVector, Ports, TestResult};
 use crate::harness::runtime::{AccessError, HostBus};
 use buffers::Transfer;
 use hardware_interface_runtime::{RegisterAccess, SharedMemoryAccess};
-use pdma_model_contract::{ChannelId, ControlResponse, Response};
+use pdma_model_contract::{ChannelId, ControlResponse, FunctionId, Response};
 use pdma_model_host::{Management, firmware};
 use pdma_model_software::control::InterruptEvent;
 use std::{io, time::Duration};
@@ -41,8 +41,8 @@ pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
         .interrupts
         .register(HostVector::Control, Handler::Control(interrupt.handler()))?;
     let mut management = buffers::management(&ports, interrupt).await?;
-    let first = management.submit_acquire().await?.raw();
-    let second = management.submit_acquire().await?.raw();
+    let first = management.submit_acquire(FunctionId::new(0)).await?.raw();
+    let second = management.submit_acquire(FunctionId::new(0)).await?.raw();
     let a = management.next_response().await?;
     let b = management.next_response().await?;
     let mut correlations = vec![(first, a), (second, b)];
@@ -55,8 +55,11 @@ pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
     let partial_bytes = old.wait_started(&ports.memory).await?;
     peer.start(202).await?;
     let old_destination = old.retire();
-    let acquire = management.submit_acquire().await?.raw();
-    let release = management.submit_release(a_id).await?.raw();
+    let acquire = management.submit_acquire(FunctionId::new(0)).await?.raw();
+    let release = management
+        .submit_release(FunctionId::new(0), a_id)
+        .await?
+        .raw();
     let mut release_done = None;
     let mut grant = None;
     let mut peer_response = None;
@@ -82,7 +85,7 @@ pub(in crate::harness) async fn main(ports: Ports<'_>) -> TestResult<Outcome> {
     let drained = release_done.ok_or("release did not complete")?;
     let c = grant.ok_or("third channel was not granted")?;
     let peer_access = probe(&ports, b_id).await?;
-    let request = management.submit_acquire().await?.raw();
+    let request = management.submit_acquire(FunctionId::new(0)).await?.raw();
     let regrant = management.next_response().await?;
     correlations.push((request, regrant));
     let mut fresh = Transfer::new(
@@ -134,7 +137,10 @@ async fn release_all(
     for channel in channels {
         requests.push(
             management
-                .submit_release(ChannelId::new(usize::try_from(channel)?))
+                .submit_release(
+                    FunctionId::new(0),
+                    ChannelId::new(usize::try_from(channel)?),
+                )
                 .await?
                 .raw(),
         );

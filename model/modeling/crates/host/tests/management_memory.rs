@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRegisters};
+use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRegisters, FunctionId};
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig};
 use pdma_model_software::control::InterruptEvent;
 use std::{
@@ -218,7 +218,7 @@ async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
                     memory.write(producer, MemoryAlignment::ONE, &p.to_le_bytes())?;
                     memory.write(consumer, MemoryAlignment::ONE, &c.to_le_bytes())?;
                     // When: starting a request with a nonempty or malformed ring.
-                    let result = client.acquire_channel().await;
+                    let result = client.acquire_channel(FunctionId::new(0)).await;
                     // Then: classification remains a protocol error, with no publication or pending request.
                     assert!(
                         matches!(result, Err(Error::ManagementProtocol)),

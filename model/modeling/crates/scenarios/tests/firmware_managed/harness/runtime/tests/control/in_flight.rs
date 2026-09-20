@@ -1,6 +1,10 @@
+const PF: FunctionId = FunctionId::new(0);
+
 use super::*;
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError};
-use pdma_model_contract::{Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::{
+    Command, CompletionFlagsValues, Endpoint, FunctionId, Response, ResponseStatus,
+};
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
@@ -74,7 +78,7 @@ async fn reset_case(release: bool) {
         )
         .await
         .unwrap();
-        let id = management.acquire_channel().await.unwrap();
+        let id = management.acquire_channel(PF).await.unwrap();
         let command = ring::<Command>(&allocator).unwrap();
         let response = ring::<Response>(&allocator).unwrap();
         let (source, destination) = prepare_copy(&allocator, &observed);
@@ -100,9 +104,9 @@ async fn reset_case(release: bool) {
         // When: Host releases the channel after actual payload writes have started.
         drop(channel);
         if release {
-            management.release_channel(id).await.unwrap();
+            management.release_channel(PF, id).await.unwrap();
         } else {
-            management.reset_channel(id).await.unwrap();
+            management.reset_channel(PF, id).await.unwrap();
         }
         let old_writes = observed.writes.load(Ordering::SeqCst);
         for _ in 0..64 {
@@ -112,10 +116,10 @@ async fn reset_case(release: bool) {
         assert!(old_writes > 0 && old_writes < LENGTH / pdma_model_dma::COPY_CHUNK_BYTES);
         assert_eq!(observed.writes.load(Ordering::SeqCst), old_writes);
         if release {
-            assert_eq!(management.acquire_channel().await.unwrap(), id);
+            assert_eq!(management.acquire_channel(PF).await.unwrap(), id);
         } else {
             assert!(matches!(
-                management.acquire_channel().await,
+                management.acquire_channel(PF).await,
                 Err(Error::ManagementStatus(ControlResponseStatus::NoResources))
             ));
             let address = u32::try_from(

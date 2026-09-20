@@ -22,6 +22,7 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         .unwrap();
         let request = ControlRequest {
             id: 77,
+            function: 0,
             opcode: ControlRequestOpcode::AcquireChannel,
             channel: 7,
         };

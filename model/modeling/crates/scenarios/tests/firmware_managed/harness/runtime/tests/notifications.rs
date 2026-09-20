@@ -14,7 +14,7 @@ use hardware_interface_runtime::{
 use hardware_interface_schema::{Decode, Encode};
 use pdma_model_contract::{
     ChannelId, ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
-    Ring,
+    FunctionId, Ring,
 };
 use pdma_model_host::Management;
 use pdma_model_software::control::{ControlIsr, InterruptEvent};
@@ -53,6 +53,7 @@ async fn memory_publication_waits_for_request_doorbell_before_firmware_consumes(
             MemoryAlignment::ONE,
             &ControlRequest {
                 id: 17,
+                function: 0,
                 opcode: ControlRequestOpcode::AcquireChannel,
                 channel: 0,
             }
@@ -114,8 +115,13 @@ async fn spurious_request_doorbells_leave_empty_queues_and_resources_unchanged()
         assert_eq!(queue.read()?.command.consumer, 0);
         assert_eq!(queue.read()?.response.producer, 0);
         // Then: the first real acquisition still obtains the only channel.
-        assert_eq!(management.acquire_channel().await?, ChannelId::new(0));
-        management.release_channel(ChannelId::new(0)).await?;
+        assert_eq!(
+            management.acquire_channel(FunctionId::new(0)).await?,
+            ChannelId::new(0)
+        );
+        management
+            .release_channel(FunctionId::new(0), ChannelId::new(0))
+            .await?;
         Ok(())
     });
     tokio::time::timeout(Duration::from_secs(3), system.run_until(program)).await??
@@ -166,8 +172,8 @@ async fn response_notifications_resume_host_without_dma_interrupt_dispatch() -> 
         )
         .await?;
         // When: firmware completes management requests without any DMA command.
-        let channel = client.acquire_channel().await?;
-        client.release_channel(channel).await?;
+        let channel = client.acquire_channel(FunctionId::new(0)).await?;
+        client.release_channel(FunctionId::new(0), channel).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(channel)
     });
     let (channel, interrupts) =

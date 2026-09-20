@@ -2,7 +2,7 @@ use hardware_interface_schema::register_map;
 
 use crate::{ReadWord, Switch, Word};
 
-/// Platform-assigned Function identity, never supplied by a management request.
+/// Platform-assigned identity, also used as the explicit target of trusted PF requests.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FunctionId(u32);
 

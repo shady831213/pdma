@@ -1,5 +1,5 @@
 use super::*;
-use pdma_model_contract::{FunctionControlRegisters, FunctionId};
+use pdma_model_contract::FunctionId;
 use pdma_model_hw_components::WindowConfigError;
 
 impl<M: Clone> Managed<M> {
@@ -64,32 +64,29 @@ impl<M: Clone> Managed<M> {
         let invalid = || BuildError::Window(WindowConfigError::AddressUnrepresentable);
         let firmware =
             FirmwareStatus::new(usize::try_from(addresses.firmware).map_err(|_| invalid())?);
-        let control = FunctionControls::new(
+        let control = ControlChannel::new(
             usize::try_from(addresses.control).map_err(|_| invalid())?,
-            function_count,
-        )
-        .map_err(BuildError::Window)?;
-        let layout = FunctionControlRegisters::new(function_count).map_err(|_| invalid())?;
+            platform::PF,
+        );
         let (to_firmware, firmware_source) = pending_interrupt(ControlIrq);
+        let (to_host, control_source) = pending_interrupt(HostIrq::Control(ControlIrq));
+        let mut control_source = Some(control_source);
         let mut destinations = Vec::new();
         let mut sources = Vec::new();
         for index in 0..function_count {
             let function = FunctionId::new(u32::try_from(index).map_err(|_| invalid())?);
             let (interrupt, dma_source) = pending_interrupt(HostIrq::Dma(Irq));
-            let (to_host, control_source) = pending_interrupt(HostIrq::Control(ControlIrq));
-            destinations.push(Destination { interrupt, to_host });
-            let offset = u32::try_from(layout.functions().offset(index).ok_or_else(invalid)?)
-                .map_err(|_| invalid())?;
-            let host_addresses = ManagementAddresses {
-                control: addresses.control.checked_add(offset).ok_or_else(invalid)?,
-                ..addresses
-            };
+            destinations.push(interrupt);
             sources.push((
                 function,
-                host_addresses,
+                addresses,
                 HostInterrupts {
                     dma: dma_source,
-                    control: control_source,
+                    control: if function == platform::PF {
+                        control_source.take()
+                    } else {
+                        None
+                    },
                     next: HostVector::Dma,
                 },
             ));
@@ -106,6 +103,7 @@ impl<M: Clone> Managed<M> {
             destinations,
             channel_count,
             to_firmware,
+            to_host,
         });
         let hosts = sources
             .into_iter()

@@ -3,7 +3,7 @@ const WINDOW_CONTROL_BASE: u32 = 0x0010_0000;
 const WINDOW_STATUS_BASE: u32 = 0x0010_0008;
 
 use hardware_interface_schema::Access;
-use pdma_model_contract::{ControlRegisters, FirmwareRegisters, RegisterView};
+use pdma_model_contract::{ControlRegisters, FirmwareRegisters, FunctionId, RegisterView};
 use pdma_model_hw_components::{AccessWindow, ControlChannel, FirmwareStatus};
 
 #[test]
@@ -18,12 +18,16 @@ fn control_view_permissions_match_real_hardware_transactions() {
         for register in original.registers() {
             let offset = register.offset();
             let mut bytes = vec![0; register.definition().width()];
-            let mut device = ControlChannel::new(0);
+            let mut device = ControlChannel::new(0, FunctionId::new(0));
             // When: the selected domain issues full-width reads and writes.
             let (read, write) = match role {
                 RegisterView::Host => (
-                    device.host_read(offset, &mut bytes).is_ok(),
-                    device.host_write(offset, &bytes).is_ok(),
+                    device
+                        .host_read(FunctionId::new(0), offset, &mut bytes)
+                        .is_ok(),
+                    device
+                        .host_write(FunctionId::new(0), offset, &bytes)
+                        .is_ok(),
                 ),
                 RegisterView::Firmware => (
                     device.firmware_read(offset, &mut bytes).is_ok(),

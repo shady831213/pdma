@@ -1,7 +1,7 @@
 use super::BuildError;
 use hardware_interface_schema::RegisterShape;
 use pdma_model_contract::{
-    ChannelWindowRegisters, DmaRegisters, FirmwareRegisters, FunctionControlRegisters,
+    ChannelWindowRegisters, ControlRegisters, DmaRegisters, FirmwareRegisters, FunctionId,
 };
 use pdma_model_hw_components::WindowConfigError;
 use pdma_model_software::control::ManagementAddresses;
@@ -13,6 +13,7 @@ pub const ADDRESSES: ManagementAddresses = ManagementAddresses {
     control: 0x0011_0000,
     firmware: 0x0012_0000,
 };
+pub(super) const PF: FunctionId = FunctionId::new(0);
 pub(crate) const WINDOW_CONTROL_BASE: u32 = ADDRESSES.windows;
 pub(crate) const WINDOW_STATUS_BASE: u32 = ADDRESSES.windows + 8;
 pub(crate) const CONTROL_CHANNEL_BASE: u32 = ADDRESSES.control;
@@ -26,11 +27,17 @@ pub(super) fn validate_functions(
     let invalid = || BuildError::Window(WindowConfigError::AddressUnrepresentable);
     let dma = DmaRegisters::new(count).map_err(|_| invalid())?;
     let windows = ChannelWindowRegisters::new(count).map_err(|_| invalid())?;
-    let control = FunctionControlRegisters::new(config.function_count).map_err(|_| invalid())?;
+    if config.function_count == 0 || u32::try_from(config.function_count).is_err() {
+        return Err(invalid());
+    }
     let blocks = [
         (addresses.dma, dma.extent(), dma.alignment()),
         (addresses.windows, windows.extent(), windows.alignment()),
-        (addresses.control, control.extent(), control.alignment()),
+        (
+            addresses.control,
+            ControlRegisters::EXTENT,
+            ControlRegisters::ALIGNMENT,
+        ),
         (
             addresses.firmware,
             FirmwareRegisters::EXTENT,

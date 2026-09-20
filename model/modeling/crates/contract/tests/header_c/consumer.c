@@ -71,13 +71,14 @@ _Static_assert(C_CONTROLQQUEUE_C_COMMANDQX2ECONSUMER_OFFSET == 16, "command cons
 _Static_assert(C_CONTROLQQUEUE_C_RESPONSEQX2EBASE_OFFSET == 24, "response base offset");
 _Static_assert(C_CONTROLQQUEUE_C_RESPONSEQX2EPRODUCER_OFFSET == 36, "response producer offset");
 _Static_assert(C_CONTROLQQUEUE_C_RESPONSEQX2ECONSUMER_OFFSET == 40, "response consumer offset");
-_Static_assert(C_CONTROLREQQUEST_SIZE == 16, "control request extent");
+_Static_assert(C_CONTROLREQQUEST_SIZE == 24, "control request extent");
 _Static_assert(C_CONTROLRESPONSE_SIZE == 16, "control response extent");
 _Static_assert(C_CONTROLREQQUEST_ALIGNMENT == 8, "control request alignment");
 _Static_assert(C_CONTROLRESPONSE_ALIGNMENT == 8, "control response alignment");
+_Static_assert(C_CONTROLREQQUEST_C_FUNCTION_OFFSET == 12, "target Function offset");
 _Static_assert(C_CONTROLREQQUEST_C_ID_OFFSET == 0, "control request id offset");
 _Static_assert(C_CONTROLREQQUEST_C_OPCODE_OFFSET == 8, "control request opcode offset");
-_Static_assert(C_CONTROLREQQUEST_C_CHANNEL_OFFSET == 12, "control request channel offset");
+_Static_assert(C_CONTROLREQQUEST_C_CHANNEL_OFFSET == 16, "control request channel offset");
 _Static_assert(C_CONTROLRESPONSE_C_ID_OFFSET == 0, "control response id offset");
 _Static_assert(C_CONTROLRESPONSE_C_STATUS_OFFSET == 8, "control response status offset");
 _Static_assert(C_CONTROLRESPONSE_C_CHANNEL_OFFSET == 12, "control response channel offset");
@@ -167,9 +168,11 @@ int main(void) {
     C_SEGMENT_STORE_C_LENGTH(segment, UINT64_C(8));
     C_CONTROLREQQUEST_STORE_C_ID(release, UINT64_C(0x0807060504030201));
     C_CONTROLREQQUEST_STORE_C_OPCODE(release, C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL);
+    C_CONTROLREQQUEST_STORE_C_FUNCTION(release, UINT32_C(7));
     C_CONTROLREQQUEST_STORE_C_CHANNEL(release, UINT32_C(0x10203040));
     C_CONTROLREQQUEST_STORE_C_ID(acquire, UINT64_C(9));
     C_CONTROLREQQUEST_STORE_C_OPCODE(acquire, C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL);
+    C_CONTROLREQQUEST_STORE_C_FUNCTION(acquire, UINT32_C(2));
     C_CONTROLREQQUEST_STORE_C_CHANNEL(acquire, UINT32_C(0));
     C_CONTROLRESPONSE_STORE_C_ID(granted, UINT64_C(9));
     C_CONTROLRESPONSE_STORE_C_STATUS(granted, C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS);

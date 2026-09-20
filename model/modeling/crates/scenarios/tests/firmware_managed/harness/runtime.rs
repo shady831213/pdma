@@ -21,7 +21,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_dma::{CommandLoop, Dma};
 use pdma_model_host::runtime::Irq;
-use pdma_model_hw_components::{ChannelWindows, FirmwareStatus, FunctionControls};
+use pdma_model_hw_components::{ChannelWindows, ControlChannel, FirmwareStatus};
 use pdma_model_software::control::{ControlIrq, ManagementAddresses};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
@@ -31,7 +31,7 @@ struct Hardware<M> {
     dma: Dma<M>,
     window: ChannelWindows,
     firmware: FirmwareStatus,
-    control: FunctionControls,
+    control: ControlChannel,
 }
 
 #[derive(Debug)]
@@ -39,9 +39,10 @@ struct Shared<M> {
     addresses: ManagementAddresses,
     hardware: Mutex<Hardware<M>>,
     changed: Notify,
-    destinations: Vec<Destination>,
+    destinations: Vec<InterruptEmitter>,
     channel_count: usize,
     to_firmware: InterruptEmitter,
+    to_host: InterruptEmitter,
 }
 
 #[derive(Debug)]
@@ -71,10 +72,4 @@ pub struct Managed<M> {
     firmware_cpu: Arc<SoftwareCpu>,
     firmware_memory: M,
     function_count: usize,
-}
-
-#[derive(Debug)]
-struct Destination {
-    interrupt: InterruptEmitter,
-    to_host: InterruptEmitter,
 }

@@ -104,6 +104,7 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
         &memory,
         ControlRequest {
             id: 2,
+            function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,
             channel: 0,
         },
@@ -171,6 +172,7 @@ async fn release_response_backpressure_preserves_queued_acquisition() -> TestRes
         &memory,
         ControlRequest {
             id: 2,
+            function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,
             channel: 0,
         },

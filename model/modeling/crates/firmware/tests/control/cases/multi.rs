@@ -16,6 +16,7 @@ async fn duplicate_release_waits_then_reports_not_allocated() -> TestResult {
     write_word(&memory, consumer, 1)?;
     let release = ControlRequest {
         id: 2,
+        function: 0,
         opcode: ControlRequestOpcode::ReleaseChannel,
         channel: 0,
     };
@@ -89,6 +90,7 @@ async fn management_waits_for_reset_before_consuming_the_next_request() -> TestR
         &memory,
         ControlRequest {
             id: 2,
+            function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,
             channel: 0,
         },

@@ -1,6 +1,6 @@
 use super::{client, control::rings, *};
 use hardware_interface_runtime::{MemoryAddress, SharedMemoryAllocator};
-use pdma_model_contract::{ChannelId, ControlResponseStatus};
+use pdma_model_contract::{ChannelId, ControlResponseStatus, FunctionId};
 use pdma_model_host::Management;
 use std::time::Duration;
 
@@ -19,8 +19,8 @@ async fn outstanding_acquisitions_and_release_preserve_peer_permissions() {
         .await
         .unwrap();
         // When: two acquisitions are published before either result is collected.
-        let first = management.submit_acquire().await.unwrap();
-        let second = management.submit_acquire().await.unwrap();
+        let first = management.submit_acquire(FunctionId::new(0)).await.unwrap();
+        let second = management.submit_acquire(FunctionId::new(0)).await.unwrap();
         let a = management.next_response().await.unwrap();
         let b = management.next_response().await.unwrap();
         // Then: correlation and independently enforced apertures survive release of one grant.
@@ -41,14 +41,20 @@ async fn outstanding_acquisitions_and_release_preserve_peer_permissions() {
             host.bus.read(address(2), &mut bytes).await,
             Err(AccessError::Closed)
         ));
-        management.release_channel(ChannelId::new(0)).await.unwrap();
+        management
+            .release_channel(FunctionId::new(0), ChannelId::new(0))
+            .await
+            .unwrap();
         assert!(matches!(
             host.bus.read(address(0), &mut bytes).await,
             Err(AccessError::Closed)
         ));
         host.bus.read(address(1), &mut bytes).await.unwrap();
         assert_eq!(
-            management.acquire_channel().await.unwrap(),
+            management
+                .acquire_channel(FunctionId::new(0))
+                .await
+                .unwrap(),
             ChannelId::new(0)
         );
     });

@@ -1,5 +1,6 @@
 use super::support::{Fixture, pending_once, response};
 use hardware_interface_runtime::{InterruptHandler, SoftwareCpu};
+use pdma_model_contract::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::{control::ControlIrq, ring::SoftRing};
 use std::{
@@ -17,9 +18,9 @@ async fn cancelled_submission_retains_identity_and_publishes_only_once() {
             let mut client = fixture.setup().await.unwrap();
             fixture.bus.blocked.store(true, Ordering::SeqCst);
             // When: submission is cancelled and then resumed.
-            pending_once(client.submit_acquire()).await;
+            pending_once(client.submit_acquire(FunctionId::new(9))).await;
             assert!(matches!(
-                client.submit_acquire().await,
+                client.submit_acquire(FunctionId::new(0)).await,
                 Err(Error::ManagementBusy)
             ));
             assert_eq!(fixture.state().unwrap().command.producer, 1);
@@ -27,9 +28,17 @@ async fn cancelled_submission_retains_identity_and_publishes_only_once() {
             let id = client.resume_submission().await.unwrap();
             // Then: the same request record survives, without a duplicate publication.
             let mut commands = SoftRing::new(fixture.rings.command);
-            assert_eq!(fixture.take(&mut commands).await.unwrap().id, id.raw());
+            let request = fixture.take(&mut commands).await.unwrap();
+            assert_eq!((request.id, request.function), (id.raw(), 9));
             assert_eq!(fixture.state().unwrap().command.producer, 1);
-            assert_eq!(client.submit_acquire().await.unwrap().raw(), id.raw() + 1);
+            assert_eq!(
+                client
+                    .submit_acquire(FunctionId::new(0))
+                    .await
+                    .unwrap()
+                    .raw(),
+                id.raw() + 1
+            );
         })
         .await;
 }
@@ -41,8 +50,8 @@ async fn cancelled_space_notification_retains_consumed_response() {
         .run_main(async {
             // Given: the response-space doorbell suspends after consumption.
             let mut client = fixture.setup().await.unwrap();
-            let first = client.submit_acquire().await.unwrap();
-            let second = client.submit_acquire().await.unwrap();
+            let first = client.submit_acquire(FunctionId::new(0)).await.unwrap();
+            let second = client.submit_acquire(FunctionId::new(0)).await.unwrap();
             let mut responses = SoftRing::new(fixture.rings.response);
             fixture
                 .respond(&mut responses, response(second.raw(), 1))
@@ -56,7 +65,10 @@ async fn cancelled_space_notification_retains_consumed_response() {
             // When: collection is cancelled and retried after notification can finish.
             pending_once(client.try_response()).await;
             assert_eq!(fixture.state().unwrap().response.consumer, 1);
-            assert!(matches!(client.submit_acquire().await, Err(Error::Full)));
+            assert!(matches!(
+                client.submit_acquire(FunctionId::new(0)).await,
+                Err(Error::Full)
+            ));
             fixture.bus.blocked.store(false, Ordering::SeqCst);
             // Then: it returns the retained completion before consuming another response.
             assert_eq!(
@@ -78,7 +90,10 @@ async fn waiting_response_can_complete_on_another_cpu() {
     let fixture = Fixture::new().unwrap();
     let first = SoftwareCpu::new();
     let mut client = first.run_main(fixture.setup()).await.unwrap();
-    let id = first.run_main(client.submit_acquire()).await.unwrap();
+    let id = first
+        .run_main(client.submit_acquire(FunctionId::new(0)))
+        .await
+        .unwrap();
     // Given: a response wait suspended before firmware has produced a completion.
     let mut future = Box::pin(client.next_response());
     first
@@ -110,7 +125,7 @@ async fn management_setup_needs_no_modeled_cpu_context() {
     let fixture = Fixture::new().unwrap();
     // When: ordinary software configures the control channel directly.
     let mut client = fixture.setup().await.unwrap();
-    let id = client.submit_acquire().await.unwrap();
+    let id = client.submit_acquire(FunctionId::new(0)).await.unwrap();
     // Then: the request is published using the supplied capabilities.
     assert_eq!(id.raw(), 1);
     assert_eq!(fixture.state().unwrap().command.producer, 1);
@@ -124,7 +139,7 @@ async fn next_response_wakes_from_isr_and_wait_pending_recovers_submission() {
             // Given: a cancelled submission with one real command already visible.
             let mut client = fixture.setup().await.unwrap();
             fixture.bus.blocked.store(true, Ordering::SeqCst);
-            pending_once(client.submit_acquire()).await;
+            pending_once(client.submit_acquire(FunctionId::new(0))).await;
             fixture.bus.blocked.store(false, Ordering::SeqCst);
             let mut commands = SoftRing::new(fixture.rings.command);
             let request = fixture.take(&mut commands).await.unwrap();

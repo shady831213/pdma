@@ -13,6 +13,7 @@ use support::*;
 const fn acquire(id: u64) -> ControlRequest {
     ControlRequest {
         id,
+        function: 0,
         opcode: ControlRequestOpcode::AcquireChannel,
         channel: 0,
     }

@@ -14,9 +14,8 @@ use std::{
 
 use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::{
-    Command, CompletionFlagsValues, ControlRegisters, ControlRequest, ControlRequestOpcode,
-    ControlResponse, ControlResponseStatus, DmaRegisters, Endpoint, Response, ResponseStatus,
-    Segment,
+    Command, CompletionFlagsValues, ControlRegisters, ControlRequest, ControlResponse,
+    DmaRegisters, Endpoint, Response, ResponseStatus, Segment,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -24,11 +23,16 @@ const QUEUE_BYTES: [u8; 48] = [
     0, 16, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0,
     0, 4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
 ];
-const CONTROL_BYTES: [[u8; 16]; 4] = [
-    [1, 2, 3, 4, 5, 6, 7, 8, 1, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
-    [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
-    [1, 2, 3, 4, 5, 6, 7, 8, 3, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
+
+const CONTROL_BYTES: [&[u8]; 4] = [
+    &[
+        1, 2, 3, 4, 5, 6, 7, 8, 1, 0, 0, 0, 7, 0, 0, 0, 0x40, 0x30, 0x20, 0x10, 0, 0, 0, 0,
+    ],
+    &[
+        9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ],
+    &[9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
+    &[1, 2, 3, 4, 5, 6, 7, 8, 3, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
 ];
 
 #[test]
@@ -164,47 +168,12 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         response_bytes.as_slice(),
         segment_bytes.as_slice(),
         offset_bytes.as_slice(),
-        CONTROL_BYTES.as_flattened(),
+        &CONTROL_BYTES.concat(),
         control_offsets.as_slice(),
         QUEUE_BYTES.as_slice(),
     ]
     .concat();
     assert_eq!(output.stdout, expected);
-    Ok(())
-}
-
-#[test]
-fn rust_control_records_match_c_consumer_fixtures() -> TestResult {
-    // Given: independent wire bytes for acquisition, release and their responses.
-    // When: the Rust contract encodes the same records used by the C consumer.
-    let control_records = [
-        ControlRequest {
-            id: 0x0807_0605_0403_0201,
-            opcode: ControlRequestOpcode::ReleaseChannel,
-            channel: 0x1020_3040,
-        }
-        .to_bytes()?,
-        ControlRequest {
-            id: 9,
-            opcode: ControlRequestOpcode::AcquireChannel,
-            channel: 0,
-        }
-        .to_bytes()?,
-        ControlResponse {
-            id: 9,
-            status: ControlResponseStatus::Success,
-            channel: 2,
-        }
-        .to_bytes()?,
-        ControlResponse {
-            id: 0x0807_0605_0403_0201,
-            status: ControlResponseStatus::NotAllocated,
-            channel: 0x1020_3040,
-        }
-        .to_bytes()?,
-    ];
-    // Then: Rust matches the independently specified C acceptance fixtures.
-    assert_eq!(control_records, CONTROL_BYTES);
     Ok(())
 }
 

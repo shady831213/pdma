@@ -1,14 +1,14 @@
 # Firmware control channel
 
-Each Function has independent Host-to-firmware command and firmware-to-Host
-response rings. Their geometry, producer/consumer cursors and entries live in memory.
+One trusted PF owns the Host-to-firmware command and firmware-to-Host
+response rings. VF software cannot access their control registers. Their geometry, producer/consumer cursors and entries live in memory.
 They are not DMA task rings. Both directions use management ISRs; there is no event ring.
 
 ## Ownership and startup
 
-- Contract defines 16-byte request/response records, a 24-byte `ControlRingState`
+- Contract defines a 24-byte request and 16-byte response, a 24-byte `ControlRingState`
   and a 48-byte `ControlQueue`. All have eight-byte alignment and little-endian encoding.
-- Host allocates the descriptor and both entry buffers. It initializes the descriptor,
+- PF Host allocates the descriptor and both entry buffers. It initializes the descriptor,
   publishes its address through bootstrap, enables the channel and rings the request doorbell.
 - Firmware reads and validates the descriptor once, retaining accepted geometry.
   Subsequent operations access the independent cursor fields, not mutable geometry.
@@ -32,10 +32,10 @@ affinity: register capability checks, where explicitly configured, remain author
 
 The always-on `ControlRegisters` map has a platform-selected base and contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
 and response doorbell at 16, for an extent of 20 bytes.
-Host owns bootstrap/enable/request writes; firmware owns response writes. Wrong-owner
+The platform-selected PF owns bootstrap/enable/request writes; firmware owns response writes. Wrong-owner
 writes are rejected even if the value would not change. Doorbells are write-only:
 one emits a coalescing pulse, zero has no effect, and hardware does not retain a one
-in register storage. Both domains may read bootstrap/enable.
+in register storage. PF and firmware may read bootstrap/enable; VF accesses are rejected.
 
 Enable freezes the bootstrap address and rejects disabling. Geometry validation now
 belongs to software, not the MMIO block. `Ring` requires a nonzero power-of-two
@@ -92,6 +92,11 @@ must provide the required release/acquire ordering and visibility before doorbel
 The managed platform supports independent Function-bound Host ports and an instance-configured
 number of DMA channels. See [Function isolation](function-isolation.md) for identity,
 ownership, interrupt routing and the remaining shared-memory trust boundary.
+Every request names a target Function separately from its request ID and channel.
+Firmware validates that target before any resource mutation; invalid targets return
+InvalidFunction. Reset/release also require that target to own the channel, or return
+PermissionDenied. Only PF submits these requests; the immutable MMIO requester
+identity still governs PF/VF data access.
 `AcquireChannel` selects the lowest free channel, opens its data window and
 returns its identifier. NoResources means all channels are allocated.
 
@@ -128,7 +133,7 @@ places these blocks, checks alignment/overflow/overlap, and performs bus address
 translation. Hardware readiness derives from each gate, not a shadow allocation
 table.
 
-Closing MMIO alone is not a drain. Host must stop ring/ISR use before reset or
+Closing MMIO alone is not a drain. PF must coordinate with the owning Function to stop ring/ISR use before reset or
 release and retain memory until completion. Reset does not undo completed external
 writes. Platform-pending DMA notifications remain associated with their original
 Host. Runtime implements no allocation/reset policy.
@@ -167,7 +172,8 @@ resources and main/ISR execution remain separate runtime services.
 the processing task's `InterruptEvent`. Host registers `event.handler()` before setup.
 `software::control::ControlQueueLayout` supplies the shared cursor adapters after
 validating their addresses; initialization and attachment remain domain-specific.
-`submit_acquire`, `submit_reset` and `submit_release` publish a request and notify firmware,
+`submit_acquire(function)`, `submit_reset(function, channel)` and
+`submit_release(function, channel)` publish a request and notify firmware,
 returning `ManagementRequestId` without waiting for execution. `try_response`
 collects an available result, or returns None without waiting for firmware;
 `next_response` waits on ISR hints until a result is available. Notification MMIO
@@ -184,7 +190,7 @@ Full means software must collect results before submitting more. Response-ring
 capacity is independent. Unknown/duplicate IDs or a reset/release result naming the wrong
 channel are protocol errors; the offending response is not consumed.
 
-Cancelled submission retains the same ID and publication state. Call
+Cancelled submission retains the same ID, target Function and publication state. Call
 `resume_submission` before another submit/collection; it finishes publication and
 notification without duplicating the command. Cancelling response collection keeps
 the request outstanding; retry `try_response` or `next_response`. The serial

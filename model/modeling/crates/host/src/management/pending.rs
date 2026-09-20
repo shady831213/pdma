@@ -1,24 +1,30 @@
 use super::{Management, ManagementRequestId, Submission, transport::ring_error};
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{ChannelId, ControlRequest, ControlRequestOpcode};
+use pdma_model_contract::{ChannelId, ControlRequest, ControlRequestOpcode, FunctionId};
 use pdma_model_software::ring::SoftRingError;
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Publishes an acquisition and rings the doorbell without waiting for firmware.
     /// Cancellation retains its identity; call `resume_submission` before submitting again.
-    pub async fn submit_acquire(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
-        self.submit(ControlRequestOpcode::AcquireChannel, 0).await
+    pub async fn submit_acquire(
+        &mut self,
+        function: FunctionId,
+    ) -> Result<ManagementRequestId, Error<B::Error>> {
+        self.submit(ControlRequestOpcode::AcquireChannel, function, 0)
+            .await
     }
 
     /// Publishes a release without waiting for reset completion or firmware's response.
     /// Retain channel memory until its successful response has been collected.
     pub async fn submit_release(
         &mut self,
+        function: FunctionId,
         channel: ChannelId,
     ) -> Result<ManagementRequestId, Error<B::Error>> {
         self.submit(
             ControlRequestOpcode::ReleaseChannel,
+            function,
             u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
         )
         .await
@@ -27,10 +33,12 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Publishes reset while retaining allocation; keep channel memory until its response.
     pub async fn submit_reset(
         &mut self,
+        function: FunctionId,
         channel: ChannelId,
     ) -> Result<ManagementRequestId, Error<B::Error>> {
         self.submit(
             ControlRequestOpcode::ResetChannel,
+            function,
             u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
         )
         .await
@@ -51,6 +59,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     pub(super) async fn submit(
         &mut self,
         opcode: ControlRequestOpcode,
+        function: FunctionId,
         channel: u32,
     ) -> Result<ManagementRequestId, Error<B::Error>> {
         if self.submission.is_some() {
@@ -89,6 +98,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         let request = ControlRequest {
             id,
             opcode,
+            function: function.raw(),
             channel,
         };
         self.outstanding.push(request);

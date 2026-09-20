@@ -1,13 +1,14 @@
 use super::{AccessError, Hardware, ManagementBus, Shared};
 use hardware_interface_runtime::RegisterAccess;
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
+use pdma_model_contract::FunctionId;
 use std::sync::Arc;
 
 /// Host work MMIO, checked by the hardware access window on every transaction.
 #[derive(Debug)]
 pub struct HostBus<M> {
     pub(super) shared: Arc<Shared<M>>,
-    pub(super) function: pdma_model_contract::FunctionId,
+    pub(super) function: FunctionId,
     pub(super) addresses: pdma_model_software::control::ManagementAddresses,
 }
 

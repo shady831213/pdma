@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{Configuration, Error};
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::{
     ChannelId, DmaDiscovery, DmaRegisters, FunctionId, RingError, WindowControl,
@@ -7,6 +7,7 @@ use pdma_model_software::{control::ManagementAddresses, dma::ChannelControl};
 
 #[derive(Clone, Copy)]
 pub(super) enum ResourceError {
+    InvalidFunction,
     InvalidChannel,
     NotAllocated,
     PermissionDenied,
@@ -20,13 +21,20 @@ struct Channel {
 pub(super) struct Resources {
     channels: Vec<Channel>,
     addresses: ManagementAddresses,
+    function_count: u32,
 }
 
 impl Resources {
     pub(super) async fn initialize<B: RegisterAccess + Sync>(
         bus: &B,
-        addresses: ManagementAddresses,
+        config: Configuration,
     ) -> Result<Self, Error<B::Error>> {
+        let addresses = config.addresses;
+        let function_count =
+            u32::try_from(config.function_count).map_err(|_| Error::FunctionCount)?;
+        if function_count == 0 {
+            return Err(Error::FunctionCount);
+        }
         let mut bytes = [0; 4];
         let discovery = addresses
             .dma
@@ -60,7 +68,16 @@ impl Resources {
         Ok(Self {
             channels,
             addresses,
+            function_count,
         })
+    }
+
+    pub(super) const fn function(&self, raw: u32) -> Result<FunctionId, ResourceError> {
+        if raw < self.function_count {
+            Ok(FunctionId::new(raw))
+        } else {
+            Err(ResourceError::InvalidFunction)
+        }
     }
 
     pub(super) async fn acquire<B: RegisterAccess + Sync>(

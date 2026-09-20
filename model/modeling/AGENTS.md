@@ -83,10 +83,11 @@ bootstrap/enable and bidirectional doorbells are hardware registers. Firmware ca
 validated geometry once; software owns cursor updates. `docs/control-channel.md`
 defines their ownership and cancellation contract. Hardware owns registers/permissions, firmware consumes and
 executes management requests, and Host owns ring memory. Runtime carries no resource
-policy. Function-bound Host ports manage an instance-configured channel count through bounded
-asynchronous submissions over independent control rings. Firmware retains per-channel owner
-allocation state and serves ordinary management requests serially. Control-bank identity is
-platform-provided, never a Host request field; unopened/full peer rings do not block scanning.
+policy. A single PF management client issues bounded asynchronous requests naming target
+Functions over one control ring pair. VF software only uses granted data channels.
+Hardware checks the platform-provided PF identity on control-register access. Firmware
+validates request targets against its configured Function namespace, retains per-channel
+owner allocation state and serves requests serially. A full PF response ring stops admission.
 ResetChannel closes its data window, awaits hardware reset, then reopens unconfigured data
 access without releasing ownership. ReleaseChannel awaits reset before freeing ownership.
 Later management requests wait; independently driven peer DMA continues. Resource lifecycle

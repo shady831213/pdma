@@ -14,7 +14,8 @@ use hardware_interface_runtime::{
 };
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
 use pdma_model_contract::{
-    ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus, Ring,
+    ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus, FunctionId,
+    Ring,
 };
 use pdma_model_host::{Management, RingConfig};
 use pdma_model_software::ring::SoftRingError;
@@ -31,11 +32,18 @@ async fn read_word(
 
 #[tokio::test]
 async fn backpressure_preserves_pending_request_until_host_releases_response_slot() -> TestResult {
+    release_backpressure(FunctionId::new(0)).await
+}
+
+pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
     // Given: real firmware with a capacity-one response ring holding an acquisition result.
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let memory = allocator.memory_access();
-    let (system, host) = Managed::new(memory.clone())?;
+    let (system, mut hosts) =
+        Managed::with_functions(memory.clone(), 1, usize::try_from(function.raw())? + 1)?;
+    let host = hosts.remove(0);
+    let observer = hosts.pop().map_or_else(|| host.bus.clone(), |vf| vf.bus);
     let mut running = pin!(system.run());
     assert!(poll_once(running.as_mut()).await.is_pending());
     let program = client::run(host.runtime, async |interrupt| {
@@ -54,6 +62,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
             MemoryAlignment::ONE,
             &ControlRequest {
                 id: 1,
+                function: function.raw(),
                 opcode: ControlRequestOpcode::AcquireChannel,
                 channel: 0,
             }
@@ -81,6 +90,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
             MemoryAlignment::ONE,
             &ControlRequest {
                 id: 2,
+                function: function.raw(),
                 opcode: ControlRequestOpcode::ReleaseChannel,
                 channel: 0,
             }
@@ -93,7 +103,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
         // Then: firmware neither consumes nor executes release until space and a kick arrive.
         assert_eq!(queue.read()?.command.consumer, 1);
         assert_eq!(queue.read()?.response.producer, 1);
-        assert_eq!(read_word(&host.bus, WINDOW_STATUS_BASE).await?, 1);
+        assert_eq!(read_word(&observer, WINDOW_STATUS_BASE).await?, 1);
         queue.consume_response(1)?;
         assert!(poll_once(running.as_mut()).await.is_pending());
         assert_eq!(queue.read()?.command.consumer, 1);
@@ -115,7 +125,7 @@ async fn backpressure_preserves_pending_request_until_host_releases_response_slo
         );
         assert_eq!(queue.read()?.command.consumer, 2);
         assert_eq!(queue.read()?.response.consumer, 1);
-        assert_eq!(read_word(&host.bus, WINDOW_STATUS_BASE).await?, 0);
+        assert_eq!(read_word(&observer, WINDOW_STATUS_BASE).await?, 0);
         Ok(())
     });
     tokio::time::timeout(Duration::from_secs(3), program).await?

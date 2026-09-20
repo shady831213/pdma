@@ -1,7 +1,10 @@
 //! Scoped execution of independent Function software programs.
 use super::{TestResult, program, runtime::Managed};
 use hardware_interface_runtime::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
+use pdma_model_contract::FunctionId;
+use program::functions::{Assignment, Grant};
 use std::{sync::Arc, time::Duration};
+use tokio::sync::oneshot;
 
 pub(crate) async fn run_reset() -> TestResult<(
     program::functions::reset::Outcome,
@@ -10,9 +13,14 @@ pub(crate) async fn run_reset() -> TestResult<(
     use program::functions::reset::{self, PeerSignals, ResetSignals};
     let allocator =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
-    let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 2)?;
+    let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3)?;
     let b = hosts.pop().ok_or("missing Function B")?;
     let a = hosts.pop().ok_or("missing Function A")?;
+    let pf = hosts.pop().ok_or("missing PF")?;
+    let (assignment_a, grant_a) = assignment(FunctionId::new(1));
+    let (assignment_b, grant_b) = assignment(FunctionId::new(2));
+    let (reset_request, reset_requested) = oneshot::channel();
+    let (reset_done, reset_completed) = oneshot::channel();
     let (started, start) = tokio::sync::oneshot::channel();
     let (submitted, submit) = tokio::sync::oneshot::channel();
     let (completed, complete) = tokio::sync::oneshot::channel();
@@ -24,10 +32,13 @@ pub(crate) async fn run_reset() -> TestResult<(
                 allocator: allocator.clone(),
                 interrupts,
             },
+            grant_a,
             ResetSignals {
                 started,
                 submitted: submit,
                 completed: complete,
+                reset: reset_request,
+                reset_done: reset_completed,
             },
         )
         .await
@@ -40,6 +51,7 @@ pub(crate) async fn run_reset() -> TestResult<(
                 allocator: allocator.clone(),
                 interrupts,
             },
+            grant_b,
             PeerSignals {
                 started: start,
                 submitted,
@@ -48,11 +60,25 @@ pub(crate) async fn run_reset() -> TestResult<(
         )
         .await
     }));
-    let (a, b) = tokio::time::timeout(
+    let manager = Box::pin(pf.runtime.run_main(async |interrupts| {
+        program::functions::manage(
+            program::Ports {
+                bus: pf.bus,
+                memory: allocator.memory_access(),
+                allocator: allocator.clone(),
+                interrupts,
+            },
+            [assignment_a, assignment_b],
+            Some((reset_requested, reset_done)),
+        )
+        .await
+    }));
+    let (result, a, b) = tokio::time::timeout(
         Duration::from_secs(5),
-        system.run_until(async { tokio::join!(first, second) }),
+        system.run_until(async { tokio::join!(manager, first, second) }),
     )
     .await??;
+    result?.0?;
     Ok((a?.0?, b?.0?))
 }
 
@@ -60,9 +86,12 @@ pub(crate) async fn run_reset() -> TestResult<(
 pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcome; 2]> {
     let storage = Arc::new(SharedMemory::new());
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
-    let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 2)?;
+    let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3)?;
     let b = hosts.pop().ok_or("missing Function B")?;
     let a = hosts.pop().ok_or("missing Function A")?;
+    let pf = hosts.pop().ok_or("missing PF")?;
+    let (assignment_a, grant_a) = assignment(FunctionId::new(1));
+    let (assignment_b, grant_b) = assignment(FunctionId::new(2));
     let first = Box::pin(a.runtime.run_main(async |interrupts| {
         program::functions::main(
             program::Ports {
@@ -72,6 +101,7 @@ pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcom
                 interrupts,
             },
             payloads[0],
+            grant_a,
         )
         .await
     }));
@@ -84,13 +114,41 @@ pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcom
                 interrupts,
             },
             payloads[1],
+            grant_b,
         )
         .await
     }));
-    let (a, b) = tokio::time::timeout(
+    let manager = Box::pin(pf.runtime.run_main(async |interrupts| {
+        program::functions::manage(
+            program::Ports {
+                bus: pf.bus,
+                memory: allocator.memory_access(),
+                allocator: allocator.clone(),
+                interrupts,
+            },
+            [assignment_a, assignment_b],
+            None,
+        )
+        .await
+    }));
+    let (result, a, b) = tokio::time::timeout(
         Duration::from_secs(5),
-        system.run_until(async { tokio::join!(first, second) }),
+        system.run_until(async { tokio::join!(manager, first, second) }),
     )
     .await??;
+    result?.0?;
     Ok([a?.0?, b?.0?])
+}
+
+fn assignment(function: FunctionId) -> (Assignment, Grant) {
+    let (send, channel) = oneshot::channel();
+    let (finished, receive) = oneshot::channel();
+    (
+        Assignment {
+            function,
+            channel: send,
+            finished: receive,
+        },
+        Grant { channel, finished },
+    )
 }

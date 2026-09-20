@@ -1,12 +1,12 @@
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
-use pdma_model_contract::{ControlRegisters, DoorbellValues};
+use pdma_model_contract::{ControlRegisters, DoorbellValues, FunctionId};
 
 mod error;
 pub use error::ControlError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Domain {
-    Host,
+    Host(FunctionId),
     Firmware,
 }
 
@@ -14,15 +14,17 @@ enum Domain {
 #[derive(Debug)]
 pub struct ControlChannel {
     registers: RegisterWindow<ControlRegisters>,
+    manager: FunctionId,
     request_pending: bool,
     response_pending: bool,
 }
 
 impl ControlChannel {
     /// Creates disabled control registers at the supplied MMIO address.
-    pub const fn new(base: usize) -> Self {
+    pub const fn new(base: usize, manager: FunctionId) -> Self {
         Self {
             registers: RegisterWindow::new(base),
+            manager,
             request_pending: false,
             response_pending: false,
         }
@@ -31,12 +33,23 @@ impl ControlChannel {
     /// Reads bootstrap or enable from the Host domain, even while disabled.
     pub fn host_read(
         &mut self,
+        function: FunctionId,
         address: usize,
         out: &mut [u8],
     ) -> Result<(), RegisterAccessError<ControlError>> {
-        self.registers
-            .read(address, out)
-            .map_err(RegisterAccessError::widen)
+        let manager = self.manager;
+        self.registers.read_with(
+            address,
+            out,
+            |_, _| {
+                if function == manager {
+                    Ok(())
+                } else {
+                    Err(ControlError::Permission)
+                }
+            },
+            |_, _| {},
+        )
     }
 
     /// Reads bootstrap or enable from firmware, even while disabled.
@@ -53,10 +66,11 @@ impl ControlChannel {
     /// Writes Host-owned bootstrap, enable, or request notification.
     pub fn host_write(
         &mut self,
+        function: FunctionId,
         address: usize,
         bytes: &[u8],
     ) -> Result<(), RegisterAccessError<ControlError>> {
-        self.write((address, bytes), Domain::Host)
+        self.write((address, bytes), Domain::Host(function))
     }
 
     /// Writes the firmware-owned response notification.
@@ -83,12 +97,15 @@ impl ControlChannel {
         transaction: (usize, &[u8]),
         domain: Domain,
     ) -> Result<(), RegisterAccessError<ControlError>> {
+        let manager = self.manager;
         self.registers.write_with(
             transaction.0,
             transaction.1,
             |offset, old, next| {
                 let owned = match domain {
-                    Domain::Host => offset != ControlRegisters::RESPONSE.offset(),
+                    Domain::Host(function) => {
+                        function == manager && offset != ControlRegisters::RESPONSE.offset()
+                    }
                     Domain::Firmware => offset == ControlRegisters::RESPONSE.offset(),
                 };
                 if !owned {

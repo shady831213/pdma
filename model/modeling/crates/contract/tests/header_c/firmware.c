@@ -20,7 +20,9 @@ _Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "hidden request r
 _Static_assert(C_FCTL_SIZE == 20, "firmware control physical extent");
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_ACCESS == C_FWIN_ACCESS_READ_WRITE, "firmware window ownership");
 _Static_assert(C_FWIN_SIZE == 36, "firmware view retains the whole window bank");
-_Static_assert(PDMA_FIRMWARE_CONTROL_STRIDE == 24, "complete aligned Function control block");
+#if defined(PDMA_HOST_CONTROL_STRIDE) || defined(PDMA_FIRMWARE_CONTROL_STRIDE)
+#error Management is a single PF control block, not a Function bank
+#endif
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_OFFSET == 0, "control bank relative offset");
 #if defined(PDMA_FIRMWARE_WINDOW_BASE) || defined(PDMA_FIRMWARE_CONTROL_BASE) || defined(PDMA_FIRMWARE_BOOT_BASE)
 #error Platform base addresses must not be fixed by the contract

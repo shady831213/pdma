@@ -1,8 +1,9 @@
-//! Host software for one Function, using unchanged management and DMA drivers.
+//! PF lifecycle management and VF data-path software.
 use super::{Handler, HostVector, Ports, TestResult, buffers, transfer};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::{ChannelId, Response};
+use pdma_model_contract::{ChannelId, FunctionId, Response};
 use pdma_model_software::control::InterruptEvent;
+use tokio::sync::oneshot;
 pub mod reset;
 
 #[derive(Debug)]
@@ -14,19 +15,63 @@ pub struct Outcome {
     pub(crate) interrupts: usize,
 }
 
-pub(in crate::harness) async fn main(ports: Ports<'_>, payload: &[u8]) -> TestResult<Outcome> {
+pub(in crate::harness) struct Grant {
+    pub(crate) channel: oneshot::Receiver<ChannelId>,
+    pub(crate) finished: oneshot::Sender<()>,
+}
+
+pub(in crate::harness) struct Assignment {
+    pub(crate) function: FunctionId,
+    pub(crate) channel: oneshot::Sender<ChannelId>,
+    pub(crate) finished: oneshot::Receiver<()>,
+}
+
+pub(in crate::harness) async fn manage(
+    ports: Ports<'_>,
+    assignments: [Assignment; 2],
+    reset: Option<(oneshot::Receiver<()>, oneshot::Sender<()>)>,
+) -> TestResult {
     let interrupt = InterruptEvent::new();
     ports
         .interrupts
         .register(HostVector::Control, Handler::Control(interrupt.handler()))?;
     let mut management = buffers::management(&ports, interrupt).await?;
-    let channel = management.acquire_channel().await?;
+    let mut channels = Vec::new();
+    for assignment in assignments {
+        let id = management.acquire_channel(assignment.function).await?;
+        assignment
+            .channel
+            .send(id)
+            .map_err(|_| "VF stopped before grant")?;
+        channels.push((assignment.function, id, assignment.finished));
+    }
+    if let Some((requested, completed)) = reset {
+        requested.await?;
+        let (function, id, _) = channels.first().ok_or("missing reset target")?;
+        management.reset_channel(*function, *id).await?;
+        completed.send(()).map_err(|()| "VF stopped during reset")?;
+    }
+    for (function, id, finished) in channels {
+        finished.await?;
+        management.release_channel(function, id).await?;
+    }
+    Ok(())
+}
+
+pub(in crate::harness) async fn main(
+    ports: Ports<'_>,
+    payload: &[u8],
+    grant: Grant,
+) -> TestResult<Outcome> {
+    let channel = grant.channel.await?;
     let memory = ports.memory.clone();
     let (response, destination, deliveries) = transfer::run(ports, payload, channel).await?;
     let mut bytes = vec![0; payload.len()];
     memory.read(destination, MemoryAlignment::ONE, &mut bytes)?;
-    management.reset_channel(channel).await?;
-    management.release_channel(channel).await?;
+    grant
+        .finished
+        .send(())
+        .map_err(|()| "PF stopped before release")?;
     Ok(Outcome {
         channel,
         response,

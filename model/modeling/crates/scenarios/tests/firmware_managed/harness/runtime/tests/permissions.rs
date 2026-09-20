@@ -1,6 +1,8 @@
 use super::{client, control::rings, *};
 use hardware_interface_runtime::{MemoryAddress, SharedMemoryAllocator};
-use pdma_model_contract::{ChannelAdmin, ChannelId, DmaControl, DmaDiscovery, DmaRegisters};
+use pdma_model_contract::{
+    ChannelAdmin, ChannelId, DmaControl, DmaDiscovery, DmaRegisters, FunctionId,
+};
 use pdma_model_host::Management;
 use std::time::Duration;
 
@@ -18,7 +20,10 @@ async fn granting_data_never_exposes_global_or_channel_administration() {
         )
         .await
         .unwrap();
-        let id = management.acquire_channel().await.unwrap();
+        let id = management
+            .acquire_channel(FunctionId::new(0))
+            .await
+            .unwrap();
         // When: a granted Host attempts every administrative reset and global control.
         for offset in [
             (pdma_model_contract::DmaDiscovery::EXTENT

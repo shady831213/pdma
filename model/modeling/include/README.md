@@ -23,8 +23,8 @@ holes. Read-only projections have zero writable masks. Descriptions are preserve
 | Boot report | Read-only | Read/write |
 | Window control | Hidden | Read/write |
 | Window readiness | Read-only | Hidden (not mapped on management bus) |
-| Control bootstrap / enable | Read/write | Read-only |
-| Request doorbell | Write-only | Hidden |
+| Control bootstrap / enable | PF only, read/write | Read-only |
+| Request doorbell | PF only, write-only | Hidden |
 | Response doorbell | Hidden | Write-only |
 
 The role prefix is part of every register macro namespace. All offsets are relative
@@ -61,17 +61,17 @@ clears busy after old work drains. Managed Host uses ResetChannel/ReleaseChannel
 requests instead of writing administrative registers. Platform-pending notifications
 survive reset. The control map remains 20 bytes: bootstrap at zero, enable at eight,
 request doorbell at 12 and response doorbell at 16.
-`CONTROL_STRIDE` is 24: each Function gets a complete eight-byte-aligned control
-block. Headers describe the per-Function template, not a fixed platform Function count.
+There is one PF control block, not a per-Function bank. Static Host metadata describes
+its PF permissions; hardware rejects every VF access. No control stride is exported.
 
-Shared wire records retain their original sizes and byte layout: Segment is
-16 bytes, Endpoint 24, Command 64, Response 24, ControlRequest and ControlResponse
-16 each, ControlRingState 24, and ControlQueue 48. Enum bitfield constants are
+Shared wire records: Segment is 16 bytes, Endpoint 24, Command 64, Response 24,
+ControlRequest 24 and ControlResponse 16, ControlRingState 24, and ControlQueue 48. Enum bitfield constants are
 unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
 lists; WORD0/WORD1 hold address/length or list_address/count. Command IOC is at
 byte 56 and response IOC at byte 12. ControlQueue nests command state at byte 0
 and response state at byte 24; each ring stores base/capacity/producer/consumer
-at bytes 0/8/12/16.
+at bytes 0/8/12/16. ControlRequest stores ID/opcode/target Function/channel
+at bytes 0/8/12/16, with four reserved tail bytes.
 
 Initialize record arrays to zero before using generated stores so reserved padding
 matches Rust encoding. Accessors encode bytes; they do not perform device I/O.

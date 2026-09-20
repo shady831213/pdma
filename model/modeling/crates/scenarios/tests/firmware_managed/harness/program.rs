@@ -12,7 +12,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use interrupts::Handler;
-use pdma_model_contract::{ControlQueue, ControlRequest, ControlResponse, Response};
+use pdma_model_contract::{ControlQueue, ControlRequest, ControlResponse, FunctionId, Response};
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig, firmware};
 use pdma_model_software::control::InterruptEvent;
 use std::time::Duration;
@@ -132,7 +132,7 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
         },
     )
     .await?;
-    let channel = management.acquire_channel().await?;
+    let channel = management.acquire_channel(FunctionId::new(0)).await?;
     let after = [
         ports.bus.write(window_control, &0_u32.to_le_bytes()).await,
         ports.bus.write(window_control, &1_u32.to_le_bytes()).await,
@@ -140,7 +140,9 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
     ];
     let bus = ports.bus.clone();
     let (response, destination, dma_interrupts) = transfer::run(ports, payload, channel).await?;
-    management.release_channel(channel).await?;
+    management
+        .release_channel(FunctionId::new(0), channel)
+        .await?;
     bus.read(window_status, &mut ready).await?;
     Ok(Outcome {
         before,

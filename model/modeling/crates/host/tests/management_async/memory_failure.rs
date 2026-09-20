@@ -3,7 +3,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
     SoftwareCpu,
 };
-use pdma_model_contract::{ControlQueue, ControlRingState};
+use pdma_model_contract::{ControlQueue, ControlRingState, FunctionId};
 use pdma_model_host::{Error, Management, ManagementConfig};
 use pdma_model_software::ring::SoftRing;
 use std::sync::{
@@ -87,12 +87,12 @@ async fn publication_and_consumption_memory_failures_preserve_original_work() {
             );
             // When: producer publication fails and is explicitly resumed.
             assert!(matches!(
-                client.submit_acquire().await,
+                client.submit_acquire(FunctionId::new(0)).await,
                 Err(Error::Memory(_))
             ));
             assert_eq!(fixture.state().unwrap().command.producer, 0);
             assert!(matches!(
-                client.submit_acquire().await,
+                client.submit_acquire(FunctionId::new(0)).await,
                 Err(Error::ManagementBusy)
             ));
             let id = client.resume_submission().await.unwrap();

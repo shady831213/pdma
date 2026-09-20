@@ -1,6 +1,6 @@
 use super::support::{Fixture, response};
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::{ChannelId, ControlRequestOpcode};
+use pdma_model_contract::{ChannelId, ControlRequestOpcode, FunctionId};
 use pdma_model_host::Error;
 use pdma_model_software::ring::SoftRing;
 
@@ -14,7 +14,10 @@ async fn reset_submission_correlates_the_selected_channel() {
             let mut commands = SoftRing::new(fixture.rings.command);
             let mut responses = SoftRing::new(fixture.rings.response);
             // When: Host requests reset of channel seven.
-            let id = client.submit_reset(ChannelId::new(7)).await.unwrap();
+            let id = client
+                .submit_reset(FunctionId::new(0), ChannelId::new(7))
+                .await
+                .unwrap();
             let request = fixture.take(&mut commands).await.unwrap();
             // Then: its typed opcode and channel are published, and a mismatched completion is rejected.
             assert_eq!(
@@ -42,7 +45,10 @@ async fn reset_completion_preserves_request_identity() {
             let mut client = fixture.setup().await.unwrap();
             let mut commands = SoftRing::new(fixture.rings.command);
             let mut responses = SoftRing::new(fixture.rings.response);
-            let id = client.submit_reset(ChannelId::new(2)).await.unwrap();
+            let id = client
+                .submit_reset(FunctionId::new(0), ChannelId::new(2))
+                .await
+                .unwrap();
             fixture.take(&mut commands).await.unwrap();
             // When: firmware publishes that reset's completion.
             fixture
@@ -51,7 +57,7 @@ async fn reset_completion_preserves_request_identity() {
                 .unwrap();
             // Then: Host collects exactly its submitted reset and releases queue capacity.
             assert_eq!(client.next_response().await.unwrap(), response(id.raw(), 2));
-            assert!(client.submit_acquire().await.is_ok());
+            assert!(client.submit_acquire(FunctionId::new(0)).await.is_ok());
         })
         .await;
 }

@@ -1,66 +1,61 @@
-//! Trusted ingress identity and independent management doorbells.
+//! PF control-aperture permission tests.
 use hardware_interface_schema::RegisterAccessError;
-use pdma_model_contract::{ControlRegisters, FunctionControlRegisters, FunctionId};
-use pdma_model_hw_components::{ControlError, FunctionControls};
+use pdma_model_contract::{ControlRegisters, FunctionId};
+use pdma_model_hw_components::{ControlChannel, ControlError};
 
 #[test]
-fn guessed_peer_addresses_cannot_publish_or_notify() {
-    // Given: two control blocks and a Function-zero requester.
-    let mut controls = FunctionControls::new(0x1000, 2).unwrap();
-    let layout = FunctionControlRegisters::new(2).unwrap();
-    let peer = 0x1000 + layout.functions().offset(1).unwrap();
-    // When: it guesses the peer bootstrap and request doorbell addresses.
-    assert_eq!(
-        controls.host_write(FunctionId::new(0), peer, &77_u64.to_le_bytes()),
-        Err(RegisterAccessError::Other(ControlError::Permission))
-    );
-    assert_eq!(
-        controls.host_write(
-            FunctionId::new(0),
-            peer + ControlRegisters::REQUEST.offset(),
-            &1_u32.to_le_bytes()
-        ),
-        Err(RegisterAccessError::Other(ControlError::Permission))
-    );
+fn vf_cannot_publish_read_or_notify_through_pf_registers() {
+    // Given: a platform-selected PF identity, unrelated to channel indices.
+    let pf = FunctionId::new(7);
+    let vf = FunctionId::new(0);
+    let mut controls = ControlChannel::new(0x1000, pf);
+    // When: a VF guesses the bootstrap, enable and both doorbells.
+    for (offset, bytes) in [
+        (0, vec![0; 8]),
+        (8, vec![1, 0, 0, 0]),
+        (12, vec![1, 0, 0, 0]),
+        (16, vec![1, 0, 0, 0]),
+    ] {
+        assert_eq!(
+            controls.host_write(vf, 0x1000 + offset, &bytes),
+            Err(RegisterAccessError::Other(ControlError::Permission))
+        );
+    }
     let mut bytes = [0xa5; 8];
     assert_eq!(
-        controls.host_read(FunctionId::new(0), peer, &mut bytes),
+        controls.host_read(vf, 0x1000, &mut bytes),
         Err(RegisterAccessError::Other(ControlError::Permission))
     );
-    // Then: the peer retains zero bootstrap and has no notification.
+    // Then: no state, read output or notification changes.
     assert_eq!(bytes, [0xa5; 8]);
-    controls.firmware_read(peer, &mut bytes).unwrap();
+    controls.firmware_read(0x1000, &mut bytes).unwrap();
     assert_eq!(bytes, [0; 8]);
-    controls.take_notifications(|_, request, response| assert!(!request && !response));
+    assert!(!controls.take_request_notification());
+    assert!(!controls.take_response_notification());
+    controls
+        .host_write(pf, 0x1000, &77_u64.to_le_bytes())
+        .unwrap();
+    controls.firmware_read(0x1000, &mut bytes).unwrap();
+    assert_eq!(u64::from_le_bytes(bytes), 77);
 }
 
 #[test]
-fn pulses_keep_function_identity_and_coalesce_independently() {
-    // Given: one pending request from each Function and repeated responses to Function one.
-    let mut controls = FunctionControls::new(0, 2).unwrap();
-    let layout = FunctionControlRegisters::new(2).unwrap();
-    for index in 0..2 {
-        let base = layout.functions().offset(index).unwrap();
-        controls
-            .host_write(
-                FunctionId::new(u32::try_from(index).unwrap()),
-                base + ControlRegisters::REQUEST.offset(),
-                &1_u32.to_le_bytes(),
-            )
-            .unwrap();
-    }
+fn only_pf_and_firmware_can_ring_their_respective_direction() {
+    // Given: a sole PF control channel with independent notification directions.
+    let pf = FunctionId::new(2);
+    let mut controls = ControlChannel::new(0, pf);
+    // When: both authorized endpoints notify repeatedly.
     for _ in 0..3 {
         controls
-            .firmware_write(
-                layout.functions().offset(1).unwrap() + ControlRegisters::RESPONSE.offset(),
-                &1_u32.to_le_bytes(),
-            )
+            .host_write(pf, ControlRegisters::REQUEST.offset(), &1_u32.to_le_bytes())
+            .unwrap();
+        controls
+            .firmware_write(ControlRegisters::RESPONSE.offset(), &1_u32.to_le_bytes())
             .unwrap();
     }
-    // When: the platform transfers pulses into pending interrupt destinations.
-    let mut seen = Vec::new();
-    controls.take_notifications(|id, request, response| seen.push((id.raw(), request, response)));
-    // Then: destination identity is preserved and every source is consumed once.
-    assert_eq!(seen, [(0, true, false), (1, true, true)]);
-    controls.take_notifications(|_, request, response| assert!(!request && !response));
+    // Then: each direction coalesces independently and is consumed once.
+    assert!(controls.take_request_notification());
+    assert!(!controls.take_request_notification());
+    assert!(controls.take_response_notification());
+    assert!(!controls.take_response_notification());
 }

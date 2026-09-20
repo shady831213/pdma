@@ -14,6 +14,8 @@ use std::{error, fmt};
 /// Firmware boot or management-service failure.
 #[derive(Debug)]
 pub enum Error<E> {
+    /// The platform's Function namespace is empty or cannot be encoded.
+    FunctionCount,
     /// The management access failed.
     Bus(E),
     /// The firmware CPU could not access a control ring entry.
@@ -35,6 +37,7 @@ pub enum Error<E> {
 impl<E: fmt::Display> fmt::Display for Error<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::FunctionCount => formatter.write_str("invalid firmware Function count"),
             Self::Bus(error) => write!(formatter, "firmware management access: {error}"),
             Self::Memory(error) => error.fmt(formatter),
             Self::Codec(error) => error.fmt(formatter),
@@ -50,6 +53,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
 impl<E: error::Error + 'static> error::Error for Error<E> {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            Self::FunctionCount => None,
             Self::Bus(error) => Some(error),
             Self::Memory(error) => Some(error),
             Self::Codec(error) => Some(error),

@@ -35,7 +35,7 @@ impl InterruptEnvelope for HostIrq {
 #[derive(Debug)]
 pub struct HostInterrupts {
     pub(super) dma: PendingInterrupt<HostIrq>,
-    pub(super) control: PendingInterrupt<HostIrq>,
+    pub(super) control: Option<PendingInterrupt<HostIrq>>,
     pub(super) next: HostVector,
 }
 
@@ -45,9 +45,13 @@ impl InterruptSource for HostInterrupts {
     type Error = tokio::sync::watch::error::RecvError;
 
     async fn wait_ready(&self) -> Result<HostVector, Self::Error> {
+        let Some(control) = &self.control else {
+            self.dma.wait_ready().await?;
+            return Ok(HostVector::Dma);
+        };
         let (first, second) = match self.next {
-            HostVector::Dma => (&self.dma, &self.control),
-            HostVector::Control => (&self.control, &self.dma),
+            HostVector::Dma => (&self.dma, control),
+            HostVector::Control => (control, &self.dma),
         };
         tokio::select! {
             biased;
@@ -73,7 +77,10 @@ impl InterruptSource for HostInterrupts {
             }
             HostVector::Control => {
                 self.next = HostVector::Dma;
-                self.control.claim(()).await
+                match &mut self.control {
+                    Some(control) => control.claim(()).await,
+                    None => Ok(None),
+                }
             }
         }
     }

@@ -9,7 +9,9 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use hardware_interface_schema::Encode;
-use pdma_model_contract::{ControlRegisters, ControlResponse, ControlResponseStatus, Ring};
+use pdma_model_contract::{
+    ControlRegisters, ControlResponse, ControlResponseStatus, FunctionId, Ring,
+};
 use pdma_model_host::{Management, firmware};
 use std::{
     future::{Future, pending, poll_fn},
@@ -105,7 +107,7 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
             .store(if response_ack { 2 } else { 1 }, Ordering::SeqCst);
         let queue = QueueMemory::new(&memory, storage.state);
         {
-            let mut request = pin!(management.acquire_channel());
+            let mut request = pin!(management.acquire_channel(FunctionId::new(0)));
             poll_fn(|cx| {
                 assert!(
                     request.as_mut().poll(cx).is_pending(),

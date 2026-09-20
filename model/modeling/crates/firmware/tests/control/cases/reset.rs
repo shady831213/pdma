@@ -19,6 +19,7 @@ async fn reset_retains_allocation_and_reopens_only_after_hardware_completion() -
         &memory,
         ControlRequest {
             id: 2,
+            function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,
             channel: 0,
         },

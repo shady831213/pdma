@@ -76,7 +76,7 @@ async fn simultaneous_dma_and_control_pending_survive_cancelled_wait_and_are_fai
         hardware_interface_runtime::pending_interrupt(HostIrq::Control(ControlIrq));
     let mut source = super::super::HostInterrupts {
         dma: dma_source,
-        control: control_source,
+        control: Some(control_source),
         next: HostVector::Dma,
     };
     {
@@ -118,13 +118,7 @@ struct OwnershipHandler {
 async fn simultaneous_host_vectors_dispatch_to_separate_registered_events() {
     // Given: both platform destinations are pending on one actual Host runtime.
     let (system, host) = Managed::new(memory()).unwrap();
-    system
-        .shared
-        .destinations
-        .first()
-        .unwrap()
-        .interrupt
-        .raise();
+    system.shared.destinations.first().unwrap().raise();
     response(&ManagementBus(Arc::clone(&system.shared))).await;
     // When: software registers independent handlers and waits for both.
     let ((), summary) = host

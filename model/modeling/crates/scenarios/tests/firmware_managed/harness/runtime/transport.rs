@@ -15,21 +15,12 @@ impl<M> Shared<M> {
     }
 
     fn deliver(&self, hardware: &mut Hardware<M>) {
-        hardware
-            .control
-            .take_notifications(|function, request, response| {
-                if request {
-                    self.to_firmware.raise();
-                }
-                if response {
-                    if let Some(destination) = usize::try_from(function.raw())
-                        .ok()
-                        .and_then(|index| self.destinations.get(index))
-                    {
-                        destination.to_host.raise();
-                    }
-                }
-            });
+        if hardware.control.take_request_notification() {
+            self.to_firmware.raise();
+        }
+        if hardware.control.take_response_notification() {
+            self.to_host.raise();
+        }
         for index in 0..self.channel_count {
             let channel = pdma_model_contract::ChannelId::new(index);
             if hardware.dma.take_channel_interrupt(channel) {
@@ -39,7 +30,7 @@ impl<M> Shared<M> {
                     .and_then(|function| usize::try_from(function.raw()).ok())
                     .and_then(|index| self.destinations.get(index))
                 {
-                    destination.interrupt.raise();
+                    destination.raise();
                 }
             }
         }

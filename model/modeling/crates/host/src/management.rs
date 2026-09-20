@@ -7,6 +7,7 @@ use crate::{Error, RingConfig};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, RegisterAccess};
 use pdma_model_contract::{
     ChannelId, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
+    FunctionId,
 };
 use pdma_model_software::control::{ControlQueueLayout, InterruptEvent, ManagementAddresses};
 use pdma_model_software::ring::SoftRing;
@@ -78,16 +79,21 @@ pub struct Management<B, M> {
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Requests a clean channel; firmware chooses its physical identifier.
-    pub async fn acquire_channel(&mut self) -> Result<ChannelId, Error<B::Error>> {
+    pub async fn acquire_channel(
+        &mut self,
+        function: FunctionId,
+    ) -> Result<ChannelId, Error<B::Error>> {
         self.require_idle()?;
-        self.submit(ControlRequestOpcode::AcquireChannel, 0).await?;
+        self.submit(ControlRequestOpcode::AcquireChannel, function, 0)
+            .await?;
         let response = self.wait_pending().await?;
         match response.status {
             ControlResponseStatus::Success => {}
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
             | ControlResponseStatus::NotAllocated
-            | ControlResponseStatus::PermissionDenied) => {
+            | ControlResponseStatus::PermissionDenied
+            | ControlResponseStatus::InvalidFunction) => {
                 return Err(Error::ManagementStatus(status));
             }
         }
@@ -100,10 +106,15 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     ///
     /// Stop software ring/ISR use first. Success invalidates the old channel driver;
     /// application memory must remain valid until this response is collected.
-    pub async fn release_channel(&mut self, channel: ChannelId) -> Result<(), Error<B::Error>> {
+    pub async fn release_channel(
+        &mut self,
+        function: FunctionId,
+        channel: ChannelId,
+    ) -> Result<(), Error<B::Error>> {
         self.require_idle()?;
         self.submit(
             ControlRequestOpcode::ReleaseChannel,
+            function,
             u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
         )
         .await?;
@@ -113,16 +124,22 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
             | ControlResponseStatus::NotAllocated
-            | ControlResponseStatus::PermissionDenied) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::PermissionDenied
+            | ControlResponseStatus::InvalidFunction) => Err(Error::ManagementStatus(status)),
         }
     }
 
     /// Resets an allocated channel, retaining its grant after hardware cleanup.
     /// Stop ring and ISR use first; after success, configure a fresh DMA driver.
-    pub async fn reset_channel(&mut self, channel: ChannelId) -> Result<(), Error<B::Error>> {
+    pub async fn reset_channel(
+        &mut self,
+        function: FunctionId,
+        channel: ChannelId,
+    ) -> Result<(), Error<B::Error>> {
         self.require_idle()?;
         self.submit(
             ControlRequestOpcode::ResetChannel,
+            function,
             u32::try_from(channel.index()).map_err(|_| Error::Geometry)?,
         )
         .await?;
@@ -131,7 +148,8 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             status @ (ControlResponseStatus::NoResources
             | ControlResponseStatus::InvalidChannel
             | ControlResponseStatus::NotAllocated
-            | ControlResponseStatus::PermissionDenied) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::PermissionDenied
+            | ControlResponseStatus::InvalidFunction) => Err(Error::ManagementStatus(status)),
         }
     }
 

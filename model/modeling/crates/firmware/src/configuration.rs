@@ -1,11 +1,11 @@
 use pdma_model_software::control::ManagementAddresses;
 
-/// Platform-provided firmware register locations and trusted control-ingress count.
+/// Platform-provided firmware register locations and valid target Function count.
 #[derive(Clone, Copy, Debug)]
 pub struct Configuration {
-    /// Bases of the shared DMA, permissions, boot status and control bank.
+    /// Bases of the shared DMA, permissions, boot status and PF control channel.
     pub addresses: ManagementAddresses,
-    /// Control-bank slots identify Functions zero through count minus one.
+    /// Valid PF request targets are Functions zero through count minus one.
     pub function_count: usize,
 }
 

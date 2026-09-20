@@ -26,7 +26,7 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
     registration
         .register((), interrupt.handler())
         .map_err(Error::Registration)?;
-    let setup = resources::Resources::initialize(&bus, addresses).await;
+    let setup = resources::Resources::initialize(&bus, config).await;
     let report = match &setup {
         Ok(_) => FirmwareBootValues::default().with_state(FirmwareBootState::Ready),
         Err(_) => FirmwareBootValues::default()
@@ -51,7 +51,7 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
                 bus: &bus,
                 memory: &memory,
                 interrupt: &interrupt,
-                config,
+                base: addresses.control,
             }
             .run(resources)
             .await

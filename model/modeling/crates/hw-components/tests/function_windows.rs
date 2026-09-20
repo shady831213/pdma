@@ -48,10 +48,7 @@ fn binding_cannot_change_while_the_aperture_is_open() -> TestResult {
         result,
         Err(RegisterAccessError::WriteForbidden { .. })
     ));
-    assert_eq!(
-        windows.interrupt_target(ChannelId::new(0)),
-        Some(FunctionId::new(0))
-    );
+    assert_eq!(windows.owner(ChannelId::new(0)), Some(FunctionId::new(0)));
     Ok(())
 }
 

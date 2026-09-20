@@ -70,6 +70,12 @@ response-slot reuse, request/result correlation, and release during an active
 copy followed by fresh acquisition and successful DMA. See
 [control channel semantics](../../docs/control-channel.md).
 
+Function cases also run PF and VF programs against independent backing stores with
+identical address ranges. Software still allocates and initializes all buffers;
+the platform supplies per-Function capabilities. These cases verify IRQ-driven
+copy and reset during a transfer while peer DMA proceeds. The shared-memory
+Function assembly remains separately exercised.
+
 ```sh
 cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture
 ```

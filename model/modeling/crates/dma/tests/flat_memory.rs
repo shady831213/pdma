@@ -40,8 +40,9 @@ impl FlatMemory {
 }
 
 impl MemoryAccess for FlatMemory {
-    fn validate(
+    fn validate_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
@@ -65,8 +66,9 @@ impl MemoryAccess for FlatMemory {
         Ok(())
     }
 
-    fn read(
+    fn read_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
@@ -84,8 +86,9 @@ impl MemoryAccess for FlatMemory {
         Ok(())
     }
 
-    fn write(
+    fn write_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],

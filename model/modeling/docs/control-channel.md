@@ -83,8 +83,10 @@ interrupt or a cancelled wait. Clones share that hint, not a broadcast stream;
 each endpoint has one processing waiter. A missing ISR is a dispatcher error,
 never a fallback to direct bus notification.
 
-The current memory backend completes accesses synchronously and serializes shared
-storage. This is not a claim of PCIe cache coherence: a future backend/transport
+The current memory backend completes accesses synchronously and serializes each
+store. In the isolated managed assembly, firmware accesses the PF control-ring
+space while VF DMA uses each channel owner's separate memory capability. This is
+not a claim of PCIe cache coherence: a future backend/transport
 must provide the required release/acquire ordering and visibility before doorbells.
 
 ## Requests and lifecycle

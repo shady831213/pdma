@@ -16,8 +16,8 @@ impl Fetch {
     }
 }
 
-impl<M: MemoryAccess> ReadyStage<Dma<M>> for Fetch {
-    fn ready(&self, device: &Dma<M>) -> bool {
+impl<M: MemoryAccess<SB>, SB> ReadyStage<Dma<M, SB>> for Fetch {
+    fn ready(&self, device: &Dma<M, SB>) -> bool {
         if device.halted() || device.resetting() {
             return false;
         }
@@ -34,7 +34,7 @@ impl<M: MemoryAccess> ReadyStage<Dma<M>> for Fetch {
     }
 }
 
-impl<M: MemoryAccess> Stage<Dma<M>> for Fetch {
+impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
     type Input = ();
     type Output = ChannelTask<Command>;
     type Error = Error;
@@ -43,7 +43,11 @@ impl<M: MemoryAccess> Stage<Dma<M>> for Fetch {
 
     fn start((): ()) {}
 
-    fn step(&mut self, device: &mut Dma<M>, (): &mut ()) -> StepOutcome<Self::Output, Error, ()> {
+    fn step(
+        &mut self,
+        device: &mut Dma<M, SB>,
+        (): &mut (),
+    ) -> StepOutcome<Self::Output, Error, ()> {
         if !self.ready(device) {
             return StepOutcome::Pending(());
         }
@@ -52,7 +56,7 @@ impl<M: MemoryAccess> Stage<Dma<M>> for Fetch {
                 Ok(selected) => selected,
                 Err(error) => return StepOutcome::Complete(Err(error)),
             };
-            let outcome = match selected.channel.command.pop(selected.memory) {
+            let outcome = match selected.channel.command.pop(&selected.memory) {
                 Ok(Some(value)) => StepOutcome::Complete(Ok(ChannelTask {
                     channel: self.channel,
                     generation: selected.channel.generation,

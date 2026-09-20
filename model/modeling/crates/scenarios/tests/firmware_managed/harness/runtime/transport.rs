@@ -1,5 +1,6 @@
-use super::{Driver, Hardware, Shared};
+use super::{Driver, Hardware, RoutedMemory, Shared};
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use pdma_model_contract::ChannelId;
 use pdma_model_dma::Dma;
 use std::convert::Infallible;
 
@@ -24,9 +25,12 @@ impl<M> Shared<M> {
         for index in 0..self.channel_count {
             let channel = pdma_model_contract::ChannelId::new(index);
             if hardware.dma.take_channel_interrupt(channel) {
-                if let Some(destination) = hardware
-                    .window
-                    .interrupt_target(channel)
+                let owner = hardware
+                    .windows
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .owner(channel);
+                if let Some(destination) = owner
                     .and_then(|function| usize::try_from(function.raw()).ok())
                     .and_then(|index| self.destinations.get(index))
                 {
@@ -40,14 +44,14 @@ impl<M> Shared<M> {
     }
 }
 
-impl<M: Send> AsyncInteractionBackend<Dma<M>, ()> for Driver<M> {
+impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, ChannelId>, ()> for Driver<M> {
     type Error = Infallible;
 
     async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Dma<M>) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Dma<RoutedMemory<M>, ChannelId>) -> StepOutcome<O, E, ()> + Send,
     {
         tokio::task::yield_now().await;
         let mut hardware = self.0.hardware.lock().await;

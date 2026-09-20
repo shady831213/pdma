@@ -24,7 +24,7 @@ pub struct LengthCheck {
 #[derive(Debug, Default)]
 pub struct CheckLengths;
 
-impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for CheckLengths {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckLengths {
     type Input = Command;
     type Output = CopyState;
     type Error = Error;
@@ -43,7 +43,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for CheckLengths {
 
     fn step(
         &mut self,
-        context: &mut ChannelContext<'_, M>,
+        context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
     ) -> StepOutcome<CopyState, Error, ()> {
         if context.channel.resetting() {
@@ -58,7 +58,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for CheckLengths {
         let Some(scan) = state.as_mut() else {
             return StepOutcome::Exhausted;
         };
-        let result = match scan.cursor.next_segment(context.memory) {
+        let result = match scan.cursor.next_segment(&context.memory) {
             Ok(Some(segment)) => match scan.total.checked_add(segment.length) {
                 Some(total) => {
                     scan.total = total;

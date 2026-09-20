@@ -21,6 +21,7 @@ pub use execution::{
     WriteCopy,
 };
 pub use fetch::Fetch;
+use hardware_interface_runtime::BoundMemory;
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_dispatch};
 use pdma_model_contract::{
     ChannelId, DmaControl, DmaDiscovery, DmaFaultCode, DmaRegistersLayout, ResetValues,
@@ -33,18 +34,19 @@ pub use stages::{
 
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]
-pub struct Dma<M> {
+pub struct Dma<M, S = ()> {
     layout: DmaRegistersLayout,
     discovery: RegisterWindow<DmaDiscovery>,
     channels: Vec<Channel>,
     /// Injected memory access capability, never a device-selected backend.
     pub memory: M,
+    sideband: fn(ChannelId) -> S,
     control: RegisterWindow<DmaControl>,
     interrupt: bool,
     active: Option<(ChannelId, u64)>,
 }
 
-impl<M> Dma<M> {
+impl<M, S> Dma<M, S> {
     /// Whether hardware has emitted a notification not yet taken by the platform.
     pub fn irq(&self) -> bool {
         self.channels.iter().any(|channel| channel.irq) || self.interrupt
@@ -97,11 +99,11 @@ impl<M> Dma<M> {
     }
 
     /// Borrows one channel and shared hardware resources for a single interaction.
-    pub fn channel_context(&mut self, id: ChannelId) -> Result<ChannelContext<'_, M>, Error> {
+    pub fn channel_context(&mut self, id: ChannelId) -> Result<ChannelContext<'_, M, S>, Error> {
         let device_fatal = self.halted();
         Ok(ChannelContext {
             channel: self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?,
-            memory: &self.memory,
+            memory: BoundMemory::new(&self.memory, (self.sideband)(id)),
             device_fatal,
         })
     }
@@ -243,15 +245,15 @@ impl<M> Dma<M> {
 
 /// One interaction's selected channel; no borrow escapes a stage step.
 #[derive(Debug)]
-pub struct ChannelContext<'a, M> {
+pub struct ChannelContext<'a, M, S = ()> {
     /// The channel whose operation is being advanced.
     pub channel: &'a mut Channel,
-    /// Shared externally supplied memory access.
-    pub memory: &'a M,
+    /// Memory access restricted to this channel's selected address space.
+    pub memory: BoundMemory<'a, M, S>,
     device_fatal: bool,
 }
 
-impl<M> ChannelContext<'_, M> {
+impl<M, S> ChannelContext<'_, M, S> {
     /// Whether this channel or the shared device has faulted.
     pub fn halted(&self) -> bool {
         self.device_fatal || self.channel.halted()

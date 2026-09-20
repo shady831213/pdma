@@ -20,7 +20,7 @@ impl<M: Clone> Managed<M> {
         addresses: ManagementAddresses,
     ) -> Result<(Self, Host<M>), BuildError> {
         let (system, mut hosts) = Self::assemble(
-            memory,
+            std::iter::once(memory),
             channel_count,
             pdma_model_firmware::Configuration {
                 addresses,
@@ -40,7 +40,23 @@ impl<M: Clone> Managed<M> {
         function_count: usize,
     ) -> Result<(Self, Vec<Host<M>>), BuildError> {
         Self::assemble(
-            memory,
+            std::iter::repeat_n(memory, function_count),
+            channel_count,
+            pdma_model_firmware::Configuration {
+                addresses: platform::ADDRESSES,
+                function_count,
+            },
+        )
+    }
+
+    /// Assigns platform memory capabilities to Function IDs, with PF memory serving control rings.
+    pub fn with_function_memory(
+        spaces: Vec<M>,
+        channel_count: usize,
+    ) -> Result<(Self, Vec<Host<M>>), BuildError> {
+        let function_count = spaces.len();
+        Self::assemble(
+            spaces.into_iter(),
             channel_count,
             pdma_model_firmware::Configuration {
                 addresses: platform::ADDRESSES,
@@ -50,17 +66,31 @@ impl<M: Clone> Managed<M> {
     }
 
     fn assemble(
-        memory: M,
+        spaces: impl Iterator<Item = M>,
         channel_count: usize,
         config: pdma_model_firmware::Configuration,
     ) -> Result<(Self, Vec<Host<M>>), BuildError> {
         let addresses = config.addresses;
         let function_count = config.function_count;
         platform::validate_functions(config, channel_count)?;
-        let dma = Dma::new(memory.clone(), channel_count).map_err(BuildError::Dma)?;
-        let pipeline = dma.command_loop();
+        let spaces: Vec<_> = spaces.collect();
+        let firmware_memory = spaces
+            .get(
+                usize::try_from(platform::PF.raw())
+                    .map_err(|_| BuildError::Window(WindowConfigError::AddressUnrepresentable))?,
+            )
+            .ok_or(BuildError::Window(WindowConfigError::InvalidChannelCount))?
+            .clone();
         let window = ChannelWindows::new(channel_count, addresses.dma, addresses.windows)
             .map_err(BuildError::Window)?;
+        let windows = Arc::new(std::sync::Mutex::new(window));
+        let dma = Dma::with_sideband(
+            RoutedMemory::new(Arc::clone(&windows), spaces),
+            channel_count,
+            std::convert::identity,
+        )
+        .map_err(BuildError::Dma)?;
+        let pipeline = dma.command_loop();
         let invalid = || BuildError::Window(WindowConfigError::AddressUnrepresentable);
         let firmware =
             FirmwareStatus::new(usize::try_from(addresses.firmware).map_err(|_| invalid())?);
@@ -95,7 +125,7 @@ impl<M: Clone> Managed<M> {
             addresses,
             hardware: Mutex::new(Hardware {
                 dma,
-                window,
+                windows,
                 firmware,
                 control,
             }),
@@ -123,7 +153,7 @@ impl<M: Clone> Managed<M> {
                 pipeline,
                 firmware_runtime: InterruptRuntime::new(Arc::clone(&firmware_cpu), firmware_source),
                 firmware_cpu,
-                firmware_memory: memory,
+                firmware_memory,
                 function_count,
             },
             hosts,

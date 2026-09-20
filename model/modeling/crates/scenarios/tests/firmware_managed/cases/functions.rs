@@ -2,6 +2,25 @@ use crate::harness::{self, TestResult};
 use pdma_model_contract::ResponseStatus;
 
 #[tokio::test]
+async fn identical_dma_addresses_resolve_in_the_owning_functions_memory() -> TestResult {
+    // Given: PF and both VFs have independent memory with the same allocation base.
+    let payloads: [&[u8]; 2] = [b"AAAA-function-one", b"BBBB-function-two"];
+    // When: firmware grants channels and both VFs submit IRQ-driven copies.
+    let outcomes = harness::functions::run_isolated(payloads).await?;
+    // Then: descriptors, payloads and responses stay in each VF's address space.
+    for (outcome, payload) in outcomes.iter().zip(payloads) {
+        assert_eq!(outcome.bytes, payload);
+        assert_eq!(outcome.response.status, ResponseStatus::Success);
+        assert_eq!(
+            outcome.response.bytes_completed,
+            u64::try_from(payload.len())?
+        );
+        assert_eq!(outcome.interrupts, 1);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn resetting_one_functions_active_copy_preserves_peer_dma() -> TestResult {
     // Given: A has a partially copied command and B submits independent work.
     // When: A requests channel reset through firmware while both tasks are outstanding.

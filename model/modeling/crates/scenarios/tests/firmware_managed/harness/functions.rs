@@ -11,9 +11,17 @@ pub(crate) async fn run_reset() -> TestResult<(
     (pdma_model_contract::Response, Vec<u8>),
 )> {
     use program::functions::reset::{self, PeerSignals, ResetSignals};
-    let allocator =
-        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
-    let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3)?;
+    let [manager_memory, a_memory, b_memory] = std::array::from_fn(|_| {
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+    });
+    let (system, mut hosts) = Managed::with_function_memory(
+        vec![
+            manager_memory.memory_access(),
+            a_memory.memory_access(),
+            b_memory.memory_access(),
+        ],
+        2,
+    )?;
     let b = hosts.pop().ok_or("missing Function B")?;
     let a = hosts.pop().ok_or("missing Function A")?;
     let pf = hosts.pop().ok_or("missing PF")?;
@@ -28,8 +36,8 @@ pub(crate) async fn run_reset() -> TestResult<(
         reset::resetting(
             program::Ports {
                 bus: a.bus,
-                memory: allocator.memory_access(),
-                allocator: allocator.clone(),
+                memory: a_memory.memory_access(),
+                allocator: a_memory,
                 interrupts,
             },
             grant_a,
@@ -47,8 +55,8 @@ pub(crate) async fn run_reset() -> TestResult<(
         reset::peer(
             program::Ports {
                 bus: b.bus,
-                memory: allocator.memory_access(),
-                allocator: allocator.clone(),
+                memory: b_memory.memory_access(),
+                allocator: b_memory,
                 interrupts,
             },
             grant_b,
@@ -64,8 +72,8 @@ pub(crate) async fn run_reset() -> TestResult<(
         program::functions::manage(
             program::Ports {
                 bus: pf.bus,
-                memory: allocator.memory_access(),
-                allocator: allocator.clone(),
+                memory: manager_memory.memory_access(),
+                allocator: manager_memory,
                 interrupts,
             },
             [assignment_a, assignment_b],
@@ -86,7 +94,29 @@ pub(crate) async fn run_reset() -> TestResult<(
 pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcome; 2]> {
     let storage = Arc::new(SharedMemory::new());
     let allocator = SharedMemoryAllocator::new(Arc::clone(&storage), MemoryAddress::new(0x1000));
-    let (system, mut hosts) = Managed::with_functions(allocator.memory_access(), 2, 3)?;
+    run_with_memory(payloads, [allocator.clone(), allocator.clone(), allocator]).await
+}
+
+/// Gives each Function its own backing at identical DMA addresses.
+pub async fn run_isolated(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcome; 2]> {
+    let allocators = std::array::from_fn(|_| {
+        SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000))
+    });
+    run_with_memory(payloads, allocators).await
+}
+
+async fn run_with_memory(
+    payloads: [&[u8]; 2],
+    [manager_memory, a_memory, b_memory]: [SharedMemoryAllocator; 3],
+) -> TestResult<[program::functions::Outcome; 2]> {
+    let (system, mut hosts) = Managed::with_function_memory(
+        vec![
+            manager_memory.memory_access(),
+            a_memory.memory_access(),
+            b_memory.memory_access(),
+        ],
+        2,
+    )?;
     let b = hosts.pop().ok_or("missing Function B")?;
     let a = hosts.pop().ok_or("missing Function A")?;
     let pf = hosts.pop().ok_or("missing PF")?;
@@ -96,8 +126,8 @@ pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcom
         program::functions::main(
             program::Ports {
                 bus: a.bus,
-                memory: allocator.memory_access(),
-                allocator: allocator.clone(),
+                memory: a_memory.memory_access(),
+                allocator: a_memory,
                 interrupts,
             },
             payloads[0],
@@ -109,8 +139,8 @@ pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcom
         program::functions::main(
             program::Ports {
                 bus: b.bus,
-                memory: allocator.memory_access(),
-                allocator: allocator.clone(),
+                memory: b_memory.memory_access(),
+                allocator: b_memory,
                 interrupts,
             },
             payloads[1],
@@ -122,8 +152,8 @@ pub async fn run(payloads: [&[u8]; 2]) -> TestResult<[program::functions::Outcom
         program::functions::manage(
             program::Ports {
                 bus: pf.bus,
-                memory: allocator.memory_access(),
-                allocator: allocator.clone(),
+                memory: manager_memory.memory_access(),
+                allocator: manager_memory,
                 interrupts,
             },
             [assignment_a, assignment_b],

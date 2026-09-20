@@ -4,6 +4,7 @@ mod build;
 mod bus;
 mod error;
 mod interrupts;
+mod memory;
 /// Scenario-owned register placement and integration validation.
 pub mod platform;
 mod run;
@@ -19,6 +20,8 @@ pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
+use memory::RoutedMemory;
+use pdma_model_contract::ChannelId;
 use pdma_model_dma::{CommandLoop, Dma};
 use pdma_model_host::runtime::Irq;
 use pdma_model_hw_components::{ChannelWindows, ControlChannel, FirmwareStatus};
@@ -28,8 +31,8 @@ use tokio::sync::{Mutex, Notify};
 
 #[derive(Debug)]
 struct Hardware<M> {
-    dma: Dma<M>,
-    window: ChannelWindows,
+    dma: Dma<RoutedMemory<M>, ChannelId>,
+    windows: Arc<std::sync::Mutex<ChannelWindows>>,
     firmware: FirmwareStatus,
     control: ControlChannel,
 }

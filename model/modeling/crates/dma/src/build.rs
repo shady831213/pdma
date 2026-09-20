@@ -1,6 +1,8 @@
 use crate::{Channel, Dma};
 use hardware_interface_schema::{RegisterBankError, RegisterWindow};
-use pdma_model_contract::{ChannelCountValues, DmaAdmin, DmaControl, DmaDiscovery, DmaRegisters};
+use pdma_model_contract::{
+    ChannelCountValues, ChannelId, DmaAdmin, DmaControl, DmaDiscovery, DmaRegisters,
+};
 use std::{collections::TryReserveError, fmt};
 
 /// Instance construction failure, separate from hardware or MMIO errors.
@@ -24,6 +26,17 @@ impl std::error::Error for BuildError {}
 impl<M> Dma<M> {
     /// Creates an immutable channel population without allocating external DMA memory.
     pub fn new(memory: M, channel_count: usize) -> Result<Self, BuildError> {
+        Self::with_sideband(memory, channel_count, |_| ())
+    }
+}
+
+impl<M, S> Dma<M, S> {
+    /// Tags each memory interaction with metadata derived from its channel.
+    pub fn with_sideband(
+        memory: M,
+        channel_count: usize,
+        sideband: fn(ChannelId) -> S,
+    ) -> Result<Self, BuildError> {
         let count = u32::try_from(channel_count).map_err(|_| BuildError::AddressSpace)?;
         let layout = DmaRegisters::new(channel_count).map_err(BuildError::Layout)?;
         let _ = u32::try_from(layout.extent()).map_err(|_| BuildError::AddressSpace)?;
@@ -41,6 +54,7 @@ impl<M> Dma<M> {
             discovery,
             channels,
             memory,
+            sideband,
             control,
             interrupt: false,
             active: None,

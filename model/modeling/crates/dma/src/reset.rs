@@ -56,10 +56,10 @@ impl<S> Resettable<S> {
     }
 }
 
-impl<M, S, I, O, W, T> Stage<Dma<M>> for Resettable<S>
+impl<M, S, I, O, W, T, SB> Stage<Dma<M, SB>> for Resettable<S>
 where
     for<'a> S:
-        Stage<ChannelContext<'a, M>, Input = I, Output = O, Wait = W, State = T, Error = Error>,
+        Stage<ChannelContext<'a, M, SB>, Input = I, Output = O, Wait = W, State = T, Error = Error>,
 {
     type Input = ChannelTask<I>;
     type Output = ChannelTask<O>;
@@ -73,7 +73,7 @@ where
 
     fn step(
         &mut self,
-        context: &mut Dma<M>,
+        context: &mut Dma<M, SB>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, W> {
         if self.channel.is_some_and(|channel| channel != state.channel) {

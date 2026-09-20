@@ -1,14 +1,15 @@
 use super::{COPY_CHUNK_BYTES, CopyState, Transfer};
 use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress};
+use hardware_interface_runtime::MemoryAccess;
+use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::ResponseStatus;
 
 /// Load endpoint segments and select one bounded payload chunk.
 #[derive(Debug, Default)]
 pub struct NextChunk;
 
-impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for NextChunk {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
     type Input = CopyState;
     type Output = Transfer;
     type Error = Error;
@@ -20,7 +21,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for NextChunk {
 
     fn step(
         &mut self,
-        context: &mut ChannelContext<'_, M>,
+        context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
         if context.channel.resetting() {
@@ -48,7 +49,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for NextChunk {
                     None
                 };
                 if let Some(cursor) = cursor {
-                    match cursor.next_segment(context.memory) {
+                    match cursor.next_segment(&context.memory) {
                         Ok(Some(_)) => {}
                         Ok(None) => progress.status = ResponseStatus::LengthMismatch,
                         Err(status) => progress.status = status,

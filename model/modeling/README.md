@@ -10,7 +10,10 @@ Host acquisition/release requests over separate rings; firmware Ready alone leav
 the DMA work window closed.
 The [Function-isolation slice](docs/function-isolation.md) uses one PF management
 channel with explicit target Functions, firmware-owned allocation, MMIO permissions and interrupt destinations
-for multiple Functions sharing that same DMA. DMA memory address spaces are not yet isolated.
+for multiple Functions sharing that same DMA. The managed platform can inject
+independent memory capabilities per Function, including identical DMA addresses;
+ordinary shared-memory assembly remains available. This does not implement PCIe,
+PASID or IOMMU translation.
 
 Run from this directory:
 
@@ -35,7 +38,7 @@ Overlap and capacity checks, backing allocation and installation run under one e
 storage access; an error leaves existing regions and bytes unchanged. There are no public
 prepared tokens, transaction drafts or memory revisions. The software allocator advances
 its address cursor only after installation succeeds. Hardware still receives only
-`MemoryAccess`, without memory ownership or allocation authority.
+byte-access capabilities, without memory ownership or allocation authority.
 
 ## Read the implementation
 
@@ -133,7 +136,7 @@ It arbitrates at command boundaries, not between chunks of different channels.
 A full idle arbitration round returns Pending; a channel's fault or reset releases
 its command, and channels without response space are skipped before acceptance.
 `ChannelContext` borrows
-only the selected channel and shared memory for each step. A reset write requests cleanup;
+only the selected channel and its memory port for each step. A reset write requests cleanup;
 hardware keeps the reset register at one until affected accepted work retires, then
 clears it to zero. `ResetControl` runs after each command-loop step, including pending
 steps. Configuration writes are rejected while the affected scope is resetting.
@@ -159,8 +162,11 @@ program finishes, then abort and join the hardware task. Command-local terminati
 is handled inside the device, not by a scenario-side retry loop. Boundary tests that
 need a single command assemble the existing stages in test fixtures.
 
-`Dma<M>` depends only on `MemoryAccess`. It neither allocates memory nor chooses
-a concrete backing. The scenario harness assembles shared memory and its allocation service
+`Dma<M, S = ()>` uses `MemoryAccess<S>` with channel-derived sideband. Plain
+`Dma::new` keeps unit-sideband memory access; managed assembly supplies ChannelId.
+Runtime resolves peripheral owner registers to Function memory capabilities;
+DMA remains Function-unaware. It neither allocates memory nor chooses
+a concrete backing. The scenario harness assembles memory and its allocation service
 externally; software allocates its own rings and payload buffers through that service.
 `dma/tests/flat_memory.rs` runs the same graph on an independent flat array.
 

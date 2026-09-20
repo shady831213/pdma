@@ -3,6 +3,16 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{MemoryAddress, MemoryAlignment, MemoryRegion};
 
+mod unit {
+    pub trait UnitSideband: Sized {
+        fn unit() -> Self;
+    }
+
+    impl UnitSideband for () {
+        fn unit() -> Self {}
+    }
+}
+
 /// Failure of one checked contiguous memory access.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemoryAccessError {
@@ -71,33 +81,75 @@ impl Display for MemoryAccessError {
 impl Error for MemoryAccessError {}
 
 /// Synchronous checked bulk access to a modeled byte store.
-pub trait MemoryAccess {
+pub trait MemoryAccess<S = ()> {
     /// Checks a complete extent without reading, writing, allocating, or changing storage.
     ///
     /// Errors follow overflow, alignment, lookup, then region-crossing order.
     /// A zero-length extent accepts installed region endpoints, but not unmapped gaps.
-    fn validate(
+    fn validate_with_sideband(
         &self,
+        sideband: &S,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
     ) -> Result<(), MemoryAccessError>;
 
     /// Reads one contiguous slice into caller-owned storage.
-    fn read(
+    fn read_with_sideband(
         &self,
+        sideband: &S,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
     ) -> Result<(), MemoryAccessError>;
 
     /// Writes one contiguous caller-owned slice.
+    fn write_with_sideband(
+        &self,
+        sideband: &S,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        source: &[u8],
+    ) -> Result<(), MemoryAccessError>;
+
+    /// Checks an extent on a unit-sideband backend.
+    fn validate(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), MemoryAccessError>
+    where
+        S: unit::UnitSideband,
+    {
+        self.validate_with_sideband(&S::unit(), address, alignment, length)
+    }
+
+    /// Reads bytes from a unit-sideband backend.
+    fn read(
+        &self,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        destination: &mut [u8],
+    ) -> Result<(), MemoryAccessError>
+    where
+        S: unit::UnitSideband,
+    {
+        self.read_with_sideband(&S::unit(), address, alignment, destination)
+    }
+
+    /// Writes bytes to a unit-sideband backend.
     fn write(
         &self,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],
-    ) -> Result<(), MemoryAccessError>;
+    ) -> Result<(), MemoryAccessError>
+    where
+        S: unit::UnitSideband,
+    {
+        self.write_with_sideband(&S::unit(), address, alignment, source)
+    }
 
     /// Reads into a default-constructed byte buffer and returns its owner.
     ///
@@ -110,11 +162,10 @@ pub trait MemoryAccess {
     ) -> Result<T, MemoryAccessError>
     where
         Self: Sized,
+        S: unit::UnitSideband,
         T: Default + AsMut<[u8]>,
     {
-        let mut value = T::default();
-        self.read(address, alignment, value.as_mut())?;
-        Ok(value)
+        self.read_typed_with_sideband(&S::unit(), address, alignment)
     }
 
     /// Writes a value's exposed bytes without encoding or reinterpreting it.
@@ -126,8 +177,40 @@ pub trait MemoryAccess {
     ) -> Result<(), MemoryAccessError>
     where
         Self: Sized,
+        S: unit::UnitSideband,
         T: AsRef<[u8]> + ?Sized,
     {
-        self.write(address, alignment, value.as_ref())
+        self.write_typed_with_sideband(&S::unit(), address, alignment, value)
+    }
+
+    /// Reads a byte-buffer owner using explicit access metadata.
+    fn read_typed_with_sideband<T>(
+        &self,
+        sideband: &S,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+    ) -> Result<T, MemoryAccessError>
+    where
+        Self: Sized,
+        T: Default + AsMut<[u8]>,
+    {
+        let mut value = T::default();
+        self.read_with_sideband(sideband, address, alignment, value.as_mut())?;
+        Ok(value)
+    }
+
+    /// Writes exposed bytes using explicit access metadata.
+    fn write_typed_with_sideband<T>(
+        &self,
+        sideband: &S,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        value: &T,
+    ) -> Result<(), MemoryAccessError>
+    where
+        Self: Sized,
+        T: AsRef<[u8]> + ?Sized,
+    {
+        self.write_with_sideband(sideband, address, alignment, value.as_ref())
     }
 }

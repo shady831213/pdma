@@ -3,8 +3,9 @@ use super::{Memory, MemoryStorage, SharedMemory};
 use crate::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion};
 
 impl<P: MemoryStorage> MemoryAccess for Memory<P> {
-    fn validate(
+    fn validate_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
@@ -15,8 +16,9 @@ impl<P: MemoryStorage> MemoryAccess for Memory<P> {
         })
     }
 
-    fn read(
+    fn read_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
@@ -34,8 +36,9 @@ impl<P: MemoryStorage> MemoryAccess for Memory<P> {
         })
     }
 
-    fn write(
+    fn write_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],
@@ -47,8 +50,9 @@ impl<P: MemoryStorage> MemoryAccess for Memory<P> {
 }
 
 impl MemoryAccess for SharedMemory {
-    fn validate(
+    fn validate_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
@@ -56,8 +60,9 @@ impl MemoryAccess for SharedMemory {
         self.memory.validate(address, alignment, length)
     }
 
-    fn read(
+    fn read_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
@@ -65,8 +70,9 @@ impl MemoryAccess for SharedMemory {
         self.memory.read(address, alignment, destination)
     }
 
-    fn write(
+    fn write_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],

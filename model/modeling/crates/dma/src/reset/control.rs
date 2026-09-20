@@ -7,7 +7,7 @@ use std::convert::Infallible;
 #[derive(Debug, Default)]
 pub struct ResetControl;
 
-impl<M> Stage<Dma<M>> for ResetControl {
+impl<M, SB> Stage<Dma<M, SB>> for ResetControl {
     type Input = ();
     type Output = Infallible;
     type Error = Infallible;
@@ -18,7 +18,7 @@ impl<M> Stage<Dma<M>> for ResetControl {
 
     fn step(
         &mut self,
-        device: &mut Dma<M>,
+        device: &mut Dma<M, SB>,
         (): &mut (),
     ) -> StepOutcome<Infallible, Infallible, Infallible> {
         if device.resetting() {

@@ -106,7 +106,14 @@ No shadow channel registers or firmware writes in the harness are allowed.
 The Function-isolation follow-on is documented in `docs/function-isolation.md`.
 DMA remains Function-unaware; peripherals enforce MMIO bindings and identify interrupt
 destinations before reassignment. Pending messages stay with their original destination.
-This adds no DMA memory isolation, PASID, Function reset/FLR or external transaction semantics.
+`MemoryAccess<S = ()>` carries explicit sideband on tagged accesses; ordinary
+read/write methods are available only for unit sideband. Managed DMA emits ChannelId;
+runtime resolves the same ChannelWindows owner registers used for MMIO/IRQ routing
+and selects the Function's injected memory capability. Platform assembly selects backing and
+provides each software program its own allocator; firmware uses PF control memory.
+Bindings remain stable until reset completes; no live rebind or shadow owner table.
+Independent spaces may use identical addresses. This adds no PASID/IOMMU translation,
+Function reset/FLR or external transaction semantics.
 
 The generic runtime's default `async-runtime` feature gates CPU/interrupt execution
 and its Tokio dependency. DMA selects `default-features = false`; synchronous

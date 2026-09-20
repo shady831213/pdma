@@ -27,6 +27,15 @@ canonical offset decoder. A host can therefore issue full bus addresses while a
 device uses generated typed views over the same root image; the runtime does not own a
 register map or device effect.
 
+`MemoryAccess<S = ()>` requires explicit metadata for `validate_with_sideband`,
+`read_with_sideband`, and `write_with_sideband`. Ordinary stores implement only
+`MemoryAccess<()>`; the existing `validate`, `read`, `write`, `read_typed`, and
+`write_typed` signatures are unit-only defaults. Metadata is never constructed
+through `Default`. `SharedMemoryAccess<S>` erases the backend while preserving its
+metadata requirement, and `BoundMemory::new(&memory, sideband)` provides ordinary
+access by forwarding every operation with the owned metadata value. The framework
+does not interpret that metadata or select device ownership policy.
+
 `MemoryAccess::validate` checks complete extents without reading or writing bytes or
 allocating backing. It preserves overflow, alignment, lookup, and region-crossing
 error order, including mapped zero-length endpoints. `SharedMemoryAccess` exposes
@@ -39,6 +48,64 @@ and the caller supplies alignment. They do not encode/decode records or reinterp
 native Rust layouts. Arrays and owned raw-byte types can use them without adding
 backend methods. `Self: Sized` keeps the byte trait object-compatible; the existing
 `SharedMemoryAccess` wrapper inherits typed access over its erased backend.
+The explicit typed counterparts, `read_typed_with_sideband` and
+`write_typed_with_sideband`, preserve metadata along with the byte extent and errors.
+
+Even default-constructible metadata cannot be omitted from a tagged backend:
+
+```compile_fail,E0277
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+#[derive(Default)]
+struct Tag;
+fn read(memory: &impl MemoryAccess<Tag>) {
+    let _ = memory.read(0.into(), MemoryAlignment::ONE, &mut [0]);
+}
+```
+
+```compile_fail,E0277
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+#[derive(Default)]
+struct Tag;
+fn write(memory: &impl MemoryAccess<Tag>) {
+    let _ = memory.write(0.into(), MemoryAlignment::ONE, &[0]);
+}
+```
+
+```compile_fail,E0277
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+#[derive(Default)]
+struct Tag;
+fn validate(memory: &impl MemoryAccess<Tag>) {
+    let _ = memory.validate(0.into(), MemoryAlignment::ONE, 1);
+}
+```
+
+```compile_fail,E0277
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+#[derive(Default)]
+struct Tag;
+fn read_typed(memory: &impl MemoryAccess<Tag>) {
+    let _ = memory.read_typed::<[u8; 1]>(0.into(), MemoryAlignment::ONE);
+}
+```
+
+```compile_fail,E0277
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
+#[derive(Default)]
+struct Tag;
+fn write_typed(memory: &impl MemoryAccess<Tag>) {
+    let _ = memory.write_typed(0.into(), MemoryAlignment::ONE, &[0]);
+}
+```
+
+An ordinary backend cannot satisfy a tagged boundary:
+
+```compile_fail,E0277
+use hardware_interface_runtime::{MemoryAccess, SharedMemory};
+struct Tag;
+fn tagged_boundary(_: &impl MemoryAccess<Tag>) {}
+tagged_boundary(&SharedMemory::new());
+```
 
 `SharedMemoryAllocator` provides a clone-shared monotonic address cursor over a
 caller-supplied `SharedMemory`. Nonzero allocations install zeroed backing before

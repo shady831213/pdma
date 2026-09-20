@@ -40,7 +40,7 @@ impl<M: Send> RegisterAccess for HostBus<M> {
             .access(
                 |Hardware {
                      dma,
-                     window,
+                     windows,
                      firmware,
                      control,
                  }| {
@@ -49,11 +49,13 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                         result => return result.map_err(AccessError::Control),
                     }
                     match firmware.read(address, bytes) {
-                        Err(RegisterAccessError::OutsideWindow { .. }) => window
+                        Err(RegisterAccessError::OutsideWindow { .. }) => windows
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
                             .for_function(self.function)
-                            .read(address, bytes, |address, bytes| {
+                            .read(address, bytes, |offset, bytes| {
                                 dma.read(
-                                    address
+                                    offset
                                         .checked_sub(dma_base)
                                         .ok_or(pdma_model_dma::Error::Unmapped)?,
                                     bytes,
@@ -74,7 +76,7 @@ impl<M: Send> RegisterAccess for HostBus<M> {
             .access(
                 |Hardware {
                      dma,
-                     window,
+                     windows,
                      firmware,
                      control,
                  }| {
@@ -83,11 +85,13 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                         result => return result.map_err(AccessError::Control),
                     }
                     match firmware.host_write(address, bytes) {
-                        Err(RegisterAccessError::OutsideWindow { .. }) => window
+                        Err(RegisterAccessError::OutsideWindow { .. }) => windows
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
                             .for_function(self.function)
-                            .write(address, bytes, |address, bytes| {
+                            .write(address, bytes, |offset, bytes| {
                                 dma.write(
-                                    address
+                                    offset
                                         .checked_sub(dma_base)
                                         .ok_or(pdma_model_dma::Error::Unmapped)?,
                                     bytes,
@@ -115,7 +119,11 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
                 }
                 match register_dispatch!(
                     hardware.firmware.read(address, bytes),
-                    hardware.window.management_read(address, bytes),
+                    hardware
+                        .windows
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .management_read(address, bytes),
                 ) {
                     Err(RegisterAccessError::OutsideWindow { .. }) => hardware
                         .dma
@@ -141,7 +149,11 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
                 }
                 match register_dispatch!(
                     hardware.firmware.management_write(address, bytes),
-                    hardware.window.management_write(address, bytes),
+                    hardware
+                        .windows
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .management_write(address, bytes),
                 ) {
                     Err(RegisterAccessError::OutsideWindow { .. }) => hardware
                         .dma

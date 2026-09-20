@@ -49,8 +49,11 @@ acknowledging reset or release. One PF management client pipelines bounded async
 requests naming target Functions over one control ring pair. VF ports only operate granted
 DMA data channels. Firmware owns Function-to-channel
 allocation; peripheral registers enforce MMIO ownership and route channel notifications.
-See `model/modeling/docs/{control-channel,function-isolation}.md`. DMA memory remains
-shared: no PASID/address-space isolation, Function reset/FLR, event ring or PCIe integration.
+See `model/modeling/docs/{control-channel,function-isolation}.md`. Managed DMA can
+use independent Function memory capabilities or an explicitly shared backend.
+DMA tags accesses with channel metadata; runtime resolves peripheral owner registers
+and selects Function backing. Backing and software allocators remain platform-owned. No PASID/IOMMU translation,
+Function reset/FLR, event ring or PCIe integration is implemented.
 PF-only firmware management retains per-Function work MMIO and IRQ isolation.
 Hardware checks the platform-selected PF identity on every control-register access;
 firmware validates request targets and channel ownership. The agreed future VF FLR

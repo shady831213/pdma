@@ -24,6 +24,11 @@ The ordinary direct-DMA assembly remains independent of firmware and Functions.
   A request target never changes the actual requester's work-MMIO identity.
 - DMA reports channel-specific pulses and a separate device-wide source. It
   neither knows Function identity nor stores software handlers.
+- Generic `MemoryAccess<S = ()>` carries explicit metadata. Managed DMA emits
+  ChannelId; its runtime adapter resolves the authoritative `ChannelWindows`
+  owner registers and forwards FunctionId to the runtime's memory-space adapter.
+  MMIO, interrupt routing and DMA memory use that same ownership bank. Ordinary
+  unit-sideband backends keep their existing read/write call signatures.
 - The scenario platform supplies private Function-bound Host bus capabilities,
   independent software CPUs/interrupt runtimes and pending interrupt destinations.
   It wires hardware events to those destinations, without allocating channels.
@@ -73,9 +78,11 @@ Out-of-range Function targets return `InvalidFunction` before resource side effe
 
 ## Scope and evidence
 
-This is management/MMIO/interrupt isolation, **not DMA address-space isolation**.
-The memory backend is still shared. Trusted software must keep other Functions'
-ring memory intact; DMA and control-memory accesses carry no Function/PASID tags.
+The managed assembly can now supply independent DMA address spaces per Function.
+`Managed::with_function_memory` binds supplied capabilities by Function ID; the
+shared-memory assembly remains available through `with_functions`. Separate spaces
+may map identical addresses to different bytes. This is injected-backend isolation,
+not PCIe/IOMMU/PASID translation or protection against a malicious integration.
 Malformed ring or bus failures remain subsystem execution errors, not independently
 recoverable Function failures. PCIe integration, PCIe PF/VF provisioning, Function reset,
 FLR, PASID/context tables, event rings and hostile-memory isolation remain future work.
@@ -86,6 +93,34 @@ exercise invalid target/ownership rejection, VF management denial, MMIO isolatio
 reuse revocation, dormant VFs managed by PF, response backpressure,
 and a real DMA notification delivered after reset/regrant. Hardware tests cover
 VF bootstrap/doorbell rejection, independent notification directions and open-binding interlocks.
+
+## DMA memory boundary
+
+All command fetches, source/destination SG-list reads, payload reads/writes and
+response publication use the selected channel's memory port. Neither descriptors
+nor VF software select a Function ID for these accesses. A missing owner capability
+fails as an unmapped access, without falling back to PF or another Function; existing
+command/response fatal and list/payload response-error semantics remain unchanged.
+
+The platform owns backing stores and gives each software program its corresponding
+allocator and memory capability. Firmware's control-ring memory is the PF's space,
+not a union of VF spaces. Sharing a backend deliberately shares its address space;
+constructors do not infer isolation or clone the underlying bytes.
+
+DMA binds its sideband to a borrowed memory view for each synchronous interaction.
+Closing Host MMIO does not revoke old DMA access or change its identity. Firmware
+must keep the owner unchanged until channel reset completes, then may reassign it.
+Existing firmware release already follows that order; live owner rebinding before
+drain is unsupported. The DMA generation guard and terminal command retirement
+prevent retained old work from accessing the new owner's memory after reset.
+
+The managed Function cases cover identical-address IRQ-driven copies and reset
+during a transfer with independent peer memory. Managed runtime memory boundary tests
+covers command/list/payload/response routing, unmapped foreign addresses and reset
+before regrant, absent bindings and closed-window access.
+The generic memory API adds explicit sideband raw and typed methods; ordinary methods
+delegate with unit sideband. Non-unit metadata cannot be omitted, even if its type
+implements Default. Descriptors and register layouts are unchanged.
 
 Scenario PF/VF grant and reset coordination uses test signals, not a new modeled
 PF-to-VF protocol.

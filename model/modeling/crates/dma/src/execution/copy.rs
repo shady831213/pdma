@@ -9,7 +9,7 @@ use std::ops::ControlFlow;
 #[derive(Debug, Default)]
 pub struct ReadCopy;
 
-impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for ReadCopy {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
@@ -20,7 +20,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for ReadCopy {
     }
     fn step(
         &mut self,
-        context: &mut ChannelContext<'_, M>,
+        context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
     ) -> StepOutcome<Transfer, Error, ()> {
         if context.channel.resetting() {
@@ -65,7 +65,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for ReadCopy {
 #[derive(Debug, Default)]
 pub struct WriteCopy;
 
-impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for WriteCopy {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy {
     type Input = Transfer;
     type Output = ControlFlow<Response, CopyState>;
     type Error = Error;
@@ -76,7 +76,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for WriteCopy {
     }
     fn step(
         &mut self,
-        context: &mut ChannelContext<'_, M>,
+        context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
         if context.channel.resetting() {

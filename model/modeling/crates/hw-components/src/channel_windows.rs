@@ -30,8 +30,8 @@ impl ChannelWindows {
         }
     }
 
-    /// Captures a channel notification's destination before any later reassignment.
-    pub fn interrupt_target(&self, channel: ChannelId) -> Option<FunctionId> {
+    /// Resolves a channel's owner even while closed for reset/drain.
+    pub fn owner(&self, channel: ChannelId) -> Option<FunctionId> {
         self.windows.get(channel.index()).map(AccessWindow::owner)
     }
     /// Places closed data windows and their permission bank in platform address space.

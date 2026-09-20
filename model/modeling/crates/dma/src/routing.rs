@@ -10,10 +10,10 @@ pub type ResponsePort = Resettable<AfterEach<Publish, UpdateIrq>>;
 #[derive(Debug)]
 pub struct RouteResponse;
 
-impl<M: MemoryAccess> Route<Dma<M>, ResponsePort> for RouteResponse {
+impl<M: MemoryAccess<SB>, SB> Route<Dma<M, SB>, ResponsePort> for RouteResponse {
     type Input = ChannelTask<Response>;
 
-    fn route(&mut self, _: &Dma<M>, input: Self::Input) -> Result<(usize, Self::Input), Error> {
+    fn route(&mut self, _: &Dma<M, SB>, input: Self::Input) -> Result<(usize, Self::Input), Error> {
         Ok((input.channel().index(), input))
     }
 }

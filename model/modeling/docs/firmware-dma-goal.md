@@ -11,7 +11,9 @@ First milestone: the [firmware-managed DMA architecture MVP](firmware-dma-mvp.md
 The subsequent [control channel](control-channel.md) implements independent
 command/response rings for multi-channel acquisition/reset/release, including local
 reset completion. [Function-aware ownership](function-isolation.md) now covers MMIO,
-management and notification routing. External drain and address-space isolation remain future work.
+management and notification routing. Function-selected memory capabilities now
+provide isolated model address spaces; external drain, PASID and IOMMU translation
+remain future work. See the [DMA memory boundary](function-isolation.md#dma-memory-boundary).
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 

@@ -8,7 +8,7 @@ pub struct RoundRobin {
     next: usize,
 }
 
-impl<M: MemoryAccess> Arbitration<Dma<M>, Fetch> for RoundRobin {
+impl<M: MemoryAccess<SB>, SB> Arbitration<Dma<M, SB>, Fetch> for RoundRobin {
     type State = usize;
 
     fn start() -> usize {
@@ -17,7 +17,7 @@ impl<M: MemoryAccess> Arbitration<Dma<M>, Fetch> for RoundRobin {
 
     fn select_index(
         &mut self,
-        context: &Dma<M>,
+        context: &Dma<M, SB>,
         sources: &[Fetch],
         visited: &mut usize,
     ) -> StepOutcome<usize, Error, ()> {

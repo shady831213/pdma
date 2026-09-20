@@ -102,6 +102,10 @@ ResetChannel retains allocation and reopens disabled/unconfigured data access.
 ReleaseChannel frees allocation and leaves access closed. Host must stop old ring/ISR
 use and preserve memory until the successful management response, then construct
 a fresh driver. Ordinary management processing is serial; peer DMA remains driven.
+With Function-separated memory, closing the window preserves its memory binding
+for old work. Firmware changes the owner only after reset completion; a later
+grant uses the new owner's space. Reset generation checks still precede old-task
+accesses. No live owner rebind or external transaction drain is introduced.
 For future VF FLR integration, PF must first release all of the VF's channels and
 collect successful responses, preventing new allocations until FLR completes.
 The later FLR requires no second firmware cleanup: the PDMA application endpoint

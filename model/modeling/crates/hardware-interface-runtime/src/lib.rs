@@ -4,6 +4,7 @@
 mod access;
 mod address;
 mod allocator;
+mod bound_memory;
 #[cfg(feature = "async-runtime")]
 mod cpu;
 mod error;
@@ -21,6 +22,7 @@ mod trace;
 pub use access::{MemoryAccess, MemoryAccessError};
 pub use address::{MemoryAddress, MemoryAlignment};
 pub use allocator::{MemoryAllocationError, SharedMemoryAllocator};
+pub use bound_memory::BoundMemory;
 #[cfg(feature = "async-runtime")]
 pub use cpu::{CpuAccessError, CpuContextError, CpuLocal, CpuRegisterAccess, SoftwareCpu};
 pub use error::{MemoryAlignmentError, MemoryError, MemoryRegionError};

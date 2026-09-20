@@ -18,24 +18,27 @@ struct FallibleMemory {
 }
 
 impl MemoryAccess for FallibleMemory {
-    fn validate(
+    fn validate_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
     ) -> Result<(), MemoryAccessError> {
         self.memory.validate(address, alignment, length)
     }
-    fn read(
+    fn read_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &mut [u8],
     ) -> Result<(), MemoryAccessError> {
         self.memory.read(address, alignment, bytes)
     }
-    fn write(
+    fn write_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],

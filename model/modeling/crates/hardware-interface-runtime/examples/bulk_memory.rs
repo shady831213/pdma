@@ -34,8 +34,9 @@ impl<A> RecordingMemoryAccess<A> {
 }
 
 impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
-    fn validate(
+    fn validate_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
@@ -43,8 +44,9 @@ impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
         self.inner.validate(address, alignment, length)
     }
 
-    fn read(
+    fn read_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
@@ -53,8 +55,9 @@ impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
         self.inner.read(address, alignment, destination)
     }
 
-    fn write(
+    fn write_with_sideband(
         &self,
+        (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],

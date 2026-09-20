@@ -14,7 +14,7 @@ use std::{convert::Infallible, ops::ControlFlow};
 #[derive(Debug, Default)]
 pub struct Publish;
 
-impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for Publish {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for Publish {
     type Input = Response;
     type Output = ();
     type Error = Error;
@@ -25,7 +25,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for Publish {
     }
     fn step(
         &mut self,
-        context: &mut ChannelContext<'_, M>,
+        context: &mut ChannelContext<'_, M, SB>,
         response: &mut Response,
     ) -> StepOutcome<(), Error, ()> {
         if context.channel.resetting() {
@@ -38,7 +38,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for Publish {
             return StepOutcome::Pending(());
         }
         let was_empty = context.channel.response.pointers().is_empty();
-        match context.channel.response.push(context.memory, response) {
+        match context.channel.response.push(&context.memory, response) {
             Ok(true) => {
                 context.channel.published(response, was_empty);
                 StepOutcome::Complete(Ok(()))
@@ -56,7 +56,7 @@ impl<M: MemoryAccess> Stage<ChannelContext<'_, M>> for Publish {
 #[derive(Debug, Default)]
 pub struct UpdateIrq;
 
-impl<M> Stage<ChannelContext<'_, M>> for UpdateIrq {
+impl<M, SB> Stage<ChannelContext<'_, M, SB>> for UpdateIrq {
     type Input = ();
     type Output = Infallible;
     type Error = Infallible;
@@ -65,7 +65,7 @@ impl<M> Stage<ChannelContext<'_, M>> for UpdateIrq {
     fn start((): ()) {}
     fn step(
         &mut self,
-        context: &mut ChannelContext<'_, M>,
+        context: &mut ChannelContext<'_, M, SB>,
         (): &mut (),
     ) -> StepOutcome<Infallible, Infallible, Infallible> {
         context.channel.update_irq();
@@ -86,15 +86,15 @@ impl<S> RunCommand<S> {
     }
 }
 
-impl<M, S> Stage<Dma<M>> for RunCommand<S>
+impl<M, S, SB> Stage<Dma<M, SB>> for RunCommand<S>
 where
-    S: Stage<Dma<M>, Input = (), Output = (), Error = Error, Wait = ()>,
+    S: Stage<Dma<M, SB>, Input = (), Output = (), Error = Error, Wait = ()>,
 {
     type Input = ();
     type Output = ControlFlow<(), ()>;
     type Error = Error;
     type Wait = ();
-    type State = Operation<S, Dma<M>>;
+    type State = Operation<S, Dma<M, SB>>;
 
     fn start((): ()) -> Self::State {
         Operation::new(())
@@ -102,7 +102,7 @@ where
 
     fn step(
         &mut self,
-        device: &mut Dma<M>,
+        device: &mut Dma<M, SB>,
         state: &mut Self::State,
     ) -> StepOutcome<Self::Output, Error, ()> {
         if state.is_complete() {
@@ -143,7 +143,7 @@ pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>
 /// Continuously executes commands through one shared pipeline.
 pub type CommandLoop = AfterEach<Repeat<RunCommand>, ResetControl>;
 
-impl<M> Dma<M> {
+impl<M, SB> Dma<M, SB> {
     /// Builds this device's lightweight command input ports for custom compositions.
     pub fn fetches(&self) -> Vec<Fetch> {
         (0..self.channels.len())

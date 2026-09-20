@@ -2,7 +2,9 @@
 use super::{Handler, HostVector, Ports, TestResult, buffers, transfer};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::{ChannelId, FunctionId, Response};
+use pdma_model_host::firmware;
 use pdma_model_software::control::InterruptEvent;
+use std::time::Duration;
 use tokio::sync::oneshot;
 pub mod reset;
 
@@ -31,6 +33,12 @@ pub(in crate::harness) async fn manage(
     assignments: [Assignment; 2],
     reset: Option<(oneshot::Receiver<()>, oneshot::Sender<()>)>,
 ) -> TestResult {
+    firmware::wait_ready(
+        &ports.bus,
+        ports.bus.addresses().firmware,
+        Duration::from_secs(1),
+    )
+    .await?;
     let interrupt = InterruptEvent::new();
     ports
         .interrupts

@@ -19,6 +19,7 @@ mod interrupts;
 mod multi_channel;
 mod notifications;
 mod permissions;
+mod pf_boot;
 mod pf_management;
 mod publication;
 

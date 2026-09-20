@@ -15,6 +15,15 @@ management and notification routing. External drain and address-space isolation 
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 
+The 2026-09-20 [VF pre-FLR decision](function-isolation.md#agreed-vf-pre-flr-integration-contract)
+uses existing PF-driven channel release before PCIe FLR. It supersedes firmware
+handling of incoming VF FLR: no second firmware ingress or cleanup coordinator is
+planned for this scope. Under the software precondition, application ACK can be
+immediate; PCIe drain and controller handshake remain integration responsibilities.
+No FLR implementation or new hardware/firmware interface is added by that decision.
+PF reset and additional cleanup for future context/address-space resources remain
+separate design work.
+
 ## Implemented preparation: shared drivers and management interrupts
 
 Recorded: 2026-09-17. The two items below are implemented alongside separate Host
@@ -207,10 +216,13 @@ Keep these completion facts separate:
    completion point, as reported by their owning port.
 3. External lifecycle release: controller/integration conditions permit reopening.
 
-Firmware coordinates these facts; writing a completion register cannot fabricate
-memory retirement. A stalled firmware must not reopen a closed scope. Management
-firmware and its access path must survive the Function reset they coordinate;
-whole-device reset needs a path that does not require that firmware to run.
+Resource-lifecycle sequencing must respect these facts; writing a completion
+register cannot fabricate memory retirement. For the agreed VF pre-FLR sequence,
+firmware completes PF-requested channel release before FLR, while the PCIe layer
+owns external drain and controller release. Firmware does not receive FLR requests.
+A stalled firmware cannot establish successful preparation. Firmware and the PF
+management channel remain outside the VF reset scope; PF and whole-device reset
+still need separately defined recovery paths.
 Already platform-pending notifications must not be reassigned to a new owner.
 
 Preserve the synchronous storage backend. Add waiting/request-completion semantics

@@ -53,8 +53,13 @@ See `model/modeling/docs/{control-channel,function-isolation}.md`. DMA memory re
 shared: no PASID/address-space isolation, Function reset/FLR, event ring or PCIe integration.
 PF-only firmware management retains per-Function work MMIO and IRQ isolation.
 Hardware checks the platform-selected PF identity on every control-register access;
-firmware validates request targets and channel ownership. Future FLR requires independent
-ingress and is not implemented. See `model/modeling/docs/function-isolation.md`.
+firmware validates request targets and channel ownership. The agreed future VF FLR
+contract requires PF to release all target channels successfully before FLR and
+prevent reacquisition until FLR completes. No firmware FLR ingress or repeated
+cleanup is needed: application ACK may be immediate under that precondition, while
+PCIe drain/controller handshake stays at integration. Direct FLR without preparation
+is unsupported, with no automatic check or recovery. PF FLR is a separate scope;
+FLR remains unimplemented. See `model/modeling/docs/function-isolation.md`.
 The generated header under `model/modeling/include` describes the current contract.
 `docs/white_boards/**` remains exploratory background.
 

@@ -102,8 +102,14 @@ ResetChannel retains allocation and reopens disabled/unconfigured data access.
 ReleaseChannel frees allocation and leaves access closed. Host must stop old ring/ISR
 use and preserve memory until the successful management response, then construct
 a fresh driver. Ordinary management processing is serial; peer DMA remains driven.
-A future VF FLR will enter lifecycle handling independently of control-ring traffic,
-with a distinct PCIe completion handshake. Neither FLR nor its coordinator is implemented.
+For future VF FLR integration, PF must first release all of the VF's channels and
+collect successful responses, preventing new allocations until FLR completes.
+The later FLR requires no second firmware cleanup: the PDMA application endpoint
+may acknowledge immediately under that precondition. PCIe drain and controller
+completion remain separate. Direct FLR without preparation is unsupported; there
+is no automatic precondition check or cleanup fallback. See the
+[VF pre-FLR contract](function-isolation.md#agreed-vf-pre-flr-integration-contract).
+PCIe FLR remains unimplemented; this decision changes no current reset behavior.
 
 ## Real hardware comparison
 

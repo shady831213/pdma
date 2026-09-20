@@ -138,18 +138,20 @@ release and retain memory until completion. Reset does not undo completed extern
 writes. Platform-pending DMA notifications remain associated with their original
 Host. Runtime implements no allocation/reset policy.
 
-### Future FLR ingress (not implemented)
+### VF pre-FLR preparation (integration decision, not implemented FLR)
 
-A PCIe FLR notification may trigger firmware's Function-to-channels cleanup without
-using the Host control ring. The lifecycle operations can be reused; receiving and
-acknowledging FLR remains separate from control-ring request/response transport.
-A future coordinator must serialize conflicting scopes, let independent Function
-operations progress, and never depend on Host response-ring consumption to finish
-FLR. The current serial control service is not that multi-ingress coordinator.
-Application cleanup, ATS/transaction drain, DWC active/done, controller release
-and later software readiness are distinct boundaries. Firmware and its management
-access must remain outside the reset VF scope. No FLR, PCIe Function provisioning, PASID or
-generic event merger is introduced here.
+PF uses existing `ReleaseChannel` requests to release every channel belonging to
+the target VF and waits for all successful responses before initiating PCIe FLR.
+PF prevents conflicting acquisitions from preparation through actual FLR completion.
+The PF control ring pair and firmware remain available; they are not VF resources.
+There is no additional Function prepare/resume command or firmware FLR input.
+
+Under this platform precondition, a future PDMA application endpoint may ACK a
+valid VF reset request immediately, without resource checks or repeated cleanup.
+PCIe-side drain and controller completion remain integration responsibilities.
+Direct FLR without preparation is unsupported and is not automatically detected
+or repaired. See the [VF pre-FLR contract](function-isolation.md#agreed-vf-pre-flr-integration-contract)
+for the exact boundaries, physical done-pin caveat and excluded PF reset scope.
 
 Malformed opcodes, invalid pointers and memory/bus failures stay typed errors.
 The supervisor reports firmware execution failures; partial side effects are not

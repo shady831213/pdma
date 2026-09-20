@@ -91,8 +91,13 @@ owner allocation state and serves requests serially. A full PF response ring sto
 ResetChannel closes its data window, awaits hardware reset, then reopens unconfigured data
 access without releasing ownership. ReleaseChannel awaits reset before freeing ownership.
 Later management requests wait; independently driven peer DMA continues. Resource lifecycle
-methods stay separate from control-ring receive/respond. Future FLR needs independent ingress
-and completion, not dependence on Host response consumption; FLR is not implemented.
+methods stay separate from control-ring receive/respond. The agreed future VF FLR
+sequence requires PF to collect successful releases for all target channels before
+FLR and prevent reacquisition until actual FLR completion. Do not add firmware FLR
+ingress, repeated cleanup or a resource-precondition checker for that contract.
+The application endpoint may ACK immediately; PCIe drain and controller handshake
+belong to integration. Direct unprepared FLR is unsupported, PF FLR is a separate
+scope, and neither is implemented. See the VF pre-FLR section in `docs/function-isolation.md`.
 Discovery is always readable, global/channel administration is firmware-only in managed mode,
 and grants expose only complete schema-defined channel data blocks. Platform assembly supplies
 register bases and validates disjoint apertures. Response backpressure stops request admission. Do not turn simulation

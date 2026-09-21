@@ -67,18 +67,6 @@ impl<M> RoutedMemory<M> {
             spaces: FunctionSpaces::new(spaces),
         }
     }
-
-    fn owner(
-        &self,
-        channel: ChannelId,
-        address: MemoryAddress,
-    ) -> Result<FunctionId, MemoryAccessError> {
-        self.windows
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .owner(channel)
-            .ok_or(MemoryAccessError::Unmapped { address })
-    }
 }
 
 impl<M: MemoryAccess> MemoryAccess<ChannelId> for RoutedMemory<M> {
@@ -89,12 +77,11 @@ impl<M: MemoryAccess> MemoryAccess<ChannelId> for RoutedMemory<M> {
         alignment: MemoryAlignment,
         length: u64,
     ) -> Result<(), MemoryAccessError> {
-        self.spaces.validate_with_sideband(
-            &self.owner(*channel, address)?,
-            address,
-            alignment,
-            length,
-        )
+        self.windows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .memory(&self.spaces)
+            .validate_with_sideband(channel, address, alignment, length)
     }
 
     fn read_with_sideband(
@@ -104,8 +91,11 @@ impl<M: MemoryAccess> MemoryAccess<ChannelId> for RoutedMemory<M> {
         alignment: MemoryAlignment,
         bytes: &mut [u8],
     ) -> Result<(), MemoryAccessError> {
-        self.spaces
-            .read_with_sideband(&self.owner(*channel, address)?, address, alignment, bytes)
+        self.windows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .memory(&self.spaces)
+            .read_with_sideband(channel, address, alignment, bytes)
     }
 
     fn write_with_sideband(
@@ -115,7 +105,10 @@ impl<M: MemoryAccess> MemoryAccess<ChannelId> for RoutedMemory<M> {
         alignment: MemoryAlignment,
         bytes: &[u8],
     ) -> Result<(), MemoryAccessError> {
-        self.spaces
-            .write_with_sideband(&self.owner(*channel, address)?, address, alignment, bytes)
+        self.windows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .memory(&self.spaces)
+            .write_with_sideband(channel, address, alignment, bytes)
     }
 }

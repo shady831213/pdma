@@ -9,7 +9,9 @@ use pdma_model_contract::{
 use crate::{AccessError, AccessWindow, WindowConfigError};
 use pdma_model_contract::{ChannelId, FunctionId};
 mod function;
+mod memory;
 pub use function::FunctionWindows;
+pub use memory::ChannelMemoryAccess;
 
 /// Independent firmware-controlled Host apertures for one configured DMA instance.
 #[derive(Debug)]

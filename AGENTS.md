@@ -51,8 +51,9 @@ DMA data channels. Firmware owns Function-to-channel
 allocation; peripheral registers enforce MMIO ownership and route channel notifications.
 See `model/modeling/docs/{control-channel,function-isolation}.md`. Managed DMA can
 use independent Function memory capabilities or an explicitly shared backend.
-DMA tags accesses with channel metadata; runtime resolves peripheral owner registers
-and selects Function backing. Backing and software allocators remain platform-owned. No PASID/IOMMU translation,
+DMA tags accesses with channel metadata; hw-components resolves owner registers
+and forwards Function-tagged requests. Runtime selects Function backing; backing and
+software allocators remain platform-owned. No PASID/IOMMU translation,
 Function reset/FLR, event ring or PCIe integration is implemented.
 PF-only firmware management retains per-Function work MMIO and IRQ isolation.
 Hardware checks the platform-selected PF identity on every control-register access;

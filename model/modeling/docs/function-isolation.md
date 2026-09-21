@@ -25,8 +25,9 @@ The ordinary direct-DMA assembly remains independent of firmware and Functions.
 - DMA reports channel-specific pulses and a separate device-wide source. It
   neither knows Function identity nor stores software handlers.
 - Generic `MemoryAccess<S = ()>` carries explicit metadata. Managed DMA emits
-  ChannelId; its runtime adapter resolves the authoritative `ChannelWindows`
-  owner registers and forwards FunctionId to the runtime's memory-space adapter.
+  ChannelId; `hw-components::ChannelMemoryAccess` borrows the authoritative
+  `ChannelWindows` bank, resolves its owner registers and forwards FunctionId
+  to the runtime's memory-space adapter.
   MMIO, interrupt routing and DMA memory use that same ownership bank. Ordinary
   unit-sideband backends keep their existing read/write call signatures.
 - The scenario platform supplies private Function-bound Host bus capabilities,
@@ -107,17 +108,36 @@ allocator and memory capability. Firmware's control-ring memory is the PF's spac
 not a union of VF spaces. Sharing a backend deliberately shares its address space;
 constructors do not infer isolation or clone the underlying bytes.
 
+`ChannelWindows::memory` creates a borrowed hardware view over a supplied
+`MemoryAccess<FunctionId>` port. It resolves one owner per synchronous access and
+forwards the address, alignment, length/buffer and existing downstream error unchanged.
+It holds no backing, allocation, synchronization or cached owner state. Runtime
+retains `FunctionSpaces` and the shared window lock; its `RoutedMemory` only locks
+and delegates to this hardware view. Lock order is hardware, windows, then backing;
+downstream backends must not reenter hardware/window locks. No lock spans an await.
+
+Every valid channel has an owner register, initially zero; release does not clear it.
+With correct firmware and platform wiring, admitted DMA requests always have a valid
+owner and supplied Function capability. Invalid channel IDs or missing capabilities
+remain model/integration errors reported through the existing memory error, not a
+new hardware lookup-failure protocol or a fallback to Function zero.
+
 DMA binds its sideband to a borrowed memory view for each synchronous interaction.
 Closing Host MMIO does not revoke old DMA access or change its identity. Firmware
 must keep the owner unchanged until channel reset completes, then may reassign it.
 Existing firmware release already follows that order; live owner rebinding before
 drain is unsupported. The DMA generation guard and terminal command retirement
 prevent retained old work from accessing the new owner's memory after reset.
+If a future external bus queues requests or permits outstanding transactions, each
+accepted request must retain its resolved FunctionId and reset completion must wait
+for all affected transactions to drain. This synchronous model adds no such queue.
 
 The managed Function cases cover identical-address IRQ-driven copies and reset
 during a transfer with independent peer memory. Managed runtime memory boundary tests
-covers command/list/payload/response routing, unmapped foreign addresses and reset
+cover command/list/payload/response routing, unmapped foreign addresses and reset
 before regrant, absent bindings and closed-window access.
+`hw-components/tests/channel_memory.rs` directly verifies identity translation,
+raw/typed access, closed-window retention, reassignment and error propagation.
 The generic memory API adds explicit sideband raw and typed methods; ordinary methods
 delegate with unit sideband. Non-unit metadata cannot be omitted, even if its type
 implements Default. Descriptors and register layouts are unchanged.

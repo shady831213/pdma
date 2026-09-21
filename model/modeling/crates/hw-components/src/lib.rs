@@ -7,7 +7,7 @@ mod error;
 mod firmware_status;
 
 pub use access_window::AccessWindow;
-pub use channel_windows::{ChannelWindows, FunctionWindows};
+pub use channel_windows::{ChannelMemoryAccess, ChannelWindows, FunctionWindows};
 pub use control_channel::{ControlChannel, ControlError};
 pub use error::{AccessError, WindowConfigError};
 pub use firmware_status::FirmwareStatus;

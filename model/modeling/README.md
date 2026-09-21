@@ -164,7 +164,8 @@ need a single command assemble the existing stages in test fixtures.
 
 `Dma<M, S = ()>` uses `MemoryAccess<S>` with channel-derived sideband. Plain
 `Dma::new` keeps unit-sideband memory access; managed assembly supplies ChannelId.
-Runtime resolves peripheral owner registers to Function memory capabilities;
+The borrowed `hw-components::ChannelMemoryAccess` view resolves owner registers
+and forwards Function-tagged memory requests; runtime selects Function backing.
 DMA remains Function-unaware. It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles memory and its allocation service
 externally; software allocates its own rings and payload buffers through that service.

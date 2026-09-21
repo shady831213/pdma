@@ -9,6 +9,7 @@ publish.workspace = true
 description = "Concrete PDMA management access-window hardware"
 
 [dependencies]
+hardware-interface-runtime = { path = "../hardware-interface-runtime", default-features = false }
 hardware-interface-schema = { path = "../hardware-interface-schema" }
 pdma-model-contract = { path = "../contract" }
 

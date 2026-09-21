@@ -108,8 +108,9 @@ DMA remains Function-unaware; peripherals enforce MMIO bindings and identify int
 destinations before reassignment. Pending messages stay with their original destination.
 `MemoryAccess<S = ()>` carries explicit sideband on tagged accesses; ordinary
 read/write methods are available only for unit sideband. Managed DMA emits ChannelId;
-runtime resolves the same ChannelWindows owner registers used for MMIO/IRQ routing
-and selects the Function's injected memory capability. Platform assembly selects backing and
+hw-components resolves the same ChannelWindows owner registers used for MMIO/IRQ routing
+through a borrowed ChannelMemoryAccess view and forwards FunctionId. Runtime selects
+the Function's injected memory capability. Platform assembly selects backing and
 provides each software program its own allocator; firmware uses PF control memory.
 Bindings remain stable until reset completes; no live rebind or shadow owner table.
 Independent spaces may use identical addresses. This adds no PASID/IOMMU translation,
@@ -117,8 +118,9 @@ Function reset/FLR or external transaction semantics.
 
 The generic runtime's default `async-runtime` feature gates CPU/interrupt execution
 and its Tokio dependency. DMA selects `default-features = false`; synchronous
-memory/backend APIs stay available and unchanged. Verify DMA's normal dependency
-tree independently because workspace feature unification can enable async support.
+memory/backend APIs stay available and unchanged. hw-components also disables default
+features when using the synchronous MemoryAccess traits. Verify both normal dependency
+trees independently because workspace feature unification can enable async support.
 Both concrete transports use `pending_interrupt`: hardware-side adapters hold the
 emitter, software dispatch holds the source. Keep causes, masking, routing policy
 and hardware-step wakeup decisions out of that generic component.

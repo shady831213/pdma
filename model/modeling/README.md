@@ -15,6 +15,10 @@ independent memory capabilities per Function, including identical DMA addresses;
 ordinary shared-memory assembly remains available. This does not implement PCIe,
 PASID or IOMMU translation.
 
+The agreed next-slice [context contract](docs/context-contract.md) records software
+obligations, context selection and lifecycle guarantees as input to the eventual
+RTL specification. It is not implemented functionality or a released ABI.
+
 Run from this directory:
 
 ```sh

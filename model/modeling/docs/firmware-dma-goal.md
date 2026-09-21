@@ -26,6 +26,12 @@ No FLR implementation or new hardware/firmware interface is added by that decisi
 PF reset and additional cleanup for future context/address-space resources remain
 separate design work.
 
+The 2026-09-21 [context contract](context-contract.md) records the agreed selectors,
+control bootstrap configuration, context lifecycle and software obligations for
+future modeling and RTL. These decisions are not implemented behavior. Its numbered
+software/hardware requirements supersede the previously open selector and
+drain/abort questions here and must be retained in the eventual RTL specification.
+
 ## Implemented preparation: shared drivers and management interrupts
 
 Recorded: 2026-09-17. The two items below are implemented alongside separate Host
@@ -108,9 +114,11 @@ firmware startup, PCIe services, context tables or external reset handshakes.
 - Channels retain their rings, registers, execution state boundaries, faults and
   reset mechanisms. Keep one shared DMA execution pipeline, composed using the
   existing building blocks; do not introduce one engine per Function or channel.
-- Commands select an address-space context using `context_id`. This is a reusable
-  context selector, not the software task identifier. Preserve task ID as a
-  submission/response correlation value, not a hardware lookup-table key.
+- Commands independently select SG-table, source-payload and destination-payload
+  contexts. A channel register selects the context shared by its two DMA rings.
+  Control memory has independent PF-programmed access configuration. These are
+  reusable access bindings, not task identifiers; preserve task ID as a
+  submission/response correlation value. See the [context contract](context-contract.md).
 - Access logic in `hw-components` derives Function identity from the controlled channel
   binding and resolves the selected context to PASID and any required access
   attributes. Lookup must be scoped and authorized; a guessed context ID must not
@@ -245,9 +253,9 @@ and speculative collections of policy generics.
 
 - Context selector width, table capacity, namespace and authorized programming
   interface; exact descriptor and register layouts remain undecided.
-- Whether source and destination select independent contexts, and which contexts
-  command rings, response rings and SG-list reads use. A command's context cannot
-  determine the access needed to fetch that command itself.
+- Target-specific context attributes and Device-memory protection; selector roles,
+  PF control bootstrap and snapshot-based Drain/Abort semantics are now recorded
+  in the [context contract](context-contract.md), not open alternatives.
 - Exact management access permissions, stop/rebind interlocks and ownership of
   local-completion, external-drain and release observations.
 - Asynchronous management events, management reset domain and recovery when

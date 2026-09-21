@@ -64,6 +64,10 @@ The obsolete architecture specification and version plans formerly under
 interface shapes into the rebuild. The workspace README and `docs/reset.md` describe the
 active model; `docs/firmware-dma-goal.md` records the agreed next direction, not
 implemented functionality or an instruction to start it automatically.
+`docs/context-contract.md` records agreed but unimplemented context semantics and
+numbered software/hardware obligations for future RTL specification and tests.
+Preserve those obligations explicitly; do not turn them into hidden harness policy
+or claim that context maintenance already exists in the current model.
 The approved first milestone is `docs/firmware-dma-mvp.md`: validate the `dma`,
 `hw-components`, firmware and concrete runtime boundaries through a real copy
 behind a firmware-configured access window. Production hardware and firmware

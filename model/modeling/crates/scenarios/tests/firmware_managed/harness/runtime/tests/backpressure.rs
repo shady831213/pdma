@@ -13,10 +13,11 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use hardware_interface_schema::{Decode, Encode, SchemaCodecError};
-use pdma_model_contract::{
-    ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus, FunctionId,
-    Ring,
+use pdma_model_contract::control::{
+    ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
 };
+use pdma_model_contract::memory::FunctionId;
+use pdma_model_contract::ring::Ring;
 use pdma_model_host::{Management, RingConfig};
 use pdma_model_software::ring::SoftRingError;
 use std::{future::pending, pin::pin, sync::Arc, time::Duration};
@@ -62,6 +63,8 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
             MemoryAlignment::ONE,
             &ControlRequest {
                 id: 1,
+                context: 0,
+                attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
                 function: function.raw(),
                 opcode: ControlRequestOpcode::AcquireChannel,
                 channel: 0,
@@ -90,6 +93,8 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
             MemoryAlignment::ONE,
             &ControlRequest {
                 id: 2,
+                context: 0,
+                attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
                 function: function.raw(),
                 opcode: ControlRequestOpcode::ReleaseChannel,
                 channel: 0,
@@ -144,7 +149,7 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
         memory.write(
             MemoryAddress::new(storage.command.entry(0)?),
             MemoryAlignment::ONE,
-            &[1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0],
+            &[1, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0],
         )?;
     }
     let queue = QueueMemory::new(&memory, storage.state);
@@ -171,7 +176,7 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
         assert!(matches!(
             result,
             Err(RunError::Firmware(pdma_model_firmware::Error::SoftRing(
-                SoftRingError::Codec(SchemaCodecError::UnknownTag { observed: 3, .. })
+                SoftRingError::Codec(SchemaCodecError::UnknownTag { observed: 255, .. })
             )))
         ));
     }

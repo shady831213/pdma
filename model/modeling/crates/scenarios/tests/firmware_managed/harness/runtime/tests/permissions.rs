@@ -1,8 +1,7 @@
 use super::{client, control::rings, *};
 use hardware_interface_runtime::{MemoryAddress, SharedMemoryAllocator};
-use pdma_model_contract::{
-    ChannelAdmin, ChannelId, DmaControl, DmaDiscovery, DmaRegisters, FunctionId,
-};
+use pdma_model_contract::dma::{ChannelAdmin, ChannelId, DmaControl, DmaDiscovery, DmaRegisters};
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Management;
 use std::time::Duration;
 
@@ -26,11 +25,11 @@ async fn granting_data_never_exposes_global_or_channel_administration() {
             .unwrap();
         // When: a granted Host attempts every administrative reset and global control.
         for offset in [
-            (pdma_model_contract::DmaDiscovery::EXTENT
-                + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                 + DmaControl::RESET.offset(),
-            (pdma_model_contract::DmaDiscovery::EXTENT
-                + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                 + DmaControl::IRQ_ENABLE.offset(),
             id.admin_offset(2).unwrap() + ChannelAdmin::RESET.offset(),
             ChannelId::new(1).admin_offset(2).unwrap() + ChannelAdmin::RESET.offset(),

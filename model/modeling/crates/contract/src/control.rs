@@ -1,36 +1,42 @@
-use crate::{Address, Switch};
-use hardware_interface_schema::{record_schema, register_map, register_schema};
+use crate::memory::ContextAttributes;
+use hardware_interface_schema::record_schema;
 
 record_schema! {
     #[short_description = "Firmware control request"]
-    #[description = "PF-produced 24-byte little-endian request, eight-byte aligned. The privileged management ingress authorizes the explicit target Function. DMA hardware never fetches these records."]
+    #[description = "PF-produced 32-byte little-endian request, eight-byte aligned. The privileged management ingress authorizes the explicit target Function. DMA hardware never fetches these records."]
     pub record ControlRequest {
         alignment: 8, endian: Little,
         fields: {
             #[description = "Host-selected request identifier echoed unchanged in the response."]
             id: u64,
-            #[description = "0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel resets and frees the selected channel. 2: ResetChannel resets the selected channel while retaining its allocation. Other values are invalid."]
-            opcode: enum(u32) { variants: { AcquireChannel = 0, ReleaseChannel = 1, ResetChannel = 2 } },
+            #[description = "0: AcquireChannel. 1: ReleaseChannel. 2: ResetChannel. 3: CreateContext. 4: DrainContext. 5: AbortContext. 6: DestroyContext. Other values are invalid. Context maintenance requires the documented submitter exclusion and publication ordering."]
+            opcode: enum(u32) { variants: { AcquireChannel = 0, ReleaseChannel = 1, ResetChannel = 2, CreateContext = 3, DrainContext = 4, AbortContext = 5, DestroyContext = 6 } },
             #[description = "Target Function in the platform-configured namespace. Only the PF management ingress may submit requests; this field is not the MMIO requester's identity."]
             function: u32,
             #[description = "DMA channel index for release or reset; ignored for acquisition."]
             channel: u32,
+            #[description = "Independent context selector for Drain, Abort and Destroy; ignored by Create and channel operations."]
+            context: u32,
+            #[description = "Address-space attributes for CreateContext; ignored by other requests."]
+            attributes: ContextAttributes,
         },
     }
 }
 
 record_schema! {
     #[short_description = "Firmware control response"]
-    #[description = "Firmware-produced 16-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware stores only bootstrap registers and does not implement channel allocation policy."]
+    #[description = "Firmware-produced 24-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware does not implement allocation policy."]
     pub record ControlResponse {
         alignment: 8, endian: Little,
         fields: {
             #[description = "Identifier copied unchanged from the corresponding control request."]
             id: u64,
-            #[description = "0: Success. 1: NoResources. 2: InvalidChannel. 3: NotAllocated. 4: PermissionDenied, channel does not belong to the target Function. 5: InvalidFunction, target is outside the configured namespace. Other values are invalid."]
-            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, PermissionDenied = 4, InvalidFunction = 5 } },
-            #[description = "Allocated channel on successful acquisition, or the selected channel for release/reset responses. Undefined for failed acquisition."]
+            #[description = "Success, resource/ownership errors, or context maintenance outcome. ContextBusy and MaintenanceFailed preserve the binding and never authorize memory reuse. InvalidAttributes rejects undefined Default/PASID combinations."]
+            status: enum(u32) { variants: { Success = 0, NoResources = 1, InvalidChannel = 2, NotAllocated = 3, PermissionDenied = 4, InvalidFunction = 5, ContextBusy = 6, InvalidContext = 7, MaintenanceFailed = 8, InvalidAttributes = 9 } },
+            #[description = "Allocated or selected channel for channel operations. Context maintenance failure identifies the first failed channel as a diagnostic, or UINT32_MAX when none applies; firmware can inspect the complete hardware failure bitmap."]
             channel: u32,
+            #[description = "Created or selected context ID, independently of any recovery channel."]
+            context: u32,
         },
     }
 }
@@ -64,35 +70,5 @@ record_schema! {
             #[description = "Firmware-produced and Host-consumed control responses."]
             response: ControlRingState,
         },
-    }
-}
-
-register_schema! {
-    #[short_description = "Coalescing notification doorbell"]
-    #[description = "Writing one emits a coalescing pulse; writing zero has no effect. The stored value returns to zero after every accepted write. Reads are forbidden and bits 1 through 31 are reserved."]
-    pub register Doorbell {
-        width: 4, endian: Little, access: WriteOnly, reset: Zero(0), writable_mask: 1,
-        fields: {
-            #[description = "Write one to notify the peer software domain."]
-            pulse: 0..=0,
-        },
-    }
-}
-
-register_map! {
-    #[short_description = "Independent firmware control channel"]
-    #[description = "Always-on bootstrap and software notification registers outside DMA work windows. Hardware performs no memory operations, ring validation or channel allocation."]
-    pub map ControlRegisters {
-        alignment: 8,
-        placements: [
-            #[description = "Host-owned address of the memory-resident ControlQueue. Both domains may read it. Changes are locked after activation; address zero has no special hardware meaning."]
-            pub bootstrap: Address,
-            #[description = "Host writes one after initializing queue memory. Both domains may read activation. Disabling and bootstrap changes are forbidden after activation; there is no live reset register."]
-            pub enable: Switch,
-            #[description = "Host-only notification to firmware after publishing requests or freeing response space."]
-            pub request: Doorbell,
-            #[description = "Firmware-only notification to Host after publishing responses or freeing command space."]
-            pub response: Doorbell,
-        ],
     }
 }

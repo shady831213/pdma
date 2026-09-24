@@ -4,19 +4,19 @@
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
 use pdma_model_dma::{Dma, Error, Fault};
 use support::{TestResult, command, read_word, run, setup, submit};
 
-const COMMAND: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::COMMAND.offset();
-const RESPONSE: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::RESPONSE.offset();
-const CHANNEL: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::CONTROL.offset();
+const COMMAND: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::COMMAND.offset();
+const RESPONSE: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset();
+const CHANNEL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::CONTROL.offset();
 const ENABLE: usize = CHANNEL + ChannelRegisters::ENABLE.offset();
 const IRQ_ENABLE: usize = CHANNEL + ChannelRegisters::IRQ_ENABLE.offset();
 const FAULT: usize = CHANNEL + ChannelRegisters::FAULT.offset();
@@ -235,7 +235,7 @@ fn rings_reuse_slots_in_order_after_wrap() -> TestResult {
             MemoryAddress::new(0x1000 + slot * u64::try_from(Command::RECORD_SIZE)?),
             MemoryAlignment::ONE,
             &Command {
-                flags: pdma_model_contract::CompletionFlagsValues::default(),
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: u64::from(cursor),
                 ..command()
             }

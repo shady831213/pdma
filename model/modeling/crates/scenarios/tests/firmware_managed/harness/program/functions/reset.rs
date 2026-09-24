@@ -1,7 +1,7 @@
 //! Software programs coordinating an active channel reset with peer DMA.
 use super::super::{Ports, TestResult, buffers};
 use super::Grant;
-use pdma_model_contract::Response;
+use pdma_model_contract::dma::Response;
 use tokio::sync::oneshot;
 
 pub(in crate::harness) struct ResetSignals {

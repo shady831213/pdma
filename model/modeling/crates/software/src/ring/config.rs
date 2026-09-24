@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 use hardware_interface_schema::RecordLayout;
-use pdma_model_contract::{Ring, RingError};
+use pdma_model_contract::ring::{Ring, RingError};
 
 /// Validated storage configuration selected by software, with no cursor state.
 #[derive(Clone, Copy, Debug)]

@@ -1,7 +1,7 @@
 use crate::{Channel, Dma};
 use hardware_interface_schema::{RegisterBankError, RegisterWindow};
-use pdma_model_contract::{
-    ChannelCountValues, ChannelId, DmaAdmin, DmaControl, DmaDiscovery, DmaRegisters,
+use pdma_model_contract::dma::{
+    ChannelCountValues, DmaAccess, DmaAdmin, DmaControl, DmaDiscovery, DmaRegisters,
 };
 use std::{collections::TryReserveError, fmt};
 
@@ -35,7 +35,7 @@ impl<M, S> Dma<M, S> {
     pub fn with_sideband(
         memory: M,
         channel_count: usize,
-        sideband: fn(ChannelId) -> S,
+        sideband: fn(DmaAccess) -> S,
     ) -> Result<Self, BuildError> {
         let count = u32::try_from(channel_count).map_err(|_| BuildError::AddressSpace)?;
         let layout = DmaRegisters::new(channel_count).map_err(BuildError::Layout)?;
@@ -58,6 +58,7 @@ impl<M, S> Dma<M, S> {
             control,
             interrupt: false,
             active: None,
+            maintenance: None,
         })
     }
 }

@@ -1,6 +1,6 @@
 //! Administration must precede channel data apertures.
 
-use pdma_model_contract::DmaRegisters;
+use pdma_model_contract::dma::DmaRegisters;
 
 #[test]
 fn all_channel_administration_precedes_data() {

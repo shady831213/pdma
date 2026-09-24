@@ -1,6 +1,7 @@
 //! PDMA channel driver and register-only control.
 
 mod bus;
+mod context;
 mod control;
 mod driver_control;
 mod error;
@@ -12,10 +13,11 @@ mod rings;
 use crate::ring::RingConfig;
 use bus::RegisterPort;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Response,
-    ResponseRegisters, Ring,
+    ResponseRegisters,
 };
+use pdma_model_contract::ring::Ring;
 use rings::{CommandRing, ResponseRing};
 
 const COMMAND: usize = ChannelBlock::COMMAND.offset();

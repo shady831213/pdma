@@ -1,5 +1,7 @@
 //! Scoped platform assembly and scheduling for managed system cases.
 
+#[doc = "Context-capable scenario platform assembly."]
+pub mod contexts;
 pub mod functions;
 pub mod multi;
 pub mod program;

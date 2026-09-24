@@ -9,7 +9,7 @@ pub use validate::{CheckLengths, LengthCheck};
 
 use cursor::Cursor;
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::{Command, Response, ResponseStatus};
+use pdma_model_contract::dma::{Command, Response, ResponseStatus};
 
 /// Scratch space per copy interaction, not a protocol transfer-length limit.
 pub const COPY_CHUNK_BYTES: usize = 256;

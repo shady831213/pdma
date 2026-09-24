@@ -11,6 +11,8 @@ use super::{AccessError, Managed};
 mod backpressure;
 mod boot;
 mod client;
+mod configuration;
+mod contexts;
 mod control;
 mod function_backpressure;
 mod function_dma;
@@ -80,7 +82,7 @@ async fn firmware_ready_does_not_grant_dma_access() {
             assert!(matches!(
                 host.bus
                     .read(
-                        u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                        u32::try_from(pdma_model_contract::dma::ChannelBlock::ALIGNMENT).unwrap(),
                         &mut word
                     )
                     .await,

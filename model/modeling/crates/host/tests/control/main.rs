@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DmaControl,
     DmaFaultCode, Endpoint, Response,
 };
@@ -81,7 +81,7 @@ async fn setup_preserves_the_device_interrupt_mask() -> Result<(), Box<dyn std::
             model.clone(),
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -91,8 +91,8 @@ async fn setup_preserves_the_device_interrupt_mask() -> Result<(), Box<dyn std::
     model
         .read(
             u32::try_from(
-                (pdma_model_contract::DmaDiscovery::EXTENT
-                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                    + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                     + DmaControl::IRQ_ENABLE.offset(),
             )?,
             &mut bytes,
@@ -115,7 +115,7 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
             model.clone(),
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -123,11 +123,11 @@ async fn software_explicitly_enables_device_and_channel_interrupts()
     cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
     // Then: both independent interrupt gates are enabled.
     for offset in [
-        (pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::CONTROL.offset())
+        (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
             + ChannelRegisters::IRQ_ENABLE.offset(),
-        (pdma_model_contract::DmaDiscovery::EXTENT
-            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        (pdma_model_contract::dma::DmaDiscovery::EXTENT
+            + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
             + DmaControl::IRQ_ENABLE.offset(),
     ] {
         let mut bytes = [0; 4];
@@ -150,7 +150,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
             model.clone(),
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -158,6 +158,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::new(3)))
         .await?;
     cpu.run_main(channel.submit(Command {
+        sg_context: 0,
         flags: CompletionFlagsValues { ioc: true },
         id: 7,
         source: Endpoint::linear(0, 0),
@@ -197,7 +198,7 @@ async fn dma_fault_is_visible_after_unmask_without_replaying_notification()
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -224,7 +225,7 @@ async fn dma_fault_is_visible_after_unmask_without_replaying_notification()
             model,
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))

@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{Command, Endpoint, Response, ResponseStatus, Segment};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::{error::Error, sync::Arc};
@@ -75,13 +75,14 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 31,
         source,
         destination,
@@ -132,7 +133,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     assert_eq!(
         cpu.run_main(channel.response()).await?,
         Some(Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 31,
             status: ResponseStatus::Success,
             bytes_completed: 8,

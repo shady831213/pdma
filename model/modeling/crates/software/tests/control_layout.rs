@@ -3,7 +3,8 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAccess,
 };
-use pdma_model_contract::{ControlQueue, ControlRingState, RingError};
+use pdma_model_contract::control::{ControlQueue, ControlRingState};
+use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::SoftRingIo;
 use std::sync::Arc;
 

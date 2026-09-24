@@ -5,7 +5,7 @@ pub mod header;
 
 use std::{error::Error, ffi::OsStr, fs, io, path::PathBuf};
 
-const HELP: &str = "Usage: pdma-abi-header --channels COUNT (--write-dir DIR | --check-dir DIR)\n\
+const HELP: &str = "Usage: pdma-abi-header --channels COUNT [--contexts COUNT] (--write-dir DIR | --check-dir DIR)\n\
     pdma-abi-header --help\n\
     Generates pdma_common.h, pdma_host.h and pdma_firmware.h.\n\
     --write-dir DIR  Replace all three generated headers.\n\
@@ -27,7 +27,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         .and_then(|arg| arg.into_string().ok())
         .and_then(|arg| arg.parse::<usize>().ok())
         .ok_or_else(invalid)?;
-    let action = args.next().ok_or_else(invalid)?;
+    let mut action = args.next().ok_or_else(invalid)?;
+    let contexts = if action == OsStr::new("--contexts") {
+        let contexts = args
+            .next()
+            .and_then(|arg| arg.into_string().ok())
+            .and_then(|arg| arg.parse::<usize>().ok())
+            .ok_or_else(invalid)?;
+        action = args.next().ok_or_else(invalid)?;
+        contexts
+    } else {
+        count
+    };
     let check = match action.to_str() {
         Some("--write-dir") => false,
         Some("--check-dir") => true,
@@ -37,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if args.next().is_some() {
         return Err(invalid().into());
     }
-    let headers = header::generate(count)?;
+    let headers = header::generate_with_contexts(count, contexts)?;
     if !check {
         fs::create_dir_all(&directory)?;
     }

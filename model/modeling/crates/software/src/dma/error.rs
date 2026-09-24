@@ -1,7 +1,8 @@
 use crate::ring::SoftRingError;
 use hardware_interface_runtime::MemoryAccessError;
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
-use pdma_model_contract::{ChannelId, RingError};
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::ring::RingError;
 use std::{error::Error as StdError, fmt};
 
 /// Software ring operation failure retaining its boundary cause.

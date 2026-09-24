@@ -1,12 +1,15 @@
 //! Generated PDMA wire-codec behavior.
 
 use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::{Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{
+    Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus,
+};
 
 #[test]
 fn command_round_trips_when_encoded_with_little_endian_padding() -> Result<(), SchemaCodecError> {
     // Given: a command with distinguishable fields.
     let command = Command {
+        sg_context: 0,
         flags: CompletionFlagsValues { ioc: true },
         id: 0x0102_0304_0506_0708,
         source: Endpoint::linear(0x1112_1314_1516_1718, 0x3132_3334_3536_3738),

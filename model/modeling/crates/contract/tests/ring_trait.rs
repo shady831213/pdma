@@ -1,6 +1,7 @@
 //! Downstream rings supply their own state and reuse the contract algorithms.
 
-use pdma_model_contract::{Command, CommandRegistersValues, Ring, RingError, RingPointers};
+use pdma_model_contract::dma::{Command, CommandRegistersValues};
+use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 
 struct RegisterRing {
     registers: CommandRegistersValues,
@@ -39,8 +40,8 @@ fn default_algorithms_use_current_registers_without_publishing_pointers() -> Res
     let mut ring = RegisterRing {
         registers: CommandRegistersValues::default(),
     };
-    ring.registers.base = pdma_model_contract::AddressValues::new(0x1000);
-    ring.registers.capacity = pdma_model_contract::WordValues::new(2);
+    ring.registers.base = pdma_model_contract::register::AddressValues::new(0x1000);
+    ring.registers.capacity = pdma_model_contract::register::WordValues::new(2);
     let pointers = RingPointers {
         producer: 1,
         consumer: 0,
@@ -48,7 +49,7 @@ fn default_algorithms_use_current_registers_without_publishing_pointers() -> Res
     // When: the same ring changes its own configuration between calculations.
     let first = ring.entry(3)?;
     let next = ring.advance_producer(pointers, 1)?;
-    ring.registers.base = pdma_model_contract::AddressValues::new(0x2000);
+    ring.registers.base = pdma_model_contract::register::AddressValues::new(0x2000);
     let second = ring.entry(3)?;
     // Then: addresses follow the owner; calculating a cursor does not publish it.
     assert_eq!((first, second), (0x1040, 0x2040));
@@ -69,7 +70,7 @@ fn snapshot_validation_checks_wrapping_occupancy_without_publication() {
     let mut ring = RegisterRing {
         registers: CommandRegistersValues::default(),
     };
-    ring.registers.capacity = pdma_model_contract::WordValues::new(2);
+    ring.registers.capacity = pdma_model_contract::register::WordValues::new(2);
     for (producer, consumer, valid) in [
         (0, 0, true),
         (2, 0, true),

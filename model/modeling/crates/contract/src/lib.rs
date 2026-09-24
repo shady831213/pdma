@@ -1,17 +1,16 @@
-//! Minimal PDMA wire records and register layout.
+//! PDMA contracts grouped by their owning hardware or software interface.
 
-mod control;
-mod dma;
-mod management;
-mod record;
-mod register;
-mod ring;
-mod view;
-
-pub use control::*;
-pub use dma::*;
-pub use management::*;
-pub use record::*;
-pub use register::*;
-pub use ring::{Ring, RingError, RingPointers};
-pub use view::RegisterView;
+#[doc = "Host-to-firmware software management messages and memory-resident queues."]
+pub mod control;
+#[doc = "DMA register, descriptor and outgoing memory-selector contracts."]
+pub mod dma;
+#[doc = "Peripheral hardware interfaces, independent of the DMA core."]
+pub mod hw_components;
+#[doc = "Resolved Function and address-space identities carried downstream of hardware lookup."]
+pub mod memory;
+#[doc = "Register primitives reused by concrete PDMA hardware maps."]
+pub mod register;
+#[doc = "Shared PDMA ring geometry and cursor protocol."]
+pub mod ring;
+#[doc = "Host and firmware register-access projections for contract export."]
+pub mod view;

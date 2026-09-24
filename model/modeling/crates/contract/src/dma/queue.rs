@@ -1,4 +1,4 @@
-use crate::{Address, ReadWord, Word};
+use crate::register::{Address, ReadWord, Word};
 use hardware_interface_schema::register_map;
 
 register_map! {

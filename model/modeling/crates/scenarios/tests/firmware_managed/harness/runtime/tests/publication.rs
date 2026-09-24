@@ -9,9 +9,10 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use hardware_interface_schema::Encode;
-use pdma_model_contract::{
-    ControlRegisters, ControlResponse, ControlResponseStatus, FunctionId, Ring,
-};
+use pdma_model_contract::control::{ControlResponse, ControlResponseStatus};
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::memory::FunctionId;
+use pdma_model_contract::ring::Ring;
 use pdma_model_host::{Management, firmware};
 use std::{
     future::{Future, pending, poll_fn},
@@ -127,6 +128,7 @@ async fn cancellation_case(response_ack: bool, moment: Moment) -> TestResult {
         if response_ack {
             let replacement = ControlResponse {
                 id: 99,
+                context: 0,
                 status: ControlResponseStatus::NoResources,
                 channel: 7,
             };

@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAlignment, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::{Endpoint, Segment};
+use pdma_model_contract::dma::{Endpoint, Segment};
 use std::{error::Error, io};
 
 use super::BufferLayout;

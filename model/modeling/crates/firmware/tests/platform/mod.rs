@@ -6,4 +6,5 @@ pub const ADDRESSES: ManagementAddresses = ManagementAddresses {
     windows: 0x2000,
     control: 0x3000,
     firmware: 0x4000,
+    contexts: None,
 };

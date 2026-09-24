@@ -4,7 +4,7 @@ use super::support::{TestResult, configure, word};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use observed::Observed;
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, Command, CommandRegisters, CompletionFlagsValues, DmaControl,
     Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
 };
@@ -60,6 +60,7 @@ fn setup() -> TestResult<Dma<Observed>> {
     publish(
         &mut device,
         Command {
+            sg_context: 0,
             id: 7,
             flags: CompletionFlagsValues { ioc: true },
             source: Endpoint::scatter_gather(0x1800, 2),
@@ -76,7 +77,7 @@ fn publish(device: &mut Dma<Observed>, command: Command) -> TestResult {
         &command.to_bytes()?,
     )?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &1_u32.to_le_bytes(),
@@ -105,8 +106,8 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
     ] {
         for reset in [
             ChannelId::new(0).admin_offset(1).ok_or("offset")?,
-            (pdma_model_contract::DmaDiscovery::EXTENT
-                + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                 + DmaControl::RESET.offset(),
         ] {
             // Given: an SG command paused at an observed list, payload or publication boundary.
@@ -150,7 +151,7 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             // Then: no old memory access resumes, and fresh work still completes once.
             assert_eq!(device.memory.interactions.get(), accesses);
             assert_eq!(snapshot(&device, 0x1400)?, before);
-            let producer = pdma_model_contract::ChannelBlock::ALIGNMENT
+            let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset();
             assert_eq!(word(&mut device, producer)?, 0);
@@ -159,6 +160,7 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             publish(
                 &mut device,
                 Command {
+                    sg_context: 0,
                     id: 99,
                     flags: CompletionFlagsValues::default(),
                     source: Endpoint::linear(0x1200, 512),

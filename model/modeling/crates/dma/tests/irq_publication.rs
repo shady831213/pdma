@@ -3,12 +3,12 @@
 pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{Response, ResponseRegisters, ResponseStatus};
+use pdma_model_contract::dma::{Response, ResponseRegisters, ResponseStatus};
 use pdma_model_dma::Dma;
 use pdma_model_dma::Pipeline;
 use support::{TestResult, command, read_word, setup, submit};
-const RESPONSE_PRODUCER: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+const RESPONSE_PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
     + ResponseRegisters::PRODUCER.offset();
 
 #[test]
@@ -33,7 +33,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
             assert_eq!(
                 Response::from_bytes(&bytes)?,
                 Response {
-                    flags: pdma_model_contract::CompletionFlagsValues::default(),
+                    flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                     id: 7,
                     status: ResponseStatus::Success,
                     bytes_completed: 4,

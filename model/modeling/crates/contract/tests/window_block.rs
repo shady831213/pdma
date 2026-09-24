@@ -1,7 +1,8 @@
 //! Both software views derive from one repeated permission block.
 
 use hardware_interface_schema::Access;
-use pdma_model_contract::{ChannelWindowRegisters, RegisterView};
+use pdma_model_contract::hw_components::windows::ChannelWindowRegisters;
+use pdma_model_contract::view::RegisterView;
 
 #[test]
 fn role_views_preserve_the_complete_channel_window_geometry()

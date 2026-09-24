@@ -6,8 +6,8 @@ use std::{any::type_name, collections::BTreeSet, error::Error, process::Command}
 fn ring_protocol_types_are_defined_by_pdma_contract() {
     // Given: the protocol types exposed to software and hardware through contract.
     let owners = [
-        type_name::<pdma_model_contract::RingError>(),
-        type_name::<pdma_model_contract::RingPointers>(),
+        type_name::<pdma_model_contract::ring::RingError>(),
+        type_name::<pdma_model_contract::ring::RingPointers>(),
     ];
     // When: their defining Rust crate is inspected, including through reexports.
     // Then: ownership is PDMA-specific, not hidden in a framework facade.

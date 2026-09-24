@@ -1,12 +1,13 @@
 //! Bounded management submissions use real memory rings and retained CPU-local state.
 
 mod cancellation;
+mod contexts;
 mod memory_failure;
 mod reset;
 pub mod support;
 
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::FunctionId;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::ring::SoftRing;
 use support::{Fixture, response};
@@ -136,7 +137,10 @@ async fn wrong_release_channel_is_never_consumed() {
             // Given: a release response that names another channel.
             let mut client = fixture.setup().await.unwrap();
             let id = client
-                .submit_release(FunctionId::new(0), pdma_model_contract::ChannelId::new(1))
+                .submit_release(
+                    FunctionId::new(0),
+                    pdma_model_contract::dma::ChannelId::new(1),
+                )
                 .await
                 .unwrap();
             let mut responses = SoftRing::new(fixture.rings.response);

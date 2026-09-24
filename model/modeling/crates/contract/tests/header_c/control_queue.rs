@@ -1,4 +1,4 @@
-use pdma_model_contract::{
+use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
     ControlRingState,
 };
@@ -33,6 +33,8 @@ fn rust_control_records_match_c_consumer_fixtures() -> super::TestResult {
     // When: the Rust contract encodes the same records used by the C consumer.
     let control_records = [
         ControlRequest {
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             id: 0x0807_0605_0403_0201,
             function: 7,
             opcode: ControlRequestOpcode::ReleaseChannel,
@@ -41,6 +43,8 @@ fn rust_control_records_match_c_consumer_fixtures() -> super::TestResult {
         .to_bytes()?
         .to_vec(),
         ControlRequest {
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             id: 9,
             function: 2,
             opcode: ControlRequestOpcode::AcquireChannel,
@@ -49,6 +53,7 @@ fn rust_control_records_match_c_consumer_fixtures() -> super::TestResult {
         .to_bytes()?
         .to_vec(),
         ControlResponse {
+            context: 0,
             id: 9,
             status: ControlResponseStatus::Success,
             channel: 2,
@@ -56,6 +61,7 @@ fn rust_control_records_match_c_consumer_fixtures() -> super::TestResult {
         .to_bytes()?
         .to_vec(),
         ControlResponse {
+            context: 0,
             id: 0x0807_0605_0403_0201,
             status: ControlResponseStatus::NotAllocated,
             channel: 0x1020_3040,

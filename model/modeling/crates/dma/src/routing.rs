@@ -1,7 +1,7 @@
 use crate::{ChannelTask, Dma, Error, Publish, Resettable, UpdateIrq};
 use hardware_interface_pipeline::{AfterEach, Route};
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::Response;
+use pdma_model_contract::dma::Response;
 
 /// A response destination bound to one channel and guarded by its reset generation.
 pub type ResponsePort = Resettable<AfterEach<Publish, UpdateIrq>>;

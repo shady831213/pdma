@@ -10,12 +10,17 @@ The ordinary direct-DMA assembly remains independent of firmware and Functions.
 ## Ownership boundaries
 
 - `contract` defines `FunctionId`, the owner register, one control-register
-  block, explicit request targets and typed invalid-target/ownership responses. DMA commands are unchanged.
-- `hw-components::ChannelWindows` owns the channel permission registers. Firmware
-  programs their owner and open bit; `for_function` enforces the requester identity
-  on each complete transaction. Discovery is public. Administration is never
+  block, explicit request targets and typed invalid-target/ownership responses.
+  Context-enabled DMA commands select bindings, never a Function identity.
+- Each `hw-components::windows::ChannelWindow` owns its permission registers. Firmware
+  programs its owner and open bit; `read_for`/`write_for` enforce the live owner
+  before readiness, open-state and transaction-bound checks. `ChannelWindows`
+  holds the windows and routes addresses; `for_function` binds the requester and
+  delegates to the selected window. Discovery is public. Administration is never
   granted by a channel window, and a foreign Function cannot read its readiness.
-- `hw-components::ControlChannel` owns one bootstrap/doorbell block. Its immutable
+  Direct window/bank `read`/`write` are caller-authorized access paths; Function-bound
+  Host ingress uses `for_function`, without caching owner or permission decisions.
+- `hw-components::control::ControlChannel` owns one bootstrap/doorbell block. Its immutable
   manager identity is supplied at platform assembly. Only this PF may read or write
   the Host-facing block. Firmware accesses the opposite view. No ring memory lives
   in hardware.
@@ -24,10 +29,11 @@ The ordinary direct-DMA assembly remains independent of firmware and Functions.
   A request target never changes the actual requester's work-MMIO identity.
 - DMA reports channel-specific pulses and a separate device-wide source. It
   neither knows Function identity nor stores software handlers.
-- Generic `MemoryAccess<S = ()>` carries explicit metadata. Managed DMA emits
-  ChannelId; `hw-components::ChannelMemoryAccess` borrows the authoritative
-  `ChannelWindows` bank, resolves its owner registers and forwards FunctionId
-  to the runtime's memory-space adapter.
+- Generic `MemoryAccess<S = ()>` carries explicit metadata. DMA emits channel/context
+  selectors. Without a context table, `hw-components::windows::ChannelMemoryAccess` borrows
+  the authoritative `ChannelWindows` bank and forwards FunctionId. The optional
+  context table additionally validates binding ownership and resolves Default/PASID
+  attributes into `MemoryIdentity` for the runtime's memory-space adapter.
   MMIO, interrupt routing and DMA memory use that same ownership bank. Ordinary
   unit-sideband backends keep their existing read/write call signatures.
 - The scenario platform supplies private Function-bound Host bus capabilities,
@@ -68,13 +74,17 @@ device-fatal recovery is not extended by this slice.
 Owner is a firmware-only 32-bit Function identity; reset value zero supports the
 single-Host configuration. Both static header views retain the complete layout.
 
-`ControlRegisters` has a 20-byte extent and eight-byte alignment, at a
+`ControlRegisters` has a 28-byte extent and eight-byte alignment, at a
 platform-selected base. There is no Function control bank or exported control stride.
 All Host ports may know its address; hardware accepts only the configured PF.
 Firmware's Function count describes valid targets, not control endpoints.
 
-A request is 24 bytes: ID at 0, opcode at 8, target Function at 12, channel at 16,
-then reserved alignment padding. Responses remain 16 bytes and correlate by ID.
+A request is 32 bytes: ID at 0, opcode at 8, target Function at 12, channel at 16,
+context at 20, and creation attributes at 24. Responses are 24 bytes: ID at 0,
+status at 8, channel at 12, context at 16, then reserved alignment padding.
+Responses correlate by ID. These layouts come from the current
+[contract schemas](../crates/contract/src/control.rs); the
+[generated header guide](../include/README.md) describes the complete wire views.
 Out-of-range Function targets return `InvalidFunction` before resource side effects.
 
 ## Scope and evidence
@@ -86,7 +96,8 @@ may map identical addresses to different bytes. This is injected-backend isolati
 not PCIe/IOMMU/PASID translation or protection against a malicious integration.
 Malformed ring or bus failures remain subsystem execution errors, not independently
 recoverable Function failures. PCIe integration, PCIe PF/VF provisioning, Function reset,
-FLR, PASID/context tables, event rings and hostile-memory isolation remain future work.
+FLR, event rings and hostile-memory isolation remain future work. Optional PASID
+bindings and context maintenance are specified in [the context contract](context-contract.md).
 
 `firmware_managed/cases/functions.rs` exercises two real IRQ-driven copies and
 reset during a partial transfer while peer DMA completes. Runtime boundary tests
@@ -136,7 +147,7 @@ The managed Function cases cover identical-address IRQ-driven copies and reset
 during a transfer with independent peer memory. Managed runtime memory boundary tests
 cover command/list/payload/response routing, unmapped foreign addresses and reset
 before regrant, absent bindings and closed-window access.
-`hw-components/tests/channel_memory.rs` directly verifies identity translation,
+`hw-components/tests/windows/memory.rs` directly verifies identity translation,
 raw/typed access, closed-window retention, reassignment and error propagation.
 The generic memory API adds explicit sideband raw and typed methods; ordinary methods
 delegate with unit sideband. Non-unit metadata cannot be omitted, even if its type

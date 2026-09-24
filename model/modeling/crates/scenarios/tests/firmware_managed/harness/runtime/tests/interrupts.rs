@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     CpuContextError, CpuLocal, InterruptDispatchError, InterruptEnvelope, InterruptHandler,
     InterruptSource, RegisterAccess, SharedMemory, SharedMemoryAccess,
 };
-use pdma_model_contract::ControlRegisters;
+use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{convert::Infallible, future::pending, pin::pin, sync::Arc};
 

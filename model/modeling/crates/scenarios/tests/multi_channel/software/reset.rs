@@ -1,5 +1,5 @@
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::{ChannelBlock, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, CommandRegisters, ResponseRegisters};
 use std::error::Error;
 
 use super::{Ports, buffers::Buffers, read_word};

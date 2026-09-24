@@ -4,6 +4,272 @@
 #include <stdint.h>
 #include "pdma_common.h"
 /*
+ * Instance-sized firmware-only context table and maintenance aperture. No context slot is reserved for control bootstrap.
+ */
+#define C_FCTX_SIZE UINT64_C(72)
+#define C_FCTX_ACCESS_READ_ONLY UINT32_C(0)
+#define C_FCTX_ACCESS_READ_WRITE UINT32_C(1)
+#define C_FCTX_ACCESS_WRITE_ONLY UINT32_C(2)
+#define C_FCTX_RESET_CONSTANT UINT32_C(0)
+#define C_FCTX_RESET_ZERO UINT32_C(1)
+#define C_FCTX_RESET_POST_RESET UINT32_C(2)
+/*
+ * ContextTableRegisters.management
+ * Firmware maintenance request, result and capacity discovery.
+ */
+/*
+ * ContextTableRegisters.entries[0]
+ * Firmware-allocated context bindings; owner and attributes are immutable while valid.
+ */
+/*
+ * ContextTableRegisters.entries[0].attributes
+ * Extensible address-space configuration resolved before memory access.
+ */
+/*
+ * ContextTableRegisters.entries[1]
+ * Firmware-allocated context bindings; owner and attributes are immutable while valid.
+ */
+/*
+ * ContextTableRegisters.entries[1].attributes
+ * Extensible address-space configuration resolved before memory access.
+ */
+/*
+ * ContextTableRegisters.entries[2]
+ * Firmware-allocated context bindings; owner and attributes are immutable while valid.
+ */
+/*
+ * ContextTableRegisters.entries[2].attributes
+ * Extensible address-space configuration resolved before memory access.
+ */
+/*
+ * ContextTableRegisters.failed[0]
+ * Failed-channel bitmap word
+ * Failure bitmap at the end of the aperture. Channel growth appends words without moving management or context entries; word count is ceil(channel_count/32).
+ */
+
+/*
+ * Context table capacity
+ * Read-only instance-configured number of context entries, not the number of free entries. Valid indices are zero through capacity minus one.
+ */
+#define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_OFFSET UINT64_C(0)
+#define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_ACCESS C_FCTX_ACCESS_READ_ONLY
+#define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUCQUAQUPQUAQUCQUIQUTQUY_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Maintenance request
+ * Firmware submits one context ID and Drain or Abort action in an atomic 64-bit transaction. Reads return zero after acceptance; use result to observe completion.
+ */
+/*
+ * context_id
+ * Context table index, not a PASID or Function identity. Ignored for Idle.
+ */
+/*
+ * action
+ * Drain completes old work normally; Abort discards unstarted target commands. Neither invalidates the table entry. Idle does nothing; encoding three is invalid.
+ */
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_C_ACTION_C_QUIDLE UINT64_C(0)
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_C_ACTION_C_QUDRAIN UINT64_C(1)
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_C_ACTION_C_QUABORT UINT64_C(2)
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_OFFSET UINT64_C(8)
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_WIDTH UINT64_C(8)
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QURQUEQUQQUUQUEQUSQUT_WRITABLE_MASK UINT64_C(17179869183)
+
+/*
+ * Maintenance result
+ * Read-only status of the latest accepted non-Idle request. Success establishes cleanup but leaves valid unchanged. On Failed, read the tail bitmap for all detected failing channels in the operation scope.
+ */
+/*
+ * state
+ * Idle before the first request; Pending while draining; Success only at the cleanup boundary. InvalidContext rejects an absent entry; Busy rejects a conflicting operation or live ring binding; Failed requires recovery, with channel details in the tail bitmap.
+ */
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUIDLE UINT64_C(0)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUPENDING UINT64_C(1)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUSUCCESS UINT64_C(2)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUINVALIDQUCONTEXT UINT64_C(3)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUBUSY UINT64_C(4)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_C_STATE_C_QUFAILED UINT64_C(5)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_OFFSET UINT64_C(16)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_WIDTH UINT64_C(4)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_ACCESS C_FCTX_ACCESS_READ_ONLY
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QURQUEQUSQUUQULQUT_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Read/write word
+ * Function identity authorized to reference this context through its channels.
+ */
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_OFFSET UINT64_C(20)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
+ */
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_OFFSET UINT64_C(24)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
+ */
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_OFFSET UINT64_C(28)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Enable control
+ * Firmware publishes a fully configured entry by setting enabled. Firmware clears it only after successful cleanup with submissions still excluded; hardware never clears it as a maintenance side effect.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_OFFSET UINT64_C(32)
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUVQUAQULQUIQUD__1_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Read/write word
+ * Function identity authorized to reference this context through its channels.
+ */
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_OFFSET UINT64_C(36)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
+ */
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_OFFSET UINT64_C(40)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
+ */
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_OFFSET UINT64_C(44)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Enable control
+ * Firmware publishes a fully configured entry by setting enabled. Firmware clears it only after successful cleanup with submissions still excluded; hardware never clears it as a maintenance side effect.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_OFFSET UINT64_C(48)
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUVQUAQULQUIQUD__2_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Read/write word
+ * Function identity authorized to reference this context through its channels.
+ */
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_OFFSET UINT64_C(52)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUOQUWQUNQUEQUR__3_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
+ */
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_OFFSET UINT64_C(56)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE__3_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Read/write word
+ * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
+ */
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_OFFSET UINT64_C(60)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUPQUAQUSQUIQUD__3_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Enable control
+ * Firmware publishes a fully configured entry by setting enabled. Firmware clears it only after successful cleanup with submissions still excluded; hardware never clears it as a maintenance side effect.
+ */
+/*
+ * enabled
+ * Enabled
+ * Zero disables the function and one enables it. The containing register placement specifies the controlled function and its side effects.
+ */
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_OFFSET UINT64_C(64)
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_ACCESS C_FCTX_ACCESS_READ_WRITE
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUVQUAQULQUIQUD__3_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Read-only word
+ * All detected failed channels in this word at the maintenance failure boundary. Frozen with the result until the next accepted non-Idle request; software cannot clear it.
+ */
+#define C_FCTX_C_QUBQUIQUTQUS_OFFSET UINT64_C(68)
+#define C_FCTX_C_QUBQUIQUTQUS_WIDTH UINT64_C(4)
+#define C_FCTX_C_QUBQUIQUTQUS_ACCESS C_FCTX_ACCESS_READ_ONLY
+#define C_FCTX_C_QUBQUIQUTQUS_RESET_KIND C_FCTX_RESET_ZERO
+#define C_FCTX_C_QUBQUIQUTQUS_RESET_VALUE UINT64_C(0)
+#define C_FCTX_C_QUBQUIQUTQUS_WRITABLE_MASK UINT64_C(0)
+
+#define C_FCTX_C_ENTRIES_INDEX UINT64_C(0)
+#define C_FCTX_C_ENTRIES_BASE UINT64_C(20)
+#define C_FCTX_C_ENTRIES_COUNT UINT64_C(3)
+#define C_FCTX_C_ENTRIES_STRIDE UINT64_C(16)
+
+#define C_FCTX_C_FAILED_INDEX UINT64_C(1)
+#define C_FCTX_C_FAILED_BASE UINT64_C(68)
+#define C_FCTX_C_FAILED_COUNT UINT64_C(1)
+#define C_FCTX_C_FAILED_STRIDE UINT64_C(4)
+
+/*
  * PDMA register apertures
  * Read-only discovery followed by contiguous administration and page-aligned channel data apertures. Layout gaps are reserved, not registers.
  */
@@ -410,6 +676,17 @@
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK UINT64_C(3)
 
 /*
+ * Read/write word
+ * Context shared by command and response ring accesses. Locked with ring geometry until reset completes.
+ */
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_OFFSET UINT64_C(4160)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
  * Command ring base address
  * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
@@ -608,6 +885,17 @@
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_RESET_KIND C_FDMA_RESET_ZERO
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_RESET_VALUE UINT64_C(0)
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_WRITABLE_MASK UINT64_C(3)
+
+/*
+ * Read/write word
+ * Context shared by command and response ring accesses. Locked with ring geometry until reset completes.
+ */
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_OFFSET UINT64_C(8256)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WRITABLE_MASK UINT64_C(4294967295)
 
 /*
  * Command ring base address
@@ -809,6 +1097,17 @@
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_RESET_VALUE UINT64_C(0)
 #define C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_WRITABLE_MASK UINT64_C(3)
 
+/*
+ * Read/write word
+ * Context shared by command and response ring accesses. Locked with ring geometry until reset completes.
+ */
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_OFFSET UINT64_C(12352)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WIDTH UINT64_C(4)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_ACCESS C_FDMA_ACCESS_READ_WRITE
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_KIND C_FDMA_RESET_ZERO
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_VALUE UINT64_C(0)
+#define C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WRITABLE_MASK UINT64_C(4294967295)
+
 #define C_FDMA_C_CHANNELS__1_INDEX UINT64_C(0)
 #define C_FDMA_C_CHANNELS__1_BASE UINT64_C(16)
 #define C_FDMA_C_CHANNELS__1_COUNT UINT64_C(3)
@@ -859,13 +1158,17 @@
  * Independent firmware control channel
  * Always-on bootstrap and software notification registers outside DMA work windows. Hardware performs no memory operations, ring validation or channel allocation.
  */
-#define C_FCTL_SIZE UINT64_C(20)
+#define C_FCTL_SIZE UINT64_C(28)
 #define C_FCTL_ACCESS_READ_ONLY UINT32_C(0)
 #define C_FCTL_ACCESS_READ_WRITE UINT32_C(1)
 #define C_FCTL_ACCESS_WRITE_ONLY UINT32_C(2)
 #define C_FCTL_RESET_CONSTANT UINT32_C(0)
 #define C_FCTL_RESET_ZERO UINT32_C(1)
 #define C_FCTL_RESET_POST_RESET UINT32_C(2)
+/*
+ * ControlRegisters.attributes
+ * PF programs Default/PASID attributes before enable. Frozen with bootstrap after enable and independent of every context table slot.
+ */
 
 /*
  * Memory address
@@ -908,6 +1211,28 @@
 #define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_RESET_KIND C_FCTL_RESET_ZERO
 #define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_RESET_VALUE UINT64_C(0)
 #define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Read/write word
+ * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
+ */
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET UINT64_C(20)
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_WIDTH UINT64_C(4)
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_ACCESS C_FCTL_ACCESS_READ_ONLY
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_RESET_KIND C_FCTL_RESET_ZERO
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_RESET_VALUE UINT64_C(0)
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Read/write word
+ * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
+ */
+#define C_FCTL_C_QUPQUAQUSQUIQUD_OFFSET UINT64_C(24)
+#define C_FCTL_C_QUPQUAQUSQUIQUD_WIDTH UINT64_C(4)
+#define C_FCTL_C_QUPQUAQUSQUIQUD_ACCESS C_FCTL_ACCESS_READ_ONLY
+#define C_FCTL_C_QUPQUAQUSQUIQUD_RESET_KIND C_FCTL_RESET_ZERO
+#define C_FCTL_C_QUPQUAQUSQUIQUD_RESET_VALUE UINT64_C(0)
+#define C_FCTL_C_QUPQUAQUSQUIQUD_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Channel permission windows

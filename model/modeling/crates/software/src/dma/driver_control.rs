@@ -1,7 +1,7 @@
 use super::Channel;
 use super::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelFaultCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaFaultCode,
 };
 

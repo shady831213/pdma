@@ -5,7 +5,7 @@ use hardware_interface_runtime::{
     SoftwareCpu,
 };
 use hardware_interface_schema::RegisterCodecError;
-use pdma_model_contract::ChannelRegisters;
+use pdma_model_contract::dma::ChannelRegisters;
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -21,8 +21,8 @@ impl RegisterAccess for CorruptFaultBus {
         self.0.read(offset, response).await?;
         if usize::try_from(offset).ok()
             == Some(
-                (pdma_model_contract::ChannelBlock::ALIGNMENT
-                    + pdma_model_contract::ChannelBlock::CONTROL.offset())
+                (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                    + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
                     + ChannelRegisters::FAULT.offset(),
             )
         {
@@ -53,7 +53,7 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
             bus,
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         )

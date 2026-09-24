@@ -1,6 +1,8 @@
 use super::support::{Fixture, response};
 use hardware_interface_runtime::SoftwareCpu;
-use pdma_model_contract::{ChannelId, ControlRequestOpcode, FunctionId};
+use pdma_model_contract::control::ControlRequestOpcode;
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::ring::SoftRing;
 

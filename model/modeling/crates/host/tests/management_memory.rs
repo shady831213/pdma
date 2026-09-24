@@ -6,7 +6,9 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRegisters, FunctionId};
+use pdma_model_contract::control::{ControlQueue, ControlQueueRaw};
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig};
 use pdma_model_software::control::InterruptEvent;
 use std::{
@@ -86,6 +88,7 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
                         windows: 0x2000,
                         control: 0x3000,
                         firmware: 0x4000,
+                        contexts: None,
                     },
                     rings: ManagementRings {
                         state,
@@ -103,6 +106,10 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
     assert_eq!(
         *bus.writes.lock().unwrap(),
         [
+            ControlRegisters::ATTRIBUTES.offset()
+                + pdma_model_contract::hw_components::context::ContextAttributeRegisters::ADDRESS_SPACE.offset(),
+            ControlRegisters::ATTRIBUTES.offset()
+                + pdma_model_contract::hw_components::context::ContextAttributeRegisters::PASID.offset(),
             ControlRegisters::BOOTSTRAP.offset(),
             ControlRegisters::ENABLE.offset(),
             ControlRegisters::REQUEST.offset()
@@ -144,6 +151,7 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
                     windows: 0x2000,
                     control: 0x3000,
                     firmware: 0x4000,
+                    contexts: None,
                 },
                 rings: ManagementRings {
                     state,
@@ -170,7 +178,7 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
 #[tokio::test]
 async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
 -> Result<(), Box<dyn std::error::Error>> {
-    use pdma_model_contract::ControlRingState;
+    use pdma_model_contract::control::ControlRingState;
     use pdma_model_host::Error;
     // Given: initialized cursors with unmapped entry storage and no outstanding request.
     let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
@@ -196,6 +204,7 @@ async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
                         windows: 0x2000,
                         control: 0x3000,
                         firmware: 0x4000,
+                        contexts: None,
                     },
                     rings: ManagementRings {
                         state,

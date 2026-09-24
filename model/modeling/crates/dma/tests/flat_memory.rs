@@ -8,7 +8,7 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     MemoryRegionError,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
@@ -133,7 +133,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
     let mut device = Dma::new(FlatMemory::new()?, 1)?;
     let command = Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 91,
         source: Endpoint::linear(256, 4),
         destination: Endpoint::linear(320, 4),
@@ -147,26 +148,26 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         .memory
         .write(MemoryAddress::new(256), MemoryAlignment::ONE, &[8, 6, 7, 5])?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::BASE.offset(),
         &128_u64.to_le_bytes(),
     )?;
     for offset in [
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
             + CommandRegisters::CAPACITY.offset(),
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CAPACITY.offset(),
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
             + ChannelRegisters::IRQ_ENABLE.offset(),
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
             + ChannelRegisters::ENABLE.offset(),
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
@@ -205,7 +206,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     assert_eq!(
         Response::from_bytes(&response)?,
         Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 91,
             status: ResponseStatus::Success,
             bytes_completed: 4,

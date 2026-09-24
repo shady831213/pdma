@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, CommandRegisters, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response, ResponseStatus};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -52,13 +52,14 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 11,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),
@@ -67,8 +68,8 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     let executor = AsyncExecutor::new(model.clone());
     let mut operation = Operation::new(());
     let consumer_offset = u32::try_from(
-        (pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::COMMAND.offset())
+        (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())
             + CommandRegisters::CONSUMER.offset(),
     )?;
 
@@ -92,7 +93,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     assert_eq!(
         cpu.run_main(channel.response()).await?,
         Some(Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 11,
             status: ResponseStatus::Success,
             bytes_completed: 8,

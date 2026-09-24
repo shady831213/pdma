@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::SharedMemory;
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::Dma;
 
 #[test]

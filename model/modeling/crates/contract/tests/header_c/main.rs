@@ -13,10 +13,11 @@ use std::{
 };
 
 use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
-use pdma_model_contract::{
-    Command, CompletionFlagsValues, ControlRegisters, ControlRequest, ControlResponse,
-    DmaRegisters, Endpoint, Response, ResponseStatus, Segment,
+use pdma_model_contract::control::{ControlRequest, ControlResponse};
+use pdma_model_contract::dma::{
+    Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response, ResponseStatus, Segment,
 };
+use pdma_model_contract::hw_components::control::ControlRegisters;
 
 type TestResult = Result<(), Box<dyn Error>>;
 const QUEUE_BYTES: [u8; 48] = [
@@ -26,13 +27,19 @@ const QUEUE_BYTES: [u8; 48] = [
 
 const CONTROL_BYTES: [&[u8]; 4] = [
     &[
-        1, 2, 3, 4, 5, 6, 7, 8, 1, 0, 0, 0, 7, 0, 0, 0, 0x40, 0x30, 0x20, 0x10, 0, 0, 0, 0,
+        1, 2, 3, 4, 5, 6, 7, 8, 1, 0, 0, 0, 7, 0, 0, 0, 0x40, 0x30, 0x20, 0x10, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+    ],
+    &[
+        9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
     ],
     &[
         9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ],
-    &[9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0],
-    &[1, 2, 3, 4, 5, 6, 7, 8, 3, 0, 0, 0, 0x40, 0x30, 0x20, 0x10],
+    &[
+        1, 2, 3, 4, 5, 6, 7, 8, 3, 0, 0, 0, 0x40, 0x30, 0x20, 0x10, 0, 0, 0, 0, 0, 0, 0, 0,
+    ],
 ];
 
 #[test]
@@ -45,8 +52,8 @@ fn generated_header_preserves_resolved_contract_descriptions() -> TestResult {
         Response::SPEC.resolve()?,
         ControlRequest::SPEC.resolve()?,
         ControlResponse::SPEC.resolve()?,
-        pdma_model_contract::ControlRingState::SPEC.resolve()?,
-        pdma_model_contract::ControlQueue::SPEC.resolve()?,
+        pdma_model_contract::control::ControlRingState::SPEC.resolve()?,
+        pdma_model_contract::control::ControlQueue::SPEC.resolve()?,
     ];
     let registers = DmaRegisters::new(3)?.resolve()?;
     let control = ControlRegisters::resolve()?;
@@ -110,9 +117,9 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     // Then: C and Rust both match independently specified little-endian bytes and MMIO addresses.
     assert_success("C consumer", &output);
     let command_bytes = [
-        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
-        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-        0, 0, 0, 0,
+        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 22, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+        33, 0, 0, 0,
     ];
     let response_bytes = [
         7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
@@ -120,15 +127,22 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
     let offsets = [
         0_u32, 4, 8, 12, 16, 20, 24, 4096, 4104, 4108, 4112, 4120, 4128, 4132, 4136, 4140, 4144,
-        4148, 4152, 4156, 8192, 8200, 8204, 8208, 8216, 8224, 8228, 8232, 8236, 8240, 8244, 8248,
-        8252, 12288, 12296, 12300, 12304, 12312, 12320, 12324, 12328, 12332, 12336, 12340, 12344,
-        12348,
+        4148, 4152, 4156, 4160, 8192, 8200, 8204, 8208, 8216, 8224, 8228, 8232, 8236, 8240, 8244,
+        8248, 8252, 8256, 12288, 12296, 12300, 12304, 12312, 12320, 12324, 12328, 12332, 12336,
+        12340, 12344, 12348, 12352,
     ];
     let command = Command {
+        sg_context: 33,
         flags: CompletionFlagsValues { ioc: true },
         id: 7,
-        source: Endpoint::linear(0x100, 8),
-        destination: Endpoint::scatter_gather(0x200, 2),
+        source: Endpoint {
+            context: 11,
+            ..Endpoint::linear(0x100, 8)
+        },
+        destination: Endpoint {
+            context: 22,
+            ..Endpoint::scatter_gather(0x200, 2)
+        },
     };
     let response = Response {
         flags: CompletionFlagsValues { ioc: true },
@@ -153,7 +167,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         rust_offsets,
         offsets.map(|offset| usize::try_from(offset).unwrap())
     );
-    let control_offsets = [0_u8, 8, 12, 16];
+    let control_offsets = [0_u8, 8, 12, 16, 20, 24];
     assert_eq!(
         ControlRegisters::resolve()?
             .registers()

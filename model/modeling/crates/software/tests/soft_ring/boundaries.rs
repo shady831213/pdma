@@ -2,7 +2,7 @@ use crate::Item;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory, SoftwareCpu,
 };
-use pdma_model_contract::RingError;
+use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing, SoftRingError, SoftRingIo};
 
 #[tokio::test]

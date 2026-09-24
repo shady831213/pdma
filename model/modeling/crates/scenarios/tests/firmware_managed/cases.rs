@@ -1,9 +1,10 @@
 use crate::harness::runtime::AccessError;
 use crate::harness::{self, Input, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::{CompletionFlagsValues, Response, ResponseStatus};
+use pdma_model_contract::dma::{CompletionFlagsValues, Response, ResponseStatus};
 use std::sync::Arc;
 
+mod contexts;
 mod functions;
 mod multi;
 
@@ -15,6 +16,7 @@ async fn relocated_platform_runs_the_same_host_and_firmware_programs() -> TestRe
         windows: 0x5000,
         control: 0x100,
         firmware: 0x7000,
+        contexts: None,
     };
     let payload = b"relocated-dma";
     // When: the ordinary software programs run on that placement.

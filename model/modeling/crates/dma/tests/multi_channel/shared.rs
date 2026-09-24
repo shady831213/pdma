@@ -3,7 +3,7 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
 use pdma_model_dma::Dma;
 
 #[test]

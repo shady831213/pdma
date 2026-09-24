@@ -1,9 +1,9 @@
 use super::{acquire, support::*};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{
-    ChannelId, ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponseStatus,
-    ControlRingState,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponseStatus, ControlRingState,
 };
+use pdma_model_contract::dma::ChannelId;
 
 #[tokio::test]
 async fn reset_retains_allocation_and_reopens_only_after_hardware_completion() -> TestResult {
@@ -18,6 +18,8 @@ async fn reset_retains_allocation_and_reopens_only_after_hardware_completion() -
     publish(
         &memory,
         ControlRequest {
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             id: 2,
             function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,

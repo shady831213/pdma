@@ -1,3 +1,4 @@
+mod contexts;
 mod pending;
 mod responses;
 mod setup;
@@ -5,10 +6,11 @@ mod transport;
 
 use crate::{Error, RingConfig};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, RegisterAccess};
-use pdma_model_contract::{
-    ChannelId, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
-    FunctionId,
+use pdma_model_contract::control::{
+    ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
 };
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_software::control::{ControlQueueLayout, InterruptEvent, ManagementAddresses};
 use pdma_model_software::ring::SoftRing;
 
@@ -93,7 +95,11 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             | ControlResponseStatus::InvalidChannel
             | ControlResponseStatus::NotAllocated
             | ControlResponseStatus::PermissionDenied
-            | ControlResponseStatus::InvalidFunction) => {
+            | ControlResponseStatus::InvalidFunction
+            | ControlResponseStatus::ContextBusy
+            | ControlResponseStatus::InvalidContext
+            | ControlResponseStatus::MaintenanceFailed
+            | ControlResponseStatus::InvalidAttributes) => {
                 return Err(Error::ManagementStatus(status));
             }
         }
@@ -125,7 +131,11 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             | ControlResponseStatus::InvalidChannel
             | ControlResponseStatus::NotAllocated
             | ControlResponseStatus::PermissionDenied
-            | ControlResponseStatus::InvalidFunction) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::InvalidFunction
+            | ControlResponseStatus::ContextBusy
+            | ControlResponseStatus::InvalidContext
+            | ControlResponseStatus::MaintenanceFailed
+            | ControlResponseStatus::InvalidAttributes) => Err(Error::ManagementStatus(status)),
         }
     }
 
@@ -149,7 +159,11 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             | ControlResponseStatus::InvalidChannel
             | ControlResponseStatus::NotAllocated
             | ControlResponseStatus::PermissionDenied
-            | ControlResponseStatus::InvalidFunction) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::InvalidFunction
+            | ControlResponseStatus::ContextBusy
+            | ControlResponseStatus::InvalidContext
+            | ControlResponseStatus::MaintenanceFailed
+            | ControlResponseStatus::InvalidAttributes) => Err(Error::ManagementStatus(status)),
         }
     }
 

@@ -5,7 +5,7 @@ mod software;
 
 use crate::harness::TestResult;
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::{ChannelFaultCode, CompletionFlagsValues, Response, ResponseStatus};
+use pdma_model_contract::dma::{ChannelFaultCode, CompletionFlagsValues, Response, ResponseStatus};
 
 #[derive(Clone, Copy, Debug)]
 enum Scenario {

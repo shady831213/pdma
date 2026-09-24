@@ -4,7 +4,7 @@ use super::super::runtime::{AccessError, HostBus};
 use hardware_interface_runtime::{
     InterruptHandler, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
-use pdma_model_contract::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
 use pdma_model_host::{Channel, ChannelConfig, DmaError, RingConfig, Rings, runtime::Irq};
 use std::sync::{
     Arc,
@@ -72,6 +72,7 @@ pub(super) async fn run(
     .await?;
     channel
         .submit(Command {
+            sg_context: 0,
             id: 37,
             source: Endpoint::linear(source.raw(), length),
             destination: Endpoint::linear(destination.raw(), length),

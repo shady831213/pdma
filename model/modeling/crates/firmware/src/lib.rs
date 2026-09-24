@@ -7,8 +7,8 @@ pub use configuration::Configuration;
 pub use control::main;
 
 use hardware_interface_runtime::{InterruptRegistrationError, MemoryAccessError};
-use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::RingError;
+use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
+use pdma_model_contract::ring::RingError;
 use std::{error, fmt};
 
 /// Firmware boot or management-service failure.
@@ -22,6 +22,8 @@ pub enum Error<E> {
     Memory(MemoryAccessError),
     /// A malformed management record was not consumed.
     Codec(SchemaCodecError),
+    /// Hardware returned an invalid register encoding.
+    RegisterCodec(RegisterCodecError),
     /// The control ring geometry or pointers are invalid.
     Ring(RingError),
     /// A memory-backed software ring operation failed.
@@ -41,6 +43,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
             Self::Bus(error) => write!(formatter, "firmware management access: {error}"),
             Self::Memory(error) => error.fmt(formatter),
             Self::Codec(error) => error.fmt(formatter),
+            Self::RegisterCodec(error) => error.fmt(formatter),
             Self::Ring(error) => error.fmt(formatter),
             Self::SoftRing(error) => error.fmt(formatter),
             Self::Dma(error) => error.fmt(formatter),
@@ -57,6 +60,7 @@ impl<E: error::Error + 'static> error::Error for Error<E> {
             Self::Bus(error) => Some(error),
             Self::Memory(error) => Some(error),
             Self::Codec(error) => Some(error),
+            Self::RegisterCodec(error) => Some(error),
             Self::Ring(error) => Some(error),
             Self::SoftRing(error) => Some(error),
             Self::Dma(error) => Some(error),

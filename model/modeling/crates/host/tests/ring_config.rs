@@ -1,6 +1,7 @@
 //! Host-owned ring configuration and constructor validation.
 
-use pdma_model_contract::{Command, Response, Ring, RingError};
+use pdma_model_contract::dma::{Command, Response};
+use pdma_model_contract::ring::{Ring, RingError};
 
 #[test]
 fn configuration_uses_the_selected_entry_layout() -> Result<(), RingError> {

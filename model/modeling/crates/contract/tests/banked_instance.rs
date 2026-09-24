@@ -1,6 +1,6 @@
 //! Instance layouts preserve hardware geometry without owning register values.
 
-use pdma_model_contract::{ChannelId, DmaRegisters};
+use pdma_model_contract::dma::{ChannelId, DmaRegisters};
 
 #[test]
 fn instance_bank_matches_resolved_register_addresses() -> Result<(), Box<dyn std::error::Error>> {

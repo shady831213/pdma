@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{Dma, ResetControl};
 use std::{
     future::{Future, poll_fn},
@@ -13,6 +13,29 @@ use std::{
 struct Bus(Mutex<Dma<SharedMemoryAccess>>);
 
 struct Relocated(Bus);
+
+#[tokio::test]
+async fn ring_context_setter_selects_the_requested_channel()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Given: two reset channels with independent ring selectors.
+    let bus = Bus::new()?;
+    let control =
+        pdma_model_software::dma::ChannelControl::discover(&bus, ChannelId::new(1)).await?;
+    // When: software selects a context before enabling its DMA ring.
+    control
+        .set_ring_context(&bus, pdma_model_contract::dma::ContextId::new(37))
+        .await?;
+    // Then: the selected channel uses that selector and its peer retains zero.
+    for (index, expected) in [(0, 0), (1, 37)] {
+        let offset = ChannelId::new(index).register_offset(2).ok_or("channel")?
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
+            + pdma_model_contract::dma::ChannelRegisters::RING_CONTEXT.offset();
+        let mut bytes = [0; 4];
+        bus.read(u32::try_from(offset)?, &mut bytes).await?;
+        assert_eq!(u32::from_le_bytes(bytes), expected);
+    }
+    Ok(())
+}
 
 impl RegisterAccess for Relocated {
     type Error = pdma_model_dma::Error;
@@ -60,7 +83,7 @@ async fn relocated_discovery_routes_data_admin_and_global_controls()
             assert_eq!(bus.0.busy(1).await?, 1);
             assert_eq!(
                 control.dma_fault(&bus).await?,
-                pdma_model_contract::DmaFaultCode::Internal
+                pdma_model_contract::dma::DmaFaultCode::Internal
             );
             assert!(bus.0.0.lock().map_err(|_| "poisoned DMA")?.take_interrupt());
             bus.0.finish_reset()?;

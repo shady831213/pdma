@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::{ChannelId, DmaRegisters, Response};
+use pdma_model_contract::dma::{ChannelId, DmaRegisters, Response};
 use pdma_model_host::{Channel, runtime::Irq};
 use std::{convert::Infallible, error::Error};
 use tokio::sync::mpsc;
@@ -64,8 +64,8 @@ where
     B: RegisterAccess + Clone + Send + Sync,
     B::Error: Error + Send + Sync + 'static,
 {
-    let count_offset =
-        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
+    let count_offset = DmaRegisters::DISCOVERY.offset()
+        + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset();
     let initial_count = read_word(&ports.bus, count_offset).await?;
     let discovery_write_rejected = ports
         .bus

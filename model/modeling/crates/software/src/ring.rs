@@ -9,7 +9,7 @@ pub use io::{MemoryRingIo, RegisterRingIo, RingCursorRegisters, SoftRingIo};
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, Encode, RecordLayout};
-use pdma_model_contract::{Ring, RingPointers};
+use pdma_model_contract::ring::{Ring, RingPointers};
 
 #[derive(Debug)]
 struct PendingPush<E> {

@@ -7,7 +7,7 @@ use hardware_interface_pipeline::{
     Then,
 };
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::{ChannelId, Response};
+use pdma_model_contract::dma::{ChannelId, Response};
 use std::{convert::Infallible, ops::ControlFlow};
 
 /// Publish a retained response; a full ring suspends only this stage.
@@ -86,7 +86,7 @@ impl<S> RunCommand<S> {
     }
 }
 
-impl<M, S, SB> Stage<Dma<M, SB>> for RunCommand<S>
+impl<M: MemoryAccess<SB>, S, SB> Stage<Dma<M, SB>> for RunCommand<S>
 where
     S: Stage<Dma<M, SB>, Input = (), Output = (), Error = Error, Wait = ()>,
 {
@@ -108,10 +108,14 @@ where
         if state.is_complete() {
             return StepOutcome::Exhausted;
         }
+        if device.discard_aborted() {
+            return StepOutcome::Progressed;
+        }
         let outcome = state.step(&mut self.pipeline, device);
         if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
             device.active = None;
         }
+        device.refresh_maintenance();
         match outcome {
             StepOutcome::Complete(Ok(()) | Err(Error::Reset | Error::Fault(_) | Error::Halted)) => {
                 StepOutcome::Complete(Ok(ControlFlow::Continue(())))

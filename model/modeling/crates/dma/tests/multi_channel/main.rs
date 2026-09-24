@@ -4,9 +4,12 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{ChannelBlock, ChannelId, DmaControl, DmaRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, DmaControl, DmaRegisters, ResponseRegisters,
+};
 use pdma_model_dma::{Dma, Error, ResetControl};
 
+mod context_abort;
 mod fairness;
 mod fan_in_inputs;
 mod reset_boundaries;
@@ -21,8 +24,8 @@ use support::{TestResult, configure, submit, word};
 fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
     // Given
     let mut device = Dma::new(SharedMemory::new(), 3)?;
-    let count =
-        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
+    let count = DmaRegisters::DISCOVERY.offset()
+        + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset();
     assert_eq!(word(&mut device, count)?, 3);
     // When
     let write = device.write(count, &1_u32.to_le_bytes());
@@ -30,8 +33,8 @@ fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
     assert_eq!(write, Err(Error::Access));
     for reset in [
         ChannelId::new(1).admin_offset(3).ok_or("channel offset")?,
-        (pdma_model_contract::DmaDiscovery::EXTENT
-            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        (pdma_model_contract::dma::DmaDiscovery::EXTENT
+            + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
             + DmaControl::RESET.offset(),
     ] {
         device.write(reset, &1_u32.to_le_bytes())?;

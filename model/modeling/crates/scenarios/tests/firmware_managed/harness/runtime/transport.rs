@@ -1,6 +1,6 @@
 use super::{Driver, Hardware, RoutedMemory, Shared};
 use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;
 use std::convert::Infallible;
 
@@ -16,14 +16,25 @@ impl<M> Shared<M> {
     }
 
     fn deliver(&self, hardware: &mut Hardware<M>) {
-        if hardware.control.take_request_notification() {
+        if let Some(contexts) = &hardware.contexts {
+            contexts
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .step(&hardware.dma);
+        }
+        let mut control = hardware
+            .control
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if control.take_request_notification() {
             self.to_firmware.raise();
         }
-        if hardware.control.take_response_notification() {
+        if control.take_response_notification() {
             self.to_host.raise();
         }
+        drop(control);
         for index in 0..self.channel_count {
-            let channel = pdma_model_contract::ChannelId::new(index);
+            let channel = pdma_model_contract::dma::ChannelId::new(index);
             if hardware.dma.take_channel_interrupt(channel) {
                 let owner = hardware
                     .windows
@@ -44,14 +55,14 @@ impl<M> Shared<M> {
     }
 }
 
-impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, ChannelId>, ()> for Driver<M> {
+impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, DmaAccess>, ()> for Driver<M> {
     type Error = Infallible;
 
     async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Dma<RoutedMemory<M>, ChannelId>) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Dma<RoutedMemory<M>, DmaAccess>) -> StepOutcome<O, E, ()> + Send,
     {
         tokio::task::yield_now().await;
         let mut hardware = self.0.hardware.lock().await;

@@ -9,7 +9,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
 };
 use pdma_model_dma::{
@@ -25,7 +25,7 @@ use std::sync::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const COUNT: usize =
-    DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
+    DmaRegisters::DISCOVERY.offset() + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset();
 
 async fn with_idle_hardware<F: std::future::Future>(
     model: &Model<SharedMemoryAccess>,
@@ -184,6 +184,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                         .await?;
                 channel
                     .submit(Command {
+                        sg_context: 0,
                         flags: CompletionFlagsValues::default(),
                         id: u64::try_from(index)?,
                         source: Endpoint::linear(0, 0),

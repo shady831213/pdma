@@ -84,6 +84,23 @@ static inline void C_ENDPOINT_STORE_C_MODE(uint8_t bytes[C_ENDPOINT_SIZE], uint3
 }
 
 /*
+ * Payload address-space context
+ * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
+ */
+#define C_ENDPOINT_C_CONTEXT_OFFSET UINT64_C(4)
+#define C_ENDPOINT_C_CONTEXT_WIDTH UINT64_C(4)
+#define C_ENDPOINT_C_CONTEXT_ENDIAN C_ENDPOINT_ENDIAN_LITTLE
+static inline uint32_t C_ENDPOINT_LOAD_C_CONTEXT(const uint8_t bytes[C_ENDPOINT_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET] | ((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_ENDPOINT_STORE_C_CONTEXT(uint8_t bytes[C_ENDPOINT_SIZE], uint32_t value) {
+    bytes[C_ENDPOINT_C_CONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_ENDPOINT_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
  * Endpoint parameters
  * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
  */
@@ -187,6 +204,23 @@ static inline void C_COMMAND_STORE_C_SOURCEQX2EMODE(uint8_t bytes[C_COMMAND_SIZE
 }
 
 /*
+ * Payload address-space context
+ * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
+ */
+#define C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET UINT64_C(12)
+#define C_COMMAND_C_SOURCEQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_COMMAND_C_SOURCEQX2ECONTEXT_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_SOURCEQX2ECONTEXT(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COMMAND_STORE_C_SOURCEQX2ECONTEXT(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SOURCEQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
  * Endpoint parameters
  * Linear: address is the first payload byte and length is the total byte count; zero length performs no payload access. ScatterGather: list_address points to consecutive eight-byte-aligned Segment records and count gives their number with no hardware limit; zero count performs no list access. List extent and summed lengths use checked arithmetic. The opposite endpoint must have the same total.
  */
@@ -247,6 +281,23 @@ static inline void C_COMMAND_STORE_C_DESTINATIONQX2EMODE(uint8_t bytes[C_COMMAND
     bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
     bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_COMMAND_C_DESTINATIONQX2EMODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Payload address-space context
+ * Context selector for payload accesses, independent of the context used to read a scatter/gather table. Ignored by ordinary context-free hardware.
+ */
+#define C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET UINT64_C(36)
+#define C_COMMAND_C_DESTINATIONQX2ECONTEXT_WIDTH UINT64_C(4)
+#define C_COMMAND_C_DESTINATIONQX2ECONTEXT_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_DESTINATIONQX2ECONTEXT(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COMMAND_STORE_C_DESTINATIONQX2ECONTEXT(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_DESTINATIONQX2ECONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 /*
@@ -311,6 +362,23 @@ static inline void C_COMMAND_STORE_C_FLAGS(uint8_t bytes[C_COMMAND_SIZE], uint32
     bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
     bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_COMMAND_C_FLAGS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Scatter/gather table context
+ * Context selector shared by both scatter/gather tables. Entries describe payload in each endpoint's own context. Ignored when both endpoints are linear or hardware is context-free.
+ */
+#define C_COMMAND_C_SGQSCONTEXT_OFFSET UINT64_C(60)
+#define C_COMMAND_C_SGQSCONTEXT_WIDTH UINT64_C(4)
+#define C_COMMAND_C_SGQSCONTEXT_ENDIAN C_COMMAND_ENDIAN_LITTLE
+static inline uint32_t C_COMMAND_LOAD_C_SGQSCONTEXT(const uint8_t bytes[C_COMMAND_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET] | ((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_COMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COMMAND_SIZE], uint32_t value) {
+    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_COMMAND_C_SGQSCONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 /*
@@ -416,13 +484,59 @@ static inline void C_RESPONSE_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_RESPONSE_
 }
 
 /*
- * Firmware control request
- * PF-produced 24-byte little-endian request, eight-byte aligned. The privileged management ingress authorizes the explicit target Function. DMA hardware never fetches these records.
+ * Extensible Host address-space attributes. Default is distinct from PASID zero. PASID is at most twenty bits and must be zero for Default.
  */
-#define C_CONTROLREQQUEST_SIZE UINT64_C(24)
+#define C_CONTEXTATTRIBUTES_SIZE UINT64_C(8)
+#define C_CONTEXTATTRIBUTES_ALIGNMENT UINT64_C(4)
+#define C_CONTEXTATTRIBUTES_ENDIAN_LITTLE UINT32_C(0)
+#define C_CONTEXTATTRIBUTES_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * Default uses no PASID and is distinct from the PASID-zero address space.
+ */
+#define C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_C_QUDEFAULT UINT64_C(0)
+#define C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_C_QUPASID UINT64_C(1)
+#define C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET UINT64_C(0)
+#define C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_WIDTH UINT64_C(4)
+#define C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_ENDIAN C_CONTEXTATTRIBUTES_ENDIAN_LITTLE
+static inline uint32_t C_CONTEXTATTRIBUTES_LOAD_C_ADDRESSQSSPACE(const uint8_t bytes[C_CONTEXTATTRIBUTES_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET] | ((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTEXTATTRIBUTES_STORE_C_ADDRESSQSSPACE(uint8_t bytes[C_CONTEXTATTRIBUTES_SIZE], uint32_t value) {
+    bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTEXTATTRIBUTES_C_ADDRESSQSSPACE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Twenty-bit PASID value; bits 20 through 31 must be zero. Default requires the complete value to be zero.
+ */
+#define C_CONTEXTATTRIBUTES_C_PASID_OFFSET UINT64_C(4)
+#define C_CONTEXTATTRIBUTES_C_PASID_WIDTH UINT64_C(4)
+#define C_CONTEXTATTRIBUTES_C_PASID_ENDIAN C_CONTEXTATTRIBUTES_ENDIAN_LITTLE
+static inline uint32_t C_CONTEXTATTRIBUTES_LOAD_C_PASID(const uint8_t bytes[C_CONTEXTATTRIBUTES_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET] | ((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTEXTATTRIBUTES_STORE_C_PASID(uint8_t bytes[C_CONTEXTATTRIBUTES_SIZE], uint32_t value) {
+    bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTEXTATTRIBUTES_C_PASID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Firmware control request
+ * PF-produced 32-byte little-endian request, eight-byte aligned. The privileged management ingress authorizes the explicit target Function. DMA hardware never fetches these records.
+ */
+#define C_CONTROLREQQUEST_SIZE UINT64_C(32)
 #define C_CONTROLREQQUEST_ALIGNMENT UINT64_C(8)
 #define C_CONTROLREQQUEST_ENDIAN_LITTLE UINT32_C(0)
 #define C_CONTROLREQQUEST_ENDIAN_BIG UINT32_C(1)
+/*
+ * ControlRequest.attributes
+ * Address-space attributes for CreateContext; ignored by other requests.
+ */
 
 /*
  * Host-selected request identifier echoed unchanged in the response.
@@ -445,11 +559,15 @@ static inline void C_CONTROLREQQUEST_STORE_C_ID(uint8_t bytes[C_CONTROLREQQUEST_
 }
 
 /*
- * 0: AcquireChannel requests one available DMA channel. 1: ReleaseChannel resets and frees the selected channel. 2: ResetChannel resets the selected channel while retaining its allocation. Other values are invalid.
+ * 0: AcquireChannel. 1: ReleaseChannel. 2: ResetChannel. 3: CreateContext. 4: DrainContext. 5: AbortContext. 6: DestroyContext. Other values are invalid. Context maintenance requires the documented submitter exclusion and publication ordering.
  */
 #define C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL UINT64_C(0)
 #define C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL UINT64_C(1)
 #define C_CONTROLREQQUEST_C_OPCODE_C_QURESETQUCHANNEL UINT64_C(2)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QUCREATEQUCONTEXT UINT64_C(3)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QUDRAINQUCONTEXT UINT64_C(4)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QUABORTQUCONTEXT UINT64_C(5)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QUDESTROYQUCONTEXT UINT64_C(6)
 #define C_CONTROLREQQUEST_C_OPCODE_OFFSET UINT64_C(8)
 #define C_CONTROLREQQUEST_C_OPCODE_WIDTH UINT64_C(4)
 #define C_CONTROLREQQUEST_C_OPCODE_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
@@ -496,10 +614,60 @@ static inline void C_CONTROLREQQUEST_STORE_C_CHANNEL(uint8_t bytes[C_CONTROLREQQ
 }
 
 /*
- * Firmware control response
- * Firmware-produced 16-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware stores only bootstrap registers and does not implement channel allocation policy.
+ * Independent context selector for Drain, Abort and Destroy; ignored by Create and channel operations.
  */
-#define C_CONTROLRESPONSE_SIZE UINT64_C(16)
+#define C_CONTROLREQQUEST_C_CONTEXT_OFFSET UINT64_C(20)
+#define C_CONTROLREQQUEST_C_CONTEXT_WIDTH UINT64_C(4)
+#define C_CONTROLREQQUEST_C_CONTEXT_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLREQQUEST_LOAD_C_CONTEXT(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET] | ((uint32_t)bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_CONTEXT(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint32_t value) {
+    bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Default uses no PASID and is distinct from the PASID-zero address space.
+ */
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_C_QUDEFAULT UINT64_C(0)
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_C_QUPASID UINT64_C(1)
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET UINT64_C(24)
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_WIDTH UINT64_C(4)
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLREQQUEST_LOAD_C_ATTRIBUTESQX2EADDRESSQSSPACE(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET] | ((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_ATTRIBUTESQX2EADDRESSQSSPACE(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint32_t value) {
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EADDRESSQSSPACE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Twenty-bit PASID value; bits 20 through 31 must be zero. Default requires the complete value to be zero.
+ */
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET UINT64_C(28)
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_WIDTH UINT64_C(4)
+#define C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLREQQUEST_LOAD_C_ATTRIBUTESQX2EPASID(const uint8_t bytes[C_CONTROLREQQUEST_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET] | ((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLREQQUEST_STORE_C_ATTRIBUTESQX2EPASID(uint8_t bytes[C_CONTROLREQQUEST_SIZE], uint32_t value) {
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLREQQUEST_C_ATTRIBUTESQX2EPASID_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Firmware control response
+ * Firmware-produced 24-byte little-endian response, eight-byte aligned. Host reads this independent control queue; hardware does not implement allocation policy.
+ */
+#define C_CONTROLRESPONSE_SIZE UINT64_C(24)
 #define C_CONTROLRESPONSE_ALIGNMENT UINT64_C(8)
 #define C_CONTROLRESPONSE_ENDIAN_LITTLE UINT32_C(0)
 #define C_CONTROLRESPONSE_ENDIAN_BIG UINT32_C(1)
@@ -525,7 +693,7 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 }
 
 /*
- * 0: Success. 1: NoResources. 2: InvalidChannel. 3: NotAllocated. 4: PermissionDenied, channel does not belong to the target Function. 5: InvalidFunction, target is outside the configured namespace. Other values are invalid.
+ * Success, resource/ownership errors, or context maintenance outcome. ContextBusy and MaintenanceFailed preserve the binding and never authorize memory reuse. InvalidAttributes rejects undefined Default/PASID combinations.
  */
 #define C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES UINT64_C(1)
@@ -533,6 +701,10 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOTQUALLOCATED UINT64_C(3)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUPERMISSIONQUDENIED UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUFUNCTION UINT64_C(5)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUCONTEXTQUBUSY UINT64_C(6)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCONTEXT UINT64_C(7)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUMAINTENANCEQUFAILED UINT64_C(8)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUATTRIBUTES UINT64_C(9)
 #define C_CONTROLRESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_CONTROLRESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
@@ -547,7 +719,7 @@ static inline void C_CONTROLRESPONSE_STORE_C_STATUS(uint8_t bytes[C_CONTROLRESPO
 }
 
 /*
- * Allocated channel on successful acquisition, or the selected channel for release/reset responses. Undefined for failed acquisition.
+ * Allocated or selected channel for channel operations. Context maintenance failure identifies the first failed channel as a diagnostic, or UINT32_MAX when none applies; firmware can inspect the complete hardware failure bitmap.
  */
 #define C_CONTROLRESPONSE_C_CHANNEL_OFFSET UINT64_C(12)
 #define C_CONTROLRESPONSE_C_CHANNEL_WIDTH UINT64_C(4)
@@ -560,6 +732,22 @@ static inline void C_CONTROLRESPONSE_STORE_C_CHANNEL(uint8_t bytes[C_CONTROLRESP
     bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
     bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_CONTROLRESPONSE_C_CHANNEL_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Created or selected context ID, independently of any recovery channel.
+ */
+#define C_CONTROLRESPONSE_C_CONTEXT_OFFSET UINT64_C(16)
+#define C_CONTROLRESPONSE_C_CONTEXT_WIDTH UINT64_C(4)
+#define C_CONTROLRESPONSE_C_CONTEXT_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLRESPONSE_LOAD_C_CONTEXT(const uint8_t bytes[C_CONTROLRESPONSE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET] | ((uint32_t)bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLRESPONSE_STORE_C_CONTEXT(uint8_t bytes[C_CONTROLRESPONSE_SIZE], uint32_t value) {
+    bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLRESPONSE_C_CONTEXT_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 /*

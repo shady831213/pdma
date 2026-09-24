@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     ResponseRegisters,
 };
@@ -12,11 +12,11 @@ use pdma_model_dma::{Dma, Error, ResetControl};
 use support::{TestResult, command, read_word, setup, submit};
 
 const CHANNEL: usize =
-    pdma_model_contract::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
-const RESET: usize =
-    pdma_model_contract::DmaDiscovery::EXTENT + pdma_model_contract::DmaAdmin::CHANNELS_OFFSET;
-const DEVICE_RESET: usize = (pdma_model_contract::DmaDiscovery::EXTENT
-    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+    pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
+const RESET: usize = pdma_model_contract::dma::DmaDiscovery::EXTENT
+    + pdma_model_contract::dma::DmaAdmin::CHANNELS_OFFSET;
+const DEVICE_RESET: usize = (pdma_model_contract::dma::DmaDiscovery::EXTENT
+    + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
     + DmaControl::RESET.offset();
 
 #[test]
@@ -36,10 +36,10 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     let response =
         accepted
             .ok_or("command not accepted")?
-            .map(|command| pdma_model_contract::Response {
+            .map(|command| pdma_model_contract::dma::Response {
                 id: command.id,
                 flags: command.flags,
-                status: pdma_model_contract::ResponseStatus::Success,
+                status: pdma_model_contract::dma::ResponseStatus::Success,
                 bytes_completed: 0,
             });
     device.write(RESET, &1_u32.to_le_bytes())?;
@@ -71,7 +71,7 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     let mut hardware = device.command_loop();
     let command = &mut hardware.upstream.stage;
     let mut operation = Operation::new(());
-    let producer = pdma_model_contract::ChannelBlock::ALIGNMENT
+    let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::RESPONSE.offset()
         + ResponseRegisters::PRODUCER.offset();
     for _ in 0..128 {
@@ -139,7 +139,7 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
     submit(&mut device, &memory, command())?;
     let mut hardware = device.command_loop();
     let mut operation = Operation::new(());
-    let consumer = pdma_model_contract::ChannelBlock::ALIGNMENT
+    let consumer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();
     for _ in 0..32 {
@@ -203,7 +203,8 @@ fn device_reset_subsumes_channel_reset_and_preserves_discovery() -> TestResult {
     device.read(DEVICE_RESET, &mut out)?;
     assert_eq!(u32::from_le_bytes(out), 0);
     device.read(
-        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset(),
+        DmaRegisters::DISCOVERY.offset()
+            + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset(),
         &mut out,
     )?;
     assert_eq!(u32::from_le_bytes(out), 3);

@@ -1,5 +1,5 @@
 use super::{CommandRegisters, DmaRegisters, Reset, ResponseRegisters};
-use crate::Switch;
+use crate::register::{Switch, Word};
 use hardware_interface_schema::{register_map, register_schema};
 
 register_schema! {
@@ -95,6 +95,8 @@ register_map! {
             pub irq_cause: ChannelIrqCause,
             #[description = "Independent non-empty and IOC notification masks. Unmask does not replay past events."]
             pub irq_mask: ChannelIrqMask,
+            #[description = "Context shared by command and response ring accesses. Locked with ring geometry until reset completes."]
+            pub ring_context: Word,
         ],
     }
 }

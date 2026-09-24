@@ -35,7 +35,7 @@ async fn boot_state_is_visible_before_firmware_starts() {
     assert!(matches!(
         host.bus
             .read(
-                u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                u32::try_from(pdma_model_contract::dma::ChannelBlock::ALIGNMENT).unwrap(),
                 &mut word
             )
             .await,
@@ -79,7 +79,7 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     assert!(matches!(
         result,
         Err(Error::FirmwareFailed(
-            pdma_model_contract::FirmwareBootError::WindowSetup
+            pdma_model_contract::hw_components::firmware::FirmwareBootError::WindowSetup
         ))
     ));
     let mut word = [0; 4];
@@ -88,7 +88,7 @@ async fn firmware_reports_initialization_failure_to_host_through_hardware() {
     assert!(matches!(
         host.bus
             .read(
-                u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                u32::try_from(pdma_model_contract::dma::ChannelBlock::ALIGNMENT).unwrap(),
                 &mut word
             )
             .await,

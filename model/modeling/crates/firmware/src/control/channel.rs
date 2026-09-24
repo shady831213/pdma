@@ -1,10 +1,9 @@
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{
-    ControlQueueRaw, ControlRegisters, ControlRequest, ControlResponse, Ring, RingError,
-    RingPointers,
-};
+use pdma_model_contract::control::{ControlQueueRaw, ControlRequest, ControlResponse};
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 use pdma_model_software::control::ControlQueueLayout;
 use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 

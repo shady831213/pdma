@@ -1,9 +1,9 @@
 use crate::{Error, Fault};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, RegisterAccessError, RegisterWindow};
-use pdma_model_contract::{
-    Command, CommandRaw, CommandRegisters, ReadWordValues, Ring, RingPointers,
-};
+use pdma_model_contract::dma::{Command, CommandRaw, CommandRegisters};
+use pdma_model_contract::register::ReadWordValues;
+use pdma_model_contract::ring::{Ring, RingPointers};
 
 /// Command queue state, including its own generated registers.
 #[derive(Debug)]
@@ -85,6 +85,14 @@ impl CommandRing {
     }
 
     pub(crate) fn pop(&mut self, memory: &impl MemoryAccess) -> Result<Option<Command>, Fault> {
+        let command = self.peek(memory)?;
+        if command.is_some() {
+            self.consume()?;
+        }
+        Ok(command)
+    }
+
+    pub(crate) fn peek(&self, memory: &impl MemoryAccess) -> Result<Option<Command>, Fault> {
         let pointers = self.pointers();
         if pointers.is_empty() {
             return Ok(None);
@@ -93,14 +101,18 @@ impl CommandRing {
             self.entry(pointers.consumer)
                 .map_err(|_| Fault::CommandRead)?,
         );
-        let next = self
-            .advance_consumer(pointers, 1)
-            .map_err(|_| Fault::CommandRead)?;
         let raw = memory
             .read_typed::<CommandRaw>(address, MemoryAlignment::ONE)
             .map_err(|_| Fault::CommandRead)?;
         let command = raw.decode().map_err(|_| Fault::CommandRead)?;
-        self.registers.values.consumer = ReadWordValues::new(next.consumer);
         Ok(Some(command))
+    }
+
+    pub(crate) fn consume(&mut self) -> Result<(), Fault> {
+        let next = self
+            .advance_consumer(self.pointers(), 1)
+            .map_err(|_| Fault::CommandRead)?;
+        self.registers.values.consumer = ReadWordValues::new(next.consumer);
+        Ok(())
     }
 }

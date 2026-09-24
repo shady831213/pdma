@@ -1,9 +1,35 @@
+mod access;
 mod channel;
 mod queue;
-pub use channel::*;
-pub use queue::*;
+mod record;
+pub use access::{ContextId, DmaAccess};
+pub use channel::{
+    ChannelAdmin, ChannelAdminRaw, ChannelAdminRegisterId, ChannelAdminValues, ChannelAdminView,
+    ChannelAdminViewMut, ChannelBlock, ChannelBlockRaw, ChannelBlockRegisterId, ChannelBlockValues,
+    ChannelBlockView, ChannelBlockViewMut, ChannelFault, ChannelFaultCode, ChannelFaultCodeRaw,
+    ChannelFaultFieldId, ChannelFaultRaw, ChannelFaultValues, ChannelFaultView,
+    ChannelFaultViewMut, ChannelId, ChannelIrqCause, ChannelIrqCauseFieldId, ChannelIrqCauseRaw,
+    ChannelIrqCauseValues, ChannelIrqCauseView, ChannelIrqCauseViewMut, ChannelIrqMask,
+    ChannelIrqMaskFieldId, ChannelIrqMaskRaw, ChannelIrqMaskValues, ChannelIrqMaskView,
+    ChannelIrqMaskViewMut, ChannelRegisters, ChannelRegistersRaw, ChannelRegistersRegisterId,
+    ChannelRegistersValues, ChannelRegistersView, ChannelRegistersViewMut,
+};
+pub use queue::{
+    CommandRegisters, CommandRegistersRaw, CommandRegistersRegisterId, CommandRegistersValues,
+    CommandRegistersView, CommandRegistersViewMut, ResponseRegisters, ResponseRegistersRaw,
+    ResponseRegistersRegisterId, ResponseRegistersValues, ResponseRegistersView,
+    ResponseRegistersViewMut,
+};
+pub use record::{
+    Command, CommandRaw, CommandView, CommandViewMut, CompletionFlags, CompletionFlagsFieldId,
+    CompletionFlagsRaw, CompletionFlagsValues, Endpoint, EndpointMode, EndpointModeRaw,
+    EndpointPayloadLinearValues, EndpointPayloadRaw, EndpointPayloadScatterGatherValues,
+    EndpointPayloadValues, EndpointRaw, EndpointView, EndpointViewMut, Response, ResponseRaw,
+    ResponseStatus, ResponseStatusRaw, ResponseView, ResponseViewMut, Segment, SegmentRaw,
+    SegmentView, SegmentViewMut,
+};
 
-use crate::Switch;
+use crate::register::Switch;
 use hardware_interface_schema::{register_map, register_schema};
 
 register_schema! {

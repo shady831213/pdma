@@ -4,7 +4,7 @@ use hardware_interface_schema::{
     RegisterLayout,
     register::{Access, ResetKind},
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelBlockValues, ChannelIrqMaskValues, ChannelRegisters, DmaControl,
     DmaRegisters,
 };
@@ -47,6 +47,7 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("control.fault", 52),
                 ("control.irq_cause", 56),
                 ("control.irq_mask", 60),
+                ("control.ring_context", 64),
             ]
             .map(|(name, offset)| {
                 (
@@ -66,7 +67,7 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
 fn generated_access_updates_selected_leaf_when_registers_are_nested() {
     // Given: reset register storage with a visible sibling value.
     let mut channel = ChannelBlockValues::default();
-    channel.command.producer = pdma_model_contract::WordValues::new(9);
+    channel.command.producer = pdma_model_contract::register::WordValues::new(9);
     // When: hardware updates the response producer through generated offset dispatch.
     let result = ChannelBlock::write_register(&mut channel, 36, 17);
     // Then: only the selected nested leaf changes.
@@ -105,6 +106,7 @@ fn channel_control_metadata_defines_software_access() -> Result<(), Box<dyn std:
             (8, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (12, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (16, Access::ReadWrite, 3, ResetKind::Zero, 0),
+            (20, Access::ReadWrite, 0xffff_ffff, ResetKind::Zero, 0),
         ]
     );
     Ok(())

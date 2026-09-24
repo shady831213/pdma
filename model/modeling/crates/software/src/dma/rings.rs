@@ -3,7 +3,7 @@ use super::{COMMAND, RESPONSE, bus::RegisterPort};
 use crate::ring::RingConfig;
 use crate::ring::{RingCursorRegisters, SoftRing};
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{Command, CommandRegisters, Response, ResponseRegisters};
+use pdma_model_contract::dma::{Command, CommandRegisters, Response, ResponseRegisters};
 
 #[derive(Debug)]
 pub(super) struct CommandRing(SoftRing<Command>);

@@ -15,7 +15,7 @@ _Static_assert(C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_ACCESS == C_HCTL_ACCESS_READ
 _Static_assert(C_HCTL_C_QUEQUNQUAQUBQULQUE_ACCESS == C_HCTL_ACCESS_READ_WRITE, "Host enable ownership");
 _Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_HCTL_ACCESS_WRITE_ONLY, "Host request pulse");
 _Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request physical offset");
-_Static_assert(C_HCTL_SIZE == 20, "hidden response retains extent");
+_Static_assert(C_HCTL_SIZE == 28, "hidden response retains extent");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS == C_HWIN_ACCESS_READ_ONLY, "Host readiness");
 _Static_assert(C_HWIN_SIZE == 36, "Host view retains the whole window bank");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET == 8, "hidden control retains readiness offset");

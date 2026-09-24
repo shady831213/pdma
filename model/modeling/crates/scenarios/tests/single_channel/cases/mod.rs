@@ -9,7 +9,7 @@ use crate::{
     software,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{ChannelFaultCode, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{ChannelFaultCode, Response, ResponseStatus, Segment};
 
 async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Vec<Segment>> {
     let injection = if response_fault {
@@ -54,7 +54,7 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
         assert_eq!(
             response,
             Some(Response {
-                flags: pdma_model_contract::CompletionFlagsValues::default(),
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::Success,
                 bytes_completed: u64::try_from(input.data.len())?

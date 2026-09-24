@@ -5,10 +5,11 @@ use hardware_interface_runtime::{
     pending_interrupt,
 };
 use hardware_interface_schema::{Decode, Encode};
-use pdma_model_contract::{
-    ControlQueue, ControlRegisters, ControlRequest, ControlResponse, ControlResponseRaw,
-    ControlRingState, DmaDiscovery, DmaRegisters,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlResponse, ControlResponseRaw, ControlRingState,
 };
+use pdma_model_contract::dma::{DmaDiscovery, DmaRegisters};
+use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::control::{ControlIrq, ControlIsr, ManagementAddresses};
 use std::{
     collections::BTreeMap,
@@ -27,6 +28,7 @@ pub(super) const ADDRESSES: ManagementAddresses = ManagementAddresses {
     windows: 0x2000,
     control: 0x3000,
     firmware: 0x4000,
+    contexts: None,
 };
 
 pub(super) struct Bus {
@@ -52,12 +54,20 @@ pub(super) async fn run(
     bus: &Bus,
     memory: SharedMemory,
 ) -> Result<std::convert::Infallible, pdma_model_firmware::Error<CpuAccessError<io::Error>>> {
+    run_at(bus, memory, ADDRESSES).await
+}
+
+pub(super) async fn run_at(
+    bus: &Bus,
+    memory: SharedMemory,
+    addresses: ManagementAddresses,
+) -> Result<std::convert::Infallible, pdma_model_firmware::Error<CpuAccessError<io::Error>>> {
     let cpu = Arc::new(SoftwareCpu::new());
     let bound = cpu.bind_registers(bus);
     let runtime = InterruptRuntime::new(cpu, bus.source.clone());
     let (result, _) = runtime
         .run_main::<ControlIsr, _>(async |registration| {
-            pdma_model_firmware::main(bound, memory, registration, ADDRESSES).await
+            pdma_model_firmware::main(bound, memory, registration, addresses).await
         })
         .await
         .map_err(|error| {

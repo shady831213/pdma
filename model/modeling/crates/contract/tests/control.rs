@@ -1,14 +1,17 @@
 //! Control-channel wire and register layout boundary tests.
 
-use pdma_model_contract::{
-    ControlQueue, ControlRegisters, ControlRequest, ControlRequestOpcode, ControlResponse,
-    ControlResponseStatus, ControlRingState, Doorbell,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
+    ControlRingState,
 };
+use pdma_model_contract::hw_components::control::{ControlRegisters, Doorbell};
 
 #[test]
 fn pf_request_encodes_the_target_function_independently_of_the_channel() {
     // Given: distinct request, Function and channel identifiers.
     let request = ControlRequest {
+        context: 0,
+        attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
         id: 7,
         opcode: ControlRequestOpcode::ResetChannel,
         function: 9,
@@ -20,7 +23,8 @@ fn pf_request_encodes_the_target_function_independently_of_the_channel() {
     assert_eq!(
         bytes,
         [
-            7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 9, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0
+            7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 9, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0
         ]
     );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
@@ -30,6 +34,8 @@ fn pf_request_encodes_the_target_function_independently_of_the_channel() {
 fn request_encodes_little_endian_and_rejects_unknown_opcode() {
     // Given: a release request with distinguishable fields.
     let request = ControlRequest {
+        context: 0,
+        attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
         id: 0x0102_0304_0506_0708,
         function: 0,
         opcode: ControlRequestOpcode::ReleaseChannel,
@@ -41,12 +47,13 @@ fn request_encodes_little_endian_and_rejects_unknown_opcode() {
     assert_eq!(
         bytes,
         [
-            8, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0
+            8, 7, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0x44, 0x33, 0x22, 0x11, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0
         ]
     );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
     assert_eq!(ControlRequest::SPEC.alignment(), 8);
-    bytes[8] = 3;
+    bytes[8] = 7;
     assert!(ControlRequest::from_bytes(&bytes).is_err());
 }
 
@@ -60,8 +67,13 @@ fn response_preserves_each_assigned_status() {
         (ControlResponseStatus::NotAllocated, 3),
         (ControlResponseStatus::PermissionDenied, 4),
         (ControlResponseStatus::InvalidFunction, 5),
+        (ControlResponseStatus::ContextBusy, 6),
+        (ControlResponseStatus::InvalidContext, 7),
+        (ControlResponseStatus::MaintenanceFailed, 8),
+        (ControlResponseStatus::InvalidAttributes, 9),
     ] {
         let response = ControlResponse {
+            context: 0,
             id: 9,
             status,
             channel: 2,
@@ -69,7 +81,12 @@ fn response_preserves_each_assigned_status() {
         // When: the response is encoded.
         let bytes = response.to_bytes().unwrap();
         // Then: the assigned tag and complete response survive the wire.
-        assert_eq!(bytes, [9, 0, 0, 0, 0, 0, 0, 0, raw, 0, 0, 0, 2, 0, 0, 0]);
+        assert_eq!(
+            bytes,
+            [
+                9, 0, 0, 0, 0, 0, 0, 0, raw, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
         assert_eq!(ControlResponse::from_bytes(&bytes).unwrap(), response);
         assert_eq!(ControlResponse::SPEC.alignment(), 8);
     }
@@ -79,6 +96,8 @@ fn response_preserves_each_assigned_status() {
 fn reset_request_has_its_own_wire_opcode() {
     // Given: reset retains the selected channel's allocation.
     let request = ControlRequest {
+        context: 0,
+        attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
         id: 7,
         function: 0,
         opcode: ControlRequestOpcode::ResetChannel,
@@ -90,7 +109,8 @@ fn reset_request_has_its_own_wire_opcode() {
     assert_eq!(
         bytes,
         [
-            7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0
+            7, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0
         ]
     );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
@@ -104,7 +124,7 @@ fn register_composition_has_bootstrap_enable_and_dual_doorbells() {
     assert_eq!(ControlRegisters::ENABLE.offset(), 8);
     assert_eq!(ControlRegisters::REQUEST.offset(), 12);
     assert_eq!(ControlRegisters::RESPONSE.offset(), 16);
-    assert_eq!(ControlRegisters::EXTENT, 20);
+    assert_eq!(ControlRegisters::EXTENT, 28);
     assert_eq!(
         Doorbell::SPEC.access(),
         hardware_interface_schema::Access::WriteOnly

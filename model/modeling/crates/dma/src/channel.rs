@@ -9,7 +9,7 @@ pub use response::ResponseRing;
 
 use crate::Fault;
 use hardware_interface_schema::RegisterWindow;
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFaultCode, ChannelIrqCauseValues, ChannelRegisters,
     ResetValues, Response, ResponseStatus,
 };

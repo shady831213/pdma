@@ -5,7 +5,7 @@ mod support;
 
 use hardware_interface_pipeline::Operation;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, Endpoint, ResponseRegisters, ResponseStatus, Segment,
 };
 use support::{Fixture, TestResult, advance, bytes, command, publish, response, setup};
@@ -121,7 +121,7 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
                 let mut fault = [0; 4];
                 dma.read(
                     base + ChannelBlock::CONTROL.offset()
-                        + pdma_model_contract::ChannelRegisters::FAULT.offset(),
+                        + pdma_model_contract::dma::ChannelRegisters::FAULT.offset(),
                     &mut fault,
                 )?;
                 assert_ne!(u32::from_le_bytes(fault), 0, "{path:?}");

@@ -1,7 +1,8 @@
 use crate::{ChannelTask, Dma, Error};
 use hardware_interface_pipeline::{ReadyStage, Stage, StepOutcome};
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::{ChannelId, Command, Ring};
+use pdma_model_contract::dma::{ChannelId, Command};
+use pdma_model_contract::ring::Ring;
 
 /// A channel's non-consuming eligibility check and command acceptance endpoint.
 #[derive(Debug)]
@@ -72,7 +73,11 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
             outcome
         };
         if let StepOutcome::Complete(Ok(task)) = &outcome {
-            device.active = Some((task.channel(), task.generation));
+            device.active = Some(ChannelTask {
+                channel: task.channel(),
+                generation: task.generation,
+                value: crate::references(&task.value),
+            });
         }
         outcome
     }

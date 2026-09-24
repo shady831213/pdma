@@ -2,7 +2,9 @@ use super::{Management, ManagementConfig};
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
 use hardware_interface_schema::Encode;
-use pdma_model_contract::{ControlQueue, ControlRegisters, ControlRingState, Ring};
+use pdma_model_contract::control::{ControlQueue, ControlRingState};
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::ring::Ring;
 use pdma_model_software::{control::ControlQueueLayout, ring::SoftRing};
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
@@ -15,6 +17,31 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         memory: M,
         config: ManagementConfig,
     ) -> Result<Self, Error<B::Error>> {
+        Self::setup_with_context(
+            bus,
+            memory,
+            (
+                config,
+                pdma_model_contract::memory::ContextAttributes::DEFAULT,
+            ),
+        )
+        .await
+    }
+
+    /// Selects independent control-memory attributes before enabling its immutable configuration.
+    pub async fn setup_with_context(
+        bus: B,
+        memory: M,
+        (config, attributes): (
+            ManagementConfig,
+            pdma_model_contract::memory::ContextAttributes,
+        ),
+    ) -> Result<Self, Error<B::Error>> {
+        attributes.validate().map_err(|_| {
+            Error::ManagementStatus(
+                pdma_model_contract::control::ControlResponseStatus::InvalidAttributes,
+            )
+        })?;
         let ManagementConfig {
             rings,
             interrupt,
@@ -62,6 +89,22 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
                 &state.encode().map_err(Error::Codec)?,
             )
             .map_err(Error::Memory)?;
+        let attribute_base = ControlRegisters::ATTRIBUTES.offset();
+        client
+            .write(
+                attribute_base
+                    + pdma_model_contract::hw_components::context::ContextAttributeRegisters::ADDRESS_SPACE.offset(),
+                &attributes.address_space.raw().to_le_bytes(),
+            )
+            .await?;
+        client
+            .write(
+                attribute_base
+                    + pdma_model_contract::hw_components::context::ContextAttributeRegisters::PASID
+                        .offset(),
+                &attributes.pasid.to_le_bytes(),
+            )
+            .await?;
         client
             .write(
                 ControlRegisters::BOOTSTRAP.offset(),

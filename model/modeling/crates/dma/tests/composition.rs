@@ -95,7 +95,7 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     let mut operation = Operation::new(command());
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.
-    let mut context = device.channel_context(pdma_model_contract::ChannelId::new(0))?;
+    let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
     let result = operation.step(&mut execution, &mut context);
     // Then: device fatal blocks even independently composed hardware.
     assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));

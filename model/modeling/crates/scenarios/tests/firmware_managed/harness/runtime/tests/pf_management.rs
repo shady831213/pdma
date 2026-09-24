@@ -1,7 +1,7 @@
 use super::*;
 use hardware_interface_schema::RegisterAccessError;
-use pdma_model_contract::ControlRegisters;
-use pdma_model_hw_components::ControlError;
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_hw_components::control::ControlError;
 
 #[tokio::test]
 async fn vf_cannot_enable_a_firmware_control_channel() {

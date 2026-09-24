@@ -3,7 +3,7 @@ use super::{
     RegisterAccess, SoftwareCpu, fixture,
 };
 use hardware_interface_runtime::{CpuAccessError, CpuContextError};
-use pdma_model_contract::{ChannelBlock, ChannelId};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId};
 use pdma_model_host::DmaError;
 
 #[tokio::test]

@@ -1,7 +1,7 @@
 use super::support::{TestResult, configure, submit, word};
 use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
-use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
 use pdma_model_dma::{Dma, Error, Publish, Resettable};
 
 fn setup() -> TestResult<Dma<SharedMemory>> {

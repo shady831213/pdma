@@ -3,7 +3,8 @@ use super::support::{
 };
 use hardware_interface_pipeline::{Operation, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{ChannelId, Endpoint, ResponseStatus, WindowControl};
+use pdma_model_contract::dma::{ChannelId, Endpoint, ResponseStatus};
+use pdma_model_contract::hw_components::windows::WindowControl;
 
 #[test]
 fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestResult {

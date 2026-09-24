@@ -4,15 +4,15 @@
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{ChannelRegisters, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, ResponseRegisters};
 use support::{TestResult, command, read_word, run, setup, submit};
 
-const CONTROL: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::CONTROL.offset();
-const COMMAND: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::COMMAND.offset();
-const RESPONSE: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::RESPONSE.offset();
+const CONTROL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::CONTROL.offset();
+const COMMAND: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::COMMAND.offset();
+const RESPONSE: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset();
 
 #[test]
 fn each_response_source_obeys_only_its_own_mask() -> TestResult {
@@ -132,7 +132,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
         &3_u32.to_le_bytes(),
     )?;
     let mut invalid = command();
-    invalid.destination = pdma_model_contract::Endpoint::linear(0x1300, 5);
+    invalid.destination = pdma_model_contract::dma::Endpoint::linear(0x1300, 5);
     submit(&mut device, &memory, invalid)?;
     run(&mut device)?;
     device.write(

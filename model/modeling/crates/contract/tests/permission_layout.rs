@@ -1,6 +1,6 @@
 //! Permission apertures are complete schema blocks.
 
-use pdma_model_contract::{ChannelBlock, DmaRegisters};
+use pdma_model_contract::dma::{ChannelBlock, DmaRegisters};
 
 #[test]
 fn channel_data_aperture_excludes_privileged_reset() -> Result<(), Box<dyn std::error::Error>> {

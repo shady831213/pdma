@@ -2,7 +2,7 @@ use hardware_interface_pipeline::{AfterEach, Operation, Repeat, RunOutcome, Step
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
 };
 use pdma_model_dma::{
@@ -36,14 +36,14 @@ pub fn setup(
     let mut device = Dma::new(memory.clone(), 1)?;
     for (offset, value) in [
         (
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::BASE.offset(),
             0x1000,
         ),
         (
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::BASE.offset(),
             response_base,
         ),
@@ -52,26 +52,26 @@ pub fn setup(
     }
     for (offset, value) in [
         (
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CAPACITY.offset(),
             capacity,
         ),
         (
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::CAPACITY.offset(),
             capacity,
         ),
         (
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::IRQ_ENABLE.offset(),
             1,
         ),
         (
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::ENABLE.offset(),
             1,
         ),
@@ -93,8 +93,8 @@ pub fn submit(
         &command.to_bytes()?,
     )?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &1_u32.to_le_bytes(),
     )?;
@@ -134,7 +134,8 @@ pub fn read_word(
 /// Canonical four-byte copy input.
 pub const fn command() -> Command {
     Command {
-        flags: pdma_model_contract::CompletionFlagsValues { ioc: false },
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
         id: 7,
         source: Endpoint::linear(0x1200, 4),
         destination: Endpoint::linear(0x1300, 4),

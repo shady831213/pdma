@@ -17,7 +17,7 @@ async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::er
                 model.clone(),
                 memory,
                 ChannelConfig {
-                    id: pdma_model_contract::ChannelId::new(0),
+                    id: pdma_model_contract::dma::ChannelId::new(0),
                     rings,
                 },
             ))
@@ -39,8 +39,8 @@ async fn reset_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::er
         model
             .read(
                 u32::try_from(
-                    pdma_model_contract::ChannelBlock::ALIGNMENT
-                        + pdma_model_contract::ChannelBlock::CONTROL.offset()
+                    pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                        + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                         + ChannelRegisters::ENABLE.offset(),
                 )?,
                 &mut enable,
@@ -64,12 +64,13 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
         .await?;
     let command = Command {
+        sg_context: 0,
         flags: CompletionFlagsValues::default(),
         id: 9,
         source: Endpoint::linear(0, 0),
@@ -90,7 +91,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
             model.clone(),
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -126,7 +127,7 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -136,14 +137,14 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
     with_idle_hardware(&model, cpu.run_main(channel.reset_dma())).await?;
     // Then: both scopes are disabled and a fresh driver sees healthy hardware.
     for offset in [
-        (pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::CONTROL.offset())
+        (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
             + ChannelRegisters::ENABLE.offset(),
-        (pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::CONTROL.offset())
+        (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
             + ChannelRegisters::IRQ_ENABLE.offset(),
-        (pdma_model_contract::DmaDiscovery::EXTENT
-            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        (pdma_model_contract::dma::DmaDiscovery::EXTENT
+            + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
             + DmaControl::IRQ_ENABLE.offset(),
     ] {
         let mut bytes = [0; 4];
@@ -155,7 +156,7 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
             model,
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))

@@ -2,9 +2,10 @@ const PF: FunctionId = FunctionId::new(0);
 
 use super::*;
 use hardware_interface_runtime::{MemoryAccess, MemoryAccessError};
-use pdma_model_contract::{
-    Command, CompletionFlagsValues, Endpoint, FunctionId, Response, ResponseStatus,
+use pdma_model_contract::dma::{
+    Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus,
 };
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
@@ -127,8 +128,8 @@ async fn reset_case(release: bool) {
             ));
             let address = u32::try_from(
                 id.register_offset(1).unwrap()
-                    + pdma_model_contract::ChannelBlock::CONTROL.offset()
-                    + pdma_model_contract::ChannelRegisters::ENABLE.offset(),
+                    + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
+                    + pdma_model_contract::dma::ChannelRegisters::ENABLE.offset(),
             )
             .unwrap();
             let mut enabled = [0xff; 4];
@@ -187,6 +188,7 @@ fn prepare_copy(
 
 fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: u64) -> Command {
     Command {
+        sg_context: 0,
         id,
         source: Endpoint::linear(source.raw(), length),
         destination: Endpoint::linear(destination.raw(), length),

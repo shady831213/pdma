@@ -1,14 +1,14 @@
 //! Scoped execution of independent Function software programs.
 use super::{TestResult, program, runtime::Managed};
 use hardware_interface_runtime::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
-use pdma_model_contract::FunctionId;
+use pdma_model_contract::memory::FunctionId;
 use program::functions::{Assignment, Grant};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::oneshot;
 
 pub(crate) async fn run_reset() -> TestResult<(
     program::functions::reset::Outcome,
-    (pdma_model_contract::Response, Vec<u8>),
+    (pdma_model_contract::dma::Response, Vec<u8>),
 )> {
     use program::functions::reset::{self, PeerSignals, ResetSignals};
     let [manager_memory, a_memory, b_memory] = std::array::from_fn(|_| {

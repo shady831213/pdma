@@ -4,7 +4,7 @@ pub use control::ResetControl;
 
 use crate::{ChannelContext, Dma, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::ChannelId;
 
 /// A value bound to the channel generation that accepted its command.
 #[derive(Debug)]

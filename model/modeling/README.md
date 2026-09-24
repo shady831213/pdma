@@ -12,12 +12,14 @@ The [Function-isolation slice](docs/function-isolation.md) uses one PF managemen
 channel with explicit target Functions, firmware-owned allocation, MMIO permissions and interrupt destinations
 for multiple Functions sharing that same DMA. The managed platform can inject
 independent memory capabilities per Function, including identical DMA addresses;
-ordinary shared-memory assembly remains available. This does not implement PCIe,
-PASID or IOMMU translation.
+ordinary shared-memory assembly remains available. This does not implement PCIe
+or IOMMU translation.
 
-The agreed next-slice [context contract](docs/context-contract.md) records software
-obligations, context selection and lifecycle guarantees as input to the eventual
-RTL specification. It is not implemented functionality or a released ABI.
+The optional [context model](docs/context-contract.md) adds independent ring, SG,
+source and destination selectors, with firmware-managed Default/PASID bindings.
+Hardware snapshots published producers for Drain/Abort and retains accepted work
+until retirement. The document records software obligations for the eventual RTL
+specification; model-local memory completion does not prove external bus drain.
 
 Run from this directory:
 
@@ -48,16 +50,23 @@ byte-access capabilities, without memory ownership or allocation authority.
 
 | Location | Responsibility |
 | --- | --- |
-| `crates/contract/src/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
+| `crates/contract/src/dma/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
 | `crates/contract/src/register.rs` | Register types shared by DMA and management hardware. |
 | `crates/contract/src/dma.rs` | DMA discovery and contiguous administration, followed by page-aligned channel data blocks. |
 | `crates/contract/src/dma/{channel,queue}.rs` | Channel-owned contracts and command/response ring registers. |
-| `crates/contract/src/management.rs` | Generated firmware control and Host readiness maps. |
-| `crates/contract/src/control.rs` | Control records, in-memory queue descriptor and bootstrap/doorbell registers. |
-| `crates/hw-components/src/control_channel.rs` | Bootstrap ownership, activation lock and notification pulses, without queue memory or allocation policy. |
+| `crates/contract/src/dma/access.rs` | Context selectors and channel/context sideband emitted by DMA. |
+| `crates/contract/src/hw_components/windows.rs` | Peripheral channel ownership, access-window control and Host readiness maps. |
+| `crates/contract/src/hw_components/context.rs` | Peripheral context table and firmware maintenance registers. |
+| `crates/contract/src/hw_components/control.rs` | Hardware bootstrap, activation and bidirectional doorbells. |
+| `crates/contract/src/hw_components/firmware.rs` | Hardware registers carrying firmware-published boot status. |
+| `crates/contract/src/control.rs` | Host-to-firmware software control messages and memory-resident queue descriptors. |
+| `crates/contract/src/memory.rs` | Function identity, extensible address-space attributes and resolved downstream memory identity. |
+| `crates/hw-components/src/context.rs` | Context bindings, maintenance result and failure bitmap, with its own memory adapter and construction errors. |
+| `crates/hw-components/src/control.rs` | Bootstrap ownership, activation lock and notification pulses, without queue memory or allocation policy. |
 | `crates/host/src/management.rs` | Host control-ring setup, channel requests and cancellation-safe response collection. |
-| `crates/hw-components/src/access_window.rs` | Hardware permission gate, derived readiness and forwarding to original DMA registers. |
-| `crates/hw-components/src/firmware_status.rs` | Firmware boot report, writable only through management access and readable by Host even with DMA closed. |
+| `crates/hw-components/src/windows/window.rs` | One channel's owner/open registers, requester authorization, readiness and complete-transaction bounds. |
+| `crates/hw-components/src/windows.rs` | Instance layout, discovery/global routing and selection of channel windows. |
+| `crates/hw-components/src/firmware.rs` | Firmware boot report, writable only through management access and readable by Host even with DMA closed. |
 | `crates/host/src/firmware.rs` | Host boot polling with distinct firmware failure and software timeout outcomes. |
 | `crates/firmware/src/lib.rs` | Async boot and serial control service; resource sequencing in its native child modules. |
 | `crates/scenarios/tests/firmware_managed/harness/runtime.rs` | Managed-system assembly with native submodules for concrete transports and scoped actor execution. |
@@ -166,11 +175,13 @@ program finishes, then abort and join the hardware task. Command-local terminati
 is handled inside the device, not by a scenario-side retry loop. Boundary tests that
 need a single command assemble the existing stages in test fixtures.
 
-`Dma<M, S = ()>` uses `MemoryAccess<S>` with channel-derived sideband. Plain
-`Dma::new` keeps unit-sideband memory access; managed assembly supplies ChannelId.
-The borrowed `hw-components::ChannelMemoryAccess` view resolves owner registers
-and forwards Function-tagged memory requests; runtime selects Function backing.
-DMA remains Function-unaware. It neither allocates memory nor chooses
+`Dma<M, S = ()>` uses `MemoryAccess<S>` with a `DmaAccess` selector containing
+channel and context IDs. Plain `Dma::new` keeps unit-sideband memory access.
+Without a context table, `hw-components::windows::ChannelMemoryAccess` resolves the Function
+owner. With a table, `ContextMemoryAccess` validates ownership and supplies a
+`MemoryIdentity` containing Function and extensible Default/PASID attributes.
+Runtime selects the injected identity's backing. DMA remains Function/PASID-unaware.
+It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles memory and its allocation service
 externally; software allocates its own rings and payload buffers through that service.
 `dma/tests/flat_memory.rs` runs the same graph on an independent flat array.

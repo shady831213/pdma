@@ -1,6 +1,8 @@
 //! The complete Host program, including preboot access probes.
 
 mod buffers;
+#[doc = "Context lifecycle software program."]
+pub mod contexts;
 pub mod functions;
 mod interrupts;
 pub mod multi;
@@ -12,7 +14,9 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use interrupts::Handler;
-use pdma_model_contract::{ControlQueue, ControlRequest, ControlResponse, FunctionId, Response};
+use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
+use pdma_model_contract::dma::Response;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig, firmware};
 use pdma_model_software::control::InterruptEvent;
 use std::time::Duration;
@@ -59,11 +63,11 @@ pub struct Outcome {
 
 pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outcome> {
     let addresses = ports.bus.addresses();
-    let first = pdma_model_contract::ChannelId::new(0);
+    let first = pdma_model_contract::dma::ChannelId::new(0);
     let window_control = addresses.window_control(first).ok_or("window address")?;
     let window_status = addresses.window_status(first).ok_or("window address")?;
     let channel_control = channel_address(&ports.bus, first).await?
-        + u32::try_from(pdma_model_contract::ChannelBlock::CONTROL.offset())?;
+        + u32::try_from(pdma_model_contract::dma::ChannelBlock::CONTROL.offset())?;
     let mut output = [0xa5; 4];
     let mut ready = [0; 4];
     let read = ports.bus.read(channel_control, &mut output).await;
@@ -156,14 +160,14 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
 
 async fn channel_address(
     bus: &HostBus<SharedMemoryAccess>,
-    id: pdma_model_contract::ChannelId,
+    id: pdma_model_contract::dma::ChannelId,
 ) -> TestResult<u32> {
     let mut count = [0; 4];
     bus.read(
         bus.addresses().dma
             + u32::try_from(
-                pdma_model_contract::DmaRegisters::DISCOVERY.offset()
-                    + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset(),
+                pdma_model_contract::dma::DmaRegisters::DISCOVERY.offset()
+                    + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset(),
             )?,
         &mut count,
     )

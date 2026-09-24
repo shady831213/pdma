@@ -1,5 +1,5 @@
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{CompletionFlagsValues, ResponseStatus};
+use pdma_model_contract::dma::{CompletionFlagsValues, ResponseStatus};
 
 use crate::{Scenario, TestResult, harness};
 

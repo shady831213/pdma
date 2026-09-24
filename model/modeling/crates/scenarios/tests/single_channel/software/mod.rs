@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::{ChannelFaultCode, ChannelId, Command, Response, Segment};
+use pdma_model_contract::dma::{ChannelFaultCode, ChannelId, Command, Response, Segment};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };
@@ -131,7 +131,8 @@ where
     let mut channel = Channel::setup(ports.bus, ports.memory, config).await?;
     channel
         .submit(Command {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            sg_context: 0,
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 7,
             source: source.endpoint,
             destination: destination.endpoint,

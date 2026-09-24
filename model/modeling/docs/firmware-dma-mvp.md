@@ -147,29 +147,31 @@ this access-window demonstration.
 
 ## Implemented interfaces and verification
 
-- `contract::ChannelWindowRegisters` declares one bank of `ChannelWindowBlock`
+- `contract::hw_components::windows::ChannelWindowRegisters` declares one bank of `ChannelWindowBlock`
   children. Each child has alignment 4 and extent 12, with `WindowControl` at
   byte 0 (open and Function owner) and `WindowStatus` at byte 8. Bank spacing derives from the child layout;
   the schema has no explicit stride. Host and firmware projections filter this
   same bank while retaining its full extent, including hidden leaves.
-- `contract::WindowControl` is firmware-only, at its platform-selected permission-bank base
+- `contract::hw_components::windows::WindowControl` is firmware-only, at its platform-selected permission-bank base
   plus the generated per-channel control offset. Writing its `open` bit enables only that
   channel's work access.
-- `contract::WindowStatus` is Host-readable at its generated status offset
+- `contract::hw_components::windows::WindowStatus` is Host-readable at its generated status offset
   within each platform-placed permission block. Blocks repeat every twelve bytes. Its `ready`
   value is derived from the same open bit, not a second retained handshake state.
   It remains readable by the bound Function while work access is closed.
-- `contract::FirmwareRegisters` is an independent report at a platform-selected base,
-  owned by `hw-components::FirmwareStatus`. Firmware alone writes
+- `contract::hw_components::firmware::FirmwareRegisters` is an independent report at a platform-selected base,
+  owned by `hw-components::firmware::FirmwareStatus`. Firmware alone writes
   its packed state/error word; Host can read it regardless of DMA permissions.
   Reset initializes Booting/no error. Runtime construction represents subsystem
   reset release; polling the firmware CPU starts the program without image loading
   or validation. DMA and channel reset do not reset this subsystem-level state.
   Live subsystem reboot and watchdog remain outside the current implementation;
   Host/firmware requests now use the separate control rings.
-- `hw-components::ChannelWindows` composes `AccessWindow` over independent channel
-  apertures, including rejection of spanning/overflowing accesses and Host attempts
-  to access management registers. It owns no DMA register copy or software policy.
+- `hw-components::windows::ChannelWindows` routes transactions to independent `ChannelWindow`
+  objects. Each window owns owner/open registers, requester authorization, readiness,
+  complete-transaction bounds and protection of its management registers. The bank
+  owns instance layout, public discovery, global/admin isolation and window lookup;
+  it owns no DMA register copy or software policy.
 - `firmware::main` closes the work window on its own software CPU and publishes
   Ready on success or Failed/WindowSetup on rejection. After Ready it serves the
   independent control rings, allocating a free channel on request and closing/resetting

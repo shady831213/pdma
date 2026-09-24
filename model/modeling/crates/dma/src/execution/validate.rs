@@ -2,7 +2,7 @@ use super::{CopyState, Cursor};
 use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::{Command, ResponseStatus};
+use pdma_model_contract::dma::{Command, ResponseStatus};
 
 #[derive(Debug)]
 enum Side {
@@ -58,7 +58,10 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckLengths 
         let Some(scan) = state.as_mut() else {
             return StepOutcome::Exhausted;
         };
-        let result = match scan.cursor.next_segment(&context.memory) {
+        let result = match scan
+            .cursor
+            .next_segment(&context.memory_for(scan.command.sg_context))
+        {
             Ok(Some(segment)) => match scan.total.checked_add(segment.length) {
                 Some(total) => {
                     scan.total = total;

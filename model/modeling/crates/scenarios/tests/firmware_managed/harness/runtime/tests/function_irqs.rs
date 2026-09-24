@@ -5,9 +5,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::{
-    ChannelId, Command, CompletionFlagsValues, Endpoint, Response, WindowControl,
-};
+use pdma_model_contract::dma::{ChannelId, Command, CompletionFlagsValues, Endpoint, Response};
+use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_host::{Channel, ChannelConfig, Rings};
 use pdma_model_software::{
     control::{ControlIsr, InterruptEvent},
@@ -45,6 +44,7 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     .unwrap();
     channel
         .submit(Command {
+            sg_context: 0,
             id: 1,
             source: Endpoint::linear(source.raw(), 4),
             destination: Endpoint::linear(destination.raw(), 4),

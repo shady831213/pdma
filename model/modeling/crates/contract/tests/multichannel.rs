@@ -4,7 +4,7 @@ use hardware_interface_schema::{
     RegisterLayout,
     register::{Access, ResetKind},
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelBlockValues, ChannelId, DmaDiscovery, DmaDiscoveryValues, DmaRegisters,
 };
 

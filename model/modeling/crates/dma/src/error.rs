@@ -1,4 +1,4 @@
-use pdma_model_contract::ChannelFaultCode;
+use pdma_model_contract::dma::ChannelFaultCode;
 use std::fmt::{self, Display, Formatter};
 
 /// Sticky channel faults cleared only by channel or device reset.
@@ -35,6 +35,8 @@ pub enum Error {
     ConfigurationLocked,
     /// Reset cleanup is pending; configuration writes are temporarily rejected.
     ResetInProgress,
+    /// A captured context frontier prevents conflicting channel or device changes.
+    MaintenanceInProgress,
     /// Ring capacity, alignment, or extent is invalid.
     Configuration,
     /// Producer or consumer advancement exceeds available entries.

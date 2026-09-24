@@ -4,7 +4,7 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{Command, CommandRegisters, Endpoint, Response};
+use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::{
@@ -76,14 +76,15 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
             bus,
             allocator.memory_access(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
         .await?;
     delay.store(true, Ordering::SeqCst);
     let submission = channel.submit(Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 1,
         source: Endpoint::linear(0, 0),
         destination: Endpoint::linear(0, 0),
@@ -109,8 +110,8 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
     model
         .read(
             u32::try_from(
-                (pdma_model_contract::ChannelBlock::ALIGNMENT
-                    + pdma_model_contract::ChannelBlock::COMMAND.offset())
+                (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                    + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())
                     + CommandRegisters::PRODUCER.offset(),
             )?,
             &mut producer,

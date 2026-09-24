@@ -1,13 +1,15 @@
 use super::{acquire, support::*};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{ControlQueue, ControlRequest, ControlRequestOpcode, ControlRingState};
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlRequestOpcode, ControlRingState,
+};
 use pdma_model_software::ring::SoftRingError;
 
 #[tokio::test]
 async fn misaligned_bootstrap_descriptor_is_rejected() -> TestResult {
     // Given: an otherwise valid descriptor is copied to a misaligned bootstrap address.
     let (bus, memory) = fixture()?;
-    let mut bytes = vec![0; pdma_model_contract::ControlQueue::RECORD_SIZE];
+    let mut bytes = vec![0; pdma_model_contract::control::ControlQueue::RECORD_SIZE];
     memory
         .read(MemoryAddress::new(QUEUE), MemoryAlignment::ONE, &mut bytes)
         .unwrap();
@@ -15,7 +17,8 @@ async fn misaligned_bootstrap_descriptor_is_rejected() -> TestResult {
         .write(MemoryAddress::new(QUEUE + 1), MemoryAlignment::ONE, &bytes)
         .unwrap();
     bus.registers.lock().unwrap().insert(
-        register(pdma_model_contract::ControlRegisters::BOOTSTRAP.offset()).unwrap(),
+        register(pdma_model_contract::hw_components::control::ControlRegisters::BOOTSTRAP.offset())
+            .unwrap(),
         (QUEUE + 1).to_le_bytes().to_vec(),
     );
     let mut program = std::pin::pin!(run(&bus, memory));
@@ -103,6 +106,8 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
     publish(
         &memory,
         ControlRequest {
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             id: 2,
             function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,
@@ -112,7 +117,7 @@ async fn release_response_waits_for_real_reset_completion() -> TestResult {
     )?;
     assert!(poll(program.as_mut()).is_pending());
     let reset = u32::try_from(
-        pdma_model_contract::ChannelId::new(0)
+        pdma_model_contract::dma::ChannelId::new(0)
             .admin_offset(1)
             .unwrap(),
     )
@@ -171,6 +176,8 @@ async fn release_response_backpressure_preserves_queued_acquisition() -> TestRes
     publish(
         &memory,
         ControlRequest {
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             id: 2,
             function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,
@@ -186,7 +193,7 @@ async fn release_response_backpressure_preserves_queued_acquisition() -> TestRes
     }
     assert_eq!(read_word(&memory, producer)?, 1);
     let reset = u32::try_from(
-        pdma_model_contract::ChannelId::new(0)
+        pdma_model_contract::dma::ChannelId::new(0)
             .admin_offset(1)
             .ok_or("admin offset")?,
     )?;
@@ -226,7 +233,7 @@ async fn release_response_backpressure_preserves_queued_acquisition() -> TestRes
     );
     assert_eq!(
         response(&memory)?.status,
-        pdma_model_contract::ControlResponseStatus::Success
+        pdma_model_contract::control::ControlResponseStatus::Success
     );
     Ok(())
 }

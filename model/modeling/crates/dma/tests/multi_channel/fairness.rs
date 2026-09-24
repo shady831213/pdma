@@ -3,7 +3,7 @@ use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
 use pdma_model_dma::Dma;
 
 #[test]
@@ -29,7 +29,7 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
         if fatal {
             device.write(
                 base + ChannelBlock::COMMAND.offset()
-                    + pdma_model_contract::CommandRegisters::PRODUCER.offset(),
+                    + pdma_model_contract::dma::CommandRegisters::PRODUCER.offset(),
                 &1_u32.to_le_bytes(),
             )?;
         } else {
@@ -82,25 +82,26 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
 }
 
 fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
-    let command = pdma_model_contract::Command {
+    let command = pdma_model_contract::dma::Command {
+        sg_context: 0,
         id: 1,
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
-        source: pdma_model_contract::Endpoint::linear(0x1200, 0),
-        destination: pdma_model_contract::Endpoint::linear(0x1400, 0),
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
+        source: pdma_model_contract::dma::Endpoint::linear(0x1200, 0),
+        destination: pdma_model_contract::dma::Endpoint::linear(0x1400, 0),
     };
     for producer in 1..=3_u32 {
         device.memory.write(
             MemoryAddress::new(
                 0x1000
                     + u64::from((producer - 1) % 2)
-                        * u64::try_from(pdma_model_contract::Command::RECORD_SIZE)?,
+                        * u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?,
             ),
             MemoryAlignment::ONE,
             &command.to_bytes()?,
         )?;
         device.write(
             base + ChannelBlock::COMMAND.offset()
-                + pdma_model_contract::CommandRegisters::PRODUCER.offset(),
+                + pdma_model_contract::dma::CommandRegisters::PRODUCER.offset(),
             &producer.to_le_bytes(),
         )?;
         if producer == 3 {

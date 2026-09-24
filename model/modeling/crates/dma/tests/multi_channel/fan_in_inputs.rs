@@ -3,7 +3,7 @@ use hardware_interface_pipeline::{Arbitrate, BranchError, Operation, ReadyStage,
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, Response, ResponseStatus,
 };
 use pdma_model_dma::{Dma, Error, Fetch, ResetControl, RoundRobin};

@@ -9,10 +9,12 @@ use crate::harness::{
 use hardware_interface_runtime::{
     MemoryAddress, RegisterAccess, SharedMemory, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::{
-    ChannelId, ControlRegisters, FirmwareBootError, FirmwareBootState, FirmwareBootValues,
-    FunctionId,
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::hw_components::firmware::{
+    FirmwareBootError, FirmwareBootState, FirmwareBootValues,
 };
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use std::{pin::pin, sync::Arc, task::Poll, time::Duration};
 use tokio::sync::oneshot;

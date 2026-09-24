@@ -5,7 +5,7 @@ pub mod support;
 
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
@@ -37,7 +37,7 @@ fn copy_publishes_response_before_notification_is_taken() -> TestResult {
     assert_eq!(
         Response::from_bytes(&bytes)?,
         Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 7,
             status: ResponseStatus::Success,
             bytes_completed: 4,
@@ -46,8 +46,8 @@ fn copy_publishes_response_before_notification_is_taken() -> TestResult {
     assert!(device.irq());
     assert!(device.take_interrupt());
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
     )?;
@@ -68,8 +68,8 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FAULT.offset()
         )?,
         Fault::ResponseWrite.code().raw()
@@ -77,15 +77,15 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::PRODUCER.offset()
         )?,
         0
     );
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::CONTROL.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
             + ChannelRegisters::IRQ_ENABLE.offset(),
         &0_u32.to_le_bytes(),
     )?;
@@ -95,8 +95,8 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CONSUMER.offset()
         )?,
         1
@@ -129,8 +129,8 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
     assert_eq!(
         read_word(
             &mut device,
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FAULT.offset()
         )?,
         0
@@ -151,8 +151,8 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     )?;
     memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[2; 4])?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::COMMAND.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
@@ -174,8 +174,8 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     assert_eq!(
         read_word(
             &mut device,
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::COMMAND.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::COMMAND.offset()
                 + CommandRegisters::CONSUMER.offset()
         )?,
         1
@@ -185,8 +185,8 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
         [0; 4]
     );
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CONSUMER.offset(),
         &1_u32.to_le_bytes(),
     )?;
@@ -218,8 +218,8 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     assert_eq!(
         read_word(
             &mut device,
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::FAULT.offset()
         )?,
         0

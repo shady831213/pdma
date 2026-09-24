@@ -2,7 +2,9 @@
 
 use crate::Error;
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::{FirmwareBootState, FirmwareBootValues, FirmwareRegisters};
+use pdma_model_contract::hw_components::firmware::{
+    FirmwareBootState, FirmwareBootValues, FirmwareRegisters,
+};
 use std::time::Duration;
 
 /// Waits for firmware initialization within a software-owned deadline.

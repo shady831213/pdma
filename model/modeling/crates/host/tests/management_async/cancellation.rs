@@ -1,6 +1,6 @@
 use super::support::{Fixture, pending_once, response};
 use hardware_interface_runtime::{InterruptHandler, SoftwareCpu};
-use pdma_model_contract::FunctionId;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::Error;
 use pdma_model_software::{control::ControlIrq, ring::SoftRing};
 use std::{

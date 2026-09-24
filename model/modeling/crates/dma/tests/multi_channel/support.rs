@@ -1,6 +1,6 @@
 use hardware_interface_pipeline::{AfterEach, Repeat, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     Endpoint, ResponseRegisters,
 };
@@ -34,8 +34,8 @@ pub fn word<M>(device: &mut Dma<M>, offset: usize) -> TestResult<u32> {
 pub fn configure<M>(device: &mut Dma<M>, index: usize) -> TestResult {
     let count = usize::try_from(word(
         device,
-        pdma_model_contract::DmaRegisters::DISCOVERY.offset()
-            + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset(),
+        pdma_model_contract::dma::DmaRegisters::DISCOVERY.offset()
+            + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset(),
     )?)?;
     let base = ChannelId::new(index)
         .register_offset(count)
@@ -80,6 +80,7 @@ pub fn configure<M>(device: &mut Dma<M>, index: usize) -> TestResult {
 pub fn submit<M: MemoryAccess>(device: &mut Dma<M>, index: usize, id: u64) -> TestResult {
     let memory = 0x1000 + u64::try_from(index)? * 0x1000;
     let command = Command {
+        sg_context: 0,
         id,
         flags: CompletionFlagsValues::default(),
         source: Endpoint::linear(memory + 0x200, 512),
@@ -92,8 +93,8 @@ pub fn submit<M: MemoryAccess>(device: &mut Dma<M>, index: usize, id: u64) -> Te
     )?;
     let count = usize::try_from(word(
         device,
-        pdma_model_contract::DmaRegisters::DISCOVERY.offset()
-            + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset(),
+        pdma_model_contract::dma::DmaRegisters::DISCOVERY.offset()
+            + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset(),
     )?)?;
     device.write(
         ChannelId::new(index)

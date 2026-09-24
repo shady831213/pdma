@@ -2,7 +2,8 @@
 
 use core::marker::PhantomData;
 use hardware_interface_schema::{RecordLayout, record_schema};
-use pdma_model_contract::{Command, Response, Ring, RingError, RingPointers};
+use pdma_model_contract::dma::{Command, Response};
+use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 
 struct LayoutRing<Entry>(u64, u32, PhantomData<Entry>);
 

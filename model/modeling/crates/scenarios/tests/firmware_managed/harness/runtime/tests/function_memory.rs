@@ -3,9 +3,10 @@ use crate::harness::runtime::memory::RoutedMemory;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{ChannelId, WindowControl};
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::Dma;
-use pdma_model_hw_components::ChannelWindows;
+use pdma_model_hw_components::windows::ChannelWindows;
 use std::sync::{Arc, Mutex};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -24,9 +25,9 @@ fn closed_window_retains_memory_binding_until_reset_and_reassignment() -> TestRe
     windows.management_write(WINDOWS, &1_u32.to_le_bytes())?;
     let windows = Arc::new(Mutex::new(windows));
     let mut dma = Dma::with_sideband(
-        RoutedMemory::new(Arc::clone(&windows), vec![first.clone(), second.clone()]),
+        RoutedMemory::new(Arc::clone(&windows), vec![first.clone(), second.clone()])?,
         1,
-        std::convert::identity,
+        |access| access,
     )?;
     // When: firmware closes Host MMIO before draining old DMA work.
     windows
@@ -63,9 +64,9 @@ fn missing_function_binding_never_falls_back_to_another_space() -> TestResult {
         &9_u32.to_le_bytes(),
     )?;
     let mut dma = Dma::with_sideband(
-        RoutedMemory::new(Arc::new(Mutex::new(windows)), vec![memory.clone()]),
+        RoutedMemory::new(Arc::new(Mutex::new(windows)), vec![memory.clone()])?,
         1,
-        std::convert::identity,
+        |access| access,
     )?;
     let context = dma.channel_context(ChannelId::new(0))?;
     let address = MemoryAddress::new(0x1000);

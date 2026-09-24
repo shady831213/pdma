@@ -1,17 +1,20 @@
 use pdma_model_software::ring::SoftRingError;
+mod contexts;
 mod failures;
 mod multi;
 mod reset;
 mod support;
 
-use pdma_model_contract::{
-    ControlQueue, ControlRegisters, ControlRequest, ControlRequestOpcode, ControlResponseStatus,
-    ControlRingState,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponseStatus, ControlRingState,
 };
+use pdma_model_contract::hw_components::control::ControlRegisters;
 use support::*;
 
 const fn acquire(id: u64) -> ControlRequest {
     ControlRequest {
+        context: 0,
+        attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
         id,
         function: 0,
         opcode: ControlRequestOpcode::AcquireChannel,

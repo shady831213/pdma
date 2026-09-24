@@ -1,12 +1,14 @@
 mod channel;
+mod contexts;
 mod resources;
 mod service;
 
 use crate::{Configuration, Error};
 use hardware_interface_runtime::{InterruptRegistration, MemoryAccess, RegisterAccess};
-use pdma_model_contract::{
-    FirmwareBootError, FirmwareBootState, FirmwareBootValues, FirmwareRegisters, RingError,
+use pdma_model_contract::hw_components::firmware::{
+    FirmwareBootError, FirmwareBootState, FirmwareBootValues, FirmwareRegisters,
 };
+use pdma_model_contract::ring::RingError;
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{convert::Infallible, future::pending};
 

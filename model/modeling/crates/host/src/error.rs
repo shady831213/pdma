@@ -1,6 +1,8 @@
 use hardware_interface_runtime::MemoryAccessError;
 use hardware_interface_schema::{RegisterCodecError, SchemaCodecError};
-use pdma_model_contract::{ControlResponseStatus, FirmwareBootError, RingError};
+use pdma_model_contract::control::ControlResponseStatus;
+use pdma_model_contract::hw_components::firmware::FirmwareBootError;
+use pdma_model_contract::ring::RingError;
 use pdma_model_software::ring::SoftRingError;
 use std::{error::Error as StdError, fmt};
 

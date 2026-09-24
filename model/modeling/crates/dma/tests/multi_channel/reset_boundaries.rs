@@ -6,7 +6,9 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use observed::Observed;
-use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, Response, ResponseRegisters};
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, CommandRegisters, Response, ResponseRegisters,
+};
 use pdma_model_dma::Dma;
 use std::cell::Cell;
 
@@ -207,11 +209,12 @@ fn assert_responses(device: &mut Dma<Observed>, reset_index: usize) -> TestResul
 fn replace(device: &mut Dma<Observed>, reset_index: usize) -> TestResult<u64> {
     configure(device, reset_index)?;
     let memory_base = 0x1000 + u64::try_from(reset_index)? * 0x1000;
-    let fresh = pdma_model_contract::Command {
+    let fresh = pdma_model_contract::dma::Command {
+        sg_context: 0,
         id: 99,
-        flags: pdma_model_contract::CompletionFlagsValues { ioc: true },
-        source: pdma_model_contract::Endpoint::linear(memory_base + 0x200, 512),
-        destination: pdma_model_contract::Endpoint::linear(memory_base + 0x800, 512),
+        flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: true },
+        source: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x200, 512),
+        destination: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x800, 512),
     };
     device.memory.memory.write(
         MemoryAddress::new(memory_base),

@@ -1,7 +1,7 @@
 use super::{Model, TestResult};
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{InterruptSource, RegisterAccess};
-use pdma_model_contract::DmaControl;
+use pdma_model_contract::dma::DmaControl;
 use pdma_model_dma::{Dma, ResetControl};
 
 #[tokio::test]
@@ -9,8 +9,8 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
     // Given: the platform has accepted a hardware error notification.
     let mut device = Dma::new((), 1)?;
     device.write(
-        (pdma_model_contract::DmaDiscovery::EXTENT
-            + pdma_model_contract::DmaAdmin::CONTROL.offset())
+        (pdma_model_contract::dma::DmaDiscovery::EXTENT
+            + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
             + DmaControl::IRQ_ENABLE.offset(),
         &1_u32.to_le_bytes(),
     )?;
@@ -21,8 +21,8 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
     model
         .write(
             u32::try_from(
-                (pdma_model_contract::DmaDiscovery::EXTENT
-                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                    + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                     + DmaControl::RESET.offset(),
             )?,
             &1_u32.to_le_bytes(),
@@ -55,8 +55,8 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
     model
         .write(
             u32::try_from(
-                (pdma_model_contract::DmaDiscovery::EXTENT
-                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                    + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                     + DmaControl::IRQ_ENABLE.offset(),
             )?,
             &1_u32.to_le_bytes(),
@@ -67,8 +67,8 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
     model
         .read(
             u32::try_from(
-                (pdma_model_contract::DmaDiscovery::EXTENT
-                    + pdma_model_contract::DmaAdmin::CONTROL.offset())
+                (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                    + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                     + DmaControl::FAULT.offset(),
             )?,
             &mut bytes,
@@ -83,8 +83,8 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
 async fn masking_preserves_emitted_notification_across_model_clones() -> TestResult {
     // Given: a fatal notification emitted before the platform claims it.
     let mut device = Dma::new((), 1)?;
-    let irq_enable = (pdma_model_contract::DmaDiscovery::EXTENT
-        + pdma_model_contract::DmaAdmin::CONTROL.offset())
+    let irq_enable = (pdma_model_contract::dma::DmaDiscovery::EXTENT
+        + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
         + DmaControl::IRQ_ENABLE.offset();
     device.write(irq_enable, &1_u32.to_le_bytes())?;
     device.signal_fatal();

@@ -1,7 +1,7 @@
 use super::Management;
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccessError, RegisterAccess};
-use pdma_model_contract::ControlRegisters;
+use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::ring::SoftRingError;
 
 impl<B: RegisterAccess + Sync, M: Sync> Management<B, M> {

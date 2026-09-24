@@ -1,7 +1,7 @@
 use super::{Completion, Management, transport::ring_error};
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{ControlRequestOpcode, ControlResponse};
+use pdma_model_contract::control::{ControlRequestOpcode, ControlResponse};
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Collects one available response without waiting for firmware or an interrupt.
@@ -44,9 +44,16 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
                 .find(|request| request.id == response.id)
                 .ok_or(Error::ManagementProtocol)?;
             match request.opcode {
-                ControlRequestOpcode::AcquireChannel => {}
+                ControlRequestOpcode::AcquireChannel | ControlRequestOpcode::CreateContext => {}
                 ControlRequestOpcode::ReleaseChannel | ControlRequestOpcode::ResetChannel => {
                     if response.channel != request.channel {
+                        return Err(Error::ManagementProtocol);
+                    }
+                }
+                ControlRequestOpcode::DrainContext
+                | ControlRequestOpcode::AbortContext
+                | ControlRequestOpcode::DestroyContext => {
+                    if response.context != request.context {
                         return Err(Error::ManagementProtocol);
                     }
                 }

@@ -14,27 +14,31 @@ mod transport;
 mod tests;
 
 pub use bus::HostBus;
-pub use error::{BuildError, RunError};
+pub use error::{AccessError, BuildError, PlatformConfigError, RunError};
 pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
 };
 use memory::RoutedMemory;
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::{CommandLoop, Dma};
 use pdma_model_host::runtime::Irq;
-use pdma_model_hw_components::{ChannelWindows, ControlChannel, FirmwareStatus};
+use pdma_model_hw_components::{
+    context::ContextTable, control::ControlChannel, firmware::FirmwareStatus,
+    windows::ChannelWindows,
+};
 use pdma_model_software::control::{ControlIrq, ManagementAddresses};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 
 #[derive(Debug)]
 struct Hardware<M> {
-    dma: Dma<RoutedMemory<M>, ChannelId>,
+    dma: Dma<RoutedMemory<M>, DmaAccess>,
     windows: Arc<std::sync::Mutex<ChannelWindows>>,
     firmware: FirmwareStatus,
-    control: ControlChannel,
+    control: Arc<std::sync::Mutex<ControlChannel>>,
+    contexts: Option<Arc<std::sync::Mutex<ContextTable>>>,
 }
 
 #[derive(Debug)]
@@ -54,9 +58,6 @@ struct ManagementBus<M>(Arc<Shared<M>>);
 #[derive(Debug)]
 struct Driver<M>(Arc<Shared<M>>);
 
-/// Hardware access failure returned through the restricted Host bus.
-pub type AccessError = pdma_model_hw_components::AccessError<pdma_model_dma::Error>;
-
 /// Host-visible capabilities, without management access or DMA internals.
 #[derive(Debug)]
 pub struct Host<M> {
@@ -73,6 +74,6 @@ pub struct Managed<M> {
     pipeline: CommandLoop,
     firmware_runtime: InterruptRuntime<PendingInterrupt<ControlIrq>>,
     firmware_cpu: Arc<SoftwareCpu>,
-    firmware_memory: M,
+    firmware_memory: memory::ControlMemory<M>,
     function_count: usize,
 }

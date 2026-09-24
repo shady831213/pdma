@@ -6,14 +6,16 @@ They are not DMA task rings. Both directions use management ISRs; there is no ev
 
 ## Ownership and startup
 
-- Contract defines a 24-byte request and 16-byte response, a 24-byte `ControlRingState`
+- Contract defines a 32-byte request and 24-byte response, a 24-byte `ControlRingState`
   and a 48-byte `ControlQueue`. All have eight-byte alignment and little-endian encoding.
 - PF Host allocates the descriptor and both entry buffers. It initializes the descriptor,
   publishes its address through bootstrap, enables the channel and rings the request doorbell.
 - Firmware reads and validates the descriptor once, retaining accepted geometry.
   Subsequent operations access the independent cursor fields, not mutable geometry.
-- Hardware owns only bootstrap, enable and two doorbells. It has no memory capability,
-  resource-allocation policy, queue arithmetic or software handlers.
+- Hardware owns bootstrap, immutable live address-space attributes, enable and two
+  doorbells. Its borrowed memory-access view resolves the fixed PF and configured
+  attributes; it owns no backing, resource-allocation policy, queue arithmetic or
+  software handlers.
 - Runtime connects each doorbell pulse to its destination's pending interrupt source.
   Each software program registers its own ISR, which wakes the ring-processing task.
   The ordinary direct-DMA assembly remains independent.
@@ -31,13 +33,13 @@ business flow in CPU scopes. Ordinary shared drivers impose no additional CPU
 affinity: register capability checks, where explicitly configured, remain authoritative.
 
 The always-on `ControlRegisters` map has a platform-selected base and contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
-and response doorbell at 16, for an extent of 20 bytes.
+response doorbell at 16, and address-space attributes at 20, for an extent of 28 bytes.
 The platform-selected PF owns bootstrap/enable/request writes; firmware owns response writes. Wrong-owner
 writes are rejected even if the value would not change. Doorbells are write-only:
 one emits a coalescing pulse, zero has no effect, and hardware does not retain a one
 in register storage. PF and firmware may read bootstrap/enable; VF accesses are rejected.
 
-Enable freezes the bootstrap address and rejects disabling. Geometry validation now
+Enable freezes the bootstrap address and Default/PASID attributes and rejects disabling. Geometry validation now
 belongs to software, not the MMIO block. `Ring` requires a nonzero power-of-two
 capacity below 2^31 and validates aligned, representable storage extents. Cursors
 are wrapping u32 entry counts. `SoftRing` validates observed pending counts.
@@ -218,7 +220,7 @@ cargo test -p pdma-model-software --test soft_ring
 cargo test -p hardware-interface-runtime --test notifications
 cargo test -p pdma-model-host --test management_memory
 cargo test -p pdma-model-firmware
-cargo test -p pdma-model-hw-components --test control_channel
+cargo test -p pdma-model-hw-components --test components control::
 cargo test -p pdma-model-scenarios --test firmware_managed
 cargo test -p pdma-model-contract --features export-c-header --test header_c
 ```

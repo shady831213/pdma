@@ -6,6 +6,8 @@ mod channel;
 mod error;
 mod execution;
 mod fetch;
+mod maintenance;
+mod memory;
 mod reset;
 mod routing;
 mod stages;
@@ -21,16 +23,50 @@ pub use execution::{
     WriteCopy,
 };
 pub use fetch::Fetch;
-use hardware_interface_runtime::BoundMemory;
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow, register_dispatch};
-use pdma_model_contract::{
-    ChannelId, DmaControl, DmaDiscovery, DmaFaultCode, DmaRegistersLayout, ResetValues,
+pub use maintenance::MaintenanceError;
+pub use memory::ChannelContext;
+use pdma_model_contract::dma::{
+    ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFaultCode,
+    DmaRegistersLayout, EndpointMode, ResetValues,
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
 pub use stages::{
     CommandLoop, CopyLoop, Execution, Intake, Pipeline, Publish, Responses, RunCommand, UpdateIrq,
 };
+
+#[derive(Debug)]
+struct Frontier {
+    channel: ChannelId,
+    generation: u64,
+    consumer: u32,
+    pending: u32,
+    passed: bool,
+    failed: bool,
+}
+
+#[derive(Debug)]
+struct Maintenance {
+    context: ContextId,
+    abort: bool,
+    frontiers: Vec<Frontier>,
+    result: Result<bool, MaintenanceError>,
+}
+
+const fn references(command: &Command) -> [Option<ContextId>; 3] {
+    let sg = match (command.source.mode, command.destination.mode) {
+        (EndpointMode::Linear, EndpointMode::Linear) => None,
+        (EndpointMode::ScatterGather, _) | (_, EndpointMode::ScatterGather) => {
+            Some(ContextId::new(command.sg_context))
+        }
+    };
+    [
+        Some(ContextId::new(command.source.context)),
+        Some(ContextId::new(command.destination.context)),
+        sg,
+    ]
+}
 
 /// Hardware context; the assembler chooses and owns the memory backing.
 #[derive(Debug)]
@@ -40,10 +76,11 @@ pub struct Dma<M, S = ()> {
     channels: Vec<Channel>,
     /// Injected memory access capability, never a device-selected backend.
     pub memory: M,
-    sideband: fn(ChannelId) -> S,
+    sideband: fn(DmaAccess) -> S,
     control: RegisterWindow<DmaControl>,
     interrupt: bool,
-    active: Option<(ChannelId, u64)>,
+    active: Option<ChannelTask<[Option<pdma_model_contract::dma::ContextId>; 3]>>,
+    maintenance: Option<Maintenance>,
 }
 
 impl<M, S> Dma<M, S> {
@@ -98,16 +135,6 @@ impl<M, S> Dma<M, S> {
         }
     }
 
-    /// Borrows one channel and shared hardware resources for a single interaction.
-    pub fn channel_context(&mut self, id: ChannelId) -> Result<ChannelContext<'_, M, S>, Error> {
-        let device_fatal = self.halted();
-        Ok(ChannelContext {
-            channel: self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?,
-            memory: BoundMemory::new(&self.memory, (self.sideband)(id)),
-            device_fatal,
-        })
-    }
-
     /// Reads a register and applies the owning channel's immediate side effects.
     pub fn read(&mut self, offset: usize, destination: &mut [u8]) -> Result<(), Error> {
         register_dispatch!(
@@ -141,12 +168,16 @@ impl<M, S> Dma<M, S> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
+        let maintenance = self.maintenance_interlock(None);
         let resetting = self.resetting();
         let mut requested = false;
         self.control.write_with(
             address,
             source,
-            |offset, _, _| {
+            |offset, _, next| {
+                if offset == DmaControl::RESET.offset() && next.reset.request() {
+                    maintenance?;
+                }
                 if resetting && offset != DmaControl::RESET.offset() {
                     return Err(Error::ResetInProgress);
                 }
@@ -170,7 +201,7 @@ impl<M, S> Dma<M, S> {
         address: usize,
         destination: &mut [u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset) = self.locate_channel(address)?;
+        let (channel, offset, _) = self.locate_channel(address)?;
         register_dispatch!(
             channel.read(offset, destination),
             Err(RegisterAccessError::InvalidOffset { offset }),
@@ -182,9 +213,9 @@ impl<M, S> Dma<M, S> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset) = self.locate_channel(address)?;
+        let (channel, offset, maintenance) = self.locate_channel(address)?;
         register_dispatch!(
-            channel.write(offset, source),
+            channel.write(offset, source, maintenance),
             Err(RegisterAccessError::InvalidOffset { offset }),
         )
     }
@@ -194,7 +225,7 @@ impl<M, S> Dma<M, S> {
         address: usize,
         destination: &mut [u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset) = self.locate_admin(address)?;
+        let (channel, offset, _) = self.locate_admin(address)?;
         channel
             .admin
             .read(offset, destination)
@@ -206,56 +237,45 @@ impl<M, S> Dma<M, S> {
         address: usize,
         source: &[u8],
     ) -> Result<(), RegisterAccessError<Error>> {
-        let (channel, offset) = self.locate_admin(address)?;
-        channel.write_admin(offset, source)
+        let (channel, offset, maintenance) = self.locate_admin(address)?;
+        channel.write_admin(offset, source, maintenance)
     }
 
     fn locate_channel(
         &mut self,
         address: usize,
-    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
+    ) -> Result<(&mut Channel, usize, bool), RegisterAccessError<Error>> {
         let (index, offset) = self
             .layout
             .channels()
             .locate(address)
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        let maintenance = self
+            .maintenance_interlock(Some(ChannelId::new(index)))
+            .is_err();
         let channel = self
             .channels
             .get_mut(index)
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
-        Ok((channel, offset))
+        Ok((channel, offset, maintenance))
     }
 
     fn locate_admin(
         &mut self,
         address: usize,
-    ) -> Result<(&mut Channel, usize), RegisterAccessError<Error>> {
+    ) -> Result<(&mut Channel, usize, bool), RegisterAccessError<Error>> {
         let admin = self.layout.admin();
         let (index, offset) = admin
             .locate(address)
             .and_then(|(_, offset)| admin.child().channels().locate(offset))
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
+        let maintenance = self
+            .maintenance_interlock(Some(ChannelId::new(index)))
+            .is_err();
         let channel = self
             .channels
             .get_mut(index)
             .ok_or(RegisterAccessError::OutsideWindow { address })?;
-        Ok((channel, offset))
-    }
-}
-
-/// One interaction's selected channel; no borrow escapes a stage step.
-#[derive(Debug)]
-pub struct ChannelContext<'a, M, S = ()> {
-    /// The channel whose operation is being advanced.
-    pub channel: &'a mut Channel,
-    /// Memory access restricted to this channel's selected address space.
-    pub memory: BoundMemory<'a, M, S>,
-    device_fatal: bool,
-}
-
-impl<M, S> ChannelContext<'_, M, S> {
-    /// Whether this channel or the shared device has faulted.
-    pub fn halted(&self) -> bool {
-        self.device_fatal || self.channel.halted()
+        Ok((channel, offset, maintenance))
     }
 }

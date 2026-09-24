@@ -3,7 +3,7 @@ use super::{
     registers::{read_word, write},
 };
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelAdmin, ChannelFaultCode, ChannelFaultValues, ChannelId, ChannelIrqCauseValues,
     ChannelIrqMaskValues, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery, DmaFaultCode,
     DmaFaultValues, DmaRegisters,

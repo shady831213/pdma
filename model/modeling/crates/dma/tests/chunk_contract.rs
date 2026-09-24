@@ -7,7 +7,7 @@ use hardware_interface_pipeline::{
     AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{Response, ResponseStatus};
+use pdma_model_contract::dma::{Response, ResponseStatus};
 use pdma_model_dma::{
     ChannelContext, CheckLengths, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
     WriteCopy,
@@ -82,7 +82,7 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
         assert_eq!(
             Response::from_bytes(&raw)?,
             Response {
-                flags: pdma_model_contract::CompletionFlagsValues::default(),
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::InvalidLength,
                 bytes_completed: 0

@@ -51,9 +51,19 @@ DMA data channels. Firmware owns Function-to-channel
 allocation; peripheral registers enforce MMIO ownership and route channel notifications.
 See `model/modeling/docs/{control-channel,function-isolation}.md`. Managed DMA can
 use independent Function memory capabilities or an explicitly shared backend.
-DMA tags accesses with channel metadata; hw-components resolves owner registers
-and forwards Function-tagged requests. Runtime selects Function backing; backing and
-software allocators remain platform-owned. No PASID/IOMMU translation,
+DMA tags accesses with channel/context selectors; hw-components resolves owner
+registers and optionally an instance-sized context table. Context attributes are
+an extensible schema record, initially Default/PASID (Default differs from PASID zero).
+Runtime selects injected Function/address-space backing; allocation stays platform-owned.
+PF control memory has its own enable-frozen configuration, not a reserved table slot.
+Firmware supports Create/Drain/Abort/DestroyContext through its existing control queues.
+Hardware accepts an atomic context-ID plus Drain/Abort request; firmware implements
+Destroy by awaiting Drain success and explicitly clearing valid. A retained failed-channel
+bitmap is the final context-map bank and covers all detected failures in the operation scope.
+DMA captures producer frontiers, discards only unstarted Abort targets and retains
+accepted task references until RunCommand retirement. Failure retains the binding
+and permits channel-reset recovery. See model/modeling/docs/context-contract.md for
+mandatory software lifetime/submission obligations. No PASID/IOMMU translation,
 Function reset/FLR, event ring or PCIe integration is implemented.
 PF-only firmware management retains per-Function work MMIO and IRQ isolation.
 Hardware checks the platform-selected PF identity on every control-register access;

@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{ChannelFaultCode, Command, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{ChannelFaultCode, Command, Endpoint, Response, ResponseStatus};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -45,13 +45,14 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 13,
         source: Endpoint::linear(0, 0),
         destination: Endpoint::linear(0, 0),
@@ -65,7 +66,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
             .is_ok()
     );
     let expected = Response {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 13,
         status: ResponseStatus::Success,
         bytes_completed: 0,
@@ -132,7 +133,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
             model.clone(),
             memory.clone(),
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
@@ -142,7 +143,8 @@ async fn copy_completes_when_host_submits_and_consumes_response()
 
     // When: a real async worker executes the submitted command.
     cpu.run_main(channel.submit(Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 7,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),
@@ -157,7 +159,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     assert_eq!(
         response,
         Some(Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 7,
             status: ResponseStatus::Success,
             bytes_completed: 8,
@@ -202,13 +204,14 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
             model.clone(),
             memory,
             ChannelConfig {
-                id: pdma_model_contract::ChannelId::new(0),
+                id: pdma_model_contract::dma::ChannelId::new(0),
                 rings,
             },
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 9,
         source: Endpoint::linear(source.raw(), 8),
         destination: Endpoint::linear(destination.raw(), 8),

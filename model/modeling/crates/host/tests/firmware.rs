@@ -54,7 +54,7 @@ async fn failed_reports_the_firmware_error_code() {
     assert!(matches!(
         result,
         Err(Error::FirmwareFailed(
-            pdma_model_contract::FirmwareBootError::WindowSetup
+            pdma_model_contract::hw_components::firmware::FirmwareBootError::WindowSetup
         ))
     ));
 }

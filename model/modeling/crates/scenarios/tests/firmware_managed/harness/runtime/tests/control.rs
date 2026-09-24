@@ -1,10 +1,12 @@
 use super::client;
 use super::*;
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, SharedMemoryAllocator};
-use pdma_model_contract::{
-    ChannelId, ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus, FunctionId,
-    Ring,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlResponse, ControlResponseStatus,
 };
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::memory::FunctionId;
+use pdma_model_contract::ring::Ring;
 use pdma_model_host::{Error, Management, ManagementRings, RingConfig, firmware};
 use std::{future::Future, pin::pin, task::Poll, time::Duration};
 
@@ -81,7 +83,7 @@ async fn host_acquires_releases_and_reuses_channel_through_control_rings() {
             assert!(matches!(
                 host.bus
                     .read(
-                        u32::try_from(pdma_model_contract::ChannelBlock::ALIGNMENT).unwrap(),
+                        u32::try_from(pdma_model_contract::dma::ChannelBlock::ALIGNMENT).unwrap(),
                         &mut word
                     )
                     .await,

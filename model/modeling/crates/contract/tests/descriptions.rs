@@ -1,10 +1,11 @@
 //! Documentation coverage of the concrete PDMA wire contract.
 
 use hardware_interface_schema::Documentation;
-use pdma_model_contract::{
-    Address, ChannelFault, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint,
-    ReadWord, Response, ResponseRegisters, Segment, Switch, Word,
+use pdma_model_contract::dma::{
+    ChannelFault, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint, Response,
+    ResponseRegisters, Segment,
 };
+use pdma_model_contract::register::{Address, ReadWord, Switch, Word};
 
 fn assert_documented(name: &str, docs: Documentation) {
     assert!(

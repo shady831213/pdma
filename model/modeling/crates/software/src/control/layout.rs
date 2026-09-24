@@ -1,6 +1,7 @@
 use crate::ring::MemoryRingIo;
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::{ControlQueue, ControlRingState, RingError};
+use pdma_model_contract::control::{ControlQueue, ControlRingState};
+use pdma_model_contract::ring::RingError;
 
 #[derive(Clone, Copy, Debug)]
 struct Cursors {

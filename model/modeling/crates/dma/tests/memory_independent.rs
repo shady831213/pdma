@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{AfterEach, Operation, Stage, StepOutcome};
-use pdma_model_contract::{ChannelId, Command};
+use pdma_model_contract::dma::{ChannelId, Command};
 use pdma_model_dma::{ChannelContext, Dma, Error, Fetch, Resettable, UpdateIrq};
 use support::{TestResult, command, setup, submit};
 

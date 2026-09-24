@@ -1,13 +1,20 @@
 # Context contract for the model and future RTL
 
 Recorded: 2026-09-21.
-Status: agreed design, not implemented behavior or a released register ABI.
-This document is specification input for the next modeling slice and subsequent
-RTL. It does not authorize implementation automatically. Current behavior remains
-described by [Function isolation](function-isolation.md),
+Status: Default/PASID model implemented; not a released register ABI or RTL bus specification.
+This document records implemented model semantics and specification input for
+subsequent RTL. Related behavior is described by [Function isolation](function-isolation.md),
 [control channels](control-channel.md), and [reset](reset.md).
 
-MUST and MUST NOT below describe the agreed future contract. Software obligations
+Implementation scope, 2026-09-23: the first iteration selects Default or PASID
+address spaces. Context attributes are a named schema record, extensible separately
+from descriptor selectors. Source/destination and SG selectors are 32-bit IDs in
+the existing 64-byte Command layout. Table capacity is instance configuration.
+Device-memory targeting, address translation and base/limit permission windows
+are outside this iteration. The obligations below are the implementation and
+verification contract; passing coverage must be recorded before claiming them.
+
+MUST and MUST NOT below describe the hardware/software contract. Software obligations
 are part of the hardware/software interface, not implementation notes. Preserve
 their identifiers when deriving the RTL specification and verification cases.
 Behavior outside these preconditions has no successful-cleanup guarantee; it MUST
@@ -29,11 +36,13 @@ inside their entries use the corresponding payload context. When neither endpoin
 uses SG, `sg_context` is ignored and is not a task reference.
 
 A context is a reusable access binding, not a task allocation. Many commands may
-reference one entry. Its logical contents include validity, owner Function, access
-target (Host or Device), and the address-space attributes applicable to that target.
-Host access can select Default or a PASID; Default is not PASID zero. Device access
-must not be forced to carry a meaningless Host PASID. This selects one target per
-context; it is not an AMD GPUVM page table that mixes targets page by page.
+reference one entry. Its first-iteration contents are validity, owner Function and
+the named address-space attributes. Access selects Default or a 20-bit PASID;
+Default is not PASID zero. PASID identifies a platform-provided space; PDMA does
+not perform page-table translation. The attribute record may later add or change
+fields without distributing those details into DMA stages or descriptor selectors.
+A future target field could distinguish Host from Device memory; such an extension
+must define the attributes meaningful to each target. It is not implemented now.
 Further attributes require defined semantics, not speculative fields.
 
 `hw-components` owns the context registers and access routing. It derives the
@@ -80,7 +89,10 @@ entry or from its current in-flight task count.
 
 ## Operations and completion semantics
 
-These are semantic operation names; opcodes and wire layouts are not assigned.
+The control opcodes and wire layouts are implemented in
+[`contract::control`](../crates/contract/src/control.rs). The table below defines
+their lifecycle semantics; register encodings are specified in the context
+management register contract below.
 
 | Operation | Effect | Successful result |
 | --- | --- | --- |
@@ -90,8 +102,10 @@ These are semantic operation names; opcodes and wire layouts are not assigned.
 | DestroyContext | Release a binding only after its old references and accepted accesses have exited | Selector no longer usable; slot eligible for reallocation |
 
 Successful Drain and Abort do not change the binding and need no ResumeContext.
-Destroy is not an unrestricted write to `valid`. The chosen management encoding
-must preserve SW-09 whether cleanup is part of Destroy or a prerequisite sequence.
+Destroy is a firmware operation: issue Drain, wait for Success, explicitly clear
+the entry's `valid`, then return the control response. Hardware implements only
+Drain and Abort; neither clears `valid`. Firmware must obey SW-09 throughout this
+sequence. A privileged `valid` write by itself does not establish cleanup.
 An operation that encounters a channel fault follows the failure path below;
 "successful result" must not be inferred merely from receiving a reply.
 
@@ -189,13 +203,79 @@ preserve this distinction when the external transport is implemented.
 
 ## RTL specification and verification handoff
 
+### Model implementation boundary
+
+- `contract/src/dma/access.rs` defines DMA channel/context selectors;
+  `contract/src/memory.rs` defines extensible attributes and resolved fabric identity;
+  `contract/src/hw_components/context.rs` defines the peripheral table/register schemas.
+  Extending attributes can change the control ABI;
+  no compatibility format or speculative extension slots are promised before ABI freeze.
+- `hw-components::context::ContextTable` owns bindings and resolves selectors against the
+  channel-owner registers. Firmware allocates entries via the firmware-only MMIO
+  aperture. Firmware implements Destroy as a fresh Drain followed by its own
+  `valid = 0` write after Success. Failure leaves the binding valid.
+- `dma/src/maintenance` captures the initial consumer plus pending count (equivalent
+  to the fixed producer), channel generation and a sticky passed flag for each channel
+  owned by the Function. The DMA API receives only channel/context IDs, never a PASID.
+- Execution acceptance is successful command fetch/consumer publication plus active
+  reference registration in one synchronous Fetch step. There is no externally visible
+  interval between those effects. `RunCommand` remains the terminal ownership boundary.
+  Abort examines unread ring entries before command admission and discards matching
+  entries without needing response space. It does not interrupt an accepted command.
+- Channel register owners interlock reset and conflicting enable/geometry/context
+  changes while maintenance is pending. Context owner and attributes are immutable
+  while valid; clearing valid is also rejected while maintenance is pending.
+  Privileged channel-owner changes also obey SW-08: supported firmware serializes
+  management, closes access and awaits real reset before owner reuse. Direct privileged
+  writes that bypass that lifecycle are not a supported alternative.
+- Firmware reads the failed-channel bitmap for the Function's allocated channels
+  and returns a control failure without stopping service. The existing control
+  response carries the first failed channel as a diagnostic, not an exhaustive list;
+  the hardware snapshot retains all failures. The context entry survives failure.
+  Recovery may reset all affected channels before a new Destroy attempt.
+- Synchronous memory calls complete within a step. No transaction IDs, outstanding
+  bus queues or artificial timing are modeled; the external drain requirements in
+  HW-07 remain an RTL/integration obligation.
+
+### Context management register contract
+
+`capacity` reports the instance's total number of context entries, not free slots.
+The aligned 64-bit `request` register carries the 32-bit context ID in bits 0..31
+and the action in bits 32..33 (Idle=0, Drain=1, Abort=2; 3 is invalid). Submit these
+together in one eight-byte MMIO write. Partial writes, invalid actions and writes
+while Pending are rejected without changing the in-flight operation. The request
+self-clears; `result` retains completion independently. Idle is a no-op.
+
+The map contains management registers, then the context entry bank, then the
+read-only `failed` bitmap bank as its final placement. Word count is
+`ceil(channel_count / 32)`. Hardware ChannelId `c` maps to word `c / 32`, bit
+`c % 32`; firmware derives the address through the schema layout and its Function
+allocation map. Increasing channel count appends bitmap words without moving the
+management registers, context entries or bitmap base.
+
+At a failure decision, hardware checks every channel in the fixed operation scope
+and records all detected failures before publishing Failed. This is a snapshot,
+not a live fault mirror or a promise to wait for future faults. The bitmap remains
+unchanged by subsequent channel recovery, faults or Idle writes, until the next
+accepted non-Idle request clears it. Foreign-Function and unimplemented bits stay
+zero. Failure without an identifiable channel may have an empty bitmap; it still
+does not authorize invalidation or resource reuse. Firmware must serialize requests
+with reading their result and bitmap, so a later request cannot replace that snapshot.
+
+Behavioral coverage lives in `dma/tests/{contexts,context_maintenance,context_frontiers}.rs`,
+`dma/src/maintenance/tests.rs`, `contract/tests/context_attributes.rs`, `hw-components/tests/context/{memory,table,request,bitmap}.rs`, and the
+`scenarios/tests/firmware_managed/cases/contexts.rs` programs. They exercise independent
+Default/PASID backings, mixed-context work, accepted-command retirement, response
+backpressure, fault recovery and safe binding reuse. The ordinary unit-sideband DMA
+and Function-only managed assemblies do not require a context table.
+
 The final specification MUST retain: the software preconditions above; hardware
 acceptance and completion points; register ownership/interlocks; ordering and
 visibility requirements; failure versus successful-cleanup meaning; reset scopes;
 and the permitted effects of discarded or partially executed tasks. Model scenarios
 must test these guarantees without concealing software obligations in the harness.
 
-Future verification obligations, not claims of existing test coverage:
+Verification obligations for both the model and subsequent RTL:
 
 | Scenario | Required observable | Contract |
 | --- | --- | --- |
@@ -210,10 +290,11 @@ Future verification obligations, not claims of existing test coverage:
 | Standalone Drain/Abort succeeds, then new target work is submitted | Same binding works without ResumeContext | Operation table |
 | Destroy after cleanup, failed cleanup, aliases and stale software waiters | Only valid successful release authorizes slot reuse; no implicit global PASID unbind | SW-09/10/11/12 |
 
-Before RTL/ABI freeze, resolve selector widths and table capacity, target-specific
-address attributes and Device-memory permissions, exact register/command layouts,
-execution-acceptance placement, maintenance error encoding, and management reset
-recovery. Generation-tagged selectors are not required by the agreed trusted-software
+Before RTL/ABI freeze, retain the model's explicit 32-bit selectors, instance-configured
+capacity, command acceptance point and failure/recovery semantics, or document changes
+to them. Specify external bus completion and management reset integration. Device-memory
+permissions and target-specific attributes require a separate feature decision.
+Generation-tagged selectors are not required by the agreed trusted-software
 protocol when all old references exit before reuse; adopting them needs separate
 semantics and does not replace draining. These open implementation details must
 not weaken the agreed software obligations or hardware completion guarantees.

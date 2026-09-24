@@ -1,4 +1,4 @@
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::ChannelId;
 
 /// Platform-supplied register bases in the software program's bus address space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,6 +11,8 @@ pub struct ManagementAddresses {
     pub control: u32,
     /// Firmware boot report.
     pub firmware: u32,
+    /// Optional firmware context-table aperture.
+    pub contexts: Option<u32>,
 }
 
 impl ManagementAddresses {

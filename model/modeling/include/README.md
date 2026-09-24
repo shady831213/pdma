@@ -6,7 +6,7 @@ The contract generates one shared wire header and two static register views:
 | --- | --- | --- |
 | `pdma_common.h` | Existing record prefixes | Identical Host/firmware record sizes, encoding, enums and accessors |
 | `pdma_host.h` | `C_HDMA`, `C_HBOOT`, `C_HCTL`, `C_HWIN` | Host |
-| `pdma_firmware.h` | `C_FDMA`, `C_FBOOT`, `C_FCTL`, `C_FWIN` | Firmware |
+| `pdma_firmware.h` | `C_FDMA`, `C_FBOOT`, `C_FCTL`, `C_FWIN`, `C_FCTX` | Firmware |
 
 Both role headers include the common header and can coexist in one C11 translation
 unit. There is no mixed full-access public header. The schema exporter generates
@@ -24,6 +24,8 @@ holes. Read-only projections have zero writable masks. Descriptions are preserve
 | Window control | Hidden | Read/write |
 | Window readiness | Read-only | Hidden (not mapped on management bus) |
 | Control bootstrap / enable | PF only, read/write | Read-only |
+| Control address-space attributes | PF only, read/write before enable | Read-only |
+| Context table and maintenance | Hidden | Original leaf permissions |
 | Request doorbell | PF only, write-only | Hidden |
 | Response doorbell | Hidden | Write-only |
 
@@ -59,19 +61,36 @@ header specifically describes the managed Host view.
 Reset remains a write-one/request, read-busy handshake. Retain memory until hardware
 clears busy after old work drains. Managed Host uses ResetChannel/ReleaseChannel
 requests instead of writing administrative registers. Platform-pending notifications
-survive reset. The control map remains 20 bytes: bootstrap at zero, enable at eight,
-request doorbell at 12 and response doorbell at 16.
+survive reset. The control map is 28 bytes: bootstrap at zero, enable at eight,
+request doorbell at 12, response doorbell at 16, and address-space attributes at 20.
+Enabling locks both bootstrap and address-space attributes. The latter select
+Default or PASID independently of the data context table; no table slot is reserved.
 There is one PF control block, not a per-Function bank. Static Host metadata describes
 its PF permissions; hardware rejects every VF access. No control stride is exported.
 
 Shared wire records: Segment is 16 bytes, Endpoint 24, Command 64, Response 24,
-ControlRequest 24 and ControlResponse 16, ControlRingState 24, and ControlQueue 48. Enum bitfield constants are
+ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
+and ControlQueue 48. Enum bitfield constants are
 unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
 lists; WORD0/WORD1 hold address/length or list_address/count. Command IOC is at
-byte 56 and response IOC at byte 12. ControlQueue nests command state at byte 0
+byte 56 and response IOC at byte 12. Endpoint's payload-context selector is at
+byte 4; the nested Command source/destination selectors are at bytes 12/36 and
+its SG-table selector is at byte 60. These replace padding without changing the
+record extents. The channel's ring_context register selects one binding for both
+DMA rings; source, destination and SG selectors independently choose data bindings.
+ControlQueue nests command state at byte 0
 and response state at byte 24; each ring stores base/capacity/producer/consumer
-at bytes 0/8/12/16. ControlRequest stores ID/opcode/target Function/channel
-at bytes 0/8/12/16, with four reserved tail bytes.
+at bytes 0/8/12/16. ControlRequest stores ID/opcode/target Function/channel/context
+at bytes 0/8/12/16/20 and creation attributes at byte 24.
+
+The firmware context map has capacity, one aligned 64-bit maintenance request
+(context ID in bits 0..31, Drain/Abort action in bits 32..33), and a retained result.
+Hardware never clears entry validity on completion; firmware owns that write.
+After the entry bank, the final `failed` bank contains one 32-bit bitmap word per
+32 hardware channels. Increasing channel count grows this tail without moving
+earlier placements. Firmware reads the bitmap only after Failed; the next accepted
+non-Idle request replaces the snapshot. See `docs/context-contract.md` for lifetime
+and ordering requirements.
 
 Initialize record arrays to zero before using generated stores so reserved padding
 matches Rust encoding. Accessors encode bytes; they do not perform device I/O.
@@ -79,11 +98,13 @@ matches Rust encoding. Accessors encode bytes; they do not perform device I/O.
 Run from `model/modeling`:
 
 ```sh
-cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --write-dir include
-cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --check-dir include
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --contexts 3 --write-dir include
+cargo run -p pdma-model-contract --features export-c-header --bin pdma-abi-header -- --channels 3 --contexts 3 --check-dir include
 ```
 
-Both the explicit channel count and a directory action are required. Generation
+Both the explicit channel count and a directory action are required. The optional
+context count defaults to the channel count for this export sample, not for hardware
+construction. Generation
 validates all three artifacts before writing; checking fails if any artifact is
 missing or stale and never modifies files. Unsupported options and role selectors
 fail before writing. `--help` lists the interface. Export remains default-off.

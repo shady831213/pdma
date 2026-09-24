@@ -2,7 +2,8 @@ use super::memory::{QueueMemory, kick};
 use super::*;
 use hardware_interface_runtime::MemoryAccess;
 use hardware_interface_schema::{Decode, Encode};
-use pdma_model_contract::{ControlRequestOpcode, ControlResponseRaw, Ring};
+use pdma_model_contract::control::{ControlRequestOpcode, ControlResponseRaw};
+use pdma_model_contract::ring::Ring;
 
 #[tokio::test]
 async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
@@ -22,6 +23,8 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         .unwrap();
         let request = ControlRequest {
             id: 77,
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             function: 0,
             opcode: ControlRequestOpcode::AcquireChannel,
             channel: 7,

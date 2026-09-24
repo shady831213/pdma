@@ -2,7 +2,7 @@
 
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
-use pdma_model_contract::{ChannelId, DmaControl};
+use pdma_model_contract::dma::{ChannelId, DmaControl};
 use pdma_model_dma::{Dma, ResetControl};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -194,8 +194,8 @@ async fn cancelling_reset_wait_preserves_hardware_request() -> Result<(), Box<dy
         }
         // Then: cancellation does not clear the hardware-owned busy bit.
         let offset = if whole_device {
-            (pdma_model_contract::DmaDiscovery::EXTENT
-                + pdma_model_contract::DmaAdmin::CONTROL.offset())
+            (pdma_model_contract::dma::DmaDiscovery::EXTENT
+                + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
                 + DmaControl::RESET.offset()
         } else {
             ChannelId::new(1)

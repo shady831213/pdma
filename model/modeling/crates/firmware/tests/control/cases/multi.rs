@@ -1,8 +1,8 @@
 use super::{acquire, support::*};
-use pdma_model_contract::{
-    ChannelId, ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponseStatus,
-    ControlRingState,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponseStatus, ControlRingState,
 };
+use pdma_model_contract::dma::ChannelId;
 
 #[tokio::test]
 async fn duplicate_release_waits_then_reports_not_allocated() -> TestResult {
@@ -15,6 +15,8 @@ async fn duplicate_release_waits_then_reports_not_allocated() -> TestResult {
     let producer = ControlQueue::RESPONSE_OFFSET + ControlRingState::PRODUCER_OFFSET;
     write_word(&memory, consumer, 1)?;
     let release = ControlRequest {
+        context: 0,
+        attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
         id: 2,
         function: 0,
         opcode: ControlRequestOpcode::ReleaseChannel,
@@ -89,6 +91,8 @@ async fn management_waits_for_reset_before_consuming_the_next_request() -> TestR
     publish(
         &memory,
         ControlRequest {
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
             id: 2,
             function: 0,
             opcode: ControlRequestOpcode::ReleaseChannel,

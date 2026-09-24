@@ -4,21 +4,33 @@ use hardware_interface_schema::{
     },
     export::{Exporter, InMemoryArtifactSink},
 };
-use pdma_model_contract::{
-    ChannelWindowRegisters, Command, ControlQueue, ControlRegisters, ControlRequest,
-    ControlResponse, ControlRingState, DmaRegisters, Endpoint, FirmwareRegisters, RegisterView,
-    Response, Segment,
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlResponse, ControlRingState,
 };
+use pdma_model_contract::dma::{Command, DmaRegisters, Endpoint, Response, Segment};
+use pdma_model_contract::hw_components::context::ContextTableRegisters;
+use pdma_model_contract::hw_components::control::ControlRegisters;
+use pdma_model_contract::hw_components::firmware::FirmwareRegisters;
+use pdma_model_contract::hw_components::windows::ChannelWindowRegisters;
+use pdma_model_contract::memory::ContextAttributes;
+use pdma_model_contract::view::RegisterView;
 use std::{error::Error, io::Write};
 
 type HeaderSet = Vec<(&'static str, Vec<u8>)>;
 
 /// Renders all role headers for one hardware channel count before file output.
 pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
+    generate_with_contexts(count, count)
+}
+
+#[doc = "Renders role headers using independently specified channel and context capacity."]
+pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet, Box<dyn Error>> {
+    u32::try_from(contexts)?;
     let layout = DmaRegisters::new(count)?;
     u32::try_from(count)?;
     u32::try_from(layout.extent())?;
     let windows = ChannelWindowRegisters::new(count)?;
+    let contexts = ContextTableRegisters::for_channels(contexts, count)?;
     let registers = layout.resolve()?;
     let mut common = InMemoryArtifactSink::new();
     for (name, record) in [
@@ -26,6 +38,7 @@ pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
         ("endpoint", Endpoint::SPEC.resolve()?),
         ("command", Command::SPEC.resolve()?),
         ("response", Response::SPEC.resolve()?),
+        ("contextattributes", ContextAttributes::SPEC.resolve()?),
         ("controlrequest", ControlRequest::SPEC.resolve()?),
         ("controlresponse", ControlResponse::SPEC.resolve()?),
         ("controlringstate", ControlRingState::SPEC.resolve()?),
@@ -44,6 +57,10 @@ pub fn generate(count: usize) -> Result<HeaderSet, Box<dyn Error>> {
         ),
     ] {
         let mut sink = InMemoryArtifactSink::new();
+        if role == RegisterView::Firmware {
+            RegisterMapCHeaderExporter::new("context", "fctx")
+                .export(&contexts.resolve()?, &mut sink)?;
+        }
         RegisterMapCHeaderExporter::new("dma", format!("{prefix}dma")).export(
             &registers.project_access(|r| role.dma_access(r.id(), r.definition().access()))?,
             &mut sink,

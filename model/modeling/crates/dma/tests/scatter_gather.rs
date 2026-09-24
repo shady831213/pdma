@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{Command, Endpoint, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{Command, Endpoint, Response, ResponseStatus, Segment};
 use support::{TestResult, run, setup, submit};
 
 fn write_segments(memory: &SharedMemory, base: u64, segments: &[Segment]) -> TestResult {
@@ -83,7 +83,8 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
             &mut device,
             &memory,
             Command {
-                flags: pdma_model_contract::CompletionFlagsValues::default(),
+                sg_context: 0,
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 source,
                 destination,
@@ -111,7 +112,7 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
         assert_eq!(
             response(&memory)?,
             Response {
-                flags: pdma_model_contract::CompletionFlagsValues::default(),
+                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::Success,
                 bytes_completed: 8
@@ -135,7 +136,8 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
         &mut device,
         &memory,
         Command {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            sg_context: 0,
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 8,
             source: Endpoint::linear(0x1400, 769),
             destination: Endpoint::linear(0x1800, 769),
@@ -150,7 +152,7 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
     assert_eq!(
         response(&memory)?,
         Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 8,
             status: ResponseStatus::Success,
             bytes_completed: 769
@@ -182,7 +184,8 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
         &mut device,
         &memory,
         Command {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            sg_context: 0,
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 5,
             source: Endpoint::scatter_gather(0x1400, 2),
             destination: Endpoint::linear(0x1202, 4),
@@ -198,7 +201,7 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
     assert_eq!(
         response(&memory)?,
         Response {
-            flags: pdma_model_contract::CompletionFlagsValues::default(),
+            flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 5,
             status: ResponseStatus::Success,
             bytes_completed: 4

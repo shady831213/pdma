@@ -1,5 +1,5 @@
 use crate::harness::{self, TestResult};
-use pdma_model_contract::ResponseStatus;
+use pdma_model_contract::dma::ResponseStatus;
 
 #[tokio::test]
 async fn identical_dma_addresses_resolve_in_the_owning_functions_memory() -> TestResult {

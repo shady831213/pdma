@@ -1,7 +1,7 @@
 use super::{ChannelControl, Error};
 use crate::ring::{RegisterRingIo, RingCursorRegisters};
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::ChannelId;
 
 #[derive(Debug)]
 pub(super) struct RegisterPort<B> {

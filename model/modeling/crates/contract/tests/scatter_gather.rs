@@ -1,7 +1,7 @@
 //! Scatter/gather endpoint wire behavior.
 
 use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::{Command, Endpoint, EndpointMode, Response, Segment};
+use pdma_model_contract::dma::{Command, Endpoint, EndpointMode, Response, Segment};
 
 #[test]
 fn independent_endpoints_and_progress_have_full_width_wire_storage() {

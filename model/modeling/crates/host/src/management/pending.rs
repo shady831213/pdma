@@ -1,7 +1,9 @@
 use super::{Management, ManagementRequestId, Submission, transport::ring_error};
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
-use pdma_model_contract::{ChannelId, ControlRequest, ControlRequestOpcode, FunctionId};
+use pdma_model_contract::control::{ControlRequest, ControlRequestOpcode};
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_software::ring::SoftRingError;
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
@@ -62,6 +64,21 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         function: FunctionId,
         channel: u32,
     ) -> Result<ManagementRequestId, Error<B::Error>> {
+        self.submit_request(ControlRequest {
+            id: 0,
+            opcode,
+            function: function.raw(),
+            channel,
+            context: 0,
+            attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
+        })
+        .await
+    }
+
+    pub(super) async fn submit_request(
+        &mut self,
+        mut request: ControlRequest,
+    ) -> Result<ManagementRequestId, Error<B::Error>> {
         if self.submission.is_some() {
             return Err(Error::ManagementBusy);
         }
@@ -95,12 +112,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         }
         let id = self.next_id;
         self.next_id = id.checked_add(1).ok_or(Error::ManagementProtocol)?;
-        let request = ControlRequest {
-            id,
-            opcode,
-            function: function.raw(),
-            channel,
-        };
+        request.id = id;
         self.outstanding.push(request);
         self.submission = Some(Submission {
             request,

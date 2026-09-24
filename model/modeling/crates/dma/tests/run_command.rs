@@ -8,19 +8,21 @@ mod run_command {
 
 use hardware_interface_pipeline::{AfterEach, Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::{ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters,
+};
 use pdma_model_dma::{Error, ResetControl, RunCommand};
 use std::ops::ControlFlow;
 use support::{TestResult, command, read_word, setup, single_command, submit};
 
 const CONTROL: usize =
-    pdma_model_contract::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
-const RESET: usize =
-    pdma_model_contract::DmaDiscovery::EXTENT + pdma_model_contract::DmaAdmin::CHANNELS_OFFSET;
-const CONSUMER: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+    pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
+const RESET: usize = pdma_model_contract::dma::DmaDiscovery::EXTENT
+    + pdma_model_contract::dma::DmaAdmin::CHANNELS_OFFSET;
+const CONSUMER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + ChannelBlock::COMMAND.offset()
     + CommandRegisters::CONSUMER.offset();
-const PRODUCER: usize = pdma_model_contract::ChannelBlock::ALIGNMENT
+const PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + ChannelBlock::RESPONSE.offset()
     + ResponseRegisters::PRODUCER.offset();
 
@@ -117,7 +119,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
         ),
     ] {
         device.write(
-            pdma_model_contract::ChannelBlock::ALIGNMENT + offset,
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT + offset,
             &value.to_le_bytes(),
         )?;
     }
@@ -132,7 +134,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
         ),
     ] {
         device.write(
-            pdma_model_contract::ChannelBlock::ALIGNMENT + offset,
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT + offset,
             &value.to_le_bytes(),
         )?;
     }

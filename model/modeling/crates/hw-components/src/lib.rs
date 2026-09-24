@@ -1,13 +1,10 @@
-//! Concrete management access-window hardware.
+//! Concrete PDMA peripheral hardware objects.
 
-mod access_window;
-mod channel_windows;
-mod control_channel;
-mod error;
-mod firmware_status;
-
-pub use access_window::AccessWindow;
-pub use channel_windows::{ChannelMemoryAccess, ChannelWindows, FunctionWindows};
-pub use control_channel::{ControlChannel, ControlError};
-pub use error::{AccessError, WindowConfigError};
-pub use firmware_status::FirmwareStatus;
+/// Firmware-owned context bindings and maintenance completion.
+pub mod context;
+/// Control-channel bootstrap, permissions, and notifications.
+pub mod control;
+/// Firmware boot status visible to Host software.
+pub mod firmware;
+/// Firmware-controlled DMA channel access windows.
+pub mod windows;

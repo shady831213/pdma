@@ -4,7 +4,7 @@ use crate::{
 };
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::{ChannelBlock, Command, CommandRegisters};
+use pdma_model_contract::dma::{ChannelBlock, Command, CommandRegisters};
 use pdma_model_dma::{ChannelTask, Dma, Error, Fault, Intake, ResetControl, RunCommand};
 use std::{cell::Cell, ops::ControlFlow, rc::Rc};
 
@@ -162,7 +162,7 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         &command().to_bytes()?,
     )?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),

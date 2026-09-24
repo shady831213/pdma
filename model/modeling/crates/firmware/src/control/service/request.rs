@@ -2,10 +2,11 @@ use crate::{
     Error,
     control::resources::{ResourceError, Resources},
 };
-use pdma_model_contract::{
-    ChannelId, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
-    RingError,
+use pdma_model_contract::control::{
+    ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
 };
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::ring::RingError;
 
 impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
     pub(super) async fn execute(
@@ -20,6 +21,7 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
             id: request.id,
             status: ControlResponseStatus::Success,
             channel: request.channel,
+            context: request.context,
         };
         let function = match resources.function(request.function) {
             Ok(function) => function,
@@ -45,6 +47,21 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
             ControlRequestOpcode::ResetChannel => {
                 response.status = resource_status(resources.reset(self.bus, (function, id)).await?);
             }
+            ControlRequestOpcode::CreateContext
+            | ControlRequestOpcode::DrainContext
+            | ControlRequestOpcode::AbortContext
+            | ControlRequestOpcode::DestroyContext => match &resources.contexts {
+                Some(contexts) => {
+                    contexts
+                        .execute(
+                            self.bus,
+                            (&request, &mut response),
+                            resources.channels(function),
+                        )
+                        .await?;
+                }
+                None => response.status = ControlResponseStatus::InvalidContext,
+            },
         }
         Ok(response)
     }

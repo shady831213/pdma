@@ -5,7 +5,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
 };
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRegisters, ControlRingState};
+use pdma_model_contract::control::{ControlQueue, ControlQueueRaw, ControlRingState};
+use pdma_model_contract::hw_components::control::ControlRegisters;
 use std::{
     future::{Future, poll_fn},
     pin::Pin,

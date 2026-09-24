@@ -1,7 +1,7 @@
 //! Typed channel fault codes over the unchanged MMIO representation.
 
 use hardware_interface_schema::RegisterValueError;
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelFault, ChannelFaultCode, ChannelFaultValues, ChannelRegistersValues,
 };
 

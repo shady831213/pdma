@@ -1,4 +1,5 @@
-use crate::{ChannelWindowBlock, ControlRegisters};
+use crate::hw_components::control::ControlRegisters;
+use crate::hw_components::windows::ChannelWindowBlock;
 use hardware_interface_schema::Access;
 
 /// Software domain whose static register permissions are exported.
@@ -14,10 +15,10 @@ impl RegisterView {
     /// Projects the DMA layout without exposing administrative blocks to managed Host software.
     pub const fn dma_access(
         self,
-        id: crate::DmaRegistersRegisterId,
+        id: crate::dma::DmaRegistersRegisterId,
         access: Access,
     ) -> Option<Access> {
-        use crate::DmaRegistersRegisterId::{Admin, Channels, Discovery};
+        use crate::dma::DmaRegistersRegisterId::{Admin, Channels, Discovery};
         match (self, id) {
             (Self::Firmware, _) | (Self::Host, Discovery | Channels) => Some(access),
             (Self::Host, Admin) => None,
@@ -32,7 +33,7 @@ impl RegisterView {
                 if offset == ChannelWindowBlock::CONTROL.offset()
                     || offset
                         == ChannelWindowBlock::CONTROL.offset()
-                            + crate::WindowControl::OWNER.offset() =>
+                            + crate::hw_components::windows::WindowControl::OWNER.offset() =>
             {
                 Some(Access::ReadWrite)
             }
@@ -50,10 +51,15 @@ impl RegisterView {
 
     /// Access to an exact relative control-register start; absent means hidden.
     pub const fn control_access(self, offset: usize) -> Option<Access> {
+        let attributes = offset >= ControlRegisters::ATTRIBUTES.offset()
+            && offset
+                < ControlRegisters::ATTRIBUTES.offset()
+                    + crate::hw_components::context::ContextAttributeRegisters::EXTENT;
         match self {
             Self::Host => {
                 if offset == ControlRegisters::BOOTSTRAP.offset()
                     || offset == ControlRegisters::ENABLE.offset()
+                    || attributes
                 {
                     Some(Access::ReadWrite)
                 } else if offset == ControlRegisters::REQUEST.offset() {
@@ -65,6 +71,7 @@ impl RegisterView {
             Self::Firmware => {
                 if offset == ControlRegisters::BOOTSTRAP.offset()
                     || offset == ControlRegisters::ENABLE.offset()
+                    || attributes
                 {
                     Some(Access::ReadOnly)
                 } else if offset == ControlRegisters::RESPONSE.offset() {

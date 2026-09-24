@@ -1,6 +1,6 @@
 use crate::{Dma, Error};
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
 };
 
@@ -37,10 +37,10 @@ fn channel_collection_miss_allows_control_in_either_order() -> Result<(), Box<dy
 {
     // Given: three channels and a control address outside their collection.
     let mut device = Dma::new((), 3)?;
-    let count =
-        DmaRegisters::DISCOVERY.offset() + pdma_model_contract::DmaDiscovery::CHANNEL_NUM.offset();
-    let enable = (pdma_model_contract::DmaDiscovery::EXTENT
-        + pdma_model_contract::DmaAdmin::CONTROL.offset())
+    let count = DmaRegisters::DISCOVERY.offset()
+        + pdma_model_contract::dma::DmaDiscovery::CHANNEL_NUM.offset();
+    let enable = (pdma_model_contract::dma::DmaDiscovery::EXTENT
+        + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
         + DmaControl::IRQ_ENABLE.offset();
     let mut out = [0; 4];
     // When: collection is attempted before control, the reverse of the public path.
@@ -71,7 +71,7 @@ fn channel_collection_preserves_miss_addresses_and_output() -> Result<(), Box<dy
     let mut device = Dma::new((), 3)?;
     for address in [
         0,
-        pdma_model_contract::ChannelBlock::ALIGNMENT - 1,
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT - 1,
         DmaRegisters::new(3)?.extent(),
         usize::MAX,
     ] {
@@ -118,7 +118,7 @@ fn collection_padding_is_terminal_inside_its_extent() -> Result<(), Box<dyn std:
     // Given: padding between child maps and between adjacent channel blocks.
     let mut device = Dma::new((), 3)?;
     for offset in [CommandRegisters::EXTENT, CommandRegisters::EXTENT + 1] {
-        let address = pdma_model_contract::ChannelBlock::ALIGNMENT + offset;
+        let address = pdma_model_contract::dma::ChannelBlock::ALIGNMENT + offset;
         let mut out = [0xa5; 4];
         // When: an access hits padding inside the channel collection.
         let read = device.read_channels(address, &mut out);

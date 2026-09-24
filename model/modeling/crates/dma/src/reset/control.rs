@@ -1,6 +1,6 @@
 use crate::Dma;
 use hardware_interface_pipeline::{Stage, StepOutcome};
-use pdma_model_contract::{ChannelId, DmaControlValues};
+use pdma_model_contract::dma::{ChannelId, DmaControlValues};
 use std::convert::Infallible;
 
 /// Completes requested resets only after accepted work has retired.
@@ -32,7 +32,8 @@ impl<M, SB> Stage<Dma<M, SB>> for ResetControl {
         } else {
             for (index, channel) in device.channels.iter_mut().enumerate() {
                 if channel.resetting()
-                    && device.active.map(|(channel, _)| channel) != Some(ChannelId::new(index))
+                    && device.active.as_ref().map(super::ChannelTask::channel)
+                        != Some(ChannelId::new(index))
                 {
                     channel.finish_reset();
                 }

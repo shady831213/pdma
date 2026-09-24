@@ -1,6 +1,6 @@
 use hardware_interface_runtime::MemoryAccessError;
 use hardware_interface_schema::SchemaCodecError;
-use pdma_model_contract::RingError;
+use pdma_model_contract::ring::RingError;
 use std::{error::Error, fmt};
 
 /// Typed software ring failures, with retained operations available for retry.

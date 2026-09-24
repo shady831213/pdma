@@ -3,7 +3,7 @@ use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::MemoryAccess;
 use hardware_interface_runtime::MemoryAddress;
-use pdma_model_contract::ResponseStatus;
+use pdma_model_contract::dma::ResponseStatus;
 
 /// Load endpoint segments and select one bounded payload chunk.
 #[derive(Debug, Default)]
@@ -49,7 +49,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
                     None
                 };
                 if let Some(cursor) = cursor {
-                    match cursor.next_segment(&context.memory) {
+                    match cursor.next_segment(&context.memory_for(progress.command.sg_context)) {
                         Ok(Some(_)) => {}
                         Ok(None) => progress.status = ResponseStatus::LengthMismatch,
                         Err(status) => progress.status = status,

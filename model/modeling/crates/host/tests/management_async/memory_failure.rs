@@ -3,7 +3,8 @@ use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
     SoftwareCpu,
 };
-use pdma_model_contract::{ControlQueue, ControlRingState, FunctionId};
+use pdma_model_contract::control::{ControlQueue, ControlRingState};
+use pdma_model_contract::memory::FunctionId;
 use pdma_model_host::{Error, Management, ManagementConfig};
 use pdma_model_software::ring::SoftRing;
 use std::sync::{
@@ -73,6 +74,7 @@ async fn publication_and_consumption_memory_failures_preserve_original_work() {
                         windows: 0x2000,
                         control: 0x3000,
                         firmware: 0x4000,
+                        contexts: None,
                     },
                     rings: fixture.rings,
                     interrupt: fixture.event.clone(),

@@ -2,7 +2,7 @@ use super::Model;
 mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
-use pdma_model_contract::{ChannelRegisters, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, ResponseRegisters};
 use pdma_model_dma::{Dma, Error, Fault};
 use std::{
     future::Future,
@@ -15,8 +15,8 @@ use std::{
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-const IRQ_ENABLE: usize = (pdma_model_contract::ChannelBlock::ALIGNMENT
-    + pdma_model_contract::ChannelBlock::CONTROL.offset())
+const IRQ_ENABLE: usize = (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+    + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
     + ChannelRegisters::IRQ_ENABLE.offset();
 
 #[derive(Default)]
@@ -114,17 +114,17 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         let mut device = model.device.lock().await;
         for offset in [
             IRQ_ENABLE,
-            (pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::COMMAND.offset())
+            (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())
                 + CommandRegisters::CAPACITY.offset(),
-            (pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::RESPONSE.offset())
+            (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset())
                 + ResponseRegisters::CAPACITY.offset(),
-            (pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset())
+            (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
                 + ChannelRegisters::ENABLE.offset(),
-            (pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::COMMAND.offset())
+            (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())
                 + CommandRegisters::PRODUCER.offset(),
         ] {
             device.write(offset, &1_u32.to_le_bytes())?;

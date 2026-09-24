@@ -3,7 +3,9 @@ use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint, Response};
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, Command, CommandRegisters, Endpoint, Response,
+};
 use pdma_model_dma::Dma;
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -79,7 +81,8 @@ async fn cancelled_committed_submission_resumes_without_republication()
         ))
         .await?;
     let command = Command {
-        flags: pdma_model_contract::CompletionFlagsValues::default(),
+        sg_context: 0,
+        flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 41,
         source: Endpoint::linear(0, 0),
         destination: Endpoint::linear(0, 0),
@@ -104,7 +107,7 @@ async fn cancelled_committed_submission_resumes_without_republication()
     // Then: the original entry has one publication and no retained submission remains.
     assert!(!channel.has_pending_submission());
     let offset = u32::try_from(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::PRODUCER.offset(),
     )?;

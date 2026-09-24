@@ -9,7 +9,7 @@ use hardware_interface_runtime::{
     InterruptRuntime, InterruptSummary, MemoryAddress, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters, ResponseRegisters};
 use pdma_model_host::runtime::Model;
 use std::{error::Error, sync::Arc};
 use tokio::task::JoinError;

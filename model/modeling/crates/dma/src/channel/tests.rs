@@ -1,9 +1,8 @@
 use super::*;
 use crate::Dma;
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
-use pdma_model_contract::{
-    ChannelRegisters, CompletionFlagsValues, ReadWordValues, ResponseRegisters, WordValues,
-};
+use pdma_model_contract::dma::{ChannelRegisters, CompletionFlagsValues, ResponseRegisters};
+use pdma_model_contract::register::{ReadWordValues, WordValues};
 
 #[test]
 fn ring_mmio_uses_its_instance_base() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,14 +33,14 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
     )?])?;
     let mut device = Dma::new(memory, 1)?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::BASE.offset(),
         &0x1000_u64.to_le_bytes(),
     )?;
     device.write(
-        pdma_model_contract::ChannelBlock::ALIGNMENT
-            + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+            + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
             + ResponseRegisters::CAPACITY.offset(),
         &4_u32.to_le_bytes(),
     )?;
@@ -86,16 +85,16 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
     // When: consumer crosses each IOC, including the boundary at zero.
     for (consumer, expected) in [(u32::MAX, 3_u32), (0, 1), (1, 0)] {
         device.write(
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::RESPONSE.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
                 + ResponseRegisters::CONSUMER.offset(),
             &consumer.to_le_bytes(),
         )?;
         // Then: non-empty and IOC causes follow the actual remaining entries.
         let mut bytes = [0; 4];
         device.read(
-            pdma_model_contract::ChannelBlock::ALIGNMENT
-                + pdma_model_contract::ChannelBlock::CONTROL.offset()
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
                 + ChannelRegisters::IRQ_CAUSE.offset(),
             &mut bytes,
         )?;

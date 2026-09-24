@@ -2,7 +2,7 @@ use super::{CopyState, Transfer};
 use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::{Response, ResponseStatus};
+use pdma_model_contract::dma::{Response, ResponseStatus};
 use std::ops::ControlFlow;
 
 /// Read one payload chunk into retained operation state.
@@ -40,7 +40,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy {
                 transfer.progress.status = match transfer.bytes.get_mut(..transfer.length) {
                     Some(bytes) => {
                         match context
-                            .memory
+                            .memory_for(transfer.progress.command.source.context)
                             .read(transfer.source, MemoryAlignment::ONE, bytes)
                         {
                             Ok(()) => ResponseStatus::Success,
@@ -108,11 +108,10 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy {
                                 transfer.progress.response(),
                             )));
                         }
-                        match context.memory.write(
-                            transfer.destination,
-                            MemoryAlignment::ONE,
-                            bytes,
-                        ) {
+                        match context
+                            .memory_for(transfer.progress.command.destination.context)
+                            .write(transfer.destination, MemoryAlignment::ONE, bytes)
+                        {
                             Ok(()) => {
                                 transfer.progress.source.advance(count);
                                 transfer.progress.destination.advance(count);

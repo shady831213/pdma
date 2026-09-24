@@ -1,7 +1,7 @@
 //! Channel notification identity at the hardware/platform boundary.
 /// Shared DMA fixtures.
 pub mod support;
-use pdma_model_contract::ChannelId;
+use pdma_model_contract::dma::ChannelId;
 use support::{TestResult, command, run, setup, submit};
 
 #[test]

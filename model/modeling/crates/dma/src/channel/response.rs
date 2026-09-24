@@ -1,7 +1,9 @@
 use crate::{Error, Fault};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Encode, RegisterAccessError, RegisterWindow};
-use pdma_model_contract::{ReadWordValues, Response, ResponseRegisters, Ring, RingPointers};
+use pdma_model_contract::dma::{Response, ResponseRegisters};
+use pdma_model_contract::register::ReadWordValues;
+use pdma_model_contract::ring::{Ring, RingPointers};
 
 /// Response queue state, including its own generated registers.
 #[derive(Debug)]

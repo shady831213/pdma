@@ -5,7 +5,9 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{ControlQueue, ControlQueueRaw, ControlRequest, ControlResponse};
+use pdma_model_contract::control::{
+    ControlQueue, ControlQueueRaw, ControlRequest, ControlResponse,
+};
 use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig};
 use pdma_model_software::{
     control::{ControlQueueLayout, InterruptEvent},
@@ -77,6 +79,7 @@ impl Fixture {
                     windows: 0x2000,
                     control: 0x3000,
                     firmware: 0x4000,
+                    contexts: None,
                 },
                 rings: self.rings,
                 interrupt: self.event.clone(),
@@ -128,8 +131,9 @@ pub(super) async fn pending_once(future: impl Future) {
 
 pub(super) const fn response(id: u64, channel: u32) -> ControlResponse {
     ControlResponse {
+        context: 0,
         id,
         channel,
-        status: pdma_model_contract::ControlResponseStatus::Success,
+        status: pdma_model_contract::control::ControlResponseStatus::Success,
     }
 }

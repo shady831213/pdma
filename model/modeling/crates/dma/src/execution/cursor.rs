@@ -1,6 +1,8 @@
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::Decode;
-use pdma_model_contract::{Endpoint, EndpointPayloadValues, ResponseStatus, Segment, SegmentRaw};
+use pdma_model_contract::dma::{
+    Endpoint, EndpointPayloadValues, ResponseStatus, Segment, SegmentRaw,
+};
 
 #[derive(Debug)]
 pub(super) struct Cursor {

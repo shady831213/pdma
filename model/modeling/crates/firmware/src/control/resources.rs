@@ -1,8 +1,9 @@
 use crate::{Configuration, Error};
 use hardware_interface_runtime::RegisterAccess;
-use pdma_model_contract::{
-    ChannelId, DmaDiscovery, DmaRegisters, FunctionId, RingError, WindowControl,
-};
+use pdma_model_contract::dma::{ChannelId, DmaDiscovery, DmaRegisters};
+use pdma_model_contract::hw_components::windows::WindowControl;
+use pdma_model_contract::memory::FunctionId;
+use pdma_model_contract::ring::RingError;
 use pdma_model_software::{control::ManagementAddresses, dma::ChannelControl};
 
 #[derive(Clone, Copy)]
@@ -19,6 +20,7 @@ struct Channel {
 }
 
 pub(super) struct Resources {
+    pub(super) contexts: Option<super::contexts::Contexts>,
     channels: Vec<Channel>,
     addresses: ManagementAddresses,
     function_count: u32,
@@ -66,6 +68,10 @@ impl Resources {
             });
         }
         Ok(Self {
+            contexts: match addresses.contexts {
+                Some(base) => Some(super::contexts::Contexts::discover(bus, base, count).await?),
+                None => None,
+            },
             channels,
             addresses,
             function_count,
@@ -78,6 +84,15 @@ impl Resources {
         } else {
             Err(ResourceError::InvalidFunction)
         }
+    }
+
+    pub(super) fn channels(&self, function: FunctionId) -> impl Iterator<Item = ChannelId> + '_ {
+        self.channels
+            .iter()
+            .enumerate()
+            .filter_map(move |(index, channel)| {
+                (channel.owner == Some(function)).then_some(ChannelId::new(index))
+            })
     }
 
     pub(super) async fn acquire<B: RegisterAccess + Sync>(

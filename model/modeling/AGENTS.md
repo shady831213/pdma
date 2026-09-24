@@ -64,10 +64,11 @@ The obsolete architecture specification and version plans formerly under
 interface shapes into the rebuild. The workspace README and `docs/reset.md` describe the
 active model; `docs/firmware-dma-goal.md` records the agreed next direction, not
 implemented functionality or an instruction to start it automatically.
-`docs/context-contract.md` records agreed but unimplemented context semantics and
-numbered software/hardware obligations for future RTL specification and tests.
-Preserve those obligations explicitly; do not turn them into hidden harness policy
-or claim that context maintenance already exists in the current model.
+`docs/context-contract.md` records Default/PASID context semantics and numbered
+software/hardware obligations for future RTL specification and tests. The optional
+context table owns bindings in hw-components; DMA owns producer-frontier snapshots
+and accepted-command retirement. Preserve these boundaries and the software
+obligations explicitly; do not turn them into hidden harness policy.
 The approved first milestone is `docs/firmware-dma-mvp.md`: validate the `dma`,
 `hw-components`, firmware and concrete runtime boundaries through a real copy
 behind a firmware-configured access window. Production hardware and firmware
@@ -75,7 +76,14 @@ belong outside scenarios. Concrete managed assembly and transport adapters belon
 in the scenario harness, superseding the earlier wiring placement requirement.
 Keep the direct-DMA assembly available for ordinary tests.
 The DMA core lives in `crates/dma`. The `firmware_managed/harness/runtime` modules
-assemble the MVP over `hw-components::AccessWindow` and `firmware::main`.
+assemble the MVP over `hw-components::windows::ChannelWindows` and `firmware::main`.
+`hw-components::{windows,context,control,firmware}` groups each hardware object with
+its memory adapters and errors. Cross-object bus errors belong to the managed runtime;
+context construction uses its own capacity/layout/allocation errors, not window errors.
+Each `ChannelWindow` owns its registers, requester authorization, open/readiness state
+and transaction bounds. The bank owns only instance layout, discovery/global routing,
+transaction-envelope validation and window lookup. Function-bound ingress delegates
+to the selected window; do not duplicate owner/open/status policy in the bank.
 Host and firmware use separate software CPUs and interrupt runtimes. Each program
 registers its management ISR; Host has a separate DMA vector. Firmware boot status is separate
 from window permission: Booting/Ready/Failed and a boot error are firmware-published
@@ -111,11 +119,18 @@ The Function-isolation follow-on is documented in `docs/function-isolation.md`.
 DMA remains Function-unaware; peripherals enforce MMIO bindings and identify interrupt
 destinations before reassignment. Pending messages stay with their original destination.
 `MemoryAccess<S = ()>` carries explicit sideband on tagged accesses; ordinary
-read/write methods are available only for unit sideband. Managed DMA emits ChannelId;
-hw-components resolves the same ChannelWindows owner registers used for MMIO/IRQ routing
-through a borrowed ChannelMemoryAccess view and forwards FunctionId. Runtime selects
-the Function's injected memory capability. Platform assembly selects backing and
-provides each software program its own allocator; firmware uses PF control memory.
+read/write methods are available only for unit sideband. DMA emits DmaAccess channel
+and context selectors. hw-components resolves the same ChannelWindows owner registers
+used for MMIO/IRQ routing. Without a context table it forwards FunctionId; with a
+table it validates the context owner and forwards a MemoryIdentity with extensible
+Default/PASID attributes. Runtime selects injected memory capabilities, not bindings.
+Platform assembly selects backing and provides each software program its own allocator.
+Firmware's control memory uses the separate PF-programmed, enable-frozen configuration,
+without reserving any data context slot.
+Context maintenance takes one atomic context-ID plus Drain/Abort register write.
+Hardware retains validity; firmware performs Destroy by awaiting Drain success and
+then clearing valid under the documented submission exclusion. The failed-channel
+bitmap is the final context-map bank and stays frozen until the next accepted request.
 Bindings remain stable until reset completes; no live rebind or shadow owner table.
 Independent spaces may use identical addresses. This adds no PASID/IOMMU translation,
 Function reset/FLR or external transaction semantics.
@@ -130,6 +145,15 @@ emitter, software dispatch holds the source. Keep causes, masking, routing polic
 and hardware-step wakeup decisions out of that generic component.
 
 ## Implementation constraints
+
+Contract public paths follow interface ownership: `contract::dma` for DMA registers,
+descriptors and outgoing selectors; `contract::hw_components::{context,windows,control,firmware}`
+for peripheral hardware interfaces; `contract::control` for Host-to-firmware software
+messages and memory-resident control queues; `contract::memory` for resolved Function
+and address-space identities. Shared ring protocol, register primitives and export
+projections remain in `ring`, `register` and `view`. Do not restore flattened root
+type exports or place hardware bootstrap/doorbell registers among software messages.
+Firmware can consume DMA and peripheral contracts without owning those interfaces.
 
 - The replacement models statically configured channels, command/response rings, linear/SG DMA copy,
   independently masked non-empty/IOC notifications, and channel/device error/reset boundaries.

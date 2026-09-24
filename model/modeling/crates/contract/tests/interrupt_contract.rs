@@ -1,12 +1,15 @@
 //! IOC bits are shared wire metadata, not a separate command protocol.
 
-use pdma_model_contract::{Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{
+    Command, CompletionFlagsValues, Endpoint, Response, ResponseStatus,
+};
 
 #[test]
 fn ioc_round_trips_in_command_and_response() -> Result<(), Box<dyn std::error::Error>> {
     // Given
     let flags = CompletionFlagsValues { ioc: true };
     let command = Command {
+        sg_context: 0,
         id: 7,
         source: Endpoint::linear(0x100, 4),
         destination: Endpoint::linear(0x200, 4),

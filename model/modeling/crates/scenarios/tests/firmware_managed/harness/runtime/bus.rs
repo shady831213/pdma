@@ -1,7 +1,7 @@
 use super::{AccessError, Hardware, ManagementBus, Shared};
 use hardware_interface_runtime::RegisterAccess;
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
-use pdma_model_contract::FunctionId;
+use pdma_model_contract::memory::FunctionId;
 use std::sync::Arc;
 
 /// Host work MMIO, checked by the hardware access window on every transaction.
@@ -43,8 +43,26 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      windows,
                      firmware,
                      control,
+                     contexts,
                  }| {
-                    match control.host_read(self.function, address, bytes) {
+                    if let Some(contexts) = contexts {
+                        let result = contexts
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .host_read(address, bytes);
+                        match result {
+                            Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                            Err(RegisterAccessError::ReadForbidden { .. }) => {
+                                return Err(AccessError::Denied);
+                            }
+                            result => return result.map_err(AccessError::Register),
+                        }
+                    }
+                    let result = control
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .host_read(self.function, address, bytes);
+                    match result {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {}
                         result => return result.map_err(AccessError::Control),
                     }
@@ -60,7 +78,8 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                                         .ok_or(pdma_model_dma::Error::Unmapped)?,
                                     bytes,
                                 )
-                            }),
+                            })
+                            .map_err(AccessError::from),
                         result => result.map_err(AccessError::Register),
                     }
                 },
@@ -79,8 +98,26 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                      windows,
                      firmware,
                      control,
+                     contexts,
                  }| {
-                    match control.host_write(self.function, address, bytes) {
+                    if let Some(contexts) = contexts {
+                        let result = contexts
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .host_write(address, bytes);
+                        match result {
+                            Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                            Err(RegisterAccessError::WriteForbidden { .. }) => {
+                                return Err(AccessError::Denied);
+                            }
+                            result => return result.map_err(AccessError::Register),
+                        }
+                    }
+                    let result = control
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .host_write(self.function, address, bytes);
+                    match result {
                         Err(RegisterAccessError::OutsideWindow { .. }) => {}
                         result => return result.map_err(AccessError::Control),
                     }
@@ -96,7 +133,8 @@ impl<M: Send> RegisterAccess for HostBus<M> {
                                         .ok_or(pdma_model_dma::Error::Unmapped)?,
                                     bytes,
                                 )
-                            }),
+                            })
+                            .map_err(AccessError::from),
                         result => result.map_err(AccessError::Register),
                     }
                 },
@@ -113,7 +151,22 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.0
             .access(|hardware| {
-                match hardware.control.firmware_read(address, bytes) {
+                if let Some(contexts) = &hardware.contexts {
+                    let result = contexts
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .management_read(address, bytes);
+                    match result {
+                        Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                        result => return result.map_err(AccessError::Register),
+                    }
+                }
+                let result = hardware
+                    .control
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .firmware_read(address, bytes);
+                match result {
                     Err(RegisterAccessError::OutsideWindow { .. }) => {}
                     result => return result.map_err(AccessError::Control),
                 }
@@ -143,7 +196,27 @@ impl<M: Send> RegisterAccess for ManagementBus<M> {
         let address = usize::try_from(address).map_err(|_| AccessError::Unmapped)?;
         self.0
             .access(|hardware| {
-                match hardware.control.firmware_write(address, bytes) {
+                if let Some(contexts) = &hardware.contexts {
+                    let windows = hardware
+                        .windows
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let result = contexts
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .management_write((address, bytes), (&mut hardware.dma, &windows));
+                    drop(windows);
+                    match result {
+                        Err(RegisterAccessError::OutsideWindow { .. }) => {}
+                        result => return result.map_err(AccessError::Register),
+                    }
+                }
+                let result = hardware
+                    .control
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .firmware_write(address, bytes);
+                match result {
                     Err(RegisterAccessError::OutsideWindow { .. }) => {}
                     result => return result.map_err(AccessError::Control),
                 }

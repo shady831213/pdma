@@ -12,10 +12,12 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator,
 };
 use hardware_interface_schema::{Decode, Encode};
-use pdma_model_contract::{
-    ChannelId, ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
-    FunctionId, Ring,
+use pdma_model_contract::control::{
+    ControlRequest, ControlRequestOpcode, ControlResponseRaw, ControlResponseStatus,
 };
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::memory::FunctionId;
+use pdma_model_contract::ring::Ring;
 use pdma_model_host::Management;
 use pdma_model_software::control::{ControlIsr, InterruptEvent};
 use std::{
@@ -53,6 +55,8 @@ async fn memory_publication_waits_for_request_doorbell_before_firmware_consumes(
             MemoryAlignment::ONE,
             &ControlRequest {
                 id: 17,
+                context: 0,
+                attributes: pdma_model_contract::memory::ContextAttributes::DEFAULT,
                 function: 0,
                 opcode: ControlRequestOpcode::AcquireChannel,
                 channel: 0,

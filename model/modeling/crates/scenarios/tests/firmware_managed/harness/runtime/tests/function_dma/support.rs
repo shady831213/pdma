@@ -3,18 +3,19 @@ use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, Endpoint, Response,
-    ResponseRegisters, WindowControl,
+    ResponseRegisters,
 };
+use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_dma::{CommandLoop, Dma};
-use pdma_model_hw_components::ChannelWindows;
+use pdma_model_hw_components::windows::ChannelWindows;
 use std::sync::{Arc, Mutex};
 
 /// Boundary-test error propagation.
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 /// DMA wired to Function-selected memory capabilities.
-pub(super) type Hardware = Dma<RoutedMemory<SharedMemory>, ChannelId>;
+pub(super) type Hardware = Dma<RoutedMemory<SharedMemory>, pdma_model_contract::dma::DmaAccess>;
 /// Permission-bank placement in these hardware fixtures.
 pub(super) const WINDOWS: usize = 0x10_0000;
 
@@ -43,9 +44,9 @@ pub(super) fn setup() -> TestResult<Fixture> {
     )?;
     let windows = Arc::new(Mutex::new(windows));
     let mut dma = Dma::with_sideband(
-        RoutedMemory::new(Arc::clone(&windows), spaces.to_vec()),
+        RoutedMemory::new(Arc::clone(&windows), spaces.to_vec())?,
         2,
-        std::convert::identity,
+        |access| access,
     )?;
     configure(&mut dma, ChannelId::new(0))?;
     configure(&mut dma, ChannelId::new(1))?;
@@ -152,9 +153,10 @@ pub(super) fn bytes<const N: usize>(memory: &SharedMemory, address: u64) -> Test
 /// Constructs the fixture's linear copy descriptor.
 pub(super) const fn command(id: u64) -> Command {
     Command {
+        sg_context: 0,
         id,
         source: Endpoint::linear(0x1200, 8),
         destination: Endpoint::linear(0x1300, 8),
-        flags: pdma_model_contract::CompletionFlagsValues { ioc: false },
+        flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
     }
 }

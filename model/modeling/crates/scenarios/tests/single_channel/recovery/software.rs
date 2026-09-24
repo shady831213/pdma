@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAccess, MemoryAddress, MemoryAlignment,
     RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
-use pdma_model_contract::{
+use pdma_model_contract::dma::{
     ChannelFaultCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
     CompletionFlagsValues, Endpoint, Response,
 };
@@ -114,6 +114,7 @@ where
             for index in 0..3 {
                 channel
                     .submit(Command {
+                        sg_context: 0,
                         id: 40 + index,
                         source: Endpoint::linear(source.raw(), length),
                         destination: Endpoint::linear(destination.raw() + index * length, length),
@@ -132,6 +133,7 @@ where
                 .await?;
             channel
                 .submit(Command {
+                    sg_context: 0,
                     id: 41,
                     source: Endpoint::linear(source.raw(), length),
                     destination: Endpoint::linear(destination.raw(), length - 1),
@@ -151,6 +153,7 @@ where
             channel = Channel::setup(ports.bus, ports.memory, config).await?;
             channel
                 .submit(Command {
+                    sg_context: 0,
                     id: 42,
                     source: Endpoint::linear(source.raw(), length),
                     destination: Endpoint::linear(destination.raw(), length),

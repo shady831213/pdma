@@ -2,6 +2,7 @@
 
 mod cancellation;
 mod contexts;
+mod events;
 mod memory_failure;
 mod reset;
 pub mod support;

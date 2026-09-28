@@ -94,8 +94,10 @@ async fn descriptor_is_in_memory_before_bootstrap_enable_and_request_doorbell() 
                         state,
                         command: RingConfig::new(command.raw(), 2).unwrap(),
                         response: RingConfig::new(response.raw(), 2).unwrap(),
+                        event: RingConfig::new(0x6000, 2).unwrap(),
                     },
                     interrupt: InterruptEvent::new(),
+                    event_interrupt: InterruptEvent::new(),
                 },
             )
             .await
@@ -157,8 +159,10 @@ async fn repeated_setup_cannot_reinitialize_live_shared_cursors() {
                     state,
                     command: RingConfig::new(0x2000, 2).unwrap(),
                     response: RingConfig::new(0x3000, 2).unwrap(),
+                    event: RingConfig::new(0x6000, 2).unwrap(),
                 },
                 interrupt: InterruptEvent::new(),
+                event_interrupt: InterruptEvent::new(),
             },
         ))
         .await;
@@ -210,8 +214,10 @@ async fn nonempty_or_invalid_control_cursors_reject_a_new_request()
                         state,
                         command: RingConfig::new(0x2000, 2)?,
                         response: RingConfig::new(0x3000, 2)?,
+                        event: RingConfig::new(0x6000, 2).unwrap(),
                     },
                     interrupt: InterruptEvent::new(),
+                    event_interrupt: InterruptEvent::new(),
                 },
             )
             .await?;

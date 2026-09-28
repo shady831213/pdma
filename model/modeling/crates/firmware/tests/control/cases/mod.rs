@@ -1,6 +1,10 @@
+use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_software::ring::SoftRingError;
+mod context_fatal;
 mod contexts;
+mod events;
 mod failures;
+mod fatal;
 mod multi;
 mod reset;
 mod support;
@@ -52,9 +56,12 @@ async fn attach_drains_preexisting_command_and_notifies_both_progress_points() -
             .lock()
             .unwrap()
             .iter()
-            .filter(
-                |(address, _)| *address == register(ControlRegisters::RESPONSE.offset()).unwrap()
-            )
+            .filter(|(address, _)| *address
+                == register(
+                    ControlRegisters::NOTIFICATION.offset()
+                        + ControlNotificationRegisters::RESPONSE.offset()
+                )
+                .unwrap())
             .count(),
         2
     );

@@ -74,10 +74,12 @@ device-fatal recovery is not extended by this slice.
 Owner is a firmware-only 32-bit Function identity; reset value zero supports the
 single-Host configuration. Both static header views retain the complete layout.
 
-`ControlRegisters` has a 28-byte extent and eight-byte alignment, at a
+`ControlRegisters` has a 36-byte extent and eight-byte alignment, at a
 platform-selected base. There is no Function control bank or exported control stride.
 All Host ports may know its address; hardware accepts only the configured PF.
 Firmware's Function count describes valid targets, not control endpoints.
+The independent event doorbell and firmware-owned event-error report belong to
+this same PF management aperture; they grant no VF administrative access.
 
 A request is 32 bytes: ID at 0, opcode at 8, target Function at 12, channel at 16,
 context at 20, and creation attributes at 24. Responses are 24 bytes: ID at 0,

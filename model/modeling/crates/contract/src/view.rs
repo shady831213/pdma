@@ -1,3 +1,4 @@
+use crate::hw_components::control::ControlNotificationRegisters;
 use crate::hw_components::control::ControlRegisters;
 use crate::hw_components::windows::ChannelWindowBlock;
 use hardware_interface_schema::Access;
@@ -62,6 +63,11 @@ impl RegisterView {
                     || attributes
                 {
                     Some(Access::ReadWrite)
+                } else if offset
+                    == ControlRegisters::NOTIFICATION.offset()
+                        + ControlNotificationRegisters::EVENT_ERROR.offset()
+                {
+                    Some(Access::ReadOnly)
                 } else if offset == ControlRegisters::REQUEST.offset() {
                     Some(Access::WriteOnly)
                 } else {
@@ -74,7 +80,18 @@ impl RegisterView {
                     || attributes
                 {
                     Some(Access::ReadOnly)
-                } else if offset == ControlRegisters::RESPONSE.offset() {
+                } else if offset
+                    == ControlRegisters::NOTIFICATION.offset()
+                        + ControlNotificationRegisters::EVENT_ERROR.offset()
+                {
+                    Some(Access::ReadWrite)
+                } else if offset
+                    == ControlRegisters::NOTIFICATION.offset()
+                        + ControlNotificationRegisters::RESPONSE.offset()
+                    || offset
+                        == ControlRegisters::NOTIFICATION.offset()
+                            + ControlNotificationRegisters::EVENT.offset()
+                {
                     Some(Access::WriteOnly)
                 } else {
                     None

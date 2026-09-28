@@ -1158,7 +1158,7 @@
  * Independent firmware control channel
  * Always-on bootstrap and software notification registers outside DMA work windows. Hardware performs no memory operations, ring validation or channel allocation.
  */
-#define C_FCTL_SIZE UINT64_C(28)
+#define C_FCTL_SIZE UINT64_C(36)
 #define C_FCTL_ACCESS_READ_ONLY UINT32_C(0)
 #define C_FCTL_ACCESS_READ_WRITE UINT32_C(1)
 #define C_FCTL_ACCESS_WRITE_ONLY UINT32_C(2)
@@ -1168,6 +1168,11 @@
 /*
  * ControlRegisters.attributes
  * PF programs Default/PASID attributes before enable. Frozen with bootstrap after enable and independent of every context table slot.
+ */
+/*
+ * ControlRegisters.notification
+ * Firmware-to-PF notifications
+ * Firmware-to-PF response and event reporting, independent of request admission.
  */
 
 /*
@@ -1198,25 +1203,10 @@
 #define C_FCTL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK UINT64_C(0)
 
 /*
- * Coalescing notification doorbell
- * Firmware-only notification to Host after publishing responses or freeing command space.
- */
-/*
- * pulse
- * Write one to notify the peer software domain.
- */
-#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET UINT64_C(16)
-#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WIDTH UINT64_C(4)
-#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_ACCESS C_FCTL_ACCESS_WRITE_ONLY
-#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_RESET_KIND C_FCTL_RESET_ZERO
-#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_RESET_VALUE UINT64_C(0)
-#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK UINT64_C(1)
-
-/*
  * Read/write word
  * Address-space mode encoded by ContextAttributes: Default is distinct from PASID zero.
  */
-#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET UINT64_C(20)
+#define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET UINT64_C(12)
 #define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_WIDTH UINT64_C(4)
 #define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_ACCESS C_FCTL_ACCESS_READ_ONLY
 #define C_FCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_RESET_KIND C_FCTL_RESET_ZERO
@@ -1227,12 +1217,61 @@
  * Read/write word
  * Twenty-bit PASID when PASID mode is selected; must be zero in Default mode.
  */
-#define C_FCTL_C_QUPQUAQUSQUIQUD_OFFSET UINT64_C(24)
+#define C_FCTL_C_QUPQUAQUSQUIQUD_OFFSET UINT64_C(16)
 #define C_FCTL_C_QUPQUAQUSQUIQUD_WIDTH UINT64_C(4)
 #define C_FCTL_C_QUPQUAQUSQUIQUD_ACCESS C_FCTL_ACCESS_READ_ONLY
 #define C_FCTL_C_QUPQUAQUSQUIQUD_RESET_KIND C_FCTL_RESET_ZERO
 #define C_FCTL_C_QUPQUAQUSQUIQUD_RESET_VALUE UINT64_C(0)
 #define C_FCTL_C_QUPQUAQUSQUIQUD_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Coalescing notification doorbell
+ * Firmware-only notification to Host after publishing responses or freeing command space.
+ */
+/*
+ * pulse
+ * Write one to notify the peer software domain.
+ */
+#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET UINT64_C(24)
+#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WIDTH UINT64_C(4)
+#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_ACCESS C_FCTL_ACCESS_WRITE_ONLY
+#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_RESET_KIND C_FCTL_RESET_ZERO
+#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_RESET_VALUE UINT64_C(0)
+#define C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Coalescing notification doorbell
+ * Firmware-only event/error notification to PF, independent of responses.
+ */
+/*
+ * pulse
+ * Write one to notify the peer software domain.
+ */
+#define C_FCTL_C_QUEQUVQUEQUNQUT_OFFSET UINT64_C(28)
+#define C_FCTL_C_QUEQUVQUEQUNQUT_WIDTH UINT64_C(4)
+#define C_FCTL_C_QUEQUVQUEQUNQUT_ACCESS C_FCTL_ACCESS_WRITE_ONLY
+#define C_FCTL_C_QUEQUVQUEQUNQUT_RESET_KIND C_FCTL_RESET_ZERO
+#define C_FCTL_C_QUEQUVQUEQUNQUT_RESET_VALUE UINT64_C(0)
+#define C_FCTL_C_QUEQUVQUEQUNQUT_WRITABLE_MASK UINT64_C(1)
+
+/*
+ * Retained event delivery error
+ * Firmware-owned event delivery error; PF can only read. DMA reset does not clear it.
+ */
+/*
+ * code
+ * 0: None. 1: Overflow. 2: AccessError. 3: InvalidRing. Nonzero means event history is incomplete and the producer is stopped.
+ */
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_C_CODE_C_QUNONE UINT64_C(0)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_C_CODE_C_QUOVERFLOW UINT64_C(1)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_C_CODE_C_QUACCESSQUERROR UINT64_C(2)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_C_CODE_C_QUINVALIDQURING UINT64_C(3)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_OFFSET UINT64_C(32)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_WIDTH UINT64_C(4)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_ACCESS C_FCTL_ACCESS_READ_WRITE
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_RESET_KIND C_FCTL_RESET_ZERO
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_RESET_VALUE UINT64_C(0)
+#define C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_WRITABLE_MASK UINT64_C(3)
 
 /*
  * Channel permission windows

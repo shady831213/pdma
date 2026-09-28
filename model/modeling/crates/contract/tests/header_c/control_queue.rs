@@ -7,6 +7,12 @@ use pdma_model_contract::control::{
 fn rust_nested_queue_matches_independent_c_fixture() -> super::TestResult {
     // Given: distinct command and response geometry with independent cursor values.
     let queue = ControlQueue {
+        event: ControlRingState {
+            base: 0x3000,
+            capacity: 8,
+            producer: 7,
+            consumer: 5,
+        },
         command: ControlRingState {
             base: 0x1000,
             capacity: 8,

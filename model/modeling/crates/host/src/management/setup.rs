@@ -10,7 +10,8 @@ use pdma_model_software::{control::ControlQueueLayout, ring::SoftRing};
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Configures empty control rings after firmware Ready, before any DMA grant.
     ///
-    /// Geometry becomes immutable on enable. Interrupted setup may leave committed
+    /// Command/response geometry freezes on enable; failed event storage has explicit recovery.
+    /// Interrupted setup may leave committed
     /// configuration: retain ring storage until the subsystem is stopped/reset.
     pub async fn setup(
         bus: B,
@@ -45,6 +46,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         let ManagementConfig {
             rings,
             interrupt,
+            event_interrupt,
             addresses,
         } = config;
         let client = Self {
@@ -53,6 +55,17 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             memory,
             layout: ControlQueueLayout::new(rings.state).map_err(Error::Ring)?,
             interrupt,
+            event_interrupt,
+            event_state: hardware_interface_runtime::MemoryAddress::new(
+                rings
+                    .state
+                    .raw()
+                    .checked_add(
+                        u64::try_from(ControlQueue::EVENT_OFFSET).map_err(|_| Error::Geometry)?,
+                    )
+                    .ok_or(Error::Geometry)?,
+            ),
+            event: SoftRing::new(rings.event),
             command: SoftRing::new(rings.command),
             response: SoftRing::new(rings.response),
             submission: None,
@@ -65,6 +78,12 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             return Err(Error::ManagementBusy);
         }
         let state = ControlQueue {
+            event: ControlRingState {
+                base: rings.event.base(),
+                capacity: rings.event.capacity(),
+                producer: 0,
+                consumer: 0,
+            },
             command: ControlRingState {
                 base: rings.command.base(),
                 capacity: rings.command.capacity(),

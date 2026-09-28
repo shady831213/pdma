@@ -82,7 +82,7 @@ async fn destroy_waits_for_drain_then_firmware_clears_valid() -> TestResult {
     Ok(())
 }
 
-fn table(bus: &Bus, owner: u32) -> TestResult {
+pub(super) fn table(bus: &Bus, owner: u32) -> TestResult {
     let entry = ContextTableRegisters::for_channels(1, 1)?
         .entries()
         .offset(0)

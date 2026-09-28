@@ -39,6 +39,8 @@ pub enum Error<B> {
     ManagementIdle,
     /// Ring ownership or response correlation was violated.
     ManagementProtocol,
+    /// Firmware stopped event delivery; event history may be incomplete.
+    EventDelivery(pdma_model_contract::hw_components::control::EventRingErrorCode),
     /// Firmware rejected a completed management operation.
     ManagementStatus(ControlResponseStatus),
 }
@@ -60,6 +62,7 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
             Self::FirmwareTimeout => f.write_str("timed out waiting for firmware readiness"),
             Self::ManagementBusy => f.write_str("management request is still pending"),
             Self::ManagementIdle => f.write_str("no pending management request"),
+            Self::EventDelivery(code) => write!(f, "event delivery failed: {code:?}"),
             Self::ManagementProtocol => f.write_str("management protocol mismatch"),
             Self::ManagementStatus(status) => write!(f, "management operation: {status:?}"),
         }
@@ -84,6 +87,7 @@ impl<B: StdError + 'static> StdError for Error<B> {
             | Self::ManagementBusy
             | Self::ManagementIdle
             | Self::ManagementProtocol
+            | Self::EventDelivery(_)
             | Self::ManagementStatus(_) => None,
         }
     }

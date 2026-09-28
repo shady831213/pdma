@@ -1,4 +1,5 @@
 mod contexts;
+mod events;
 mod pending;
 mod responses;
 mod setup;
@@ -7,7 +8,7 @@ mod transport;
 use crate::{Error, RingConfig};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, RegisterAccess};
 use pdma_model_contract::control::{
-    ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
+    ControlEvent, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
 };
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::FunctionId;
@@ -17,12 +18,14 @@ use pdma_model_software::ring::SoftRing;
 /// Host-owned storage for the independent management queues.
 #[derive(Debug, Clone, Copy)]
 pub struct ManagementRings {
-    /// Shared queue descriptor, kept alive with both entry buffers.
+    /// Shared queue descriptor, kept alive with all three entry buffers.
     pub state: MemoryAddress,
     /// Host-produced firmware requests.
     pub command: RingConfig<ControlRequest>,
     /// Firmware-produced management results.
     pub response: RingConfig<ControlResponse>,
+    /// Firmware-produced asynchronous system events.
+    pub event: RingConfig<ControlEvent>,
 }
 
 /// Control storage and the work event served by the program's registered ISR.
@@ -34,6 +37,8 @@ pub struct ManagementConfig {
     pub rings: ManagementRings,
     /// Register its handler before enabling the control channel.
     pub interrupt: InterruptEvent,
+    /// Independent event-doorbell ISR wake hint.
+    pub event_interrupt: InterruptEvent,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -70,6 +75,9 @@ pub struct Management<B, M> {
     memory: M,
     layout: ControlQueueLayout,
     interrupt: InterruptEvent,
+    event_interrupt: InterruptEvent,
+    event_state: MemoryAddress,
+    event: SoftRing<ControlEvent>,
     command: SoftRing<ControlRequest>,
     response: SoftRing<ControlResponse>,
     submission: Option<Submission>,
@@ -99,7 +107,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             | ControlResponseStatus::ContextBusy
             | ControlResponseStatus::InvalidContext
             | ControlResponseStatus::MaintenanceFailed
-            | ControlResponseStatus::InvalidAttributes) => {
+            | ControlResponseStatus::InvalidAttributes
+            | ControlResponseStatus::DeviceFailed
+            | ControlResponseStatus::InvalidState) => {
                 return Err(Error::ManagementStatus(status));
             }
         }
@@ -135,7 +145,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             | ControlResponseStatus::ContextBusy
             | ControlResponseStatus::InvalidContext
             | ControlResponseStatus::MaintenanceFailed
-            | ControlResponseStatus::InvalidAttributes) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::InvalidAttributes
+            | ControlResponseStatus::DeviceFailed
+            | ControlResponseStatus::InvalidState) => Err(Error::ManagementStatus(status)),
         }
     }
 
@@ -163,7 +175,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             | ControlResponseStatus::ContextBusy
             | ControlResponseStatus::InvalidContext
             | ControlResponseStatus::MaintenanceFailed
-            | ControlResponseStatus::InvalidAttributes) => Err(Error::ManagementStatus(status)),
+            | ControlResponseStatus::InvalidAttributes
+            | ControlResponseStatus::DeviceFailed
+            | ControlResponseStatus::InvalidState) => Err(Error::ManagementStatus(status)),
         }
     }
 

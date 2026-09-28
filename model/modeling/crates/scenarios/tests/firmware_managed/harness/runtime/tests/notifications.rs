@@ -71,7 +71,7 @@ async fn memory_publication_waits_for_request_doorbell_before_firmware_consumes(
         kick(&host.bus).await?;
         tokio::select! {
             result = running.as_mut() => panic!("system stopped: {result:?}"),
-            result = queue.wait_response(&interrupt, 1) => result?,
+            result = queue.wait_response(&interrupt.response, 1) => result?,
         }
         let response = memory
             .read_typed::<ControlResponseRaw>(
@@ -139,6 +139,7 @@ impl InterruptHandler<HostIrq> for Handler {
             HostIrq::Dma(_) => {
                 self.dma.fetch_add(1, Ordering::SeqCst);
             }
+            HostIrq::Event(_) => panic!("unexpected event in healthy control test"),
             HostIrq::Control(irq) => {
                 self.management.fetch_add(1, Ordering::SeqCst);
                 self.control.handle(irq).await?;
@@ -172,7 +173,13 @@ async fn response_notifications_resume_host_without_dma_interrupt_dispatch() -> 
         let mut client = Management::setup(
             host.bus,
             memory,
-            client::config(rings(&allocator)?, &interrupt),
+            client::config(
+                rings(&allocator)?,
+                &client::Interrupts {
+                    response: interrupt,
+                    event: InterruptEvent::new(),
+                },
+            ),
         )
         .await?;
         // When: firmware completes management requests without any DMA command.

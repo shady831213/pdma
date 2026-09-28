@@ -1,3 +1,4 @@
+use super::monitor::Monitor;
 use crate::Error;
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::control::{
@@ -39,19 +40,21 @@ impl Contexts {
 
     pub(super) async fn execute<B: RegisterAccess + Sync>(
         &self,
-        bus: &B,
+        (bus, monitor): (&B, &Monitor<'_, B>),
         (request, response): (&ControlRequest, &mut ControlResponse),
         channels: impl Iterator<Item = ChannelId> + Send,
     ) -> Result<(), Error<B::Error>> {
         let (action, destroy) = match request.opcode {
             ControlRequestOpcode::CreateContext => {
-                return self.create(bus, (request, response)).await;
+                return self.create((bus, monitor), (request, response)).await;
             }
             ControlRequestOpcode::DrainContext => (ContextRequestAction::Drain, false),
             ControlRequestOpcode::DestroyContext => (ContextRequestAction::Drain, true),
             ControlRequestOpcode::AbortContext => (ContextRequestAction::Abort, false),
             ControlRequestOpcode::AcquireChannel
             | ControlRequestOpcode::ReleaseChannel
+            | ControlRequestOpcode::ResetDma
+            | ControlRequestOpcode::ResetEvents
             | ControlRequestOpcode::ResetChannel => return Ok(()),
         };
         let index =
@@ -101,6 +104,7 @@ impl Contexts {
                 }
                 ContextResultState::Success => {
                     if destroy {
+                        monitor.healthy().await?;
                         self.write(bus, (entry + ContextEntryRegisters::VALID.offset(), 0))
                             .await?;
                     }
@@ -123,7 +127,7 @@ impl Contexts {
 
     async fn create<B: RegisterAccess + Sync>(
         &self,
-        bus: &B,
+        (bus, monitor): (&B, &Monitor<'_, B>),
         (request, response): (&ControlRequest, &mut ControlResponse),
     ) -> Result<(), Error<B::Error>> {
         if request.attributes.validate().is_err() {
@@ -164,6 +168,7 @@ impl Contexts {
                 ),
             )
             .await?;
+            monitor.healthy().await?;
             self.write(bus, (entry + ContextEntryRegisters::VALID.offset(), 1))
                 .await?;
             response.context =

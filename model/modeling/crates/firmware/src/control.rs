@@ -1,5 +1,7 @@
 mod channel;
 mod contexts;
+mod events;
+mod monitor;
 mod resources;
 mod service;
 
@@ -53,7 +55,7 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
                 bus: &bus,
                 memory: &memory,
                 interrupt: &interrupt,
-                base: addresses.control,
+                addresses,
             }
             .run(resources)
             .await

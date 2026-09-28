@@ -34,6 +34,7 @@ impl Cursors {
 pub struct ControlQueueLayout {
     command: Cursors,
     response: Cursors,
+    event: Cursors,
 }
 
 impl ControlQueueLayout {
@@ -48,12 +49,18 @@ impl ControlQueueLayout {
         Ok(Self {
             command: Cursors::new(base, ControlQueue::COMMAND_OFFSET)?,
             response: Cursors::new(base, ControlQueue::RESPONSE_OFFSET)?,
+            event: Cursors::new(base, ControlQueue::EVENT_OFFSET)?,
         })
     }
 
     /// Borrows memory at the control command ring's cursor addresses.
     pub const fn command_io<'a, M>(&self, memory: &'a M) -> MemoryRingIo<'a, M> {
         self.command.io(memory)
+    }
+
+    /// Borrows the independent event cursor fields.
+    pub const fn event_io<'a, M>(&self, memory: &'a M) -> MemoryRingIo<'a, M> {
+        self.event.io(memory)
     }
 
     /// Borrows memory at the control response ring's cursor addresses.

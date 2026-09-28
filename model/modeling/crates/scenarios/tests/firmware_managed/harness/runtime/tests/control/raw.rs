@@ -40,7 +40,7 @@ async fn acquisition_selects_channel_instead_of_using_ignored_request_field() {
         let queue = QueueMemory::new(&memory, rings.state);
         queue.publish_command(1).unwrap();
         kick(&host.bus).await.unwrap();
-        queue.wait_response(&interrupt, 1).await.unwrap();
+        queue.wait_response(&interrupt.response, 1).await.unwrap();
         let response = memory
             .read_typed::<ControlResponseRaw>(
                 MemoryAddress::new(rings.response.entry(0).unwrap()),

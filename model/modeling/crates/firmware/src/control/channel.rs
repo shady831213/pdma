@@ -1,7 +1,10 @@
 use crate::Error;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
 use hardware_interface_schema::Decode;
-use pdma_model_contract::control::{ControlQueueRaw, ControlRequest, ControlResponse};
+use pdma_model_contract::control::{
+    ControlQueue, ControlRequest, ControlResponse, ControlRingState, ControlRingStateRaw,
+};
+use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::ring::{Ring, RingError, RingPointers};
 use pdma_model_software::control::ControlQueueLayout;
@@ -10,6 +13,7 @@ use pdma_model_software::ring::{MemoryRingIo, RingConfig, SoftRing};
 pub(super) struct Channel<'a, B, M> {
     bus: &'a B,
     base: u32,
+    descriptor: MemoryAddress,
     command: SoftRing<ControlRequest>,
     response: SoftRing<ControlResponse>,
     command_io: MemoryRingIo<'a, M>,
@@ -35,41 +39,44 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         let queue_base = u64::from_le_bytes(bytes);
         let layout =
             ControlQueueLayout::new(MemoryAddress::new(queue_base)).map_err(Error::Ring)?;
-        let queue = memory
-            .read_typed::<ControlQueueRaw>(MemoryAddress::new(queue_base), MemoryAlignment::ONE)
-            .map_err(Error::Memory)?
-            .decode()
-            .map_err(Error::Codec)?;
+        let descriptor = MemoryAddress::new(queue_base);
+        let command_state = read_state(memory, descriptor, ControlQueue::COMMAND_OFFSET)?;
+        let response_state = read_state(memory, descriptor, ControlQueue::RESPONSE_OFFSET)?;
         let command =
-            RingConfig::new(queue.command.base, queue.command.capacity).map_err(Error::Ring)?;
+            RingConfig::new(command_state.base, command_state.capacity).map_err(Error::Ring)?;
         let response =
-            RingConfig::new(queue.response.base, queue.response.capacity).map_err(Error::Ring)?;
+            RingConfig::new(response_state.base, response_state.capacity).map_err(Error::Ring)?;
         command
             .validate_pointers(RingPointers {
-                producer: queue.command.producer,
-                consumer: queue.command.consumer,
+                producer: command_state.producer,
+                consumer: command_state.consumer,
             })
             .map_err(Error::Ring)?;
         response
             .validate_pointers(RingPointers {
-                producer: queue.response.producer,
-                consumer: queue.response.consumer,
+                producer: response_state.producer,
+                consumer: response_state.consumer,
             })
             .map_err(Error::Ring)?;
-        if queue.command.consumer != 0
-            || queue.response.producer != 0
-            || queue.response.consumer != 0
+        if command_state.consumer != 0
+            || response_state.producer != 0
+            || response_state.consumer != 0
         {
             return Err(Error::Ring(RingError::Pointers));
         }
         Ok(Some(Self {
             bus,
             base,
+            descriptor,
             command: SoftRing::new(command),
             response: SoftRing::new(response),
             command_io: layout.command_io(memory),
             response_io: layout.response_io(memory),
         }))
+    }
+
+    pub(super) const fn descriptor(&self) -> MemoryAddress {
+        self.descriptor
     }
 
     pub(super) async fn has_response_space(&self) -> Result<bool, Error<B::Error>> {
@@ -114,7 +121,12 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
     async fn notify(&self) -> Result<(), Error<B::Error>> {
         self.bus
             .write(
-                address(self.base, ControlRegisters::RESPONSE.offset()).map_err(Error::Ring)?,
+                address(
+                    self.base,
+                    ControlRegisters::NOTIFICATION.offset()
+                        + ControlNotificationRegisters::RESPONSE.offset(),
+                )
+                .map_err(Error::Ring)?,
                 &1_u32.to_le_bytes(),
             )
             .await
@@ -137,4 +149,20 @@ async fn read_word<B: RegisterAccess + Sync>(
         .await
         .map_err(Error::Bus)?;
     Ok(u32::from_le_bytes(bytes))
+}
+
+fn read_state<M: MemoryAccess, E>(
+    memory: &M,
+    base: MemoryAddress,
+    offset: usize,
+) -> Result<ControlRingState, Error<E>> {
+    let address = base
+        .raw()
+        .checked_add(u64::try_from(offset).map_err(|_| Error::Ring(RingError::Geometry))?)
+        .ok_or(Error::Ring(RingError::Geometry))?;
+    memory
+        .read_typed::<ControlRingStateRaw>(MemoryAddress::new(address), MemoryAlignment::ONE)
+        .map_err(Error::Memory)?
+        .decode()
+        .map_err(Error::Codec)
 }

@@ -1,5 +1,11 @@
 # Minimal multi-channel PDMA
 
+The [system specification](docs/spec.md) includes hardware and firmware requirements,
+Host/platform obligations, and explicit model-to-RTL verification boundaries.
+[Managed fatal/events](docs/fatal-events.md) specifies the PF event ring and explicit
+DMA/event recovery. Raw DMA-wide fatal notification goes to firmware; PF receives
+firmware events and coordinates affected VFs.
+
 Next major goal: [firmware-managed DMA](docs/firmware-dma-goal.md), preparing
 SR-IOV, PASID and Function reset boundaries while preserving the ordinary
 configuration. This is a recorded direction, not implemented functionality.
@@ -326,7 +332,8 @@ values 0, 1 and 2. Host `Channel::fault()` returns this enum and rejects unknown
 encodings. Hardware updates the generated field directly; enum values and their
 descriptions are also exported to the C header from the same schema metadata.
 
-This is not the predecessor's ABI. There is no event ring, resource credit policy,
+This is not the predecessor's ABI. The DMA datapath has no event ring; the managed PF control transport has one.
+There is no resource credit policy,
 old semantic API, custom future, or additional
 executor. Historical scenarios are preserved on the backup branch only. The old
 C header has been replaced by the current generated contract; see

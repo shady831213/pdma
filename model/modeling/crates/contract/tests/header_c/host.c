@@ -14,8 +14,13 @@ _Static_assert(C_HBOOT_C_QUBQUOQUOQUT_WRITABLE_MASK == 0, "Host boot is not writ
 _Static_assert(C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_ACCESS == C_HCTL_ACCESS_READ_WRITE, "Host bootstrap ownership");
 _Static_assert(C_HCTL_C_QUEQUNQUAQUBQULQUE_ACCESS == C_HCTL_ACCESS_READ_WRITE, "Host enable ownership");
 _Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_HCTL_ACCESS_WRITE_ONLY, "Host request pulse");
-_Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request physical offset");
-_Static_assert(C_HCTL_SIZE == 28, "hidden response retains extent");
+_Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 20, "request physical offset");
+_Static_assert(C_HCTL_SIZE == 36, "hidden response retains extent");
+_Static_assert(C_HCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_ACCESS == C_HCTL_ACCESS_READ_ONLY, "PF reads event error");
+_Static_assert(C_HCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_WRITABLE_MASK == 0, "PF cannot clear event error");
+#ifdef C_HCTL_C_QUEQUVQUEQUNQUT_OFFSET
+#error Host must not expose the firmware event doorbell
+#endif
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS == C_HWIN_ACCESS_READ_ONLY, "Host readiness");
 _Static_assert(C_HWIN_SIZE == 36, "Host view retains the whole window bank");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_OFFSET == 8, "hidden control retains readiness offset");

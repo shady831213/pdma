@@ -93,7 +93,13 @@ Independent control command/response rings now carry channel acquisition/release
 Ready does not grant access. Geometry, cursors and entries now live in memory;
 bootstrap/enable and bidirectional doorbells are hardware registers. Firmware caches
 validated geometry once; software owns cursor updates. `docs/control-channel.md`
-defines their ownership and cancellation contract. Hardware owns registers/permissions, firmware consumes and
+defines their ownership and cancellation contract. The independent PF event ring,
+event doorbell and firmware-owned event error follow docs/fatal-events.md. The system
+specification entry point is docs/spec.md; firmware is part of that specification.
+DMA fatal interrupts reach firmware only; firmware closes windows and reports PF
+events even with full response storage. ResetDma preserves allocations, bindings and
+management state, leaving data windows closed. ResetEvents repairs only failed event
+delivery. Event full is an error, never backpressure or an implicit retry queue. Hardware owns registers/permissions, firmware consumes and
 executes management requests, and Host owns ring memory. Runtime carries no resource
 policy. A single PF management client issues bounded asynchronous requests naming target
 Functions over one control ring pair. VF software only uses granted data channels.

@@ -140,6 +140,12 @@ pub(super) fn fixture() -> TestResult<(Bus, SharedMemory)> {
         MemoryAlignment::ONE,
     )?])?;
     let queue = ControlQueue {
+        event: ControlRingState {
+            base: 0x1300,
+            capacity: 1,
+            producer: 0,
+            consumer: 0,
+        },
         command: ControlRingState {
             base: COMMAND,
             capacity: 1,

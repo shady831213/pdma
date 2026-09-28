@@ -17,13 +17,14 @@ impl InterruptHandler<HostIrq> for Handler {
             (Self::Dma(handler), HostIrq::Dma(irq)) => {
                 handler.handle(irq).await.map_err(HandlerError::Dma)
             }
-            (Self::Control(handler), HostIrq::Control(irq)) => match handler.handle(irq).await {
-                Ok(()) => Ok(()),
-                Err(never) => match never {},
-            },
-            (Self::Dma(_), HostIrq::Control(_)) | (Self::Control(_), HostIrq::Dma(_)) => {
-                Err(HandlerError::VectorMismatch)
+            (Self::Control(handler), HostIrq::Control(irq) | HostIrq::Event(irq)) => {
+                match handler.handle(irq).await {
+                    Ok(()) => Ok(()),
+                    Err(never) => match never {},
+                }
             }
+            (Self::Dma(_), HostIrq::Control(_) | HostIrq::Event(_))
+            | (Self::Control(_), HostIrq::Dma(_)) => Err(HandlerError::VectorMismatch),
         }
     }
 }

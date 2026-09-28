@@ -10,14 +10,12 @@ pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};
 use hardware_interface_runtime::{
-    InterruptRegistration, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
-    SharedMemoryAllocator,
+    InterruptRegistration, MemoryAddress, RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use interrupts::Handler;
-use pdma_model_contract::control::{ControlQueue, ControlRequest, ControlResponse};
 use pdma_model_contract::dma::Response;
 use pdma_model_contract::memory::FunctionId;
-use pdma_model_host::{Management, ManagementConfig, ManagementRings, RingConfig, firmware};
+use pdma_model_host::firmware;
 use pdma_model_software::control::InterruptEvent;
 use std::time::Duration;
 
@@ -107,35 +105,11 @@ pub(super) async fn main(ports: Ports<'_>, input: Input<'_>) -> TestResult<Outco
             .into());
         }
     };
-    let command = ports.allocator.allocate(
-        2 * u64::try_from(ControlRequest::RECORD_SIZE)?,
-        MemoryAlignment::try_new(u64::try_from(ControlRequest::RECORD_ALIGNMENT)?)?,
-    )?;
-    let response = ports.allocator.allocate(
-        2 * u64::try_from(ControlResponse::RECORD_SIZE)?,
-        MemoryAlignment::try_new(u64::try_from(ControlResponse::RECORD_ALIGNMENT)?)?,
-    )?;
     let interrupt = InterruptEvent::new();
     ports
         .interrupts
         .register(HostVector::Control, Handler::Control(interrupt.handler()))?;
-    let mut management = Management::setup(
-        ports.bus.clone(),
-        ports.memory.clone(),
-        ManagementConfig {
-            addresses,
-            interrupt,
-            rings: ManagementRings {
-                state: ports.allocator.allocate(
-                    u64::try_from(ControlQueue::RECORD_SIZE)?,
-                    MemoryAlignment::try_new(u64::try_from(ControlQueue::RECORD_ALIGNMENT)?)?,
-                )?,
-                command: RingConfig::new(command.raw(), 2)?,
-                response: RingConfig::new(response.raw(), 2)?,
-            },
-        },
-    )
-    .await?;
+    let mut management = buffers::management(&ports, interrupt).await?;
     let channel = management.acquire_channel(FunctionId::new(0)).await?;
     let after = [
         ports.bus.write(window_control, &0_u32.to_le_bytes()).await,

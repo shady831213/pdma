@@ -24,6 +24,7 @@ pub(super) fn rings(
         )?,
         command: ring::<ControlRequest>(allocator)?,
         response: ring::<ControlResponse>(allocator)?,
+        event: ring::<pdma_model_contract::control::ControlEvent>(allocator)?,
     })
 }
 

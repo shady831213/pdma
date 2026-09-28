@@ -62,6 +62,7 @@ impl Fixture {
                 state: allocator.allocate(u64::try_from(ControlQueue::RECORD_SIZE)?, alignment)?,
                 command: RingConfig::new(allocator.allocate(128, alignment)?.raw(), 2)?,
                 response: RingConfig::new(allocator.allocate(128, alignment)?.raw(), 2)?,
+                event: RingConfig::new(allocator.allocate(16, alignment)?.raw(), 2)?,
             },
             event: InterruptEvent::new(),
         })
@@ -83,6 +84,7 @@ impl Fixture {
                 },
                 rings: self.rings,
                 interrupt: self.event.clone(),
+                event_interrupt: InterruptEvent::new(),
             },
         )
         .await

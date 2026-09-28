@@ -55,15 +55,15 @@ _Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUFAULT == 2, "read fault status code
 _Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT == 3, "write fault status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH == 4, "length mismatch status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULISTQUREADQUFAULT == 5, "list read fault status code");
-_Static_assert(C_HCTL_SIZE == 28, "control channel extent");
+_Static_assert(C_HCTL_SIZE == 36, "control channel extent");
 _Static_assert(C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET == 0, "bootstrap address");
 _Static_assert(C_HCTL_C_QUEQUNQUAQUBQULQUE_OFFSET == 8, "activation address");
-_Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 12, "request doorbell address");
-_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "response doorbell address");
+_Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET == 20, "request doorbell address");
+_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 24, "response doorbell address");
 _Static_assert(C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_ACCESS == C_HCTL_ACCESS_WRITE_ONLY, "request doorbell is write-only");
 _Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_WRITABLE_MASK == 1, "response doorbell only accepts pulse bit");
 _Static_assert(C_CONTROLRINGSTATE_SIZE == 24, "ring state extent");
-_Static_assert(C_CONTROLQQUEUE_SIZE == 48, "queue extent");
+_Static_assert(C_CONTROLQQUEUE_SIZE == 72, "queue extent");
 _Static_assert(C_CONTROLQQUEUE_ALIGNMENT == 8, "queue alignment");
 _Static_assert(C_CONTROLQQUEUE_C_COMMANDQX2EBASE_OFFSET == 0, "command base offset");
 _Static_assert(C_CONTROLQQUEUE_C_COMMANDQX2EPRODUCER_OFFSET == 12, "command producer offset");
@@ -101,10 +101,12 @@ int main(void) {
     const uint8_t control_offsets[] = {
         C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET,
         C_HCTL_C_QUEQUNQUAQUBQULQUE_OFFSET,
-        C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET,
-        C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET,
         C_HCTL_C_QUAQUDQUDQURQUEQUSQUSQSQUSQUPQUAQUCQUE_OFFSET,
         C_HCTL_C_QUPQUAQUSQUIQUD_OFFSET,
+        C_HCTL_C_QURQUEQUQQUUQUEQUSQUT_OFFSET,
+        C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET,
+        C_FCTL_C_QUEQUVQUEQUNQUT_OFFSET,
+        C_FCTL_C_QUEQUVQUEQUNQUTQSQUEQURQURQUOQUR_OFFSET,
     };
     const uint32_t offsets[] = {
         C_FDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET,
@@ -196,6 +198,10 @@ int main(void) {
     C_CONTROLQQUEUE_STORE_C_RESPONSEQX2ECAPACITY(queue, UINT32_C(4));
     C_CONTROLQQUEUE_STORE_C_RESPONSEQX2EPRODUCER(queue, UINT32_C(2));
     C_CONTROLQQUEUE_STORE_C_RESPONSEQX2ECONSUMER(queue, UINT32_C(1));
+    C_CONTROLQQUEUE_STORE_C_EVENTQX2EBASE(queue, UINT64_C(0x3000));
+    C_CONTROLQQUEUE_STORE_C_EVENTQX2ECAPACITY(queue, UINT32_C(8));
+    C_CONTROLQQUEUE_STORE_C_EVENTQX2EPRODUCER(queue, UINT32_C(7));
+    C_CONTROLQQUEUE_STORE_C_EVENTQX2ECONSUMER(queue, UINT32_C(5));
     if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2EBASE(queue) != UINT64_C(0x1000)) return 24;
     if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2ECAPACITY(queue) != UINT32_C(8)) return 25;
     if (C_CONTROLQQUEUE_LOAD_C_COMMANDQX2EPRODUCER(queue) != UINT32_C(3)) return 26;

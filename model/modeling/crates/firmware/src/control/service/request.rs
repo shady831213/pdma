@@ -12,8 +12,26 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
     pub(super) async fn execute(
         &self,
         resources: &mut Resources,
-        request: ControlRequest,
+        (monitor, request): (&super::Monitor<'_, B>, ControlRequest),
     ) -> Result<ControlResponse, Error<B::Error>> {
+        match request.opcode {
+            ControlRequestOpcode::ResetDma => {
+                monitor.reset().await?;
+                return Ok(super::response(request));
+            }
+            ControlRequestOpcode::ResetEvents => {
+                let mut response = super::response(request);
+                response.status = ControlResponseStatus::InvalidState;
+                return Ok(response);
+            }
+            ControlRequestOpcode::AcquireChannel
+            | ControlRequestOpcode::ReleaseChannel
+            | ControlRequestOpcode::ResetChannel
+            | ControlRequestOpcode::CreateContext
+            | ControlRequestOpcode::DrainContext
+            | ControlRequestOpcode::AbortContext
+            | ControlRequestOpcode::DestroyContext => monitor.healthy().await?,
+        }
         let id = ChannelId::new(
             usize::try_from(request.channel).map_err(|_| Error::Ring(RingError::Geometry))?,
         );
@@ -31,8 +49,11 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
             }
         };
         match request.opcode {
+            ControlRequestOpcode::ResetDma | ControlRequestOpcode::ResetEvents => {
+                response.status = ControlResponseStatus::InvalidState;
+            }
             ControlRequestOpcode::AcquireChannel => {
-                match resources.acquire(self.bus, function).await? {
+                match resources.acquire((self.bus, monitor), function).await? {
                     Some(id) => {
                         response.channel = u32::try_from(id.index())
                             .map_err(|_| Error::Ring(RingError::Geometry))?;
@@ -41,11 +62,15 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
                 }
             }
             ControlRequestOpcode::ReleaseChannel => {
-                response.status =
-                    resource_status(resources.release(self.bus, (function, id)).await?);
+                response.status = resource_status(
+                    resources
+                        .release((self.bus, monitor), (function, id))
+                        .await?,
+                );
             }
             ControlRequestOpcode::ResetChannel => {
-                response.status = resource_status(resources.reset(self.bus, (function, id)).await?);
+                response.status =
+                    resource_status(resources.reset((self.bus, monitor), (function, id)).await?);
             }
             ControlRequestOpcode::CreateContext
             | ControlRequestOpcode::DrainContext
@@ -54,7 +79,7 @@ impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Servi
                 Some(contexts) => {
                     contexts
                         .execute(
-                            self.bus,
+                            (self.bus, monitor),
                             (&request, &mut response),
                             resources.channels(function),
                         )

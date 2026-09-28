@@ -1,0 +1,106 @@
+use crate::Error;
+use hardware_interface_runtime::RegisterAccess;
+use pdma_model_contract::{
+    control::{ControlEvent, ControlEventKind},
+    dma::{ChannelId, DmaFaultCode},
+    ring::RingError,
+};
+use pdma_model_software::{control::ManagementAddresses, dma::ChannelControl};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+pub(super) struct Monitor<'a, B> {
+    bus: &'a B,
+    addresses: ManagementAddresses,
+    count: usize,
+    control: ChannelControl,
+    failed: AtomicBool,
+    report: AtomicBool,
+}
+
+impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
+    pub(super) async fn new(
+        bus: &'a B,
+        addresses: ManagementAddresses,
+        count: usize,
+    ) -> Result<Self, Error<B::Error>> {
+        let control = ChannelControl::discover_at(bus, ChannelId::new(0), addresses.dma)
+            .await
+            .map_err(Error::Dma)?;
+        control
+            .set_dma_irq_enabled(bus, true)
+            .await
+            .map_err(Error::Dma)?;
+        Ok(Self {
+            bus,
+            addresses,
+            count,
+            control,
+            failed: AtomicBool::new(false),
+            report: AtomicBool::new(false),
+        })
+    }
+
+    pub(super) fn failed(&self) -> bool {
+        self.failed.load(Ordering::SeqCst)
+    }
+
+    pub(super) async fn observe(&self) -> Result<(), Error<B::Error>> {
+        match self.control.dma_fault(self.bus).await.map_err(Error::Dma)? {
+            DmaFaultCode::None => {}
+            DmaFaultCode::Internal => {
+                if !self.failed.swap(true, Ordering::SeqCst) {
+                    self.report.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+        if self.failed() {
+            self.close().await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn healthy(&self) -> Result<(), Error<B::Error>> {
+        self.observe().await?;
+        if self.failed() {
+            return Err(Error::DeviceFailed);
+        }
+        Ok(())
+    }
+
+    pub(super) fn take_event(&self) -> Option<ControlEvent> {
+        self.report
+            .swap(false, Ordering::SeqCst)
+            .then_some(ControlEvent {
+                kind: ControlEventKind::DmaFatal,
+                code: pdma_model_contract::dma::DmaFaultValues::RESET
+                    .with_code(DmaFaultCode::Internal)
+                    .raw(),
+            })
+    }
+
+    pub(super) async fn reset(&self) -> Result<(), Error<B::Error>> {
+        self.close().await?;
+        self.control.reset_dma(self.bus).await.map_err(Error::Dma)?;
+        self.failed.store(false, Ordering::SeqCst);
+        self.control
+            .set_dma_irq_enabled(self.bus, true)
+            .await
+            .map_err(Error::Dma)?;
+        self.healthy().await
+    }
+
+    async fn close(&self) -> Result<(), Error<B::Error>> {
+        for index in 0..self.count {
+            self.bus
+                .write(
+                    self.addresses
+                        .window_control(ChannelId::new(index))
+                        .ok_or(Error::Ring(RingError::Geometry))?,
+                    &0_u32.to_le_bytes(),
+                )
+                .await
+                .map_err(Error::Bus)?;
+        }
+        Ok(())
+    }
+}

@@ -64,7 +64,13 @@ DMA captures producer frontiers, discards only unstarted Abort targets and retai
 accepted task references until RunCommand retirement. Failure retains the binding
 and permits channel-reset recovery. See model/modeling/docs/context-contract.md for
 mandatory software lifetime/submission obligations. No PASID/IOMMU translation,
-Function reset/FLR, event ring or PCIe integration is implemented.
+Function reset/FLR or PCIe integration is implemented.
+Managed firmware handles DMA fatal notifications, closes work windows and publishes
+PF events over an independent in-memory event ring and event doorbell. Event failure
+is retained in PF-readable firmware-owned status without retries or backpressure.
+ResetDma preserves grants/bindings and management state but leaves work windows closed;
+ResetEvents rearms only a failed event producer. See docs/spec.md and docs/fatal-events.md
+under model/modeling for system requirements, including firmware and RTL obligations.
 PF-only firmware management retains per-Function work MMIO and IRQ isolation.
 Hardware checks the platform-selected PF identity on every control-register access;
 firmware validates request targets and channel ownership. The agreed future VF FLR

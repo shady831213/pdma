@@ -137,6 +137,8 @@ impl<M: Clone> Managed<M> {
         let (to_firmware, firmware_source) = pending_interrupt(ControlIrq);
         let (to_host, control_source) = pending_interrupt(HostIrq::Control(ControlIrq));
         let mut control_source = Some(control_source);
+        let (to_events, event_source) = pending_interrupt(HostIrq::Event(ControlIrq));
+        let mut event_source = Some(event_source);
         let mut destinations = Vec::new();
         let mut sources = Vec::new();
         for index in 0..function_count {
@@ -148,11 +150,15 @@ impl<M: Clone> Managed<M> {
             destinations.push(interrupt);
             sources.push((
                 function,
-                addresses,
                 HostInterrupts {
                     dma: dma_source,
                     control: if function == platform::PF {
                         control_source.take()
+                    } else {
+                        None
+                    },
+                    event: if function == platform::PF {
+                        event_source.take()
                     } else {
                         None
                     },
@@ -174,17 +180,11 @@ impl<M: Clone> Managed<M> {
             channel_count,
             to_firmware,
             to_host,
+            to_events,
         });
         let hosts = sources
             .into_iter()
-            .map(|(function, addresses, source)| Host {
-                bus: HostBus {
-                    shared: Arc::clone(&shared),
-                    function,
-                    addresses,
-                },
-                runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source),
-            })
+            .map(|(function, source)| Host::new(Arc::clone(&shared), function, source))
             .collect();
         let firmware_cpu = Arc::new(SoftwareCpu::new());
         Ok((
@@ -198,5 +198,18 @@ impl<M: Clone> Managed<M> {
             },
             hosts,
         ))
+    }
+}
+
+impl<M> Host<M> {
+    fn new(shared: Arc<Shared<M>>, function: FunctionId, source: HostInterrupts) -> Self {
+        Self {
+            bus: HostBus {
+                addresses: shared.addresses,
+                shared,
+                function,
+            },
+            runtime: InterruptRuntime::new(Arc::new(SoftwareCpu::new()), source),
+        }
     }
 }

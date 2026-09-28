@@ -6,8 +6,8 @@ use pdma_model_hw_components::control::{ControlChannel, ControlError};
 
 const BASE: usize = 0x100;
 const ENABLE: usize = BASE + 8;
-const REQUEST: usize = BASE + 12;
-const RESPONSE: usize = BASE + 16;
+const REQUEST: usize = BASE + 20;
+const RESPONSE: usize = BASE + 24;
 
 #[test]
 fn bootstrap_and_enable_are_visible_to_both_domains() {

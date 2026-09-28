@@ -1,3 +1,4 @@
+use super::monitor::Monitor;
 use crate::{Configuration, Error};
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::dma::{ChannelId, DmaDiscovery, DmaRegisters};
@@ -78,6 +79,10 @@ impl Resources {
         })
     }
 
+    pub(super) fn channel_count(&self) -> usize {
+        self.channels.len()
+    }
+
     pub(super) const fn function(&self, raw: u32) -> Result<FunctionId, ResourceError> {
         if raw < self.function_count {
             Ok(FunctionId::new(raw))
@@ -97,7 +102,7 @@ impl Resources {
 
     pub(super) async fn acquire<B: RegisterAccess + Sync>(
         &mut self,
-        bus: &B,
+        (bus, monitor): (&B, &Monitor<'_, B>),
         function: FunctionId,
     ) -> Result<Option<ChannelId>, Error<B::Error>> {
         let Some((index, channel)) = self
@@ -117,14 +122,16 @@ impl Resources {
         bus.write(owner, &function.raw().to_le_bytes())
             .await
             .map_err(Error::Bus)?;
+        monitor.healthy().await?;
         Self::set_window(bus, self.addresses, id, true).await?;
+        monitor.healthy().await?;
         channel.owner = Some(function);
         Ok(Some(id))
     }
 
     pub(super) async fn reset<B: RegisterAccess + Sync>(
         &mut self,
-        bus: &B,
+        (bus, monitor): (&B, &Monitor<'_, B>),
         (function, id): (FunctionId, ChannelId),
     ) -> Result<Result<(), ResourceError>, Error<B::Error>> {
         let Some(channel) = self.channels.get_mut(id.index()) else {
@@ -138,13 +145,15 @@ impl Resources {
         }
         Self::set_window(bus, self.addresses, id, false).await?;
         channel.control.reset(bus).await.map_err(Error::Dma)?;
+        monitor.healthy().await?;
         Self::set_window(bus, self.addresses, id, true).await?;
+        monitor.healthy().await?;
         Ok(Ok(()))
     }
 
     pub(super) async fn release<B: RegisterAccess + Sync>(
         &mut self,
-        bus: &B,
+        (bus, monitor): (&B, &Monitor<'_, B>),
         (function, id): (FunctionId, ChannelId),
     ) -> Result<Result<(), ResourceError>, Error<B::Error>> {
         let Some(channel) = self.channels.get_mut(id.index()) else {
@@ -158,6 +167,7 @@ impl Resources {
         }
         Self::set_window(bus, self.addresses, id, false).await?;
         channel.control.reset(bus).await.map_err(Error::Dma)?;
+        monitor.healthy().await?;
         channel.owner = None;
         Ok(Ok(()))
     }

@@ -5,7 +5,7 @@ use hardware_interface_schema::{
     export::{Exporter, InMemoryArtifactSink},
 };
 use pdma_model_contract::control::{
-    ControlQueue, ControlRequest, ControlResponse, ControlRingState,
+    ControlEvent, ControlQueue, ControlRequest, ControlResponse, ControlRingState,
 };
 use pdma_model_contract::dma::{Command, DmaRegisters, Endpoint, Response, Segment};
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
@@ -41,6 +41,7 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
         ("contextattributes", ContextAttributes::SPEC.resolve()?),
         ("controlrequest", ControlRequest::SPEC.resolve()?),
         ("controlresponse", ControlResponse::SPEC.resolve()?),
+        ("controlevent", ControlEvent::SPEC.resolve()?),
         ("controlringstate", ControlRingState::SPEC.resolve()?),
         ("controlqueue", ControlQueue::SPEC.resolve()?),
     ] {

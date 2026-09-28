@@ -136,7 +136,7 @@ async fn runtime_reestablishes_the_firmware_cpu_on_every_poll() -> TestResult {
             .is_pending()
     );
     // Then: firmware still executes on its assigned CPU and publishes Ready normally.
-    assert_eq!(bus.writes.load(Ordering::SeqCst), 2);
+    assert_eq!(bus.writes.load(Ordering::SeqCst), 3);
     assert_eq!(bus.report.load(Ordering::SeqCst), 1);
     Ok(())
 }

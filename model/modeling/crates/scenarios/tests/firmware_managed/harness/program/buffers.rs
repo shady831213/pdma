@@ -136,6 +136,15 @@ pub(in crate::harness::program) async fn management_with_context(
     interrupt: InterruptEvent,
     attributes: pdma_model_contract::memory::ContextAttributes,
 ) -> TestResult<Management<HostBus<SharedMemoryAccess>, SharedMemoryAccess>> {
+    let event_interrupt = InterruptEvent::new();
+    ports.interrupts.register(
+        super::HostVector::Event,
+        super::Handler::Control(event_interrupt.handler()),
+    )?;
+    let event = ports.allocator.allocate(
+        8 * u64::try_from(pdma_model_contract::control::ControlEvent::RECORD_SIZE)?,
+        MemoryAlignment::try_new(4)?,
+    )?;
     let command = ports.allocator.allocate(
         u64::try_from(8 * ControlRequest::RECORD_SIZE)?,
         MemoryAlignment::try_new(u64::try_from(ControlRequest::RECORD_ALIGNMENT)?)?,
@@ -155,10 +164,12 @@ pub(in crate::harness::program) async fn management_with_context(
             ManagementConfig {
                 addresses: ports.bus.addresses(),
                 interrupt,
+                event_interrupt,
                 rings: ManagementRings {
                     state,
                     command: RingConfig::new(command.raw(), 8)?,
                     response: RingConfig::new(response.raw(), 8)?,
+                    event: RingConfig::new(event.raw(), 8)?,
                 },
             },
             attributes,

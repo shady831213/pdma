@@ -44,7 +44,10 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
                 .find(|request| request.id == response.id)
                 .ok_or(Error::ManagementProtocol)?;
             match request.opcode {
-                ControlRequestOpcode::AcquireChannel | ControlRequestOpcode::CreateContext => {}
+                ControlRequestOpcode::AcquireChannel
+                | ControlRequestOpcode::CreateContext
+                | ControlRequestOpcode::ResetDma
+                | ControlRequestOpcode::ResetEvents => {}
                 ControlRequestOpcode::ReleaseChannel | ControlRequestOpcode::ResetChannel => {
                     if response.channel != request.channel {
                         return Err(Error::ManagementProtocol);

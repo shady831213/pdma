@@ -5,6 +5,7 @@ use hardware_interface_runtime::{
     CpuContextError, CpuLocal, InterruptDispatchError, InterruptEnvelope, InterruptHandler,
     InterruptSource, RegisterAccess, SharedMemory, SharedMemoryAccess,
 };
+use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_software::control::{ControlIrq, ControlIsr, InterruptEvent};
 use std::{convert::Infallible, future::pending, pin::pin, sync::Arc};
@@ -15,7 +16,12 @@ fn memory() -> SharedMemoryAccess {
 
 async fn response<M: Send>(bus: &ManagementBus<M>) {
     bus.write(
-        CONTROL_CHANNEL_BASE + u32::try_from(ControlRegisters::RESPONSE.offset()).unwrap(),
+        CONTROL_CHANNEL_BASE
+            + u32::try_from(
+                ControlRegisters::NOTIFICATION.offset()
+                    + ControlNotificationRegisters::RESPONSE.offset(),
+            )
+            .unwrap(),
         &1_u32.to_le_bytes(),
     )
     .await
@@ -68,15 +74,18 @@ async fn repeated_response_doorbells_before_wait_coalesce_into_one_isr() {
 }
 
 #[tokio::test]
-async fn simultaneous_dma_and_control_pending_survive_cancelled_wait_and_are_fair() {
+async fn simultaneous_dma_control_and_event_pending_survive_cancelled_wait_and_are_fair() {
     // Given: separate pending bits with both destinations raised.
     let (dma, dma_source) =
         hardware_interface_runtime::pending_interrupt(HostIrq::Dma(pdma_model_host::runtime::Irq));
     let (control, control_source) =
         hardware_interface_runtime::pending_interrupt(HostIrq::Control(ControlIrq));
+    let (event, event_source) =
+        hardware_interface_runtime::pending_interrupt(HostIrq::Event(ControlIrq));
     let mut source = super::super::HostInterrupts {
         dma: dma_source,
         control: Some(control_source),
+        event: Some(event_source),
         next: HostVector::Dma,
     };
     {
@@ -85,6 +94,7 @@ async fn simultaneous_dma_and_control_pending_survive_cancelled_wait_and_are_fai
     }
     dma.raise();
     control.raise();
+    event.raise();
     // When: a non-consuming wait is cancelled and DMA raises again after its claim.
     assert_eq!(source.wait_ready().await.unwrap(), HostVector::Dma);
     let ready = source.wait_ready().await.unwrap();
@@ -98,6 +108,11 @@ async fn simultaneous_dma_and_control_pending_survive_cancelled_wait_and_are_fai
     assert_eq!(
         source.claim(ready).await.unwrap().unwrap().vector(),
         HostVector::Control
+    );
+    let ready = source.wait_ready().await.unwrap();
+    assert_eq!(
+        source.claim(ready).await.unwrap().unwrap().vector(),
+        HostVector::Event
     );
     let ready = source.wait_ready().await.unwrap();
     assert_eq!(

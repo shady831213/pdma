@@ -559,7 +559,7 @@ static inline void C_CONTROLREQQUEST_STORE_C_ID(uint8_t bytes[C_CONTROLREQQUEST_
 }
 
 /*
- * 0: AcquireChannel. 1: ReleaseChannel. 2: ResetChannel. 3: CreateContext. 4: DrainContext. 5: AbortContext. 6: DestroyContext. Other values are invalid. Context maintenance requires the documented submitter exclusion and publication ordering.
+ * 0: AcquireChannel. 1: ReleaseChannel. 2: ResetChannel. 3: CreateContext. 4: DrainContext. 5: AbortContext. 6: DestroyContext. 7: ResetDma (all Functions). 8: ResetEvents. Other values are invalid. Context maintenance requires the documented submitter exclusion and publication ordering.
  */
 #define C_CONTROLREQQUEST_C_OPCODE_C_QUACQQUIREQUCHANNEL UINT64_C(0)
 #define C_CONTROLREQQUEST_C_OPCODE_C_QURELEASEQUCHANNEL UINT64_C(1)
@@ -568,6 +568,8 @@ static inline void C_CONTROLREQQUEST_STORE_C_ID(uint8_t bytes[C_CONTROLREQQUEST_
 #define C_CONTROLREQQUEST_C_OPCODE_C_QUDRAINQUCONTEXT UINT64_C(4)
 #define C_CONTROLREQQUEST_C_OPCODE_C_QUABORTQUCONTEXT UINT64_C(5)
 #define C_CONTROLREQQUEST_C_OPCODE_C_QUDESTROYQUCONTEXT UINT64_C(6)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QURESETQUDMA UINT64_C(7)
+#define C_CONTROLREQQUEST_C_OPCODE_C_QURESETQUEVENTS UINT64_C(8)
 #define C_CONTROLREQQUEST_C_OPCODE_OFFSET UINT64_C(8)
 #define C_CONTROLREQQUEST_C_OPCODE_WIDTH UINT64_C(4)
 #define C_CONTROLREQQUEST_C_OPCODE_ENDIAN C_CONTROLREQQUEST_ENDIAN_LITTLE
@@ -582,7 +584,7 @@ static inline void C_CONTROLREQQUEST_STORE_C_OPCODE(uint8_t bytes[C_CONTROLREQQU
 }
 
 /*
- * Target Function in the platform-configured namespace. Only the PF management ingress may submit requests; this field is not the MMIO requester's identity.
+ * Target Function in the platform-configured namespace. Only the PF management ingress may submit requests; this field is not the MMIO requester's identity. Ignored by device-wide ResetDma and ResetEvents.
  */
 #define C_CONTROLREQQUEST_C_FUNCTION_OFFSET UINT64_C(12)
 #define C_CONTROLREQQUEST_C_FUNCTION_WIDTH UINT64_C(4)
@@ -693,7 +695,7 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 }
 
 /*
- * Success, resource/ownership errors, or context maintenance outcome. ContextBusy and MaintenanceFailed preserve the binding and never authorize memory reuse. InvalidAttributes rejects undefined Default/PASID combinations.
+ * Success, resource/ownership errors, or context maintenance outcome. ContextBusy and MaintenanceFailed preserve the binding and never authorize memory reuse. InvalidAttributes rejects undefined Default/PASID combinations. DeviceFailed requires DMA recovery; InvalidState rejects a recovery operation outside its permitted lifecycle.
  */
 #define C_CONTROLRESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUNOQURESOURCES UINT64_C(1)
@@ -705,6 +707,8 @@ static inline void C_CONTROLRESPONSE_STORE_C_ID(uint8_t bytes[C_CONTROLRESPONSE_
 #define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUCONTEXT UINT64_C(7)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUMAINTENANCEQUFAILED UINT64_C(8)
 #define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUATTRIBUTES UINT64_C(9)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUDEVICEQUFAILED UINT64_C(10)
+#define C_CONTROLRESPONSE_C_STATUS_C_QUINVALIDQUSTATE UINT64_C(11)
 #define C_CONTROLRESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_CONTROLRESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_CONTROLRESPONSE_C_STATUS_ENDIAN C_CONTROLRESPONSE_ENDIAN_LITTLE
@@ -751,8 +755,50 @@ static inline void C_CONTROLRESPONSE_STORE_C_CONTEXT(uint8_t bytes[C_CONTROLRESP
 }
 
 /*
+ * Asynchronous PF event
+ * Firmware-produced event with no request ID. Delivery failure is retained in event_error, without retries or backpressure.
+ */
+#define C_CONTROLEVENT_SIZE UINT64_C(8)
+#define C_CONTROLEVENT_ALIGNMENT UINT64_C(4)
+#define C_CONTROLEVENT_ENDIAN_LITTLE UINT32_C(0)
+#define C_CONTROLEVENT_ENDIAN_BIG UINT32_C(1)
+
+/*
+ * 0: DmaFatal, observed by firmware. Other kinds are invalid.
+ */
+#define C_CONTROLEVENT_C_KIND_C_QUDMAQUFATAL UINT64_C(0)
+#define C_CONTROLEVENT_C_KIND_OFFSET UINT64_C(0)
+#define C_CONTROLEVENT_C_KIND_WIDTH UINT64_C(4)
+#define C_CONTROLEVENT_C_KIND_ENDIAN C_CONTROLEVENT_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLEVENT_LOAD_C_KIND(const uint8_t bytes[C_CONTROLEVENT_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLEVENT_C_KIND_OFFSET] | ((uint32_t)bytes[C_CONTROLEVENT_C_KIND_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLEVENT_C_KIND_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLEVENT_C_KIND_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLEVENT_STORE_C_KIND(uint8_t bytes[C_CONTROLEVENT_SIZE], uint32_t value) {
+    bytes[C_CONTROLEVENT_C_KIND_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLEVENT_C_KIND_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLEVENT_C_KIND_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLEVENT_C_KIND_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * DMA fatal code captured by firmware.
+ */
+#define C_CONTROLEVENT_C_CODE_OFFSET UINT64_C(4)
+#define C_CONTROLEVENT_C_CODE_WIDTH UINT64_C(4)
+#define C_CONTROLEVENT_C_CODE_ENDIAN C_CONTROLEVENT_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLEVENT_LOAD_C_CODE(const uint8_t bytes[C_CONTROLEVENT_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLEVENT_C_CODE_OFFSET] | ((uint32_t)bytes[C_CONTROLEVENT_C_CODE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLEVENT_C_CODE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLEVENT_C_CODE_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLEVENT_STORE_C_CODE(uint8_t bytes[C_CONTROLEVENT_SIZE], uint32_t value) {
+    bytes[C_CONTROLEVENT_C_CODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLEVENT_C_CODE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLEVENT_C_CODE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLEVENT_C_CODE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
  * Memory-resident control ring state
- * Software-owned ring geometry and wrapping entry counts. The producer writes producer after storing an entry; the consumer writes consumer after reading an entry. Geometry remains stable while enabled.
+ * Software-owned ring geometry and wrapping entry counts. Producer follows entry storage; consumer follows entry reading. Command/response geometry stays fixed while enabled. Event geometry can change only after a retained delivery error has stopped its producer, before ResetEvents reattachment.
  */
 #define C_CONTROLRINGSTATE_SIZE UINT64_C(24)
 #define C_CONTROLRINGSTATE_ALIGNMENT UINT64_C(8)
@@ -829,9 +875,9 @@ static inline void C_CONTROLRINGSTATE_STORE_C_CONSUMER(uint8_t bytes[C_CONTROLRI
 
 /*
  * Memory-resident firmware control queue
- * Host allocates and initializes both rings before publishing this record's address through bootstrap. Each software side updates only its owned cursor fields.
+ * Host allocates and initializes all three rings before publishing this record's address through bootstrap. Each software side updates only its owned cursor fields.
  */
-#define C_CONTROLQQUEUE_SIZE UINT64_C(48)
+#define C_CONTROLQQUEUE_SIZE UINT64_C(72)
 #define C_CONTROLQQUEUE_ALIGNMENT UINT64_C(8)
 #define C_CONTROLQQUEUE_ENDIAN_LITTLE UINT32_C(0)
 #define C_CONTROLQQUEUE_ENDIAN_BIG UINT32_C(1)
@@ -844,6 +890,11 @@ static inline void C_CONTROLRINGSTATE_STORE_C_CONSUMER(uint8_t bytes[C_CONTROLRI
  * ControlQueue.response
  * Memory-resident control ring state
  * Firmware-produced and Host-consumed control responses.
+ */
+/*
+ * ControlQueue.event
+ * Memory-resident control ring state
+ * Firmware-produced PF asynchronous events, independent of request completion.
  */
 
 /*
@@ -980,6 +1031,74 @@ static inline void C_CONTROLQQUEUE_STORE_C_RESPONSEQX2ECONSUMER(uint8_t bytes[C_
     bytes[C_CONTROLQQUEUE_C_RESPONSEQX2ECONSUMER_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
     bytes[C_CONTROLQQUEUE_C_RESPONSEQX2ECONSUMER_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
     bytes[C_CONTROLQQUEUE_C_RESPONSEQX2ECONSUMER_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Memory address of the entry buffer.
+ */
+#define C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET UINT64_C(48)
+#define C_CONTROLQQUEUE_C_EVENTQX2EBASE_WIDTH UINT64_C(8)
+#define C_CONTROLQQUEUE_C_EVENTQX2EBASE_ENDIAN C_CONTROLQQUEUE_ENDIAN_LITTLE
+static inline uint64_t C_CONTROLQQUEUE_LOAD_C_EVENTQX2EBASE(const uint8_t bytes[C_CONTROLQQUEUE_SIZE]) {
+    return (uint64_t)((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET] | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(7)] << UINT32_C(56)));
+}
+static inline void C_CONTROLQQUEUE_STORE_C_EVENTQX2EBASE(uint8_t bytes[C_CONTROLQQUEUE_SIZE], uint64_t value) {
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EBASE_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
+}
+
+/*
+ * Nonzero power-of-two entry capacity below 2^31, validated by software.
+ */
+#define C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET UINT64_C(56)
+#define C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_WIDTH UINT64_C(4)
+#define C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_ENDIAN C_CONTROLQQUEUE_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLQQUEUE_LOAD_C_EVENTQX2ECAPACITY(const uint8_t bytes[C_CONTROLQQUEUE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET] | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLQQUEUE_STORE_C_EVENTQX2ECAPACITY(uint8_t bytes[C_CONTROLQQUEUE_SIZE], uint32_t value) {
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECAPACITY_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Wrapping published-entry count, owned by the producer.
+ */
+#define C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET UINT64_C(60)
+#define C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_WIDTH UINT64_C(4)
+#define C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_ENDIAN C_CONTROLQQUEUE_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLQQUEUE_LOAD_C_EVENTQX2EPRODUCER(const uint8_t bytes[C_CONTROLQQUEUE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET] | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLQQUEUE_STORE_C_EVENTQX2EPRODUCER(uint8_t bytes[C_CONTROLQQUEUE_SIZE], uint32_t value) {
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2EPRODUCER_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
+}
+
+/*
+ * Wrapping consumed-entry count, owned by the consumer.
+ */
+#define C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET UINT64_C(64)
+#define C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_WIDTH UINT64_C(4)
+#define C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_ENDIAN C_CONTROLQQUEUE_ENDIAN_LITTLE
+static inline uint32_t C_CONTROLQQUEUE_LOAD_C_EVENTQX2ECONSUMER(const uint8_t bytes[C_CONTROLQQUEUE_SIZE]) {
+    return (uint32_t)((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET] | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint32_t)bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET + UINT64_C(3)] << UINT32_C(24)));
+}
+static inline void C_CONTROLQQUEUE_STORE_C_EVENTQX2ECONSUMER(uint8_t bytes[C_CONTROLQQUEUE_SIZE], uint32_t value) {
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET] = (uint8_t)(value & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
+    bytes[C_CONTROLQQUEUE_C_EVENTQX2ECONSUMER_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 
 #endif

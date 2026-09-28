@@ -27,7 +27,8 @@ holes. Read-only projections have zero writable masks. Descriptions are preserve
 | Control address-space attributes | PF only, read/write before enable | Read-only |
 | Context table and maintenance | Hidden | Original leaf permissions |
 | Request doorbell | PF only, write-only | Hidden |
-| Response doorbell | Hidden | Write-only |
+| Response/event doorbell | Hidden | Write-only |
+| Event delivery error | PF only, read-only | Read/write |
 
 The role prefix is part of every register macro namespace. All offsets are relative
 to platform-supplied bases; the contract exports no absolute base macros. Host and
@@ -61,8 +62,10 @@ header specifically describes the managed Host view.
 Reset remains a write-one/request, read-busy handshake. Retain memory until hardware
 clears busy after old work drains. Managed Host uses ResetChannel/ReleaseChannel
 requests instead of writing administrative registers. Platform-pending notifications
-survive reset. The control map is 28 bytes: bootstrap at zero, enable at eight,
-request doorbell at 12, response doorbell at 16, and address-space attributes at 20.
+survive reset. The control map is 36 bytes: bootstrap at zero, enable at eight,
+address-space attributes at 12 and request doorbell at 20. The firmware-owned
+notification block starts at 24, containing response doorbell at 24, event doorbell
+at 28 and event error at 32. Response and event remain independent notifications.
 Enabling locks both bootstrap and address-space attributes. The latter select
 Default or PASID independently of the data context table; no table slot is reserved.
 There is one PF control block, not a per-Function bank. Static Host metadata describes
@@ -70,7 +73,7 @@ its PF permissions; hardware rejects every VF access. No control stride is expor
 
 Shared wire records: Segment is 16 bytes, Endpoint 24, Command 64, Response 24,
 ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
-and ControlQueue 48. Enum bitfield constants are
+ControlEvent 8 (alignment four), and ControlQueue 72. Enum bitfield constants are
 unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
 lists; WORD0/WORD1 hold address/length or list_address/count. Command IOC is at
 byte 56 and response IOC at byte 12. Endpoint's payload-context selector is at
@@ -78,8 +81,8 @@ byte 4; the nested Command source/destination selectors are at bytes 12/36 and
 its SG-table selector is at byte 60. These replace padding without changing the
 record extents. The channel's ring_context register selects one binding for both
 DMA rings; source, destination and SG selectors independently choose data bindings.
-ControlQueue nests command state at byte 0
-and response state at byte 24; each ring stores base/capacity/producer/consumer
+ControlQueue nests command state at byte 0,
+response state at byte 24 and event state at byte 48; each ring stores base/capacity/producer/consumer
 at bytes 0/8/12/16. ControlRequest stores ID/opcode/target Function/channel/context
 at bytes 0/8/12/16/20 and creation attributes at byte 24.
 

@@ -1,18 +1,18 @@
 # Firmware control channel
 
 One trusted PF owns the Host-to-firmware command and firmware-to-Host
-response rings. VF software cannot access their control registers. Their geometry, producer/consumer cursors and entries live in memory.
-They are not DMA task rings. Both directions use management ISRs; there is no event ring.
+response rings, plus an independent firmware-to-PF event ring. VF software cannot access their control registers. Their geometry, producer/consumer cursors and entries live in memory.
+They are not DMA task rings. All notification directions use software-registered ISRs. See [fatal and events](fatal-events.md) for asynchronous system reporting and recovery.
 
 ## Ownership and startup
 
 - Contract defines a 32-byte request and 24-byte response, a 24-byte `ControlRingState`
-  and a 48-byte `ControlQueue`. All have eight-byte alignment and little-endian encoding.
-- PF Host allocates the descriptor and both entry buffers. It initializes the descriptor,
+  and a 72-byte `ControlQueue`. All have eight-byte alignment and little-endian encoding.
+- PF Host allocates the descriptor and all three entry buffers. It initializes the descriptor,
   publishes its address through bootstrap, enables the channel and rings the request doorbell.
 - Firmware reads and validates the descriptor once, retaining accepted geometry.
   Subsequent operations access the independent cursor fields, not mutable geometry.
-- Hardware owns bootstrap, immutable live address-space attributes, enable and two
+- Hardware owns bootstrap, immutable live address-space attributes, enable, an event-error report and three
   doorbells. Its borrowed memory-access view resolves the fixed PF and configured
   attributes; it owns no backing, resource-allocation policy, queue arithmetic or
   software handlers.
@@ -32,9 +32,12 @@ operations and ISR registration; it does not capture CPU identity or wrap its
 business flow in CPU scopes. Ordinary shared drivers impose no additional CPU
 affinity: register capability checks, where explicitly configured, remain authoritative.
 
-The always-on `ControlRegisters` map has a platform-selected base and contains bootstrap at offset 0 (eight bytes), enable at 8, request doorbell at 12,
-response doorbell at 16, and address-space attributes at 20, for an extent of 28 bytes.
-The platform-selected PF owns bootstrap/enable/request writes; firmware owns response writes. Wrong-owner
+The always-on `ControlRegisters` map has a platform-selected base and contains
+bootstrap at offset 0 (eight bytes), enable at 8, address-space attributes at 12,
+and request doorbell at 20. Its `notification: ControlNotificationRegisters` block
+starts at 24: response doorbell at child offset 0, event doorbell at 4 and event
+error at 8 (absolute offsets 24/28/32). The complete map has an extent of 36 bytes.
+The platform-selected PF owns bootstrap/enable/request writes; firmware owns response/event doorbell and event-error writes; PF reads event error. Wrong-owner
 writes are rejected even if the value would not change. Doorbells are write-only:
 one emits a coalescing pulse, zero has no effect, and hardware does not retain a one
 in register storage. PF and firmware may read bootstrap/enable; VF accesses are rejected.
@@ -43,11 +46,12 @@ Enable freezes the bootstrap address and Default/PASID attributes and rejects di
 belongs to software, not the MMIO block. `Ring` requires a nonzero power-of-two
 capacity below 2^31 and validates aligned, representable storage extents. Cursors
 are wrapping u32 entry counts. `SoftRing` validates observed pending counts.
-Host owns command producer and response consumer; firmware owns the opposite
+Host owns command producer and response/event consumers; firmware owns the opposite
 cursors. These in-memory ownership rules are a software protocol, not hardware
 write protection. Host must keep accepted geometry and firmware-owned cursors intact.
 
-There is no live control-channel rebind/reset in this slice. Repeated Host setup
+There is no live command/response rebind/reset. A failed event producer can be
+reattached with ResetEvents under the fatal/event chapter's exclusion rules. Repeated Host setup
 rejects an already enabled channel before touching its descriptor. Keep storage
 valid until the subsystem is safely stopped/reset. Concurrent configuration by
 multiple Host clients is not supported.
@@ -66,19 +70,20 @@ Firmware checks response space before accepting another command.
 The firmware-local control endpoint owns attachment, receive/consume, response
 publication and notifications. Resources serves ordinary requests serially:
 check response space, receive one request, await its resource operation, publish
-the response. A reset holds up later management requests, not independently driven
+the response. Fatal observation remains active across waits with the same retained
+operation future; event publication never waits for response space. A reset holds up later management requests, not independently driven
 hardware or peer DMA. Host can still submit bounded asynchronous requests and
 correlate responses by ID. Full response storage stops command admission; the
 single firmware producer cannot lose the slot checked before starting an operation.
 
 Notification is a hint, not a count or payload. Endpoints check the shared ring,
 then wait if they cannot progress. A notification received before the wait is retained;
-repeated notifications coalesce. Spurious or retried doorbells are harmless. The
-two destinations do not share DMA interrupt causes, masks or handlers.
+repeated notifications coalesce. Spurious or retried doorbells are harmless. The management
+destinations do not share DMA interrupt causes, masks or handlers.
 
 The existing coalescing doorbell pulse becomes a platform-pending interrupt.
 `InterruptSource::claim` consumes it before dispatch; this slice adds no management
-cause/mask/ACK registers. Host dispatch distinguishes Control and DMA vectors.
+cause/mask/ACK registers. Host dispatch distinguishes Control, Event and DMA vectors.
 Firmware has its own control source, CPU and `InterruptRuntime`.
 `software::control::InterruptEvent` retains the ISR wake hint across an early
 interrupt or a cancelled wait. Clones share that hint, not a broadcast stream;
@@ -159,7 +164,8 @@ for the exact boundaries, physical done-pin caveat and excluded PF reset scope.
 
 Malformed opcodes, invalid pointers and memory/bus failures stay typed errors.
 The supervisor reports firmware execution failures; partial side effects are not
-rolled back or automatically replayed. Recovery of a failed subsystem is not added.
+rolled back or automatically replayed. DMA-only and event-only recovery are defined in [fatal and events](fatal-events.md).
+A failed management transport or firmware program still requires platform recovery.
 
 ## Shared software ring and cancellation
 
@@ -175,7 +181,7 @@ transport and independent progress notifications to the software crate; CPU-loca
 resources and main/ISR execution remain separate runtime services.
 
 `Management::setup(bus, memory, ManagementConfig)` accepts platform `ManagementAddresses`, `ManagementRings` and
-the processing task's `InterruptEvent`. Host registers `event.handler()` before setup.
+separate response/event `InterruptEvent` instances. Host registers both handlers before setup.
 `software::control::ControlQueueLayout` supplies the shared cursor adapters after
 validating their addresses; initialization and attachment remain domain-specific.
 `submit_acquire(function)`, `submit_reset(function, channel)` and

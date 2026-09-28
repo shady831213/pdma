@@ -20,9 +20,10 @@ use pdma_model_contract::dma::{
 use pdma_model_contract::hw_components::control::ControlRegisters;
 
 type TestResult = Result<(), Box<dyn Error>>;
-const QUEUE_BYTES: [u8; 48] = [
+const QUEUE_BYTES: [u8; 72] = [
     0, 16, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0,
-    0, 4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+    0, 4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 7, 0,
+    0, 0, 5, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 const CONTROL_BYTES: [&[u8]; 4] = [
@@ -167,7 +168,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
         rust_offsets,
         offsets.map(|offset| usize::try_from(offset).unwrap())
     );
-    let control_offsets = [0_u8, 8, 12, 16, 20, 24];
+    let control_offsets = [0_u8, 8, 12, 16, 20, 24, 28, 32];
     assert_eq!(
         ControlRegisters::resolve()?
             .registers()

@@ -22,7 +22,8 @@ async fn pf_manages_dormant_vfs_and_rejects_invalid_target_functions() {
             ManagementConfig {
                 addresses: pf.bus.addresses(),
                 rings: rings(&allocator).unwrap(),
-                interrupt,
+                interrupt: interrupt.response,
+                event_interrupt: interrupt.event,
             },
         )
         .await
@@ -75,7 +76,7 @@ async fn pf_manages_dormant_vfs_and_rejects_invalid_target_functions() {
             Err(AccessError::Closed)
         ));
     });
-    tokio::time::timeout(Duration::from_secs(5), system.run_until(program))
+    tokio::time::timeout(Duration::from_secs(5), system.run_until(Box::pin(program)))
         .await
         .unwrap()
         .unwrap();
@@ -99,7 +100,8 @@ async fn pf_lifecycle_validates_target_ownership_and_reassignment_revokes_old_ac
             ManagementConfig {
                 addresses: pf.bus.addresses(),
                 rings: rings(&allocator).unwrap(),
-                interrupt,
+                interrupt: interrupt.response,
+                event_interrupt: interrupt.event,
             },
         )
         .await
@@ -165,7 +167,7 @@ async fn pf_lifecycle_validates_target_ownership_and_reassignment_revokes_old_ac
         management.release_channel(fb, mine).await.unwrap();
         management.release_channel(fb, peer).await.unwrap();
     });
-    tokio::time::timeout(Duration::from_secs(5), system.run_until(program))
+    tokio::time::timeout(Duration::from_secs(5), system.run_until(Box::pin(program)))
         .await
         .unwrap()
         .unwrap();

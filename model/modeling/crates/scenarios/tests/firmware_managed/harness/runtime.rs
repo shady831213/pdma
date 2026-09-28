@@ -50,6 +50,7 @@ struct Shared<M> {
     channel_count: usize,
     to_firmware: InterruptEmitter,
     to_host: InterruptEmitter,
+    to_events: InterruptEmitter,
 }
 
 #[derive(Debug)]

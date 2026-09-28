@@ -9,6 +9,8 @@ pub enum HostVector {
     Dma,
     /// Management response doorbell.
     Control,
+    /// Firmware event doorbell.
+    Event,
 }
 
 /// Platform notification delivered to Host software.
@@ -18,6 +20,8 @@ pub enum HostIrq {
     Dma(Irq),
     /// Control response notification.
     Control(ControlIrq),
+    /// Firmware asynchronous event notification.
+    Event(ControlIrq),
 }
 
 impl InterruptEnvelope for HostIrq {
@@ -27,15 +31,17 @@ impl InterruptEnvelope for HostIrq {
         match self {
             Self::Dma(_) => HostVector::Dma,
             Self::Control(_) => HostVector::Control,
+            Self::Event(_) => HostVector::Event,
         }
     }
 }
 
-/// Two independent pending destinations sharing the canonical Host dispatcher.
+/// Independent DMA, response and event pending destinations sharing the canonical Host dispatcher.
 #[derive(Debug)]
 pub struct HostInterrupts {
     pub(super) dma: PendingInterrupt<HostIrq>,
     pub(super) control: Option<PendingInterrupt<HostIrq>>,
+    pub(super) event: Option<PendingInterrupt<HostIrq>>,
     pub(super) next: HostVector,
 }
 
@@ -45,43 +51,55 @@ impl InterruptSource for HostInterrupts {
     type Error = tokio::sync::watch::error::RecvError;
 
     async fn wait_ready(&self) -> Result<HostVector, Self::Error> {
-        let Some(control) = &self.control else {
-            self.dma.wait_ready().await?;
-            return Ok(HostVector::Dma);
-        };
-        let (first, second) = match self.next {
-            HostVector::Dma => (&self.dma, control),
-            HostVector::Control => (control, &self.dma),
-        };
+        let mut sources = [
+            (HostVector::Dma, Some(&self.dma)),
+            (HostVector::Control, self.control.as_ref()),
+            (HostVector::Event, self.event.as_ref()),
+        ];
+        sources.rotate_left(match self.next {
+            HostVector::Dma => 0,
+            HostVector::Control => 1,
+            HostVector::Event => 2,
+        });
+        let [first, second, third] = sources;
         tokio::select! {
             biased;
-            ready = first.wait_ready() => {
-                ready?;
-                Ok(self.next)
-            },
-            ready = second.wait_ready() => {
-                ready?;
-                Ok(match self.next {
-                    HostVector::Dma => HostVector::Control,
-                    HostVector::Control => HostVector::Dma,
-                })
-            },
+            result = wait(first) => result,
+            result = wait(second) => result,
+            result = wait(third) => result,
         }
     }
 
     async fn claim(&mut self, ready: HostVector) -> Result<Option<HostIrq>, Self::Error> {
-        match ready {
+        let source = match ready {
             HostVector::Dma => {
                 self.next = HostVector::Control;
-                self.dma.claim(()).await
+                Some(&mut self.dma)
             }
             HostVector::Control => {
-                self.next = HostVector::Dma;
-                match &mut self.control {
-                    Some(control) => control.claim(()).await,
-                    None => Ok(None),
-                }
+                self.next = HostVector::Event;
+                self.control.as_mut()
             }
+            HostVector::Event => {
+                self.next = HostVector::Dma;
+                self.event.as_mut()
+            }
+        };
+        match source {
+            Some(source) => source.claim(()).await,
+            None => Ok(None),
         }
+    }
+}
+
+async fn wait(
+    (vector, source): (HostVector, Option<&PendingInterrupt<HostIrq>>),
+) -> Result<HostVector, tokio::sync::watch::error::RecvError> {
+    match source {
+        Some(source) => {
+            source.wait_ready().await?;
+            Ok(vector)
+        }
+        None => std::future::pending().await,
     }
 }

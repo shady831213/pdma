@@ -14,6 +14,7 @@ mod client;
 mod configuration;
 mod contexts;
 mod control;
+mod fatal;
 mod function_backpressure;
 mod function_dma;
 mod function_irqs;

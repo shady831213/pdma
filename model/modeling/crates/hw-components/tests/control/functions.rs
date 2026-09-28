@@ -1,5 +1,6 @@
 //! PF control-aperture permission tests.
 use hardware_interface_schema::RegisterAccessError;
+use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
 use pdma_model_contract::memory::FunctionId;
 use pdma_model_hw_components::control::{ControlChannel, ControlError};
@@ -10,16 +11,23 @@ fn vf_cannot_publish_read_or_notify_through_pf_registers() {
     let pf = FunctionId::new(7);
     let vf = FunctionId::new(0);
     let mut controls = ControlChannel::new(0x1000, pf);
-    // When: a VF guesses the bootstrap, enable and both doorbells.
-    for (offset, bytes) in [
-        (0, vec![0; 8]),
-        (8, vec![1, 0, 0, 0]),
-        (12, vec![1, 0, 0, 0]),
-        (16, vec![1, 0, 0, 0]),
-    ] {
+    // When: a VF accesses every leaf, including all notification registers.
+    for register in ControlRegisters::resolve().unwrap().registers() {
+        let offset = register.offset();
+        let mut bytes = vec![0; register.definition().width()];
         assert_eq!(
             controls.host_write(vf, 0x1000 + offset, &bytes),
             Err(RegisterAccessError::Other(ControlError::Permission))
+        );
+        assert_eq!(
+            controls.host_read(vf, 0x1000 + offset, &mut bytes),
+            Err(match register.definition().access() {
+                hardware_interface_schema::Access::WriteOnly =>
+                    RegisterAccessError::ReadForbidden { offset },
+                hardware_interface_schema::Access::ReadOnly
+                | hardware_interface_schema::Access::ReadWrite =>
+                    RegisterAccessError::Other(ControlError::Permission),
+            })
         );
     }
     let mut bytes = [0xa5; 8];
@@ -33,6 +41,7 @@ fn vf_cannot_publish_read_or_notify_through_pf_registers() {
     assert_eq!(bytes, [0; 8]);
     assert!(!controls.take_request_notification());
     assert!(!controls.take_response_notification());
+    assert!(!controls.take_event_notification());
     controls
         .host_write(pf, 0x1000, &77_u64.to_le_bytes())
         .unwrap();
@@ -51,7 +60,11 @@ fn only_pf_and_firmware_can_ring_their_respective_direction() {
             .host_write(pf, ControlRegisters::REQUEST.offset(), &1_u32.to_le_bytes())
             .unwrap();
         controls
-            .firmware_write(ControlRegisters::RESPONSE.offset(), &1_u32.to_le_bytes())
+            .firmware_write(
+                ControlRegisters::NOTIFICATION.offset()
+                    + ControlNotificationRegisters::RESPONSE.offset(),
+                &1_u32.to_le_bytes(),
+            )
             .unwrap();
     }
     // Then: each direction coalesces independently and is consumed once.

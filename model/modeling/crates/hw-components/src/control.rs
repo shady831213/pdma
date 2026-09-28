@@ -1,4 +1,5 @@
 use hardware_interface_schema::{RegisterAccessError, RegisterWindow};
+use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 use pdma_model_contract::hw_components::control::{ControlRegisters, DoorbellValues};
 use pdma_model_contract::memory::{FunctionId, InvalidContextAttributes, MemoryIdentity};
 
@@ -20,6 +21,7 @@ pub struct ControlChannel {
     manager: FunctionId,
     request_pending: bool,
     response_pending: bool,
+    event_pending: bool,
 }
 
 impl ControlChannel {
@@ -37,10 +39,11 @@ impl ControlChannel {
             manager,
             request_pending: false,
             response_pending: false,
+            event_pending: false,
         }
     }
 
-    /// Reads bootstrap or enable from the Host domain, even while disabled.
+    /// Reads PF-visible configuration and event status, even while disabled.
     pub fn host_read(
         &mut self,
         function: FunctionId,
@@ -62,7 +65,7 @@ impl ControlChannel {
         )
     }
 
-    /// Reads bootstrap or enable from firmware, even while disabled.
+    /// Reads configuration and event status from firmware, even while disabled.
     pub fn firmware_read(
         &mut self,
         address: usize,
@@ -83,7 +86,7 @@ impl ControlChannel {
         self.write((address, bytes), Domain::Host(function))
     }
 
-    /// Writes the firmware-owned response notification.
+    /// Writes firmware-owned notifications or event delivery status.
     pub fn firmware_write(
         &mut self,
         address: usize,
@@ -102,6 +105,11 @@ impl ControlChannel {
         core::mem::replace(&mut self.response_pending, false)
     }
 
+    /// Takes the independent firmware-to-PF event notification.
+    pub const fn take_event_notification(&mut self) -> bool {
+        core::mem::replace(&mut self.event_pending, false)
+    }
+
     fn write(
         &mut self,
         transaction: (usize, &[u8]),
@@ -112,11 +120,13 @@ impl ControlChannel {
             transaction.0,
             transaction.1,
             |offset, old, next| {
+                let notification = offset >= ControlRegisters::NOTIFICATION.offset()
+                    && offset
+                        < ControlRegisters::NOTIFICATION.offset()
+                            + ControlNotificationRegisters::EXTENT;
                 let owned = match domain {
-                    Domain::Host(function) => {
-                        function == manager && offset != ControlRegisters::RESPONSE.offset()
-                    }
-                    Domain::Firmware => offset == ControlRegisters::RESPONSE.offset(),
+                    Domain::Host(function) => function == manager && !notification,
+                    Domain::Firmware => notification,
                 };
                 if !owned {
                     return Err(ControlError::Permission);
@@ -137,9 +147,11 @@ impl ControlChannel {
             },
             |_, next| {
                 self.request_pending |= next.request.pulse();
-                self.response_pending |= next.response.pulse();
+                self.response_pending |= next.notification.response.pulse();
+                self.event_pending |= next.notification.event.pulse();
                 next.request = DoorbellValues::RESET;
-                next.response = DoorbellValues::RESET;
+                next.notification.response = DoorbellValues::RESET;
+                next.notification.event = DoorbellValues::RESET;
             },
         )
     }

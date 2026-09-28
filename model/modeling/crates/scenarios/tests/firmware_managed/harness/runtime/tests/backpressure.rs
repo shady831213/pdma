@@ -75,7 +75,7 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
         kick(&host.bus).await?;
         tokio::select! {
             result = running.as_mut() => panic!("system stopped: {result:?}"),
-            result = queue.wait_response(&interrupt, 1) => result?,
+            result = queue.wait_response(&interrupt.response, 1) => result?,
         }
         let first = memory
             .read_typed::<ControlResponseRaw>(
@@ -116,7 +116,7 @@ pub(super) async fn release_backpressure(function: FunctionId) -> TestResult {
         kick(&host.bus).await?;
         tokio::select! {
             result = running.as_mut() => panic!("system stopped: {result:?}"),
-            result = queue.wait_response(&interrupt, 2) => result?,
+            result = queue.wait_response(&interrupt.response, 2) => result?,
         }
         let released = memory
             .read_typed::<ControlResponseRaw>(

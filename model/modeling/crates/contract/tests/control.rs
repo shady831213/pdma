@@ -1,4 +1,5 @@
 //! Control-channel wire and register layout boundary tests.
+use pdma_model_contract::hw_components::control::ControlNotificationRegisters;
 
 use pdma_model_contract::control::{
     ControlQueue, ControlRequest, ControlRequestOpcode, ControlResponse, ControlResponseStatus,
@@ -53,7 +54,7 @@ fn request_encodes_little_endian_and_rejects_unknown_opcode() {
     );
     assert_eq!(ControlRequest::from_bytes(&bytes).unwrap(), request);
     assert_eq!(ControlRequest::SPEC.alignment(), 8);
-    bytes[8] = 7;
+    bytes[8] = 9;
     assert!(ControlRequest::from_bytes(&bytes).is_err());
 }
 
@@ -122,9 +123,12 @@ fn register_composition_has_bootstrap_enable_and_dual_doorbells() {
     // Then: each leaf has its independent address and expected extent.
     assert_eq!(ControlRegisters::BOOTSTRAP.offset(), 0);
     assert_eq!(ControlRegisters::ENABLE.offset(), 8);
-    assert_eq!(ControlRegisters::REQUEST.offset(), 12);
-    assert_eq!(ControlRegisters::RESPONSE.offset(), 16);
-    assert_eq!(ControlRegisters::EXTENT, 28);
+    assert_eq!(ControlRegisters::REQUEST.offset(), 20);
+    assert_eq!(
+        ControlRegisters::NOTIFICATION.offset() + ControlNotificationRegisters::RESPONSE.offset(),
+        24
+    );
+    assert_eq!(ControlRegisters::EXTENT, 36);
     assert_eq!(
         Doorbell::SPEC.access(),
         hardware_interface_schema::Access::WriteOnly
@@ -136,6 +140,12 @@ fn register_composition_has_bootstrap_enable_and_dual_doorbells() {
 fn memory_queue_encodes_geometry_and_independent_cursors() {
     // Given: distinct command and response descriptors, including wrapped counts.
     let queue = ControlQueue {
+        event: ControlRingState {
+            base: 0x3000,
+            capacity: 8,
+            producer: 7,
+            consumer: 5,
+        },
         command: ControlRingState {
             base: 0x0102_0304_0506_0708,
             capacity: 2,
@@ -160,13 +170,14 @@ fn memory_queue_encodes_geometry_and_independent_cursors() {
     assert_eq!(ControlRingState::RECORD_ALIGNMENT, 8);
     assert_eq!(ControlQueue::COMMAND_OFFSET, 0);
     assert_eq!(ControlQueue::RESPONSE_OFFSET, 24);
-    assert_eq!(ControlQueue::RECORD_SIZE, 48);
+    assert_eq!(ControlQueue::RECORD_SIZE, 72);
     assert_eq!(ControlQueue::RECORD_ALIGNMENT, 8);
     assert_eq!(
         bytes,
         [
             8, 7, 6, 5, 4, 3, 2, 1, 2, 0, 0, 0, 255, 255, 255, 255, 254, 255, 255, 255, 0, 0, 0, 0,
-            136, 119, 102, 85, 68, 51, 34, 17, 4, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0
+            136, 119, 102, 85, 68, 51, 34, 17, 4, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+            48, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 7, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0
         ]
     );
     assert_eq!(ControlQueue::from_bytes(&bytes).unwrap(), queue);

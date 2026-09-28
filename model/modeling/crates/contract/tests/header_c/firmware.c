@@ -16,8 +16,8 @@ _Static_assert(C_FCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_WRITABLE_MASK == 0, "firmwar
 _Static_assert(C_FCTL_C_QUEQUNQUAQUBQULQUE_ACCESS == C_FCTL_ACCESS_READ_ONLY, "firmware enable read-only");
 _Static_assert(C_FCTL_C_QUEQUNQUAQUBQULQUE_WRITABLE_MASK == 0, "firmware enable is not writable");
 _Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_ACCESS == C_FCTL_ACCESS_WRITE_ONLY, "firmware response pulse");
-_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 16, "hidden request retains response offset");
-_Static_assert(C_FCTL_SIZE == 28, "firmware control physical extent");
+_Static_assert(C_FCTL_C_QURQUEQUSQUPQUOQUNQUSQUE_OFFSET == 24, "hidden request retains response offset");
+_Static_assert(C_FCTL_SIZE == 36, "firmware control physical extent");
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_ACCESS == C_FWIN_ACCESS_READ_WRITE, "firmware window ownership");
 _Static_assert(C_FWIN_SIZE == 36, "firmware view retains the whole window bank");
 #if defined(PDMA_HOST_CONTROL_STRIDE) || defined(PDMA_FIRMWARE_CONTROL_STRIDE)

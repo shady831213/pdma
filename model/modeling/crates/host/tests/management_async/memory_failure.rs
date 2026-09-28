@@ -78,6 +78,7 @@ async fn publication_and_consumption_memory_failures_preserve_original_work() {
                     },
                     rings: fixture.rings,
                     interrupt: fixture.event.clone(),
+                    event_interrupt: pdma_model_software::control::InterruptEvent::new(),
                 },
             )
             .await

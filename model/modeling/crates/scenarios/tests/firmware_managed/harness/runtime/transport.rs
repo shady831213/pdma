@@ -32,6 +32,9 @@ impl<M> Shared<M> {
         if control.take_response_notification() {
             self.to_host.raise();
         }
+        if control.take_event_notification() {
+            self.to_events.raise();
+        }
         drop(control);
         for index in 0..self.channel_count {
             let channel = pdma_model_contract::dma::ChannelId::new(index);

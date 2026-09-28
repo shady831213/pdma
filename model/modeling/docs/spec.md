@@ -18,7 +18,7 @@ PCIe, IOMMU translation, caches and an actual interconnect are integration scope
 | [Reset](reset.md) | Stop, retire, drain and reset completion; memory lifetime |
 | [Control channel](control-channel.md) | PF/firmware requests, responses, ring ownership and cancellation |
 | [Function isolation](function-isolation.md) | Grants, routing, permissions and pre-FLR obligations |
-| [Contexts](context-contract.md) | Context bindings, maintenance frontiers and lifetime |
+| [Contexts](context-contract.md) | Context bindings, maintenance frontiers, lifetime and non-faulting migration-copy obligations |
 | [Fatal and events](fatal-events.md) | System fatal handling, PF events and managed recovery |
 
 The fatal/event chapter describes the managed recovery extension. Its verification
@@ -26,6 +26,14 @@ section records implementation coverage. Other
 chapters describe the existing model except sections explicitly marked future.
 The architecture goal and MVP documents are background, not additional acceptance
 requirements. Removed specifications on the backup branch are not authoritative.
+
+The agreed [non-faulting migration-copy usage](context-contract.md#non-faulting-page-migration-copy)
+uses existing copy behavior with explicit software/platform preconditions. It is
+distinct from copying pageable virtual addresses with recoverable faults. The
+next design focus is [DSA-like partial completion and Host continuation](page-fault-recovery.md).
+That note is non-normative and unimplemented: completion encoding, SG recovery,
+ordering and lifecycle interactions must be agreed before adding requirements or
+changing the existing error/halt behavior.
 
 ## Responsibility notation
 

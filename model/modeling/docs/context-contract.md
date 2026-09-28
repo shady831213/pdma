@@ -65,6 +65,41 @@ Hardware freezes these settings on enable. Firmware's Host-memory access port us
 this configuration without first creating a table entry through the control ring.
 Data-channel/context maintenance does not revoke the control path.
 
+## Non-faulting page-migration copy
+
+Agreed: 2026-09-28. This usage contract applies when PDMA copies prepared page
+contents as part of migration. It does not claim that every DMA used for migration
+must forbid recoverable page faults, or that the complete HMM workflow is implemented.
+
+**SW-13 (submitting software).** Before publishing a migration copy, prepare the
+source and destination pages and retain them until their use has ended under
+SW-04/SW-10. Ensure command/response storage and any SG metadata remain accessible
+for their required lifetimes as well. Do not submit this copy on the assumption
+that its own demand faults will first make its buffers available.
+
+**PLAT-MIGRATION-1 (platform/OS).** Provide an authorized access path with valid,
+stable mappings and permissions for the copy and its supporting queue/metadata
+accesses. This can use established mappings or a suitable physical-address path;
+it does not require bypassing translation or isolation. In particular, the copy
+must not depend on resolving the same unfinished migration fault it is servicing.
+
+**HW-MIGRATION-1 (DMA).** Execute this as an ordinary copy. Unexpected access
+failures follow the existing operation-specific error/fatal paths; they do not
+implicitly suspend for demand paging, retry indefinitely or enable resume.
+Completed writes are not rolled back by a subsequent failure or reset.
+
+The original CPU/GPU access may have faulted and triggered migration. That fault
+is distinct from accesses made by the migration copy. Page-table updates, MMU/TLB
+invalidation and cross-engine synchronization remain separate responsibilities;
+copy completion alone does not certify the complete migration protocol.
+
+The current model provides the ordinary copy/error behavior; it does not emulate
+page residency, page tables or MMU translation. Verification of this usage's OS/MMU
+preconditions belongs to integration. Copying pageable virtual addresses with
+recoverable faults is a separate, unimplemented
+[DSA-like continuation design](page-fault-recovery.md). This note does not waive
+the existing context submission-exclusion and lifetime obligations.
+
 ## Software obligations
 
 | ID | Responsible party | Required behavior |
@@ -86,6 +121,8 @@ Host/VF coordination with the PF remains a software/platform responsibility; thi
 contract does not introduce a VF mailbox. Violating SW-02 or SW-03 invalidates the
 snapshot proof. Hardware cannot infer unpublished future commands from a table
 entry or from its current in-flight task count.
+The non-faulting migration usage additionally requires SW-13 and PLAT-MIGRATION-1
+above; these do not introduce a new descriptor mode or register.
 
 ## Operations and completion semantics
 

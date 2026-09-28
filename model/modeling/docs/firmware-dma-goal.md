@@ -1,9 +1,12 @@
-# Next goal: firmware-managed DMA
+# Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Status: broader architectural direction; the first architecture MVP is implemented,
-with Function-scoped channel management now implemented; PCIe virtualization, context
-selection and Function-level reset remain future work.
+Updated: 2026-09-28.
+Status: the architecture MVP, Function-scoped channel management, context selection
+and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
+integration and Function-level reset remain unimplemented. The next design focus
+is DSA-like partial completion and Host continuation for pageable-VA copies;
+synchronization and fence semantics follow.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
@@ -12,8 +15,9 @@ The subsequent [control channel](control-channel.md) implements independent
 command/response rings for multi-channel acquisition/reset/release, including local
 reset completion. [Function-aware ownership](function-isolation.md) now covers MMIO,
 management and notification routing. Function-selected memory capabilities now
-provide isolated model address spaces; external drain, PASID and IOMMU translation
-remain future work. See the [DMA memory boundary](function-isolation.md#dma-memory-boundary).
+provide isolated model address spaces. Default/PASID context attributes and routing
+are implemented; actual address translation and external transaction drain are not.
+See the [DMA memory boundary](function-isolation.md#dma-memory-boundary).
 Validate the ownership and runtime assembly boundaries before implementing the
 broader virtualization and address-space features below.
 
@@ -28,9 +32,66 @@ separate design work.
 
 The 2026-09-21 [context contract](context-contract.md) records the agreed selectors,
 control bootstrap configuration, context lifecycle and software obligations for
-future modeling and RTL. These decisions are not implemented behavior. Its numbered
+modeling and RTL. Context selection and lifecycle behavior are now implemented;
+translation and bus transaction mechanics remain outside the model. Its numbered
 software/hardware requirements supersede the previously open selector and
 drain/abort questions here and must be retained in the eventual RTL specification.
+
+## Next direction: GPU/SoC copy engine
+
+Recorded: 2026-09-28. Status: use case accepted for design discussion, not an approved
+interface or implementation plan. PDMA may be integrated into a GPU-like SoC as a
+copy engine participating in HMM-related page migration and page-table maintenance,
+in addition to the PCIe endpoint use case. Keep page-data movement distinct from
+page-table updates and MMU invalidation. Ordinary copy must remain simple.
+
+### First: page-fault and recovery semantics
+
+Decision, 2026-09-28: separate two uses. For migration of prepared page contents,
+software/platform guarantees a non-faulting copy path, including supporting queue
+and SG accesses. Existing DMA copy behavior is sufficient for that data-movement
+step; unexpected access failures remain errors, not recoverable paging. This is a
+chosen usage contract, not a universal restriction on migration engines. The
+[context contract](context-contract.md#non-faulting-page-migration-copy) records
+the normative obligations and the boundary with full HMM support.
+
+The next focus is the second use: copying pageable virtual addresses, where DMA's
+own access can encounter a recoverable page fault. The selected direction for the
+next design pass is **DSA-like partial completion followed by Host software
+continuation**, retaining direct Host/VF use of DMA rings. DMA ends the affected
+hardware command with precise progress and fault information; software repairs
+the mapping and submits the remainder as a new command. Firmware does not proxy
+each copy or retain its suspended progress.
+
+The [page-fault recovery design note](page-fault-recovery.md) records the agreed
+responsibilities, unresolved completion/SG/order semantics, and NVIDIA evidence
+limits. It is not an implemented feature or a frozen ABI. Existing unsuccessful
+responses still stop the channel until reset; the proposed recoverable outcome
+must be distinguished from those errors before implementation.
+
+Device-retained resume, firmware-owned VF task queues and MMU-transparent retry
+remain alternatives outside this next slice. Do not restore the retired resume
+API or introduce per-channel suspended tasks from the research discussion.
+Keep the existing functional abstraction: no bus cycles, transaction IDs,
+outstanding queues or asynchronous memory-transaction model are requested.
+
+### Then: synchronization and fences
+
+Define dependency waits, completion signaling, ordering scope and memory visibility
+separately. Decide which operations belong to DMA commands and which belong to the
+MMU/platform or controlling software. Copy completion must not silently imply cache
+maintenance or TLB invalidation. No fence encoding, new opcode or register is fixed yet.
+
+### Deferred
+
+Full PCIe/GPU-MMU integration is not part of the first discussion. Recovery without
+working firmware remains the separate low-priority TBD below. Update the normative
+spec and implement focused scenarios only after the relevant semantics are agreed.
+
+Reference starting points:
+
+- [Linux HMM](https://docs.kernel.org/mm/hmm.html): page migration and device page-table synchronization responsibilities.
+- [Page-fault recovery sources and evidence limits](page-fault-recovery.md#references-and-evidence-limits): Intel partial completion and scoped NVIDIA comparisons; do not combine different architectures into an unverified VF design.
 
 ## Implemented preparation: shared drivers and management interrupts
 
@@ -99,7 +160,8 @@ actual hardware permissions are checked against the projections in boundary test
 ## Objective
 
 Use firmware plus the existing shared DMA hardware as the primary architecture
-for preparing SR-IOV, PASID and function-level reset support. Keep policy and
+for preparing SR-IOV, PASID and function-level reset support, and evaluate GPU/SoC
+copy-engine fault recovery and synchronization at the same functional abstraction level. Keep policy and
 management sequencing in firmware, with enforceable isolation and completion
 mechanisms in hardware. Do not integrate with `pcie_modeling` yet; establish
 boundaries that reduce the eventual integration work.
@@ -251,28 +313,55 @@ and speculative collections of policy generics.
 
 ## Questions for the broader goal, beyond the MVP
 
-- Context selector width, table capacity, namespace and authorized programming
-  interface; exact descriptor and register layouts remain undecided.
+- Context selector and management layouts are implemented in the contract; future
+  extensions must preserve the documented ownership and lifecycle boundaries.
 - Target-specific context attributes and Device-memory protection; selector roles,
   PF control bootstrap and snapshot-based Drain/Abort semantics are now recorded
   in the [context contract](context-contract.md), not open alternatives.
 - Exact management access permissions, stop/rebind interlocks and ownership of
   local-completion, external-drain and release observations.
-- Asynchronous management events, management reset domain and recovery when
-  firmware is unavailable. The current in-memory control command/response protocol
-  does not include an event ring or Function lifecycle protocol.
-- Scheduling policy when an accepted task waits on memory. Retaining one shared
-  engine does not automatically provide cross-Function progress while it waits;
-  do not silently introduce per-channel suspended execution or preemption.
+- Recovery when firmware or the management transport itself is unavailable remains
+  deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
+  recovery are implemented in [fatal and events](fatal-events.md).
+- Ordering after a terminal partial completion and later software continuation,
+  as discussed in the page-fault note. Scheduling suspended tasks or synchronization
+  waits remains separate future work, not an implicit addition to this slice.
 - Which features are instance configuration and which have software enable bits.
+
+## Deferred TBD: subsystem recovery without working firmware
+
+Recorded: 2026-09-28. Priority: low. Status: design unresolved; no implementation
+scheduled. The user considers this important but not a current architectural blocker.
+It is not a missing part of the completed DMA fatal/event recovery feature.
+
+The potential scope is recovery when firmware has stopped responding or the
+management command/response transport cannot operate. Existing `ResetDma` and
+`ResetEvents` depend on functioning firmware and management transport; they retain
+their documented behavior.
+
+Before implementing, decide:
+
+- The recovery trigger and authority: external platform reset, independent MMIO,
+  or another integration mechanism; no watchdog or new register interface is agreed.
+- Reset domains and retained state, including firmware execution, DMA pipeline,
+  windows, context bindings, management queues and platform-pending notifications.
+- Completion and memory-lifetime guarantees for old accesses, followed by firmware
+  startup, Host re-bootstrap and coordination of affected Functions.
+
+An external reset input and full subsystem reinitialization were discussed as a
+candidate, not an approved design. Do not add a reset controller, runtime framework,
+or mandatory RTL requirement from this note alone. Revisit the design explicitly
+when this item is prioritized; keep hardware, firmware, Host and platform ownership
+clear in the resulting specification.
 
 ## Future acceptance focus
 
 Retain ordinary copy, SG, fault, reset and interrupt scenarios. Add explicit
 hardware/firmware/host/harness separation and test unauthorized resource access,
-context isolation, queued-context reuse, delayed memory completion during reset,
-local completion before external release, stale notifications and unaffected
-channel behavior. These are future requirements, not claims of current coverage.
+context isolation, queued-context reuse, stale notifications and unaffected channel
+behavior. Page-fault recovery and synchronization scenarios depend on the upcoming
+semantic decisions. External transaction drain and release remain RTL/platform
+obligations, not a mandate to lower the model to bus-transaction timing.
 
 ## Reference boundary
 

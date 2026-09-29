@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 mod names;
 
 use crate::{
-    export::{Artifact, ArtifactSink, Exporter},
+    export::{Artifact, ArtifactSink, ExportError, Exporter},
     register::{Access, ResetKind},
     register_map::ResolvedRegisterMap,
 };
@@ -42,9 +42,9 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> Exporter<ResolvedR
         &self,
         schema: &ResolvedRegisterMap<I, F>,
         sink: &mut Sink,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
         let model = RegisterMapCHeaderModel::from_resolved(schema);
         let contents = render(&model, &self.config.symbol_prefix);
@@ -54,12 +54,13 @@ impl<I: Copy + Eq + 'static, F: Copy + Eq + core::fmt::Debug> Exporter<ResolvedR
             .filter_map(|definition| definition.split_ascii_whitespace().next())
             .map(|name| (name.to_owned(), name.to_owned()))
             .collect::<Vec<_>>();
-        super::naming::reject_collisions(&paths_and_names)?;
+        super::naming::reject_collisions(&paths_and_names).map_err(ExportError::Render)?;
         sink.emit(Artifact {
             logical_name: self.config.logical_name.clone(),
             media_type: String::from(C_MEDIA_TYPE),
             contents: contents.into_bytes(),
         })
+        .map_err(ExportError::Sink)
     }
 }
 

@@ -36,7 +36,7 @@ pub fn render<S, E>(
 where
     E: Exporter<S, Error = CHeaderExportError>,
 {
-    let mut sink = InMemoryArtifactSink::<CHeaderExportError>::new();
+    let mut sink = InMemoryArtifactSink::new();
     exporter.export(schema, &mut sink)?;
     let mut artifacts = sink.into_artifacts().into_iter();
     let artifact = artifacts

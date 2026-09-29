@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 
 use crate::{
     Endian, ResolvedRecord, ScalarKind,
-    export::{Artifact, ArtifactSink, Exporter},
+    export::{Artifact, ArtifactSink, ExportError, Exporter},
 };
 
 use super::{
@@ -32,9 +32,13 @@ impl RecordCHeaderExporter {
 impl Exporter<ResolvedRecord> for RecordCHeaderExporter {
     type Error = CHeaderExportError;
 
-    fn export<Sink>(&self, schema: &ResolvedRecord, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        schema: &ResolvedRecord,
+        sink: &mut Sink,
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
         let model = RecordCHeaderModel::from_resolved(schema);
         let paths_and_names = model
@@ -42,7 +46,7 @@ impl Exporter<ResolvedRecord> for RecordCHeaderExporter {
             .iter()
             .map(|field| (field.path().into(), c_identifier(field.name())))
             .collect::<Vec<_>>();
-        super::naming::reject_collisions(&paths_and_names)?;
+        super::naming::reject_collisions(&paths_and_names).map_err(ExportError::Render)?;
         sink.emit(Artifact {
             logical_name: self.config.logical_name.clone(),
             media_type: String::from(C_MEDIA_TYPE),
@@ -53,6 +57,7 @@ impl Exporter<ResolvedRecord> for RecordCHeaderExporter {
             )
             .into_bytes(),
         })
+        .map_err(ExportError::Sink)
     }
 }
 

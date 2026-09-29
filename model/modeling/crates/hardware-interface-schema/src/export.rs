@@ -1,6 +1,6 @@
 //! Format-neutral, owned artifact export vocabulary.
 
-use core::convert::Infallible;
+use core::{convert::Infallible, fmt};
 
 /// Built-in artifact renderers enabled by format-specific crate features.
 #[cfg(feature = "export-c-header")]
@@ -28,29 +28,60 @@ pub trait ArtifactSink {
 
 /// Renders one schema value into artifacts through an application-provided sink.
 pub trait Exporter<S> {
-    /// Error returned by this exporter or its compatible sink.
+    /// Failure while rendering the schema, independent of artifact storage.
     type Error;
 
     /// Emits this exporter's artifacts for `schema` into `sink`.
-    fn export<Sink>(&self, schema: &S, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        schema: &S,
+        sink: &mut Sink,
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>;
+        Sink: ArtifactSink;
 }
 
-/// An in-memory sink parameterized by an exporter's error type.
+/// Rendering or storage failure retaining the error owned by its origin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportError<R, S> {
+    /// The renderer could not produce an artifact.
+    Render(R),
+    /// The sink rejected an artifact.
+    Sink(S),
+}
+
+impl<R: fmt::Display, S: fmt::Display> fmt::Display for ExportError<R, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Render(error) => error.fmt(f),
+            Self::Sink(error) => error.fmt(f),
+        }
+    }
+}
+
+impl<R: std::error::Error + 'static, S: std::error::Error + 'static> std::error::Error
+    for ExportError<R, S>
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Render(error) => Some(error),
+            Self::Sink(error) => Some(error),
+        }
+    }
+}
+
+/// An infallible in-memory artifact collection.
 #[derive(Debug, PartialEq, Eq)]
-pub struct InMemoryArtifactSink<E = Infallible> {
+pub struct InMemoryArtifactSink {
     artifacts: Vec<Artifact>,
-    error: core::marker::PhantomData<fn() -> E>,
 }
 
-impl<E> InMemoryArtifactSink<E> {
+impl InMemoryArtifactSink {
     /// Creates an empty in-memory artifact collection.
     #[must_use]
     pub const fn new() -> Self {
         Self {
             artifacts: Vec::new(),
-            error: core::marker::PhantomData,
         }
     }
 
@@ -67,14 +98,14 @@ impl<E> InMemoryArtifactSink<E> {
     }
 }
 
-impl<E> Default for InMemoryArtifactSink<E> {
+impl Default for InMemoryArtifactSink {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<E> ArtifactSink for InMemoryArtifactSink<E> {
-    type Error = E;
+impl ArtifactSink for InMemoryArtifactSink {
+    type Error = Infallible;
 
     fn emit(&mut self, artifact: Artifact) -> Result<(), Self::Error> {
         self.artifacts.push(artifact);

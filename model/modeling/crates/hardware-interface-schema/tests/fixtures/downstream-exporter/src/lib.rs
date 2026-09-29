@@ -4,7 +4,7 @@ use core::convert::Infallible;
 
 use his::{
     bits_schema,
-    export::{Artifact, ArtifactSink, Exporter},
+    export::{Artifact, ArtifactSink, ExportError, Exporter},
     record_schema, register_map,
     register_map::RegisterLocation,
     register_schema,
@@ -165,9 +165,13 @@ pub fn export_resolved(sink: &mut TelemetrySink) -> Option<()> {
 impl Exporter<TelemetryResolved> for TelemetryExporter {
     type Error = Infallible;
 
-    fn export<Sink>(&self, schema: &TelemetryResolved, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        schema: &TelemetryResolved,
+        sink: &mut Sink,
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
         let records = schema
             .record
@@ -204,6 +208,7 @@ impl Exporter<TelemetryResolved> for TelemetryExporter {
             )
             .into_bytes(),
         })
+        .map_err(ExportError::Sink)
     }
 }
 

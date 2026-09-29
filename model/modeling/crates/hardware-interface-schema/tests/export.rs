@@ -4,7 +4,7 @@ use core::convert::Infallible;
 
 use hardware_interface_schema::{
     RecordSpec, ResolvedRecord,
-    export::{Artifact, ArtifactSink, Exporter, InMemoryArtifactSink},
+    export::{Artifact, ArtifactSink, ExportError, Exporter, InMemoryArtifactSink},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,12 +27,16 @@ impl ArtifactSink for LocalCollectingSink {
     }
 }
 
-struct RejectingSink;
+#[derive(Default)]
+struct RejectingSink {
+    attempted: usize,
+}
 
 impl ArtifactSink for RejectingSink {
     type Error = LocalExportError;
 
     fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
+        self.attempted += 1;
         Err(LocalExportError::SinkRejected)
     }
 }
@@ -56,9 +60,13 @@ struct LocalExporter;
 impl Exporter<ResolvedRecord> for LocalExporter {
     type Error = LocalExportError;
 
-    fn export<Sink>(&self, _schema: &ResolvedRecord, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        _schema: &ResolvedRecord,
+        sink: &mut Sink,
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
         let logical_name = String::from("record-layout.bin");
         let media_type = String::from("application/x-local-schema");
@@ -67,12 +75,14 @@ impl Exporter<ResolvedRecord> for LocalExporter {
             logical_name,
             media_type,
             contents,
-        })?;
+        })
+        .map_err(ExportError::Sink)?;
         sink.emit(Artifact {
             logical_name: String::from("record-layout.note"),
             media_type: String::from("text/plain"),
             contents: Vec::new(),
         })
+        .map_err(ExportError::Sink)
     }
 }
 
@@ -81,11 +91,15 @@ struct RejectingExporter;
 impl Exporter<ResolvedRecord> for RejectingExporter {
     type Error = LocalExportError;
 
-    fn export<Sink>(&self, _schema: &ResolvedRecord, _sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        _schema: &ResolvedRecord,
+        _sink: &mut Sink,
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
-        Err(LocalExportError::ExporterRejected)
+        Err(ExportError::Render(LocalExportError::ExporterRejected))
     }
 }
 
@@ -94,15 +108,20 @@ struct InfallibleLocalExporter;
 impl Exporter<ResolvedRecord> for InfallibleLocalExporter {
     type Error = Infallible;
 
-    fn export<Sink>(&self, _schema: &ResolvedRecord, sink: &mut Sink) -> Result<(), Self::Error>
+    fn export<Sink>(
+        &self,
+        _schema: &ResolvedRecord,
+        sink: &mut Sink,
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
         sink.emit(Artifact {
             logical_name: String::from("odd-content"),
             media_type: String::from("application/x-local-schema"),
             contents: vec![0, 255, 7],
         })
+        .map_err(ExportError::Sink)
     }
 }
 
@@ -167,13 +186,17 @@ fn sink_rejection_reaches_the_caller_as_the_exact_typed_error() {
     // Given
     let schema = record_schema().resolve().expect("fixture must resolve");
     let exporter = LocalExporter;
-    let mut sink = RejectingSink;
+    let mut sink = RejectingSink::default();
 
     // When
     let result = exporter.export(&schema, &mut sink);
 
     // Then
-    assert_eq!(result, Err(LocalExportError::SinkRejected));
+    assert_eq!(
+        result,
+        Err(ExportError::Sink(LocalExportError::SinkRejected))
+    );
+    assert_eq!(sink.attempted, 1);
 }
 
 #[test]
@@ -187,6 +210,9 @@ fn exporter_rejection_does_not_invoke_the_sink() {
     let result = exporter.export(&schema, &mut sink);
 
     // Then
-    assert_eq!(result, Err(LocalExportError::ExporterRejected));
+    assert_eq!(
+        result,
+        Err(ExportError::Render(LocalExportError::ExporterRejected))
+    );
     assert_eq!(sink.emitted, 0);
 }

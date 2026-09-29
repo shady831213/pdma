@@ -1,10 +1,7 @@
 use super::*;
 use hardware_interface_schema::{
     RegisterWindow,
-    export::{
-        Exporter, InMemoryArtifactSink,
-        backends::c_header::{CHeaderExportError, RegisterMapCHeaderExporter},
-    },
+    export::{Exporter, InMemoryArtifactSink, backends::c_header::RegisterMapCHeaderExporter},
 };
 use std::{fmt::Write as _, process::Command};
 
@@ -16,7 +13,7 @@ fn strict_c11_retains_nested_singleton_topology_when_members_are_hidden()
         (register.id() == NestedRegisterId::Tail)
             .then_some(hardware_interface_schema::Access::ReadOnly)
     })?;
-    let mut sink = InMemoryArtifactSink::<CHeaderExportError>::new();
+    let mut sink = InMemoryArtifactSink::new();
     RegisterMapCHeaderExporter::new("nested.h", "nested").export(&resolved, &mut sink)?;
     let directory = std::env::var_os("SCHEMA_BANK_EVIDENCE_DIR")
         .map_or_else(
@@ -66,7 +63,7 @@ fn strict_c11_addresses_match_routing_for_runtime_counts() -> Result<(), Box<dyn
     for count in [1, 3, 5] {
         let layout = super::contiguous::Grouped::new(count)?;
         let resolved = layout.resolve()?;
-        let mut sink = InMemoryArtifactSink::<CHeaderExportError>::new();
+        let mut sink = InMemoryArtifactSink::new();
         RegisterMapCHeaderExporter::new("banks.h", "banks").export(&resolved, &mut sink)?;
         let header = &sink.artifacts().first().unwrap().contents;
         let mut consumer = String::from(

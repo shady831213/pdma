@@ -315,12 +315,14 @@ Those checks belong to the application runtime.
 `Artifact` is one owned `{ logical_name, media_type, contents }` result.
 `ArtifactSink` receives artifacts, and `Exporter<S>` renders a schema `S` into a caller
 provided sink. They are format-neutral: applications may define their own sinks and
-exporters without changing this crate.
+exporters without changing this crate. `ExportError<RenderError, SinkError>` keeps rendering
+and storage failures distinct and preserves each typed cause. `Exporter::Error` describes
+rendering only; sinks choose their own error type. `InMemoryArtifactSink` is infallible.
 
 ```rust
 use core::convert::Infallible;
 use hardware_interface_schema::{
-    export::{Artifact, ArtifactSink, Exporter},
+    export::{Artifact, ArtifactSink, ExportError, Exporter},
     register_map::RegisterMapSpec,
 };
 
@@ -348,15 +350,15 @@ where
         &self,
         schema: &RegisterMapSpec<I>,
         sink: &mut Sink,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), ExportError<Self::Error, Sink::Error>>
     where
-        Sink: ArtifactSink<Error = Self::Error>,
+        Sink: ArtifactSink,
     {
         sink.emit(Artifact {
             logical_name: String::from("layout.txt"),
             media_type: String::from("text/plain"),
             contents: format!("map-bytes={}", schema.size()).into_bytes(),
-        })
+        }).map_err(ExportError::Sink)
     }
 }
 ```

@@ -1,7 +1,7 @@
 use hardware_interface_schema::{
     FieldSpec, RecordPlacement, RecordSpec, ScalarKind,
     export::backends::c_header::{CHeaderExportError, RecordCHeaderExporter},
-    export::{Artifact, ArtifactSink, Exporter},
+    export::{Artifact, ArtifactSink, ExportError, Exporter},
 };
 
 use super::support::{NESTED_C_MAIN, PREFIX_C_MAIN, RECORD, TestResult, compile_fragments, render};
@@ -65,11 +65,11 @@ struct RejectingSink {
 }
 
 impl ArtifactSink for RejectingSink {
-    type Error = CHeaderExportError;
+    type Error = u32;
 
     fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
         self.attempted += 1;
-        Err(CHeaderExportError::SinkRejected { code: 17 })
+        Err(17)
     }
 }
 
@@ -79,7 +79,7 @@ struct CountingSink {
 }
 
 impl ArtifactSink for CountingSink {
-    type Error = CHeaderExportError;
+    type Error = core::convert::Infallible;
 
     fn emit(&mut self, _artifact: Artifact) -> Result<(), Self::Error> {
         self.attempted += 1;
@@ -104,7 +104,13 @@ fn c_header_resolved_collision_is_typed_before_sink_emission() -> TestResult {
         first_index: 0,
         second_index: 1,
     };
-    assert_eq!(result, Err(expected.clone()));
+    assert_eq!(
+        std::error::Error::source(result.as_ref().unwrap_err())
+            .unwrap()
+            .to_string(),
+        expected.to_string()
+    );
+    assert_eq!(result, Err(ExportError::Render(expected.clone())));
     assert_eq!(sink.attempted, 0);
     println!("collision={expected:?};sink_attempts={}", sink.attempted);
     Ok(())
@@ -121,7 +127,7 @@ fn c_header_sink_rejection_is_typed_and_emits_no_partial_artifact() -> TestResul
     let result = exporter.export(&resolved, &mut sink);
 
     // Then: the exact sink variant escapes and no artifact was accepted.
-    assert_eq!(result, Err(CHeaderExportError::SinkRejected { code: 17 }));
+    assert_eq!(result, Err(ExportError::Sink(17)));
     assert_eq!(sink.attempted, 1);
     assert!(sink.artifacts.is_empty());
     println!(

@@ -72,7 +72,7 @@ fn long_actual_c_prefix_collisions_are_rejected_before_emission() -> TestResult 
     // When: rendering symbols whose distinguishing suffix lies beyond that length.
     let result = exporter.export(&resolved, &mut sink);
     // Then: no artifact is emitted and the collision remains a typed error.
-    assert!(matches!(result, Err(hardware_interface_schema::export::backends::c_header::CHeaderExportError::NameCollision { .. })));
+    assert!(matches!(result, Err(hardware_interface_schema::export::ExportError::Render(hardware_interface_schema::export::backends::c_header::CHeaderExportError::NameCollision { .. }))));
     assert!(sink.artifacts().is_empty());
     Ok(())
 }

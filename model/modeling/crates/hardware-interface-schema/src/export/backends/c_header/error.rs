@@ -1,6 +1,6 @@
 use core::fmt;
 
-/// Failure while projecting or emitting a resolved C fragment.
+/// Failure while projecting a resolved C fragment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CHeaderExportError {
     /// Two export origins share one C11-significant identifier prefix.
@@ -13,11 +13,6 @@ pub enum CHeaderExportError {
         first_index: usize,
         /// Later position in the validated origin sequence.
         second_index: usize,
-    },
-    /// Application sink rejection used by typed sink implementations.
-    SinkRejected {
-        /// Application-defined rejection code.
-        code: u32,
     },
 }
 
@@ -33,7 +28,6 @@ impl fmt::Display for CHeaderExportError {
                 formatter,
                 "C identifier collision between {first_path} at {first_index} and {second_path} at {second_index}"
             ),
-            Self::SinkRejected { code } => write!(formatter, "artifact sink rejected code {code}"),
         }
     }
 }

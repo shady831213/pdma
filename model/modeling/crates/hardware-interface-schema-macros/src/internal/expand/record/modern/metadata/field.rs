@@ -45,7 +45,7 @@ pub(super) fn fill_field(
             id_index,
         }),
         ModernTypeDecl::BitsReference(path) => quote!({
-            let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
+            let id = match #facade::inferred_field_id(#id_index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
             fields[output_index] = #facade::FieldSpec::new(
                 id,
                 #name,
@@ -68,7 +68,7 @@ pub(super) fn fill_field(
                 let slot_name = if field.scoped_union { format!("{name}_word{index}") } else { format!("word{index}") };
                 let relative = quote!((#index).saturating_mul(#width));
                 quote!({
-                    let id = match #facade::inferred_field_id(#slot_id) { Some(id) => id, None => 0 };
+                    let id = match #facade::inferred_field_id(#slot_id) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
                     fields[output_index] = #facade::FieldSpec::new(id, #slot_name, #marker::#offset.saturating_add(#relative), #kind)
                         .with_endian(#facade::Endian::#endian)
                         .with_declaration_index(#declaration_index);
@@ -105,7 +105,7 @@ fn fill_scalar(input: ScalarFill<'_>) -> TokenStream {
     } = input;
     let kind = scalar::kind(scalar_type);
     quote!({
-        let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
+        let id = match #facade::inferred_field_id(#id_index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
         fields[output_index] = #facade::FieldSpec::new(id, #name, #marker::#offset, #facade::ScalarKind::#kind)
             .with_endian(#facade::Endian::#endian)
             .with_declaration_index(#declaration_index);

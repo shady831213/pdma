@@ -55,13 +55,13 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
             #[doc = "Schema documentation."] pub const DOCUMENTATION: #facade::Documentation = #documentation;
             #(#constants)*
             #[doc = "Binds and validates immutable map parameters."]
-            pub fn new(#(#parameters: usize),*) -> Result<#layout, #facade::RegisterBankError> {
+            pub fn new(#(#parameters: usize),*) -> ::core::result::Result<#layout, #facade::RegisterBankError> {
                 let mut #cursor = 0usize;
                 #(#initializers)*
                 #(#checks)*
                 let extent = #extent;
-                if #cursor > extent { return Err(#facade::RegisterBankError::Extent); }
-                Ok(#layout { extent, #(#symbols: #bindings),* })
+                if #cursor > extent { return ::core::result::Result::Err(#facade::RegisterBankError::Extent); }
+                ::core::result::Result::Ok(#layout { extent, #(#symbols: #bindings),* })
             }
         }
         impl #layout {
@@ -74,9 +74,9 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
                 else { #facade::RegisterAccessError::OutsideWindow { address } }
             }
             #[doc = "Resolves the generated leaf metadata for this instance."]
-            pub fn resolve(&self) -> Result<#facade::ResolvedRegisterMap<#id>, #facade::RegisterMapError<#id>> {
-                let mut registers = Vec::new();
-                let mut placements = Vec::new();
+            pub fn resolve(&self) -> ::core::result::Result<#facade::ResolvedRegisterMap<#id>, #facade::RegisterMapError<#id>> {
+                let mut registers = ::std::vec::Vec::new();
+                let mut placements = ::std::vec::Vec::new();
                 let mut declaration_index = 0usize;
                 #collectors
                 #facade::finish_ordered_register_map(stringify!(#marker), self.extent, registers)
@@ -87,7 +87,7 @@ pub(super) fn expand(decl: &OrderedMapDecl) -> syn::Result<TokenStream> {
             fn documentation(&self) -> #facade::Documentation { #marker::DOCUMENTATION }
             fn alignment(&self) -> usize { #alignment }
             fn extent(&self) -> usize { self.extent }
-            fn append_registers<I: Copy + 'static>(&self, collection: #facade::RegisterCollection<'_, I>) {
+            fn append_registers<I: ::core::marker::Copy + 'static>(&self, collection: #facade::RegisterCollection<'_, I>) {
                 collection.placements.push(#facade::ResolvedRegisterMapPlacement::new(
                     collection.path.clone(),
                     #facade::RegisterMapPlacement::new(collection.id, collection.name, collection.offset, 1, 0,

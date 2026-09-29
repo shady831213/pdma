@@ -19,7 +19,7 @@ pub(super) fn expand(
         let base = if root { quote!(0usize) } else { quote!(offset) };
         let id = if root { quote!(#id_type::#variant) } else { quote!(id) };
         let child_path = if p.bank { quote!(format!("{}.{}[{}]", #parent, #name, instance)) } else { quote!(format!("{}.{}", #parent, #name)) };
-        let repeated = if p.bank { quote!(Some((#name, instance))) } else if root { quote!(None) } else { quote!(repeated) };
+        let repeated = if p.bank { quote!(::core::option::Option::Some((#name, instance))) } else if root { quote!(::core::option::Option::None) } else { quote!(repeated) };
         let output = if root { quote!(&mut registers) } else { quote!(output) };
         let placements = if root { quote!(&mut placements) } else { quote!(placements) };
         let index = if root { quote!(&mut declaration_index) } else { quote!(declaration_index) };

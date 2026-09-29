@@ -25,7 +25,7 @@ pub(super) fn leaf_getters(
     let (parameters, check, instance) = if item.bank {
         (
             quote!(instance: usize),
-            quote!(if instance >= #count { return Err(#facade::SchemaCodecError::BufferTooShort { required: #count, actual: instance }); }),
+            quote!(if instance >= #count { return ::core::result::Result::Err(#facade::SchemaCodecError::BufferTooShort { required: #count, actual: instance }); }),
             quote!(instance),
         )
     } else {
@@ -90,7 +90,7 @@ pub(super) fn expand(
             pub fn new(bytes: &'a [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let actual = bytes.len();
                 let bytes = bytes.get(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
-                Ok(Self { bytes })
+                ::core::result::Result::Ok(Self { bytes })
             }
             #(#getters)*
             #root_immutable
@@ -103,7 +103,7 @@ pub(super) fn expand(
             pub fn new(bytes: &'a mut [u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let actual = bytes.len();
                 let bytes = bytes.get_mut(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
-                Ok(Self { bytes })
+                ::core::result::Result::Ok(Self { bytes })
             }
             #(#getters)*
             #(#mutable_getters)*

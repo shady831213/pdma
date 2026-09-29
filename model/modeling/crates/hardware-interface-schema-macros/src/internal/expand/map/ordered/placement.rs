@@ -36,13 +36,13 @@ pub(super) fn placement_geometry(
     let high_water_name = format_ident!("__{}_HIGH_WATER", constant);
     let count = placement.count.0;
     let offset = placement.offset.map_or_else(
-        || quote!(match #facade::checked_align_up(#cursor, <#definition as #facade::RegisterLayout>::ALIGNMENT) { Some(value) => value, None => 0 }),
+        || quote!(match #facade::checked_align_up(#cursor, <#definition as #facade::RegisterLayout>::ALIGNMENT) { ::core::option::Option::Some(value) => value, ::core::option::Option::None => 0 }),
         |value| {
             let value = value.0;
             quote!(#value)
         },
     );
-    let stride = quote!(match #facade::checked_align_up(<#definition as #facade::RegisterLayout>::EXTENT, <#definition as #facade::RegisterLayout>::ALIGNMENT) { Some(value) => value, None => 0 });
+    let stride = quote!(match #facade::checked_align_up(<#definition as #facade::RegisterLayout>::EXTENT, <#definition as #facade::RegisterLayout>::ALIGNMENT) { ::core::option::Option::Some(value) => value, ::core::option::Option::None => 0 });
     let id = quote!(#id_name::#item_variant);
     let name = symbol.to_string();
     let bank = placement.bank.then(|| quote!(.as_bank()));
@@ -51,7 +51,7 @@ pub(super) fn placement_geometry(
     let internals = vec![
         quote!(const #offset_name: usize = #offset;),
         quote!(const #stride_name: usize = #stride;),
-        quote!(const #end_name: usize = match #facade::checked_placement_end(Self::#offset_name, #count, Self::#stride_name, <#definition as #facade::RegisterLayout>::EXTENT) { Some(value) => value, None => 0 };),
+        quote!(const #end_name: usize = match #facade::checked_placement_end(Self::#offset_name, #count, Self::#stride_name, <#definition as #facade::RegisterLayout>::EXTENT) { ::core::option::Option::Some(value) => value, ::core::option::Option::None => 0 };),
         quote!(const #high_water_name: usize = if #cursor > Self::#end_name { #cursor } else { Self::#end_name };),
         quote!(#rust_docs #[doc = "Generated ordered child placement."] pub const #constant: #facade::RegisterMapPlacement<#id_name> = #spec;),
         quote!(#[doc = "Stable generated placement member identity."] pub const #identity_name: #facade::SchemaMemberIdentity = #facade::SchemaMemberIdentity::new(stringify!(#marker), #name);),
@@ -60,7 +60,7 @@ pub(super) fn placement_geometry(
         quote!(<#definition as #facade::RegisterLayout>::ALIGNMENT.saturating_sub(1));
     let alignment_check = quote!(#map_alignment & #alignment_mask == 0);
     let offset_alignment = quote!(
-        matches!(#facade::checked_align_up(#marker::#offset_name, <#definition as #facade::RegisterLayout>::ALIGNMENT), Some(aligned) if aligned == #marker::#offset_name)
+        matches!(#facade::checked_align_up(#marker::#offset_name, <#definition as #facade::RegisterLayout>::ALIGNMENT), ::core::option::Option::Some(aligned) if aligned == #marker::#offset_name)
     );
     let stride_alignment = quote!(#marker::#stride_name >= <#definition as #facade::RegisterLayout>::EXTENT && #marker::#stride_name & #alignment_mask == 0);
     let mut assertions = vec![

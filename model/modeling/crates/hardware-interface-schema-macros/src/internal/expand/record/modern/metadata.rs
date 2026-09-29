@@ -117,7 +117,7 @@ fn metadata_parts(
             let id_index = next_id;
             next_id += 1;
             placements.push(quote!({
-                let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
+                let id = match #facade::inferred_field_id(#id_index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
                 #facade::RecordPlacement::new(id, #name, #marker::#offset, &#ty::SPEC)
                     .with_declaration_index(#declaration_index).with_documentation(#documentation)
             }));
@@ -127,7 +127,7 @@ fn metadata_parts(
             let id_index = next_id;
             next_id += 1;
             placements.push(quote!({
-                let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
+                let id = match #facade::inferred_field_id(#id_index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 };
                 #facade::RecordPlacement::new(id, #name, #marker::#offset, &#path::SPEC)
                     .with_declaration_index(#declaration_index)
                     .with_documentation((#documentation).with_fallback(<#path as #facade::RecordLayout>::DOCUMENTATION))
@@ -161,7 +161,7 @@ fn metadata_parts(
                         quote!(.with_enum(#metadata))
                     });
                     quote!(#facade::BitsFieldSpec::place(
-                        match #facade::inferred_field_id(#index) { Some(id) => id, None => 0 },
+                        match #facade::inferred_field_id(#index) { ::core::option::Option::Some(id) => id, ::core::option::Option::None => 0 },
                         #name, #lsb, #facade::BitsFieldDefinition::new(#width)#enumeration,
                     ).with_declaration_index(#index).with_documentation(#documentation))
                 });

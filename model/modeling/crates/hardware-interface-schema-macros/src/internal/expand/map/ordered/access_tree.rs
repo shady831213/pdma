@@ -192,7 +192,7 @@ fn group_methods(groups: &[Group], context: &ExpansionContext<'_>) -> (TokenStre
             pub fn #method(&self) -> ::core::result::Result<#view<'_>, #facade::SchemaCodecError> {
                 let actual = self.bytes.len();
                 let bytes = self.bytes.get(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
-                Ok(#view { bytes })
+                ::core::result::Result::Ok(#view { bytes })
             }
         });
         mutable.push(quote! {
@@ -200,7 +200,7 @@ fn group_methods(groups: &[Group], context: &ExpansionContext<'_>) -> (TokenStre
             pub fn #mutable_method(&mut self) -> ::core::result::Result<#view_mut<'_>, #facade::SchemaCodecError> {
                 let actual = self.bytes.len();
                 let bytes = self.bytes.get_mut(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
-                Ok(#view_mut { bytes })
+                ::core::result::Result::Ok(#view_mut { bytes })
             }
         });
     }

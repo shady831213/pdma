@@ -97,7 +97,7 @@ pub(super) fn emit(input: Emission<'_>) -> TokenStream {
                     #facade::finish_ordered_register_map(#marker_name, Self::EXTENT, registers).map(|map| map.with_documentation(Self::DOCUMENTATION).with_placements(placements))
                 })
             }
-            fn __append_registers<I: Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
+            fn __append_registers<I: ::core::marker::Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
                 let #facade::RegisterCollection { id, path, offset, declaration_index, repeated, output, placements, .. } = collection;
                 #nested_collectors
             }
@@ -105,16 +105,16 @@ pub(super) fn emit(input: Emission<'_>) -> TokenStream {
                 placement: #facade::RegisterMapPlacement<#id_name>,
                 instance: usize,
             ) -> ::core::result::Result<::core::ops::Range<usize>, #facade::SchemaCodecError> {
-                let Some(step) = instance.checked_mul(placement.stride()) else {
-                    return Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
+                let ::core::option::Option::Some(step) = instance.checked_mul(placement.stride()) else {
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
                 };
-                let Some(start) = placement.offset().checked_add(step) else {
-                    return Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
+                let ::core::option::Option::Some(start) = placement.offset().checked_add(step) else {
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
                 };
-                let Some(end) = start.checked_add(placement.extent()) else {
-                    return Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
+                let ::core::option::Option::Some(end) = start.checked_add(placement.extent()) else {
+                    return ::core::result::Result::Err(#facade::SchemaCodecError::BufferTooShort { required: Self::EXTENT, actual: 0 });
                 };
-                Ok(start..end)
+                ::core::result::Result::Ok(start..end)
             }
         }
         #(#assertions)*

@@ -44,7 +44,7 @@ pub(super) fn expand(
     Ok(quote! {
         #enums
         #[doc = "Typed raw scalar for the generated packed-bit field."]
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[derive(Clone, Copy, Debug, ::core::default::Default, Eq, PartialEq)]
         #visibility struct #raw_name(#raw_type);
         impl #raw_name {
             #[doc = "Creates one typed raw scalar."]

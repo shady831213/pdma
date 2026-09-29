@@ -49,12 +49,12 @@ pub(super) fn expand(
             fn decode_from(bytes: &[u8]) -> ::core::result::Result<Self, #facade::SchemaCodecError> {
                 let actual = bytes.len();
                 let bytes = bytes.get(..#extent).ok_or(#facade::SchemaCodecError::BufferTooShort { required: #extent, actual })?;
-                Ok(Self { #(#decoded_fields),* })
+                ::core::result::Result::Ok(Self { #(#decoded_fields),* })
             }
             #[doc = "Encodes into one exact map-sized array."] pub fn to_bytes(self) -> ::core::result::Result<[u8; #extent], #facade::SchemaCodecError> {
                 let mut bytes = [0; #extent];
                 self.encode_into(&mut bytes)?;
-                Ok(bytes)
+                ::core::result::Result::Ok(bytes)
             }
             #[doc = "Encodes every child and clears all map padding."] pub fn encode_into(&self, bytes: &mut [u8]) -> ::core::result::Result<(), #facade::SchemaCodecError> {
                 let actual = bytes.len();
@@ -66,7 +66,7 @@ pub(super) fn expand(
                     #(#encoded_fields)*
                 }
                 output.copy_from_slice(&encoded);
-                Ok(())
+                ::core::result::Result::Ok(())
             }
         }
         impl ::core::default::Default for #values_name {
@@ -87,7 +87,7 @@ pub(super) fn expand(
             fn encode(bytes: &mut [u8], value: &Self::Value) -> ::core::result::Result<(), #facade::SchemaCodecError> { value.encode_into(bytes) }
             fn view(bytes: &[u8]) -> ::core::result::Result<Self::View<'_>, #facade::SchemaCodecError> { #view_name::new(bytes) }
             fn view_mut(bytes: &mut [u8]) -> ::core::result::Result<Self::ViewMut<'_>, #facade::SchemaCodecError> { #view_mut_name::new(bytes) }
-            fn append_registers<I: Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
+            fn append_registers<I: ::core::marker::Copy + 'static>(collection: #facade::RegisterCollection<'_, I>) {
                 collection.placements.push(#facade::ResolvedRegisterMapPlacement::new(
                     collection.path.clone(),
                     #facade::RegisterMapPlacement::new(collection.id, collection.name, collection.offset, 1, 0,

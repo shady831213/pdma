@@ -65,7 +65,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
     let transparent_conversions = transparent_conversions(context);
     quote! {
         #[doc = "Typed raw scalar for one reusable bits schema."]
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[derive(Clone, Copy, Debug, ::core::default::Default, Eq, PartialEq)]
         #visibility struct #raw_name(#raw_type);
         impl #raw_name {
             #[doc = "Creates one typed raw scalar."]
@@ -89,7 +89,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> TokenStream {
             #[doc = "Semantic default with zero integers and first-declared enum variants."]
             pub const ZERO: Self = Self { #(#zero_fields,)* };
             #(#accessors)*
-            fn from_raw(raw: u64) -> ::core::result::Result<Self, #facade::SchemaCodecError> { Ok(Self { #(#decoded_fields,)* }) }
+            fn from_raw(raw: u64) -> ::core::result::Result<Self, #facade::SchemaCodecError> { ::core::result::Result::Ok(Self { #(#decoded_fields,)* }) }
             fn raw(&self) -> ::core::result::Result<u64, #facade::BitsValueError> {
                 let value = self;
                 let mut raw = 0_u64;

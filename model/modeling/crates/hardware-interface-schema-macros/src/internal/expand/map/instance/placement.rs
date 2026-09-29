@@ -66,7 +66,7 @@ pub(super) fn expand(
             let variant = variant(&symbol.to_string());
             let name = symbol.to_string();
             constants.push(quote!(#[doc = "Fixed placement metadata."] pub const #constant: #facade::RegisterMapPlacement<#id> = #facade::RegisterMapPlacement::new(#id::#variant, #name, #offset, #count, #stride, #facade::RegisterLayoutGeometry::new(<#definition as #facade::RegisterLayout>::ALIGNMENT, <#definition as #facade::RegisterLayout>::EXTENT));));
-            let end = quote!(match #facade::checked_placement_end(#offset, #count, #stride, <#definition as #facade::RegisterLayout>::EXTENT) { Some(end) => end, None => usize::MAX });
+            let end = quote!(match #facade::checked_placement_end(#offset, #count, #stride, <#definition as #facade::RegisterLayout>::EXTENT) { ::core::option::Option::Some(end) => end, ::core::option::Option::None => usize::MAX });
             *prefix = prefix.as_ref().map(|prior| quote!({ let end = #end; let prior = #prior; if prior > end { prior } else { end } }));
         } else {
             *prefix = None;
@@ -80,7 +80,7 @@ pub(super) fn expand(
             let #binding = {
                 let #child = #child_value;
                 let #child_alignment = #facade::RegisterShape::alignment(&#child);
-                if #child_alignment == 0 || Self::ALIGNMENT % #child_alignment != 0 { return Err(#facade::RegisterBankError::Alignment); }
+                if #child_alignment == 0 || Self::ALIGNMENT % #child_alignment != 0 { return ::core::result::Result::Err(#facade::RegisterBankError::Alignment); }
                 let #child_offset = #offset;
                 #facade::RegisterBank::new(#child, #child_offset, #count)?
             };

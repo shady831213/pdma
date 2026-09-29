@@ -75,7 +75,7 @@ pub(super) fn expand(context: &SchemaContext<'_>) -> syn::Result<TokenStream> {
                     while reserved & (1_u64 << first_reserved) == 0 {
                         first_reserved += 1;
                     }
-                    let Some(location) = location.checked_rebase(#facade::SchemaCoordinate::Bit(first_reserved)) else {
+                    let ::core::option::Option::Some(location) = location.checked_rebase(#facade::SchemaCoordinate::Bit(first_reserved)) else {
                         return ::core::result::Result::Err(#facade::SchemaCodecError::CoordinateRebaseOverflow {
                             location,
                             base: #facade::SchemaCoordinate::Bit(first_reserved),

@@ -132,7 +132,7 @@ fn expand_inline(
         });
         fields.push(quote!(#facade::BitsFieldSpec::place(#id, #name, #lsb, #facade::BitsFieldDefinition::new(#bit_width)#enumeration).with_declaration_index(#index).with_documentation(#documentation)));
         let raw = quote!(raw);
-        let decoded = field.enumeration.as_ref().map_or_else(|| { let decoded = crate::internal::expand::bits::decode_local(field, &raw); quote!(Ok(#decoded)) }, |decl| {
+        let decoded = field.enumeration.as_ref().map_or_else(|| { let decoded = crate::internal::expand::bits::decode_local(field, &raw); quote!(::core::result::Result::Ok(#decoded)) }, |decl| {
                 let raw = crate::internal::expand::scalar::from_u64(decl.storage, raw.clone());
                 quote!(#semantic_type::from_raw(#raw).map_err(#facade::RegisterCodecError::from_schema_error).map_err(|error| error.rebased(self.base)))
             });

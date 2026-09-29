@@ -1,6 +1,6 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
-    DmaControl, DmaFaultCode, Endpoint, Model, Operation, RegisterAccess, SoftwareCpu, fixture,
+    DmaControl, DmaFatalCode, Endpoint, Model, Operation, RegisterAccess, SoftwareCpu, fixture,
     single_command, with_idle_hardware,
 };
 
@@ -70,6 +70,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
         ))
         .await?;
     let command = Command {
+        copy_length: 0,
         sg_context: 0,
         flags: CompletionFlagsValues::default(),
         id: 9,
@@ -161,6 +162,6 @@ async fn device_reset_leaves_disabled_hardware_for_fresh_setup()
             },
         ))
         .await?;
-    assert_eq!(cpu.run_main(channel.dma_fault()).await?, DmaFaultCode::None);
+    assert_eq!(cpu.run_main(channel.dma_fatal()).await?, DmaFatalCode::None);
     Ok(())
 }

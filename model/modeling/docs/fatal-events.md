@@ -6,7 +6,7 @@ it does not specify PCIe fatal recovery or firmware crash recovery.
 
 ## Fault ownership and containment
 
-**HW-FATAL-1.** A DMA-wide internal fatal latches the existing DMA fault register,
+**HW-FATAL-1.** A DMA-wide internal fatal latches the existing DMA fatal register,
 stops new command acceptance and issuance of further old-work memory accesses.
 Already completed writes remain visible. Committed RTL bus transactions may still
 complete; a fatal notification does not certify drain or authorize memory reuse.

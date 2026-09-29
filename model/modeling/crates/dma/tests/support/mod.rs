@@ -6,16 +6,16 @@ use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
 };
 use pdma_model_dma::{
-    CheckLengths, Dma, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+    CheckRanges, Dma, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 
 /// Test harness error propagation.
-pub type TestResult = Result<(), Box<dyn std::error::Error>>;
+pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 /// Assemble one command for tests that inspect its completion and intermediate boundaries.
 pub fn single_command<M>(device: &Dma<M>) -> Pipeline {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, Repeat::new(chunk));
     Then::new(
         Then::new(
             device.intake(),
@@ -33,7 +33,17 @@ pub fn setup(
     let memory = SharedMemory::new();
     let region = MemoryRegion::try_new(MemoryAddress::new(0x1000), 0x1000, MemoryAlignment::ONE)?;
     memory.add_regions(&[region])?;
-    let mut device = Dma::new(memory.clone(), 1)?;
+    let device = configure(memory.clone(), response_base, capacity)?;
+    Ok((device, memory))
+}
+
+/// Configure a channel over an injected test memory capability.
+pub fn configure<M: MemoryAccess>(
+    memory: M,
+    response_base: u64,
+    capacity: u32,
+) -> Result<Dma<M>, Box<dyn std::error::Error>> {
+    let mut device = Dma::new(memory, 1)?;
     for (offset, value) in [
         (
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -78,7 +88,7 @@ pub fn setup(
     ] {
         device.write(offset, &value.to_le_bytes())?;
     }
-    Ok((device, memory))
+    Ok(device)
 }
 
 /// Publish the first test descriptor through memory and MMIO.
@@ -134,10 +144,11 @@ pub fn read_word(
 /// Canonical four-byte copy input.
 pub const fn command() -> Command {
     Command {
+        copy_length: 4,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
         id: 7,
-        source: Endpoint::linear(0x1200, 4),
-        destination: Endpoint::linear(0x1300, 4),
+        source: Endpoint::linear(0x1200, 0),
+        destination: Endpoint::linear(0x1300, 0),
     }
 }

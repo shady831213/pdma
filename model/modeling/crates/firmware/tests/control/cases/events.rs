@@ -63,7 +63,7 @@ async fn event_full_access_failure_and_bad_cursors_stop_publication_without_retr
         memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[0xa5; 8])?;
         // When: fatal requires an event and firmware is repeatedly woken afterwards.
         bus.registers.lock().unwrap().insert(
-            u32::try_from(DmaDiscovery::EXTENT + DmaControl::FAULT.offset())?,
+            u32::try_from(DmaDiscovery::EXTENT + DmaControl::FATAL.offset())?,
             1_u32.to_le_bytes().to_vec(),
         );
         for _ in 0..8 {

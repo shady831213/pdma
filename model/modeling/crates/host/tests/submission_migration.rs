@@ -83,6 +83,7 @@ async fn suspended_submission_completes_on_another_cpu() -> Result<(), Box<dyn s
         .await?;
     delay.store(true, Ordering::SeqCst);
     let submission = channel.submit(Command {
+        copy_length: 0,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 1,

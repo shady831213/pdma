@@ -2,9 +2,9 @@
 #include "pdma_firmware.h"
 #include <stdio.h>
 
-_Static_assert(C_COMMAND_SIZE == 64, "command wire extent");
-_Static_assert(C_RESPONSE_SIZE == 24, "response wire extent");
-_Static_assert(C_ENDPOINT_SIZE == 24, "endpoint wire extent");
+_Static_assert(C_COMMAND_SIZE == 104, "command wire extent");
+_Static_assert(C_RESPONSE_SIZE == 72, "response wire extent");
+_Static_assert(C_ENDPOINT_SIZE == 40, "endpoint wire extent");
 _Static_assert(C_SEGMENT_SIZE == 16, "segment wire extent");
 _Static_assert(C_FDMA_SIZE == 16384, "device MMIO extent");
 _Static_assert(C_FBOOT_SIZE == 4, "atomic firmware boot report extent");
@@ -27,7 +27,7 @@ _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_WRITABLE_MASK == 1, "only access-enable 
 _Static_assert(C_FWIN_C_QUOQUPQUEQUN__1_RESET_VALUE == 0, "window starts closed");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_ACCESS == C_HWIN_ACCESS_READ_ONLY, "readiness is read-only");
 _Static_assert(C_HWIN_C_QURQUEQUAQUDQUY__1_WRITABLE_MASK == 0, "readiness has no writable fields");
-_Static_assert(C_COMMAND_C_FLAGS_OFFSET == 56, "command IOC offset");
+_Static_assert(C_COMMAND_C_FLAGS_OFFSET == 96, "command IOC offset");
 _Static_assert(C_RESPONSE_C_FLAGS_OFFSET == 12, "response IOC offset");
 _Static_assert(C_COMMAND_ALIGNMENT == 8, "command alignment");
 _Static_assert(C_RESPONSE_ALIGNMENT == 8, "response alignment");
@@ -41,20 +41,20 @@ _Static_assert(C_FDMA_C_QUPQURQUOQUDQUUQUCQUEQUR__6_OFFSET == 12324, "third chan
 _Static_assert(C_FDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_VALUE == 0, "channel count populated by hardware");
 _Static_assert(C_FDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_RESET_KIND == C_FDMA_RESET_POST_RESET, "instance discovery initialized after reset");
 _Static_assert(C_FDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_ACCESS == C_FDMA_ACCESS_READ_ONLY, "channel count is read-only");
-_Static_assert(C_FDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE == 0, "no channel fault code");
-_Static_assert(C_FDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUCOMMANDQUREAD == 1, "command fault code");
-_Static_assert(C_FDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QURESPONSEQUWRITE == 2, "response fault code");
-_Static_assert(C_FDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUINTERNAL == 1, "device internal fault code");
+_Static_assert(C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUNONE == 0, "no channel fatal code");
+_Static_assert(C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUCOMMANDQUREAD == 1, "command fatal code");
+_Static_assert(C_FDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QURESPONSEQUWRITE == 2, "response fatal code");
+_Static_assert(C_FDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUINTERNAL == 1, "device internal fatal code");
 _Static_assert(C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_ACCESS == C_FDMA_ACCESS_READ_ONLY, "causes are read-only");
 _Static_assert(C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_WRITABLE_MASK == 3, "two notification mask bits");
 _Static_assert(C_FDMA_C_QURQUEQUSQUEQUT__2_ACCESS == C_FDMA_ACCESS_READ_WRITE, "channel reset exposes busy state");
 _Static_assert(C_FDMA_C_QURQUEQUSQUEQUT__1_ACCESS == C_FDMA_ACCESS_READ_WRITE, "device reset exposes busy state");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUSUCCESS == 0, "success status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH == 1, "invalid length status code");
-_Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUFAULT == 2, "read fault status code");
-_Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUFAULT == 3, "write fault status code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QUREADQUERROR == 2, "read error status code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QUWRITEQUERROR == 3, "write error status code");
 _Static_assert(C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH == 4, "length mismatch status code");
-_Static_assert(C_RESPONSE_C_STATUS_C_QULISTQUREADQUFAULT == 5, "list read fault status code");
+_Static_assert(C_RESPONSE_C_STATUS_C_QULISTQUREADQUERROR == 5, "list read error status code");
 _Static_assert(C_HCTL_SIZE == 36, "control channel extent");
 _Static_assert(C_HCTL_C_QUBQUOQUOQUTQUSQUTQURQUAQUP_OFFSET == 0, "bootstrap address");
 _Static_assert(C_HCTL_C_QUEQUNQUAQUBQULQUE_OFFSET == 8, "activation address");
@@ -111,7 +111,7 @@ int main(void) {
     const uint32_t offsets[] = {
         C_FDMA_C_QUCQUHQUAQUNQUNQUEQULQSQUNQUUQUM_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_OFFSET,
-        C_FDMA_C_QUFQUAQUUQULQUT__1_OFFSET,
+        C_FDMA_C_QUFQUAQUTQUAQUL__1_OFFSET,
         C_FDMA_C_QURQUEQUSQUEQUT__1_OFFSET,
         C_FDMA_C_QURQUEQUSQUEQUT__2_OFFSET,
         C_FDMA_C_QURQUEQUSQUEQUT__3_OFFSET,
@@ -126,7 +126,7 @@ int main(void) {
         C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__2_OFFSET,
         C_FDMA_C_QUEQUNQUAQUBQULQUE__1_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_OFFSET,
-        C_FDMA_C_QUFQUAQUUQULQUT__2_OFFSET,
+        C_FDMA_C_QUFQUAQUTQUAQUL__2_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__1_OFFSET,
         C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_OFFSET,
@@ -140,7 +140,7 @@ int main(void) {
         C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__4_OFFSET,
         C_FDMA_C_QUEQUNQUAQUBQULQUE__2_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_OFFSET,
-        C_FDMA_C_QUFQUAQUUQULQUT__3_OFFSET,
+        C_FDMA_C_QUFQUAQUTQUAQUL__3_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__2_OFFSET,
         C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_OFFSET,
@@ -154,7 +154,7 @@ int main(void) {
         C_FDMA_C_QUCQUOQUNQUSQUUQUMQUEQUR__6_OFFSET,
         C_FDMA_C_QUEQUNQUAQUBQULQUE__3_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__4_OFFSET,
-        C_FDMA_C_QUFQUAQUUQULQUT__4_OFFSET,
+        C_FDMA_C_QUFQUAQUTQUAQUL__4_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET,
         C_FDMA_C_QUIQURQUQQSQUMQUAQUSQUK__3_OFFSET,
         C_FDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_OFFSET,
@@ -165,15 +165,25 @@ int main(void) {
     C_COMMAND_STORE_C_SGQSCONTEXT(command, UINT32_C(33));
     C_COMMAND_STORE_C_SOURCEQX2EMODE(command, C_COMMAND_C_SOURCEQX2EMODE_C_QULINEAR);
     C_COMMAND_STORE_C_SOURCEQX2EWORD0(command, UINT64_C(0x100));
-    C_COMMAND_STORE_C_SOURCEQX2EWORD1(command, UINT64_C(8));
+    C_COMMAND_STORE_C_COPYQSLENGTH(command, UINT64_C(8));
+    C_COMMAND_STORE_C_SOURCEQX2EWORD1(command, UINT64_C(7));
+    C_COMMAND_STORE_C_DESTINATIONQX2EWORD2(command, UINT64_C(1));
+    C_COMMAND_STORE_C_DESTINATIONQX2EWORD3(command, UINT64_C(3));
     C_COMMAND_STORE_C_DESTINATIONQX2EMODE(command, C_COMMAND_C_DESTINATIONQX2EMODE_C_QUSCATTERQUGATHER);
     C_COMMAND_STORE_C_DESTINATIONQX2EWORD0(command, UINT64_C(0x200));
     C_COMMAND_STORE_C_DESTINATIONQX2EWORD1(command, UINT64_C(2));
     C_COMMAND_STORE_C_FLAGS(command, UINT32_C(1));
     C_RESPONSE_STORE_C_ID(response, UINT64_C(7));
-    C_RESPONSE_STORE_C_STATUS(response, C_RESPONSE_C_STATUS_C_QUSUCCESS);
+    C_RESPONSE_STORE_C_STATUS(response, C_RESPONSE_C_STATUS_C_QUPAGEQUFAULT);
+    uint8_t *fault = response + C_RESPONSE_RECORD_C_INFO_OFFSET;
+    C_PAGEFAULTINFO_STORE_C_FAULTQSADDRESS(fault, UINT64_C(0x4567));
+    C_PAGEFAULTINFO_STORE_C_KINDSQX2EACCESS(fault, C_PAGEFAULTINFO_C_KINDSQX2EACCESS_C_QUDESTINATIONQUWRITE);
+    C_PAGEFAULTINFO_STORE_C_KINDSQX2ESOURCEQSMODE(fault, C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_C_QUSCATTERQUGATHER);
+    C_PAGEFAULTINFO_STORE_C_SOURCEQSWORD0(fault, UINT64_C(2));
+    C_PAGEFAULTINFO_STORE_C_SOURCEQSWORD1(fault, UINT64_C(3));
+    C_PAGEFAULTINFO_STORE_C_DESTINATIONQSWORD0(fault, UINT64_C(5));
     C_RESPONSE_STORE_C_FLAGS(response, UINT32_C(1));
-    C_RESPONSE_STORE_C_BYTESQSCOMPLETED(response, UINT64_C(8));
+    C_PAGEFAULTINFO_STORE_C_BYTESQSCOMPLETED(fault, UINT64_C(8));
     C_SEGMENT_STORE_C_ADDRESS(segment, UINT64_C(0x300));
     C_SEGMENT_STORE_C_LENGTH(segment, UINT64_C(8));
     C_CONTROLREQQUEST_STORE_C_ID(release, UINT64_C(0x0807060504030201));
@@ -213,15 +223,15 @@ int main(void) {
     if (C_COMMAND_LOAD_C_ID(command) != UINT64_C(7)) return 1;
     if (C_COMMAND_LOAD_C_SOURCEQX2EMODE(command) != UINT32_C(0)) return 2;
     if (C_COMMAND_LOAD_C_SOURCEQX2EWORD0(command) != UINT64_C(0x100)) return 3;
-    if (C_COMMAND_LOAD_C_SOURCEQX2EWORD1(command) != UINT64_C(8)) return 4;
+    if (C_COMMAND_LOAD_C_COPYQSLENGTH(command) != UINT64_C(8)) return 4;
     if (C_COMMAND_LOAD_C_DESTINATIONQX2EMODE(command) != UINT32_C(1)) return 10;
     if (C_COMMAND_LOAD_C_DESTINATIONQX2EWORD0(command) != UINT64_C(0x200)) return 11;
     if (C_COMMAND_LOAD_C_DESTINATIONQX2EWORD1(command) != UINT64_C(2)) return 12;
     if (C_COMMAND_LOAD_C_FLAGS(command) != UINT32_C(1)) return 17;
     if (C_RESPONSE_LOAD_C_ID(response) != UINT64_C(7)) return 5;
-    if (C_RESPONSE_LOAD_C_STATUS(response) != UINT32_C(0)) return 6;
+    if (C_RESPONSE_LOAD_C_STATUS(response) != UINT32_C(6)) return 6;
     if (C_RESPONSE_LOAD_C_FLAGS(response) != UINT32_C(1)) return 18;
-    if (C_RESPONSE_LOAD_C_BYTESQSCOMPLETED(response) != UINT64_C(8)) return 13;
+    if (C_PAGEFAULTINFO_LOAD_C_BYTESQSCOMPLETED(fault) != UINT64_C(8)) return 13;
     if (C_SEGMENT_LOAD_C_ADDRESS(segment) != UINT64_C(0x300)) return 14;
     if (C_SEGMENT_LOAD_C_LENGTH(segment) != UINT64_C(8)) return 15;
     if (fwrite(command, 1, sizeof(command), stdout) != sizeof(command)) return 7;

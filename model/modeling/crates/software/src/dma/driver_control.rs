@@ -2,13 +2,13 @@ use super::Channel;
 use super::Error;
 use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
 use pdma_model_contract::dma::{
-    ChannelFaultCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaFaultCode,
+    ChannelFatalCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaFatalCode,
 };
 
 impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
-    /// Reads the hardware's sticky channel fault code.
-    pub async fn fault(&self) -> Result<ChannelFaultCode, Error<B::Error>> {
-        self.port.control.fault(&self.port.bus).await
+    /// Reads the hardware's sticky channel fatal code.
+    pub async fn fatal(&self) -> Result<ChannelFatalCode, Error<B::Error>> {
+        self.port.control.fatal(&self.port.bus).await
     }
 
     /// Enables or masks all channel interrupt notifications.
@@ -46,14 +46,14 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
         self.port.control.reset(&self.port.bus).await
     }
 
-    /// Reads the sticky device-wide fault, which channel reset cannot clear.
-    pub async fn dma_fault(&self) -> Result<DmaFaultCode, Error<B::Error>> {
-        self.port.control.dma_fault(&self.port.bus).await
+    /// Reads the sticky device-wide fatal, which channel reset cannot clear.
+    pub async fn dma_fatal(&self) -> Result<DmaFatalCode, Error<B::Error>> {
+        self.port.control.dma_fatal(&self.port.bus).await
     }
 
     /// Enables or masks device-fatal notifications independently of the channel gate.
     ///
-    /// Enabling does not replay masked events; inspect the device fault afterward.
+    /// Enabling does not replay masked events; inspect the device fatal afterward.
     pub async fn set_dma_irq_enabled(&self, enabled: bool) -> Result<(), Error<B::Error>> {
         self.port
             .control

@@ -82,8 +82,8 @@ async fn relocated_discovery_routes_data_admin_and_global_controls()
             assert_eq!(bus.0.busy(0).await?, 0);
             assert_eq!(bus.0.busy(1).await?, 1);
             assert_eq!(
-                control.dma_fault(&bus).await?,
-                pdma_model_contract::dma::DmaFaultCode::Internal
+                control.dma_fatal(&bus).await?,
+                pdma_model_contract::dma::DmaFatalCode::Internal
             );
             assert!(bus.0.0.lock().map_err(|_| "poisoned DMA")?.take_interrupt());
             bus.0.finish_reset()?;

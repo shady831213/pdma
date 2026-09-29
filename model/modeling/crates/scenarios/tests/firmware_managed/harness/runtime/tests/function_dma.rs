@@ -62,7 +62,7 @@ fn command_lists_payload_and_response_use_the_same_channel_owner() -> TestResult
         let result = response(memory)?;
         assert_eq!(result.id, 100 + u64::try_from(index)?);
         assert_eq!(result.status, ResponseStatus::Success);
-        assert_eq!(result.bytes_completed, 8);
+        assert_eq!(result.bytes_completed(), 8);
     }
     Ok(())
 }
@@ -100,8 +100,8 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
                 &0x4000_u64.to_le_bytes(),
             )?,
             Path::List => work.source = Endpoint::scatter_gather(0x4000, 1),
-            Path::Read => work.source = Endpoint::linear(0x4000, 8),
-            Path::Write => work.destination = Endpoint::linear(0x4000, 8),
+            Path::Read => work.source = Endpoint::linear(0x4000, 0),
+            Path::Write => work.destination = Endpoint::linear(0x4000, 0),
             Path::Response => dma.write(
                 base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
                 &0x4000_u64.to_le_bytes(),
@@ -121,14 +121,14 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
                 let mut fault = [0; 4];
                 dma.read(
                     base + ChannelBlock::CONTROL.offset()
-                        + pdma_model_contract::dma::ChannelRegisters::FAULT.offset(),
+                        + pdma_model_contract::dma::ChannelRegisters::FATAL.offset(),
                     &mut fault,
                 )?;
                 assert_ne!(u32::from_le_bytes(fault), 0, "{path:?}");
             }
-            Path::List => assert_eq!(response(&local)?.status, ResponseStatus::ListReadFault),
-            Path::Read => assert_eq!(response(&local)?.status, ResponseStatus::ReadFault),
-            Path::Write => assert_eq!(response(&local)?.status, ResponseStatus::WriteFault),
+            Path::List => assert_eq!(response(&local)?.status, ResponseStatus::ListReadError),
+            Path::Read => assert_eq!(response(&local)?.status, ResponseStatus::ReadError),
+            Path::Write => assert_eq!(response(&local)?.status, ResponseStatus::WriteError),
         }
     }
     Ok(())

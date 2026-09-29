@@ -1,12 +1,12 @@
 # Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-09-28.
+Updated: 2026-09-29.
 Status: the architecture MVP, Function-scoped channel management, context selection
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
-integration and Function-level reset remain unimplemented. The next design focus
-is DSA-like partial completion and Host continuation for pageable-VA copies;
-synchronization and fence semantics follow.
+integration and Function-level reset remain unimplemented. Payload-only DSA-like
+partial completion and Host continuation for pageable-VA copies are implemented;
+synchronization and fence semantics remain future work.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
 
@@ -55,19 +55,24 @@ chosen usage contract, not a universal restriction on migration engines. The
 [context contract](context-contract.md#non-faulting-page-migration-copy) records
 the normative obligations and the boundary with full HMM support.
 
-The next focus is the second use: copying pageable virtual addresses, where DMA's
-own access can encounter a recoverable page fault. The selected direction for the
-next design pass is **DSA-like partial completion followed by Host software
+The implemented second use copies pageable virtual addresses, where DMA's own
+access can encounter a recoverable page fault. The selected design is **DSA-like partial completion followed by Host software
 continuation**, retaining direct Host/VF use of DMA rings. DMA ends the affected
 hardware command with precise progress and fault information; software repairs
 the mapping and submits the remainder as a new command. Firmware does not proxy
 each copy or retain its suspended progress.
 
-The [page-fault recovery design note](page-fault-recovery.md) records the agreed
-responsibilities, unresolved completion/SG/order semantics, and NVIDIA evidence
-limits. It is not an implemented feature or a frozen ABI. Existing unsuccessful
-responses still stop the channel until reset; the proposed recoverable outcome
-must be distinguished from those errors before implementation.
+The [page-fault recovery design note](page-fault-recovery.md) records the 2026-09-29
+decisions and their rationale: independent Linear offsets or SG entry/local-offset
+positions, a common copy length, and PageFault responses with both continuation
+positions. Ordinary subrange starts are software-calculated; fault recovery reuses
+hardware-reported positions. Retained command/context bindings identify the repair
+address space without duplicating resolved attributes in DMA responses. No hidden
+task state survives independent commands. The note also preserves alternatives,
+RTL cost considerations and NVIDIA evidence limits. The payload-only slice now implements these requirements, with a schema-defined
+wire layout, typed PageFault access result and managed PASID repair scenario.
+PageFault does not halt the channel; other unsuccessful responses still do.
+The ABI is not released or frozen.
 
 Device-retained resume, firmware-owned VF task queues and MMU-transparent retry
 remain alternatives outside this next slice. Do not restore the retired resume

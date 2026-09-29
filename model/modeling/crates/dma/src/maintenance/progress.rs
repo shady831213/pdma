@@ -78,15 +78,15 @@ impl<M: MemoryAccess<S>, S> Dma<M, S> {
             };
             match selected.channel.command.peek(&selected.memory) {
                 Ok(Some(command)) if references(&command).contains(&Some(context)) => {
-                    if let Err(fault) = selected.channel.command.consume() {
-                        selected.channel.latch(fault);
+                    if let Err(fatal) = selected.channel.command.consume() {
+                        selected.channel.latch(fatal);
                     }
                     self.refresh_maintenance();
                     return true;
                 }
                 Ok(Some(_) | None) => {}
-                Err(fault) => {
-                    selected.channel.latch(fault);
+                Err(fatal) => {
+                    selected.channel.latch(fatal);
                     selected.channel.update_irq();
                 }
             }

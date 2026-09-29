@@ -53,7 +53,7 @@ impl Builder<'_> {
                 let segment = segments
                     .first()
                     .ok_or_else(|| io::Error::other("linear span missing"))?;
-                Endpoint::linear(segment.address, segment.length)
+                Endpoint::linear(segment.address, 0)
             }
             BufferLayout::ScatterGather(_) => {
                 let width = u64::try_from(Segment::RECORD_SIZE)?;

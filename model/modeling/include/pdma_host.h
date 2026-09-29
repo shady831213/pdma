@@ -47,7 +47,7 @@
 /*
  * DmaRegisters.channels[0]
  * Independent channel data interfaces
- * Page-aligned complete channel blocks containing rings, configuration, faults and notifications. Unused bytes are reserved to their owning block.
+ * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
  */
 /*
  * DmaRegisters.channels[0].command
@@ -62,12 +62,12 @@
 /*
  * DmaRegisters.channels[0].control
  * Channel management interface
- * Processing enable, interrupt causes and sticky channel fault. There is no separate event ring.
+ * Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring.
  */
 /*
  * DmaRegisters.channels[1]
  * Independent channel data interfaces
- * Page-aligned complete channel blocks containing rings, configuration, faults and notifications. Unused bytes are reserved to their owning block.
+ * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
  */
 /*
  * DmaRegisters.channels[1].command
@@ -82,12 +82,12 @@
 /*
  * DmaRegisters.channels[1].control
  * Channel management interface
- * Processing enable, interrupt causes and sticky channel fault. There is no separate event ring.
+ * Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring.
  */
 /*
  * DmaRegisters.channels[2]
  * Independent channel data interfaces
- * Page-aligned complete channel blocks containing rings, configuration, faults and notifications. Unused bytes are reserved to their owning block.
+ * Page-aligned complete channel blocks containing rings, configuration, fatal failures and notifications. Unused bytes are reserved to their owning block.
  */
 /*
  * DmaRegisters.channels[2].command
@@ -102,7 +102,7 @@
 /*
  * DmaRegisters.channels[2].control
  * Channel management interface
- * Processing enable, interrupt causes and sticky channel fault. There is no separate event ring.
+ * Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring.
  */
 
 /*
@@ -118,7 +118,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__1_OFFSET UINT64_C(4096)
 #define C_HDMA_C_QUBQUAQUSQUE__1_WIDTH UINT64_C(8)
@@ -162,7 +162,7 @@
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(4120)
 #define C_HDMA_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)
@@ -206,7 +206,7 @@
 
 /*
  * Channel processing enable
- * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or faults.
+ * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or errors.
  */
 /*
  * enabled
@@ -237,38 +237,38 @@
 #define C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Sticky channel fault
+ * Sticky channel fatal
  * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
 /*
  * code
- * Fault code
+ * Fatal code
  * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
  */
 /*
  * None
- * No channel fault
+ * No channel fatal
  * Neither ring has latched a hardware access failure.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUNONE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * ResponseWrite
  * Response publication failed
  * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_OFFSET UINT64_C(4148)
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_WIDTH UINT64_C(4)
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_ACCESS C_HDMA_ACCESS_READ_ONLY
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_RESET_KIND C_HDMA_RESET_ZERO
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_RESET_VALUE UINT64_C(0)
-#define C_HDMA_C_QUFQUAQUUQULQUT__1_WRITABLE_MASK UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_OFFSET UINT64_C(4148)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_WIDTH UINT64_C(4)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_ACCESS C_HDMA_ACCESS_READ_ONLY
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__1_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Channel interrupt causes
@@ -284,11 +284,11 @@
  */
 /*
  * response_error
- * An error response was published; processing is stopped until reset.
+ * A stopping error response was published; processing is stopped until reset. PageFault does not set this cause.
  */
 /*
  * channel_fatal
- * The channel fault register contains a fatal error.
+ * The channel fatal register contains a fatal error.
  */
 #define C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_OFFSET UINT64_C(4152)
 #define C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__1_WIDTH UINT64_C(4)
@@ -329,7 +329,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__3_OFFSET UINT64_C(8192)
 #define C_HDMA_C_QUBQUAQUSQUE__3_WIDTH UINT64_C(8)
@@ -373,7 +373,7 @@
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__4_OFFSET UINT64_C(8216)
 #define C_HDMA_C_QUBQUAQUSQUE__4_WIDTH UINT64_C(8)
@@ -417,7 +417,7 @@
 
 /*
  * Channel processing enable
- * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or faults.
+ * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or errors.
  */
 /*
  * enabled
@@ -448,38 +448,38 @@
 #define C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__2_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Sticky channel fault
+ * Sticky channel fatal
  * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
 /*
  * code
- * Fault code
+ * Fatal code
  * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
  */
 /*
  * None
- * No channel fault
+ * No channel fatal
  * Neither ring has latched a hardware access failure.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUNONE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * ResponseWrite
  * Response publication failed
  * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_OFFSET UINT64_C(8244)
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_WIDTH UINT64_C(4)
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_ACCESS C_HDMA_ACCESS_READ_ONLY
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_RESET_KIND C_HDMA_RESET_ZERO
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_RESET_VALUE UINT64_C(0)
-#define C_HDMA_C_QUFQUAQUUQULQUT__2_WRITABLE_MASK UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_OFFSET UINT64_C(8244)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_WIDTH UINT64_C(4)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_ACCESS C_HDMA_ACCESS_READ_ONLY
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__2_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Channel interrupt causes
@@ -495,11 +495,11 @@
  */
 /*
  * response_error
- * An error response was published; processing is stopped until reset.
+ * A stopping error response was published; processing is stopped until reset. PageFault does not set this cause.
  */
 /*
  * channel_fatal
- * The channel fault register contains a fatal error.
+ * The channel fatal register contains a fatal error.
  */
 #define C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_OFFSET UINT64_C(8248)
 #define C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__2_WIDTH UINT64_C(4)
@@ -540,7 +540,7 @@
 
 /*
  * Command ring base address
- * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 64 bytes apart. The value cannot change after the channel's first successful enable until reset.
+ * Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__5_OFFSET UINT64_C(12288)
 #define C_HDMA_C_QUBQUAQUSQUE__5_WIDTH UINT64_C(8)
@@ -584,7 +584,7 @@
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__6_OFFSET UINT64_C(12312)
 #define C_HDMA_C_QUBQUAQUSQUE__6_WIDTH UINT64_C(8)
@@ -628,7 +628,7 @@
 
 /*
  * Channel processing enable
- * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or faults.
+ * One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or errors.
  */
 /*
  * enabled
@@ -659,38 +659,38 @@
 #define C_HDMA_C_QUIQURQUQQSQUEQUNQUAQUBQULQUE__3_WRITABLE_MASK UINT64_C(1)
 
 /*
- * Sticky channel fault
+ * Sticky channel fatal
  * A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it.
  */
 /*
  * code
- * Fault code
+ * Fatal code
  * Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid.
  */
 /*
  * None
- * No channel fault
+ * No channel fatal
  * Neither ring has latched a hardware access failure.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_C_CODE_C_QUNONE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUNONE UINT64_C(0)
 /*
  * CommandRead
  * Command fetch failed
  * Hardware could not fetch or decode a command ring entry; its consumer cursor was not advanced.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QUCOMMANDQUREAD UINT64_C(1)
 /*
  * ResponseWrite
  * Response publication failed
  * Hardware could not publish a response ring entry; its producer cursor was not advanced. The payload copy may already have completed.
  */
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_OFFSET UINT64_C(12340)
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_WIDTH UINT64_C(4)
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_ACCESS C_HDMA_ACCESS_READ_ONLY
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_RESET_KIND C_HDMA_RESET_ZERO
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_RESET_VALUE UINT64_C(0)
-#define C_HDMA_C_QUFQUAQUUQULQUT__3_WRITABLE_MASK UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_C_CODE_C_QURESPONSEQUWRITE UINT64_C(2)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_OFFSET UINT64_C(12340)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_WIDTH UINT64_C(4)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_ACCESS C_HDMA_ACCESS_READ_ONLY
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUTQUAQUL__3_WRITABLE_MASK UINT64_C(0)
 
 /*
  * Channel interrupt causes
@@ -706,11 +706,11 @@
  */
 /*
  * response_error
- * An error response was published; processing is stopped until reset.
+ * A stopping error response was published; processing is stopped until reset. PageFault does not set this cause.
  */
 /*
  * channel_fatal
- * The channel fault register contains a fatal error.
+ * The channel fatal register contains a fatal error.
  */
 #define C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_OFFSET UINT64_C(12344)
 #define C_HDMA_C_QUIQURQUQQSQUCQUAQUUQUSQUE__3_WIDTH UINT64_C(4)

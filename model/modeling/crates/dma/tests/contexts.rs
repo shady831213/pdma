@@ -78,6 +78,7 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
     // Given
     let mut dma = Dma::with_sideband(Spaces::new()?, 1, |access| access.context.raw())?;
     let command = Command {
+        copy_length: 4,
         id: 7,
         flags: CompletionFlagsValues::default(),
         sg_context: 1,

@@ -12,7 +12,7 @@ async fn identical_dma_addresses_resolve_in_the_owning_functions_memory() -> Tes
         assert_eq!(outcome.bytes, payload);
         assert_eq!(outcome.response.status, ResponseStatus::Success);
         assert_eq!(
-            outcome.response.bytes_completed,
+            outcome.response.bytes_completed(),
             u64::try_from(payload.len())?
         );
         assert_eq!(outcome.interrupts, 1);
@@ -50,7 +50,7 @@ async fn two_functions_copy_through_shared_dma_and_receive_only_their_own_irq() 
         assert_eq!(outcome.bytes, payload);
         assert_eq!(outcome.response.status, ResponseStatus::Success);
         assert_eq!(
-            outcome.response.bytes_completed,
+            outcome.response.bytes_completed(),
             u64::try_from(payload.len())?
         );
         assert_eq!(outcome.interrupts, 1);

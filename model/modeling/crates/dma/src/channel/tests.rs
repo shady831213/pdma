@@ -1,7 +1,9 @@
 use super::*;
 use crate::Dma;
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
+use pdma_model_contract::dma::ResponseStatus;
 use pdma_model_contract::dma::{ChannelRegisters, CompletionFlagsValues, ResponseRegisters};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_contract::register::{ReadWordValues, WordValues};
 
 #[test]
@@ -28,7 +30,7 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
         MemoryAddress::new(0x1000),
-        256,
+        u64::try_from(4 * Response::RECORD_SIZE)?,
         MemoryAlignment::ONE,
     )?])?;
     let mut device = Dma::new(memory, 1)?;
@@ -65,7 +67,7 @@ fn consuming_multiple_iocs_across_counter_wrap_clears_only_consumed_causes()
             id: 7,
             status: ResponseStatus::Success,
             flags: CompletionFlagsValues { ioc },
-            bytes_completed: 0,
+            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
         };
         assert_eq!(
             device

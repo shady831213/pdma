@@ -19,6 +19,7 @@ PCIe, IOMMU translation, caches and an actual interconnect are integration scope
 | [Control channel](control-channel.md) | PF/firmware requests, responses, ring ownership and cancellation |
 | [Function isolation](function-isolation.md) | Grants, routing, permissions and pre-FLR obligations |
 | [Contexts](context-contract.md) | Context bindings, maintenance frontiers, lifetime and non-faulting migration-copy obligations |
+| [Pageable copy](page-fault-recovery.md) | Selected ranges, PageFault responses, software continuation and repair/lifetime obligations |
 | [Fatal and events](fatal-events.md) | System fatal handling, PF events and managed recovery |
 
 The fatal/event chapter describes the managed recovery extension. Its verification
@@ -30,10 +31,10 @@ requirements. Removed specifications on the backup branch are not authoritative.
 The agreed [non-faulting migration-copy usage](context-contract.md#non-faulting-page-migration-copy)
 uses existing copy behavior with explicit software/platform preconditions. It is
 distinct from copying pageable virtual addresses with recoverable faults. The
-next design focus is [DSA-like partial completion and Host continuation](page-fault-recovery.md).
-That note is non-normative and unimplemented: completion encoding, SG recovery,
-ordering and lifecycle interactions must be agreed before adding requirements or
-changing the existing error/halt behavior.
+implemented [DSA-like partial completion and Host continuation](page-fault-recovery.md)
+chapter specifies endpoint/continuation positions, repair identity, atomic failed
+access and software lifetime obligations. Payload PageFault is a terminal,
+non-halting response; metadata faults and other errors retain their prior policy.
 
 ## Responsibility notation
 

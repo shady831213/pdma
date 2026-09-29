@@ -21,7 +21,7 @@ fn linear_command_does_not_reference_ignored_sg_selector() -> TestResult {
     unrelated.id = 8;
     unrelated.sg_context = 7;
     memory.write(
-        MemoryAddress::new(0x1040),
+        MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
         &unrelated.to_bytes()?,
     )?;
@@ -57,7 +57,7 @@ fn linear_command_does_not_reference_ignored_sg_selector() -> TestResult {
         MemoryAlignment::ONE,
         &mut response,
     )?;
-    assert_eq!(Response::from_bytes(&response)?.id, unrelated.id);
+    assert_eq!(Response::from_bytes(response.as_ref())?.id, unrelated.id);
     let mut bytes = [0; 4];
     memory.read(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(bytes, [4, 3, 2, 1]);
@@ -75,7 +75,7 @@ fn later_unrelated_publication_does_not_extend_the_drain_frontier() -> TestResul
     let mut later = command();
     later.id = 8;
     memory.write(
-        MemoryAddress::new(0x1040),
+        MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
         &later.to_bytes()?,
     )?;

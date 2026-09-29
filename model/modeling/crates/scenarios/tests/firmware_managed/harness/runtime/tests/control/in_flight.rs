@@ -188,10 +188,11 @@ fn prepare_copy(
 
 fn copy(id: u64, (source, destination): (MemoryAddress, MemoryAddress), length: u64) -> Command {
     Command {
+        copy_length: length,
         sg_context: 0,
         id,
-        source: Endpoint::linear(source.raw(), length),
-        destination: Endpoint::linear(destination.raw(), length),
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
         flags: CompletionFlagsValues::default(),
     }
 }

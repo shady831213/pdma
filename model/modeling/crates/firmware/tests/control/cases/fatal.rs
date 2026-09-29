@@ -16,7 +16,7 @@ async fn startup_fatal_is_reported_once_after_host_attaches() -> TestResult {
         .unwrap()
         .insert(enable, 0_u32.to_le_bytes().to_vec());
     bus.registers.lock().unwrap().insert(
-        u32::try_from(DmaDiscovery::EXTENT + DmaControl::FAULT.offset())?,
+        u32::try_from(DmaDiscovery::EXTENT + DmaControl::FATAL.offset())?,
         1_u32.to_le_bytes().to_vec(),
     );
     let mut program = std::pin::pin!(run(&bus, memory.clone()));
@@ -87,7 +87,7 @@ async fn fatal_during_reset_finishes_without_reopening_or_reissuing_reset() -> T
     )?;
     // When: fatal interrupts that same request, then hardware completes with no new IRQ.
     bus.registers.lock().unwrap().insert(
-        u32::try_from(DmaDiscovery::EXTENT + DmaControl::FAULT.offset())?,
+        u32::try_from(DmaDiscovery::EXTENT + DmaControl::FATAL.offset())?,
         1_u32.to_le_bytes().to_vec(),
     );
     bus.notification.raise();
@@ -134,7 +134,7 @@ async fn fatal_closes_window_and_publishes_event_with_full_response_ring() -> Te
     }
     publish(&memory, acquire(2), 2)?;
     // When: a hardware fatal wakes firmware while no response space exists.
-    let fault = u32::try_from(DmaDiscovery::EXTENT + DmaControl::FAULT.offset())?;
+    let fault = u32::try_from(DmaDiscovery::EXTENT + DmaControl::FATAL.offset())?;
     bus.registers
         .lock()
         .unwrap()

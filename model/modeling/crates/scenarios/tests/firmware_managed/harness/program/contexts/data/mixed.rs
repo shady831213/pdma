@@ -101,14 +101,15 @@ const fn command(
     length: u64,
 ) -> Command {
     Command {
+        copy_length: length,
         id,
         source: Endpoint {
             context: source.1.raw(),
-            ..Endpoint::linear(source.0.raw(), length)
+            ..Endpoint::linear(source.0.raw(), 0)
         },
         destination: Endpoint {
             context: destination.1.raw(),
-            ..Endpoint::linear(destination.0.raw(), length)
+            ..Endpoint::linear(destination.0.raw(), 0)
         },
         sg_context: 0,
         flags: CompletionFlagsValues { ioc: false },

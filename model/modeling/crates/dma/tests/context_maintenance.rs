@@ -119,7 +119,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     let mut input = command();
     input.source = pdma_model_contract::dma::Endpoint {
         context: 7,
-        ..pdma_model_contract::dma::Endpoint::linear(0x9000, 4)
+        ..pdma_model_contract::dma::Endpoint::linear(0x9000, 0)
     };
     submit(&mut dma, &memory, input)?;
     let channel = ChannelId::new(0);

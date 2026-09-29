@@ -2,7 +2,7 @@ use crate::Error;
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::{
     control::{ControlEvent, ControlEventKind},
-    dma::{ChannelId, DmaFaultCode},
+    dma::{ChannelId, DmaFatalCode},
     ring::RingError,
 };
 use pdma_model_software::{control::ManagementAddresses, dma::ChannelControl};
@@ -45,9 +45,9 @@ impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
     }
 
     pub(super) async fn observe(&self) -> Result<(), Error<B::Error>> {
-        match self.control.dma_fault(self.bus).await.map_err(Error::Dma)? {
-            DmaFaultCode::None => {}
-            DmaFaultCode::Internal => {
+        match self.control.dma_fatal(self.bus).await.map_err(Error::Dma)? {
+            DmaFatalCode::None => {}
+            DmaFatalCode::Internal => {
                 if !self.failed.swap(true, Ordering::SeqCst) {
                     self.report.store(true, Ordering::SeqCst);
                 }
@@ -72,8 +72,8 @@ impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
             .swap(false, Ordering::SeqCst)
             .then_some(ControlEvent {
                 kind: ControlEventKind::DmaFatal,
-                code: pdma_model_contract::dma::DmaFaultValues::RESET
-                    .with_code(DmaFaultCode::Internal)
+                code: pdma_model_contract::dma::DmaFatalValues::RESET
+                    .with_code(DmaFatalCode::Internal)
                     .raw(),
             })
     }

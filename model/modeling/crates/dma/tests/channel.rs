@@ -9,7 +9,8 @@ use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
-use pdma_model_dma::{Dma, Fault, Pipeline};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_dma::{ChannelFatal, Dma, Pipeline};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]
@@ -40,7 +41,7 @@ fn copy_publishes_response_before_notification_is_taken() -> TestResult {
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 7,
             status: ResponseStatus::Success,
-            bytes_completed: 4,
+            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
         }
     );
     assert!(device.irq());
@@ -70,9 +71,9 @@ fn response_write_fault_is_reported_without_response_memory() -> TestResult {
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::FAULT.offset()
+                + ChannelRegisters::FATAL.offset()
         )?,
-        Fault::ResponseWrite.code().raw()
+        ChannelFatal::ResponseWrite.code().raw()
     );
     assert_eq!(
         read_word(
@@ -112,7 +113,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
         &mut device,
         &memory,
         Command {
-            source: Endpoint::linear(0x8000, 4),
+            source: Endpoint::linear(0x8000, 0),
             ..command()
         },
     )?;
@@ -123,7 +124,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
     memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(
         Response::from_bytes(&bytes)?.status,
-        ResponseStatus::ReadFault
+        ResponseStatus::ReadError
     );
     assert!(device.irq());
     assert_eq!(
@@ -131,7 +132,7 @@ fn source_fault_produces_failure_response_not_success() -> TestResult {
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::FAULT.offset()
+                + ChannelRegisters::FATAL.offset()
         )?,
         0
     );
@@ -220,7 +221,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             &mut device,
             pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                 + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
-                + ChannelRegisters::FAULT.offset()
+                + ChannelRegisters::FATAL.offset()
         )?,
         0
     );

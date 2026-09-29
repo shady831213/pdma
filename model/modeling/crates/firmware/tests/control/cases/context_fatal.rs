@@ -36,7 +36,7 @@ async fn fatal_waits_for_accepted_context_maintenance_before_dma_recovery() -> T
     for _ in 0..4 {
         assert!(poll(program.as_mut()).is_pending());
     }
-    let fault = u32::try_from(DmaDiscovery::EXTENT + DmaControl::FAULT.offset())?;
+    let fault = u32::try_from(DmaDiscovery::EXTENT + DmaControl::FATAL.offset())?;
     // When: fatal interrupts maintenance before hardware has released its interlock.
     bus.registers
         .lock()

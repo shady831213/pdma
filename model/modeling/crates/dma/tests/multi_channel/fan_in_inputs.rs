@@ -177,14 +177,16 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
         })
         .ok_or("replacement command did not finish")??;
     // Then: the replacement task completes under its fresh generation, not as stale work.
-    let raw = device.memory.read_typed::<[u8; Response::RECORD_SIZE]>(
-        MemoryAddress::new(0x1100),
-        MemoryAlignment::ONE,
-    )?;
-    let response = Response::from_bytes(&raw)?;
+    let raw = device
+        .memory
+        .read_typed::<pdma_model_contract::dma::ResponseRaw>(
+            MemoryAddress::new(0x1100),
+            MemoryAlignment::ONE,
+        )?;
+    let response = Response::from_bytes(raw.as_ref())?;
     assert_eq!(response.id, 99);
     assert_eq!(response.status, ResponseStatus::Success);
-    assert_eq!(response.bytes_completed, 512);
+    assert_eq!(response.bytes_completed(), 512);
     assert_eq!(consumer(&mut device, 0)?, 1);
     assert_eq!(consumer(&mut device, 1)?, 0);
     Ok(())

@@ -2,7 +2,7 @@ use super::{CopyState, Transfer};
 use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{Response, ResponseStatus};
+use pdma_model_contract::dma::{PageFaultKindsAccess, Response, ResponseStatus};
 use std::ops::ControlFlow;
 
 /// Read one payload chunk into retained operation state.
@@ -37,25 +37,28 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy {
         };
         match transfer.progress.status {
             ResponseStatus::Success if transfer.length > 0 => {
-                transfer.progress.status = match transfer.bytes.get_mut(..transfer.length) {
+                match transfer.bytes.get_mut(..transfer.length) {
                     Some(bytes) => {
                         match context
                             .memory_for(transfer.progress.command.source.context)
                             .read(transfer.source, MemoryAlignment::ONE, bytes)
                         {
-                            Ok(()) => ResponseStatus::Success,
-                            Err(_) => ResponseStatus::ReadFault,
+                            Ok(()) => {}
+                            Err(error) => transfer
+                                .progress
+                                .fail_access(error, PageFaultKindsAccess::SourceRead),
                         }
                     }
-                    None => ResponseStatus::InvalidLength,
-                };
+                    None => transfer.progress.status = ResponseStatus::InvalidLength,
+                }
             }
             ResponseStatus::Success
+            | ResponseStatus::PageFault
             | ResponseStatus::InvalidLength
-            | ResponseStatus::ReadFault
-            | ResponseStatus::WriteFault
+            | ResponseStatus::ReadError
+            | ResponseStatus::WriteError
             | ResponseStatus::LengthMismatch
-            | ResponseStatus::ListReadFault => {}
+            | ResponseStatus::ListReadError => {}
         }
         StepOutcome::Complete(Ok(transfer))
     }
@@ -104,9 +107,9 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy {
                             && (count > 0 || transfer.progress.remaining == 0) =>
                     {
                         if count == 0 {
-                            return StepOutcome::Complete(Ok(ControlFlow::Break(
-                                transfer.progress.response(),
-                            )));
+                            return StepOutcome::Complete(
+                                transfer.progress.response().map(ControlFlow::Break),
+                            );
                         }
                         match context
                             .memory_for(transfer.progress.command.destination.context)
@@ -123,18 +126,21 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy {
                                     )));
                                 }
                             }
-                            Err(_) => transfer.progress.status = ResponseStatus::WriteFault,
+                            Err(error) => transfer
+                                .progress
+                                .fail_access(error, PageFaultKindsAccess::DestinationWrite),
                         }
                     }
                     _ => transfer.progress.status = ResponseStatus::InvalidLength,
                 }
             }
             ResponseStatus::InvalidLength
-            | ResponseStatus::ReadFault
-            | ResponseStatus::WriteFault
+            | ResponseStatus::PageFault
+            | ResponseStatus::ReadError
+            | ResponseStatus::WriteError
             | ResponseStatus::LengthMismatch
-            | ResponseStatus::ListReadFault => {}
+            | ResponseStatus::ListReadError => {}
         }
-        StepOutcome::Complete(Ok(ControlFlow::Break(transfer.progress.response())))
+        StepOutcome::Complete(transfer.progress.response().map(ControlFlow::Break))
     }
 }

@@ -50,19 +50,19 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
                 };
                 if let Some(cursor) = cursor {
                     match cursor.next_segment(&context.memory_for(progress.command.sg_context)) {
-                        Ok(Some(_)) => {}
-                        Ok(None) => progress.status = ResponseStatus::LengthMismatch,
+                        Ok(true) => {}
+                        Ok(false) => progress.status = ResponseStatus::LengthMismatch,
                         Err(status) => progress.status = status,
                     }
                     return StepOutcome::Progressed;
                 }
                 let Some(address) = progress.source.address() else {
-                    progress.status = ResponseStatus::ReadFault;
+                    progress.status = ResponseStatus::ReadError;
                     return StepOutcome::Progressed;
                 };
                 source = address;
                 let Some(address) = progress.destination.address() else {
-                    progress.status = ResponseStatus::WriteFault;
+                    progress.status = ResponseStatus::WriteError;
                     return StepOutcome::Progressed;
                 };
                 destination = address;
@@ -75,11 +75,12 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
                     .min(COPY_CHUNK_BYTES);
             }
             ResponseStatus::Success
+            | ResponseStatus::PageFault
             | ResponseStatus::InvalidLength
-            | ResponseStatus::ReadFault
-            | ResponseStatus::WriteFault
+            | ResponseStatus::ReadError
+            | ResponseStatus::WriteError
             | ResponseStatus::LengthMismatch
-            | ResponseStatus::ListReadFault => {}
+            | ResponseStatus::ListReadError => {}
         }
         state.take().map_or(StepOutcome::Exhausted, |progress| {
             StepOutcome::Complete(Ok(Transfer {

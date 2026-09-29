@@ -117,6 +117,7 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     }
     memory.write(0x1600.into(), MemoryAlignment::ONE, &[1, 3, 5, 7])?;
     let normal = Command {
+        copy_length: 4,
         id: 1,
         flags: CompletionFlagsValues { ioc: false },
         sg_context: 0,
@@ -138,9 +139,9 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     }
     let copied: [u8; 4] = memory.read_typed(0x1700.into(), MemoryAlignment::ONE)?;
     assert_eq!(copied, [1, 3, 5, 7]);
-    let response_bytes: [u8; Response::RECORD_SIZE] =
+    let response_bytes: pdma_model_contract::dma::ResponseRaw =
         memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
-    let response = Response::from_bytes(&response_bytes)?;
+    let response = Response::from_bytes(response_bytes.as_ref())?;
     assert_eq!((response.id, response.status), (1, ResponseStatus::Success));
     {
         let accesses = dma.memory.accesses.borrow();
@@ -182,6 +183,7 @@ fn abort_with_full_response_ring_has_no_sg_payload_response_or_irq_effects()
     let base = channel.register_offset(1).ok_or("channel layout")?;
     let responses = base + ChannelBlock::RESPONSE.offset();
     let target = Command {
+        copy_length: normal.copy_length,
         id: 2,
         flags: CompletionFlagsValues { ioc: true },
         sg_context: 7,

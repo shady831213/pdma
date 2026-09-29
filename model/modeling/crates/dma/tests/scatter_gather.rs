@@ -5,6 +5,7 @@ pub mod support;
 
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{Command, Endpoint, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use support::{TestResult, run, setup, submit};
 
 fn write_segments(memory: &SharedMemory, base: u64, segments: &[Segment]) -> TestResult {
@@ -19,11 +20,11 @@ fn write_segments(memory: &SharedMemory, base: u64, segments: &[Segment]) -> Tes
 }
 
 fn response(memory: &SharedMemory) -> Result<Response, Box<dyn std::error::Error>> {
-    let bytes = memory.read_typed::<[u8; Response::RECORD_SIZE]>(
+    let bytes = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
         MemoryAddress::new(0x1100),
         MemoryAlignment::ONE,
     )?;
-    Ok(Response::from_bytes(&bytes)?)
+    Ok(Response::from_bytes(bytes.as_ref())?)
 }
 
 #[test]
@@ -72,17 +73,18 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
         let source = if gather {
             Endpoint::scatter_gather(0x1400, 3)
         } else {
-            Endpoint::linear(0x1200, 8)
+            Endpoint::linear(0x1200, 0)
         };
         let destination = if scatter {
             Endpoint::scatter_gather(0x1500, 2)
         } else {
-            Endpoint::linear(0x1300, 8)
+            Endpoint::linear(0x1300, 0)
         };
         submit(
             &mut device,
             &memory,
             Command {
+                copy_length: 8,
                 sg_context: 0,
                 flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
@@ -115,7 +117,7 @@ fn independent_endpoint_modes_copy_across_different_boundaries() -> TestResult {
                 flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::Success,
-                bytes_completed: 8
+                info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
             }
         );
         assert!(device.irq());
@@ -136,11 +138,12 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
         &mut device,
         &memory,
         Command {
+            copy_length: 769,
             sg_context: 0,
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 8,
-            source: Endpoint::linear(0x1400, 769),
-            destination: Endpoint::linear(0x1800, 769),
+            source: Endpoint::linear(0x1400, 0),
+            destination: Endpoint::linear(0x1800, 0),
         },
     )?;
     // When: hardware executes through multiple copy iterations.
@@ -155,7 +158,9 @@ fn scratch_buffer_size_does_not_limit_command_length() -> TestResult {
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 8,
             status: ResponseStatus::Success,
-            bytes_completed: 769
+            info: ResponseInfoValues::Success(CompletionInfo {
+                bytes_completed: 769
+            }),
         }
     );
     Ok(())
@@ -184,11 +189,12 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
         &mut device,
         &memory,
         Command {
+            copy_length: 4,
             sg_context: 0,
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 5,
             source: Endpoint::scatter_gather(0x1400, 2),
-            destination: Endpoint::linear(0x1202, 4),
+            destination: Endpoint::linear(0x1202, 0),
         },
     )?;
     // When: hardware processes the stream without detecting or rejecting overlap.
@@ -204,7 +210,7 @@ fn overlapping_segments_follow_execution_order() -> TestResult {
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 5,
             status: ResponseStatus::Success,
-            bytes_completed: 4
+            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
         }
     );
     Ok(())

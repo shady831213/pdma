@@ -9,7 +9,8 @@ use crate::{
     software,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelFaultCode, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{ChannelFatalCode, Response, ResponseStatus, Segment};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 
 async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Vec<Segment>> {
     let injection = if response_fault {
@@ -20,7 +21,7 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
     let report = harness::run(injection, input).await?;
     let software::Outcome {
         response,
-        fault,
+        fatal,
         destination,
     } = report.program?;
     assert!(report.worker.is_cancelled());
@@ -47,9 +48,9 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
     assert_eq!(report.summary.deliveries(), 1);
     assert!(!report.irq);
     if response_fault {
-        assert_eq!(fault, ChannelFaultCode::ResponseWrite);
+        assert_eq!(fatal, ChannelFatalCode::ResponseWrite);
         assert_eq!(response, None);
-        println!("fault: copied={copied:?}, sticky_fault={fault:?}, IRQ handled and masked");
+        println!("fatal: copied={copied:?}, sticky_fault={fatal:?}, IRQ handled and masked");
     } else {
         assert_eq!(
             response,
@@ -57,10 +58,12 @@ async fn copy(response_fault: bool, input: software::Input<'_>) -> TestResult<Ve
                 flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::Success,
-                bytes_completed: u64::try_from(input.data.len())?
+                info: ResponseInfoValues::Success(CompletionInfo {
+                    bytes_completed: u64::try_from(input.data.len())?
+                }),
             })
         );
-        assert_eq!(fault, ChannelFaultCode::None);
+        assert_eq!(fatal, ChannelFatalCode::None);
         println!("copy: copied={copied:?}, response={response:?}, IRQ handled and cleared");
     }
     Ok(destination)

@@ -56,11 +56,14 @@ byte-access capabilities, without memory ownership or allocation authority.
 
 | Location | Responsibility |
 | --- | --- |
-| `crates/contract/src/dma/record.rs` | Generated Segment, Endpoint, Command and Response wire records. |
+| `crates/contract/src/dma.rs` | Public DMA contract facade; explicit exports from the owning modules. |
+| `crates/contract/src/dma/command.rs` | Command descriptors and command-requested completion flags. |
+| `crates/contract/src/dma/endpoint.rs` | Payload endpoint geometry, SG segments and typed positions. |
+| `crates/contract/src/dma/response.rs` | Completion records, status-specific information and fault continuations. |
 | `crates/contract/src/register.rs` | Register types shared by DMA and management hardware. |
-| `crates/contract/src/dma.rs` | DMA discovery and contiguous administration, followed by page-aligned channel data blocks. |
-| `crates/contract/src/dma/{channel,queue}.rs` | Channel-owned contracts and command/response ring registers. |
-| `crates/contract/src/dma/access.rs` | Context selectors and channel/context sideband emitted by DMA. |
+| `crates/contract/src/dma/registers.rs` | DMA discovery and administration schemas, composed into the top-level register map. |
+| `crates/contract/src/dma/registers/channel.rs` | Channel control/IRQ schemas and command/response ring register maps. |
+| `crates/contract/src/dma/access.rs` | Channel/context selectors and outgoing DMA sideband; channel address helpers use the register layout. |
 | `crates/contract/src/hw_components/windows.rs` | Peripheral channel ownership, access-window control and Host readiness maps. |
 | `crates/contract/src/hw_components/context.rs` | Peripheral context table and firmware maintenance registers. |
 | `crates/contract/src/hw_components/control.rs` | Hardware bootstrap, activation and bidirectional doorbells. |
@@ -89,13 +92,13 @@ byte-access capabilities, without memory ownership or allocation authority.
 | `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
 | `crates/dma/src/routing.rs` | Generation-bound response destination policy. |
 | `crates/dma/src/execution.rs` | Retained copy progress and chunk payload. |
-| `crates/dma/src/execution/validate.rs` | Incremental endpoint-total validation. |
+| `crates/dma/src/execution/validate.rs` | Incremental selected-range validation. |
 | `crates/dma/src/execution/cursor.rs` | Shared linear/SG endpoint traversal. |
 | `crates/dma/src/execution/next.rs` | Select the next chunk across independent boundaries. |
 | `crates/dma/src/execution/copy.rs` | Composable chunk read/write transforms. |
 | `crates/software/src/dma.rs` | Shared DMA driver configuration, submit and response consumption; reexported by Host. |
 | `crates/host/src/runtime.rs` | PDMA transport: async context access, worker wakeup and pending notification delivery. |
-| `crates/software/src/dma/control.rs` | Shared CPU-checked discovery, fault, IRQ and register-only reset access. |
+| `crates/software/src/dma/control.rs` | Shared discovery, fatal, IRQ and register-only reset access. |
 | `crates/dma/src/reset.rs` | Channel-bound task guards around the composed stages. |
 | `crates/dma/src/reset/control.rs` | Reset completion after affected accepted work retires. |
 | `crates/hardware-interface-runtime/src/interrupt/runtime.rs` | CPU-bound software execution, ISR registration and dispatcher lifetime. |
@@ -111,7 +114,7 @@ composition is deliberately explicit:
 
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-let execution = Then::new(CheckLengths, Repeat::new(chunk));
+let execution = Then::new(CheckRanges, Repeat::new(chunk));
 Then::new(
     Then::new(device.intake(), Resettable::new(AfterEach::new(execution, UpdateIrq))),
     device.responses(),
@@ -257,19 +260,26 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   enable, including across disable/re-enable. Software owns allocation and ensures
   rings and payload have appropriate backing and do not alias unintentionally.
 - Generated commands contain an ID and two independent endpoints. Each endpoint is
-  either Linear(address,length) or ScatterGather(list_address,count). Segment records
+  either Linear(address,offset) or ScatterGather(list_address,count) with an explicit
+  start index and local offset. One command copy_length selects both ranges. Segment records
   contain address/length; ring and list storage uses generated size/alignment metadata,
   while payloads require only byte alignment. See `include/README.md` for the current ABI.
-- Hardware first traverses both descriptions and sums lengths with checked arithmetic.
-  Mismatched totals return `LengthMismatch` before payload reads or writes. List read
-  failures return `ListReadFault`; length/list-address arithmetic overflow returns
+- Hardware validates both selected ranges before payload reads or writes, starting
+  directly at each selected SG entry. Unused prefix/suffix entries are not scanned.
+  Insufficient selected capacity returns `LengthMismatch`; backing totals need not match.
+  List read failures return `ListReadError`; invalid positions or selected-range overflow return
   `InvalidLength`. Software keeps SG descriptors stable across validation and execution;
   hardware retains only the current segment and cursor, not a snapshot of each list.
 - Copy iterations use the smaller of the current source remainder, destination remainder,
   command remainder and 256-byte scratch capacity. This scratch size is not a protocol
   limit; there is no additional segment-count/total-length bound. Zero-length segments
-  are skipped, zero counts do not read a list, and a zero-total command touches no payload.
-- Payload failures return `ReadFault` or `WriteFault` and stop further copying. One
+  are skipped, zero counts do not read a list, and a zero-length command touches no list or payload.
+- Explicitly repairable payload translation misses return `PageFault` without halting.
+  The response supplies fault address/access role and both continuation positions;
+  software repairs and resubmits, retaining ID/context bindings. DMA stores no suspended
+  task. A failed PageFault access must not leave externally committed writes from that
+  call. See [pageable-copy requirements](docs/page-fault-recovery.md).
+- Other payload failures return `ReadError` or `WriteError` and stop further copying. One
   response reports bytes_completed from successful writes; earlier writes are not rolled
   back. Overlap is neither detected nor rejected. Later reads observe earlier writes
   according to actual chunk order; there is no whole-transfer memmove guarantee.
@@ -278,10 +288,10 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   With one in-flight command, a free response slot cannot be taken by another command
   before publication. The composable Publish stage still retains a response if driven
   independently against a full ring.
-- Command fetch failure latches fault code 1 without consuming the command. Response
+- Command fetch failure latches fatal code 1 without consuming the command. Response
   publication failure latches code 2 without advancing response producer. Payload
   copy may already have completed in the latter case; software must not assume retry
-  is safe. No event ring or memory write is needed to expose the fault.
+  is safe. No event ring or memory write is needed to expose the fatal.
 - Successful publication notifies on response empty-to-non-empty transitions and,
   independently, when the command's IOC flag is set. `irq_mask` bit 0 masks the
   first source and bit 1 masks IOC; one means masked. Both masks reset to zero.
@@ -291,7 +301,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   unconsumed IOC response exists, bit 2 is sticky response-error stop, bit 3 is
   channel fatal. IOC clears when consumer passes the latest IOC response, even if
   ordinary responses remain. Causes are visible regardless of notification masks.
-  There is no W1C ACK or exposed IOC task pointer. Error responses and new channel
+  There is no W1C ACK or exposed IOC task pointer. Stopping error responses and new channel
   fatal events bypass the two routine masks, including when response is already non-empty.
 - Device-side unmask/enabling never replays historical events. Software must check
   responses and errors after enabling before it waits. Software drains through fresh
@@ -306,7 +316,7 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   work retires. Writing zero is ignored; repeated requests coalesce. Busy scopes reject
   configuration writes with `Error::ResetInProgress`, while reads remain available.
   Completion clears channel configuration, pointers, causes and retained work; device
-  reset also clears device-wide fault and controls and preserves `channel_num`.
+  reset also clears device-wide fatal and controls and preserves `channel_num`.
   The host reset methods consume their driver and poll for zero before returning success;
   software then creates fresh drivers through setup. A cancelled wait or caller timeout
   is not completion: affected memory must stay valid until completion is observed.
@@ -326,9 +336,9 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   autonomous shared-engine fault source, and memory-backend diagnostics are not
   automatically promoted to device-wide fatal.
 
-`ChannelRegisters.fault` uses the dedicated `ChannelFault` register schema. Its
-`code` field is `ChannelFaultCode::{None, CommandRead, ResponseWrite}` with wire
-values 0, 1 and 2. Host `Channel::fault()` returns this enum and rejects unknown
+`ChannelRegisters.fatal` uses the dedicated `ChannelFatal` register schema. Its
+`code` field is `ChannelFatalCode::{None, CommandRead, ResponseWrite}` with wire
+values 0, 1 and 2. Host `Channel::fatal()` returns this enum and rejects unknown
 encodings. Hardware updates the generated field directly; enum values and their
 descriptions are also exported to the C header from the same schema metadata.
 

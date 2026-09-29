@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
-use pdma_model_dma::{Dma, Error, Fault};
+use pdma_model_dma::{ChannelFatal, Dma, Error};
 use support::{TestResult, command, read_word, run, setup, submit};
 
 const COMMAND: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -19,7 +19,7 @@ const CHANNEL: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset();
 const ENABLE: usize = CHANNEL + ChannelRegisters::ENABLE.offset();
 const IRQ_ENABLE: usize = CHANNEL + ChannelRegisters::IRQ_ENABLE.offset();
-const FAULT: usize = CHANNEL + ChannelRegisters::FAULT.offset();
+const FAULT: usize = CHANNEL + ChannelRegisters::FATAL.offset();
 const PRODUCER: usize = COMMAND + CommandRegisters::PRODUCER.offset();
 const CONSUMER: usize = RESPONSE + ResponseRegisters::CONSUMER.offset();
 const COMMAND_CONSUMER: usize = COMMAND + CommandRegisters::CONSUMER.offset();
@@ -156,7 +156,7 @@ fn unmask_does_not_replay_command_read_fault() -> TestResult {
     assert!(!device.irq());
     assert_eq!(
         read_word(&mut device, FAULT)?,
-        Fault::CommandRead.code().raw()
+        ChannelFatal::CommandRead.code().raw()
     );
     assert_eq!(read_word(&mut device, COMMAND_CONSUMER)?, 0);
     assert_eq!(read_word(&mut device, RESPONSE_PRODUCER)?, 0);
@@ -173,7 +173,7 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
         &mut device,
         &memory,
         Command {
-            destination: Endpoint::linear(0x8000, 4),
+            destination: Endpoint::linear(0x8000, 0),
             ..command()
         },
     )?;
@@ -184,7 +184,7 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
     memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
     assert_eq!(
         Response::from_bytes(&bytes)?.status,
-        ResponseStatus::WriteFault
+        ResponseStatus::WriteError
     );
     assert!(device.irq());
     assert_eq!(read_word(&mut device, FAULT)?, 0);
@@ -195,7 +195,7 @@ fn destination_fault_is_a_failed_completion() -> TestResult {
 fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> TestResult {
     for (length, status) in [
         (0, ResponseStatus::Success),
-        (257, ResponseStatus::ReadFault),
+        (257, ResponseStatus::ReadError),
     ] {
         // Given
         let (mut device, memory) = setup(0x1100, 2)?;
@@ -203,8 +203,9 @@ fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> Te
             &mut device,
             &memory,
             Command {
-                source: Endpoint::linear(u64::MAX, length),
-                destination: Endpoint::linear(u64::MAX, length),
+                copy_length: length,
+                source: Endpoint::linear(0x8000, 0),
+                destination: Endpoint::linear(0x9000, 0),
                 ..command()
             },
         )?;
@@ -215,7 +216,7 @@ fn zero_length_skips_payload_and_longer_copy_reports_inaccessible_source() -> Te
         memory.read(MemoryAddress::new(0x1100), MemoryAlignment::ONE, &mut bytes)?;
         let response = Response::from_bytes(&bytes)?;
         assert_eq!(
-            (response.id, response.status, response.bytes_completed),
+            (response.id, response.status, response.bytes_completed()),
             (7, status, 0)
         );
         assert!(device.irq());

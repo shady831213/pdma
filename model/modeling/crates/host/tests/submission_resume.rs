@@ -81,6 +81,7 @@ async fn cancelled_committed_submission_resumes_without_republication()
         ))
         .await?;
     let command = Command {
+        copy_length: 0,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 41,

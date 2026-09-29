@@ -1,5 +1,5 @@
 use super::{
-    Channel, ChannelConfig, ChannelIrqMaskValues, ChannelRegisters, DmaFaultCode, Model,
+    Channel, ChannelConfig, ChannelIrqMaskValues, ChannelRegisters, DmaFatalCode, Model,
     RegisterAccess, SoftwareCpu, fixture,
 };
 use hardware_interface_runtime::{CpuAccessError, CpuContextError};
@@ -29,10 +29,10 @@ async fn control_operations_can_run_on_another_cpu() -> Result<(), Box<dyn std::
         .await?;
     other.run_main(channel.set_dma_irq_enabled(true)).await?;
     let cause = other.run_main(channel.irq_cause()).await?;
-    let fault = other.run_main(channel.dma_fault()).await?;
+    let fault = other.run_main(channel.dma_fatal()).await?;
     // Then: register effects and returned hardware state do not depend on the setup CPU.
     assert_eq!(cause.raw(), 0);
-    assert_eq!(fault, DmaFaultCode::None);
+    assert_eq!(fault, DmaFatalCode::None);
     let mut mask = [0; 4];
     model
         .read(

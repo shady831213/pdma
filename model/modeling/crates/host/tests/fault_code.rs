@@ -23,7 +23,7 @@ impl RegisterAccess for CorruptFaultBus {
             == Some(
                 (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
                     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
-                    + ChannelRegisters::FAULT.offset(),
+                    + ChannelRegisters::FATAL.offset(),
             )
         {
             response.copy_from_slice(&3_u32.to_le_bytes());
@@ -59,7 +59,7 @@ async fn unknown_fault_is_a_codec_error() -> Result<(), Box<dyn std::error::Erro
         )
         .await?;
         // When: software reads the fault as a typed state.
-        let result = channel.fault().await;
+        let result = channel.fatal().await;
         // Then: unknown is reported explicitly rather than returned as a normal state.
         assert!(matches!(
             result,

@@ -18,17 +18,16 @@ mod tests;
 pub use arbitration::RoundRobin;
 pub use build::BuildError;
 pub use channel::{Channel, CommandRing, ResponseRing};
-pub use error::{Error, Fault};
+pub use error::{ChannelFatal, Error};
 pub use execution::{
-    COPY_CHUNK_BYTES, CheckLengths, CopyState, LengthCheck, NextChunk, ReadCopy, Transfer,
-    WriteCopy,
+    COPY_CHUNK_BYTES, CheckRanges, CopyState, NextChunk, RangeCheck, ReadCopy, Transfer, WriteCopy,
 };
 pub use fetch::Fetch;
 use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::ChannelContext;
 use pdma_model_contract::dma::{
-    ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFaultCode,
+    ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
     DmaRegistersLayout, EndpointMode, ResetValues,
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
@@ -113,14 +112,14 @@ impl<M, S> Dma<M, S> {
 
     /// Signals a device-wide internal hardware fault, never a software bus command.
     pub fn signal_fatal(&mut self) {
-        if self.control.values.fault.code() == Ok(DmaFaultCode::None) {
-            self.control.values.fault = self.control.values.fault.with_code(DmaFaultCode::Internal);
+        if self.control.values.fatal.code() == Ok(DmaFatalCode::None) {
+            self.control.values.fatal = self.control.values.fatal.with_code(DmaFatalCode::Internal);
             self.interrupt |= self.control.values.irq_enable.raw() != 0;
         }
     }
 
     pub(crate) fn halted(&self) -> bool {
-        self.control.values.fault.code() != Ok(DmaFaultCode::None)
+        self.control.values.fatal.code() != Ok(DmaFatalCode::None)
     }
 
     pub(crate) fn resetting(&self) -> bool {

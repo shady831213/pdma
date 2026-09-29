@@ -4,6 +4,8 @@
 pub mod contexts;
 pub mod functions;
 pub mod multi;
+/// Pageable-memory platform assembly for recovery scenarios.
+pub mod page_fault;
 pub mod program;
 pub mod runtime;
 

@@ -20,7 +20,7 @@ on that same channel:
 - `copy_accepts_a_byte_aligned_destination`: a nine-byte payload is copied into
   a destination that is not eight-byte aligned, with normal response and IRQ delivery.
 - `response_write_fault_reaches_host_without_a_response_entry`: the copy completes,
-  response publication fails, and the host observes `ChannelFaultCode::ResponseWrite`
+  response publication fails, and the host observes `ChannelFatalCode::ResponseWrite`
   through IRQ delivery without needing a response entry.
 - `software_setup_failure_stops_interrupt_runtime`: an unmapped command buffer
   fails submission before ISR registration, and the runtime returns without hanging.

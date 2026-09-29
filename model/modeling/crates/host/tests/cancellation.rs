@@ -8,6 +8,7 @@ use hardware_interface_runtime::{
     SharedMemoryAllocator, SoftwareCpu,
 };
 use pdma_model_contract::dma::{Command, CommandRegisters, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -58,11 +59,12 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 8,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 11,
-        source: Endpoint::linear(source.raw(), 8),
-        destination: Endpoint::linear(destination.raw(), 8),
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
@@ -96,7 +98,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 11,
             status: ResponseStatus::Success,
-            bytes_completed: 8,
+            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
         })
     );
     assert_eq!(cpu.run_main(channel.response()).await?, None);

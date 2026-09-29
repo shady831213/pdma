@@ -3,6 +3,7 @@
 pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_contract::dma::{Response, ResponseRegisters, ResponseStatus};
 use pdma_model_dma::Dma;
 use pdma_model_dma::Pipeline;
@@ -36,7 +37,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
                     flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                     id: 7,
                     status: ResponseStatus::Success,
-                    bytes_completed: 4,
+                    info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
                 }
             );
         }

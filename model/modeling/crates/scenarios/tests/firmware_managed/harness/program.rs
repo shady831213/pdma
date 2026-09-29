@@ -6,6 +6,8 @@ pub mod contexts;
 pub mod functions;
 mod interrupts;
 pub mod multi;
+/// Host-owned page repair and DMA continuation scenario.
+pub mod page_fault;
 pub mod transfer;
 
 use super::runtime::{AccessError, HostBus, HostIrq, HostVector};

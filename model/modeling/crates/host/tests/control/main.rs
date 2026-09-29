@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
 };
 use pdma_model_contract::dma::{
     ChannelIrqMaskValues, ChannelRegisters, Command, CompletionFlagsValues, DmaControl,
-    DmaFaultCode, Endpoint, Response,
+    DmaFatalCode, Endpoint, Response,
 };
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
@@ -158,6 +158,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::new(3)))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 0,
         sg_context: 0,
         flags: CompletionFlagsValues { ioc: true },
         id: 7,
@@ -187,7 +188,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
 }
 
 #[tokio::test]
-async fn dma_fault_is_visible_after_unmask_without_replaying_notification()
+async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: software has masked the independent device-fatal gate.
     let (device, memory, rings) = fixture()?;
@@ -216,8 +217,8 @@ async fn dma_fault_is_visible_after_unmask_without_replaying_notification()
     // Then: the sticky fault is visible without replay and device reset permits recovery.
     assert!(!model.irq());
     assert_eq!(
-        cpu.run_main(channel.dma_fault()).await?,
-        DmaFaultCode::Internal
+        cpu.run_main(channel.dma_fatal()).await?,
+        DmaFatalCode::Internal
     );
     with_idle_hardware(&model, cpu.run_main(channel.reset_dma())).await?;
     let channel = cpu
@@ -230,6 +231,6 @@ async fn dma_fault_is_visible_after_unmask_without_replaying_notification()
             },
         ))
         .await?;
-    assert_eq!(cpu.run_main(channel.dma_fault()).await?, DmaFaultCode::None);
+    assert_eq!(cpu.run_main(channel.dma_fatal()).await?, DmaFatalCode::None);
     Ok(())
 }

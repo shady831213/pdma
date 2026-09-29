@@ -1,21 +1,21 @@
-use pdma_model_contract::dma::ChannelFaultCode;
+use pdma_model_contract::dma::ChannelFatalCode;
 use std::fmt::{self, Display, Formatter};
 
-/// Sticky channel faults cleared only by channel or device reset.
+/// Sticky channel fatal failures cleared only by channel or device reset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Fault {
+pub enum ChannelFatal {
     /// The command ring could not be read.
     CommandRead,
     /// A completion record could not be written.
     ResponseWrite,
 }
 
-impl Fault {
-    /// Value latched in the channel's fault register.
-    pub const fn code(self) -> ChannelFaultCode {
+impl ChannelFatal {
+    /// Value latched in the channel's fatal register.
+    pub const fn code(self) -> ChannelFatalCode {
         match self {
-            Self::CommandRead => ChannelFaultCode::CommandRead,
-            Self::ResponseWrite => ChannelFaultCode::ResponseWrite,
+            Self::CommandRead => ChannelFatalCode::CommandRead,
+            Self::ResponseWrite => ChannelFatalCode::ResponseWrite,
         }
     }
 }
@@ -41,9 +41,9 @@ pub enum Error {
     Configuration,
     /// Producer or consumer advancement exceeds available entries.
     Cursor,
-    /// A hardware fault was latched during this operation.
-    Fault(Fault),
-    /// The channel remains stopped after an earlier hardware fault.
+    /// A hardware fatal was latched during this operation.
+    ChannelFatal(ChannelFatal),
+    /// The channel remains stopped after a stopping response error or hardware fatal.
     Halted,
     /// Hardware reset invalidated this retained operation before another interaction.
     Reset,

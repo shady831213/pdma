@@ -2,11 +2,13 @@ use crate::harness::runtime::AccessError;
 use crate::harness::{self, Input, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{CompletionFlagsValues, Response, ResponseStatus};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use std::sync::Arc;
 
 mod contexts;
 mod functions;
 mod multi;
+mod page_fault;
 
 #[tokio::test(flavor = "current_thread")]
 async fn relocated_platform_runs_the_same_host_and_firmware_programs() -> TestResult {
@@ -57,7 +59,9 @@ async fn firmware_opens_access_for_the_same_host_program_and_real_irq_copy() -> 
             id: 37,
             status: ResponseStatus::Success,
             flags: CompletionFlagsValues::default(),
-            bytes_completed: u64::try_from(payload.len())?,
+            info: ResponseInfoValues::Success(CompletionInfo {
+                bytes_completed: u64::try_from(payload.len())?
+            }),
         }
     );
     let mut copied = vec![0; payload.len()];

@@ -12,6 +12,7 @@ use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::{Dma, Pipeline};
 use std::{cell::RefCell, ops::Range};
 
@@ -133,11 +134,12 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     // Given
     let mut device = Dma::new(FlatMemory::new()?, 1)?;
     let command = Command {
+        copy_length: 4,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 91,
-        source: Endpoint::linear(256, 4),
-        destination: Endpoint::linear(320, 4),
+        source: Endpoint::linear(256, 0),
+        destination: Endpoint::linear(320, 0),
     };
     device.memory.write(
         MemoryAddress::new(0),
@@ -209,7 +211,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 91,
             status: ResponseStatus::Success,
-            bytes_completed: 4,
+            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 4 }),
         }
     );
     assert!(device.irq());

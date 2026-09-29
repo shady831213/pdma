@@ -17,8 +17,9 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     let (mut dma, memory) = support::setup(0x1100, 2)?;
     memory.write(MemoryAddress::new(0x1200), MemoryAlignment::ONE, &[7; 512])?;
     let mut command = support::command();
-    command.source = Endpoint::linear(0x1200, 512);
-    command.destination = Endpoint::linear(0x1600, 512);
+    command.copy_length = 512;
+    command.source = Endpoint::linear(0x1200, 0);
+    command.destination = Endpoint::linear(0x1600, 0);
     support::submit(&mut dma, &memory, command)?;
     let mut pipeline = dma.command_loop();
     let mut operation = Operation::new(());

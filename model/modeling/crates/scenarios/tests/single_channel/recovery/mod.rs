@@ -5,7 +5,8 @@ mod software;
 
 use crate::harness::TestResult;
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelFaultCode, CompletionFlagsValues, Response, ResponseStatus};
+use pdma_model_contract::dma::{ChannelFatalCode, CompletionFlagsValues, Response, ResponseStatus};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 
 #[derive(Clone, Copy, Debug)]
 enum Scenario {
@@ -30,7 +31,9 @@ async fn recovery_batch_last_ioc_notifies_once_and_drains_all_responses() -> Tes
                 id: 40 + u64::try_from(index)?,
                 status: ResponseStatus::Success,
                 flags: CompletionFlagsValues { ioc: index == 2 },
-                bytes_completed: u64::try_from(payload.len())?,
+                info: ResponseInfoValues::Success(CompletionInfo {
+                    bytes_completed: u64::try_from(payload.len())?
+                }),
             }
         );
     }
@@ -66,17 +69,19 @@ async fn recovery_error_irq_allows_channel_reset_and_next_copy_in_same_runtime()
                 id: 41,
                 status: ResponseStatus::LengthMismatch,
                 flags: CompletionFlagsValues::default(),
-                bytes_completed: 0,
+                info: ResponseInfoValues::LengthMismatch(CompletionInfo { bytes_completed: 0 }),
             },
             Response {
                 id: 42,
                 status: ResponseStatus::Success,
                 flags: CompletionFlagsValues::default(),
-                bytes_completed: u64::try_from(payload.len())?,
+                info: ResponseInfoValues::Success(CompletionInfo {
+                    bytes_completed: u64::try_from(payload.len())?
+                }),
             },
         ]
     );
-    assert_eq!(report.outcome.fault, ChannelFaultCode::None);
+    assert_eq!(report.outcome.fatal, ChannelFatalCode::None);
     assert_eq!(report.outcome.causes.len(), 2);
     let first = report.outcome.causes.first().ok_or("missing error cause")?;
     assert!(first.response_error());

@@ -7,7 +7,8 @@ use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
 };
-use pdma_model_contract::dma::{ChannelFaultCode, Command, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{ChannelFatalCode, Command, Endpoint, Response, ResponseStatus};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::Dma;
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model};
 use std::sync::Arc;
@@ -51,6 +52,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 0,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 13,
@@ -69,7 +71,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 13,
         status: ResponseStatus::Success,
-        bytes_completed: 0,
+        info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
     };
     let mut corrupted = expected.to_bytes()?;
     *corrupted.get_mut(8).ok_or("response status byte missing")? = 255;
@@ -143,11 +145,12 @@ async fn copy_completes_when_host_submits_and_consumes_response()
 
     // When: a real async worker executes the submitted command.
     cpu.run_main(channel.submit(Command {
+        copy_length: 8,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 7,
-        source: Endpoint::linear(source.raw(), 8),
-        destination: Endpoint::linear(destination.raw(), 8),
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
     assert!(executor.run(&mut stage, &mut operation).await.is_ok());
@@ -162,7 +165,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 7,
             status: ResponseStatus::Success,
-            bytes_completed: 8,
+            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 8 }),
         })
     );
     let mut copied = [0; 8];
@@ -210,11 +213,12 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         ))
         .await?;
     cpu.run_main(channel.submit(Command {
+        copy_length: 8,
         sg_context: 0,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
         id: 9,
-        source: Endpoint::linear(source.raw(), 8),
-        destination: Endpoint::linear(destination.raw(), 8),
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
     let mut operation = Operation::new(());
@@ -223,20 +227,20 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     // When: response publication fails at the real memory boundary.
     assert!(executor.run(&mut stage, &mut operation).await.is_err());
 
-    // Then: the notification is claimed once while the fault remains visible through masking.
+    // Then: the notification is claimed once while the fatal remains visible through masking.
     model.wait_ready().await?;
     assert!(model.claim(()).await?.is_some());
     assert_eq!(
-        cpu.run_main(channel.fault()).await?,
-        ChannelFaultCode::ResponseWrite
+        cpu.run_main(channel.fatal()).await?,
+        ChannelFatalCode::ResponseWrite
     );
     assert_eq!(cpu.run_main(channel.response()).await?, None);
     cpu.run_main(channel.set_irq_enabled(false)).await?;
     assert!(model.claim(()).await?.is_none());
     assert!(!model.irq());
     assert_eq!(
-        cpu.run_main(channel.fault()).await?,
-        ChannelFaultCode::ResponseWrite
+        cpu.run_main(channel.fatal()).await?,
+        ChannelFatalCode::ResponseWrite
     );
     Ok(())
 }

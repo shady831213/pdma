@@ -1,4 +1,4 @@
-use crate::{Error, Fault};
+use crate::{ChannelFatal, Error};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Decode, RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{Command, CommandRaw, CommandRegisters};
@@ -84,7 +84,10 @@ impl CommandRing {
         )
     }
 
-    pub(crate) fn pop(&mut self, memory: &impl MemoryAccess) -> Result<Option<Command>, Fault> {
+    pub(crate) fn pop(
+        &mut self,
+        memory: &impl MemoryAccess,
+    ) -> Result<Option<Command>, ChannelFatal> {
         let command = self.peek(memory)?;
         if command.is_some() {
             self.consume()?;
@@ -92,26 +95,26 @@ impl CommandRing {
         Ok(command)
     }
 
-    pub(crate) fn peek(&self, memory: &impl MemoryAccess) -> Result<Option<Command>, Fault> {
+    pub(crate) fn peek(&self, memory: &impl MemoryAccess) -> Result<Option<Command>, ChannelFatal> {
         let pointers = self.pointers();
         if pointers.is_empty() {
             return Ok(None);
         }
         let address = MemoryAddress::new(
             self.entry(pointers.consumer)
-                .map_err(|_| Fault::CommandRead)?,
+                .map_err(|_| ChannelFatal::CommandRead)?,
         );
         let raw = memory
             .read_typed::<CommandRaw>(address, MemoryAlignment::ONE)
-            .map_err(|_| Fault::CommandRead)?;
-        let command = raw.decode().map_err(|_| Fault::CommandRead)?;
+            .map_err(|_| ChannelFatal::CommandRead)?;
+        let command = raw.decode().map_err(|_| ChannelFatal::CommandRead)?;
         Ok(Some(command))
     }
 
-    pub(crate) fn consume(&mut self) -> Result<(), Fault> {
+    pub(crate) fn consume(&mut self) -> Result<(), ChannelFatal> {
         let next = self
             .advance_consumer(self.pointers(), 1)
-            .map_err(|_| Fault::CommandRead)?;
+            .map_err(|_| ChannelFatal::CommandRead)?;
         self.registers.values.consumer = ReadWordValues::new(next.consumer);
         Ok(())
     }

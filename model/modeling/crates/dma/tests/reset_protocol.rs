@@ -8,6 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     ResponseRegisters,
 };
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::{Dma, Error, ResetControl};
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -40,7 +41,7 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
                 id: command.id,
                 flags: command.flags,
                 status: pdma_model_contract::dma::ResponseStatus::Success,
-                bytes_completed: 0,
+                info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
             });
     device.write(RESET, &1_u32.to_le_bytes())?;
     let mut responses = device.responses();

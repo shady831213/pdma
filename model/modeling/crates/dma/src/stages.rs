@@ -1,5 +1,5 @@
 use crate::{
-    ChannelContext, CheckLengths, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
+    ChannelContext, CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
     ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
@@ -44,15 +44,15 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for Publish {
                 StepOutcome::Complete(Ok(()))
             }
             Ok(false) => StepOutcome::Pending(()),
-            Err(fault) => {
-                context.channel.latch(fault);
-                StepOutcome::Complete(Err(Error::Fault(fault)))
+            Err(fatal) => {
+                context.channel.latch(fatal);
+                StepOutcome::Complete(Err(Error::ChannelFatal(fatal)))
             }
         }
     }
 }
 
-/// Refresh observable IRQ causes from queue-owned response and fault state.
+/// Refresh observable IRQ causes from queue-owned response and fatal state.
 #[derive(Debug, Default)]
 pub struct UpdateIrq;
 
@@ -117,9 +117,9 @@ where
         }
         device.refresh_maintenance();
         match outcome {
-            StepOutcome::Complete(Ok(()) | Err(Error::Reset | Error::Fault(_) | Error::Halted)) => {
-                StepOutcome::Complete(Ok(ControlFlow::Continue(())))
-            }
+            StepOutcome::Complete(
+                Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
+            ) => StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
             StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
             StepOutcome::Progressed => StepOutcome::Progressed,
             StepOutcome::Pending(()) => StepOutcome::Pending(()),
@@ -132,7 +132,7 @@ where
 pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
 
 /// Length validation followed by bounded-memory copy iterations.
-pub type Execution = Then<CheckLengths, Repeat<CopyLoop>>;
+pub type Execution = Then<CheckRanges, Repeat<CopyLoop>>;
 
 /// Application arbitration over the instance's command ports.
 pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) -> Error>;
@@ -176,7 +176,7 @@ impl<M, SB> Dma<M, SB> {
     /// Builds the sustained command loop from this instance's hardware stages.
     pub fn command_loop(&self) -> CommandLoop {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-        let execution = Then::new(CheckLengths, Repeat::new(chunk));
+        let execution = Then::new(CheckRanges, Repeat::new(chunk));
         AfterEach::new(
             Repeat::new(RunCommand::new(Then::new(
                 Then::new(

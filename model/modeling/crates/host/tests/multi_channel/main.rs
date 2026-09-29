@@ -13,7 +13,7 @@ use pdma_model_contract::dma::{
     ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
 };
 use pdma_model_dma::{
-    CheckLengths, Dma, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
+    CheckRanges, Dma, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
 };
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
@@ -164,7 +164,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 3)?;
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, Repeat::new(chunk));
     let mut hardware = Then::new(
         Then::new(
             device.intake(),
@@ -184,6 +184,7 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
                         .await?;
                 channel
                     .submit(Command {
+                        copy_length: 0,
                         sg_context: 0,
                         flags: CompletionFlagsValues::default(),
                         id: u64::try_from(index)?,

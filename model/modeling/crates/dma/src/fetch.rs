@@ -64,9 +64,9 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
                     value,
                 })),
                 Ok(None) => StepOutcome::Pending(()),
-                Err(fault) => {
-                    selected.channel.latch(fault);
-                    StepOutcome::Complete(Err(Error::Fault(fault)))
+                Err(fatal) => {
+                    selected.channel.latch(fatal);
+                    StepOutcome::Complete(Err(Error::ChannelFatal(fatal)))
                 }
             };
             selected.channel.update_irq();

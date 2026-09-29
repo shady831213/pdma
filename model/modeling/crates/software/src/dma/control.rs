@@ -4,9 +4,9 @@ use super::{
 };
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::dma::{
-    ChannelAdmin, ChannelFaultCode, ChannelFaultValues, ChannelId, ChannelIrqCauseValues,
-    ChannelIrqMaskValues, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery, DmaFaultCode,
-    DmaFaultValues, DmaRegisters,
+    ChannelAdmin, ChannelFatalCode, ChannelFatalValues, ChannelId, ChannelIrqCauseValues,
+    ChannelIrqMaskValues, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery, DmaFatalCode,
+    DmaFatalValues, DmaRegisters,
 };
 
 /// Register control without DMA ring ownership or allocation.
@@ -81,15 +81,15 @@ impl ChannelControl {
         Ok(control)
     }
 
-    /// Reads the hardware's sticky channel fault code.
-    pub async fn fault<B: RegisterAccess + Sync>(
+    /// Reads the hardware's sticky channel fatal code.
+    pub async fn fatal<B: RegisterAccess + Sync>(
         &self,
         bus: &B,
-    ) -> Result<ChannelFaultCode, Error<B::Error>> {
+    ) -> Result<ChannelFatalCode, Error<B::Error>> {
         let raw = self
-            .channel_read_word(bus, CHANNEL + ChannelRegisters::FAULT.offset())
+            .channel_read_word(bus, CHANNEL + ChannelRegisters::FATAL.offset())
             .await?;
-        ChannelFaultValues::new(raw)
+        ChannelFatalValues::new(raw)
             .code()
             .map_err(Error::RegisterCodec)
     }
@@ -184,20 +184,20 @@ impl ChannelControl {
             .map(|busy| busy != 0)
     }
 
-    /// Reads the sticky device-wide fault, which channel reset cannot clear.
-    pub async fn dma_fault<B: RegisterAccess + Sync>(
+    /// Reads the sticky device-wide fatal, which channel reset cannot clear.
+    pub async fn dma_fatal<B: RegisterAccess + Sync>(
         &self,
         bus: &B,
-    ) -> Result<DmaFaultCode, Error<B::Error>> {
-        let raw = read_word(bus, self.global + DmaControl::FAULT.offset()).await?;
-        DmaFaultValues::new(raw)
+    ) -> Result<DmaFatalCode, Error<B::Error>> {
+        let raw = read_word(bus, self.global + DmaControl::FATAL.offset()).await?;
+        DmaFatalValues::new(raw)
             .code()
             .map_err(Error::RegisterCodec)
     }
 
     /// Enables or masks device-fatal notifications independently of the channel gate.
     ///
-    /// Enabling does not replay masked events; inspect the device fault afterward.
+    /// Enabling does not replay masked events; inspect the device fatal afterward.
     pub async fn set_dma_irq_enabled<B: RegisterAccess + Sync>(
         &self,
         bus: &B,

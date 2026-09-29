@@ -1,22 +1,66 @@
-use super::{CommandRegisters, DmaRegisters, Reset, ResponseRegisters};
-use crate::register::{Switch, Word};
+use super::Reset;
+use crate::register::{Address, ReadWord, Switch, Word};
 use hardware_interface_schema::{register_map, register_schema};
 
+register_map! {
+    #[short_description = "Command ring registers"]
+    #[description = "Software writes command records and publishes the producer cursor; hardware fetches records and advances the consumer cursor. Cursors are wrapping 32-bit entry counts, not byte offsets."]
+    pub map CommandRegisters {
+        alignment: 8,
+        placements: [
+            #[short_description = "Command ring base address"]
+            #[description = "Start of command storage in the attached memory backend, aligned to eight bytes. Command slots are 104 bytes apart. The value cannot change after the channel's first successful enable until reset."]
+            pub base: Address,
+            #[short_description = "Command ring capacity"]
+            #[description = "Number of command slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]
+            pub capacity: Word,
+            #[short_description = "Published command count"]
+            #[description = "Software advances this wrapping cursor only after writing command records to memory. Publication may not exceed the ring's free capacity; hardware reads entries between consumer and producer."]
+            pub producer: Word,
+            #[short_description = "Fetched command count"]
+            #[description = "Hardware advances this wrapping cursor after successfully reading and decoding a command. It releases the command slot; it does not indicate that the copy has completed."]
+            pub consumer: ReadWord,
+        ],
+    }
+}
+
+register_map! {
+    #[short_description = "Response ring registers"]
+    #[description = "Hardware writes response records and publishes the producer cursor; software consumes records and advances the consumer cursor. A full ring stalls publication without replaying the copy."]
+    pub map ResponseRegisters {
+        alignment: 8,
+        placements: [
+            #[short_description = "Response ring base address"]
+            #[description = "Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable."]
+            pub base: Address,
+            #[short_description = "Response ring capacity"]
+            #[description = "Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]
+            pub capacity: Word,
+            #[short_description = "Published response count"]
+            #[description = "Hardware advances this cursor only after writing a complete response. Empty-to-non-empty transitions and IOC publication independently request notification unless masked."]
+            pub producer: ReadWord,
+            #[short_description = "Consumed response count"]
+            #[description = "Software advances this wrapping cursor after reading and decoding responses. It may consume only published entries. Draining the ring removes its interrupt condition, but does not clear a channel fault."]
+            pub consumer: Word,
+        ],
+    }
+}
+
 register_schema! {
-    #[short_description = "Channel fault state"]
+    #[short_description = "Channel fatal state"]
     #[description = "Hardware-owned sticky failure state. Software can observe the code; only channel or device reset clears it."]
-    pub register ChannelFault {
+    pub register ChannelFatal {
         width: 4,
         endian: Little,
         access: ReadOnly,
         reset: Zero(0),
         writable_mask: 0,
         fields: {
-            #[short_description = "Fault code"]
+            #[short_description = "Fatal code"]
             #[description = "Distinguishes normal operation from command-fetch and response-publication failures. Other encodings are invalid."]
             code: 0..=31 => enum {
                 variants: {
-                    #[short_description = "No channel fault"]
+                    #[short_description = "No channel fatal"]
                     #[description = "Neither ring has latched a hardware access failure."]
                     None = 0,
                     #[short_description = "Command fetch failed"]
@@ -41,9 +85,9 @@ register_schema! {
             response_non_empty: 0..=0,
             #[description = "At least one published IOC response remains unconsumed."]
             ioc: 1..=1,
-            #[description = "An error response was published; processing is stopped until reset."]
+            #[description = "A stopping error response was published; processing is stopped until reset. PageFault does not set this cause."]
             response_error: 2..=2,
-            #[description = "The channel fault register contains a fatal error."]
+            #[description = "The channel fatal register contains a fatal error."]
             channel_fatal: 3..=3,
         },
     }
@@ -77,20 +121,20 @@ register_map! {
 }
 
 register_map! {
-    #[short_description = "Channel controls and fault state"]
-    #[description = "Controls channel processing and independent response notification sources. Any error stops the channel until reset. Ring-access fatal codes are distinct from command-level response status."]
+    #[short_description = "Channel controls and fatal state"]
+    #[description = "Controls channel processing and independent response notification sources. Stopping errors require reset; recoverable payload PageFault does not halt the channel. Ring-access fatal codes are distinct from command-level response status."]
     pub map ChannelRegisters {
         alignment: 4,
         placements: [
             #[short_description = "Channel processing enable"]
-            #[description = "One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or faults."]
+            #[description = "One permits pipeline progress and validates both ring geometries; the first successful enable locks their base addresses and capacities. Zero pauses processing without clearing cursors, retained work or errors."]
             pub enable: Switch,
             #[short_description = "Channel interrupt enable"]
             #[description = "One permits new channel notifications, including error and fatal. Zero suppresses them without clearing causes or retracting notifications already emitted. Enabling does not replay past events."]
             pub irq_enable: Switch,
-            #[short_description = "Sticky channel fault"]
+            #[short_description = "Sticky channel fatal"]
             #[description = "A latched ring-access failure stops processing and contributes to IRQ. Only channel or device reset clears it."]
-            pub fault: ChannelFault,
+            pub fatal: ChannelFatal,
             #[description = "Response non-empty, IOC, response error and channel fatal causes, visible even while masked."]
             pub irq_cause: ChannelIrqCause,
             #[description = "Independent non-empty and IOC notification masks. Unmask does not replay past events."]
@@ -103,7 +147,7 @@ register_map! {
 
 register_map! {
     #[short_description = "PDMA channel register block"]
-    #[description = "One independent channel's command/response rings, notification controls and sticky fault. DmaRegisters repeats this data block for every implemented channel; recovery lives in ChannelAdmin."]
+    #[description = "One independent channel's command/response rings, notification controls and sticky fatal. DmaRegisters repeats this data block for every implemented channel; recovery lives in ChannelAdmin."]
     pub map ChannelBlock {
         alignment: 4096,
         extent: 4096,
@@ -115,41 +159,8 @@ register_map! {
             #[description = "Registers owned by the hardware-produced, software-consumed response ring. Software programs storage before enabling the channel and releases responses through its consumer cursor."]
             pub response: ResponseRegisters,
             #[short_description = "Channel management interface"]
-            #[description = "Processing enable, interrupt causes and sticky channel fault. There is no separate event ring."]
+            #[description = "Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring."]
             pub control: ChannelRegisters,
         ],
-    }
-}
-
-/// A channel selection, checked against hardware discovery by its consumer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ChannelId(usize);
-
-impl ChannelId {
-    /// Creates a channel selection without assuming a device's channel count.
-    pub const fn new(index: usize) -> Self {
-        Self(index)
-    }
-
-    /// Returns the zero-based channel index.
-    pub const fn index(self) -> usize {
-        self.0
-    }
-
-    /// Returns the data aperture for a valid population and selection, or `None` on overflow.
-    pub fn register_offset(self, channel_count: usize) -> Option<usize> {
-        DmaRegisters::new(channel_count)
-            .ok()?
-            .channels()
-            .offset(self.0)
-    }
-
-    /// Returns the privileged recovery address for a valid population and selection.
-    pub fn admin_offset(self, channel_count: usize) -> Option<usize> {
-        let layout = DmaRegisters::new(channel_count).ok()?;
-        layout
-            .admin()
-            .base()
-            .checked_add(layout.admin().child().channels().offset(self.0)?)
     }
 }

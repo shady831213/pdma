@@ -3,6 +3,8 @@
 #![cfg(feature = "export-c-header")]
 
 mod control_queue;
+/// Independently specified DMA wire fixtures for the C consumer.
+pub mod dma_wire;
 
 use std::{
     error::Error,
@@ -14,9 +16,7 @@ use std::{
 
 use hardware_interface_schema::{Documentation, ResolvedRegisterMap};
 use pdma_model_contract::control::{ControlRequest, ControlResponse};
-use pdma_model_contract::dma::{
-    Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response, ResponseStatus, Segment,
-};
+use pdma_model_contract::dma::{Command, DmaRegisters, Endpoint, Response, Segment};
 use pdma_model_contract::hw_components::control::ControlRegisters;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -117,47 +117,13 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
 
     // Then: C and Rust both match independently specified little-endian bytes and MMIO addresses.
     assert_success("C consumer", &output);
-    let command_bytes = [
-        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0,
-        0, 0, 1, 0, 0, 0, 22, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
-        33, 0, 0, 0,
-    ];
-    let response_bytes = [
-        7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    let segment_bytes = [0, 3, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0];
+    let dma_bytes = dma_wire::bytes()?;
     let offsets = [
         0_u32, 4, 8, 12, 16, 20, 24, 4096, 4104, 4108, 4112, 4120, 4128, 4132, 4136, 4140, 4144,
         4148, 4152, 4156, 4160, 8192, 8200, 8204, 8208, 8216, 8224, 8228, 8232, 8236, 8240, 8244,
         8248, 8252, 8256, 12288, 12296, 12300, 12304, 12312, 12320, 12324, 12328, 12332, 12336,
         12340, 12344, 12348, 12352,
     ];
-    let command = Command {
-        sg_context: 33,
-        flags: CompletionFlagsValues { ioc: true },
-        id: 7,
-        source: Endpoint {
-            context: 11,
-            ..Endpoint::linear(0x100, 8)
-        },
-        destination: Endpoint {
-            context: 22,
-            ..Endpoint::scatter_gather(0x200, 2)
-        },
-    };
-    let response = Response {
-        flags: CompletionFlagsValues { ioc: true },
-        id: 7,
-        status: ResponseStatus::Success,
-        bytes_completed: 8,
-    };
-    let segment = Segment {
-        address: 0x300,
-        length: 8,
-    };
-    assert_eq!(command.to_bytes()?, command_bytes);
-    assert_eq!(response.to_bytes()?, response_bytes);
-    assert_eq!(segment.to_bytes()?, segment_bytes);
     let resolved = DmaRegisters::new(3)?.resolve()?;
     let rust_offsets = resolved
         .registers()
@@ -179,9 +145,7 @@ fn generated_header_matches_current_rust_wire_bytes_and_mmio() -> TestResult {
     );
     let offset_bytes: Vec<_> = offsets.into_iter().flat_map(u32::to_le_bytes).collect();
     let expected = [
-        command_bytes.as_slice(),
-        response_bytes.as_slice(),
-        segment_bytes.as_slice(),
+        dma_bytes.as_slice(),
         offset_bytes.as_slice(),
         &CONTROL_BYTES.concat(),
         control_offsets.as_slice(),

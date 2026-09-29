@@ -16,6 +16,12 @@ mod unit {
 /// Failure of one checked contiguous memory access.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemoryAccessError {
+    /// A repairable not-present translation, distinct from access denial.
+    /// No externally visible write from this failed call may have committed.
+    PageFault {
+        /// First byte whose translation is missing, possibly inside the access.
+        address: MemoryAddress,
+    },
     /// The exclusive access end exceeds the address space.
     AddressOverflow {
         /// Access start address.
@@ -49,6 +55,9 @@ pub enum MemoryAccessError {
 impl Display for MemoryAccessError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::PageFault { address } => {
+                write!(formatter, "page fault at {:#x}", address.raw())
+            }
             Self::AddressOverflow { address, length } => write!(
                 formatter,
                 "memory access at {:#x} with length {length} exceeds the address space",
@@ -104,6 +113,7 @@ pub trait MemoryAccess<S = ()> {
     ) -> Result<(), MemoryAccessError>;
 
     /// Writes one contiguous caller-owned slice.
+    /// Returning `PageFault` guarantees this call committed no externally visible bytes.
     fn write_with_sideband(
         &self,
         sideband: &S,

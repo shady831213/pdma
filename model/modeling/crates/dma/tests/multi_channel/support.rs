@@ -5,7 +5,7 @@ use pdma_model_contract::dma::{
     Endpoint, ResponseRegisters,
 };
 use pdma_model_dma::{
-    CheckLengths, Dma, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+    CheckRanges, Dma, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -13,7 +13,7 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 /// Assemble one command while keeping arbitration state across test operations.
 pub fn single_command<M>(device: &Dma<M>) -> Pipeline {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, Repeat::new(chunk));
     Then::new(
         Then::new(
             device.intake(),
@@ -80,11 +80,12 @@ pub fn configure<M>(device: &mut Dma<M>, index: usize) -> TestResult {
 pub fn submit<M: MemoryAccess>(device: &mut Dma<M>, index: usize, id: u64) -> TestResult {
     let memory = 0x1000 + u64::try_from(index)? * 0x1000;
     let command = Command {
+        copy_length: 512,
         sg_context: 0,
         id,
         flags: CompletionFlagsValues::default(),
-        source: Endpoint::linear(memory + 0x200, 512),
-        destination: Endpoint::linear(memory + 0x400, 512),
+        source: Endpoint::linear(memory + 0x200, 0),
+        destination: Endpoint::linear(memory + 0x400, 0),
     };
     device.memory.write(
         MemoryAddress::new(memory),

@@ -201,7 +201,9 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   cancellation does not release affected memory or cancel hardware cleanup.
 - Source and destination independently select linear spans or SG lists. Software owns
   list/buffer allocation and keeps descriptors stable until completion. Hardware checks
-  total lengths before payload writes, reads lists incrementally and retains cursors;
+  both selected ranges before payload writes, reads lists from explicit start positions
+  incrementally and retains only current cursors. One command copy_length selects
+  independent Linear byte offsets or SG entry/local offsets; backing totals need not match;
   do not cache whole lists, reject overlap or invent segment-count/total-length limits.
   Fixed copy scratch size is an implementation detail, not a command-size limit.
 - Reuse FanIn/Arbitrate/FanOut/Dispatch/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
@@ -223,8 +225,13 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.
 - Keep the model deterministic and step-based. No cycle timing or extra executors.
 - Device notification masks never replay old events when cleared. Platform-pending
-  notifications survive device masking/reset until claimed. Response errors stop
+  notifications survive device masking/reset until claimed. Stopping response errors halt
   the channel after publication; reset never rolls back external memory writes.
+  Payload PageFault is terminal but non-halting, with fault address/access and both
+  continuation positions. Failed PageFault writes commit no external bytes from that call.
+  Software owns repair/retry and retains ID/context associations; DMA keeps no suspended
+  task across commands. Metadata faults retain their old stopping/fatal behavior.
+  See docs/page-fault-recovery.md for normative hardware, software and RTL obligations.
 - Software handlers remain outside the hardware. Preserve CPU-local and handler
   execution guarantees supplied by the runtime.
 - Runtime memory installs regions atomically with `add_regions(&regions)`. Keep overlap,
@@ -237,6 +244,15 @@ Firmware can consume DMA and peripheral contracts without owning those interface
 - Tests use Given/When/Then and observable outcomes. Do not weaken them to get green.
 - No unsafe code, production `unwrap`/`expect`/`panic`/`todo`, or unchecked indexing.
 - Keep Rust source below 250 pure LOC; split by responsibility.
+- Organize modules by semantic ownership, not one type per file or line count alone.
+  Keep closely related definitions and their implementations together; subordinate
+  details belong under their owner, not beside it as unrelated top-level modules.
+  Preserve cohesive units when satisfying the LOC limit; do not add forwarding
+  layers or scatter implementations merely to make files shorter.
+  Before completion, review changed modules and their neighbors for cohesion,
+  dependency direction, unnecessary fragmentation, stale names/exports and domain
+  responsibility leaks. Passing tests and satisfying LOC limits do not replace
+  this architectural self-review; do not wait for the user to identify these issues.
 - Use existing Cargo/rustfmt/clippy settings and terse public API docs.
 - Do not stage build caches or incidental agent state.
 - Prefix every git command with `GIT_MASTER=1`.

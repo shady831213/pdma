@@ -1,4 +1,4 @@
-use crate::{Error, Fault};
+use crate::{ChannelFatal, Error};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::{Encode, RegisterAccessError, RegisterWindow};
 use pdma_model_contract::dma::{Response, ResponseRegisters};
@@ -98,22 +98,22 @@ impl ResponseRing {
         &mut self,
         memory: &impl MemoryAccess,
         response: &Response,
-    ) -> Result<bool, Fault> {
+    ) -> Result<bool, ChannelFatal> {
         let pointers = self.pointers();
         let address = MemoryAddress::new(
             self.entry(pointers.producer)
-                .map_err(|_| Fault::ResponseWrite)?,
+                .map_err(|_| ChannelFatal::ResponseWrite)?,
         );
         if pointers.pending() == self.capacity() {
             return Ok(false);
         }
         let next = self
             .advance_producer(pointers, 1)
-            .map_err(|_| Fault::ResponseWrite)?;
-        let raw = response.encode().map_err(|_| Fault::ResponseWrite)?;
+            .map_err(|_| ChannelFatal::ResponseWrite)?;
+        let raw = response.encode().map_err(|_| ChannelFatal::ResponseWrite)?;
         memory
             .write_typed(address, MemoryAlignment::ONE, &raw)
-            .map_err(|_| Fault::ResponseWrite)?;
+            .map_err(|_| ChannelFatal::ResponseWrite)?;
         self.registers.values.producer = ReadWordValues::new(next.producer);
         if response.flags.ioc {
             self.last_ioc = Some(next.producer);

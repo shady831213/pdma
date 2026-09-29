@@ -3,7 +3,7 @@ mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, ResponseRegisters};
-use pdma_model_dma::{Dma, Error, Fault};
+use pdma_model_dma::{ChannelFatal, Dma, Error};
 use std::{
     future::Future,
     pin::{Pin, pin},
@@ -138,7 +138,7 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         drop(device);
         assert!(matches!(
             outcome,
-            StepOutcome::Complete(Err(Error::Fault(Fault::CommandRead)))
+            StepOutcome::Complete(Err(Error::ChannelFatal(ChannelFatal::CommandRead)))
         ));
     }
     assert!(!model.irq());

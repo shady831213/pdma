@@ -2,7 +2,7 @@
 
 use hardware_interface_schema::Documentation;
 use pdma_model_contract::dma::{
-    ChannelFault, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint, Response,
+    ChannelFatal, ChannelRegisters, Command, CommandRegisters, DmaRegisters, Endpoint, Response,
     ResponseRegisters, Segment,
 };
 use pdma_model_contract::register::{Address, ReadWord, Switch, Word};
@@ -28,7 +28,7 @@ fn register_definitions_and_placements_have_complete_documentation()
         ReadWord::SPEC,
         Address::SPEC,
         Switch::SPEC,
-        ChannelFault::SPEC,
+        ChannelFatal::SPEC,
     ];
     // When: the public metadata is resolved as a documentation generator would consume it.
     let map = DmaRegisters::new(3)?.resolve()?;

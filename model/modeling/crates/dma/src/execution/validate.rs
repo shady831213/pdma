@@ -10,34 +10,32 @@ enum Side {
     Destination,
 }
 
-/// Incremental list-length scan; no payload memory is accessed.
+/// Incremental validation of selected ranges, without payload access.
 #[derive(Debug)]
-pub struct LengthCheck {
+pub struct RangeCheck {
     command: Command,
     cursor: Cursor,
     side: Side,
-    source_total: u64,
-    total: u64,
+    remaining: u64,
 }
 
-/// Validate matching endpoint totals before copying any payload.
+/// Validate both selected ranges before committing payload writes.
 #[derive(Debug, Default)]
-pub struct CheckLengths;
+pub struct CheckRanges;
 
-impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckLengths {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
     type Input = Command;
     type Output = CopyState;
     type Error = Error;
     type Wait = ();
-    type State = Option<LengthCheck>;
+    type State = Option<RangeCheck>;
 
     fn start(command: Command) -> Self::State {
-        Some(LengthCheck {
-            cursor: Cursor::new(command.source),
+        Some(RangeCheck {
+            cursor: Cursor::new(command.source, command.copy_length),
+            remaining: command.copy_length,
             command,
             side: Side::Source,
-            source_total: 0,
-            total: 0,
         })
     }
 
@@ -58,36 +56,42 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckLengths 
         let Some(scan) = state.as_mut() else {
             return StepOutcome::Exhausted;
         };
-        let result = match scan
-            .cursor
-            .next_segment(&context.memory_for(scan.command.sg_context))
-        {
-            Ok(Some(segment)) => match scan.total.checked_add(segment.length) {
-                Some(total) => {
-                    scan.total = total;
-                    return StepOutcome::Progressed;
-                }
-                None => ResponseStatus::InvalidLength,
-            },
-            Ok(None) => match scan.side {
+        let result = if scan.remaining == 0 {
+            match scan.side {
                 Side::Source => {
-                    scan.source_total = scan.total;
-                    scan.total = 0;
-                    scan.cursor = Cursor::new(scan.command.destination);
+                    scan.cursor = Cursor::new(scan.command.destination, scan.command.copy_length);
+                    scan.remaining = scan.command.copy_length;
                     scan.side = Side::Destination;
                     return StepOutcome::Progressed;
                 }
-                Side::Destination => {
-                    if scan.total == scan.source_total {
-                        ResponseStatus::Success
+                Side::Destination => ResponseStatus::Success,
+            }
+        } else {
+            match scan
+                .cursor
+                .next_segment(&context.memory_for(scan.command.sg_context))
+            {
+                Ok(true) => {
+                    let count = scan.remaining.min(scan.cursor.remaining());
+                    if count != 0
+                        && scan
+                            .cursor
+                            .address()
+                            .and_then(|address| address.checked_add(count))
+                            .is_none()
+                    {
+                        ResponseStatus::InvalidLength
                     } else {
-                        ResponseStatus::LengthMismatch
+                        scan.cursor.advance(count);
+                        scan.remaining -= count;
+                        return StepOutcome::Progressed;
                     }
                 }
-            },
-            Err(status) => status,
+                Ok(false) => ResponseStatus::LengthMismatch,
+                Err(status) => status,
+            }
         };
-        let output = CopyState::new(scan.command, scan.source_total, result);
+        let output = CopyState::new(scan.command, result);
         *state = None;
         StepOutcome::Complete(Ok(output))
     }

@@ -7,7 +7,7 @@ use hardware_interface_runtime::{
     RegisterAccess, SharedMemoryAccess, SharedMemoryAllocator,
 };
 use pdma_model_contract::dma::{
-    ChannelFaultCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
+    ChannelFatalCode, ChannelId, ChannelIrqCauseValues, ChannelIrqMaskValues, Command,
     CompletionFlagsValues, Endpoint, Response,
 };
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Irq};
@@ -25,7 +25,7 @@ pub(super) struct Outcome {
     pub(super) responses: Vec<Response>,
     pub(super) causes: Vec<ChannelIrqCauseValues>,
     pub(super) destination: MemoryAddress,
-    pub(super) fault: ChannelFaultCode,
+    pub(super) fatal: ChannelFatalCode,
 }
 
 impl Outcome {
@@ -104,7 +104,13 @@ where
         responses: Vec::new(),
         causes: Vec::new(),
         destination,
-        fault: ChannelFaultCode::None,
+        fatal: ChannelFatalCode::None,
+    };
+    let request = Command {
+        source: Endpoint::linear(source.raw(), 0),
+        destination: Endpoint::linear(destination.raw(), 0),
+        copy_length: length,
+        ..Command::ZERO
     };
     match scenario {
         Scenario::Batch => {
@@ -114,11 +120,10 @@ where
             for index in 0..3 {
                 channel
                     .submit(Command {
-                        sg_context: 0,
                         id: 40 + index,
-                        source: Endpoint::linear(source.raw(), length),
-                        destination: Endpoint::linear(destination.raw() + index * length, length),
+                        destination: Endpoint::linear(destination.raw() + index * length, 0),
                         flags: CompletionFlagsValues { ioc: index == 2 },
+                        ..request
                     })
                     .await?;
             }
@@ -133,11 +138,9 @@ where
                 .await?;
             channel
                 .submit(Command {
-                    sg_context: 0,
                     id: 41,
-                    source: Endpoint::linear(source.raw(), length),
-                    destination: Endpoint::linear(destination.raw(), length - 1),
-                    flags: CompletionFlagsValues::default(),
+                    destination: Endpoint::scatter_gather(0, 0),
+                    ..request
                 })
                 .await?;
         }
@@ -148,18 +151,10 @@ where
     match scenario {
         Scenario::Batch => {}
         Scenario::ChannelReset => {
-            outcome.fault = channel.fault().await?;
+            outcome.fatal = channel.fatal().await?;
             channel.reset().await?;
             channel = Channel::setup(ports.bus, ports.memory, config).await?;
-            channel
-                .submit(Command {
-                    sg_context: 0,
-                    id: 42,
-                    source: Endpoint::linear(source.raw(), length),
-                    destination: Endpoint::linear(destination.raw(), length),
-                    flags: CompletionFlagsValues::default(),
-                })
-                .await?;
+            channel.submit(Command { id: 42, ..request }).await?;
             outcome
                 .wait_and_drain(&mut channel, &mut notifications)
                 .await?;

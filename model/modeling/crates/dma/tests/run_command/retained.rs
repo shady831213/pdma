@@ -5,7 +5,7 @@ use crate::{
 use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, Command, CommandRegisters};
-use pdma_model_dma::{ChannelTask, Dma, Error, Fault, Intake, ResetControl, RunCommand};
+use pdma_model_dma::{ChannelFatal, ChannelTask, Dma, Error, Intake, ResetControl, RunCommand};
 use std::{cell::Cell, ops::ControlFlow, rc::Rc};
 
 struct DropWitness(Rc<Cell<usize>>);
@@ -72,16 +72,16 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
     for terminal in [
         StepOutcome::Complete(Ok(())),
         StepOutcome::Complete(Err(Error::Reset)),
-        StepOutcome::Complete(Err(Error::Fault(Fault::ResponseWrite))),
+        StepOutcome::Complete(Err(Error::ChannelFatal(ChannelFatal::ResponseWrite))),
         StepOutcome::Complete(Err(Error::Halted)),
         StepOutcome::Complete(Err(Error::Routing)),
         StepOutcome::Exhausted,
     ] {
         // Given: a child that retains accepted work even when returning a terminal result.
         let expected = match terminal {
-            StepOutcome::Complete(Ok(()) | Err(Error::Reset | Error::Fault(_) | Error::Halted)) => {
-                StepOutcome::Complete(Ok(ControlFlow::Continue(())))
-            }
+            StepOutcome::Complete(
+                Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
+            ) => StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
             StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
             StepOutcome::Exhausted => StepOutcome::Exhausted,
             StepOutcome::Progressed | StepOutcome::Pending(()) => {

@@ -22,7 +22,7 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
     // Then: device discovery precedes three aligned, independent channel maps.
     let mut expected = vec![("DmaRegisters.discovery.channel_num".to_owned(), 0)];
     expected.extend(
-        [("irq_enable", 4), ("fault", 8), ("reset", 12)]
+        [("irq_enable", 4), ("fatal", 8), ("reset", 12)]
             .map(|(name, offset)| (format!("DmaRegisters.admin.control.{name}"), offset)),
     );
     expected.extend((0..3).map(|index| {
@@ -44,7 +44,7 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("response.consumer", 40),
                 ("control.enable", 44),
                 ("control.irq_enable", 48),
-                ("control.fault", 52),
+                ("control.fatal", 52),
                 ("control.irq_cause", 56),
                 ("control.irq_mask", 60),
                 ("control.ring_context", 64),

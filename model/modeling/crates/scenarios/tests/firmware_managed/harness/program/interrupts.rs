@@ -5,6 +5,7 @@ use pdma_model_host::DmaError;
 use pdma_model_software::control::ControlIsr;
 
 pub(in crate::harness) enum Handler {
+    Wake(tokio::sync::mpsc::UnboundedSender<()>),
     Dma(Box<transfer::Handler>),
     Control(ControlIsr),
 }
@@ -14,6 +15,10 @@ impl InterruptHandler<HostIrq> for Handler {
 
     async fn handle(&mut self, irq: &HostIrq) -> Result<(), Self::Error> {
         match (self, irq) {
+            (Self::Wake(sender), HostIrq::Dma(_)) => {
+                let _closed = sender.send(());
+                Ok(())
+            }
             (Self::Dma(handler), HostIrq::Dma(irq)) => {
                 handler.handle(irq).await.map_err(HandlerError::Dma)
             }
@@ -23,7 +28,7 @@ impl InterruptHandler<HostIrq> for Handler {
                     Err(never) => match never {},
                 }
             }
-            (Self::Dma(_), HostIrq::Control(_) | HostIrq::Event(_))
+            (Self::Dma(_) | Self::Wake(_), HostIrq::Control(_) | HostIrq::Event(_))
             | (Self::Control(_), HostIrq::Dma(_)) => Err(HandlerError::VectorMismatch),
         }
     }

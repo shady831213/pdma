@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
     InterruptHandler, InterruptRegistration, MemoryAlignment, RegisterAccess, SharedMemoryAccess,
     SharedMemoryAllocator,
 };
-use pdma_model_contract::dma::{ChannelFaultCode, ChannelId, Command, Response, Segment};
+use pdma_model_contract::dma::{ChannelFatalCode, ChannelId, Command, Response, Segment};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as HostError, RingConfig, Rings, runtime::Irq,
 };
@@ -45,7 +45,7 @@ impl<'a> Input<'a> {
 }
 
 /// Result delivered from the ISR to the main software program.
-pub type Completion = (Option<Response>, ChannelFaultCode);
+pub type Completion = (Option<Response>, ChannelFatalCode);
 /// Platform capabilities visible to the software program.
 #[derive(Debug)]
 pub struct Ports<'a, B> {
@@ -64,8 +64,8 @@ pub struct Ports<'a, B> {
 pub struct Outcome {
     /// Response consumed by the ISR, if hardware published one.
     pub response: Option<Response>,
-    /// Sticky fault observed by the ISR.
-    pub fault: ChannelFaultCode,
+    /// Sticky fatal observed by the ISR.
+    pub fatal: ChannelFatalCode,
     /// Software-allocated destination of the DMA copy.
     pub destination: Vec<Segment>,
 }
@@ -81,16 +81,16 @@ impl<B: RegisterAccess + Send + Sync> InterruptHandler<Irq> for CompletionHandle
     type Error = HostError<B::Error>;
 
     async fn handle(&mut self, _: &Irq) -> Result<(), Self::Error> {
-        let fault = self.channel.fault().await?;
+        let fatal = self.channel.fatal().await?;
         let response = self.channel.response().await?;
-        match fault {
-            ChannelFaultCode::None => {}
-            ChannelFaultCode::CommandRead | ChannelFaultCode::ResponseWrite => {
+        match fatal {
+            ChannelFatalCode::None => {}
+            ChannelFatalCode::CommandRead | ChannelFatalCode::ResponseWrite => {
                 self.channel.set_irq_enabled(false).await?;
             }
         }
         if let Some(completion) = self.completion.take() {
-            let _receiver_closed = completion.send((response, fault));
+            let _receiver_closed = completion.send((response, fatal));
         }
         Ok(())
     }
@@ -131,6 +131,7 @@ where
     let mut channel = Channel::setup(ports.bus, ports.memory, config).await?;
     channel
         .submit(Command {
+            copy_length: u64::try_from(input.data.len())?,
             sg_context: 0,
             flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
             id: 7,
@@ -147,10 +148,10 @@ where
             completion: Some(completion),
         },
     )?;
-    let (response, fault) = received.await?;
+    let (response, fatal) = received.await?;
     Ok(Outcome {
         response,
-        fault,
+        fatal,
         destination: destination.segments,
     })
 }

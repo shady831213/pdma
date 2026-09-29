@@ -9,7 +9,8 @@ subsequent RTL. Related behavior is described by [Function isolation](function-i
 Implementation scope, 2026-09-23: the first iteration selects Default or PASID
 address spaces. Context attributes are a named schema record, extensible separately
 from descriptor selectors. Source/destination and SG selectors are 32-bit IDs in
-the existing 64-byte Command layout. Table capacity is instance configuration.
+the Command layout, now 104 bytes after explicit range/continuation support.
+Table capacity is instance configuration.
 Device-memory targeting, address translation and base/limit permission windows
 are outside this iteration. The obligations below are the implementation and
 verification contract; passing coverage must be recorded before claiming them.
@@ -96,8 +97,8 @@ copy completion alone does not certify the complete migration protocol.
 The current model provides the ordinary copy/error behavior; it does not emulate
 page residency, page tables or MMU translation. Verification of this usage's OS/MMU
 preconditions belongs to integration. Copying pageable virtual addresses with
-recoverable faults is a separate, unimplemented
-[DSA-like continuation design](page-fault-recovery.md). This note does not waive
+recoverable faults follows the separate, implemented
+[DSA-like continuation contract](page-fault-recovery.md). This note does not waive
 the existing context submission-exclusion and lifetime obligations.
 
 ## Software obligations
@@ -121,6 +122,11 @@ Host/VF coordination with the PF remains a software/platform responsibility; thi
 contract does not introduce a VF mailbox. Violating SW-02 or SW-03 invalidates the
 snapshot proof. Hardware cannot infer unpublished future commands from a table
 entry or from its current in-flight task count.
+Pageable copies additionally follow HOST-PF-01/02 in the [pageable-copy chapter](page-fault-recovery.md):
+submission exclusion includes retries; retain command-ID/context/address-space
+associations through repair and final completion or safe abandonment. A terminal
+PageFault response releases that attempt's hardware references, not software's
+logical-copy ownership. Drain does not account for an unsubmitted continuation.
 The non-faulting migration usage additionally requires SW-13 and PLAT-MIGRATION-1
 above; these do not introduce a new descriptor mode or register.
 

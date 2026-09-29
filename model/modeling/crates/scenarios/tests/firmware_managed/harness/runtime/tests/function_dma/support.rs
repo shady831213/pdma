@@ -132,11 +132,11 @@ pub(super) fn advance(
 
 /// Decodes the first software-visible completion.
 pub(super) fn response(memory: &SharedMemory) -> TestResult<Response> {
-    let bytes = memory.read_typed::<[u8; Response::RECORD_SIZE]>(
+    let bytes = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
         MemoryAddress::new(0x1100),
         MemoryAlignment::ONE,
     )?;
-    Ok(Response::from_bytes(&bytes)?)
+    Ok(Response::from_bytes(bytes.as_ref())?)
 }
 
 /// Reads an exact output or sentinel extent.
@@ -153,10 +153,11 @@ pub(super) fn bytes<const N: usize>(memory: &SharedMemory, address: u64) -> Test
 /// Constructs the fixture's linear copy descriptor.
 pub(super) const fn command(id: u64) -> Command {
     Command {
+        copy_length: 8,
         sg_context: 0,
         id,
-        source: Endpoint::linear(0x1200, 8),
-        destination: Endpoint::linear(0x1300, 8),
+        source: Endpoint::linear(0x1200, 0),
+        destination: Endpoint::linear(0x1300, 0),
         flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: false },
     }
 }

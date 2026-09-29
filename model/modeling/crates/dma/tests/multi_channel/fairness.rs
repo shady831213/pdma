@@ -64,7 +64,7 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
             assert_eq!(
                 word(
                     &mut device,
-                    base + ChannelBlock::CONTROL.offset() + ChannelRegisters::FAULT.offset()
+                    base + ChannelBlock::CONTROL.offset() + ChannelRegisters::FATAL.offset()
                 )?,
                 1
             );
@@ -83,6 +83,7 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
 
 fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult {
     let command = pdma_model_contract::dma::Command {
+        copy_length: 0,
         sg_context: 0,
         id: 1,
         flags: pdma_model_contract::dma::CompletionFlagsValues::default(),

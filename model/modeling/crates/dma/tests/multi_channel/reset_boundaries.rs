@@ -188,11 +188,11 @@ fn assert_responses(device: &mut Dma<Observed>, reset_index: usize) -> TestResul
         let raw = device
             .memory
             .memory
-            .read_typed::<[u8; Response::RECORD_SIZE]>(
+            .read_typed::<pdma_model_contract::dma::ResponseRaw>(
                 MemoryAddress::new(0x1100 + u64::try_from(index)? * 0x1000),
                 MemoryAlignment::ONE,
             )?;
-        let response = Response::from_bytes(&raw)?;
+        let response = Response::from_bytes(raw.as_ref())?;
         assert_eq!(
             response.id,
             if index == reset_index {
@@ -201,7 +201,7 @@ fn assert_responses(device: &mut Dma<Observed>, reset_index: usize) -> TestResul
                 u64::try_from(index)?
             }
         );
-        assert_eq!(response.bytes_completed, 512);
+        assert_eq!(response.bytes_completed(), 512);
     }
     Ok(())
 }
@@ -210,11 +210,12 @@ fn replace(device: &mut Dma<Observed>, reset_index: usize) -> TestResult<u64> {
     configure(device, reset_index)?;
     let memory_base = 0x1000 + u64::try_from(reset_index)? * 0x1000;
     let fresh = pdma_model_contract::dma::Command {
+        copy_length: 512,
         sg_context: 0,
         id: 99,
         flags: pdma_model_contract::dma::CompletionFlagsValues { ioc: true },
-        source: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x200, 512),
-        destination: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x800, 512),
+        source: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x200, 0),
+        destination: pdma_model_contract::dma::Endpoint::linear(memory_base + 0x800, 0),
     };
     device.memory.memory.write(
         MemoryAddress::new(memory_base),

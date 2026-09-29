@@ -8,7 +8,7 @@ use hardware_interface_pipeline::{
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_dma::{
-    ChannelContext, CheckLengths, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
+    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
     WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
@@ -53,7 +53,7 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
         WriteCopy,
     );
-    let execution = Then::new(CheckLengths, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, Repeat::new(chunk));
     let mut hardware = Then::new(
         Then::new(
             device.intake(),
@@ -91,7 +91,7 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
 fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     // Given: an execution stage started with a valid command.
     let (mut device, _) = setup(0x1100, 2)?;
-    let mut execution = CheckLengths;
+    let mut execution = CheckRanges;
     let mut operation = Operation::new(command());
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.

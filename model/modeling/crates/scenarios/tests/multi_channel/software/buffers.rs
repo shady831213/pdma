@@ -50,10 +50,11 @@ impl Buffers {
         let length = u64::try_from(self.length)?;
         let destination = self.destination.raw() + if second { length } else { 0 };
         Ok(Command {
+            copy_length: length,
             sg_context: 0,
             id,
-            source: Endpoint::linear(self.source.raw(), length),
-            destination: Endpoint::linear(destination, length),
+            source: Endpoint::linear(self.source.raw(), 0),
+            destination: Endpoint::linear(destination, 0),
             flags: CompletionFlagsValues::default(),
         })
     }

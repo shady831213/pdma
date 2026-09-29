@@ -44,10 +44,11 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     .unwrap();
     channel
         .submit(Command {
+            copy_length: 4,
             sg_context: 0,
             id: 1,
-            source: Endpoint::linear(source.raw(), 4),
-            destination: Endpoint::linear(destination.raw(), 4),
+            source: Endpoint::linear(source.raw(), 0),
+            destination: Endpoint::linear(destination.raw(), 0),
             flags: CompletionFlagsValues::default(),
         })
         .await

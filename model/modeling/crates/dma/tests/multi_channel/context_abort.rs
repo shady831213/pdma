@@ -24,14 +24,15 @@ fn abort_during_unaccepted_arbitration_does_not_stall_peer_channels() -> TestRes
         configure(&mut dma, 0)?;
         configure(&mut dma, 1)?;
         let target = Command {
+            copy_length: 512,
             id: 7,
             flags: CompletionFlagsValues::default(),
             sg_context: 0,
             source: Endpoint {
                 context: 7,
-                ..Endpoint::linear(0x1200, 512)
+                ..Endpoint::linear(0x1200, 0)
             },
-            destination: Endpoint::linear(0x1400, 512),
+            destination: Endpoint::linear(0x1400, 0),
         };
         memory.write(
             MemoryAddress::new(0x1000),

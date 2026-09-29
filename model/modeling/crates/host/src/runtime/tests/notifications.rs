@@ -69,7 +69,7 @@ async fn enabling_after_masked_fatal_does_not_emit_a_notification() -> TestResul
             u32::try_from(
                 (pdma_model_contract::dma::DmaDiscovery::EXTENT
                     + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
-                    + DmaControl::FAULT.offset(),
+                    + DmaControl::FATAL.offset(),
             )?,
             &mut bytes,
         )

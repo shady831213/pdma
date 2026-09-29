@@ -38,8 +38,9 @@ impl<M: MemoryAccess + Send + Sync + 'static> Managed<M> {
         let hardware = async {
             let mut pipeline = self.pipeline;
             let executor = AsyncExecutor::new(Driver(self.shared));
+            let mut operation = Box::new(Operation::new(()));
             executor
-                .run(&mut pipeline, &mut Operation::new(()))
+                .run(&mut pipeline, &mut operation)
                 .await
                 .map_err(RunError::Hardware)?;
             Err::<Infallible, _>(RunError::HardwareStopped)

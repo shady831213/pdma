@@ -71,15 +71,24 @@ Default or PASID independently of the data context table; no table slot is reser
 There is one PF control block, not a per-Function bank. Static Host metadata describes
 its PF permissions; hardware rejects every VF access. No control stride is exported.
 
-Shared wire records: Segment is 16 bytes, Endpoint 24, Command 64, Response 24,
+Shared wire records: Segment is 16 bytes, Endpoint 40, Command 104, Response 72,
 ControlRequest 32 and ControlResponse 24, ContextAttributes 8, ControlRingState 24,
 ControlEvent 8 (alignment four), and ControlQueue 72. Enum bitfield constants are
 unshifted values. Endpoints use mode zero for linear spans and one for scatter/gather
-lists; WORD0/WORD1 hold address/length or list_address/count. Command IOC is at
-byte 56 and response IOC at byte 12. Endpoint's payload-context selector is at
-byte 4; the nested Command source/destination selectors are at bytes 12/36 and
-its SG-table selector is at byte 60. These replace padding without changing the
-record extents. The channel's ring_context register selects one binding for both
+lists; WORD0/WORD1 hold the Linear base/offset (WORD2/WORD3 reserved), or all four
+words hold SG list_address/count/index/offset. Each endpoint starts with mode/context
+at 0/4 and parameters at 8. Command copy_length is at 88,
+IOC at 96 and SG context at 100. Response IOC stays at byte 12. The nested source
+and destination payload-context selectors are at bytes 12/52.
+Response status selects an info union at byte 16. Success and stopping errors use
+CompletionInfo (eight-byte bytes_completed); PageFault uses PageFaultInfo (56 bytes).
+Its committed bytes/address are at 0/8, access/source-mode/destination-mode bytes
+at 16/17/18, and source/destination position unions at 24/40. Linear stores offset
+and a reserved zero word; SG stores index/offset. Access is SourceRead (1) or
+DestinationWrite (2). The generated record-placement OFFSET/SIZE constants locate
+info within Response; apply the selected case's generated accessors to that slice.
+Inactive case storage is zero, and nonzero inactive storage is rejected by Rust.
+These are deliberate wire-layout changes, not compatibility aliases. The channel's ring_context register selects one binding for both
 DMA rings; source, destination and SG selectors independently choose data bindings.
 ControlQueue nests command state at byte 0,
 response state at byte 24 and event state at byte 48; each ring stores base/capacity/producer/consumer

@@ -154,10 +154,11 @@ async fn copy(
     channel.set_irq_enabled(false).await.unwrap();
     channel
         .submit(Command {
+            copy_length: 8,
             id: 17,
             sg_context: 0,
-            source: Endpoint::linear(source.raw(), 8),
-            destination: Endpoint::linear(destination.raw(), 8),
+            source: Endpoint::linear(source.raw(), 0),
+            destination: Endpoint::linear(destination.raw(), 0),
             flags: CompletionFlagsValues { ioc: false },
         })
         .await

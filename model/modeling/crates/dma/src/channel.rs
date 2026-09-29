@@ -7,14 +7,14 @@ mod tests;
 pub use command::CommandRing;
 pub use response::ResponseRing;
 
-use crate::Fault;
+use crate::ChannelFatal;
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::dma::{
-    ChannelAdmin, ChannelBlock, ChannelFaultCode, ChannelIrqCauseValues, ChannelRegisters,
-    ResetValues, Response, ResponseStatus,
+    ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
+    ResetValues, Response,
 };
 
-/// One channel owns two rings, sticky fault state and interrupt controls.
+/// One channel owns two rings, sticky fatal state and interrupt controls.
 #[derive(Debug)]
 pub struct Channel {
     /// Host-produced command ring.
@@ -43,9 +43,9 @@ impl Default for Channel {
 }
 
 impl Channel {
-    pub(crate) fn latch(&mut self, fault: Fault) {
-        if self.registers.values.fault.code() == Ok(ChannelFaultCode::None) {
-            self.registers.values.fault = self.registers.values.fault.with_code(fault.code());
+    pub(crate) fn latch(&mut self, fatal: ChannelFatal) {
+        if self.registers.values.fatal.code() == Ok(ChannelFatalCode::None) {
+            self.registers.values.fatal = self.registers.values.fatal.with_code(fatal.code());
             self.irq |= self.registers.values.irq_enable.raw() != 0;
         }
     }
@@ -55,13 +55,13 @@ impl Channel {
             u32::from(!self.response.pointers().is_empty())
                 | (u32::from(self.response.last_ioc.is_some()) << 1)
                 | (self.registers.values.irq_cause.raw() & 4)
-                | (u32::from(self.registers.values.fault.code() != Ok(ChannelFaultCode::None))
+                | (u32::from(self.registers.values.fatal.code() != Ok(ChannelFatalCode::None))
                     << 3),
         );
     }
 
     pub(crate) fn published(&mut self, response: &Response, was_empty: bool) {
-        let error = response.status != ResponseStatus::Success;
+        let error = response.status.halts();
         if error {
             self.registers.values.irq_cause =
                 ChannelIrqCauseValues::new(self.registers.values.irq_cause.raw() | 4);
@@ -93,9 +93,9 @@ impl Channel {
     }
 
     pub(crate) fn halted(&self) -> bool {
-        match self.registers.values.fault.code() {
-            Ok(ChannelFaultCode::None) => self.registers.values.irq_cause.response_error(),
-            Ok(ChannelFaultCode::CommandRead | ChannelFaultCode::ResponseWrite) | Err(_) => true,
+        match self.registers.values.fatal.code() {
+            Ok(ChannelFatalCode::None) => self.registers.values.irq_cause.response_error(),
+            Ok(ChannelFatalCode::CommandRead | ChannelFatalCode::ResponseWrite) | Err(_) => true,
         }
     }
     pub(crate) const fn enabled(&self) -> bool {

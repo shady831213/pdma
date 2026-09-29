@@ -60,6 +60,7 @@ fn setup() -> TestResult<Dma<Observed>> {
     publish(
         &mut device,
         Command {
+            copy_length: 512,
             sg_context: 0,
             id: 7,
             flags: CompletionFlagsValues { ioc: true },
@@ -160,11 +161,12 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             publish(
                 &mut device,
                 Command {
+                    copy_length: 512,
                     sg_context: 0,
                     id: 99,
                     flags: CompletionFlagsValues::default(),
-                    source: Endpoint::linear(0x1200, 512),
-                    destination: Endpoint::linear(0x1600, 512),
+                    source: Endpoint::linear(0x1200, 0),
+                    destination: Endpoint::linear(0x1600, 0),
                 },
             )?;
             for _ in 0..256 {
@@ -179,13 +181,13 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             let raw = device
                 .memory
                 .memory
-                .read_typed::<[u8; Response::RECORD_SIZE]>(
+                .read_typed::<pdma_model_contract::dma::ResponseRaw>(
                     MemoryAddress::new(0x1100),
                     MemoryAlignment::ONE,
                 )?;
-            let response = Response::from_bytes(&raw)?;
+            let response = Response::from_bytes(raw.as_ref())?;
             assert_eq!(
-                (response.id, response.status, response.bytes_completed),
+                (response.id, response.status, response.bytes_completed()),
                 (99, ResponseStatus::Success, 512)
             );
         }

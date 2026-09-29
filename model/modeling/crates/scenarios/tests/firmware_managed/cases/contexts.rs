@@ -12,7 +12,7 @@ async fn pasid_control_bootstraps_contexts_and_copies_between_identical_addresse
     assert_eq!(outcome.bytes, b"PASID-backed scatter gather copy");
     let copied = outcome.responses.first().ok_or("missing copy response")?;
     assert_eq!(copied.status, ResponseStatus::Success);
-    assert_eq!(copied.bytes_completed, 32);
+    assert_eq!(copied.bytes_completed(), 32);
     assert_eq!(
         outcome
             .management

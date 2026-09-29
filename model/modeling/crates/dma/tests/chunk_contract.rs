@@ -7,9 +7,10 @@ use hardware_interface_pipeline::{
     AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_contract::dma::{Response, ResponseStatus};
 use pdma_model_dma::{
-    ChannelContext, CheckLengths, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
+    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
     WriteCopy,
 };
 use support::{TestResult, command, setup, submit};
@@ -48,7 +49,7 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
             Then::new(Then::new(NextChunk, ReadCopy), Resize(length)),
             WriteCopy,
         );
-        let execution = Then::new(CheckLengths, Repeat::new(chunk));
+        let execution = Then::new(CheckRanges, Repeat::new(chunk));
         let mut pipeline = Then::new(
             Then::new(
                 device.intake(),
@@ -75,17 +76,17 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
         }
         // Then: the command reports failure with no payload writes or false progress.
         assert!(finished);
-        let raw = memory.read_typed::<[u8; Response::RECORD_SIZE]>(
+        let raw = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
             MemoryAddress::new(0x1100),
             MemoryAlignment::ONE,
         )?;
         assert_eq!(
-            Response::from_bytes(&raw)?,
+            Response::from_bytes(raw.as_ref())?,
             Response {
                 flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
                 id: 7,
                 status: ResponseStatus::InvalidLength,
-                bytes_completed: 0
+                info: ResponseInfoValues::InvalidLength(CompletionInfo { bytes_completed: 0 }),
             }
         );
         assert_eq!(

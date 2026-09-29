@@ -1,19 +1,19 @@
-//! Typed channel fault codes over the unchanged MMIO representation.
+//! Typed channel fatal codes over the unchanged MMIO representation.
 
 use hardware_interface_schema::RegisterValueError;
 use pdma_model_contract::dma::{
-    ChannelFault, ChannelFaultCode, ChannelFaultValues, ChannelRegistersValues,
+    ChannelFatal, ChannelFatalCode, ChannelFatalValues, ChannelRegistersValues,
 };
 
 #[test]
 fn reset_fault_decodes_to_none() -> Result<(), Box<dyn std::error::Error>> {
     // Given: reset channel registers.
     let registers = ChannelRegistersValues::default();
-    // When: software interprets the fault field.
-    let code = registers.fault.code()?;
-    // Then: the reset encoding denotes no fault.
-    assert_eq!(code, ChannelFaultCode::None);
-    assert_eq!(registers.fault.raw(), 0);
+    // When: software interprets the fatal field.
+    let code = registers.fatal.code()?;
+    // Then: the reset encoding denotes no fatal.
+    assert_eq!(code, ChannelFatalCode::None);
+    assert_eq!(registers.fatal.raw(), 0);
     Ok(())
 }
 
@@ -21,16 +21,16 @@ fn reset_fault_decodes_to_none() -> Result<(), Box<dyn std::error::Error>> {
 fn typed_faults_preserve_existing_wire_codes() -> Result<(), Box<dyn std::error::Error>> {
     // Given: the three defined hardware states and their wire encodings.
     for (code, raw) in [
-        (ChannelFaultCode::None, 0),
-        (ChannelFaultCode::CommandRead, 1),
-        (ChannelFaultCode::ResponseWrite, 2),
+        (ChannelFatalCode::None, 0),
+        (ChannelFatalCode::CommandRead, 1),
+        (ChannelFatalCode::ResponseWrite, 2),
     ] {
         // When: hardware writes an enum into the register field.
-        let register = ChannelFaultValues::default().with_code(code);
+        let register = ChannelFatalValues::default().with_code(code);
         // Then: typed and raw readers observe the same state.
         assert_eq!(register.raw(), raw);
         assert_eq!(register.code()?, code);
-        assert_eq!(ChannelFaultCode::from_raw(raw)?, code);
+        assert_eq!(ChannelFatalCode::from_raw(raw)?, code);
     }
     Ok(())
 }
@@ -38,14 +38,14 @@ fn typed_faults_preserve_existing_wire_codes() -> Result<(), Box<dyn std::error:
 #[test]
 fn unknown_fault_encoding_stays_raw_and_rejects_typed_decode() {
     // Given: a bus value outside the declared enum.
-    let register = ChannelFaultValues::new(3);
+    let register = ChannelFatalValues::new(3);
     // When: interpreting its code as a hardware state.
     let decoded = register.code();
-    // Then: unknown is an error, never the no-fault state; raw inspection remains possible.
+    // Then: unknown is an error, never the no-fatal state; raw inspection remains possible.
     assert_eq!(
         decoded,
         Err(RegisterValueError::UnknownTag {
-            location: ChannelFault::CODE_IDENTITY.at_bit(0),
+            location: ChannelFatal::CODE_IDENTITY.at_bit(0),
             observed: 3,
         })
     );

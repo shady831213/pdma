@@ -29,7 +29,9 @@ fn each_response_source_obeys_only_its_own_mask() -> TestResult {
         let mut ioc = command();
         ioc.flags.ioc = true;
         memory.write(
-            MemoryAddress::new(0x1040),
+            MemoryAddress::new(
+                0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?,
+            ),
             MemoryAlignment::ONE,
             &ioc.to_bytes()?,
         )?;
@@ -58,7 +60,7 @@ fn non_empty_notifies_only_on_transition() -> TestResult {
     assert!(device.take_interrupt());
     assert!(!device.irq());
     memory.write(
-        MemoryAddress::new(0x1040),
+        MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
         &command().to_bytes()?,
     )?;
@@ -94,7 +96,7 @@ fn ioc_notifies_while_non_empty_and_mask_does_not_replay() -> TestResult {
     let mut ioc = command();
     ioc.flags.ioc = true;
     memory.write(
-        MemoryAddress::new(0x1040),
+        MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
         &ioc.to_bytes()?,
     )?;
@@ -132,7 +134,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
         &3_u32.to_le_bytes(),
     )?;
     let mut invalid = command();
-    invalid.destination = pdma_model_contract::dma::Endpoint::linear(0x1300, 5);
+    invalid.destination = pdma_model_contract::dma::Endpoint::scatter_gather(0, 0);
     submit(&mut device, &memory, invalid)?;
     run(&mut device)?;
     device.write(
@@ -140,7 +142,7 @@ fn error_response_stops_the_channel_even_after_consumption() -> TestResult {
         &1_u32.to_le_bytes(),
     )?;
     memory.write(
-        MemoryAddress::new(0x1040),
+        MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
         MemoryAlignment::ONE,
         &command().to_bytes()?,
     )?;
@@ -173,7 +175,11 @@ fn fatal_notifies_even_when_response_cause_is_already_active() -> TestResult {
     assert!(device.take_interrupt());
     let mut malformed = command().to_bytes()?;
     malformed[8] = 255;
-    memory.write(MemoryAddress::new(0x1040), MemoryAlignment::ONE, &malformed)?;
+    memory.write(
+        MemoryAddress::new(0x1000 + u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?),
+        MemoryAlignment::ONE,
+        &malformed,
+    )?;
     device.write(
         COMMAND + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
@@ -192,12 +198,16 @@ fn fatal_notifies_even_when_response_cause_is_already_active() -> TestResult {
 #[test]
 fn ioc_cause_clears_at_latest_ioc_not_at_ring_empty() -> TestResult {
     // Given: two IOC responses followed by an ordinary response.
-    let (mut device, memory) = setup(0x1100, 4)?;
+    let (mut device, memory) = setup(0x1800, 4)?;
     for producer in 0..3_u32 {
         let mut input = command();
         input.flags.ioc = producer < 2;
         memory.write(
-            MemoryAddress::new(0x1000 + u64::from(producer) * 64),
+            MemoryAddress::new(
+                0x1000
+                    + u64::from(producer)
+                        * u64::try_from(pdma_model_contract::dma::Command::RECORD_SIZE)?,
+            ),
             MemoryAlignment::ONE,
             &input.to_bytes()?,
         )?;

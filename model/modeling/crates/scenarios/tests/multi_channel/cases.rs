@@ -16,7 +16,7 @@ fn assert_responses(report: &harness::Report, expected: &[(usize, u64, u64)]) {
     for (channel, response) in &report.outcome.responses {
         assert_eq!(response.status, ResponseStatus::Success);
         assert_eq!(response.flags, CompletionFlagsValues::default());
-        responses.push((channel.index(), response.id, response.bytes_completed));
+        responses.push((channel.index(), response.id, response.bytes_completed()));
     }
     responses.sort_unstable();
     assert_eq!(responses, expected);

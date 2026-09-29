@@ -11,7 +11,7 @@ fn independent_endpoints_and_progress_have_full_width_wire_storage() {
     // When: their generated wire extents are inspected.
     let sizes = (command.size(), response.size());
     // Then: two tagged endpoints and 64-bit completion progress fit in the records.
-    assert_eq!(sizes, (64, 24));
+    assert_eq!(sizes, (104, 72));
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn endpoint_constructors_when_const_evaluated_select_matching_tags() -> Result<(
         assert_eq!(endpoint.mode, tag);
         assert_eq!(endpoint.payload.tag(), tag);
         assert_eq!(Endpoint::from_bytes(&bytes)?, endpoint);
-        assert_eq!(bytes.len(), 24);
+        assert_eq!(bytes.len(), 40);
         assert_eq!(Endpoint::SPEC.alignment(), 8);
     }
     Ok(())
@@ -41,7 +41,7 @@ fn endpoint_constructors_when_const_evaluated_select_matching_tags() -> Result<(
 #[test]
 fn endpoint_when_wire_mode_is_unknown_rejects_the_tag() {
     // Given: an endpoint containing the first unassigned mode.
-    let mut bytes = [0; 24];
+    let mut bytes = [0; Endpoint::RECORD_SIZE];
     bytes[0] = 2;
     // When: raw storage crosses the generated typed boundary.
     let result = Endpoint::from_bytes(&bytes);

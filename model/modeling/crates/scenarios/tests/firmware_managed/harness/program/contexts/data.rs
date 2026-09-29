@@ -79,11 +79,12 @@ impl Transfer {
         driver.set_irq_enabled(false).await?;
         let mut source_endpoint = Endpoint::scatter_gather(list.raw(), 1);
         source_endpoint.context = contexts[2].raw();
-        let mut destination_endpoint = Endpoint::linear(destination.raw(), length);
+        let mut destination_endpoint = Endpoint::linear(destination.raw(), 0);
         destination_endpoint.context = contexts[3].raw();
         Ok(Self {
             driver,
             command: Command {
+                copy_length: length,
                 id: 37,
                 source: source_endpoint,
                 destination: destination_endpoint,
@@ -98,7 +99,7 @@ impl Transfer {
     pub(super) async fn submit(&mut self, failure: bool) -> TestResult {
         let mut command = self.command;
         if failure {
-            let mut source = Endpoint::linear(u64::MAX - 4096, u64::try_from(PAYLOAD.len())?);
+            let mut source = Endpoint::linear(u64::MAX - 4096, 0);
             source.context = command.source.context;
             command.source = source;
         }

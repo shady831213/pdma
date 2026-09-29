@@ -16,6 +16,7 @@ pub(in crate::internal) struct ScopedPath {
 pub(in crate::internal) struct UnionCaseDecl {
     pub(in crate::internal) name: Ident,
     pub(in crate::internal) fields: Vec<UnionFieldDecl>,
+    pub(in crate::internal) record: Option<Path>,
 }
 
 pub(in crate::internal) struct UnionFieldDecl {
@@ -69,13 +70,30 @@ impl Parse for ScopedPath {
 impl Parse for UnionCaseDecl {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let name = input.parse()?;
+        if input.peek(syn::token::Paren) {
+            let body;
+            syn::parenthesized!(body in input);
+            let record = body.parse()?;
+            if !body.is_empty() {
+                return Err(body.error("expected one record type"));
+            }
+            return Ok(Self {
+                name,
+                fields: Vec::new(),
+                record: Some(record),
+            });
+        }
         let body;
         braced!(body in input);
         let fields = body
             .parse_terminated(UnionFieldDecl::parse, Token![,])?
             .into_iter()
             .collect();
-        Ok(Self { name, fields })
+        Ok(Self {
+            name,
+            fields,
+            record: None,
+        })
     }
 }
 

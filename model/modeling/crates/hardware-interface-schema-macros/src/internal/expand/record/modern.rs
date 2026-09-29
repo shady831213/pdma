@@ -40,6 +40,14 @@ pub(super) fn expand(decl: &ModernRecordDecl) -> syn::Result<TokenStream> {
         crate::internal::syntax::ModernTypeDecl::Bits(bits_decl) => {
             bits::expand(marker, &field.name, bits_decl, visibility, &facade)
         }
+        crate::internal::syntax::ModernTypeDecl::Union(union_decl)
+            if union_decl
+                .cases
+                .first()
+                .is_some_and(|case| case.record.is_some()) =>
+        {
+            union::records::expand(decl, &field.name, union_decl, visibility, &facade)
+        }
         crate::internal::syntax::ModernTypeDecl::Union(union_decl) => union::expand(
             decl,
             &field.name,

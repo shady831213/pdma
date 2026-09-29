@@ -65,7 +65,7 @@ pub(super) fn fill_field(
             let width = &geometry.storage.width;
             let slots = (0..geometry.slots).map(|index| {
                 let slot_id = id_index + index;
-                let slot_name = format!("word{index}");
+                let slot_name = if field.scoped_union { format!("{name}_word{index}") } else { format!("word{index}") };
                 let relative = quote!((#index).saturating_mul(#width));
                 quote!({
                     let id = match #facade::inferred_field_id(#slot_id) { Some(id) => id, None => 0 };

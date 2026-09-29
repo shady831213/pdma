@@ -15,6 +15,7 @@ pub(super) struct PlacedField<'a> {
     pub(super) decl: &'a ModernFieldDecl,
     pub(super) offset_name: syn::Ident,
     pub(super) offset: TokenStream,
+    pub(super) scoped_union: bool,
 }
 
 pub(super) struct UnionGeometry {
@@ -32,6 +33,12 @@ pub(super) struct UnionStorage {
 impl<'a> RecordPlan<'a> {
     pub(super) fn new(decl: &'a ModernRecordDecl, facade: &TokenStream) -> Self {
         let mut fields = Vec::with_capacity(decl.fields.len());
+        let scoped_union = decl
+            .fields
+            .iter()
+            .filter(|field| matches!(field.ty, ModernTypeDecl::Union(_)))
+            .count()
+            > 1;
         let mut cursor = quote!(0_usize);
         let mut alignments = Vec::with_capacity(decl.fields.len());
         for field in &decl.fields {
@@ -46,6 +53,7 @@ impl<'a> RecordPlan<'a> {
                 decl: field,
                 offset_name,
                 offset,
+                scoped_union,
             });
         }
         let alignment = decl.alignment.map_or_else(
@@ -68,6 +76,24 @@ impl<'a> RecordPlan<'a> {
 }
 
 pub(super) fn union_geometry(union: &UnionDecl, facade: &TokenStream) -> Option<UnionGeometry> {
+    if union.cases.first()?.record.is_some() {
+        let records = union
+            .cases
+            .iter()
+            .filter_map(|case| case.record.as_ref())
+            .collect::<Vec<_>>();
+        let alignment = quote!({ let mut value = 1_usize; #(if #records::RECORD_ALIGNMENT > value { value = #records::RECORD_ALIGNMENT; })* value });
+        let extent = quote!({ let mut value = 0_usize; #(if #records::RECORD_SIZE > value { value = #records::RECORD_SIZE; })* #facade::inferred_align_up(value, #alignment) });
+        return Some(UnionGeometry {
+            storage: UnionStorage {
+                ty: quote!(u8),
+                kind: quote!(#facade::ScalarKind::U8),
+                width: alignment,
+            },
+            slots: 0,
+            extent,
+        });
+    }
     let storage = union
         .cases
         .iter()

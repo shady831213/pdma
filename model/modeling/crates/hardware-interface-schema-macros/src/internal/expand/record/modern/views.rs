@@ -131,7 +131,11 @@ fn getters(
                 let ty = &geometry.storage.ty;
                 (0..geometry.slots)
                     .map(|index| {
-                        let method = format_ident!("word{index}");
+                        let method = if field.scoped_union {
+                            format_ident!("{name}_word{index}")
+                        } else {
+                            format_ident!("word{index}")
+                        };
                         let relative = quote!((#index).saturating_mul(#width));
                         raw_scalar::dynamic_getter(scalar_context, &method, &relative, ty, width)
                     })
@@ -193,7 +197,11 @@ fn setters(
                 let ty = &geometry.storage.ty;
                 (0..geometry.slots)
                     .map(|index| {
-                        let method = format_ident!("word{index}");
+                        let method = if field.scoped_union {
+                            format_ident!("{name}_word{index}")
+                        } else {
+                            format_ident!("word{index}")
+                        };
                         let relative = quote!((#index).saturating_mul(#width));
                         raw_scalar::dynamic_setter(scalar_context, &method, &relative, ty, width)
                     })

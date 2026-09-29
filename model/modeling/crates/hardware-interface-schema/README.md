@@ -474,3 +474,22 @@ codecs, checked views and generated-value register windows.
 `hardware-interface-pipeline`
 supplies interaction drive policies, and the PDMA device supplies register command,
 DMA, reset and IRQ effects.
+
+### Record-backed union cases
+
+In addition to equal-width inline cases, a record union can reuse complete schemas:
+```rust,ignore
+info: union { tag: self.status, cases: {
+    Success(CompletionInfo),
+    PageFault(PageFaultInfo),
+} }
+```
+All branches in that union use record syntax. Size and alignment are the maximum
+of the selected record definitions, rounded for alignment. Encoding derives the
+tag from the value; decoding rejects nonzero storage beyond the selected record.
+Nested codec errors retain their rebased coordinates. The parent specification
+marks an opaque union region; each branch retains its own record specification.
+The C exporter emits nested-record OFFSET/SIZE constants, so separately exported
+branch accessors can operate on that region without handwritten layout offsets.
+With multiple inline unions in one record, raw word accessors and metadata are
+prefixed by the union field name; a single inline union retains word0/word1 names.

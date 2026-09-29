@@ -58,15 +58,16 @@ pub(super) fn encode(context: Context<'_>) -> TokenStream {
     } = context;
     let name = &field.name;
     let identity = format_ident!("{}_IDENTITY", name.to_string().to_ascii_uppercase());
+    let binding = binding(name);
     let encoded = match &field.ty {
         UnionFieldType::Scalar(_) => {
-            quote!(#facade::write_scalar(bytes, #facade::Endian::#endian, *#name))
+            quote!(#facade::write_scalar(bytes, #facade::Endian::#endian, *#binding))
         }
         UnionFieldType::Bits(path) => quote!(
             <#path as #facade::BitsLayout>::encode_record(
                 bytes,
                 #facade::Endian::#endian,
-                #name,
+                #binding,
                 #owner::#identity.at(offset),
             )
         ),
@@ -78,4 +79,12 @@ pub(super) fn encode(context: Context<'_>) -> TokenStream {
         let bytes = bytes.get_mut(offset..end).ok_or(#facade::SchemaCodecError::BufferTooShort { required: end, actual })?;
         #encoded?;
     })
+}
+
+pub(super) fn binding(name: &syn::Ident) -> syn::Ident {
+    format_ident!(
+        "__schema_union_value_{}",
+        name,
+        span = proc_macro2::Span::mixed_site()
+    )
 }

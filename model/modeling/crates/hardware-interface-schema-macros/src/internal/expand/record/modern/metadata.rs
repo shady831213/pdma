@@ -47,7 +47,9 @@ pub(super) fn expand(
         let width = &geometry.storage.width;
         (0..geometry.slots)
             .map(|index| {
-                let name = format_ident!("WORD{index}_OFFSET");
+                let name = if field.scoped_union {
+                    format_ident!("{}_WORD{index}_OFFSET", field.decl.name.to_string().to_ascii_uppercase())
+                } else { format_ident!("WORD{index}_OFFSET") };
                 let relative = quote!((#index).saturating_mul(#width));
                 quote!(#[doc = "Generated raw union-storage slot offset."] pub const #name: usize = Self::#base.saturating_add(#relative);)
             })
@@ -109,6 +111,18 @@ fn metadata_parts(
         let name = field.decl.name.to_string();
         let offset = &field.offset_name;
         let documentation = field.decl.documentation.metadata(facade);
+        if matches!(&field.decl.ty, ModernTypeDecl::Union(union) if union.cases.first().is_some_and(|case| case.record.is_some()))
+        {
+            let ty = super::scalar::type_name(marker, &field.decl.name, "Values");
+            let id_index = next_id;
+            next_id += 1;
+            placements.push(quote!({
+                let id = match #facade::inferred_field_id(#id_index) { Some(id) => id, None => 0 };
+                #facade::RecordPlacement::new(id, #name, #marker::#offset, &#ty::SPEC)
+                    .with_declaration_index(#declaration_index).with_documentation(#documentation)
+            }));
+            continue;
+        }
         if let ModernTypeDecl::Record(path) = &field.decl.ty {
             let id_index = next_id;
             next_id += 1;

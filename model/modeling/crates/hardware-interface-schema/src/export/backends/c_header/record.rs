@@ -46,9 +46,39 @@ impl Exporter<ResolvedRecord> for RecordCHeaderExporter {
         sink.emit(Artifact {
             logical_name: self.config.logical_name.clone(),
             media_type: String::from(C_MEDIA_TYPE),
-            contents: render(&model, &self.config.symbol_prefix).into_bytes(),
+            contents: format!(
+                "{}{}",
+                render(&model, &self.config.symbol_prefix),
+                render_placements(schema, &self.config.symbol_prefix)
+            )
+            .into_bytes(),
         })
     }
+}
+
+fn render_placements(schema: &ResolvedRecord, prefix: &str) -> String {
+    let mut output = String::new();
+    for member in schema.members() {
+        if let crate::ResolvedMemberKind::Record { definition, .. } = member.kind() {
+            let name = member
+                .path()
+                .strip_prefix(schema.root())
+                .and_then(|path| path.strip_prefix('.'))
+                .unwrap_or_else(|| member.path());
+            let name = c_identifier(name);
+            let _ = writeln!(
+                output,
+                "#define {prefix}_RECORD_{name}_OFFSET UINT64_C({})",
+                member.absolute_offset()
+            );
+            let _ = writeln!(
+                output,
+                "#define {prefix}_RECORD_{name}_SIZE UINT64_C({})",
+                definition.size()
+            );
+        }
+    }
+    output
 }
 
 fn render(model: &RecordCHeaderModel, prefix: &str) -> String {

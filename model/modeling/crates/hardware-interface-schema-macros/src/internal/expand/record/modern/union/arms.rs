@@ -80,7 +80,11 @@ pub(super) fn encode(context: &Context<'_>) -> Vec<TokenStream> {
         .map(|case| {
             let case_name = &case.name;
             let case_type = case_type(context.record, context.field, case_name);
-            let names = case.fields.iter().map(|field| &field.name);
+            let names = case.fields.iter().map(|field| {
+                let name = &field.name;
+                let binding = case_field::binding(name);
+                quote!(#name: #binding)
+            });
             let encoded = case.fields.iter().enumerate().map(|(index, field)| {
                 let quantum = context.quantum;
                 let relative = quote!((#index).saturating_mul(#quantum));

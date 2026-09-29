@@ -83,6 +83,10 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
     let mut names = HashSet::new();
     let mut field_count = 0_usize;
     for case in &union.cases {
+        if let Some(path) = &case.record {
+            field_count += 1;
+            check_type(decl, &ModernTypeDecl::Record(path.clone()))?;
+        }
         if !names.insert(case.name.to_string()) {
             return Err(syn::Error::new(case.name.span(), "duplicate union case"));
         }
@@ -101,6 +105,17 @@ fn check_union(decl: &ModernRecordDecl, union: &UnionDecl) -> syn::Result<()> {
         return Err(syn::Error::new(
             union.tag.span,
             "union requires at least one stored field",
+        ));
+    }
+    let record_cases = union
+        .cases
+        .iter()
+        .filter(|case| case.record.is_some())
+        .count();
+    if record_cases != 0 && record_cases != union.cases.len() {
+        return Err(syn::Error::new(
+            union.tag.span,
+            "record and inline union cases cannot be mixed",
         ));
     }
     match (union.tag.segments.len(), &root_field.ty) {

@@ -11,6 +11,7 @@ mod arms;
 mod case_field;
 mod codec;
 mod identity;
+pub(super) mod records;
 
 pub(super) struct TagInfo {
     pub(super) ty: TokenStream,

@@ -13,15 +13,9 @@ mod unit {
     }
 }
 
-/// Failure of one checked contiguous memory access.
+/// Failure of one checked contiguous access to the built-in memory store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemoryAccessError {
-    /// A repairable not-present translation, distinct from access denial.
-    /// No externally visible write from this failed call may have committed.
-    PageFault {
-        /// First byte whose translation is missing, possibly inside the access.
-        address: MemoryAddress,
-    },
     /// The exclusive access end exceeds the address space.
     AddressOverflow {
         /// Access start address.
@@ -55,9 +49,6 @@ pub enum MemoryAccessError {
 impl Display for MemoryAccessError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PageFault { address } => {
-                write!(formatter, "page fault at {:#x}", address.raw())
-            }
             Self::AddressOverflow { address, length } => write!(
                 formatter,
                 "memory access at {:#x} with length {length} exceeds the address space",
@@ -91,17 +82,19 @@ impl Error for MemoryAccessError {}
 
 /// Synchronous checked bulk access to a modeled byte store.
 pub trait MemoryAccess<S = ()> {
+    /// Backend-owned failure, preserved by the default access helpers.
+    type Error;
+
     /// Checks a complete extent without reading, writing, allocating, or changing storage.
     ///
-    /// Errors follow overflow, alignment, lookup, then region-crossing order.
-    /// A zero-length extent accepts installed region endpoints, but not unmapped gaps.
+    /// The backend defines accepted extents and validation errors.
     fn validate_with_sideband(
         &self,
         sideband: &S,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError>;
+    ) -> Result<(), Self::Error>;
 
     /// Reads one contiguous slice into caller-owned storage.
     fn read_with_sideband(
@@ -110,17 +103,16 @@ pub trait MemoryAccess<S = ()> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
-    ) -> Result<(), MemoryAccessError>;
+    ) -> Result<(), Self::Error>;
 
     /// Writes one contiguous caller-owned slice.
-    /// Returning `PageFault` guarantees this call committed no externally visible bytes.
     fn write_with_sideband(
         &self,
         sideband: &S,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],
-    ) -> Result<(), MemoryAccessError>;
+    ) -> Result<(), Self::Error>;
 
     /// Checks an extent on a unit-sideband backend.
     fn validate(
@@ -128,7 +120,7 @@ pub trait MemoryAccess<S = ()> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError>
+    ) -> Result<(), Self::Error>
     where
         S: unit::UnitSideband,
     {
@@ -141,7 +133,7 @@ pub trait MemoryAccess<S = ()> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
-    ) -> Result<(), MemoryAccessError>
+    ) -> Result<(), Self::Error>
     where
         S: unit::UnitSideband,
     {
@@ -154,7 +146,7 @@ pub trait MemoryAccess<S = ()> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],
-    ) -> Result<(), MemoryAccessError>
+    ) -> Result<(), Self::Error>
     where
         S: unit::UnitSideband,
     {
@@ -169,7 +161,7 @@ pub trait MemoryAccess<S = ()> {
         &self,
         address: MemoryAddress,
         alignment: MemoryAlignment,
-    ) -> Result<T, MemoryAccessError>
+    ) -> Result<T, Self::Error>
     where
         Self: Sized,
         S: unit::UnitSideband,
@@ -184,7 +176,7 @@ pub trait MemoryAccess<S = ()> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         value: &T,
-    ) -> Result<(), MemoryAccessError>
+    ) -> Result<(), Self::Error>
     where
         Self: Sized,
         S: unit::UnitSideband,
@@ -199,7 +191,7 @@ pub trait MemoryAccess<S = ()> {
         sideband: &S,
         address: MemoryAddress,
         alignment: MemoryAlignment,
-    ) -> Result<T, MemoryAccessError>
+    ) -> Result<T, Self::Error>
     where
         Self: Sized,
         T: Default + AsMut<[u8]>,
@@ -216,7 +208,7 @@ pub trait MemoryAccess<S = ()> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         value: &T,
-    ) -> Result<(), MemoryAccessError>
+    ) -> Result<(), Self::Error>
     where
         Self: Sized,
         T: AsRef<[u8]> + ?Sized,

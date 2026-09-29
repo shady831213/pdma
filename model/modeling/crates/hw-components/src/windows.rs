@@ -12,7 +12,7 @@ mod memory;
 mod window;
 pub use error::{AccessError, WindowConfigError};
 pub use function::FunctionWindows;
-pub use memory::ChannelMemoryAccess;
+pub use memory::{ChannelMemoryAccess, MemoryError};
 pub use window::ChannelWindow;
 
 /// Independent firmware-controlled Host apertures for one configured DMA instance.

@@ -12,7 +12,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     pub async fn submit_acquire(
         &mut self,
         function: FunctionId,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit(ControlRequestOpcode::AcquireChannel, function, 0)
             .await
     }
@@ -23,7 +23,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         channel: ChannelId,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit(
             ControlRequestOpcode::ReleaseChannel,
             function,
@@ -37,7 +37,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         channel: ChannelId,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit(
             ControlRequestOpcode::ResetChannel,
             function,
@@ -47,11 +47,13 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     }
 
     /// Finishes the retained publication and notification, returning the same identity.
-    pub async fn resume_submission(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
+    pub async fn resume_submission(
+        &mut self,
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.publish().await
     }
 
-    pub(super) fn require_idle(&self) -> Result<(), Error<B::Error>> {
+    pub(super) fn require_idle(&self) -> Result<(), Error<B::Error, M::Error>> {
         if !self.outstanding.is_empty() {
             return Err(Error::ManagementBusy);
         }
@@ -63,7 +65,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         opcode: ControlRequestOpcode,
         function: FunctionId,
         channel: u32,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit_request(ControlRequest {
             id: 0,
             opcode,
@@ -78,7 +80,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     pub(super) async fn submit_request(
         &mut self,
         mut request: ControlRequest,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         if self.submission.is_some() {
             return Err(Error::ManagementBusy);
         }
@@ -121,7 +123,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         self.publish().await
     }
 
-    pub(super) async fn publish(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
+    pub(super) async fn publish(
+        &mut self,
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         let mut submission = self.submission.ok_or(Error::ManagementIdle)?;
         if !submission.published {
             let io = self.layout.command_io(&self.memory);

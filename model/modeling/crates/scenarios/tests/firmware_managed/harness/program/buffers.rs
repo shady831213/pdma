@@ -10,7 +10,7 @@ use pdma_model_host::{
 };
 use pdma_model_software::control::InterruptEvent;
 
-pub(super) type Driver = Channel<HostBus<SharedMemoryAccess>, SharedMemoryAccess>;
+pub(super) type Driver<M = SharedMemoryAccess> = Channel<HostBus<M>, SharedMemoryAccess>;
 
 pub(super) struct Transfer {
     pub(super) driver: Driver,
@@ -132,11 +132,11 @@ pub(in crate::harness::program) async fn management(
     .await
 }
 
-pub(in crate::harness::program) async fn management_with_context(
-    ports: &Ports<'_>,
+pub(in crate::harness::program) async fn management_with_context<M: Send>(
+    ports: &Ports<'_, M>,
     interrupt: InterruptEvent,
     attributes: pdma_model_contract::memory::ContextAttributes,
-) -> TestResult<Management<HostBus<SharedMemoryAccess>, SharedMemoryAccess>> {
+) -> TestResult<Management<HostBus<M>, SharedMemoryAccess>> {
     let event_interrupt = InterruptEvent::new();
     ports.interrupts.register(
         super::HostVector::Event,

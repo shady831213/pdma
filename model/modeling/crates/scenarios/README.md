@@ -76,6 +76,12 @@ the platform supplies per-Function capabilities. These cases verify IRQ-driven
 copy and reset during a transfer while peer DMA proceeds. The shared-memory
 Function assembly remains separately exercised.
 
+Scenario memory routing retains backend errors: `FunctionSpaces` reports a missing
+identity with its address or preserves the downstream error; `RoutedMemory` retains
+the window/context rejection layer. The managed page-fault backend owns `PageError`
+and maps it to DMA's `MemoryFailure` only at the execution boundary. Its system case
+repairs independent source and destination PASIDs and resubmits without reset.
+
 ```sh
 cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture
 ```

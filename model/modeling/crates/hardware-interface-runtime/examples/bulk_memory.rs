@@ -5,8 +5,7 @@ use std::io::{self, Write};
 use std::sync::Arc;
 
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
-    SharedMemoryAllocator,
+    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory, SharedMemoryAllocator,
 };
 
 struct RecordingMemoryAccess<A> {
@@ -34,13 +33,15 @@ impl<A> RecordingMemoryAccess<A> {
 }
 
 impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
+    type Error = A::Error;
+
     fn validate_with_sideband(
         &self,
         (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.inner.validate(address, alignment, length)
     }
 
@@ -50,7 +51,7 @@ impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.read_calls.set(self.read_calls.get().saturating_add(1));
         self.inner.read(address, alignment, destination)
     }
@@ -61,7 +62,7 @@ impl<A: MemoryAccess> MemoryAccess for RecordingMemoryAccess<A> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.write_calls
             .set(self.write_calls.get().saturating_add(1));
         self.inner.write(address, alignment, source)

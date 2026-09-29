@@ -24,6 +24,8 @@ impl UnmappedRing {
 }
 
 impl MemoryAccess for UnmappedRing {
+    type Error = MemoryAccessError;
+
     fn validate_with_sideband(
         &self,
         (): &(),

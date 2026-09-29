@@ -32,8 +32,8 @@ pub enum Input<'a> {
     StopAfterReady,
 }
 
-pub(super) struct Ports<'a> {
-    pub(super) bus: HostBus<SharedMemoryAccess>,
+pub(super) struct Ports<'a, M = SharedMemoryAccess> {
+    pub(super) bus: HostBus<M>,
     pub(super) memory: SharedMemoryAccess,
     pub(super) allocator: SharedMemoryAllocator,
     pub(super) interrupts: InterruptRegistration<'a, HostIrq, Handler>,

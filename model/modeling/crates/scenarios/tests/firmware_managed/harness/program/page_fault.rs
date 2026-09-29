@@ -21,8 +21,8 @@ pub struct Outcome {
     pub(crate) released: bool,
 }
 
-pub(in crate::harness) async fn main(
-    ports: Ports<'_>,
+pub(in crate::harness) async fn main<M: Send>(
+    ports: Ports<'_, M>,
     [lists, source, destination]: [Space; 3],
 ) -> TestResult<Outcome> {
     firmware::wait_ready(

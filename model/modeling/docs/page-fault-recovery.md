@@ -288,8 +288,9 @@ Reset observed before the next access discards old work, including a pending fau
 response, and retains earlier external writes. Metadata and response-write failures
 retain their existing stopping/fatal outcomes.
 
-**PLAT-PF-01 (access classification and atomic failure).** MemoryAccessError::PageFault
-means a specifically repairable not-present translation. Its address identifies the
+**PLAT-PF-01 (access classification and atomic failure).** A platform access failure
+converted to DMA's `MemoryFailure::PageFault` means a specifically repairable
+not-present translation. Its address identifies the
 first missing byte in the attempted access, possibly after its start. A write
 returning that error must commit no externally visible bytes from that call.
 Unmapped storage, binding/authorization failure, permission denial and allocation
@@ -297,6 +298,17 @@ failure must not be relabeled as paging. DMA does not dictate page size. An RTL
 adapter must either prevent a failed modeled access from partially committing or
 refine internal commit boundaries so published progress remains truthful; replaying
 already-visible writes is not an acceptable substitute.
+
+`MemoryAccess::Error` belongs to the backend. The generic runtime neither enumerates
+platform failures nor classifies them for DMA. Its built-in `MemoryAccessError`
+describes only its own storage checks. Bound/shared access and typed byte helpers
+preserve the backend's error type; software rings, Host and firmware preserve it
+in their respective operation errors. Hardware routing owns its channel/context
+rejections and wraps downstream failures without reinterpreting them as missing
+storage. At the DMA boundary, `Into<MemoryFailure>` classifies those failures as
+ordinary `Access` or repairable `PageFault`; the access role then determines the
+existing response or fatal behavior. Adding a backend failure category therefore
+does not require modifying the generic runtime or the wire contract.
 
 **HOST-PF-01 (repair and resubmission).** Software retains the command-ID association,
 independent endpoint contexts and binding-to-address-space association. It resolves

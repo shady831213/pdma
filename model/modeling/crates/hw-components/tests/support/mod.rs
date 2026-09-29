@@ -52,6 +52,7 @@ impl Spaces {
     }
 }
 impl MemoryAccess<MemoryIdentity> for Spaces {
+    type Error = MemoryAccessError;
     fn validate_with_sideband(
         &self,
         identity: &MemoryIdentity,

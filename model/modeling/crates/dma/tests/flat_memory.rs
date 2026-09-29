@@ -41,6 +41,7 @@ impl FlatMemory {
 }
 
 impl MemoryAccess for FlatMemory {
+    type Error = MemoryAccessError;
     fn validate_with_sideband(
         &self,
         (): &(),

@@ -18,15 +18,32 @@ struct FallibleMemory {
     rejected: Arc<AtomicU64>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum BackendError {
+    Rejected { address: MemoryAddress, reason: u32 },
+    Backing(MemoryAccessError),
+}
+
+impl std::fmt::Display for BackendError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for BackendError {}
+
 impl MemoryAccess for FallibleMemory {
+    type Error = BackendError;
     fn validate_with_sideband(
         &self,
         (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
-        self.memory.validate(address, alignment, length)
+    ) -> Result<(), BackendError> {
+        self.memory
+            .validate(address, alignment, length)
+            .map_err(BackendError::Backing)
     }
     fn read_with_sideband(
         &self,
@@ -34,8 +51,10 @@ impl MemoryAccess for FallibleMemory {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.memory.read(address, alignment, bytes)
+    ) -> Result<(), BackendError> {
+        self.memory
+            .read(address, alignment, bytes)
+            .map_err(BackendError::Backing)
     }
     fn write_with_sideband(
         &self,
@@ -43,15 +62,20 @@ impl MemoryAccess for FallibleMemory {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), BackendError> {
         if self
             .rejected
             .compare_exchange(address.raw(), 0, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
         {
-            return Err(MemoryAccessError::Unmapped { address });
+            return Err(BackendError::Rejected {
+                address,
+                reason: 73,
+            });
         }
-        self.memory.write(address, alignment, bytes)
+        self.memory
+            .write(address, alignment, bytes)
+            .map_err(BackendError::Backing)
     }
 }
 
@@ -92,10 +116,10 @@ async fn publication_and_consumption_memory_failures_preserve_original_work() {
                 Ordering::SeqCst,
             );
             // When: producer publication fails and is explicitly resumed.
-            assert!(matches!(
-                client.submit_acquire(FunctionId::new(0)).await,
-                Err(Error::Memory(_))
-            ));
+            let rejected = memory.rejected.load(Ordering::SeqCst);
+            let error = client.submit_acquire(FunctionId::new(0)).await.unwrap_err();
+            assert!(std::error::Error::source(&error).is_some());
+            assert!(matches!(error, Error::Memory(BackendError::Rejected { address, reason: 73 }) if address.raw() == rejected));
             assert_eq!(fixture.state().unwrap().command.producer, 0);
             assert!(matches!(
                 client.submit_acquire(FunctionId::new(0)).await,

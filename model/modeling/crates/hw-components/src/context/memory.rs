@@ -1,7 +1,7 @@
 use super::ContextTable;
 use crate::windows::ChannelWindows;
-use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::DmaAccess;
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
 
 #[doc = "Borrowed context lookup translating DMA selectors into authorized fabric identities."]
@@ -28,24 +28,33 @@ impl ContextTable {
 }
 
 impl<M: ?Sized> ContextMemoryAccess<'_, M> {
-    fn identity(
-        &self,
-        access: DmaAccess,
-        address: MemoryAddress,
-    ) -> Result<MemoryIdentity, MemoryAccessError> {
-        let unmapped = MemoryAccessError::Unmapped { address };
-        let owner = self.windows.owner(access.channel).ok_or(unmapped)?;
+    fn identity<E>(&self, access: DmaAccess) -> Result<MemoryIdentity, MemoryError<E>> {
+        let owner = self
+            .windows
+            .owner(access.channel)
+            .ok_or(MemoryError::UnownedChannel {
+                channel: access.channel,
+            })?;
         let entry = usize::try_from(access.context.raw())
             .ok()
             .and_then(|index| self.table.entries.get(index))
             .filter(|entry| entry.values.valid.enabled())
-            .ok_or(unmapped)?;
+            .ok_or(MemoryError::InvalidContext {
+                context: access.context,
+            })?;
         if FunctionId::new(entry.values.owner.raw()) != owner {
-            return Err(unmapped);
+            return Err(MemoryError::OwnerMismatch {
+                context: access.context,
+                owner,
+            });
         }
         Ok(MemoryIdentity {
             function: owner,
-            attributes: entry.values.attributes.attributes().map_err(|_| unmapped)?,
+            attributes: entry.values.attributes.attributes().map_err(|_| {
+                MemoryError::InvalidAttributes {
+                    context: access.context,
+                }
+            })?,
         })
     }
 }
@@ -53,19 +62,17 @@ impl<M: ?Sized> ContextMemoryAccess<'_, M> {
 impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
     for ContextMemoryAccess<'_, M>
 {
+    type Error = MemoryError<M::Error>;
     fn validate_with_sideband(
         &self,
         access: &DmaAccess,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
-        self.downstream.validate_with_sideband(
-            &self.identity(*access, address)?,
-            address,
-            alignment,
-            length,
-        )
+    ) -> Result<(), Self::Error> {
+        self.downstream
+            .validate_with_sideband(&self.identity(*access)?, address, alignment, length)
+            .map_err(MemoryError::Downstream)
     }
     fn read_with_sideband(
         &self,
@@ -73,13 +80,10 @@ impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.downstream.read_with_sideband(
-            &self.identity(*access, address)?,
-            address,
-            alignment,
-            bytes,
-        )
+    ) -> Result<(), Self::Error> {
+        self.downstream
+            .read_with_sideband(&self.identity(*access)?, address, alignment, bytes)
+            .map_err(MemoryError::Downstream)
     }
     fn write_with_sideband(
         &self,
@@ -87,12 +91,83 @@ impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.downstream.write_with_sideband(
-            &self.identity(*access, address)?,
-            address,
-            alignment,
-            bytes,
-        )
+    ) -> Result<(), Self::Error> {
+        self.downstream
+            .write_with_sideband(&self.identity(*access)?, address, alignment, bytes)
+            .map_err(MemoryError::Downstream)
+    }
+}
+
+/// Rejection by this hardware memory port or a preserved downstream failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryError<E> {
+    /// No owner exists for this channel selection.
+    UnownedChannel {
+        /// Channel requested by the upstream access.
+        channel: ChannelId,
+    },
+    /// The context selector does not identify a valid entry.
+    InvalidContext {
+        /// Context selector that failed the validity check.
+        context: ContextId,
+    },
+    /// The selected context belongs to another Function.
+    OwnerMismatch {
+        /// Context selected by the upstream access.
+        context: ContextId,
+        /// Channel owner that must also own the context.
+        owner: FunctionId,
+    },
+    /// The context's address-space attributes are invalid.
+    InvalidAttributes {
+        /// Context whose address-space attributes could not be decoded.
+        context: ContextId,
+    },
+    /// Failure reported by the selected downstream memory.
+    Downstream(E),
+}
+
+impl<E: core::fmt::Display> core::fmt::Display for MemoryError<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::UnownedChannel { channel } => {
+                write!(f, "channel {} has no memory owner", channel.index())
+            }
+            Self::InvalidContext { context } => write!(f, "context {} is not valid", context.raw()),
+            Self::OwnerMismatch { context, owner } => write!(
+                f,
+                "context {} is not owned by Function {}",
+                context.raw(),
+                owner.raw()
+            ),
+            Self::InvalidAttributes { context } => {
+                write!(f, "context {} has invalid attributes", context.raw())
+            }
+            Self::Downstream(error) => error.fmt(f),
+        }
+    }
+}
+
+impl<E: core::error::Error + 'static> core::error::Error for MemoryError<E> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Downstream(error) => Some(error),
+            Self::UnownedChannel { .. }
+            | Self::InvalidContext { .. }
+            | Self::OwnerMismatch { .. }
+            | Self::InvalidAttributes { .. } => None,
+        }
+    }
+}
+
+impl<E: Into<Self>> From<MemoryError<E>> for pdma_model_dma::MemoryFailure {
+    fn from(error: MemoryError<E>) -> Self {
+        match error {
+            MemoryError::Downstream(error) => error.into(),
+            MemoryError::UnownedChannel { .. }
+            | MemoryError::InvalidContext { .. }
+            | MemoryError::OwnerMismatch { .. }
+            | MemoryError::InvalidAttributes { .. } => Self::Access,
+        }
     }
 }

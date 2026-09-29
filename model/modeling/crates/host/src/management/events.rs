@@ -13,7 +13,7 @@ use pdma_model_software::ring::SoftRing;
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Reads firmware's retained event delivery failure without consuming an event.
-    pub async fn event_error(&self) -> Result<EventRingErrorCode, Error<B::Error>> {
+    pub async fn event_error(&self) -> Result<EventRingErrorCode, Error<B::Error, M::Error>> {
         EventRingErrorValues::new(
             self.read(
                 ControlRegisters::NOTIFICATION.offset()
@@ -27,7 +27,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
 
     /// Consumes one event without completing a management request.
     /// A delivery error takes priority because event history is incomplete.
-    pub async fn try_event(&mut self) -> Result<Option<ControlEvent>, Error<B::Error>> {
+    pub async fn try_event(&mut self) -> Result<Option<ControlEvent>, Error<B::Error, M::Error>> {
         match self.event_error().await? {
             EventRingErrorCode::None => {}
             code @ (EventRingErrorCode::Overflow
@@ -43,7 +43,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     }
 
     /// Waits on the independent event ISR hint, not on management completions.
-    pub async fn next_event(&mut self) -> Result<ControlEvent, Error<B::Error>> {
+    pub async fn next_event(&mut self) -> Result<ControlEvent, Error<B::Error, M::Error>> {
         loop {
             if let Some(event) = self.try_event().await? {
                 return Ok(event);
@@ -54,7 +54,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
 
     /// Requests whole-DMA recovery after PF has quiesced all affected Functions.
     /// Keep old memory alive until success; grants stay closed after recovery.
-    pub async fn submit_reset_dma(&mut self) -> Result<ManagementRequestId, Error<B::Error>> {
+    pub async fn submit_reset_dma(
+        &mut self,
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit(ControlRequestOpcode::ResetDma, FunctionId::new(0), 0)
             .await
     }
@@ -64,7 +66,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     pub async fn reset_events(
         &mut self,
         config: RingConfig<ControlEvent>,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.require_idle()?;
         match self.event_error().await? {
             EventRingErrorCode::None => {

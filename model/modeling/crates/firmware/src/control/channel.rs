@@ -25,7 +25,7 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         bus: &'a B,
         memory: &'a M,
         base: u32,
-    ) -> Result<Option<Self>, Error<B::Error>> {
+    ) -> Result<Option<Self>, Error<B::Error, M::Error>> {
         if read_word(bus, base, ControlRegisters::ENABLE.offset()).await? == 0 {
             return Ok(None);
         }
@@ -79,14 +79,16 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         self.descriptor
     }
 
-    pub(super) async fn has_response_space(&self) -> Result<bool, Error<B::Error>> {
+    pub(super) async fn has_response_space(&self) -> Result<bool, Error<B::Error, M::Error>> {
         self.response
             .has_space(&self.response_io)
             .await
             .map_err(Error::SoftRing)
     }
 
-    pub(super) async fn try_receive(&mut self) -> Result<Option<ControlRequest>, Error<B::Error>> {
+    pub(super) async fn try_receive(
+        &mut self,
+    ) -> Result<Option<ControlRequest>, Error<B::Error, M::Error>> {
         let request = self
             .command
             .peek(&self.command_io)
@@ -105,7 +107,7 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
     pub(super) async fn respond(
         &mut self,
         response: ControlResponse,
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M::Error>> {
         // The service checked space before this publication; no other producer writes this ring.
         if !self
             .response
@@ -118,7 +120,7 @@ impl<'a, B: RegisterAccess + Sync, M: MemoryAccess + Sync> Channel<'a, B, M> {
         self.notify().await
     }
 
-    async fn notify(&self) -> Result<(), Error<B::Error>> {
+    async fn notify(&self) -> Result<(), Error<B::Error, M::Error>> {
         self.bus
             .write(
                 address(
@@ -139,11 +141,11 @@ fn address(base: u32, offset: usize) -> Result<u32, RingError> {
         .ok_or(RingError::Geometry)
 }
 
-async fn read_word<B: RegisterAccess + Sync>(
+async fn read_word<B: RegisterAccess + Sync, E>(
     bus: &B,
     base: u32,
     offset: usize,
-) -> Result<u32, Error<B::Error>> {
+) -> Result<u32, Error<B::Error, E>> {
     let mut bytes = [0; 4];
     bus.read(address(base, offset).map_err(Error::Ring)?, &mut bytes)
         .await
@@ -155,7 +157,7 @@ fn read_state<M: MemoryAccess, E>(
     memory: &M,
     base: MemoryAddress,
     offset: usize,
-) -> Result<ControlRingState, Error<E>> {
+) -> Result<ControlRingState, Error<E, M::Error>> {
     let address = base
         .raw()
         .checked_add(u64::try_from(offset).map_err(|_| Error::Ring(RingError::Geometry))?)

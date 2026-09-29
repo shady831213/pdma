@@ -2,6 +2,7 @@
 mod context;
 mod control;
 mod firmware;
+mod routing_errors;
 /// Shared backing for hardware memory-routing tests.
 pub mod support;
 mod windows;

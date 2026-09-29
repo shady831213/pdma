@@ -23,14 +23,14 @@ pub async fn main<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync>(
     memory: M,
     registration: InterruptRegistration<'_, ControlIrq, ControlIsr>,
     config: impl Into<Configuration>,
-) -> Result<Infallible, Error<B::Error>> {
+) -> Result<Infallible, Error<B::Error, M::Error>> {
     let config = config.into();
     let addresses = config.addresses;
     let interrupt = InterruptEvent::new();
     registration
         .register((), interrupt.handler())
         .map_err(Error::Registration)?;
-    let setup = resources::Resources::initialize(&bus, config).await;
+    let setup = resources::Resources::initialize::<_, M::Error>(&bus, config).await;
     let report = match &setup {
         Ok(_) => FirmwareBootValues::default().with_state(FirmwareBootState::Ready),
         Err(_) => FirmwareBootValues::default()

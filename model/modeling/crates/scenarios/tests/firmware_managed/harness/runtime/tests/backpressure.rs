@@ -170,7 +170,9 @@ async fn rejected_command_case(unmapped: bool) -> TestResult {
     if unmapped {
         assert!(matches!(result,
             Err(RunError::Firmware(pdma_model_firmware::Error::SoftRing(SoftRingError::Memory(
-                MemoryAccessError::Unmapped { address }
+                pdma_model_hw_components::control::MemoryError::Downstream(
+                    super::super::memory::SpaceError::Downstream(MemoryAccessError::Unmapped { address })
+                )
             )))) if address == MemoryAddress::new(0xdead_0000)));
     } else {
         assert!(matches!(

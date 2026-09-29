@@ -9,7 +9,10 @@ use std::ops::ControlFlow;
 #[derive(Debug, Default)]
 pub struct ReadCopy;
 
-impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy
+where
+    M::Error: Into<crate::MemoryFailure>,
+{
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
@@ -46,7 +49,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy {
                             Ok(()) => {}
                             Err(error) => transfer
                                 .progress
-                                .fail_access(error, PageFaultKindsAccess::SourceRead),
+                                .fail_access(error.into(), PageFaultKindsAccess::SourceRead),
                         }
                     }
                     None => transfer.progress.status = ResponseStatus::InvalidLength,
@@ -68,7 +71,10 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for ReadCopy {
 #[derive(Debug, Default)]
 pub struct WriteCopy;
 
-impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy {
+impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy
+where
+    M::Error: Into<crate::MemoryFailure>,
+{
     type Input = Transfer;
     type Output = ControlFlow<Response, CopyState>;
     type Error = Error;
@@ -128,7 +134,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for WriteCopy {
                             }
                             Err(error) => transfer
                                 .progress
-                                .fail_access(error, PageFaultKindsAccess::DestinationWrite),
+                                .fail_access(error.into(), PageFaultKindsAccess::DestinationWrite),
                         }
                     }
                     _ => transfer.progress.status = ResponseStatus::InvalidLength,

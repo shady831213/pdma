@@ -15,11 +15,11 @@ impl<B: RegisterAccess + Send + Sync> RegisterPort<B> {
         Ok(Self { bus, control })
     }
 
-    pub(super) fn ring_io<'a, M>(
+    pub(super) fn ring_io<'a, M, E>(
         &'a self,
         memory: &'a M,
         registers: RingCursorRegisters,
-    ) -> Result<RegisterRingIo<'a, B, M>, Error<B::Error>> {
+    ) -> Result<RegisterRingIo<'a, B, M>, Error<B::Error, E>> {
         let base = u32::try_from(self.control.channel).map_err(|_| Error::Geometry)?;
         let registers = RingCursorRegisters {
             producer: base

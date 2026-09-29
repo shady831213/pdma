@@ -131,6 +131,12 @@ used for MMIO/IRQ routing. Without a context table it forwards FunctionId; with 
 table it validates the context owner and forwards a MemoryIdentity with extensible
 Default/PASID attributes. Runtime selects injected memory capabilities, not bindings.
 Platform assembly selects backing and provides each software program its own allocator.
+`MemoryAccess::Error` is backend-owned. Generic runtime adapters and typed access
+helpers preserve it; do not extend the runtime's built-in storage error enum for
+platform-specific failures. DMA classifies input errors through `Into<MemoryFailure>`
+at payload access, while metadata failures retain their scoped error/fatal semantics.
+Hardware routing distinguishes its own rejections from downstream errors, and
+software error types retain backend details without depending on DMA classification.
 Firmware's control memory uses the separate PF-programmed, enable-frozen configuration,
 without reserving any data context slot.
 Context maintenance takes one atomic context-ID plus Drain/Abort register write.

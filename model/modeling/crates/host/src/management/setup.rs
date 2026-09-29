@@ -17,7 +17,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         bus: B,
         memory: M,
         config: ManagementConfig,
-    ) -> Result<Self, Error<B::Error>> {
+    ) -> Result<Self, Error<B::Error, M::Error>> {
         Self::setup_with_context(
             bus,
             memory,
@@ -37,7 +37,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
             ManagementConfig,
             pdma_model_contract::memory::ContextAttributes,
         ),
-    ) -> Result<Self, Error<B::Error>> {
+    ) -> Result<Self, Error<B::Error, M::Error>> {
         attributes.validate().map_err(|_| {
             Error::ManagementStatus(
                 pdma_model_contract::control::ControlResponseStatus::InvalidAttributes,

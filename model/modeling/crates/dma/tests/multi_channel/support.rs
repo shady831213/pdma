@@ -77,7 +77,10 @@ pub fn configure<M>(device: &mut Dma<M>, index: usize) -> TestResult {
 }
 
 /// Publish the first 512-byte copy command on a selected channel.
-pub fn submit<M: MemoryAccess>(device: &mut Dma<M>, index: usize, id: u64) -> TestResult {
+pub fn submit<M: MemoryAccess>(device: &mut Dma<M>, index: usize, id: u64) -> TestResult
+where
+    M::Error: std::error::Error + 'static,
+{
     let memory = 0x1000 + u64::try_from(index)? * 0x1000;
     let command = Command {
         copy_length: 512,

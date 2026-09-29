@@ -42,6 +42,7 @@ impl Spaces {
 }
 
 impl MemoryAccess<u32> for Spaces {
+    type Error = MemoryAccessError;
     fn validate_with_sideband(
         &self,
         context: &u32,

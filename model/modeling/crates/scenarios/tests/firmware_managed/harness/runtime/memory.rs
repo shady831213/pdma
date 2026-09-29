@@ -1,96 +1,62 @@
 use super::PlatformConfigError;
-use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::DmaAccess;
-use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
-use pdma_model_hw_components::{context::ContextTable, windows::ChannelWindows};
-use std::sync::{Arc, Mutex};
+use pdma_model_dma::MemoryFailure;
+use pdma_model_hw_components::{context, windows};
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
+};
 
 mod control;
+mod spaces;
 pub(super) use control::ControlMemory;
+pub(super) use spaces::FunctionSpaces;
+pub(in crate::harness) use spaces::SpaceError;
 
-#[derive(Debug)]
-pub(super) struct FunctionSpaces<M>(pub(super) Vec<(MemoryIdentity, M)>);
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum RouteError<E> {
+    Window(windows::MemoryError<SpaceError<E>>),
+    Context(context::MemoryError<SpaceError<E>>),
+}
 
-impl<M> FunctionSpaces<M> {
-    pub(super) fn new(spaces: Vec<M>) -> Result<Self, PlatformConfigError> {
-        Ok(Self(
-            spaces
-                .into_iter()
-                .enumerate()
-                .map(|(index, memory)| {
-                    Ok((
-                        MemoryIdentity {
-                            function: FunctionId::new(
-                                u32::try_from(index)
-                                    .map_err(|_| PlatformConfigError::FunctionCount)?,
-                            ),
-                            attributes: ContextAttributes::DEFAULT,
-                        },
-                        memory,
-                    ))
-                })
-                .collect::<Result<_, PlatformConfigError>>()?,
-        ))
-    }
-
-    fn get(
-        &self,
-        identity: MemoryIdentity,
-        address: MemoryAddress,
-    ) -> Result<&M, MemoryAccessError> {
-        self.0
-            .iter()
-            .find(|(key, _)| *key == identity)
-            .map(|(_, memory)| memory)
-            .ok_or(MemoryAccessError::Unmapped { address })
+impl<E: fmt::Display> fmt::Display for RouteError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Window(error) => error.fmt(f),
+            Self::Context(error) => error.fmt(f),
+        }
     }
 }
 
-impl<M: MemoryAccess> MemoryAccess<MemoryIdentity> for FunctionSpaces<M> {
-    fn validate_with_sideband(
-        &self,
-        function: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        length: u64,
-    ) -> Result<(), MemoryAccessError> {
-        self.get(*function, address)?
-            .validate(address, alignment, length)
+impl<E: std::error::Error + 'static> std::error::Error for RouteError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Window(error) => Some(error),
+            Self::Context(error) => Some(error),
+        }
     }
+}
 
-    fn read_with_sideband(
-        &self,
-        function: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.get(*function, address)?
-            .read(address, alignment, bytes)
-    }
-
-    fn write_with_sideband(
-        &self,
-        function: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.get(*function, address)?
-            .write(address, alignment, bytes)
+impl<E: Into<Self>> From<RouteError<E>> for MemoryFailure {
+    fn from(error: RouteError<E>) -> Self {
+        match error {
+            RouteError::Window(error) => error.into(),
+            RouteError::Context(error) => error.into(),
+        }
     }
 }
 
 #[derive(Debug)]
 pub(super) struct RoutedMemory<M> {
-    windows: Arc<Mutex<ChannelWindows>>,
+    windows: Arc<Mutex<windows::ChannelWindows>>,
     spaces: FunctionSpaces<M>,
-    contexts: Option<Arc<Mutex<ContextTable>>>,
+    contexts: Option<Arc<Mutex<context::ContextTable>>>,
 }
 
 impl<M> RoutedMemory<M> {
     pub(super) fn new(
-        windows: Arc<Mutex<ChannelWindows>>,
+        windows: Arc<Mutex<windows::ChannelWindows>>,
         spaces: Vec<M>,
     ) -> Result<Self, PlatformConfigError> {
         Ok(Self {
@@ -101,8 +67,8 @@ impl<M> RoutedMemory<M> {
     }
 
     pub(super) const fn with_contexts(
-        windows: Arc<Mutex<ChannelWindows>>,
-        contexts: Arc<Mutex<ContextTable>>,
+        windows: Arc<Mutex<windows::ChannelWindows>>,
+        contexts: Arc<Mutex<context::ContextTable>>,
         spaces: FunctionSpaces<M>,
     ) -> Self {
         Self {
@@ -114,25 +80,25 @@ impl<M> RoutedMemory<M> {
 }
 
 impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
+    type Error = RouteError<M::Error>;
+
     fn validate_with_sideband(
         &self,
         channel: &DmaAccess,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         let windows = self
             .windows
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.contexts.as_ref().map_or_else(
             || {
-                windows.memory(&self.spaces).validate_with_sideband(
-                    &channel.channel,
-                    address,
-                    alignment,
-                    length,
-                )
+                windows
+                    .memory(&self.spaces)
+                    .validate_with_sideband(&channel.channel, address, alignment, length)
+                    .map_err(RouteError::Window)
             },
             |contexts| {
                 contexts
@@ -140,6 +106,7 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .memory(&windows, &self.spaces)
                     .validate_with_sideband(channel, address, alignment, length)
+                    .map_err(RouteError::Context)
             },
         )
     }
@@ -150,7 +117,7 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         let windows = self
             .windows
             .lock()
@@ -160,13 +127,12 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .memory(&windows, &self.spaces)
-                .read_with_sideband(channel, address, alignment, bytes),
-            None => windows.memory(&self.spaces).read_with_sideband(
-                &channel.channel,
-                address,
-                alignment,
-                bytes,
-            ),
+                .read_with_sideband(channel, address, alignment, bytes)
+                .map_err(RouteError::Context),
+            None => windows
+                .memory(&self.spaces)
+                .read_with_sideband(&channel.channel, address, alignment, bytes)
+                .map_err(RouteError::Window),
         }
     }
 
@@ -176,19 +142,17 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         let windows = self
             .windows
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.contexts.as_ref().map_or_else(
             || {
-                windows.memory(&self.spaces).write_with_sideband(
-                    &channel.channel,
-                    address,
-                    alignment,
-                    bytes,
-                )
+                windows
+                    .memory(&self.spaces)
+                    .write_with_sideband(&channel.channel, address, alignment, bytes)
+                    .map_err(RouteError::Window)
             },
             |contexts| {
                 contexts
@@ -196,61 +160,8 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .memory(&windows, &self.spaces)
                     .write_with_sideband(channel, address, alignment, bytes)
+                    .map_err(RouteError::Context)
             },
-        )
-    }
-}
-
-impl<M: MemoryAccess> MemoryAccess<FunctionId> for FunctionSpaces<M> {
-    fn validate_with_sideband(
-        &self,
-        function: &FunctionId,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        length: u64,
-    ) -> Result<(), MemoryAccessError> {
-        self.validate_with_sideband(
-            &MemoryIdentity {
-                function: *function,
-                attributes: ContextAttributes::DEFAULT,
-            },
-            address,
-            alignment,
-            length,
-        )
-    }
-    fn read_with_sideband(
-        &self,
-        function: &FunctionId,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.read_with_sideband(
-            &MemoryIdentity {
-                function: *function,
-                attributes: ContextAttributes::DEFAULT,
-            },
-            address,
-            alignment,
-            bytes,
-        )
-    }
-    fn write_with_sideband(
-        &self,
-        function: &FunctionId,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
-        self.write_with_sideband(
-            &MemoryIdentity {
-                function: *function,
-                attributes: ContextAttributes::DEFAULT,
-            },
-            address,
-            alignment,
-            bytes,
         )
     }
 }

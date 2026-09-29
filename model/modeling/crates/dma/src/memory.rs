@@ -1,6 +1,31 @@
 use crate::{Channel, Dma, Error};
-use hardware_interface_runtime::BoundMemory;
+use hardware_interface_runtime::{BoundMemory, MemoryAccessError, MemoryAddress};
 use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
+
+/// Memory-port failures understood by DMA, independent of backend diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryFailure {
+    /// The access failed without a repairable translation miss.
+    Access,
+    /// A payload mapping can be repaired and the command resubmitted.
+    /// Converting a failed write to this variant guarantees that the call
+    /// committed no externally visible bytes. Earlier accesses are unaffected.
+    PageFault {
+        /// First missing virtual byte within the requested access.
+        address: MemoryAddress,
+    },
+}
+
+impl From<MemoryAccessError> for MemoryFailure {
+    fn from(error: MemoryAccessError) -> Self {
+        match error {
+            MemoryAccessError::AddressOverflow { .. }
+            | MemoryAccessError::Misaligned { .. }
+            | MemoryAccessError::Unmapped { .. }
+            | MemoryAccessError::CrossesRegion { .. } => Self::Access,
+        }
+    }
+}
 
 impl<M, S> Dma<M, S> {
     /// Borrows one channel and shared hardware resources for a single interaction.

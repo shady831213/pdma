@@ -17,7 +17,7 @@ struct Transcript {
     errors: Vec<MemoryAccessError>,
 }
 
-trait MemoryFixture: MemoryAccess {
+trait MemoryFixture: MemoryAccess<Error = MemoryAccessError> {
     fn installed_regions(&self) -> Vec<MemoryRegion>;
     fn install(&self, regions: &[MemoryRegion]) -> Result<(), MemoryError>;
     fn addition_error(&self, regions: &[MemoryRegion]) -> MemoryError;

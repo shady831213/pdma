@@ -92,7 +92,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     pub async fn acquire_channel(
         &mut self,
         function: FunctionId,
-    ) -> Result<ChannelId, Error<B::Error>> {
+    ) -> Result<ChannelId, Error<B::Error, M::Error>> {
         self.require_idle()?;
         self.submit(ControlRequestOpcode::AcquireChannel, function, 0)
             .await?;
@@ -126,7 +126,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         channel: ChannelId,
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M::Error>> {
         self.require_idle()?;
         self.submit(
             ControlRequestOpcode::ReleaseChannel,
@@ -157,7 +157,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         channel: ChannelId,
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M::Error>> {
         self.require_idle()?;
         self.submit(
             ControlRequestOpcode::ResetChannel,
@@ -182,7 +182,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     }
 
     /// Resumes publication or collection of the same request after cancellation.
-    pub async fn wait_pending(&mut self) -> Result<ControlResponse, Error<B::Error>> {
+    pub async fn wait_pending(&mut self) -> Result<ControlResponse, Error<B::Error, M::Error>> {
         if self.outstanding.is_empty() {
             return Err(Error::ManagementIdle);
         }

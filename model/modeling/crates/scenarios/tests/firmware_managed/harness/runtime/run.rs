@@ -1,17 +1,23 @@
 use super::{Driver, Managed, ManagementBus, RunError};
 use hardware_interface_pipeline::{AsyncExecutor, Operation};
 use hardware_interface_runtime::MemoryAccess;
+use pdma_model_hw_components::control::MemoryError;
 use std::{convert::Infallible, future::Future, sync::Arc};
 
 #[cfg(test)]
 mod tests;
 
-impl<M: MemoryAccess + Send + Sync + 'static> Managed<M> {
+impl<M: MemoryAccess + Send + Sync + 'static> Managed<M>
+where
+    M::Error: Into<pdma_model_dma::MemoryFailure>,
+{
     /// Runs hardware and firmware until an actor fails or the caller cancels simulation.
     ///
     /// All actor futures are scoped here; cancellation leaves no spawned tasks.
     /// It does not acknowledge hardware reset or authorize memory reuse.
-    pub async fn run(self) -> Result<Infallible, RunError> {
+    pub(in crate::harness) async fn run(
+        self,
+    ) -> Result<Infallible, RunError<MemoryError<super::memory::SpaceError<M::Error>>>> {
         let addresses = self.shared.addresses;
         let management = self
             .firmware_cpu
@@ -52,14 +58,17 @@ impl<M: MemoryAccess + Send + Sync + 'static> Managed<M> {
     ///
     /// Actor errors take precedence over a simultaneously ready Host result.
     /// Returning or cancelling stops simulation, not an architectural reset.
-    pub async fn run_until<F: Future>(self, program: F) -> Result<F::Output, RunError> {
+    pub(in crate::harness) async fn run_until<F: Future>(
+        self,
+        program: F,
+    ) -> Result<F::Output, RunError<MemoryError<super::memory::SpaceError<M::Error>>>> {
         supervise(self.run(), program).await
     }
 }
 
-async fn supervise<S, P>(system: S, program: P) -> Result<P::Output, RunError>
+async fn supervise<S, P, E>(system: S, program: P) -> Result<P::Output, RunError<E>>
 where
-    S: Future<Output = Result<Infallible, RunError>>,
+    S: Future<Output = Result<Infallible, RunError<E>>>,
     P: Future,
 {
     tokio::select! {

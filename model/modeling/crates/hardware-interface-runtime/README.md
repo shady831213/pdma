@@ -31,14 +31,16 @@ register map or device effect.
 `read_with_sideband`, and `write_with_sideband`. Ordinary stores implement only
 `MemoryAccess<()>`; the existing `validate`, `read`, `write`, `read_typed`, and
 `write_typed` signatures are unit-only defaults. Metadata is never constructed
-through `Default`. `SharedMemoryAccess<S>` erases the backend while preserving its
+through `Default`. Each backend owns `MemoryAccess::Error`; all helpers return that
+type unchanged. `SharedMemoryAccess<S, E = MemoryAccessError>` erases the backend while preserving its
 metadata requirement, and `BoundMemory::new(&memory, sideband)` provides ordinary
 access by forwarding every operation with the owned metadata value. The framework
 does not interpret that metadata or select device ownership policy.
 
 `MemoryAccess::validate` checks complete extents without reading or writing bytes or
-allocating backing. It preserves overflow, alignment, lookup, and region-crossing
-error order, including mapped zero-length endpoints. `SharedMemoryAccess` exposes
+allocating backing. The built-in stores use `MemoryAccessError` and preserve overflow,
+alignment, lookup, and region-crossing error order, including mapped zero-length endpoints.
+Other backends define their own validation errors. `SharedMemoryAccess` exposes
 this check together with reads and writes, without storage-management authority.
 
 `MemoryAccess::read_typed<T>` reads into `T::default()` through `AsMut<[u8]>`;

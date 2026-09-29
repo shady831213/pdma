@@ -9,7 +9,9 @@ use hardware_interface_runtime::{
 use std::sync::Arc;
 use support::{alignment, install, region};
 
-fn exercise(memory: &impl MemoryAccess) -> Result<(), MemoryAccessError> {
+fn exercise(
+    memory: &impl MemoryAccess<Error = MemoryAccessError>,
+) -> Result<(), MemoryAccessError> {
     let address = MemoryAddress::new(0x1000);
     memory.write(address, MemoryAlignment::ONE, &[0x12, 0x34, 0x56, 0x78])?;
     let value = memory.read_typed::<[u8; 4]>(address, MemoryAlignment::ONE)?;

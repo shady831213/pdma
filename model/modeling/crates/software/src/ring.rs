@@ -46,12 +46,18 @@ where
     }
 
     /// Queries validated published cursors without reading entries or changing retained operations.
-    pub async fn is_empty<I: SoftRingIo>(&self, io: &I) -> Result<bool, SoftRingError<I::Error>> {
+    pub async fn is_empty<I: SoftRingIo>(
+        &self,
+        io: &I,
+    ) -> Result<bool, SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         self.pointers(io).await.map(RingPointers::is_empty)
     }
 
     /// Checks available storage without retaining an entry.
-    pub async fn has_space<I: SoftRingIo>(&self, io: &I) -> Result<bool, SoftRingError<I::Error>> {
+    pub async fn has_space<I: SoftRingIo>(
+        &self,
+        io: &I,
+    ) -> Result<bool, SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         if self.pending.is_some() {
             return Err(SoftRingError::Busy);
         }
@@ -65,7 +71,7 @@ where
         &mut self,
         io: &I,
         entry: E,
-    ) -> Result<bool, SoftRingError<I::Error>> {
+    ) -> Result<bool, SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         if self.pending.is_some() {
             return Err(SoftRingError::Busy);
         }
@@ -89,11 +95,14 @@ where
     pub async fn resume_push<I: SoftRingIo>(
         &mut self,
         io: &I,
-    ) -> Result<(), SoftRingError<I::Error>> {
+    ) -> Result<(), SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         self.publish(io).await
     }
 
-    async fn publish<I: SoftRingIo>(&mut self, io: &I) -> Result<(), SoftRingError<I::Error>> {
+    async fn publish<I: SoftRingIo>(
+        &mut self,
+        io: &I,
+    ) -> Result<(), SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         let pending = self.pending.as_mut().ok_or(SoftRingError::Idle)?;
         let producer = io.read_producer().await.map_err(SoftRingError::Cursor)?;
         let next = pending.cursor.wrapping_add(1);
@@ -135,7 +144,7 @@ where
     pub async fn peek<I: SoftRingIo>(
         &mut self,
         io: &I,
-    ) -> Result<Option<E>, SoftRingError<I::Error>> {
+    ) -> Result<Option<E>, SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         if let Some((_, entry)) = self.cached {
             return Ok(Some(entry));
         }
@@ -157,7 +166,10 @@ where
     }
 
     /// Consumes the cached entry; retry reconciles a committed consumer write.
-    pub async fn consume<I: SoftRingIo>(&mut self, io: &I) -> Result<(), SoftRingError<I::Error>> {
+    pub async fn consume<I: SoftRingIo>(
+        &mut self,
+        io: &I,
+    ) -> Result<(), SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         let (cursor, _) = self.cached.ok_or(SoftRingError::Idle)?;
         let consumer = io.read_consumer().await.map_err(SoftRingError::Cursor)?;
         let next = cursor.wrapping_add(1);
@@ -182,7 +194,7 @@ where
     async fn pointers<I: SoftRingIo>(
         &self,
         io: &I,
-    ) -> Result<RingPointers, SoftRingError<I::Error>> {
+    ) -> Result<RingPointers, SoftRingError<I::Error, <I::Memory as MemoryAccess>::Error>> {
         let consumer = io.read_consumer().await.map_err(SoftRingError::Cursor)?;
         let producer = io.read_producer().await.map_err(SoftRingError::Cursor)?;
         let pointers = RingPointers { producer, consumer };

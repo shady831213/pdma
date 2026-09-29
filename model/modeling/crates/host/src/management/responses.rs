@@ -6,12 +6,14 @@ use pdma_model_contract::control::{ControlRequestOpcode, ControlResponse};
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
     /// Collects one available response without waiting for firmware or an interrupt.
     /// Bus notification may suspend; cancellation retains the response until retried.
-    pub async fn try_response(&mut self) -> Result<Option<ControlResponse>, Error<B::Error>> {
+    pub async fn try_response(
+        &mut self,
+    ) -> Result<Option<ControlResponse>, Error<B::Error, M::Error>> {
         self.collect().await
     }
 
     /// Waits on ISR hints until any outstanding request completes, in response order.
-    pub async fn next_response(&mut self) -> Result<ControlResponse, Error<B::Error>> {
+    pub async fn next_response(&mut self) -> Result<ControlResponse, Error<B::Error, M::Error>> {
         loop {
             if let Some(response) = self.collect().await? {
                 return Ok(response);
@@ -23,7 +25,9 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         }
     }
 
-    pub(super) async fn collect(&mut self) -> Result<Option<ControlResponse>, Error<B::Error>> {
+    pub(super) async fn collect(
+        &mut self,
+    ) -> Result<Option<ControlResponse>, Error<B::Error, M::Error>> {
         if self.submission.is_some() {
             return Err(Error::ManagementBusy);
         }

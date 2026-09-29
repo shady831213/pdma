@@ -1,11 +1,9 @@
-use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, RegisterAccess,
-};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess};
 
 /// Borrowed cursor transport and entry memory for a software ring.
 pub trait SoftRingIo: Sync {
     /// Cursor transport failure.
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error;
     /// Entry memory backend.
     type Memory: MemoryAccess + Sync;
     /// Entry memory selected by the assembly.
@@ -40,7 +38,7 @@ impl<'a, M> MemoryRingIo<'a, M> {
 }
 
 impl<M: MemoryAccess + Sync> SoftRingIo for MemoryRingIo<'_, M> {
-    type Error = MemoryAccessError;
+    type Error = M::Error;
     type Memory = M;
     fn memory(&self) -> &M {
         self.memory

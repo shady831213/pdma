@@ -7,11 +7,11 @@ use std::{error::Error as StdError, fmt};
 
 /// Software ring operation failure retaining its boundary cause.
 #[derive(Debug)]
-pub enum Error<B> {
+pub enum Error<B, M = MemoryAccessError> {
     /// Register transport rejected an access.
     Bus(B),
     /// Injected memory rejected an access.
-    Memory(MemoryAccessError),
+    Memory(M),
     /// A wire record failed its generated codec.
     Codec(SchemaCodecError),
     /// A register field contains an invalid encoding.
@@ -37,7 +37,7 @@ pub enum Error<B> {
     RingCursorChanged,
 }
 
-impl<B: fmt::Display> fmt::Display for Error<B> {
+impl<B: fmt::Display, M: fmt::Display> fmt::Display for Error<B, M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Bus(error) => error.fmt(f),
@@ -62,7 +62,7 @@ impl<B: fmt::Display> fmt::Display for Error<B> {
     }
 }
 
-impl<B: StdError + 'static> StdError for Error<B> {
+impl<B: StdError + 'static, M: StdError + 'static> StdError for Error<B, M> {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Self::Bus(error) => Some(error),
@@ -80,8 +80,8 @@ impl<B: StdError + 'static> StdError for Error<B> {
     }
 }
 
-impl<B> From<SoftRingError<B>> for Error<B> {
-    fn from(error: SoftRingError<B>) -> Self {
+impl<B, M> From<SoftRingError<B, M>> for Error<B, M> {
+    fn from(error: SoftRingError<B, M>) -> Self {
         match error {
             SoftRingError::Cursor(error) => Self::Bus(error),
             SoftRingError::Memory(error) => Self::Memory(error),

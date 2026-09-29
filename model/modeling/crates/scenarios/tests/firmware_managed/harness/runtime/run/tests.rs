@@ -63,7 +63,7 @@ impl RegisterAccess for FailedManagement {
 #[tokio::test]
 async fn actor_failure_wins_over_ready_host_completion() {
     // Given: both results are ready in the same poll.
-    let actor = async { Err::<Infallible, _>(RunError::HardwareStopped) };
+    let actor = async { Err::<Infallible, RunError>(RunError::HardwareStopped) };
     // When: the supervisor polls both actors.
     let result = supervise(actor, async { 42 }).await;
     // Then: a ready Host result cannot hide the hardware failure.

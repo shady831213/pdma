@@ -5,12 +5,12 @@ use pdma_model_contract::dma::{ChannelId, Command, ContextId, Endpoint, Response
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
-pub(super) async fn prepare(
-    ports: &Ports<'_>,
+pub(super) async fn prepare<M: Send>(
+    ports: &Ports<'_, M>,
     channel: ChannelId,
     [list_id, ring_id, source_id, destination_id]: [ContextId; 4],
     (lists, source, destination): (&Space, &Space, &Space),
-) -> TestResult<(Driver, Command, MemoryAddress)> {
+) -> TestResult<(Driver<M>, Command, MemoryAddress)> {
     let data: Vec<u8> = (0_u8..=250).cycle().take(600).collect();
     let src = source.allocator.allocate(600, MemoryAlignment::ONE)?;
     let dst = destination.allocator.allocate(600, MemoryAlignment::ONE)?;

@@ -52,6 +52,11 @@ prepared tokens, transaction drafts or memory revisions. The software allocator 
 its address cursor only after installation succeeds. Hardware still receives only
 byte-access capabilities, without memory ownership or allocation authority.
 
+Memory backends select their own `MemoryAccess::Error`. Runtime adapters preserve
+that type; DMA alone classifies it through `MemoryFailure` for hardware handling.
+Routing failures belong to hw-components, and software retains the original
+backend errors. New platform error categories need no generic runtime change.
+
 ## Read the implementation
 
 | Location | Responsibility |

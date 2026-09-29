@@ -51,7 +51,7 @@ pub struct Channel<B, M> {
     response: ResponseRing,
 }
 
-impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
+impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
     /// Discovers and programs one channel, enabling its interrupt gate.
     ///
     /// Cancellation may leave partial setup; request channel reset through the bus and
@@ -119,12 +119,14 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
             .await?;
         Ok(channel)
     }
+}
 
+impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
     /// Writes the descriptor before publishing its producer cursor.
     ///
     /// Cancellation retains an accepted command for `resume_submission`.
     /// A new submission is rejected while that publication remains pending.
-    pub async fn submit(&mut self, command: Command) -> Result<(), Error<B::Error>> {
+    pub async fn submit(&mut self, command: Command) -> Result<(), Error<B::Error, M::Error>> {
         self.command.push(&self.port, &self.memory, command).await
     }
 
@@ -134,14 +136,14 @@ impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, 
     }
 
     /// Completes an accepted submission without repeating a committed publication.
-    pub async fn resume_submission(&mut self) -> Result<(), Error<B::Error>> {
+    pub async fn resume_submission(&mut self) -> Result<(), Error<B::Error, M::Error>> {
         self.command.resume(&self.port, &self.memory).await
     }
 
     /// Reads and decodes one response before advancing its consumer cursor.
     ///
     /// Cancellation retains the decoded response; another call reconciles consumption.
-    pub async fn response(&mut self) -> Result<Option<Response>, Error<B::Error>> {
+    pub async fn response(&mut self) -> Result<Option<Response>, Error<B::Error, M::Error>> {
         self.response.pop(&self.port, &self.memory).await
     }
 }

@@ -25,7 +25,7 @@ pub use execution::{
 pub use fetch::Fetch;
 use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
-pub use memory::ChannelContext;
+pub use memory::{ChannelContext, MemoryFailure};
 use pdma_model_contract::dma::{
     ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
     DmaRegistersLayout, EndpointMode, ResetValues,

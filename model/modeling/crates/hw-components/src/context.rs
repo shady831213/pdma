@@ -14,7 +14,7 @@ mod error;
 mod maintenance;
 mod memory;
 pub use error::ContextConfigError;
-pub use memory::ContextMemoryAccess;
+pub use memory::{ContextMemoryAccess, MemoryError};
 
 #[doc = "Firmware-owned context bindings and hardware maintenance completion."]
 #[derive(Debug)]

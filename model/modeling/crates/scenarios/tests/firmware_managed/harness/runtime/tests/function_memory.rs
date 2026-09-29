@@ -1,10 +1,11 @@
 //! Scenario memory routing through the authoritative Function owner bank.
-use crate::harness::runtime::memory::RoutedMemory;
+use crate::harness::runtime::memory::{RouteError, RoutedMemory, SpaceError};
 use hardware_interface_runtime::{
-    MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
+    MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::windows::WindowControl;
+use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 use pdma_model_dma::Dma;
 use pdma_model_hw_components::windows::ChannelWindows;
 use std::sync::{Arc, Mutex};
@@ -80,9 +81,22 @@ fn missing_function_binding_never_falls_back_to_another_space() -> TestResult {
         .memory
         .write(address, MemoryAlignment::ONE, &[0x33; 4]);
     // Then: all accesses fail without reading or modifying the other Function's bytes.
-    assert_eq!(checked, Err(MemoryAccessError::Unmapped { address }));
-    assert_eq!(read, Err(MemoryAccessError::Unmapped { address }));
-    assert_eq!(write, Err(MemoryAccessError::Unmapped { address }));
+    for result in [checked, read, write] {
+        assert_eq!(
+            result,
+            Err(RouteError::Window(
+                pdma_model_hw_components::windows::MemoryError::Downstream(
+                    SpaceError::MissingSpace {
+                        identity: MemoryIdentity {
+                            function: FunctionId::new(9),
+                            attributes: ContextAttributes::DEFAULT
+                        },
+                        address,
+                    }
+                )
+            ))
+        );
+    }
     assert_eq!(bytes, [0xa5; 4]);
     assert_eq!(
         memory.read_typed::<[u8; 4]>(address, MemoryAlignment::ONE)?,

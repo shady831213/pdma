@@ -18,11 +18,11 @@ pub(super) struct Monitor<'a, B> {
 }
 
 impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
-    pub(super) async fn new(
+    pub(super) async fn new<M>(
         bus: &'a B,
         addresses: ManagementAddresses,
         count: usize,
-    ) -> Result<Self, Error<B::Error>> {
+    ) -> Result<Self, Error<B::Error, M>> {
         let control = ChannelControl::discover_at(bus, ChannelId::new(0), addresses.dma)
             .await
             .map_err(Error::Dma)?;
@@ -44,7 +44,7 @@ impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
         self.failed.load(Ordering::SeqCst)
     }
 
-    pub(super) async fn observe(&self) -> Result<(), Error<B::Error>> {
+    pub(super) async fn observe<M>(&self) -> Result<(), Error<B::Error, M>> {
         match self.control.dma_fatal(self.bus).await.map_err(Error::Dma)? {
             DmaFatalCode::None => {}
             DmaFatalCode::Internal => {
@@ -59,7 +59,7 @@ impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
         Ok(())
     }
 
-    pub(super) async fn healthy(&self) -> Result<(), Error<B::Error>> {
+    pub(super) async fn healthy<M>(&self) -> Result<(), Error<B::Error, M>> {
         self.observe().await?;
         if self.failed() {
             return Err(Error::DeviceFailed);
@@ -78,7 +78,7 @@ impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
             })
     }
 
-    pub(super) async fn reset(&self) -> Result<(), Error<B::Error>> {
+    pub(super) async fn reset<M>(&self) -> Result<(), Error<B::Error, M>> {
         self.close().await?;
         self.control.reset_dma(self.bus).await.map_err(Error::Dma)?;
         self.failed.store(false, Ordering::SeqCst);
@@ -89,7 +89,7 @@ impl<'a, B: RegisterAccess + Sync> Monitor<'a, B> {
         self.healthy().await
     }
 
-    async fn close(&self) -> Result<(), Error<B::Error>> {
+    async fn close<M>(&self) -> Result<(), Error<B::Error, M>> {
         for index in 0..self.count {
             self.bus
                 .write(

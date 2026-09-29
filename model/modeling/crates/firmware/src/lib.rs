@@ -13,7 +13,7 @@ use std::{error, fmt};
 
 /// Firmware boot or management-service failure.
 #[derive(Debug)]
-pub enum Error<E> {
+pub enum Error<E, M = MemoryAccessError> {
     /// The platform's Function namespace is empty or cannot be encoded.
     FunctionCount,
     /// DMA recovery is required before this operation can proceed.
@@ -21,7 +21,7 @@ pub enum Error<E> {
     /// The management access failed.
     Bus(E),
     /// The firmware CPU could not access a control ring entry.
-    Memory(MemoryAccessError),
+    Memory(M),
     /// A malformed management record was not consumed.
     Codec(SchemaCodecError),
     /// Hardware returned an invalid register encoding.
@@ -29,7 +29,7 @@ pub enum Error<E> {
     /// The control ring geometry or pointers are invalid.
     Ring(RingError),
     /// A memory-backed software ring operation failed.
-    SoftRing(SoftRingError<MemoryAccessError>),
+    SoftRing(SoftRingError<M, M>),
     /// A shared DMA control operation failed.
     Dma(pdma_model_software::dma::Error<E>),
     /// Firmware could not register its management interrupt handler.
@@ -38,7 +38,7 @@ pub enum Error<E> {
     Allocation(std::collections::TryReserveError),
 }
 
-impl<E: fmt::Display> fmt::Display for Error<E> {
+impl<E: fmt::Display, M: fmt::Display> fmt::Display for Error<E, M> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DeviceFailed => formatter.write_str("DMA recovery required"),
@@ -56,7 +56,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
     }
 }
 
-impl<E: error::Error + 'static> error::Error for Error<E> {
+impl<E: error::Error + 'static, M: error::Error + 'static> error::Error for Error<E, M> {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::FunctionCount | Self::DeviceFailed => None,

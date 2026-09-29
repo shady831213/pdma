@@ -5,11 +5,11 @@ use std::{error::Error, fmt};
 
 /// Typed software ring failures, with retained operations available for retry.
 #[derive(Clone, Copy, Debug)]
-pub enum SoftRingError<E> {
+pub enum SoftRingError<E, M = MemoryAccessError> {
     /// Cursor transport failed.
     Cursor(E),
     /// Entry memory access failed.
-    Memory(MemoryAccessError),
+    Memory(M),
     /// Entry encoding or decoding failed.
     Codec(SchemaCodecError),
     /// Ring geometry or cursor movement is invalid.
@@ -22,11 +22,11 @@ pub enum SoftRingError<E> {
     CursorChanged,
 }
 
-impl<E: Error> fmt::Display for SoftRingError<E> {
+impl<E: fmt::Display, M: fmt::Display> fmt::Display for SoftRingError<E, M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Cursor(error) => fmt::Display::fmt(error, f),
-            Self::Memory(error) => error.fmt(f),
+            Self::Memory(error) => fmt::Display::fmt(error, f),
             Self::Codec(error) => error.fmt(f),
             Self::Ring(error) => error.fmt(f),
             Self::Busy => f.write_str("software ring push is pending"),
@@ -35,7 +35,7 @@ impl<E: Error> fmt::Display for SoftRingError<E> {
         }
     }
 }
-impl<E: Error + 'static> Error for SoftRingError<E> {
+impl<E: Error + 'static, M: Error + 'static> Error for SoftRingError<E, M> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Cursor(error) => Some(error),

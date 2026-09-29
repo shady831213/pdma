@@ -1,7 +1,29 @@
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
 };
+use pdma_model_dma::MemoryFailure;
 use std::cell::Cell;
+
+#[derive(Debug)]
+pub(super) enum BackendError {
+    Backing(MemoryAccessError),
+    MissingPage { address: MemoryAddress },
+}
+
+impl From<MemoryAccessError> for BackendError {
+    fn from(error: MemoryAccessError) -> Self {
+        Self::Backing(error)
+    }
+}
+
+impl From<BackendError> for MemoryFailure {
+    fn from(error: BackendError) -> Self {
+        match error {
+            BackendError::Backing(error) => error.into(),
+            BackendError::MissingPage { address } => Self::PageFault { address },
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct Paged {
@@ -16,7 +38,7 @@ impl Paged {
         address: MemoryAddress,
         length: usize,
         write: bool,
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), BackendError> {
         if let Some((missing, writes)) = self.missing.get()
             && writes == write
             && missing >= address.raw()
@@ -27,7 +49,7 @@ impl Paged {
                 })?
         {
             self.faults.set(self.faults.get() + 1);
-            return Err(MemoryAccessError::PageFault {
+            return Err(BackendError::MissingPage {
                 address: missing.into(),
             });
         }
@@ -36,14 +58,17 @@ impl Paged {
 }
 
 impl MemoryAccess for Paged {
+    type Error = BackendError;
     fn validate_with_sideband(
         &self,
         (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
-        self.memory.validate(address, alignment, length)
+    ) -> Result<(), BackendError> {
+        self.memory
+            .validate(address, alignment, length)
+            .map_err(Into::into)
     }
     fn read_with_sideband(
         &self,
@@ -51,9 +76,11 @@ impl MemoryAccess for Paged {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         out: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), BackendError> {
         self.fault(address, out.len(), false)?;
-        self.memory.read(address, alignment, out)
+        self.memory
+            .read(address, alignment, out)
+            .map_err(Into::into)
     }
     fn write_with_sideband(
         &self,
@@ -61,8 +88,10 @@ impl MemoryAccess for Paged {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), BackendError> {
         self.fault(address, bytes.len(), true)?;
-        self.memory.write(address, alignment, bytes)
+        self.memory
+            .write(address, alignment, bytes)
+            .map_err(Into::into)
     }
 }

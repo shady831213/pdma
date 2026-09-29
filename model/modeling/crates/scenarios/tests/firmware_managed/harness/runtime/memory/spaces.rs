@@ -1,0 +1,185 @@
+use super::PlatformConfigError;
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
+use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
+use pdma_model_dma::MemoryFailure;
+use std::fmt;
+
+#[derive(Debug, PartialEq, Eq)]
+pub(in crate::harness) enum SpaceError<E> {
+    MissingSpace {
+        identity: MemoryIdentity,
+        address: MemoryAddress,
+    },
+    Downstream(E),
+}
+
+impl<E: fmt::Display> fmt::Display for SpaceError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingSpace { identity, address } => write!(
+                f,
+                "missing memory space {identity:?} at {:#x}",
+                address.raw()
+            ),
+            Self::Downstream(error) => error.fmt(f),
+        }
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for SpaceError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::MissingSpace { .. } => None,
+            Self::Downstream(error) => Some(error),
+        }
+    }
+}
+
+impl<E: Into<Self>> From<SpaceError<E>> for MemoryFailure {
+    fn from(error: SpaceError<E>) -> Self {
+        match error {
+            SpaceError::MissingSpace { .. } => Self::Access,
+            SpaceError::Downstream(error) => error.into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(in crate::harness::runtime) struct FunctionSpaces<M>(
+    pub(in crate::harness::runtime) Vec<(MemoryIdentity, M)>,
+);
+
+impl<M> FunctionSpaces<M> {
+    pub(in crate::harness::runtime) fn new(spaces: Vec<M>) -> Result<Self, PlatformConfigError> {
+        Ok(Self(
+            spaces
+                .into_iter()
+                .enumerate()
+                .map(|(index, memory)| {
+                    Ok((
+                        MemoryIdentity {
+                            function: FunctionId::new(
+                                u32::try_from(index)
+                                    .map_err(|_| PlatformConfigError::FunctionCount)?,
+                            ),
+                            attributes: ContextAttributes::DEFAULT,
+                        },
+                        memory,
+                    ))
+                })
+                .collect::<Result<_, PlatformConfigError>>()?,
+        ))
+    }
+}
+
+impl<M: MemoryAccess> FunctionSpaces<M> {
+    fn get(
+        &self,
+        identity: MemoryIdentity,
+        address: MemoryAddress,
+    ) -> Result<&M, SpaceError<M::Error>> {
+        self.0
+            .iter()
+            .find(|(key, _)| *key == identity)
+            .map(|(_, memory)| memory)
+            .ok_or(SpaceError::MissingSpace { identity, address })
+    }
+}
+
+impl<M: MemoryAccess> MemoryAccess<MemoryIdentity> for FunctionSpaces<M> {
+    type Error = SpaceError<M::Error>;
+
+    fn validate_with_sideband(
+        &self,
+        identity: &MemoryIdentity,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), Self::Error> {
+        self.get(*identity, address)?
+            .validate(address, alignment, length)
+            .map_err(SpaceError::Downstream)
+    }
+
+    fn read_with_sideband(
+        &self,
+        identity: &MemoryIdentity,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        bytes: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        self.get(*identity, address)?
+            .read(address, alignment, bytes)
+            .map_err(SpaceError::Downstream)
+    }
+
+    fn write_with_sideband(
+        &self,
+        identity: &MemoryIdentity,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        bytes: &[u8],
+    ) -> Result<(), Self::Error> {
+        self.get(*identity, address)?
+            .write(address, alignment, bytes)
+            .map_err(SpaceError::Downstream)
+    }
+}
+
+impl<M: MemoryAccess> MemoryAccess<FunctionId> for FunctionSpaces<M> {
+    type Error = SpaceError<M::Error>;
+
+    fn validate_with_sideband(
+        &self,
+        function: &FunctionId,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), Self::Error> {
+        self.validate_with_sideband(
+            &MemoryIdentity {
+                function: *function,
+                attributes: ContextAttributes::DEFAULT,
+            },
+            address,
+            alignment,
+            length,
+        )
+    }
+
+    fn read_with_sideband(
+        &self,
+        function: &FunctionId,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        bytes: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        self.read_with_sideband(
+            &MemoryIdentity {
+                function: *function,
+                attributes: ContextAttributes::DEFAULT,
+            },
+            address,
+            alignment,
+            bytes,
+        )
+    }
+
+    fn write_with_sideband(
+        &self,
+        function: &FunctionId,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        bytes: &[u8],
+    ) -> Result<(), Self::Error> {
+        self.write_with_sideband(
+            &MemoryIdentity {
+                function: *function,
+                attributes: ContextAttributes::DEFAULT,
+            },
+            address,
+            alignment,
+            bytes,
+        )
+    }
+}

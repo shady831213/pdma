@@ -22,7 +22,7 @@ impl CommandRing {
         port: &RegisterPort<B>,
         memory: &M,
         command: Command,
-    ) -> Result<(), Error<B::Error>>
+    ) -> Result<(), Error<B::Error, M::Error>>
     where
         B: RegisterAccess + Send + Sync,
         M: MemoryAccess + Send + Sync,
@@ -39,7 +39,7 @@ impl CommandRing {
         &mut self,
         port: &RegisterPort<B>,
         memory: &M,
-    ) -> Result<(), Error<B::Error>>
+    ) -> Result<(), Error<B::Error, M::Error>>
     where
         B: RegisterAccess + Send + Sync,
         M: MemoryAccess + Send + Sync,
@@ -49,7 +49,7 @@ impl CommandRing {
     }
 }
 
-fn command_registers<B>() -> Result<RingCursorRegisters, Error<B>> {
+fn command_registers<B, E>() -> Result<RingCursorRegisters, Error<B, E>> {
     Ok(RingCursorRegisters {
         producer: u32::try_from(COMMAND + CommandRegisters::PRODUCER.offset())
             .map_err(|_| Error::Geometry)?,
@@ -70,7 +70,7 @@ impl ResponseRing {
         &mut self,
         port: &RegisterPort<B>,
         memory: &M,
-    ) -> Result<Option<Response>, Error<B::Error>>
+    ) -> Result<Option<Response>, Error<B::Error, M::Error>>
     where
         B: RegisterAccess + Send + Sync,
         M: MemoryAccess + Send + Sync,

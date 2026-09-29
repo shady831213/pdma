@@ -19,11 +19,11 @@ pub(super) struct Contexts {
 }
 
 impl Contexts {
-    pub(super) async fn discover<B: RegisterAccess + Sync>(
+    pub(super) async fn discover<B: RegisterAccess + Sync, M>(
         bus: &B,
         base: u32,
         channel_count: usize,
-    ) -> Result<Self, Error<B::Error>> {
+    ) -> Result<Self, Error<B::Error, M>> {
         let mut table = Self {
             base,
             count: 0,
@@ -38,12 +38,12 @@ impl Contexts {
         Ok(table)
     }
 
-    pub(super) async fn execute<B: RegisterAccess + Sync>(
+    pub(super) async fn execute<B: RegisterAccess + Sync, M>(
         &self,
         (bus, monitor): (&B, &Monitor<'_, B>),
         (request, response): (&ControlRequest, &mut ControlResponse),
         channels: impl Iterator<Item = ChannelId> + Send,
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M>> {
         let (action, destroy) = match request.opcode {
             ControlRequestOpcode::CreateContext => {
                 return self.create((bus, monitor), (request, response)).await;
@@ -125,11 +125,11 @@ impl Contexts {
         }
     }
 
-    async fn create<B: RegisterAccess + Sync>(
+    async fn create<B: RegisterAccess + Sync, M>(
         &self,
         (bus, monitor): (&B, &Monitor<'_, B>),
         (request, response): (&ControlRequest, &mut ControlResponse),
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M>> {
         if request.attributes.validate().is_err() {
             response.status = ControlResponseStatus::InvalidAttributes;
             return Ok(());
@@ -179,7 +179,7 @@ impl Contexts {
         Ok(())
     }
 
-    fn entry<E>(&self, index: usize) -> Result<usize, Error<E>> {
+    fn entry<E, M>(&self, index: usize) -> Result<usize, Error<E, M>> {
         ContextTableRegisters::for_channels(self.count, self.channel_count)
             .map_err(|_| Error::Ring(RingError::Geometry))?
             .entries()
@@ -187,11 +187,11 @@ impl Contexts {
             .ok_or(Error::Ring(RingError::Geometry))
     }
 
-    async fn failed_channels<B: RegisterAccess + Sync>(
+    async fn failed_channels<B: RegisterAccess + Sync, M>(
         &self,
         bus: &B,
         channels: impl Iterator<Item = ChannelId> + Send,
-    ) -> Result<Vec<ChannelId>, Error<B::Error>> {
+    ) -> Result<Vec<ChannelId>, Error<B::Error, M>> {
         let layout = ContextTableRegisters::for_channels(self.count, self.channel_count)
             .map_err(|_| Error::Ring(RingError::Geometry))?;
         let mut failed = Vec::new();
@@ -222,17 +222,17 @@ impl Contexts {
         Ok(failed)
     }
 
-    fn address<E>(&self, offset: usize) -> Result<u32, Error<E>> {
+    fn address<E, M>(&self, offset: usize) -> Result<u32, Error<E, M>> {
         self.base
             .checked_add(u32::try_from(offset).map_err(|_| Error::Ring(RingError::Geometry))?)
             .ok_or(Error::Ring(RingError::Geometry))
     }
 
-    async fn read<B: RegisterAccess + Sync>(
+    async fn read<B: RegisterAccess + Sync, M>(
         &self,
         bus: &B,
         offset: usize,
-    ) -> Result<u32, Error<B::Error>> {
+    ) -> Result<u32, Error<B::Error, M>> {
         let mut bytes = [0; 4];
         bus.read(self.address(offset)?, &mut bytes)
             .await
@@ -240,11 +240,11 @@ impl Contexts {
         Ok(u32::from_le_bytes(bytes))
     }
 
-    async fn write<B: RegisterAccess + Sync>(
+    async fn write<B: RegisterAccess + Sync, M>(
         &self,
         bus: &B,
         (offset, value): (usize, u32),
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M>> {
         bus.write(self.address(offset)?, &value.to_le_bytes())
             .await
             .map_err(Error::Bus)

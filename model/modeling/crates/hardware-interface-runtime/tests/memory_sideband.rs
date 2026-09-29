@@ -45,6 +45,8 @@ impl BankMemory {
 }
 
 impl MemoryAccess<Bank> for BankMemory {
+    type Error = MemoryAccessError;
+
     fn validate_with_sideband(
         &self,
         sideband: &Bank,
@@ -80,7 +82,7 @@ impl MemoryAccess<Bank> for BankMemory {
 fn tagged_trait_object_routes_raw_operations() -> Result<(), Box<dyn std::error::Error>> {
     // Given: independent banks sharing the same address range.
     let memory = BankMemory::new()?;
-    let erased: &dyn MemoryAccess<Bank> = &memory;
+    let erased: &dyn MemoryAccess<Bank, Error = MemoryAccessError> = &memory;
     // When: raw operations explicitly select the second bank.
     erased.validate_with_sideband(&Bank::Second, 0x1000.into(), MemoryAlignment::ONE, 8)?;
     erased.write_with_sideband(&Bank::Second, 0x1000.into(), MemoryAlignment::ONE, &[9; 4])?;
@@ -131,9 +133,9 @@ fn bound_memory_forwards_owned_sideband_to_unsized_backend()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a unit-memory adapter bound to a tagged trait object.
     let memory = BankMemory::new()?;
-    let erased: &dyn MemoryAccess<Bank> = &memory;
+    let erased: &dyn MemoryAccess<Bank, Error = MemoryAccessError> = &memory;
     let bound = BoundMemory::new(erased, Bank::Second);
-    let ordinary: &dyn MemoryAccess = &bound;
+    let ordinary: &dyn MemoryAccess<Error = MemoryAccessError> = &bound;
     // When: ordinary raw and typed operations use the binding.
     ordinary.validate(0x1000.into(), MemoryAlignment::ONE, 8)?;
     ordinary.write(0x1000.into(), MemoryAlignment::ONE, &[2, 4])?;

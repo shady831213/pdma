@@ -1,5 +1,5 @@
-use super::FunctionSpaces;
-use hardware_interface_runtime::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
+use super::{FunctionSpaces, SpaceError};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_hw_components::control::ControlChannel;
 use std::sync::{Arc, Mutex};
 
@@ -10,13 +10,15 @@ pub(in crate::harness::runtime) struct ControlMemory<M> {
 }
 
 impl<M: MemoryAccess> MemoryAccess for ControlMemory<M> {
+    type Error = pdma_model_hw_components::control::MemoryError<SpaceError<M::Error>>;
+
     fn validate_with_sideband(
         &self,
         (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.control
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -29,7 +31,7 @@ impl<M: MemoryAccess> MemoryAccess for ControlMemory<M> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.control
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -42,7 +44,7 @@ impl<M: MemoryAccess> MemoryAccess for ControlMemory<M> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.control
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

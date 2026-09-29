@@ -1,4 +1,4 @@
-use crate::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment};
+use crate::{MemoryAccess, MemoryAddress, MemoryAlignment};
 
 /// Unit-sideband access to a borrowed backend with one owned metadata value.
 #[derive(Debug)]
@@ -15,13 +15,15 @@ impl<'a, M: ?Sized, S> BoundMemory<'a, M, S> {
 }
 
 impl<M: MemoryAccess<S> + ?Sized, S> MemoryAccess for BoundMemory<'_, M, S> {
+    type Error = M::Error;
+
     fn validate_with_sideband(
         &self,
         (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.memory
             .validate_with_sideband(&self.sideband, address, alignment, length)
     }
@@ -32,7 +34,7 @@ impl<M: MemoryAccess<S> + ?Sized, S> MemoryAccess for BoundMemory<'_, M, S> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         destination: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.memory
             .read_with_sideband(&self.sideband, address, alignment, destination)
     }
@@ -43,7 +45,7 @@ impl<M: MemoryAccess<S> + ?Sized, S> MemoryAccess for BoundMemory<'_, M, S> {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         source: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.memory
             .write_with_sideband(&self.sideband, address, alignment, source)
     }

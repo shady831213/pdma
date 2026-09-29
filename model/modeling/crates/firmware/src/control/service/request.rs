@@ -9,11 +9,11 @@ use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::RingError;
 
 impl<B: hardware_interface_runtime::RegisterAccess + Sync, M: Sync> super::Service<'_, B, M> {
-    pub(super) async fn execute(
+    pub(super) async fn execute<E>(
         &self,
         resources: &mut Resources,
         (monitor, request): (&super::Monitor<'_, B>, ControlRequest),
-    ) -> Result<ControlResponse, Error<B::Error>> {
+    ) -> Result<ControlResponse, Error<B::Error, E>> {
         match request.opcode {
             ControlRequestOpcode::ResetDma => {
                 monitor.reset().await?;

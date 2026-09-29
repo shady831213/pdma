@@ -14,6 +14,7 @@ pub(super) struct Observed {
 }
 
 impl MemoryAccess for Observed {
+    type Error = MemoryAccessError;
     fn validate_with_sideband(
         &self,
         (): &(),

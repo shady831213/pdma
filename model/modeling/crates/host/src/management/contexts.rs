@@ -11,7 +11,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         attributes: ContextAttributes,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit_request(ControlRequest {
             id: 0,
             opcode: ControlRequestOpcode::CreateContext,
@@ -28,7 +28,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         context: ContextId,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit_context(function, (ControlRequestOpcode::DrainContext, context))
             .await
     }
@@ -38,7 +38,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         context: ContextId,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit_context(function, (ControlRequestOpcode::AbortContext, context))
             .await
     }
@@ -48,7 +48,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         context: ContextId,
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit_context(function, (ControlRequestOpcode::DestroyContext, context))
             .await
     }
@@ -57,7 +57,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Send + Sync> Management<B, M> {
         &mut self,
         function: FunctionId,
         (opcode, context): (ControlRequestOpcode, ContextId),
-    ) -> Result<ManagementRequestId, Error<B::Error>> {
+    ) -> Result<ManagementRequestId, Error<B::Error, M::Error>> {
         self.submit_request(ControlRequest {
             id: 0,
             opcode,

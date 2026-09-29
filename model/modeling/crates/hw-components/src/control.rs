@@ -6,7 +6,7 @@ use pdma_model_contract::memory::{FunctionId, InvalidContextAttributes, MemoryId
 mod error;
 mod memory;
 pub use error::ControlError;
-pub use memory::ControlMemoryAccess;
+pub use memory::{ControlMemoryAccess, MemoryError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Domain {

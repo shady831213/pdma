@@ -73,10 +73,13 @@ impl std::error::Error for BuildError {
 
 /// Failure of a supervised hardware or firmware actor.
 #[derive(Debug)]
-pub enum RunError {
+pub enum RunError<E = hardware_interface_runtime::MemoryAccessError> {
     /// Firmware boot or control service failed.
     Firmware(
-        pdma_model_firmware::Error<hardware_interface_runtime::CpuAccessError<super::AccessError>>,
+        pdma_model_firmware::Error<
+            hardware_interface_runtime::CpuAccessError<super::AccessError>,
+            E,
+        >,
     ),
     /// Firmware interrupt delivery failed.
     FirmwareInterrupt(
@@ -92,9 +95,21 @@ pub enum RunError {
     HardwareStopped,
 }
 
-impl fmt::Display for RunError {
+impl<E: fmt::Debug> fmt::Display for RunError<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "managed execution: {self:?}")
     }
 }
-impl std::error::Error for RunError {}
+impl<E: std::error::Error + 'static> std::error::Error for RunError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Firmware(error) => Some(error),
+            Self::FirmwareInterrupt(error) => Some(error),
+            Self::Hardware(AsyncRunError::Stage(error)) => Some(error),
+            Self::Hardware(
+                AsyncRunError::BackendInteraction(error) | AsyncRunError::BackendWait(error),
+            ) => Some(error),
+            Self::Hardware(AsyncRunError::Exhausted) | Self::HardwareStopped => None,
+        }
+    }
+}

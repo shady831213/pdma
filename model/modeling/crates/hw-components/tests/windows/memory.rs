@@ -6,7 +6,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::hw_components::windows::WindowControl;
 use pdma_model_contract::memory::FunctionId;
-use pdma_model_hw_components::windows::ChannelWindows;
+use pdma_model_hw_components::windows::{ChannelWindows, MemoryError};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 const BASE: usize = 0x10_0000;
@@ -47,6 +47,7 @@ impl Spaces {
 }
 
 impl MemoryAccess<FunctionId> for Spaces {
+    type Error = MemoryAccessError;
     fn validate_with_sideband(
         &self,
         function: &FunctionId,
@@ -85,7 +86,7 @@ fn channel_access_uses_owner_for_validation_raw_and_typed_io() -> TestResult {
     let spaces = Spaces::new()?;
     let mut windows = ChannelWindows::new(1, 0, u32::try_from(BASE)?)?;
     windows.management_write(BASE + WindowControl::OWNER.offset(), &1_u32.to_le_bytes())?;
-    let downstream: &dyn MemoryAccess<FunctionId> = &spaces;
+    let downstream: &dyn MemoryAccess<FunctionId, Error = MemoryAccessError> = &spaces;
     let port = windows.memory(downstream);
     // When: channel zero accesses the second Function through the hardware view.
     port.validate_with_sideband(&CHANNEL, ADDRESS, MemoryAlignment::ONE, 16)?;
@@ -160,18 +161,18 @@ fn invalid_channel_and_downstream_errors_preserve_buffers() -> TestResult {
     let validate = port.validate_with_sideband(&invalid, ADDRESS, MemoryAlignment::ONE, 4);
     let downstream_error = port.write_with_sideband(&CHANNEL, misaligned, alignment, &[9; 4]);
     // Then: errors retain their addresses, no read buffer or backing bytes are changed.
-    assert_eq!(read, Err(MemoryAccessError::Unmapped { address: ADDRESS }));
-    assert_eq!(write, Err(MemoryAccessError::Unmapped { address: ADDRESS }));
+    assert_eq!(read, Err(MemoryError::UnownedChannel { channel: invalid }));
+    assert_eq!(write, Err(MemoryError::UnownedChannel { channel: invalid }));
     assert_eq!(
         validate,
-        Err(MemoryAccessError::Unmapped { address: ADDRESS })
+        Err(MemoryError::UnownedChannel { channel: invalid })
     );
     assert_eq!(
         downstream_error,
-        Err(MemoryAccessError::Misaligned {
+        Err(MemoryError::Downstream(MemoryAccessError::Misaligned {
             address: misaligned,
             alignment
-        })
+        }))
     );
     assert_eq!(bytes, [0xa5; 4]);
     assert_eq!(

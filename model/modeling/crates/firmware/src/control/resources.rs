@@ -28,10 +28,10 @@ pub(super) struct Resources {
 }
 
 impl Resources {
-    pub(super) async fn initialize<B: RegisterAccess + Sync>(
+    pub(super) async fn initialize<B: RegisterAccess + Sync, M>(
         bus: &B,
         config: Configuration,
-    ) -> Result<Self, Error<B::Error>> {
+    ) -> Result<Self, Error<B::Error, M>> {
         let addresses = config.addresses;
         let function_count =
             u32::try_from(config.function_count).map_err(|_| Error::FunctionCount)?;
@@ -100,11 +100,11 @@ impl Resources {
             })
     }
 
-    pub(super) async fn acquire<B: RegisterAccess + Sync>(
+    pub(super) async fn acquire<B: RegisterAccess + Sync, M>(
         &mut self,
         (bus, monitor): (&B, &Monitor<'_, B>),
         function: FunctionId,
-    ) -> Result<Option<ChannelId>, Error<B::Error>> {
+    ) -> Result<Option<ChannelId>, Error<B::Error, M>> {
         let Some((index, channel)) = self
             .channels
             .iter_mut()
@@ -129,11 +129,11 @@ impl Resources {
         Ok(Some(id))
     }
 
-    pub(super) async fn reset<B: RegisterAccess + Sync>(
+    pub(super) async fn reset<B: RegisterAccess + Sync, M>(
         &mut self,
         (bus, monitor): (&B, &Monitor<'_, B>),
         (function, id): (FunctionId, ChannelId),
-    ) -> Result<Result<(), ResourceError>, Error<B::Error>> {
+    ) -> Result<Result<(), ResourceError>, Error<B::Error, M>> {
         let Some(channel) = self.channels.get_mut(id.index()) else {
             return Ok(Err(ResourceError::InvalidChannel));
         };
@@ -151,11 +151,11 @@ impl Resources {
         Ok(Ok(()))
     }
 
-    pub(super) async fn release<B: RegisterAccess + Sync>(
+    pub(super) async fn release<B: RegisterAccess + Sync, M>(
         &mut self,
         (bus, monitor): (&B, &Monitor<'_, B>),
         (function, id): (FunctionId, ChannelId),
-    ) -> Result<Result<(), ResourceError>, Error<B::Error>> {
+    ) -> Result<Result<(), ResourceError>, Error<B::Error, M>> {
         let Some(channel) = self.channels.get_mut(id.index()) else {
             return Ok(Err(ResourceError::InvalidChannel));
         };
@@ -172,12 +172,12 @@ impl Resources {
         Ok(Ok(()))
     }
 
-    async fn set_window<B: RegisterAccess + Sync>(
+    async fn set_window<B: RegisterAccess + Sync, M>(
         bus: &B,
         addresses: ManagementAddresses,
         id: ChannelId,
         open: bool,
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M>> {
         bus.write(
             addresses
                 .window_control(id)

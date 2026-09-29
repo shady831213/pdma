@@ -16,7 +16,10 @@ pub(super) struct Service<'a, B, M> {
 }
 
 impl<B: RegisterAccess + Sync, M: MemoryAccess + Sync> Service<'_, B, M> {
-    pub(super) async fn run(self, mut resources: Resources) -> Result<Infallible, Error<B::Error>> {
+    pub(super) async fn run(
+        self,
+        mut resources: Resources,
+    ) -> Result<Infallible, Error<B::Error, M::Error>> {
         let monitor = Monitor::new(self.bus, self.addresses, resources.channel_count()).await?;
         let mut channel = loop {
             monitor.observe().await?;
@@ -96,7 +99,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Sync> Service<'_, B, M> {
     async fn observe(
         &self,
         (monitor, events): (&Monitor<'_, B>, Option<&mut Events<'_, B, M>>),
-    ) -> Result<(), Error<B::Error>> {
+    ) -> Result<(), Error<B::Error, M::Error>> {
         monitor.observe().await?;
         if let Some(events) = events {
             if let Some(event) = monitor.take_event() {
@@ -110,7 +113,7 @@ impl<B: RegisterAccess + Sync, M: MemoryAccess + Sync> Service<'_, B, M> {
         &self,
         future: F,
         (monitor, mut events): (&Monitor<'_, B>, Option<&mut Events<'_, B, M>>),
-    ) -> Result<F::Output, Error<B::Error>> {
+    ) -> Result<F::Output, Error<B::Error, M::Error>> {
         let mut future = std::pin::pin!(future);
         loop {
             tokio::select! {

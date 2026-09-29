@@ -3,6 +3,8 @@ use super::{Memory, MemoryStorage, SharedMemory};
 use crate::{MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion};
 
 impl<P: MemoryStorage> MemoryAccess for Memory<P> {
+    type Error = MemoryAccessError;
+
     fn validate_with_sideband(
         &self,
         (): &(),
@@ -50,6 +52,8 @@ impl<P: MemoryStorage> MemoryAccess for Memory<P> {
 }
 
 impl MemoryAccess for SharedMemory {
+    type Error = MemoryAccessError;
+
     fn validate_with_sideband(
         &self,
         (): &(),

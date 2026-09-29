@@ -8,6 +8,45 @@ use std::{
 
 const PAGE_SIZE: u64 = 256;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(in crate::harness) enum PageError {
+    Access(MemoryAccessError),
+    PageFault { address: MemoryAddress },
+}
+
+impl std::fmt::Display for PageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Access(error) => error.fmt(f),
+            Self::PageFault { address } => write!(f, "page fault at {:#x}", address.raw()),
+        }
+    }
+}
+
+impl std::error::Error for PageError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Access(error) => Some(error),
+            Self::PageFault { .. } => None,
+        }
+    }
+}
+
+impl From<MemoryAccessError> for PageError {
+    fn from(error: MemoryAccessError) -> Self {
+        Self::Access(error)
+    }
+}
+
+impl From<PageError> for pdma_model_dma::MemoryFailure {
+    fn from(error: PageError) -> Self {
+        match error {
+            PageError::Access(_) => Self::Access,
+            PageError::PageFault { address } => Self::PageFault { address },
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(in crate::harness) struct PageTable(Arc<Mutex<BTreeSet<u64>>>);
 
@@ -40,7 +79,7 @@ impl Paged {
         alignment: MemoryAlignment,
         length: u64,
         action: impl FnOnce() -> Result<T, MemoryAccessError>,
-    ) -> Result<T, MemoryAccessError> {
+    ) -> Result<T, PageError> {
         self.memory.validate(address, alignment, length)?;
         let missing = self
             .pages
@@ -52,24 +91,26 @@ impl Paged {
                 .range(address.raw() / PAGE_SIZE..=(address.raw() + length - 1) / PAGE_SIZE)
                 .next()
         {
-            return Err(MemoryAccessError::PageFault {
+            return Err(PageError::PageFault {
                 address: (page * PAGE_SIZE).max(address.raw()).into(),
             });
         }
         let result = action();
         drop(missing);
-        result
+        result.map_err(PageError::Access)
     }
 }
 
 impl MemoryAccess for Paged {
+    type Error = PageError;
+
     fn validate_with_sideband(
         &self,
         (): &(),
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.access(address, alignment, length, || Ok(()))
     }
     fn read_with_sideband(
@@ -78,7 +119,7 @@ impl MemoryAccess for Paged {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         out: &mut [u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.access(
             address,
             alignment,
@@ -95,7 +136,7 @@ impl MemoryAccess for Paged {
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
-    ) -> Result<(), MemoryAccessError> {
+    ) -> Result<(), Self::Error> {
         self.access(
             address,
             alignment,

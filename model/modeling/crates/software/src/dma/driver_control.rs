@@ -1,11 +1,11 @@
 use super::Channel;
 use super::Error;
-use hardware_interface_runtime::{MemoryAccess, RegisterAccess};
+use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::dma::{
     ChannelFatalCode, ChannelIrqCauseValues, ChannelIrqMaskValues, DmaFatalCode,
 };
 
-impl<B: RegisterAccess + Send + Sync, M: MemoryAccess + Send + Sync> Channel<B, M> {
+impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
     /// Reads the hardware's sticky channel fatal code.
     pub async fn fatal(&self) -> Result<ChannelFatalCode, Error<B::Error>> {
         self.port.control.fatal(&self.port.bus).await

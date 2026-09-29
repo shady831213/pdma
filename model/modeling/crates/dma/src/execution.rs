@@ -7,8 +7,9 @@ pub use copy::{ReadCopy, WriteCopy};
 pub use next::NextChunk;
 pub use validate::{CheckRanges, RangeCheck};
 
+use crate::MemoryFailure;
 use cursor::Cursor;
-use hardware_interface_runtime::{MemoryAccessError, MemoryAddress};
+use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::dma::{
     Command, CompletionInfo, PageFaultInfo, PageFaultKindsAccess, Response, ResponseInfoValues,
     ResponseStatus,
@@ -72,16 +73,13 @@ impl CopyState {
         })
     }
 
-    const fn fail_access(&mut self, error: MemoryAccessError, access: PageFaultKindsAccess) {
+    const fn fail_access(&mut self, error: MemoryFailure, access: PageFaultKindsAccess) {
         self.status = match error {
-            MemoryAccessError::PageFault { address } => {
+            MemoryFailure::PageFault { address } => {
                 self.fault = Some((address, access));
                 ResponseStatus::PageFault
             }
-            MemoryAccessError::AddressOverflow { .. }
-            | MemoryAccessError::Misaligned { .. }
-            | MemoryAccessError::Unmapped { .. }
-            | MemoryAccessError::CrossesRegion { .. } => match access {
+            MemoryFailure::Access => match access {
                 PageFaultKindsAccess::SourceRead => ResponseStatus::ReadError,
                 PageFaultKindsAccess::DestinationWrite => ResponseStatus::WriteError,
             },

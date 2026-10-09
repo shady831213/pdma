@@ -5,9 +5,10 @@ use pdma_model_contract::memory::FunctionId;
 
 /// Translates channel metadata to its register-owned Function before forwarding memory access.
 #[derive(Debug)]
-pub struct ChannelMemoryAccess<'a, M: ?Sized> {
+pub struct ChannelMemoryAccess<'a, M: ?Sized, F = fn(ChannelId, FunctionId) -> FunctionId> {
     windows: &'a ChannelWindows,
     downstream: &'a M,
+    map: F,
 }
 
 impl ChannelWindows {
@@ -16,11 +17,27 @@ impl ChannelWindows {
         ChannelMemoryAccess {
             windows: self,
             downstream,
+            map: |_, function| function,
         }
     }
 }
 
-impl<M: ?Sized> ChannelMemoryAccess<'_, M> {
+impl<'a, M: ?Sized> ChannelMemoryAccess<'a, M> {
+    /// Maps an authorized channel and owner to platform sideband on every memory operation.
+    #[must_use]
+    pub fn map_sideband<F, S>(self, map: F) -> ChannelMemoryAccess<'a, M, F>
+    where
+        F: Fn(ChannelId, FunctionId) -> S,
+    {
+        ChannelMemoryAccess {
+            windows: self.windows,
+            downstream: self.downstream,
+            map,
+        }
+    }
+}
+
+impl<M: ?Sized, F> ChannelMemoryAccess<'_, M, F> {
     fn owner<E>(&self, channel: ChannelId) -> Result<FunctionId, MemoryError<E>> {
         self.windows
             .owner(channel)
@@ -28,7 +45,10 @@ impl<M: ?Sized> ChannelMemoryAccess<'_, M> {
     }
 }
 
-impl<M: MemoryAccess<FunctionId> + ?Sized> MemoryAccess<ChannelId> for ChannelMemoryAccess<'_, M> {
+impl<M: MemoryAccess<S> + ?Sized, F, S> MemoryAccess<ChannelId> for ChannelMemoryAccess<'_, M, F>
+where
+    F: Fn(ChannelId, FunctionId) -> S,
+{
     type Error = MemoryError<M::Error>;
     fn validate_with_sideband(
         &self,
@@ -39,7 +59,7 @@ impl<M: MemoryAccess<FunctionId> + ?Sized> MemoryAccess<ChannelId> for ChannelMe
     ) -> Result<(), Self::Error> {
         let function = self.owner(*channel)?;
         self.downstream
-            .validate_with_sideband(&function, address, alignment, length)
+            .validate_with_sideband(&(self.map)(*channel, function), address, alignment, length)
             .map_err(MemoryError::Downstream)
     }
 
@@ -52,7 +72,7 @@ impl<M: MemoryAccess<FunctionId> + ?Sized> MemoryAccess<ChannelId> for ChannelMe
     ) -> Result<(), Self::Error> {
         let function = self.owner(*channel)?;
         self.downstream
-            .read_with_sideband(&function, address, alignment, bytes)
+            .read_with_sideband(&(self.map)(*channel, function), address, alignment, bytes)
             .map_err(MemoryError::Downstream)
     }
 
@@ -65,7 +85,7 @@ impl<M: MemoryAccess<FunctionId> + ?Sized> MemoryAccess<ChannelId> for ChannelMe
     ) -> Result<(), Self::Error> {
         let function = self.owner(*channel)?;
         self.downstream
-            .write_with_sideband(&function, address, alignment, bytes)
+            .write_with_sideband(&(self.map)(*channel, function), address, alignment, bytes)
             .map_err(MemoryError::Downstream)
     }
 }

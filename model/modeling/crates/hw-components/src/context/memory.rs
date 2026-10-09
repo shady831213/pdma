@@ -6,10 +6,11 @@ use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
 
 #[doc = "Borrowed context lookup translating DMA selectors into authorized fabric identities."]
 #[derive(Debug)]
-pub struct ContextMemoryAccess<'a, M: ?Sized> {
+pub struct ContextMemoryAccess<'a, M: ?Sized, F = fn(DmaAccess, MemoryIdentity) -> MemoryIdentity> {
     table: &'a ContextTable,
     windows: &'a ChannelWindows,
     downstream: &'a M,
+    map: F,
 }
 
 impl ContextTable {
@@ -23,11 +24,28 @@ impl ContextTable {
             table: self,
             windows,
             downstream,
+            map: |_, identity| identity,
         }
     }
 }
 
-impl<M: ?Sized> ContextMemoryAccess<'_, M> {
+impl<'a, M: ?Sized> ContextMemoryAccess<'a, M> {
+    /// Maps authorized selectors and identity to platform sideband on every memory operation.
+    #[must_use]
+    pub fn map_sideband<F, S>(self, map: F) -> ContextMemoryAccess<'a, M, F>
+    where
+        F: Fn(DmaAccess, MemoryIdentity) -> S,
+    {
+        ContextMemoryAccess {
+            table: self.table,
+            windows: self.windows,
+            downstream: self.downstream,
+            map,
+        }
+    }
+}
+
+impl<M: ?Sized, F> ContextMemoryAccess<'_, M, F> {
     fn identity<E>(&self, access: DmaAccess) -> Result<MemoryIdentity, MemoryError<E>> {
         let owner = self
             .windows
@@ -59,8 +77,9 @@ impl<M: ?Sized> ContextMemoryAccess<'_, M> {
     }
 }
 
-impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
-    for ContextMemoryAccess<'_, M>
+impl<M: MemoryAccess<S> + ?Sized, F, S> MemoryAccess<DmaAccess> for ContextMemoryAccess<'_, M, F>
+where
+    F: Fn(DmaAccess, MemoryIdentity) -> S,
 {
     type Error = MemoryError<M::Error>;
     fn validate_with_sideband(
@@ -71,7 +90,12 @@ impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
         length: u64,
     ) -> Result<(), Self::Error> {
         self.downstream
-            .validate_with_sideband(&self.identity(*access)?, address, alignment, length)
+            .validate_with_sideband(
+                &(self.map)(*access, self.identity(*access)?),
+                address,
+                alignment,
+                length,
+            )
             .map_err(MemoryError::Downstream)
     }
     fn read_with_sideband(
@@ -82,7 +106,12 @@ impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
         bytes: &mut [u8],
     ) -> Result<(), Self::Error> {
         self.downstream
-            .read_with_sideband(&self.identity(*access)?, address, alignment, bytes)
+            .read_with_sideband(
+                &(self.map)(*access, self.identity(*access)?),
+                address,
+                alignment,
+                bytes,
+            )
             .map_err(MemoryError::Downstream)
     }
     fn write_with_sideband(
@@ -93,7 +122,12 @@ impl<M: MemoryAccess<MemoryIdentity> + ?Sized> MemoryAccess<DmaAccess>
         bytes: &[u8],
     ) -> Result<(), Self::Error> {
         self.downstream
-            .write_with_sideband(&self.identity(*access)?, address, alignment, bytes)
+            .write_with_sideband(
+                &(self.map)(*access, self.identity(*access)?),
+                address,
+                alignment,
+                bytes,
+            )
             .map_err(MemoryError::Downstream)
     }
 }

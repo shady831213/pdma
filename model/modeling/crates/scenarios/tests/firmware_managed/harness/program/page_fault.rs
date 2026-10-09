@@ -1,138 +1,131 @@
+pub(in crate::harness) mod management;
+/// Software-owned tagged recovery with two channels in one address space.
+pub mod shared_space;
 mod transfer;
 
-use super::{Handler, HostVector, Ports, TestResult, buffers};
-use crate::harness::{contexts::ATTRIBUTES, page_fault::Space};
-use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::{
-    control::ControlResponseStatus,
-    dma::{Command, ContextId, PageFaultInfo, PageFaultKindsAccess, Response, ResponseInfoValues},
-    memory::{ContextAttributes, FunctionId},
+use super::{Handler, HostVector, Ports, TestResult};
+use crate::harness::{
+    contexts::ATTRIBUTES,
+    page_fault::{FaultReport, Space},
+    runtime::AccessError,
 };
-use pdma_model_host::firmware;
-use pdma_model_software::control::InterruptEvent;
-use std::time::Duration;
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
+use pdma_model_contract::{
+    dma::{ChannelId, ContextId, Response, ResponseStatus},
+    memory::FunctionId,
+};
+use tokio::sync::{mpsc, oneshot};
+
+pub(in crate::harness) struct Grant {
+    pub channel: ChannelId,
+    pub contexts: [ContextId; 4],
+}
+
+pub(in crate::harness) struct Recovery {
+    pub sources: crate::harness::page_fault::platform::Sources,
+    pub spaces: [Space; 3],
+    pub reports: mpsc::Receiver<FaultReport>,
+    pub grant: oneshot::Receiver<Grant>,
+    pub finished: oneshot::Sender<()>,
+    pub released: oneshot::Receiver<()>,
+}
 
 #[derive(Debug, Default)]
-/// Software-observed completions, repair identities and released resources.
+/// Software-observed platform faults and the original command's completion.
 pub struct Outcome {
     pub(crate) responses: Vec<Response>,
-    pub(crate) repairs: Vec<(ContextAttributes, u64)>,
+    pub(crate) faults: Vec<FaultReport>,
+    pub(crate) faulted: Vec<bool>,
     pub(crate) bytes: Vec<u8>,
-    pub(crate) released: bool,
+    pub(crate) closed_resume: Option<Result<(), AccessError>>,
 }
 
 pub(in crate::harness) async fn main<M: Send>(
     ports: Ports<'_, M>,
-    [lists, source, destination]: [Space; 3],
+    recovery: Recovery,
 ) -> TestResult<Outcome> {
-    firmware::wait_ready(
-        &ports.bus,
-        ports.bus.addresses().firmware,
-        Duration::from_secs(1),
-    )
-    .await?;
-    let control_irq = InterruptEvent::new();
-    ports
-        .interrupts
-        .register(HostVector::Control, Handler::Control(control_irq.handler()))?;
-    let mut management =
-        buffers::management_with_context(&ports, control_irq, ATTRIBUTES[1]).await?;
-    let function = FunctionId::new(0);
-    let mut contexts = Vec::new();
-    for attributes in ATTRIBUTES {
-        management
-            .submit_create_context(function, attributes)
-            .await?;
-        let response = management.next_response().await?;
-        if response.status != ControlResponseStatus::Success {
-            return Err("context creation failed".into());
-        }
-        contexts.push(ContextId::new(response.context));
-    }
-    let [list_id, ring_id, source_id, destination_id]: [ContextId; 4] =
-        contexts.try_into().map_err(|_| "context count")?;
-    let channel = management.acquire_channel(function).await?;
-    let (mut driver, mut request, dst) = transfer::prepare(
-        &ports,
-        channel,
-        [list_id, ring_id, source_id, destination_id],
-        (&lists, &source, &destination),
-    )
-    .await?;
-    let (wake, mut notifications) = tokio::sync::mpsc::unbounded_channel();
+    let Recovery {
+        sources,
+        spaces: [lists, source, destination],
+        mut reports,
+        grant,
+        finished,
+        released,
+    } = recovery;
+    let Grant { channel, contexts } = grant.await?;
+    let mut handler = sources
+        .handler(FunctionId::new(1), &[channel])
+        .ok_or("unknown granted source")?;
+    let (mut driver, request, dst) =
+        transfer::prepare(&ports, channel, contexts, (&lists, &source, &destination)).await?;
+    let (wake, mut notifications) = mpsc::unbounded_channel();
     ports
         .interrupts
         .register(HostVector::Dma, Handler::Wake(wake))?;
     let mut outcome = Outcome::default();
-    loop {
-        driver.submit(request).await?;
-        notifications.recv().await.ok_or("DMA ISR stopped")?;
-        let response = driver
-            .response()
-            .await?
-            .ok_or("notification without response")?;
-        if response.id != request.id {
-            return Err("unknown completion".into());
+    driver.submit(request).await?;
+    for _ in 0..2 {
+        let report = tokio::select! {
+            report = reports.recv() => report.ok_or("platform fault reporter stopped")?,
+            _ = notifications.recv() => return Err("page fault generated a DMA interrupt".into()),
+        };
+        if handler.resolve(&report) != Some(channel) {
+            return Err("fault source is outside this grant".into());
         }
-        outcome.responses.push(response);
-        match response.info {
-            ResponseInfoValues::Success(_) => break,
-            ResponseInfoValues::PageFault(fault) => {
-                let (selector, attributes) = repair_payload(
-                    &fault,
-                    &request,
-                    [
-                        (source_id, &source, ATTRIBUTES[2]),
-                        (destination_id, &destination, ATTRIBUTES[3]),
-                    ],
-                )?;
-                outcome.repairs.push((attributes, fault.fault_address));
-                management
-                    .submit_drain_context(function, ContextId::new(selector))
-                    .await?;
-                if management.next_response().await?.status != ControlResponseStatus::Success {
-                    return Err("faulted attempt did not retire".into());
-                }
-                request = transfer::continuation(request, fault)?;
+        if driver.response().await?.is_some() {
+            return Err("suspended command published a response".into());
+        }
+        let faulted = loop {
+            let faulted = driver.faulted().await?;
+            if faulted {
+                break faulted;
             }
-            ResponseInfoValues::InvalidLength(_)
-            | ResponseInfoValues::ReadError(_)
-            | ResponseInfoValues::WriteError(_)
-            | ResponseInfoValues::LengthMismatch(_)
-            | ResponseInfoValues::ListReadError(_) => return Err("unrecoverable DMA error".into()),
+            tokio::task::yield_now().await;
+        };
+        if report.identity.function != FunctionId::new(1) {
+            return Err("fault reported for the wrong Function".into());
         }
+        let space = [(ATTRIBUTES[2], &source), (ATTRIBUTES[3], &destination)]
+            .into_iter()
+            .find(|(attributes, _)| *attributes == report.identity.attributes)
+            .map(|(_, space)| space)
+            .ok_or("unknown fault address space")?;
+        if !space.pages.repair(report.address) {
+            return Err("reported page was not missing in its address space".into());
+        }
+        outcome.faults.push(report);
+        outcome.faulted.push(faulted);
+        driver.resume().await?;
+    }
+    notifications.recv().await.ok_or("DMA ISR stopped")?;
+    let response = driver
+        .response()
+        .await?
+        .ok_or("notification without response")?;
+    if response.id != request.id || response.status != ResponseStatus::Success {
+        return Err("original command failed to complete".into());
+    }
+    outcome.responses.push(response);
+    if driver.response().await?.is_some() {
+        return Err("duplicate command response".into());
     }
     outcome.bytes.resize(600, 0);
     destination
         .allocator
         .memory_access()
         .read(dst, MemoryAlignment::ONE, &mut outcome.bytes)?;
-    management.release_channel(function, channel).await?;
-    for id in [list_id, ring_id, source_id, destination_id] {
-        management.submit_destroy_context(function, id).await?;
-        if management.next_response().await?.status != ControlResponseStatus::Success {
-            return Err("context destroy failed".into());
-        }
-    }
-    outcome.released = true;
+    handler.retire();
+    reports.close();
+    finished
+        .send(())
+        .map_err(|()| "PF stopped before release")?;
+    released.await?;
+    let address = ports.bus.addresses().dma
+        + u32::try_from(
+            channel.register_offset(1).ok_or("channel address")?
+                + pdma_model_contract::dma::ChannelBlock::CONTROL.offset()
+                + pdma_model_contract::dma::ChannelRegisters::RESUME.offset(),
+        )?;
+    outcome.closed_resume = Some(ports.bus.write(address, &1_u32.to_le_bytes()).await);
     Ok(outcome)
-}
-
-fn repair_payload(
-    fault: &PageFaultInfo,
-    request: &Command,
-    bindings: [(ContextId, &Space, ContextAttributes); 2],
-) -> TestResult<(u32, ContextAttributes)> {
-    let selector = match fault.kinds.access {
-        PageFaultKindsAccess::SourceRead => request.source.context,
-        PageFaultKindsAccess::DestinationWrite => request.destination.context,
-    };
-    let (_, space, attributes) = bindings
-        .into_iter()
-        .find(|(id, _, _)| id.raw() == selector)
-        .ok_or("unknown payload context")?;
-    if !space.pages.repair(fault.fault_address.into()) {
-        return Err("page not missing in retained address space".into());
-    }
-    Ok((selector, attributes))
 }

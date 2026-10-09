@@ -68,7 +68,7 @@ fn generated_dispatch_rejects_gaps_and_out_of_range_addresses() {
     // Given: reset register storage.
     let mut values = ChannelBlockValues::default();
     // When: accessing interiors, queue alignment gaps, channel padding and the map end.
-    let results = [1, 20, 21, 22, 23, 68, 72, usize::MAX].map(|offset| {
+    let results = [1, 20, 21, 22, 23, 73, 88, usize::MAX].map(|offset| {
         (
             ChannelBlock::read_register(&values, offset),
             ChannelBlock::write_register(&mut values, offset, 7),

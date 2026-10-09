@@ -68,7 +68,7 @@ fn entries_follow_wire_layout_and_wrap_for_different_record_types() -> Result<()
         tiny.entry(4)?,
     ];
     // Then
-    assert_eq!(addresses, [0x1138, 0x20d8, 0x3006, 0x3000]);
+    assert_eq!(addresses, [0x1138, 0x2048, 0x3006, 0x3000]);
     assert_eq!(commands.entry(4)?, 0x1000);
     assert_eq!(aligned.entry(1)?, 0x4008);
     assert_eq!(commands.base(), 0x1000);
@@ -187,10 +187,10 @@ fn every_accepted_capacity_keeps_entries_contiguous_across_counter_overflow()
         if ring.validate_geometry().is_ok() {
             for pointer in [u32::MAX - 1, u32::MAX] {
                 let current = ring.entry(pointer)?;
-                let expected = if current + 72 == 0x1000 + u64::from(capacity) * 72 {
+                let expected = if current + 24 == 0x1000 + u64::from(capacity) * 24 {
                     0x1000
                 } else {
-                    current + 72
+                    current + 24
                 };
                 // When
                 let next = ring.entry(pointer.wrapping_add(1))?;

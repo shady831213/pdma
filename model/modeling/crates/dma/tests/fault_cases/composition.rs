@@ -1,0 +1,132 @@
+use super::*;
+use hardware_interface_pipeline::{AfterEach, Repeat, Stage, Then};
+use pdma_model_dma::{
+    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, ResetControl, Resettable, RunCommand,
+    Schedule, Transfer, UpdateIrq, WriteCopy,
+};
+
+struct InvertPayload;
+
+impl Stage<ChannelContext<'_, Paged>> for InvertPayload {
+    type Input = Transfer;
+    type Output = Transfer;
+    type Error = Error;
+    type Wait = ();
+    type State = Option<Transfer>;
+    fn start(input: Transfer) -> Self::State {
+        Some(input)
+    }
+    fn step(
+        &mut self,
+        _: &mut ChannelContext<'_, Paged>,
+        state: &mut Self::State,
+    ) -> StepOutcome<Transfer, Error, ()> {
+        let Some(mut transfer) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
+        for byte in &mut transfer.bytes {
+            *byte = !*byte;
+        }
+        StepOutcome::Complete(Ok(transfer))
+    }
+}
+
+#[test]
+fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> TestResult {
+    // Given: an inserted payload transform already ran when destination access faults.
+    let mut device = setup()?.dma;
+    let command = streams(&device)?;
+    device.memory.missing.set(Some((0x1343, true)));
+    submit(&mut device, command, 0)?;
+    let chunk = Then::new(
+        Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
+        WriteCopy,
+    );
+    let execution = Then::new(CheckRanges, Repeat::new(chunk));
+    let pipeline = Then::new(
+        Then::new(
+            device.intake(),
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        ),
+        device.responses(),
+    );
+    let mut engine = AfterEach::new(
+        Schedule::new(Repeat::new(RunCommand::new(pipeline))),
+        ResetControl,
+    );
+    let mut operation = Operation::new(());
+    for _ in 0..256 {
+        assert!(matches!(
+            operation.step(&mut engine, &mut device),
+            StepOutcome::Progressed | StepOutcome::Pending(())
+        ));
+    }
+    // When: a repeated fault and eventual repair resume that same composed operation.
+    assert_eq!(fault_status(&mut device)?, 1);
+    resume(&mut device, 1)?;
+    for _ in 0..256 {
+        assert!(matches!(
+            operation.step(&mut engine, &mut device),
+            StepOutcome::Progressed | StepOutcome::Pending(())
+        ));
+    }
+    assert_eq!(fault_status(&mut device)?, 1);
+    device.memory.missing.set(None);
+    device
+        .memory
+        .memory
+        .write(0x1240.into(), MemoryAlignment::ONE, b"12345")?;
+    resume(&mut device, 1)?;
+    for _ in 0..256 {
+        assert!(matches!(
+            operation.step(&mut engine, &mut device),
+            StepOutcome::Progressed | StepOutcome::Pending(())
+        ));
+    }
+    // Then: cached transformed bytes commit exactly once, without re-reading or re-transforming.
+    assert_eq!(
+        device
+            .memory
+            .memory
+            .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+        b"cdefgh".map(|byte| !byte)
+    );
+    assert_eq!(response(&device)?.bytes_completed(), 8);
+    assert_eq!(
+        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
+    // Given: the scheduler owns a suspended SG task.
+    let mut device = setup()?;
+    let command = streams(&device)?;
+    device.memory.missing.set(Some((0x1242, false)));
+    submit(&mut device, command, 0)?;
+    run(&mut device)?;
+    // When: a caller independently validates an unrelated zero-length command.
+    let mut operation = Operation::new(Command::ZERO);
+    let mut complete = false;
+    let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
+    for _ in 0..16 {
+        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut context) {
+            let _progress = result?;
+            complete = true;
+            break;
+        }
+    }
+    // Then: the parked task remains owned and resumes with its original progress.
+    assert!(complete);
+    assert_eq!(fault_status(&mut device)?, 1);
+    device.memory.missing.set(None);
+    resume(&mut device, 1)?;
+    run(&mut device)?;
+    assert_eq!(
+        (response(&device)?.id, response(&device)?.bytes_completed()),
+        (7, 8)
+    );
+    Ok(())
+}

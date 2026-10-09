@@ -64,7 +64,7 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/contract/src/dma.rs` | Public DMA contract facade; explicit exports from the owning modules. |
 | `crates/contract/src/dma/command.rs` | Command descriptors and command-requested completion flags. |
 | `crates/contract/src/dma/endpoint.rs` | Payload endpoint geometry, SG segments and typed positions. |
-| `crates/contract/src/dma/response.rs` | Completion records, status-specific information and fault continuations. |
+| `crates/contract/src/dma/response.rs` | Final completion records and committed progress. |
 | `crates/contract/src/register.rs` | Register types shared by DMA and management hardware. |
 | `crates/contract/src/dma/registers.rs` | DMA discovery and administration schemas, composed into the top-level register map. |
 | `crates/contract/src/dma/registers/channel.rs` | Channel control/IRQ schemas and command/response ring register maps. |
@@ -152,16 +152,28 @@ child step at a time and reuses its hardware; it does not add another executor.
 Command execution stages can inspect and transform the owned `Transfer`; `dma/tests/composition.rs`
 inserts a payload transform between read and write without changing the core or executor.
 Command execution
-errors travel in the response value; they do not skip publication. Fetch and
+ordinary errors travel in the response value; they do not skip publication. A
+payload PageFault instead parks the retained transfer and yields the shared engine,
+without publishing a response. Fetch and
 publication faults stop the channel. An error response is published before the channel
 stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
-`device.command_loop()` builds `CommandLoop = AfterEach<Repeat<RunCommand>, ResetControl>`, reusing one shared
-pipeline and one in-flight command for either single-channel or multi-channel devices.
-It arbitrates at command boundaries, not between chunks of different channels.
-A full idle arbitration round returns Pending; a channel's fault or reset releases
-its command, and channels without response space are skipped before acceptance.
+`device.command_loop()` builds `CommandLoop = AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>`, reusing one shared
+pipeline and one executing command for either single-channel or multi-channel devices.
+`ScheduleState` owns the current Operation and at most one parked Operation per
+physical channel. A faulting copy leaf retains its Transfer and returns Pending;
+RunCommand does not retire it. Schedule parks the exact composed state, including
+both cursors, write scratch and custom transforms, while Channel.parked retains
+accepted context references. Existing Fetch/RoundRobin selection signals the private
+resume_selected handoff, restoring the exact Operation without command refetch,
+CheckRanges restart or repeated transforms. Schedule discards reset/Abort targets
+before stepping shared active work, so even a disabled peer cannot block cleanup.
+Arbitration changes channels at command completion or payload-fault suspension;
+it does not time-slice healthy commands between chunks. A full idle arbitration
+round returns Pending; stopping errors and reset retire affected work, while a
+payload fault retains ownership. Channels without response space are skipped before
+new acceptance; a parked channel cannot accept a successor.
 `ChannelContext` borrows
 only the selected channel and its memory port for each step. A reset write requests cleanup;
 hardware keeps the reset register at one until affected accepted work retires, then
@@ -169,12 +181,11 @@ clears it to zero. `ResetControl` runs after each command-loop step, including p
 steps. Configuration writes are rejected while the affected scope is resetting.
 Generation tags additionally reject retained pre-reset tasks after later reconfiguration;
 they do not acknowledge reset. Custom command compositions use `RunCommand<S>`
-as their ownership-release boundary and step `ResetControl`. The wrapper accepts any
+inside Schedule for ownership and suspension, and step `ResetControl`. RunCommand accepts any
 child stage with the complete command's input/output/error/wait contract and uses the
 existing `Operation` to dispose of terminal child state before releasing ownership.
-Only termination of the
-complete pipeline releases ownership; response publication and `Resettable` binding
-do not acknowledge command cleanup.
+Only terminal completion or cancellation cleanup releases accepted ownership;
+parking, response publication and `Resettable` binding do not acknowledge cleanup.
 Discarding an accepted operation does not
 model hardware cleanup. See the [reset contract](docs/reset.md) for completion and memory
 lifetime requirements.
@@ -194,6 +205,13 @@ channel and context IDs. Plain `Dma::new` keeps unit-sideband memory access.
 Without a context table, `hw-components::windows::ChannelMemoryAccess` resolves the Function
 owner. With a table, `ContextMemoryAccess` validates ownership and supplies a
 `MemoryIdentity` containing Function and extensible Default/PASID attributes.
+The routing adapters' `map_sideband` hook lets a trusted platform retain the
+authorized source alongside that identity, including an opaque fault-source tag.
+The platform defines and resolves that tag; the MMU only echoes it. PASID/address
+alone cannot identify a channel when several channels use the same space. Tag
+associations and pending fault handlers must outlive their requests and be retired
+before unsafe reuse, as specified in PLAT-PF-02 of
+[pageable-copy recovery](docs/page-fault-recovery.md).
 Runtime selects the injected identity's backing. DMA remains Function/PASID-unaware.
 It neither allocates memory nor chooses
 a concrete backing. The scenario harness assembles memory and its allocation service
@@ -279,19 +297,27 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   command remainder and 256-byte scratch capacity. This scratch size is not a protocol
   limit; there is no additional segment-count/total-length bound. Zero-length segments
   are skipped, zero counts do not read a list, and a zero-length command touches no list or payload.
-- Explicitly repairable payload translation misses return `PageFault` without halting.
-  The response supplies fault address/access role and both continuation positions;
-  software repairs and resubmits, retaining ID/context bindings. DMA stores no suspended
-  task. A failed PageFault access must not leave externally committed writes from that
-  call. See [pageable-copy requirements](docs/page-fault-recovery.md).
+- Explicitly repairable payload translation misses park the original command,
+  both cursors and committed prefix. A failed write retains its successful read
+  scratch; resume retries the failed access without replaying committed writes.
+  No response, DMA IRQ or firmware event reports this suspension. The platform
+  MMU/backend independently reports fault identity/address/access; owner software
+  repairs mappings/TLB state, observes 32-bit FAULT_STATUS.faulted and writes
+  32-bit RESUME.request=1 through channel work MMIO. Resume clears faulted without
+  enabling the channel or clearing errors. Zero and requests while not faulted do
+  not prearm a later fault. Same-channel successors wait while peers can run.
+  Software serializes fault handling with reset/release/reallocation and retires
+  old handlers before reuse; late or duplicate requests are not episode-checked.
+  A failed PageFault write commits no bytes
+  from that call. See [pageable-copy requirements](docs/page-fault-recovery.md).
 - Other payload failures return `ReadError` or `WriteError` and stop further copying. One
   response reports bytes_completed from successful writes; earlier writes are not rolled
   back. Overlap is neither detected nor rejected. Later reads observe earlier writes
   according to actual chunk order; there is no whole-transfer memmove guarantee.
 - Full command ring is a host submission error. Full response ring is hardware
   backpressure: arbitration leaves that channel's commands queued and serves eligible peers.
-  With one in-flight command, a free response slot cannot be taken by another command
-  before publication. The composable Publish stage still retains a response if driven
+  With at most one accepted command per channel, its free response slot cannot be
+  taken by a successor before publication. The composable Publish stage retains a response if driven
   independently against a full ring.
 - Command fetch failure latches fatal code 1 without consuming the command. Response
   publication failure latches code 2 without advancing response producer. Payload
@@ -322,12 +348,13 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   configuration writes with `Error::ResetInProgress`, while reads remain available.
   Completion clears channel configuration, pointers, causes and retained work; device
   reset also clears device-wide fatal and controls and preserves `channel_num`.
+  It cancels parked work without resume and clears the faulted status.
   The host reset methods consume their driver and poll for zero before returning success;
   software then creates fresh drivers through setup. A cancelled wait or caller timeout
   is not completion: affected memory must stay valid until completion is observed.
   Neither reset clears external memory or rolls back committed writes. Merely disabling
   a healthy channel still suspends and preserves its operation.
-  Execution is non-preemptive: disabling the active channel holds the shared unit
+  Healthy execution is non-preemptive: disabling the active channel holds the shared unit
   until that channel is re-enabled or reset.
   Resetting one channel neither changes peer registers nor restarts a peer's active command.
   If the reset channel owns the shared engine, retiring its old buffered data and
@@ -337,9 +364,8 @@ without adopting its raw pointer dereferences or phase-bit pointer encoding.
   or timed drain. See [reset semantics and hardware comparison](docs/reset.md).
 - `Dma::signal_fatal()` represents a device-wide internal hardware fault input.
   It stops all execution and uses the device control block's independent IRQ enable.
-  Only device reset clears it; channel reset does not. The minimal model has no
-  autonomous shared-engine fault source, and memory-backend diagnostics are not
-  automatically promoted to device-wide fatal.
+  Only device reset clears it; channel reset does not.
+  Ordinary memory-backend diagnostics are not automatically promoted to device fatal.
 
 `ChannelRegisters.fatal` uses the dedicated `ChannelFatal` register schema. Its
 `code` field is `ChannelFatalCode::{None, CommandRead, ResponseWrite}` with wire

@@ -1,0 +1,93 @@
+use super::*;
+use crate::harness::page_fault::platform::Sources;
+use hardware_interface_runtime::{SharedMemory, SharedMemoryAllocator};
+use pdma_model_contract::dma::ChannelId;
+use pdma_model_contract::memory::{ContextAttributes, FunctionId};
+
+#[test]
+fn same_space_fault_reports_distinguish_originating_channels() {
+    // Given: two channel requests touch the same missing page in the same address space.
+    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let address = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
+    let (reports, mut receiver) = mpsc::channel(2);
+    let sources = Sources::new(2);
+    let identity = MemoryIdentity {
+        function: FunctionId::new(1),
+        attributes: ContextAttributes::DEFAULT,
+    };
+    let memory = Paged {
+        memory: allocator.memory_access(),
+        pages: PageTable::default(),
+        reports,
+    };
+    memory.pages.evict(address);
+    // When: both accesses fault before either owner repairs the shared page.
+    for channel in 0..2 {
+        assert_eq!(
+            memory.write_with_sideband(
+                &TaggedRequest {
+                    identity,
+                    tag: sources.tag(ChannelId::new(channel))
+                },
+                address,
+                MemoryAlignment::ONE,
+                &[1; 4]
+            ),
+            Err(PageError::PageFault { address })
+        );
+    }
+    // Then: platform reports must retain enough origin information for separate resumes.
+    let first = receiver.try_recv().unwrap();
+    let second = receiver.try_recv().unwrap();
+    assert_ne!(
+        first, second,
+        "same-space reports lost the originating channel"
+    );
+}
+
+#[test]
+fn platform_write_fault_reports_identity_without_committing_bytes() {
+    use hardware_interface_runtime::{SharedMemory, SharedMemoryAllocator};
+    use pdma_model_contract::memory::{ContextAttributes, FunctionId};
+    // Given: one missing page backed by initialized storage and an independent fault receiver.
+    let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
+    let address = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
+    let (reports, mut receiver) = mpsc::channel(1);
+    let sources = Sources::new(1);
+    let request = TaggedRequest {
+        identity: MemoryIdentity {
+            function: FunctionId::new(1),
+            attributes: ContextAttributes::DEFAULT,
+        },
+        tag: sources.tag(ChannelId::new(0)),
+    };
+    let memory = Paged {
+        memory: allocator.memory_access(),
+        pages: PageTable::default(),
+        reports,
+    };
+    memory
+        .memory
+        .write(address, MemoryAlignment::ONE, &[1, 2, 3, 4])
+        .unwrap();
+    memory.pages.evict(address);
+    // When: a payload write accesses the missing page.
+    let result = memory.write_with_sideband(&request, address, MemoryAlignment::ONE, &[5, 6, 7, 8]);
+    // Then: the platform identifies the fault and the entire failed write stays uncommitted.
+    assert_eq!(result, Err(PageError::PageFault { address }));
+    assert_eq!(
+        receiver.try_recv().unwrap(),
+        FaultReport {
+            identity: request.identity,
+            tag: request.tag.unwrap(),
+            address,
+            access: FaultAccess::Write
+        }
+    );
+    let mut bytes = [0; 4];
+    memory
+        .memory
+        .read(address, MemoryAlignment::ONE, &mut bytes)
+        .unwrap();
+    assert_eq!(bytes, [1, 2, 3, 4]);
+}

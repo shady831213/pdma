@@ -22,10 +22,10 @@ fn host_bank_templates_and_expanded_leaves_exclude_administration() {
             .first()
             .is_some_and(|r| r.id() == DmaRegistersRegisterId::Channels)
         {
-            assert_eq!(bank.registers().len(), 14);
+            assert_eq!(bank.registers().len(), 16);
         }
     }
-    assert_eq!(host.registers().len(), 43);
+    assert_eq!(host.registers().len(), 49);
     assert_eq!(
         host.registers().first().unwrap().definition().access(),
         Access::ReadOnly

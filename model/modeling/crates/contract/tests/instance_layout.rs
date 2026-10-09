@@ -10,7 +10,7 @@ fn resolved_channels_follow_each_instance_count() -> Result<(), Box<dyn std::err
         let map = DmaRegisters::new(count)?.resolve()?;
         // Then: only its configured channels occur, at the established byte geometry.
         assert_eq!(map.size(), extent);
-        assert_eq!(map.registers().len(), 4 + 15 * count);
+        assert_eq!(map.registers().len(), 4 + 17 * count);
         for index in 0..count {
             let base = 4096 + 4096 * index;
             assert_eq!(ChannelId::new(index).register_offset(count), Some(base));

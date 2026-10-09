@@ -6,7 +6,7 @@ use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelFatalCode, ChannelFatalValues, ChannelId, ChannelIrqCauseValues,
     ChannelIrqMaskValues, ChannelRegisters, DmaAdmin, DmaControl, DmaDiscovery, DmaFatalCode,
-    DmaFatalValues, DmaRegisters,
+    DmaFatalValues, DmaRegisters, FaultStatusValues,
 };
 
 /// Register control without DMA ring ownership or allocation.
@@ -79,6 +79,28 @@ impl ChannelControl {
             u32::try_from(address).map_err(|_| Error::Geometry)?;
         }
         Ok(control)
+    }
+
+    /// Reports whether a payload fault is waiting for software repair and resume.
+    pub async fn faulted<B: RegisterAccess + Sync>(
+        &self,
+        bus: &B,
+    ) -> Result<bool, Error<B::Error>> {
+        let raw = self
+            .channel_read_word(bus, CHANNEL + ChannelRegisters::FAULT_STATUS.offset())
+            .await?;
+        Ok(FaultStatusValues::new(raw).faulted())
+    }
+
+    /// Requests retry after platform mapping repair, serialized with reset and release.
+    /// Does not enable the channel, clear errors, or acknowledge task completion.
+    pub async fn resume<B: RegisterAccess + Sync>(&self, bus: &B) -> Result<(), Error<B::Error>> {
+        self.channel_write(
+            bus,
+            CHANNEL + ChannelRegisters::RESUME.offset(),
+            &1_u32.to_le_bytes(),
+        )
+        .await
     }
 
     /// Reads the hardware's sticky channel fatal code.

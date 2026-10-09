@@ -11,7 +11,7 @@ bits_schema! {
 
 record_schema! {
     #[short_description = "DMA copy command"]
-    #[description = "A 104-byte, eight-byte-aligned little-endian command. Two independent endpoint starts select one copy_length. Hardware validates both selected ranges before payload writes; backing capacities need not match. Software retains lists and resources while any attempt or continuation can use them. Every submission is self-contained."]
+    #[description = "A 104-byte, eight-byte-aligned little-endian command. Two independent endpoint starts select one copy_length. Hardware validates both selected ranges before payload writes; backing capacities need not match. Software retains lists and resources until final completion or acknowledged cancellation, including payload-fault suspension. Every submission is self-contained."]
     pub record Command {
         alignment: 8,
         endian: Little,

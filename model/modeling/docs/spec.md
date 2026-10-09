@@ -19,7 +19,7 @@ PCIe, IOMMU translation, caches and an actual interconnect are integration scope
 | [Control channel](control-channel.md) | PF/firmware requests, responses, ring ownership and cancellation |
 | [Function isolation](function-isolation.md) | Grants, routing, permissions and pre-FLR obligations |
 | [Contexts](context-contract.md) | Context bindings, maintenance frontiers, lifetime and non-faulting migration-copy obligations |
-| [Pageable copy](page-fault-recovery.md) | Selected ranges, PageFault responses, software continuation and repair/lifetime obligations |
+| [Pageable copy](page-fault-recovery.md) | Selected ranges, retained suspension, owner write-one resume and repair/lifetime obligations |
 | [Fatal and events](fatal-events.md) | System fatal handling, PF events and managed recovery |
 
 The fatal/event chapter describes the managed recovery extension. Its verification
@@ -31,10 +31,16 @@ requirements. Removed specifications on the backup branch are not authoritative.
 The agreed [non-faulting migration-copy usage](context-contract.md#non-faulting-page-migration-copy)
 uses existing copy behavior with explicit software/platform preconditions. It is
 distinct from copying pageable virtual addresses with recoverable faults. The
-implemented [DSA-like partial completion and Host continuation](page-fault-recovery.md)
-chapter specifies endpoint/continuation positions, repair identity, atomic failed
-access and software lifetime obligations. Payload PageFault is a terminal,
-non-halting response; metadata faults and other errors retain their prior policy.
+approved [retained suspension and owner resume](page-fault-recovery.md)
+chapter specifies endpoint positions, platform fault identity, replay-safe access
+boundaries, channel fault/resume bits, opaque platform source-tag correlation and
+software lifetime obligations. Payload PageFault
+retains the original command without a response or DMA IRQ/event; same-channel
+successors wait while peers can run. Firmware lifecycle operations include parked
+work. Metadata faults and other errors retain their prior policy. Physical channels
+remain fixed with one shared engine; no oversubscription, barriers, true MMU or
+PCIe integration is introduced. A transparent ATS+PRI retry port is a separate
+platform boundary and does not require PDMA resume for its held transactions.
 
 ## Responsibility notation
 

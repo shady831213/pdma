@@ -25,12 +25,19 @@ after it observes completion.
 
 Channel reset clears that channel's configuration, ring pointers, fault, IRQ causes
 and notification controls. It discards its buffered payload and unpublished response.
+This includes parked payload-fault work and its retained read scratch; no repair
+or RESUME is required to finish reset. The visible FAULT_STATUS.faulted bit clears.
+Software must serialize repair/resume with reset and retire old fault handlers and
+their pending requests before reconfiguration or regrant. A late write-one RESUME
+can clear a later fault; hardware does not identify which episode it was meant for.
 Peer channel state and accepted work remain intact, although cleanup of the shared
 engine can delay peers. Channel reset cannot clear a device-wide fault.
 
 Device reset subsumes pending channel resets, blocks new work on every channel and
 waits for all affected cleanup. It resets every channel plus device-wide fault and
 controls, preserving the instance's read-only `channel_num`.
+Platform-specific MMIO ordering and completion must uphold that software lifecycle
+exclusion; program order in one issuer is not synchronization between other actors.
 
 Neither scope rolls back external memory writes already performed. Notifications
 already handed to the platform remain pending until the platform claims them;
@@ -39,18 +46,25 @@ reset does not retract them.
 ## How the current model reaches completion
 
 `Dma::command_loop()` composes
-`AfterEach<Repeat<RunCommand>, ResetControl>`. `Fetch` gates resetting channels and
-device reset before accepting commands. Accepted work records its channel and generation in
-`Dma.active`; the command, SG-list, payload and response paths check reset before
-further memory access. `RunCommand` alone clears `Dma.active` when the complete
-pipeline terminates, covering success, reset and errors at any stage. Its retained
+`AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>`. `Fetch` gates resetting channels and
+device reset before accepting commands. Accepted ownership records channel and
+generation, including per-channel parked work; command, SG-list, payload and
+response paths check reset before further memory access. `RunCommand` releases
+executing ownership when the complete pipeline terminates. Payload faults return
+Pending with the leaf's Transfer intact; Schedule parks the exact composed Operation
+and retains its accepted references in Channel.parked. Resume restores that operation
+through existing Fetch/RoundRobin selection, without replaying completed stages.
+Before any shared active step, Schedule discards affected parked operations on
+reset or matching Abort and releases their references. A disabled active peer
+therefore cannot prevent parked cleanup. RunCommand's retained
 `Operation<S, Dma<M>>` discards child state before ownership is released, including
 for custom child stages that do not clear their own state. Response publication
 can precede that outcome by additional composition steps; ownership remains held during
 those steps, so reset cannot acknowledge cleanup early. Neither response ports nor
 `Resettable` release whole-command ownership.
 `ResetControl` runs after every outer step,
-including a pending step, and clears reset only once affected ownership has retired.
+including a pending step, and clears reset only once affected executing and parked
+ownership has retired.
 An unrelated active channel does not prevent an idle channel's reset from completing.
 
 `MemoryAccess` calls are synchronous and finish within a hardware step. MMIO has
@@ -65,7 +79,7 @@ so guarded custom stages can reject stale tasks even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
 Custom command graphs must preserve the single shared execution path, wrap the
-assembled pipeline in `RunCommand<S>`, and drive `ResetControl`. The child must implement
+assembled pipeline in `RunCommand<S>` with Schedule, and drive `ResetControl`. The child must implement
 `Stage<Dma<M>, Input = (), Output = (), Error = Error, Wait = ()>`; its internal
 composition and arbitration policy need not match the default `Pipeline`. Merely
 dropping a software waiter or abandoning an accepted `Operation` does not flush

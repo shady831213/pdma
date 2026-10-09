@@ -1,4 +1,5 @@
 use super::PlatformConfigError;
+use crate::harness::runtime::platform::MemoryRequest;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 use pdma_model_dma::MemoryFailure;
@@ -44,15 +45,16 @@ impl<E: Into<Self>> From<SpaceError<E>> for MemoryFailure {
     }
 }
 
-#[derive(Debug)]
-pub(in crate::harness::runtime) struct FunctionSpaces<M>(
-    pub(in crate::harness::runtime) Vec<(MemoryIdentity, M)>,
-);
+#[derive(Clone, Debug)]
+pub(in crate::harness::runtime) struct FunctionSpaces<M> {
+    pub(in crate::harness::runtime) backing: Vec<(MemoryIdentity, M)>,
+    pub(in crate::harness::runtime) bind: Option<fn(&M, MemoryRequest) -> M>,
+}
 
 impl<M> FunctionSpaces<M> {
     pub(in crate::harness::runtime) fn new(spaces: Vec<M>) -> Result<Self, PlatformConfigError> {
-        Ok(Self(
-            spaces
+        Ok(Self {
+            backing: spaces
                 .into_iter()
                 .enumerate()
                 .map(|(index, memory)| {
@@ -68,7 +70,8 @@ impl<M> FunctionSpaces<M> {
                     ))
                 })
                 .collect::<Result<_, PlatformConfigError>>()?,
-        ))
+            bind: None,
+        })
     }
 }
 
@@ -78,11 +81,63 @@ impl<M: MemoryAccess> FunctionSpaces<M> {
         identity: MemoryIdentity,
         address: MemoryAddress,
     ) -> Result<&M, SpaceError<M::Error>> {
-        self.0
+        self.backing
             .iter()
             .find(|(key, _)| *key == identity)
             .map(|(_, memory)| memory)
             .ok_or(SpaceError::MissingSpace { identity, address })
+    }
+}
+
+impl<M: MemoryAccess> MemoryAccess<MemoryRequest> for FunctionSpaces<M> {
+    type Error = SpaceError<M::Error>;
+
+    fn validate_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        length: u64,
+    ) -> Result<(), Self::Error> {
+        let memory = self.get(request.identity, address)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .validate(address, alignment, length)
+            .map_err(SpaceError::Downstream)
+    }
+
+    fn read_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        bytes: &mut [u8],
+    ) -> Result<(), Self::Error> {
+        let memory = self.get(request.identity, address)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .read(address, alignment, bytes)
+            .map_err(SpaceError::Downstream)
+    }
+
+    fn write_with_sideband(
+        &self,
+        request: &MemoryRequest,
+        address: MemoryAddress,
+        alignment: MemoryAlignment,
+        bytes: &[u8],
+    ) -> Result<(), Self::Error> {
+        let memory = self.get(request.identity, address)?;
+        let bound = self.bind.map(|bind| bind(memory, *request));
+        bound
+            .as_ref()
+            .unwrap_or(memory)
+            .write(address, alignment, bytes)
+            .map_err(SpaceError::Downstream)
     }
 }
 
@@ -96,50 +151,10 @@ impl<M: MemoryAccess> MemoryAccess<MemoryIdentity> for FunctionSpaces<M> {
         alignment: MemoryAlignment,
         length: u64,
     ) -> Result<(), Self::Error> {
-        self.get(*identity, address)?
-            .validate(address, alignment, length)
-            .map_err(SpaceError::Downstream)
-    }
-
-    fn read_with_sideband(
-        &self,
-        identity: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &mut [u8],
-    ) -> Result<(), Self::Error> {
-        self.get(*identity, address)?
-            .read(address, alignment, bytes)
-            .map_err(SpaceError::Downstream)
-    }
-
-    fn write_with_sideband(
-        &self,
-        identity: &MemoryIdentity,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        bytes: &[u8],
-    ) -> Result<(), Self::Error> {
-        self.get(*identity, address)?
-            .write(address, alignment, bytes)
-            .map_err(SpaceError::Downstream)
-    }
-}
-
-impl<M: MemoryAccess> MemoryAccess<FunctionId> for FunctionSpaces<M> {
-    type Error = SpaceError<M::Error>;
-
-    fn validate_with_sideband(
-        &self,
-        function: &FunctionId,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        length: u64,
-    ) -> Result<(), Self::Error> {
         self.validate_with_sideband(
-            &MemoryIdentity {
-                function: *function,
-                attributes: ContextAttributes::DEFAULT,
+            &MemoryRequest {
+                channel: None,
+                identity: *identity,
             },
             address,
             alignment,
@@ -149,15 +164,15 @@ impl<M: MemoryAccess> MemoryAccess<FunctionId> for FunctionSpaces<M> {
 
     fn read_with_sideband(
         &self,
-        function: &FunctionId,
+        identity: &MemoryIdentity,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &mut [u8],
     ) -> Result<(), Self::Error> {
         self.read_with_sideband(
-            &MemoryIdentity {
-                function: *function,
-                attributes: ContextAttributes::DEFAULT,
+            &MemoryRequest {
+                channel: None,
+                identity: *identity,
             },
             address,
             alignment,
@@ -167,15 +182,15 @@ impl<M: MemoryAccess> MemoryAccess<FunctionId> for FunctionSpaces<M> {
 
     fn write_with_sideband(
         &self,
-        function: &FunctionId,
+        identity: &MemoryIdentity,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
     ) -> Result<(), Self::Error> {
         self.write_with_sideband(
-            &MemoryIdentity {
-                function: *function,
-                attributes: ContextAttributes::DEFAULT,
+            &MemoryRequest {
+                channel: None,
+                identity: *identity,
             },
             address,
             alignment,

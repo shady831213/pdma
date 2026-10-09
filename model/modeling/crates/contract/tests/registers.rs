@@ -48,6 +48,8 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
                 ("control.irq_cause", 56),
                 ("control.irq_mask", 60),
                 ("control.ring_context", 64),
+                ("control.fault_status", 68),
+                ("control.resume", 72),
             ]
             .map(|(name, offset)| {
                 (
@@ -107,6 +109,8 @@ fn channel_control_metadata_defines_software_access() -> Result<(), Box<dyn std:
             (12, Access::ReadOnly, 0, ResetKind::Zero, 0),
             (16, Access::ReadWrite, 3, ResetKind::Zero, 0),
             (20, Access::ReadWrite, 0xffff_ffff, ResetKind::Zero, 0),
+            (24, Access::ReadOnly, 0, ResetKind::Zero, 0),
+            (28, Access::WriteOnly, 1, ResetKind::Zero, 0),
         ]
     );
     Ok(())

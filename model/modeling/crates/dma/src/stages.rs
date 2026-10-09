@@ -1,6 +1,6 @@
 use crate::{
     ChannelContext, CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
-    ResponsePort, RoundRobin, RouteResponse, WriteCopy,
+    ResponsePort, RoundRobin, RouteResponse, Schedule, WriteCopy,
 };
 use hardware_interface_pipeline::{
     AfterEach, Arbitrate, BranchError, Dispatch, MapError, Operation, Repeat, Stage, StepOutcome,
@@ -145,7 +145,7 @@ pub type Responses =
 pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>>>, Responses>;
 
 /// Continuously executes commands through one shared pipeline.
-pub type CommandLoop = AfterEach<Repeat<RunCommand>, ResetControl>;
+pub type CommandLoop = AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>;
 
 impl<M, SB> Dma<M, SB> {
     /// Builds this device's lightweight command input ports for custom compositions.
@@ -178,13 +178,13 @@ impl<M, SB> Dma<M, SB> {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
         let execution = Then::new(CheckRanges, Repeat::new(chunk));
         AfterEach::new(
-            Repeat::new(RunCommand::new(Then::new(
+            Schedule::new(Repeat::new(RunCommand::new(Then::new(
                 Then::new(
                     self.intake(),
                     Resettable::new(AfterEach::new(execution, UpdateIrq)),
                 ),
                 self.responses(),
-            ))),
+            )))),
             ResetControl,
         )
     }

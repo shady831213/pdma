@@ -162,7 +162,7 @@
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__2_OFFSET UINT64_C(4120)
 #define C_HDMA_C_QUBQUAQUSQUE__2_WIDTH UINT64_C(8)
@@ -284,7 +284,7 @@
  */
 /*
  * response_error
- * A stopping error response was published; processing is stopped until reset. PageFault does not set this cause.
+ * A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
@@ -326,6 +326,36 @@
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__1_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Payload fault status
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt.
+ */
+/*
+ * faulted
+ * A payload page fault awaits software repair and an explicit resume request.
+ */
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_OFFSET UINT64_C(4164)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WIDTH UINT64_C(4)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_ACCESS C_HDMA_ACCESS_READ_ONLY
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__1_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Resume suspended command
+ * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+ */
+/*
+ * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero.
+ */
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_OFFSET UINT64_C(4168)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_WIDTH UINT64_C(4)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_ACCESS C_HDMA_ACCESS_WRITE_ONLY
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__1_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Command ring base address
@@ -373,7 +403,7 @@
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__4_OFFSET UINT64_C(8216)
 #define C_HDMA_C_QUBQUAQUSQUE__4_WIDTH UINT64_C(8)
@@ -495,7 +525,7 @@
  */
 /*
  * response_error
- * A stopping error response was published; processing is stopped until reset. PageFault does not set this cause.
+ * A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
@@ -537,6 +567,36 @@
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__2_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Payload fault status
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt.
+ */
+/*
+ * faulted
+ * A payload page fault awaits software repair and an explicit resume request.
+ */
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_OFFSET UINT64_C(8260)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WIDTH UINT64_C(4)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_ACCESS C_HDMA_ACCESS_READ_ONLY
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__2_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Resume suspended command
+ * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+ */
+/*
+ * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero.
+ */
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_OFFSET UINT64_C(8264)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_WIDTH UINT64_C(4)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_ACCESS C_HDMA_ACCESS_WRITE_ONLY
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__2_WRITABLE_MASK UINT64_C(1)
 
 /*
  * Command ring base address
@@ -584,7 +644,7 @@
 
 /*
  * Response ring base address
- * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable.
+ * Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable.
  */
 #define C_HDMA_C_QUBQUAQUSQUE__6_OFFSET UINT64_C(12312)
 #define C_HDMA_C_QUBQUAQUSQUE__6_WIDTH UINT64_C(8)
@@ -706,7 +766,7 @@
  */
 /*
  * response_error
- * A stopping error response was published; processing is stopped until reset. PageFault does not set this cause.
+ * A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause.
  */
 /*
  * channel_fatal
@@ -748,6 +808,36 @@
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_KIND C_HDMA_RESET_ZERO
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_RESET_VALUE UINT64_C(0)
 #define C_HDMA_C_QURQUIQUNQUGQSQUCQUOQUNQUTQUEQUXQUT__3_WRITABLE_MASK UINT64_C(4294967295)
+
+/*
+ * Payload fault status
+ * The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt.
+ */
+/*
+ * faulted
+ * A payload page fault awaits software repair and an explicit resume request.
+ */
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_OFFSET UINT64_C(12356)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WIDTH UINT64_C(4)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_ACCESS C_HDMA_ACCESS_READ_ONLY
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QUFQUAQUUQULQUTQSQUSQUTQUAQUTQUUQUS__3_WRITABLE_MASK UINT64_C(0)
+
+/*
+ * Resume suspended command
+ * Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment.
+ */
+/*
+ * request
+ * Write one to clear faulted after mapping repair; reserved bits must be zero.
+ */
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_OFFSET UINT64_C(12360)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_WIDTH UINT64_C(4)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_ACCESS C_HDMA_ACCESS_WRITE_ONLY
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_KIND C_HDMA_RESET_ZERO
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_RESET_VALUE UINT64_C(0)
+#define C_HDMA_C_QURQUEQUSQUUQUMQUE__3_WRITABLE_MASK UINT64_C(1)
 
 #define C_HDMA_C_CHANNELS__1_INDEX UINT64_C(0)
 #define C_HDMA_C_CHANNELS__1_BASE UINT64_C(16)

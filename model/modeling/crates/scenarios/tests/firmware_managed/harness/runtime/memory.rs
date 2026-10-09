@@ -1,6 +1,8 @@
 use super::PlatformConfigError;
+use super::platform::MemoryRequest;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::DmaAccess;
+use pdma_model_contract::memory::{ContextAttributes, MemoryIdentity};
 use pdma_model_dma::MemoryFailure;
 use pdma_model_hw_components::{context, windows};
 use std::{
@@ -97,6 +99,13 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
             || {
                 windows
                     .memory(&self.spaces)
+                    .map_sideband(|channel, function| MemoryRequest {
+                        channel: Some(channel),
+                        identity: MemoryIdentity {
+                            function,
+                            attributes: ContextAttributes::DEFAULT,
+                        },
+                    })
                     .validate_with_sideband(&channel.channel, address, alignment, length)
                     .map_err(RouteError::Window)
             },
@@ -105,6 +114,10 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .memory(&windows, &self.spaces)
+                    .map_sideband(|access, identity| MemoryRequest {
+                        channel: Some(access.channel),
+                        identity,
+                    })
                     .validate_with_sideband(channel, address, alignment, length)
                     .map_err(RouteError::Context)
             },
@@ -127,10 +140,21 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .memory(&windows, &self.spaces)
+                .map_sideband(|access, identity| MemoryRequest {
+                    channel: Some(access.channel),
+                    identity,
+                })
                 .read_with_sideband(channel, address, alignment, bytes)
                 .map_err(RouteError::Context),
             None => windows
                 .memory(&self.spaces)
+                .map_sideband(|channel, function| MemoryRequest {
+                    channel: Some(channel),
+                    identity: MemoryIdentity {
+                        function,
+                        attributes: ContextAttributes::DEFAULT,
+                    },
+                })
                 .read_with_sideband(&channel.channel, address, alignment, bytes)
                 .map_err(RouteError::Window),
         }
@@ -151,6 +175,13 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
             || {
                 windows
                     .memory(&self.spaces)
+                    .map_sideband(|channel, function| MemoryRequest {
+                        channel: Some(channel),
+                        identity: MemoryIdentity {
+                            function,
+                            attributes: ContextAttributes::DEFAULT,
+                        },
+                    })
                     .write_with_sideband(&channel.channel, address, alignment, bytes)
                     .map_err(RouteError::Window)
             },
@@ -159,6 +190,10 @@ impl<M: MemoryAccess> MemoryAccess<DmaAccess> for RoutedMemory<M> {
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .memory(&windows, &self.spaces)
+                    .map_sideband(|access, identity| MemoryRequest {
+                        channel: Some(access.channel),
+                        identity,
+                    })
                     .write_with_sideband(channel, address, alignment, bytes)
                     .map_err(RouteError::Context)
             },

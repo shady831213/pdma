@@ -80,7 +80,10 @@ Scenario memory routing retains backend errors: `FunctionSpaces` reports a missi
 identity with its address or preserves the downstream error; `RoutedMemory` retains
 the window/context rejection layer. The managed page-fault backend owns `PageError`
 and maps it to DMA's `MemoryFailure` only at the execution boundary. Its system case
-repairs independent source and destination PASIDs and resubmits without reset.
+receives independent platform fault reports, repairs source and destination PASIDs,
+observes the channel's faulted bit, and writes one to resume the original retained command.
+The granted VF receives one final response; foreign and closed-channel resume
+accesses remain denied.
 
 ```sh
 cargo test -p pdma-model-scenarios --test firmware_managed -- --nocapture

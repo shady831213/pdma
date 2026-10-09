@@ -6,6 +6,16 @@ use pdma_model_contract::dma::{
 };
 
 impl<B: RegisterAccess + Send + Sync, M: Send + Sync> Channel<B, M> {
+    /// Reports whether a payload fault is waiting for software repair and resume.
+    pub async fn faulted(&self) -> Result<bool, Error<B::Error>> {
+        self.port.control.faulted(&self.port.bus).await
+    }
+
+    /// Requests retry after mapping repair; serialize with fault handling, reset and release.
+    pub async fn resume(&self) -> Result<(), Error<B::Error>> {
+        self.port.control.resume(&self.port.bus).await
+    }
+
     /// Reads the hardware's sticky channel fatal code.
     pub async fn fatal(&self) -> Result<ChannelFatalCode, Error<B::Error>> {
         self.port.control.fatal(&self.port.bus).await

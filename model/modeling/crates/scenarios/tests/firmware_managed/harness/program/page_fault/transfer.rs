@@ -26,9 +26,10 @@ pub(super) async fn prepare<M: Send>(
     let commands = ports
         .allocator
         .allocate(u64::try_from(2 * Command::RECORD_SIZE)?, alignment)?;
-    let responses = ports
-        .allocator
-        .allocate(u64::try_from(2 * Response::RECORD_SIZE)?, alignment)?;
+    let responses = ports.allocator.allocate(
+        u64::try_from(2 * Response::RECORD_SIZE)?,
+        MemoryAlignment::try_new(u64::try_from(Response::RECORD_ALIGNMENT)?)?,
+    )?;
     ChannelControl::discover_at(&ports.bus, channel, ports.bus.addresses().dma)
         .await?
         .set_ring_context(&ports.bus, ring_id)
@@ -90,23 +91,4 @@ fn endpoint(
         context: context.raw(),
         ..Endpoint::scatter_gather(base.raw(), 2)
     })
-}
-pub(super) fn continuation(
-    mut request: pdma_model_contract::dma::Command,
-    fault: pdma_model_contract::dma::PageFaultInfo,
-) -> super::TestResult<pdma_model_contract::dma::Command> {
-    request.copy_length = request
-        .copy_length
-        .checked_sub(fault.bytes_completed)
-        .ok_or("invalid progress")?;
-    request.source = request
-        .source
-        .with_start(fault.source_next())
-        .ok_or("source position mode mismatch")?;
-    request.destination = request
-        .destination
-        .with_start(fault.destination_next())
-        .ok_or("destination position mode mismatch")?;
-    request.id = request.id.checked_add(1).ok_or("command ID overflow")?;
-    Ok(request)
 }

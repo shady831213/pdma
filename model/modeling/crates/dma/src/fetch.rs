@@ -29,7 +29,8 @@ impl<M: MemoryAccess<SB>, SB> ReadyStage<Dma<M, SB>> for Fetch {
                 channel.enabled()
                     && !channel.resetting()
                     && !channel.halted()
-                    && !channel.command.pointers().is_empty()
+                    && !channel.registers.values.fault_status.faulted()
+                    && (channel.parked.is_some() || !channel.command.pointers().is_empty())
                     && channel.response.pointers().pending() < channel.response.capacity()
             })
     }
@@ -50,6 +51,14 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
         (): &mut (),
     ) -> StepOutcome<Self::Output, Error, ()> {
         if !self.ready(device) {
+            return StepOutcome::Pending(());
+        }
+        if device
+            .channels
+            .get(self.channel.index())
+            .is_some_and(|channel| channel.parked.is_some())
+        {
+            device.resume_selected = Some(self.channel);
             return StepOutcome::Pending(());
         }
         let outcome = {

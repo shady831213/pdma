@@ -1,4 +1,4 @@
-//! Payload misses terminate attempts without resetting a channel or retaining replay state.
+//! Retained payload suspension through the shared execution pipeline.
 
 mod fault_cases;
 /// Shared hardware test assembly.

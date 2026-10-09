@@ -7,12 +7,10 @@ pub use copy::{ReadCopy, WriteCopy};
 pub use next::NextChunk;
 pub use validate::{CheckRanges, RangeCheck};
 
-use crate::MemoryFailure;
 use cursor::Cursor;
 use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::dma::{
-    Command, CompletionInfo, PageFaultInfo, PageFaultKindsAccess, Response, ResponseInfoValues,
-    ResponseStatus,
+    Command, CompletionInfo, Response, ResponseInfoValues, ResponseStatus,
 };
 
 /// Scratch space per copy interaction, not a protocol transfer-length limit.
@@ -27,7 +25,6 @@ pub struct CopyState {
     remaining: u64,
     bytes_completed: u64,
     status: ResponseStatus,
-    fault: Option<(MemoryAddress, PageFaultKindsAccess)>,
 }
 
 impl CopyState {
@@ -39,11 +36,10 @@ impl CopyState {
             remaining: command.copy_length,
             bytes_completed: 0,
             status,
-            fault: None,
         }
     }
 
-    fn response(&self) -> Result<Response, crate::Error> {
+    const fn response(&self) -> Response {
         let progress = CompletionInfo {
             bytes_completed: self.bytes_completed,
         };
@@ -54,36 +50,13 @@ impl CopyState {
             ResponseStatus::WriteError => ResponseInfoValues::WriteError(progress),
             ResponseStatus::LengthMismatch => ResponseInfoValues::LengthMismatch(progress),
             ResponseStatus::ListReadError => ResponseInfoValues::ListReadError(progress),
-            ResponseStatus::PageFault => {
-                let (address, access) = self.fault.ok_or(crate::Error::Routing)?;
-                ResponseInfoValues::PageFault(PageFaultInfo::from_positions(
-                    self.bytes_completed,
-                    address.raw(),
-                    access,
-                    self.source.position(),
-                    self.destination.position(),
-                ))
-            }
         };
-        Ok(Response {
+        Response {
             flags: self.command.flags,
             id: self.command.id,
             status: info.tag(),
             info,
-        })
-    }
-
-    const fn fail_access(&mut self, error: MemoryFailure, access: PageFaultKindsAccess) {
-        self.status = match error {
-            MemoryFailure::PageFault { address } => {
-                self.fault = Some((address, access));
-                ResponseStatus::PageFault
-            }
-            MemoryFailure::Access => match access {
-                PageFaultKindsAccess::SourceRead => ResponseStatus::ReadError,
-                PageFaultKindsAccess::DestinationWrite => ResponseStatus::WriteError,
-            },
-        };
+        }
     }
 }
 

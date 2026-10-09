@@ -7,11 +7,11 @@ mod tests;
 pub use command::CommandRing;
 pub use response::ResponseRing;
 
-use crate::ChannelFatal;
+use crate::{ChannelFatal, ChannelTask};
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
-    ResetValues, Response,
+    ContextId, FaultStatusValues, ResetValues, Response,
 };
 
 /// One channel owns two rings, sticky fatal state and interrupt controls.
@@ -26,6 +26,7 @@ pub struct Channel {
     pub(crate) configured: bool,
     pub(crate) irq: bool,
     pub(crate) generation: u64,
+    pub(crate) parked: Option<ChannelTask<[Option<ContextId>; 3]>>,
 }
 
 impl Default for Channel {
@@ -38,11 +39,16 @@ impl Default for Channel {
             configured: false,
             irq: false,
             generation: 0,
+            parked: None,
         }
     }
 }
 
 impl Channel {
+    pub(crate) const fn suspend(&mut self) {
+        self.registers.values.fault_status = FaultStatusValues::new(1);
+    }
+
     pub(crate) fn latch(&mut self, fatal: ChannelFatal) {
         if self.registers.values.fatal.code() == Ok(ChannelFatalCode::None) {
             self.registers.values.fatal = self.registers.values.fatal.with_code(fatal.code());

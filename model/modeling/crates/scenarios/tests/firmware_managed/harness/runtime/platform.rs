@@ -105,3 +105,13 @@ pub(super) fn validate_functions(
     }
     Ok(())
 }
+#[derive(Clone, Copy, Debug)]
+pub(in crate::harness) struct MemoryRequest {
+    pub channel: Option<pdma_model_contract::dma::ChannelId>,
+    pub identity: pdma_model_contract::memory::MemoryIdentity,
+}
+
+pub(in crate::harness) type MemoryBinding<M> = (
+    Vec<(pdma_model_contract::memory::MemoryIdentity, M)>,
+    Option<fn(&M, MemoryRequest) -> M>,
+);

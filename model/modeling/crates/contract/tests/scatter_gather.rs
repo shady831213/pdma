@@ -11,7 +11,7 @@ fn independent_endpoints_and_progress_have_full_width_wire_storage() {
     // When: their generated wire extents are inspected.
     let sizes = (command.size(), response.size());
     // Then: two tagged endpoints and 64-bit completion progress fit in the records.
-    assert_eq!(sizes, (104, 72));
+    assert_eq!(sizes, (104, 24));
 }
 
 #[test]

@@ -1,7 +1,6 @@
 use pdma_model_contract::dma::ResponseInfoValues;
 use pdma_model_contract::dma::{
-    Command, CompletionFlagsValues, Endpoint, PageFaultKindsAccess, Position, Response,
-    ResponseStatus, Segment,
+    Command, CompletionFlagsValues, Endpoint, Position, Response, ResponseStatus, Segment,
 };
 
 /// Encodes the Rust fixtures and verifies them against independent wire bytes.
@@ -29,20 +28,8 @@ pub fn bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
             .get_mut(index)
             .ok_or("command fixture offset")? = value;
     }
-    let mut response_bytes = [0; 72];
-    for (index, value) in [
-        (0, 7),
-        (8, 6),
-        (12, 1),
-        (16, 8),
-        (24, 0x67),
-        (25, 0x45),
-        (32, 2),
-        (33, 1),
-        (40, 2),
-        (48, 3),
-        (56, 5),
-    ] {
+    let mut response_bytes = [0; 24];
+    for (index, value) in [(0, 7), (8, 3), (12, 1), (16, 8)] {
         *response_bytes
             .get_mut(index)
             .ok_or("response fixture offset")? = value;
@@ -67,16 +54,10 @@ pub fn bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let response = Response {
         flags: CompletionFlagsValues { ioc: true },
         id: 7,
-        status: ResponseStatus::PageFault,
-        info: ResponseInfoValues::PageFault(
-            pdma_model_contract::dma::PageFaultInfo::from_positions(
-                8,
-                0x4567,
-                PageFaultKindsAccess::DestinationWrite,
-                Position::scatter_gather(2, 3),
-                Position::linear(5),
-            ),
-        ),
+        status: ResponseStatus::WriteError,
+        info: ResponseInfoValues::WriteError(pdma_model_contract::dma::CompletionInfo {
+            bytes_completed: 8,
+        }),
     };
     let segment = Segment {
         address: 0x300,

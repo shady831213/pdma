@@ -82,6 +82,14 @@ impl<M: Clone> Managed<M> {
         channel_count: usize,
         context: platform::ContextPlatform,
     ) -> Result<(Self, Vec<Host<M>>), BuildError> {
+        Self::with_platform_memory((spaces, None), channel_count, context)
+    }
+
+    pub(in crate::harness) fn with_platform_memory(
+        (spaces, bind): platform::MemoryBinding<M>,
+        channel_count: usize,
+        context: platform::ContextPlatform,
+    ) -> Result<(Self, Vec<Host<M>>), BuildError> {
         let config = pdma_model_firmware::Configuration {
             addresses: ManagementAddresses {
                 contexts: Some(0x0013_0000),
@@ -90,7 +98,10 @@ impl<M: Clone> Managed<M> {
             function_count: context.function_count,
         };
         Self::assemble_spaces(
-            memory::FunctionSpaces(spaces),
+            memory::FunctionSpaces {
+                backing: spaces,
+                bind,
+            },
             channel_count,
             (config, Some(context.capacity)),
         )
@@ -101,8 +112,7 @@ impl<M: Clone> Managed<M> {
         channel_count: usize,
         (config, capacity): (pdma_model_firmware::Configuration, Option<usize>),
     ) -> Result<(Self, Vec<Host<M>>), BuildError> {
-        let addresses = config.addresses;
-        let function_count = config.function_count;
+        let (addresses, function_count) = (config.addresses, config.function_count);
         platform::validate_functions(config, channel_count, capacity)?;
         let window = ChannelWindows::new(channel_count, addresses.dma, addresses.windows)
             .map_err(BuildError::Window)?;
@@ -112,11 +122,15 @@ impl<M: Clone> Managed<M> {
             Some(contexts) => RoutedMemory::with_contexts(
                 Arc::clone(&windows),
                 Arc::clone(contexts),
-                memory::FunctionSpaces(spaces.0.clone()),
+                spaces.clone(),
             ),
             None => RoutedMemory::new(
                 Arc::clone(&windows),
-                spaces.0.iter().map(|(_, memory)| memory.clone()).collect(),
+                spaces
+                    .backing
+                    .iter()
+                    .map(|(_, memory)| memory.clone())
+                    .collect(),
             )
             .map_err(BuildError::Platform)?,
         };

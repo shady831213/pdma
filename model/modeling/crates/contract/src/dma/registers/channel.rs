@@ -31,7 +31,7 @@ register_map! {
         alignment: 8,
         placements: [
             #[short_description = "Response ring base address"]
-            #[description = "Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 72 bytes apart. The value cannot change after the channel's first successful enable."]
+            #[description = "Start of response storage in the attached memory backend, aligned to eight bytes. Response slots are 24 bytes apart. The value cannot change after the channel's first successful enable."]
             pub base: Address,
             #[short_description = "Response ring capacity"]
             #[description = "Number of response slots. Must be a nonzero power of two below 2^31, with the complete ring extent representable in the address space. The value cannot change after the first successful enable."]
@@ -85,7 +85,7 @@ register_schema! {
             response_non_empty: 0..=0,
             #[description = "At least one published IOC response remains unconsumed."]
             ioc: 1..=1,
-            #[description = "A stopping error response was published; processing is stopped until reset. PageFault does not set this cause."]
+            #[description = "A stopping error response was published; processing is stopped until reset. Payload suspension does not set this cause."]
             response_error: 2..=2,
             #[description = "The channel fatal register contains a fatal error."]
             channel_fatal: 3..=3,
@@ -122,7 +122,7 @@ register_map! {
 
 register_map! {
     #[short_description = "Channel controls and fatal state"]
-    #[description = "Controls channel processing and independent response notification sources. Stopping errors require reset; recoverable payload PageFault does not halt the channel. Ring-access fatal codes are distinct from command-level response status."]
+    #[description = "Controls channel processing and independent response notification sources. Stopping errors require reset; recoverable payload faults retain the command until explicit resume. Ring-access fatal codes are distinct from command-level response status."]
     pub map ChannelRegisters {
         alignment: 4,
         placements: [
@@ -141,6 +141,12 @@ register_map! {
             pub irq_mask: ChannelIrqMask,
             #[description = "Context shared by command and response ring accesses. Locked with ring geometry until reset completes."]
             pub ring_context: Word,
+            #[short_description = "Payload fault status"]
+            #[description = "The faulted bit is set while a retained command awaits software repair and resume. Fault details are reported by the platform, without a DMA response or interrupt."]
+            pub fault_status: FaultStatus,
+            #[short_description = "Resume suspended command"]
+            #[description = "Write one after repairing mappings to clear faulted and permit retry of retained work. Does not enable processing, clear errors or complete the command. Software serializes fault handling and resume with reset, release and reassignment."]
+            pub resume: Resume,
         ],
     }
 }
@@ -162,5 +168,29 @@ register_map! {
             #[description = "Processing enable, interrupt causes and sticky channel fatal. There is no separate event ring."]
             pub control: ChannelRegisters,
         ],
+    }
+}
+
+register_schema! {
+    #[short_description = "Payload fault status"]
+    #[description = "Hardware sets faulted when a payload access returns a recoverable page fault. Resume clears it; a later fault sets it again. Zero is not command completion. Reset or matching Abort discards parked work and clears the bit."]
+    pub register FaultStatus {
+        width: 4, endian: Little, access: ReadOnly, reset: Zero(0),
+        writable_mask: 0, fields: {
+            #[description = "A payload page fault awaits software repair and an explicit resume request."]
+            faulted: 0..=0,
+        },
+    }
+}
+
+register_schema! {
+    #[short_description = "Payload resume request"]
+    #[description = "Write-one action for the current channel fault. Zero writes have no effect; requests made while not faulted are discarded, not saved for later faults. No request identity or duplicate suppression is provided."]
+    pub register Resume {
+        width: 4, endian: Little, access: WriteOnly, reset: Zero(0),
+        writable_mask: 1, fields: {
+            #[description = "Write one to clear faulted after mapping repair; reserved bits must be zero."]
+            request: 0..=0,
+        },
     }
 }

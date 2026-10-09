@@ -11,8 +11,11 @@ pub use channel::{
     ChannelIrqMaskViewMut, ChannelRegisters, ChannelRegistersRaw, ChannelRegistersRegisterId,
     ChannelRegistersValues, ChannelRegistersView, ChannelRegistersViewMut, CommandRegisters,
     CommandRegistersRaw, CommandRegistersRegisterId, CommandRegistersValues, CommandRegistersView,
-    CommandRegistersViewMut, ResponseRegisters, ResponseRegistersRaw, ResponseRegistersRegisterId,
-    ResponseRegistersValues, ResponseRegistersView, ResponseRegistersViewMut,
+    CommandRegistersViewMut, FaultStatus, FaultStatusFieldId, FaultStatusRaw, FaultStatusValues,
+    FaultStatusView, FaultStatusViewMut, ResponseRegisters, ResponseRegistersRaw,
+    ResponseRegistersRegisterId, ResponseRegistersValues, ResponseRegistersView,
+    ResponseRegistersViewMut, Resume, ResumeFieldId, ResumeRaw, ResumeValues, ResumeView,
+    ResumeViewMut,
 };
 
 use crate::register::Switch;

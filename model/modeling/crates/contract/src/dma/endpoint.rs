@@ -19,7 +19,7 @@ record_schema! {
 
 record_schema! {
     #[short_description = "Endpoint byte position"]
-    #[description = "A self-describing continuation position, containing one mode-selected union. Linear has only a base-relative byte offset. SG has an original-table entry index and entry-local byte offset. No state from an earlier hardware command is required."]
+    #[description = "A self-describing subrange position, containing one mode-selected union. Linear has only a base-relative byte offset. SG has an original-table entry index and entry-local byte offset. No state from an earlier hardware command is required."]
     pub record Position {
         alignment: 8, endian: Little,
         fields: {

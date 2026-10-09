@@ -60,8 +60,10 @@ Firmware supports Create/Drain/Abort/DestroyContext through its existing control
 Hardware accepts an atomic context-ID plus Drain/Abort request; firmware implements
 Destroy by awaiting Drain success and explicitly clearing valid. A retained failed-channel
 bitmap is the final context-map bank and covers all detected failures in the operation scope.
-DMA captures producer frontiers, discards only unstarted Abort targets and retains
-accepted task references until RunCommand retirement. Failure retains the binding
+DMA captures producer frontiers, discards unstarted or parked Abort targets and retains
+accepted task references through suspension until terminal retirement. Running Abort
+targets remain command-atomic unless they park. Drain encountering parked work returns
+ChannelStopped with the retained failure bitmap. Failure retains the binding
 and permits channel-reset recovery. See model/modeling/docs/context-contract.md for
 mandatory software lifetime/submission obligations. No PASID/IOMMU translation,
 Function reset/FLR or PCIe integration is implemented.
@@ -86,7 +88,21 @@ The generated header under `model/modeling/include` describes the current contra
 The current implementation has an instance-configured channel count with independent reset,
 command/response rings and one shared DMA execution pipeline. It supports independently
 selected linear/scatter-gather DMA endpoints, and interrupt delivery using existing
-building blocks. Do not expand that scope or
+building blocks. Recoverable payload PageFault parks the original command and both
+cursors, including successful read scratch for a failed write, while peers can run.
+Owner software repairs through its platform, observes FAULT_STATUS.faulted and
+writes RESUME.request=1 in channel work MMIO; both registers are 32 bits. No fault
+response or DMA IRQ/event is produced. Software must serialize repair/resume with
+resource lifecycle operations. Platform-defined opaque tags distinguish fault
+sources even when channels share a Function/PASID; the MMU echoes tags rather than
+interpreting PDMA channel IDs. hw-components exposes authorized source/identity
+sideband mapping; MemoryIdentity stays address-space-only. Tags must retain their
+association through outstanding reports/handlers. Software must coordinate
+reset, release and reallocation and retire old fault handling before reuse; hardware
+does not correlate late or duplicate requests with fault episodes. Normal responses are 24 bytes with
+statuses 0..5; retired PageFault status 6 is invalid. See
+`model/modeling/docs/page-fault-recovery.md`. No true MMU, PCIe integration,
+oversubscription or barrier semantics are added. Do not expand that scope or
 recreate the old API surface to satisfy historical tests.
 
 ## Working rules

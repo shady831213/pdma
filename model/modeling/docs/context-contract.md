@@ -9,7 +9,7 @@ subsequent RTL. Related behavior is described by [Function isolation](function-i
 Implementation scope, 2026-09-23: the first iteration selects Default or PASID
 address spaces. Context attributes are a named schema record, extensible separately
 from descriptor selectors. Source/destination and SG selectors are 32-bit IDs in
-the Command layout, now 104 bytes after explicit range/continuation support.
+the Command layout, now 104 bytes after explicit range selection support.
 Table capacity is instance configuration.
 Device-memory targeting, address translation and base/limit permission windows
 are outside this iteration. The obligations below are the implementation and
@@ -52,6 +52,13 @@ the selected entry's ownership. A descriptor cannot select another Function by
 guessing a context ID. Resolved target/identity attributes accompany each request
 through the fabric to its destination adapter. The DMA core carries selectors and
 task state; it does not implement PCIe identity or select memory backing.
+
+Resolved MemoryIdentity identifies the address space, not the request source.
+After authorization, the platform can attach an opaque source tag to its outgoing
+sideband. Fault reports echo that tag so channels sharing one Function/PASID remain
+distinguishable. Tag encoding, association and lifetime belong to the platform;
+they are not context-table entries or DMA descriptor fields. See PLAT-PF-02 in
+[pageable-copy recovery](page-fault-recovery.md).
 
 Firmware allocates, configures and releases table entries in response to PF
 management requests. The Host OS/platform establishes actual memory mappings and
@@ -98,7 +105,7 @@ The current model provides the ordinary copy/error behavior; it does not emulate
 page residency, page tables or MMU translation. Verification of this usage's OS/MMU
 preconditions belongs to integration. Copying pageable virtual addresses with
 recoverable faults follows the separate, implemented
-[DSA-like continuation contract](page-fault-recovery.md). This note does not waive
+[retained suspension contract](page-fault-recovery.md). This note does not waive
 the existing context submission-exclusion and lifetime obligations.
 
 ## Software obligations
@@ -108,7 +115,7 @@ the existing context submission-exclusion and lifetime obligations.
 | SW-01 | PF and platform/OS | Establish the intended accessible mappings before publishing a binding. Initialize control queue memory and control access configuration before enable. Do not reconfigure the enabled control access window. |
 | SW-02 | Submitters and PF coordinator | Before issuing Drain/Abort, stop all submitters from publishing new commands referencing the target context, on every relevant channel. Keep this exclusion until successful completion; on failure retain it through recovery. Commands using only other contexts may continue. |
 | SW-03 | Submitters and platform transport | Make all prior descriptor stores and producer publications visible to hardware before the maintenance request can take effect. PF/VF or CPU-to-CPU coordination must establish this ordering; merely sending a later control message is not sufficient by itself. |
-| SW-04 | Submitters | Keep published descriptor contents stable until consumed; retain SG lists, payload storage and mappings until ordinary task completion or the successful maintenance boundary that ends their use. Abort does not interrupt an already-started command. |
+| SW-04 | Submitters | Keep published descriptor contents stable until consumed; retain SG lists, payload storage and mappings through suspension until ordinary task completion or confirmed cancellation cleanup. Abort does not interrupt running work, but may discard matching parked work. |
 | SW-05 | Channel users | Keep ring storage and its context binding valid while hardware can still use it. Disabling submission alone does not prove that accepted work and response writes have ended. |
 | SW-06 | Host software | Continue normal response consumption while waiting for maintenance. Software need not count responses to prove Drain/Abort completion and must not wait for a per-command response from an Abort-discarded command. |
 | SW-07 | Host software | Treat successful Abort as collective termination of its old target tasks, not proof that none executed. Handle normal responses already published but not yet consumed; do not reuse task IDs in a way that confuses these with new tasks. Pending interrupt delivery is not retracted. |
@@ -123,10 +130,13 @@ contract does not introduce a VF mailbox. Violating SW-02 or SW-03 invalidates t
 snapshot proof. Hardware cannot infer unpublished future commands from a table
 entry or from its current in-flight task count.
 Pageable copies additionally follow HOST-PF-01/02 in the [pageable-copy chapter](page-fault-recovery.md):
-submission exclusion includes retries; retain command-ID/context/address-space
-associations through repair and final completion or safe abandonment. A terminal
-PageFault response releases that attempt's hardware references, not software's
-logical-copy ownership. Drain does not account for an unsubmitted continuation.
+retain command-ID/channel/context/address-space associations through repair and
+final completion or confirmed cancellation cleanup. Payload PageFault parks the
+original command and retains its hardware references; no terminal fault response
+releases them. Repair/resume must be coordinated with maintenance, reset and release.
+Software must retire old fault handlers, mapping repairs and resume requests before
+identity reuse. The fault/resume bits carry no episode identity and cannot reject a
+late request intended for older work.
 The non-faulting migration usage additionally requires SW-13 and PLAT-MIGRATION-1
 above; these do not introduce a new descriptor mode or register.
 
@@ -141,7 +151,7 @@ management register contract below.
 | --- | --- | --- |
 | CreateContext | Establish a complete, authorized binding before making it usable | Return a reusable selector; table exhaustion is not per-command exhaustion |
 | DrainContext | Let old tasks referencing the context finish normally | Old target tasks have retired; original binding remains usable |
-| AbortContext | Discard old target tasks not yet started; let started tasks reach their ordinary terminal outcome | Old target tasks have retired or been discarded; original binding remains usable |
+| AbortContext | Discard unstarted or parked old target tasks; let running tasks complete or discard them if they park | Old target tasks have retired or been discarded; original binding remains usable |
 | DestroyContext | Release a binding only after its old references and accepted accesses have exited | Selector no longer usable; slot eligible for reallocation |
 
 Successful Drain and Abort do not change the binding and need no ResumeContext.
@@ -158,20 +168,24 @@ translation. Safely stop/reset and detach the ring first. Whole-context maintena
 cannot silently exempt ring traffic while claiming the context is quiescent.
 
 HW-02: Define a single execution-acceptance point ordered against an Abort request.
-A target command before that point may be discarded; a command already past it
-continues under its original immutable bindings. A prefetched descriptor is not
+A target command before that point may be discarded; a running command past it
+continues under its original immutable bindings unless it parks on a payload fault.
+Matching parked work may be discarded even if its fault follows Abort acceptance.
+A prefetched descriptor is not
 automatically a started command. The implementation/spec must identify the exact
 acceptance point, not infer it from first payload write or consumer movement.
 
-HW-03: Abort is command-granular, not per-memory-access cancellation. Discarded
-commands consume their command-ring entry but perform no SG/payload accesses and
-need not publish a response or completion interrupt. Their discard path must not
+HW-03: Abort is command-granular, not per-memory-access cancellation. Unstarted
+discarded commands consume their command-ring entry but perform no SG/payload accesses.
+Parked discarded commands retain earlier committed writes but perform no later accesses.
+Neither discard publishes a response or completion interrupt. Their discard path must not
 require response-ring space. Other commands retain ordinary execution/admission
 rules. Abort must not simply invalidate a table entry that a started command is
-still using. Ordinary faults and channel/device reset retain their own semantics.
+still using. A parked target's accepted references retire only after its retained
+state is discarded. Ordinary errors and channel/device reset retain their semantics.
 This is not transactional rollback: writes already performed are not undone.
 
-HW-04: Normal responses from started tasks are published through the retained ring
+HW-04: Normal responses from tasks that complete are published through the retained ring
 context. Real errors keep the ordinary report/halt/reset policy; no new per-task
 Aborted response or non-halting error policy is required merely for discarded work.
 Do not cancel tasks whose only use of the target ID is an ignored SG selector.
@@ -195,10 +209,13 @@ Interlock conflicting configuration/lifecycle changes while the operation is pen
 HW-07: Consumer progress proves descriptor consumption, not execution completion.
 Register accepted task ownership without an observable gap when advancing consumer,
 and keep it until the complete command pipeline retires. Preserve the existing
-`RunCommand` terminal boundary; do not release ownership merely on payload completion
-or response publication. Deduplicate multiple uses of the same context within a
-task when using reference counts. The current single executing command does not
-require a speculative multi-engine ledger.
+`RunCommand` terminal boundary; suspension returns Pending and Schedule retains
+the exact composed Operation, with accepted references in Channel.parked, without
+whole-command retirement. Do not release ownership merely
+on payload completion or response publication. Deduplicate multiple uses of the same context within a
+task when using reference counts. Parking releases shared engine capacity without
+retiring ownership; count all retained parked tasks alongside the single executing
+command. This requires no additional execution engine.
 
 Successful maintenance requires all of:
 
@@ -231,6 +248,13 @@ servicing later requests, not terminate its service or wait indefinitely for a
 reset request queued behind the blocked operation. Common response backpressure
 and transport faults retain their general handling, not a new context-only protocol.
 
+A parked command blocking a captured frontier or target retirement makes Drain
+return ChannelStopped with that channel in the retained failure bitmap. This is
+failure, not a successful drain or a fatal DMA event. Firmware continues serving
+control requests. Software may repair and resume through owner work MMIO, then
+retry maintenance, or reset to cancel old work before retrying. Abort discards
+matching parked targets; an unrelated parked blocker still requires failure/recovery.
+
 HW-09: End or supersede the failed maintenance operation in a defined way, allow
 the necessary channel reset, and preserve bindings/storage until recovery proves
 cleanup. Failure must neither leak a maintenance lock that prevents reset nor make
@@ -262,9 +286,15 @@ preserve this distinction when the external transport is implemented.
   owned by the Function. The DMA API receives only channel/context IDs, never a PASID.
 - Execution acceptance is successful command fetch/consumer publication plus active
   reference registration in one synchronous Fetch step. There is no externally visible
-  interval between those effects. `RunCommand` remains the terminal ownership boundary.
+  interval between those effects. `RunCommand` releases executing state only at its
+  terminal boundary. Schedule parks the exact pending Operation, retaining accepted
+  references in Channel.parked until resumed completion or cancellation cleanup.
+  It cleans parked reset/Abort targets before stepping active shared work; a disabled
+  peer cannot prevent that cleanup.
   Abort examines unread ring entries before command admission and discards matching
-  entries without needing response space. It does not interrupt an accepted command.
+  entries without needing response space. Running accepted commands remain atomic,
+  but matching parked commands are discarded without responses, including commands
+  that park after Abort acceptance. Their retained references retire after cleanup.
 - Channel register owners interlock reset and conflicting enable/geometry/context
   changes while maintenance is pending. Context owner and attributes are immutable
   while valid; clearing valid is also rejected while maintenance is pending.
@@ -325,11 +355,12 @@ Verification obligations for both the model and subsequent RTL:
 | Distinct ring, SG, source and destination spaces with identical addresses | Every access reaches the intended authorized space | Selection table, SW-01/12 |
 | Control bootstrap before any data context exists | Management starts without context-table allocation | SW-01, independent control path |
 | Mixed-context queued work with later unrelated submissions | Only fixed old frontiers are awaited; unrelated tasks are not discarded | SW-02/03, HW-05/06 |
-| Abort before/after execution acceptance | Before: no payload/SG or task response; after: ordinary completion | HW-02/03/04 |
+| Abort before/after execution acceptance | Before: no payload/SG or task response; running: ordinary completion unless it parks; parked: discard without response | HW-02/03/04 |
 | Consumer reaches frontier while a target command is still active | No early maintenance success | HW-07 |
 | Multiple channels and wrapping pointers, including an empty queue | All old work covered; reached frontiers stay reached | HW-05/06 |
 | Active ring context is a maintenance target | No loss of live ring access or premature resource release | SW-05, HW-01 |
 | Channel faults during maintenance | Control failure returns; reset can proceed; binding is not reused | SW-10, HW-08/09 |
+| Target or frontier-blocking work parks during Drain | ChannelStopped and failure bitmap return; repair/resume or reset permits a later retry | HW-07/08/09 |
 | Standalone Drain/Abort succeeds, then new target work is submitted | Same binding works without ResumeContext | Operation table |
 | Destroy after cleanup, failed cleanup, aliases and stale software waiters | Only valid successful release authorizes slot reuse; no implicit global PASID unbind | SW-09/10/11/12 |
 

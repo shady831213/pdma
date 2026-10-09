@@ -7,7 +7,7 @@ use pdma_model_contract::dma::{ChannelId, ContextId, DmaAccess};
 pub enum MemoryFailure {
     /// The access failed without a repairable translation miss.
     Access,
-    /// A payload mapping can be repaired and the command resubmitted.
+    /// A payload mapping can be repaired and the retained command resumed.
     /// Converting a failed write to this variant guarantees that the call
     /// committed no externally visible bytes. Earlier accesses are unaffected.
     PageFault {

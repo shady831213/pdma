@@ -1,8 +1,8 @@
 use super::{CopyState, Transfer};
-use crate::{ChannelContext, Error};
+use crate::{ChannelContext, Error, MemoryFailure};
 use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
-use pdma_model_contract::dma::{PageFaultKindsAccess, Response, ResponseStatus};
+use pdma_model_contract::dma::{Response, ResponseStatus};
 use std::ops::ControlFlow;
 
 /// Read one payload chunk into retained operation state.
@@ -32,7 +32,7 @@ where
         if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
-        if !context.channel.enabled() {
+        if !context.channel.enabled() || context.channel.registers.values.fault_status.faulted() {
             return StepOutcome::Pending(());
         }
         let Some(mut transfer) = state.take() else {
@@ -47,16 +47,22 @@ where
                             .read(transfer.source, MemoryAlignment::ONE, bytes)
                         {
                             Ok(()) => {}
-                            Err(error) => transfer
-                                .progress
-                                .fail_access(error.into(), PageFaultKindsAccess::SourceRead),
+                            Err(error) => match error.into() {
+                                MemoryFailure::PageFault { .. } => {
+                                    *state = Some(transfer);
+                                    context.channel.suspend();
+                                    return StepOutcome::Pending(());
+                                }
+                                MemoryFailure::Access => {
+                                    transfer.progress.status = ResponseStatus::ReadError;
+                                }
+                            },
                         }
                     }
                     None => transfer.progress.status = ResponseStatus::InvalidLength,
                 }
             }
             ResponseStatus::Success
-            | ResponseStatus::PageFault
             | ResponseStatus::InvalidLength
             | ResponseStatus::ReadError
             | ResponseStatus::WriteError
@@ -94,7 +100,7 @@ where
         if context.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
-        if !context.channel.enabled() {
+        if !context.channel.enabled() || context.channel.registers.values.fault_status.faulted() {
             return StepOutcome::Pending(());
         }
         let Some(mut transfer) = state.take() else {
@@ -113,9 +119,9 @@ where
                             && (count > 0 || transfer.progress.remaining == 0) =>
                     {
                         if count == 0 {
-                            return StepOutcome::Complete(
-                                transfer.progress.response().map(ControlFlow::Break),
-                            );
+                            return StepOutcome::Complete(Ok(ControlFlow::Break(
+                                transfer.progress.response(),
+                            )));
                         }
                         match context
                             .memory_for(transfer.progress.command.destination.context)
@@ -132,21 +138,27 @@ where
                                     )));
                                 }
                             }
-                            Err(error) => transfer
-                                .progress
-                                .fail_access(error.into(), PageFaultKindsAccess::DestinationWrite),
+                            Err(error) => match error.into() {
+                                MemoryFailure::PageFault { .. } => {
+                                    *state = Some(transfer);
+                                    context.channel.suspend();
+                                    return StepOutcome::Pending(());
+                                }
+                                MemoryFailure::Access => {
+                                    transfer.progress.status = ResponseStatus::WriteError;
+                                }
+                            },
                         }
                     }
                     _ => transfer.progress.status = ResponseStatus::InvalidLength,
                 }
             }
             ResponseStatus::InvalidLength
-            | ResponseStatus::PageFault
             | ResponseStatus::ReadError
             | ResponseStatus::WriteError
             | ResponseStatus::LengthMismatch
             | ResponseStatus::ListReadError => {}
         }
-        StepOutcome::Complete(transfer.progress.response().map(ControlFlow::Break))
+        StepOutcome::Complete(Ok(ControlFlow::Break(transfer.progress.response())))
     }
 }

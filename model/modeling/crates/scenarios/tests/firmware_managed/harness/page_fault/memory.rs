@@ -1,17 +1,46 @@
+use super::{FaultTag, platform::TaggedRequest};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
+use pdma_model_contract::memory::MemoryIdentity;
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
 };
+use tokio::sync::mpsc;
 
 const PAGE_SIZE: u64 = 256;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Access reported by the platform memory backend.
+pub enum FaultAccess {
+    /// Payload read.
+    Read,
+    /// Payload write.
+    Write,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Platform fault identity, independent of the DMA response protocol.
+pub struct FaultReport {
+    pub(crate) tag: FaultTag,
+    /// Function and address space selected by the memory router.
+    pub identity: MemoryIdentity,
+    /// First missing address touched by the access.
+    pub address: MemoryAddress,
+    /// Access that encountered the missing mapping.
+    pub access: FaultAccess,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub(in crate::harness) enum PageError {
     Access(MemoryAccessError),
     PageFault { address: MemoryAddress },
+    ReportDelivery,
+    MissingSource,
 }
 
 impl std::fmt::Display for PageError {
@@ -19,6 +48,8 @@ impl std::fmt::Display for PageError {
         match self {
             Self::Access(error) => error.fmt(f),
             Self::PageFault { address } => write!(f, "page fault at {:#x}", address.raw()),
+            Self::ReportDelivery => f.write_str("platform fault report delivery failed"),
+            Self::MissingSource => f.write_str("faulting request has no DMA source tag"),
         }
     }
 }
@@ -27,7 +58,7 @@ impl std::error::Error for PageError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Access(error) => Some(error),
-            Self::PageFault { .. } => None,
+            Self::PageFault { .. } | Self::ReportDelivery | Self::MissingSource => None,
         }
     }
 }
@@ -41,7 +72,9 @@ impl From<MemoryAccessError> for PageError {
 impl From<PageError> for pdma_model_dma::MemoryFailure {
     fn from(error: PageError) -> Self {
         match error {
-            PageError::Access(_) => Self::Access,
+            PageError::Access(_) | PageError::ReportDelivery | PageError::MissingSource => {
+                Self::Access
+            }
             PageError::PageFault { address } => Self::PageFault { address },
         }
     }
@@ -70,17 +103,15 @@ impl PageTable {
 pub(super) struct Paged {
     pub memory: SharedMemoryAccess,
     pub pages: PageTable,
+    pub reports: mpsc::Sender<FaultReport>,
 }
 
 impl Paged {
-    fn access<T>(
+    fn access(
         &self,
-        address: MemoryAddress,
-        alignment: MemoryAlignment,
-        length: u64,
-        action: impl FnOnce() -> Result<T, MemoryAccessError>,
-    ) -> Result<T, PageError> {
-        self.memory.validate(address, alignment, length)?;
+        (address, length): (MemoryAddress, u64),
+        (request, access): (&TaggedRequest, FaultAccess),
+    ) -> Result<(), PageError> {
         let missing = self
             .pages
             .0
@@ -91,60 +122,70 @@ impl Paged {
                 .range(address.raw() / PAGE_SIZE..=(address.raw() + length - 1) / PAGE_SIZE)
                 .next()
         {
-            return Err(PageError::PageFault {
-                address: (page * PAGE_SIZE).max(address.raw()).into(),
-            });
+            let address = (page * PAGE_SIZE).max(address.raw()).into();
+            drop(missing);
+            self.reports
+                .try_send(FaultReport {
+                    identity: request.identity,
+                    tag: request.tag.clone().ok_or(PageError::MissingSource)?,
+                    address,
+                    access,
+                })
+                .map_err(|_| PageError::ReportDelivery)?;
+            return Err(PageError::PageFault { address });
         }
-        let result = action();
         drop(missing);
-        result.map_err(PageError::Access)
+        Ok(())
     }
 }
 
-impl MemoryAccess for Paged {
+impl MemoryAccess<TaggedRequest> for Paged {
     type Error = PageError;
 
     fn validate_with_sideband(
         &self,
-        (): &(),
+        _request: &TaggedRequest,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         length: u64,
     ) -> Result<(), Self::Error> {
-        self.access(address, alignment, length, || Ok(()))
+        self.memory
+            .validate(address, alignment, length)
+            .map_err(PageError::Access)
     }
     fn read_with_sideband(
         &self,
-        (): &(),
+        request: &TaggedRequest,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         out: &mut [u8],
     ) -> Result<(), Self::Error> {
-        self.access(
+        let length = u64::try_from(out.len()).map_err(|_| MemoryAccessError::AddressOverflow {
             address,
-            alignment,
-            u64::try_from(out.len()).map_err(|_| MemoryAccessError::AddressOverflow {
-                address,
-                length: u64::MAX,
-            })?,
-            || self.memory.read(address, alignment, out),
-        )
+            length: u64::MAX,
+        })?;
+        self.memory.validate(address, alignment, length)?;
+        self.access((address, length), (request, FaultAccess::Read))?;
+        self.memory
+            .read(address, alignment, out)
+            .map_err(PageError::Access)
     }
     fn write_with_sideband(
         &self,
-        (): &(),
+        request: &TaggedRequest,
         address: MemoryAddress,
         alignment: MemoryAlignment,
         bytes: &[u8],
     ) -> Result<(), Self::Error> {
-        self.access(
-            address,
-            alignment,
+        let length =
             u64::try_from(bytes.len()).map_err(|_| MemoryAccessError::AddressOverflow {
                 address,
                 length: u64::MAX,
-            })?,
-            || self.memory.write(address, alignment, bytes),
-        )
+            })?;
+        self.memory.validate(address, alignment, length)?;
+        self.access((address, length), (request, FaultAccess::Write))?;
+        self.memory
+            .write(address, alignment, bytes)
+            .map_err(PageError::Access)
     }
 }

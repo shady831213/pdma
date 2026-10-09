@@ -124,6 +124,18 @@ remain independent of that transport. Firmware is the only lifecycle issuer in
 managed mode. Direct-DMA software retains privileged register access through the
 same shared `software::dma::ChannelControl` handshake.
 
+Payload PageFault recovery uses the owning Function's channel work MMIO, not this
+PF control ring. FAULT_STATUS exposes the faulted bit; after platform mapping
+repair the owner writes RESUME.request=1. Both registers are 32 bits. This emits no intermediate
+DMA response, IRQ or PF event and adds no firmware opcode. Firmware still owns
+resource lifetime: Drain encountering parked work returns ChannelStopped and the
+retained failed-channel bitmap, allowing later repair/reset requests to proceed.
+Abort discards matching parked work without a task response; reset/release cancel
+it without waiting for resume and acknowledge only after cleanup. Coordinate old
+fault handlers, OS repairs and resume requests with reset/release/reallocation and
+retire them before reuse. A late resume is not checked against a fault episode.
+See [pageable-copy recovery](page-fault-recovery.md).
+
 The DMA schema groups read-only discovery, one contiguous DmaAdmin block containing
 global control and channel reset registers, then page-aligned channel data blocks.
 Each data block owns 4096 bytes including reserved space; base and stride are

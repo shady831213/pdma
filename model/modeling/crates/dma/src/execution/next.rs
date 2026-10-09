@@ -75,7 +75,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
                     .min(COPY_CHUNK_BYTES);
             }
             ResponseStatus::Success
-            | ResponseStatus::PageFault
             | ResponseStatus::InvalidLength
             | ResponseStatus::ReadError
             | ResponseStatus::WriteError

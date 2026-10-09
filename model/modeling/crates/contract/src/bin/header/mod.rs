@@ -6,7 +6,7 @@ use pdma_model_contract::control::{
     ControlEvent, ControlQueue, ControlRequest, ControlResponse, ControlRingState,
 };
 use pdma_model_contract::dma::{
-    Command, CompletionInfo, DmaRegisters, Endpoint, PageFaultInfo, Response, Segment,
+    Command, CompletionInfo, DmaRegisters, Endpoint, Response, Segment,
 };
 use pdma_model_contract::hw_components::context::ContextTableRegisters;
 use pdma_model_contract::hw_components::control::ControlRegisters;
@@ -39,7 +39,6 @@ pub fn generate_with_contexts(count: usize, contexts: usize) -> Result<HeaderSet
         ("command", Command::SPEC.resolve()?),
         ("response", Response::SPEC.resolve()?),
         ("completioninfo", CompletionInfo::SPEC.resolve()?),
-        ("pagefaultinfo", PageFaultInfo::SPEC.resolve()?),
         ("contextattributes", ContextAttributes::SPEC.resolve()?),
         ("controlrequest", ControlRequest::SPEC.resolve()?),
         ("controlresponse", ControlResponse::SPEC.resolve()?),

@@ -186,7 +186,7 @@ static inline void C_ENDPOINT_STORE_C_WORD3(uint8_t bytes[C_ENDPOINT_SIZE], uint
 
 /*
  * DMA copy command
- * A 104-byte, eight-byte-aligned little-endian command. Two independent endpoint starts select one copy_length. Hardware validates both selected ranges before payload writes; backing capacities need not match. Software retains lists and resources while any attempt or continuation can use them. Every submission is self-contained.
+ * A 104-byte, eight-byte-aligned little-endian command. Two independent endpoint starts select one copy_length. Hardware validates both selected ranges before payload writes; backing capacities need not match. Software retains lists and resources until final completion or acknowledged cancellation, including payload-fault suspension. Every submission is self-contained.
  */
 #define C_COMMAND_SIZE UINT64_C(104)
 #define C_COMMAND_ALIGNMENT UINT64_C(8)
@@ -534,16 +534,16 @@ static inline void C_COMMAND_STORE_C_SGQSCONTEXT(uint8_t bytes[C_COMMAND_SIZE], 
 
 /*
  * DMA copy response
- * A 72-byte, eight-byte-aligned little-endian completion. PageFault terminates one attempt without halting the channel, using ordinary non-empty/IOC notification. Other unsuccessful results stop the channel until reset. Ring failures use the channel fatal register. Committed writes are never rolled back.
+ * A 24-byte, eight-byte-aligned little-endian terminal completion. Recoverable payload faults suspend the command without publishing a response. Unsuccessful results stop the channel until reset. Ring failures use the channel fatal register. Committed writes are never rolled back.
  */
-#define C_RESPONSE_SIZE UINT64_C(72)
+#define C_RESPONSE_SIZE UINT64_C(24)
 #define C_RESPONSE_ALIGNMENT UINT64_C(8)
 #define C_RESPONSE_ENDIAN_LITTLE UINT32_C(0)
 #define C_RESPONSE_ENDIAN_BIG UINT32_C(1)
 /*
  * Response.info
  * Status-specific completion information
- * The status selects the only valid information format. Success and stopping errors report committed bytes; PageFault additionally reports access and continuation data. Unused case storage must be zero.
+ * The status selects the only valid information format. Success and stopping errors report committed bytes.
  */
 
 /*
@@ -569,7 +569,7 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
 
 /*
  * Copy result
- * 0: Success. 1: InvalidLength, invalid position or overflowing range. 2: ReadError. 3: WriteError. 4: LengthMismatch, selected SG capacity is insufficient. 5: ListReadError. 6: PageFault, a payload mapping is not present and software may repair/resubmit. Only Success and PageFault avoid channel halt. Other values are invalid.
+ * 0: Success. 1: InvalidLength, invalid position or overflowing range. 2: ReadError. 3: WriteError. 4: LengthMismatch, selected SG capacity is insufficient. 5: ListReadError. Only Success avoids channel halt. Other values, including the retired PageFault encoding 6, are invalid.
  */
 #define C_RESPONSE_C_STATUS_C_QUSUCCESS UINT64_C(0)
 #define C_RESPONSE_C_STATUS_C_QUINVALIDQULENGTH UINT64_C(1)
@@ -577,7 +577,6 @@ static inline void C_RESPONSE_STORE_C_ID(uint8_t bytes[C_RESPONSE_SIZE], uint64_
 #define C_RESPONSE_C_STATUS_C_QUWRITEQUERROR UINT64_C(3)
 #define C_RESPONSE_C_STATUS_C_QULENGTHQUMISMATCH UINT64_C(4)
 #define C_RESPONSE_C_STATUS_C_QULISTQUREADQUERROR UINT64_C(5)
-#define C_RESPONSE_C_STATUS_C_QUPAGEQUFAULT UINT64_C(6)
 #define C_RESPONSE_C_STATUS_OFFSET UINT64_C(8)
 #define C_RESPONSE_C_STATUS_WIDTH UINT64_C(4)
 #define C_RESPONSE_C_STATUS_ENDIAN C_RESPONSE_ENDIAN_LITTLE
@@ -613,11 +612,11 @@ static inline void C_RESPONSE_STORE_C_FLAGS(uint8_t bytes[C_RESPONSE_SIZE], uint
     bytes[C_RESPONSE_C_FLAGS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
 }
 #define C_RESPONSE_RECORD_C_INFO_OFFSET UINT64_C(16)
-#define C_RESPONSE_RECORD_C_INFO_SIZE UINT64_C(56)
+#define C_RESPONSE_RECORD_C_INFO_SIZE UINT64_C(8)
 
 /*
  * Completed copy progress
- * Success or stopping-error progress, without page-fault-only fields.
+ * Final successful or stopping-error progress of the original command.
  */
 #define C_COMPLETIONINFO_SIZE UINT64_C(8)
 #define C_COMPLETIONINFO_ALIGNMENT UINT64_C(8)
@@ -626,7 +625,7 @@ static inline void C_RESPONSE_STORE_C_FLAGS(uint8_t bytes[C_RESPONSE_SIZE], uint
 
 /*
  * Committed prefix
- * Bytes successfully written by this attempt; source reads alone do not count. Success reports copy_length and preflight errors report zero.
+ * Bytes successfully written by this command; source reads alone do not count. Success reports copy_length and preflight errors report zero.
  */
 #define C_COMPLETIONINFO_C_BYTESQSCOMPLETED_OFFSET UINT64_C(0)
 #define C_COMPLETIONINFO_C_BYTESQSCOMPLETED_WIDTH UINT64_C(8)
@@ -644,196 +643,6 @@ static inline void C_COMPLETIONINFO_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_COM
     bytes[C_COMPLETIONINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
     bytes[C_COMPLETIONINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
 }
-
-/*
- * Repairable payload page-fault information
- * Committed progress and two independent first-uncommitted positions. The 56-byte record groups discriminator bytes to avoid per-position tag padding. No context is retained by hardware after retirement.
- */
-#define C_PAGEFAULTINFO_SIZE UINT64_C(56)
-#define C_PAGEFAULTINFO_ALIGNMENT UINT64_C(8)
-#define C_PAGEFAULTINFO_ENDIAN_LITTLE UINT32_C(0)
-#define C_PAGEFAULTINFO_ENDIAN_BIG UINT32_C(1)
-/*
- * PageFaultInfo.kinds
- * Access and position discriminators
- * Grouped small fields; the generated codec derives position modes from their union cases.
- */
-
-/*
- * Committed prefix
- * Successfully written bytes relative to this attempt. Software subtracts this from its submitted copy_length.
- */
-#define C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET UINT64_C(0)
-#define C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_WIDTH UINT64_C(8)
-#define C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint64_t C_PAGEFAULTINFO_LOAD_C_BYTESQSCOMPLETED(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET] | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_PAGEFAULTINFO_STORE_C_BYTESQSCOMPLETED(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint64_t value) {
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_BYTESQSCOMPLETED_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Faulting virtual address
- * First missing virtual byte of the failed payload access, not a PTE address. The command ID and retained context association identify its address space.
- */
-#define C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET UINT64_C(8)
-#define C_PAGEFAULTINFO_C_FAULTQSADDRESS_WIDTH UINT64_C(8)
-#define C_PAGEFAULTINFO_C_FAULTQSADDRESS_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint64_t C_PAGEFAULTINFO_LOAD_C_FAULTQSADDRESS(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET] | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_PAGEFAULTINFO_STORE_C_FAULTQSADDRESS(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint64_t value) {
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_FAULTQSADDRESS_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Failed payload access
- * SourceRead requires a readable mapping, DestinationWrite requires a writable mapping. Software checks authorization before repair.
- */
-#define C_PAGEFAULTINFO_C_KINDSQX2EACCESS_C_QUSOURCEQUREAD UINT64_C(1)
-#define C_PAGEFAULTINFO_C_KINDSQX2EACCESS_C_QUDESTINATIONQUWRITE UINT64_C(2)
-#define C_PAGEFAULTINFO_C_KINDSQX2EACCESS_OFFSET UINT64_C(16)
-#define C_PAGEFAULTINFO_C_KINDSQX2EACCESS_WIDTH UINT64_C(1)
-#define C_PAGEFAULTINFO_C_KINDSQX2EACCESS_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint8_t C_PAGEFAULTINFO_LOAD_C_KINDSQX2EACCESS(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint8_t)bytes[C_PAGEFAULTINFO_C_KINDSQX2EACCESS_OFFSET];
-}
-static inline void C_PAGEFAULTINFO_STORE_C_KINDSQX2EACCESS(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint8_t value) {
-    bytes[C_PAGEFAULTINFO_C_KINDSQX2EACCESS_OFFSET] = (uint8_t)(value & UINT64_C(255));
-}
-
-/*
- * Source position mode
- * Selected by the source position union, not separately configured.
- */
-#define C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_C_QULINEAR UINT64_C(0)
-#define C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_OFFSET UINT64_C(17)
-#define C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_WIDTH UINT64_C(1)
-#define C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint8_t C_PAGEFAULTINFO_LOAD_C_KINDSQX2ESOURCEQSMODE(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint8_t)bytes[C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_OFFSET];
-}
-static inline void C_PAGEFAULTINFO_STORE_C_KINDSQX2ESOURCEQSMODE(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint8_t value) {
-    bytes[C_PAGEFAULTINFO_C_KINDSQX2ESOURCEQSMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-}
-
-/*
- * Destination position mode
- * Selected independently by the destination position union.
- */
-#define C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_C_QULINEAR UINT64_C(0)
-#define C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_C_QUSCATTERQUGATHER UINT64_C(1)
-#define C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_OFFSET UINT64_C(18)
-#define C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_WIDTH UINT64_C(1)
-#define C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint8_t C_PAGEFAULTINFO_LOAD_C_KINDSQX2EDESTINATIONQSMODE(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint8_t)bytes[C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_OFFSET];
-}
-static inline void C_PAGEFAULTINFO_STORE_C_KINDSQX2EDESTINATIONQSMODE(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint8_t value) {
-    bytes[C_PAGEFAULTINFO_C_KINDSQX2EDESTINATIONQSMODE_OFFSET] = (uint8_t)(value & UINT64_C(255));
-}
-
-/*
- * Source continuation
- * Linear offset or original SG index/local offset for the first uncommitted source byte. Unused union storage must be zero.
- */
-#define C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET UINT64_C(24)
-#define C_PAGEFAULTINFO_C_SOURCEQSWORD0_WIDTH UINT64_C(8)
-#define C_PAGEFAULTINFO_C_SOURCEQSWORD0_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint64_t C_PAGEFAULTINFO_LOAD_C_SOURCEQSWORD0(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET] | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_PAGEFAULTINFO_STORE_C_SOURCEQSWORD0(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint64_t value) {
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Source continuation
- * Linear offset or original SG index/local offset for the first uncommitted source byte. Unused union storage must be zero.
- */
-#define C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET UINT64_C(32)
-#define C_PAGEFAULTINFO_C_SOURCEQSWORD1_WIDTH UINT64_C(8)
-#define C_PAGEFAULTINFO_C_SOURCEQSWORD1_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint64_t C_PAGEFAULTINFO_LOAD_C_SOURCEQSWORD1(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET] | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_PAGEFAULTINFO_STORE_C_SOURCEQSWORD1(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint64_t value) {
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_SOURCEQSWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Destination continuation
- * Independent destination position at the same committed prefix. At segment end, advance index and set offset zero without fetching another entry.
- */
-#define C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET UINT64_C(40)
-#define C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_WIDTH UINT64_C(8)
-#define C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint64_t C_PAGEFAULTINFO_LOAD_C_DESTINATIONQSWORD0(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET] | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_PAGEFAULTINFO_STORE_C_DESTINATIONQSWORD0(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint64_t value) {
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD0_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-
-/*
- * Destination continuation
- * Independent destination position at the same committed prefix. At segment end, advance index and set offset zero without fetching another entry.
- */
-#define C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET UINT64_C(48)
-#define C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_WIDTH UINT64_C(8)
-#define C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_ENDIAN C_PAGEFAULTINFO_ENDIAN_LITTLE
-static inline uint64_t C_PAGEFAULTINFO_LOAD_C_DESTINATIONQSWORD1(const uint8_t bytes[C_PAGEFAULTINFO_SIZE]) {
-    return (uint64_t)((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET] | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(1)] << UINT32_C(8)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(2)] << UINT32_C(16)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(3)] << UINT32_C(24)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(4)] << UINT32_C(32)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(5)] << UINT32_C(40)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(6)] << UINT32_C(48)) | ((uint64_t)bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(7)] << UINT32_C(56)));
-}
-static inline void C_PAGEFAULTINFO_STORE_C_DESTINATIONQSWORD1(uint8_t bytes[C_PAGEFAULTINFO_SIZE], uint64_t value) {
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET] = (uint8_t)(value & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(1)] = (uint8_t)((value >> UINT32_C(8)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(2)] = (uint8_t)((value >> UINT32_C(16)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(3)] = (uint8_t)((value >> UINT32_C(24)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(4)] = (uint8_t)((value >> UINT32_C(32)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(5)] = (uint8_t)((value >> UINT32_C(40)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(6)] = (uint8_t)((value >> UINT32_C(48)) & UINT64_C(255));
-    bytes[C_PAGEFAULTINFO_C_DESTINATIONQSWORD1_OFFSET + UINT64_C(7)] = (uint8_t)((value >> UINT32_C(56)) & UINT64_C(255));
-}
-#define C_PAGEFAULTINFO_RECORD_C_KINDS_OFFSET UINT64_C(16)
-#define C_PAGEFAULTINFO_RECORD_C_KINDS_SIZE UINT64_C(3)
 
 /*
  * Extensible Host address-space attributes. Default is distinct from PASID zero. PASID is at most twenty bits and must be zero for Default.

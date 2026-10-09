@@ -34,6 +34,9 @@ The ordinary direct-DMA assembly remains independent of firmware and Functions.
   the authoritative `ChannelWindows` bank and forwards FunctionId. The optional
   context table additionally validates binding ownership and resolves Default/PASID
   attributes into `MemoryIdentity` for the runtime's memory-space adapter.
+  Both routing adapters expose authorized source/identity sideband mapping for
+  platform integration. The platform may attach an opaque fault-source tag;
+  MemoryIdentity itself remains the address-space selector, not a channel ID.
   MMIO, interrupt routing and DMA memory use that same ownership bank. Ordinary
   unit-sideband backends keep their existing read/write call signatures.
 - The scenario platform supplies private Function-bound Host bus capabilities,
@@ -59,6 +62,24 @@ handshake before freeing the allocation. Reuse then programs the new owner and
 opens its window. PF must coordinate with VF software to retain old memory until reset completes; reset
 does not undo completed writes. Owner-register writes while open are rejected.
 Closing a window alone is not evidence that DMA has drained.
+
+An owning PF/VF resumes a payload-faulted command through FAULT_STATUS/RESUME in its
+granted channel data block; foreign Functions fail the same live ownership checks
+as other work MMIO. There is no new PF management resume request. Platform MMU fault
+reports independently identify address space, address and access and correlate them
+with owned suspended work; PDMA produces no page-fault response or interrupt.
+An opaque platform tag preserves that correlation even when channels share a PASID
+and VA. The MMU echoes the tag without interpreting its channel/instance association.
+Tag associations cannot be reused while old requests, reports or handlers refer to
+them; source stability does not replace software exclusion across channel regrant.
+See PLAT-PF-02 in [pageable-copy requirements](page-fault-recovery.md).
+Reset/release cancels parked work before owner reassignment. FAULT_STATUS.faulted
+is read-only; RESUME.request=1 clears it without enabling the channel or clearing
+errors. Both registers are 32 bits. PF/VF software must serialize repair/resume
+with lifecycle management and retire old handlers, mapping repairs and pending
+resume writes before reuse. Ownership checks do not distinguish two fault episodes
+for the same owner, including when it reacquires the same channel. Hardware does
+not protect a later fault or recycled address space from an old handler's request.
 
 The platform transfers each DMA pulse to the currently bound destination at the
 hardware interaction boundary, before any later binding update. The pending

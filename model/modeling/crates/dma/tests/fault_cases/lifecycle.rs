@@ -1,45 +1,44 @@
 use super::*;
-use pdma_model_contract::dma::ChannelId;
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
+use pdma_model_contract::dma::{ChannelId, ContextId};
+use pdma_model_dma::MaintenanceError;
 
 #[test]
-fn pending_fault_response_is_discarded_by_channel_reset() -> TestResult {
-    // Given: hardware observed a payload fault but has not yet published its response.
+fn payload_fault_does_not_publish_a_response() -> TestResult {
+    // Given: an accepted command with a missing source payload page.
     let mut device = setup()?;
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
-    device
-        .memory
-        .memory
-        .write(0x1000.into(), MemoryAlignment::ONE, &command.to_bytes()?)?;
-    device.write(
-        CMD + CommandRegisters::PRODUCER.offset(),
-        &1_u32.to_le_bytes(),
-    )?;
-    let mut pipeline = device.command_loop();
-    let mut operation = Operation::new(());
-    for _ in 0..128 {
-        let _step = operation.step(&mut pipeline, &mut device);
-        if device.memory.faults.get() != 0 {
-            break;
-        }
-    }
-    assert_eq!(device.memory.faults.get(), 1);
+    submit(&mut device, command, 0)?;
+    // When: the shared engine reaches the page fault.
+    run(&mut device)?;
+    // Then: the command remains retained without completion or interrupt.
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
         0
     );
-    // When: reset arrives before the terminal publication.
+    assert!(!device.take_interrupt());
+    assert_eq!(fault_status(&mut device)?, 1);
+    Ok(())
+}
+
+#[test]
+fn reset_discards_parked_work_and_clears_fault_status() -> TestResult {
+    // Given: suspended work with a committed prefix.
+    let mut device = setup()?;
+    let command = streams(&device)?;
+    device.memory.missing.set(Some((0x1242, false)));
+    submit(&mut device, command, 0)?;
+    run(&mut device)?;
     let reset = ChannelId::new(0).admin_offset(1).ok_or("reset address")?;
+    // When: reset is driven without any resume request.
     device.write(reset, &1_u32.to_le_bytes())?;
     for _ in 0..128 {
-        let _step = operation.step(&mut pipeline, &mut device);
-        if read_word(&mut device, reset)? == 0 {
-            break;
-        }
+        device.step()?;
     }
-    // Then: reset waits for retirement, discards the response and preserves committed writes.
+    // Then: cleanup finishes, committed bytes stay, and the old task cannot revive.
     assert_eq!(read_word(&mut device, reset)?, 0);
+    resume(&mut device, 1)?;
+    assert_eq!(fault_status(&mut device)?, 0);
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
         0
@@ -56,127 +55,85 @@ fn pending_fault_response_is_discarded_by_channel_reset() -> TestResult {
 }
 
 #[test]
-fn unrelated_work_completes_while_faulting_page_remains_absent() -> TestResult {
-    // Given: an unconsumed PageFault response and an absent source page.
-    let mut device = setup()?;
-    let command = streams(&device)?;
-    device.memory.missing.set(Some((0x1242, false)));
-    assert_eq!(
-        submit(&mut device, command, 0)?.status,
-        ResponseStatus::PageFault
-    );
-    assert!(device.take_interrupt());
-    // When: a later independent command uses resident storage on the same channel.
-    let peer = Command {
-        id: 99,
-        source: Endpoint::linear(0x1200, 0),
-        destination: Endpoint::linear(0x1600, 0),
-        copy_length: 3,
-        ..Command::ZERO
-    };
-    let response = submit(&mut device, peer, 1)?;
-    // Then: progress does not depend on page repair or draining the earlier response.
-    assert_eq!(
-        response,
-        Response {
-            id: 99,
-            info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 3 }),
-            ..Response::ZERO
+fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestResult {
+    for abort in [false, true] {
+        // Given: a parked command holds a non-ring context.
+        let mut device = setup()?;
+        let mut command = streams(&device)?;
+        command.source.context = 7;
+        device.memory.missing.set(Some((0x1242, false)));
+        submit(&mut device, command, 0)?;
+        run(&mut device)?;
+        let context = ContextId::new(7);
+        let channel = ChannelId::new(0);
+        // When: management requests maintenance of the retained reference.
+        if abort {
+            device.abort_context(context, &[channel])?;
+        } else {
+            device.drain_context(context, &[channel])?;
         }
+        for _ in 0..128 {
+            device.step()?;
+        }
+        // Then: Drain fails explicitly; Abort retires parked work without publishing.
+        if abort {
+            assert_eq!(device.context_status(context), Ok(true));
+            assert_eq!(fault_status(&mut device)?, 0);
+        } else {
+            assert_eq!(
+                device.context_status(context),
+                Err(MaintenanceError::ChannelStopped(channel))
+            );
+            assert_eq!(
+                device.failed_context_channels(context).collect::<Vec<_>>(),
+                vec![channel]
+            );
+            assert_eq!(fault_status(&mut device)?, 1);
+        }
+        assert_eq!(
+            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+            0
+        );
+        assert!(!device.take_interrupt());
+    }
+    Ok(())
+}
+
+#[test]
+fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestResult {
+    // Given: a command has been accepted before Abort arrives.
+    let mut device = setup()?;
+    let mut command = streams(&device)?;
+    command.destination.context = 7;
+    device.memory.missing.set(Some((0x1242, false)));
+    submit(&mut device, command, 0)?;
+    for _ in 0..128 {
+        device.step()?;
+        if read_word(&mut device, CMD + CommandRegisters::CONSUMER.offset())? == 1 {
+            break;
+        }
+    }
+    assert_eq!(device.memory.faults.get(), 0);
+    // When: Abort waits for the running command and that command encounters a page fault.
+    device.abort_context(ContextId::new(7), &[ChannelId::new(0)])?;
+    for _ in 0..256 {
+        device.step()?;
+    }
+    // Then: committed bytes remain and maintenance completes without requiring resume.
+    assert_eq!(device.context_status(ContextId::new(7)), Ok(true));
+    assert_eq!(device.memory.faults.get(), 1);
+    assert_eq!(fault_status(&mut device)?, 0);
+    assert_eq!(
+        read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+        0
     );
     assert_eq!(
         device
             .memory
             .memory
-            .read_typed::<[u8; 3]>(0x1600.into(), MemoryAlignment::ONE)?,
-        *b"abc"
+            .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
+        *b"c-----"
     );
     assert!(!device.take_interrupt());
-    assert_eq!(device.memory.faults.get(), 1);
-    Ok(())
-}
-
-#[test]
-fn mixed_endpoints_use_their_own_continuation_representation() -> TestResult {
-    for linear_source in [true, false] {
-        // Given: only one endpoint is SG, with different boundaries from its linear peer.
-        let mut device = setup()?;
-        let mut command = streams(&device)?;
-        if linear_source {
-            device
-                .memory
-                .memory
-                .write(0x1200.into(), MemoryAlignment::ONE, b"abcdefgh")?;
-            command.source = Endpoint::linear(0x1200, 0);
-            device.memory.missing.set(Some((0x1343, true)));
-        } else {
-            command.destination = Endpoint::linear(0x1600, 0);
-            device.memory.missing.set(Some((0x1242, false)));
-        }
-        // When: the noninitial chunk faults and software uses the returned positions directly.
-        let response = submit(&mut device, command, 0)?;
-        assert_eq!(response.status, ResponseStatus::PageFault);
-        let (completed, source, destination) = if linear_source {
-            (2, Position::linear(2), Position::scatter_gather(1, 0))
-        } else {
-            (3, Position::scatter_gather(1, 0), Position::linear(3))
-        };
-        assert_eq!(
-            (
-                response.bytes_completed(),
-                response
-                    .page_fault()
-                    .ok_or("expected PageFault")?
-                    .source_next(),
-                response
-                    .page_fault()
-                    .ok_or("expected PageFault")?
-                    .destination_next()
-            ),
-            (completed, source, destination)
-        );
-        consume(&mut device, 0)?;
-        device.memory.missing.set(None);
-        command.source = command
-            .source
-            .with_start(
-                response
-                    .page_fault()
-                    .ok_or("expected PageFault")?
-                    .source_next(),
-            )
-            .ok_or("position mode mismatch")?;
-        command.destination = command
-            .destination
-            .with_start(
-                response
-                    .page_fault()
-                    .ok_or("expected PageFault")?
-                    .destination_next(),
-            )
-            .ok_or("position mode mismatch")?;
-        command.copy_length -= response.bytes_completed();
-        let done = submit(&mut device, command, 1)?;
-        // Then: only the remaining range completes and its output matches the original stream.
-        assert_eq!(done.status, ResponseStatus::Success);
-        assert_eq!(done.bytes_completed(), 8 - completed);
-        if linear_source {
-            assert_eq!(
-                device
-                    .memory
-                    .memory
-                    .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
-                *b"cdefgh"
-            );
-        } else {
-            assert_eq!(
-                device
-                    .memory
-                    .memory
-                    .read_typed::<[u8; 8]>(0x1600.into(), MemoryAlignment::ONE)?,
-                *b"abcdefgh"
-            );
-        }
-    }
     Ok(())
 }

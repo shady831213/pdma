@@ -59,6 +59,7 @@ impl<M, S> Dma<M, S> {
             interrupt: false,
             active: None,
             maintenance: None,
+            resume_selected: None,
         })
     }
 }

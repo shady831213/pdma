@@ -1,7 +1,7 @@
 use super::Channel;
 use crate::Error;
 use hardware_interface_schema::{RegisterAccessError, register_dispatch};
-use pdma_model_contract::dma::ResetValues;
+use pdma_model_contract::dma::{FaultStatusValues, ResetValues, ResumeValues};
 use pdma_model_contract::ring::Ring;
 
 impl Channel {
@@ -78,6 +78,10 @@ impl Channel {
                 Ok(())
             },
             |_, next| {
+                if next.resume.request() {
+                    next.fault_status = FaultStatusValues::new(0);
+                }
+                next.resume = ResumeValues::new(0);
                 if next.enable.raw() != 0 {
                     *configured = true;
                 }

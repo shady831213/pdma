@@ -69,8 +69,8 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.command_loop();
-    let command = &mut hardware.upstream.stage;
+    let mut hardware = pdma_model_dma::RunCommand::new(support::single_command(&device));
+    let command = &mut hardware;
     let mut operation = Operation::new(());
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::RESPONSE.offset()

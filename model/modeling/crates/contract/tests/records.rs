@@ -60,7 +60,7 @@ fn response_round_trips_when_status_is_assigned() -> Result<(), SchemaCodecError
         let bytes = response.to_bytes()?;
 
         // Then: the wire status, IOC flag, and decoded value agree.
-        let mut expected = [0; 72];
+        let mut expected = [0; 24];
         expected[0] = 7;
         expected[8] = discriminant;
         expected[12] = 1;

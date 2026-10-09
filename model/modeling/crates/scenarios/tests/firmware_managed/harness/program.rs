@@ -6,7 +6,7 @@ pub mod contexts;
 pub mod functions;
 mod interrupts;
 pub mod multi;
-/// Host-owned page repair and DMA continuation scenario.
+/// VF-owned page repair and retained DMA task resume scenario.
 pub mod page_fault;
 pub mod transfer;
 

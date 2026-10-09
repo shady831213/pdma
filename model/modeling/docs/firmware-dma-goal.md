@@ -1,11 +1,11 @@
 # Firmware-managed DMA roadmap
 
 Recorded: 2026-09-15.
-Updated: 2026-09-29.
+Updated: 2026-10-09.
 Status: the architecture MVP, Function-scoped channel management, context selection
 and maintenance, and managed fatal/event recovery are implemented. Actual PCIe/IOMMU
-integration and Function-level reset remain unimplemented. Payload-only DSA-like
-partial completion and Host continuation for pageable-VA copies are implemented;
+integration and Function-level reset remain unimplemented. Payload-only retained
+suspension with owner per-channel resume replaces the earlier DSA-like continuation;
 synchronization and fence semantics remain future work.
 This document records decisions and open questions; it is not an execution plan
 or an instruction to start implementation automatically.
@@ -55,28 +55,33 @@ chosen usage contract, not a universal restriction on migration engines. The
 [context contract](context-contract.md#non-faulting-page-migration-copy) records
 the normative obligations and the boundary with full HMM support.
 
-The implemented second use copies pageable virtual addresses, where DMA's own
-access can encounter a recoverable page fault. The selected design is **DSA-like partial completion followed by Host software
-continuation**, retaining direct Host/VF use of DMA rings. DMA ends the affected
-hardware command with precise progress and fault information; software repairs
-the mapping and submits the remainder as a new command. Firmware does not proxy
-each copy or retain its suspended progress.
+The second use copies pageable virtual addresses, where DMA's own payload access
+can encounter a recoverable page fault. The 2026-10-09 decision selects retained
+suspension and owner resume, superseding terminal partial-completion/resubmission.
+DMA retains the original command, both cursors, committed prefix and successful
+read scratch when a write faults. Same-channel successors wait; other physical
+channels can use the shared engine. The platform MMU/backend independently reports
+fault identity/address/access; software observes FAULT_STATUS.faulted, repairs
+translations and writes RESUME.request=1 through its owned channel work MMIO. There is
+no intermediate DMA response, IRQ, firmware event or new PF management opcode.
 
-The [page-fault recovery design note](page-fault-recovery.md) records the 2026-09-29
-decisions and their rationale: independent Linear offsets or SG entry/local-offset
-positions, a common copy length, and PageFault responses with both continuation
-positions. Ordinary subrange starts are software-calculated; fault recovery reuses
-hardware-reported positions. Retained command/context bindings identify the repair
-address space without duplicating resolved attributes in DMA responses. No hidden
-task state survives independent commands. The note also preserves alternatives,
-RTL cost considerations and NVIDIA evidence limits. The payload-only slice now implements these requirements, with a schema-defined
-wire layout, typed PageFault access result and managed PASID repair scenario.
-PageFault does not halt the channel; other unsuccessful responses still do.
-The ABI is not released or frozen.
+The [page-fault recovery chapter](page-fault-recovery.md) records the contract,
+software lifetime requirements and superseded decisions. Independent Linear offsets
+and SG entry/local-offset positions remain general subrange inputs. Final responses
+are 24 bytes with statuses 0..5; PageFault status 6 and fault continuation fields
+are retired. Fault status and resume are 32-bit registers with one boolean bit each;
+software must serialize repair/resume with reset/release/reallocation and retire
+old fault handling before reuse. Reset/release cancel parked work without resume. Drain reports ChannelStopped when
+parked work prevents completion; Abort discards matching parked work without a
+response. Firmware retains resource lifecycle management. The ABI is not frozen.
 
-Device-retained resume, firmware-owned VF task queues and MMU-transparent retry
-remain alternatives outside this next slice. Do not restore the retired resume
-API or introduce per-channel suspended tasks from the research discussion.
+Firmware-owned logical VF queues remain future work. TSG-style grouping does not
+imply channel oversubscription, and a future logical channel interface should hide
+physical registers. Firmware alone cannot supply oversubscription without hardware
+state-save, lifecycle and isolation primitives. Physical channel count stays fixed in this slice. Transparent
+MMU/ATS+PRI retry is a distinct lower boundary: a port that retains and retries the
+original transaction does not return a PDMA PageFault or need PDMA resume. No
+integration with that port or true MMU is included.
 Keep the existing functional abstraction: no bus cycles, transaction IDs,
 outstanding queues or asynchronous memory-transaction model are requested.
 
@@ -86,6 +91,8 @@ Define dependency waits, completion signaling, ordering scope and memory visibil
 separately. Decide which operations belong to DMA commands and which belong to the
 MMU/platform or controlling software. Copy completion must not silently imply cache
 maintenance or TLB invalidation. No fence encoding, new opcode or register is fixed yet.
+Ordered command completion does not require serial physical transactions; future
+parallel execution must preserve replay-safe commit and retirement boundaries.
 
 ### Deferred
 
@@ -328,9 +335,9 @@ and speculative collections of policy generics.
 - Recovery when firmware or the management transport itself is unavailable remains
   deferred; see the low-priority TBD below. PF events and firmware-mediated DMA/event
   recovery are implemented in [fatal and events](fatal-events.md).
-- Ordering after a terminal partial completion and later software continuation,
-  as discussed in the page-fault note. Scheduling suspended tasks or synchronization
-  waits remains separate future work, not an implicit addition to this slice.
+- Synchronization waits, barrier visibility and any logical-channel scheduling or
+  oversubscription remain future work. Retained physical-channel suspension and
+  owner resume are specified in the page-fault chapter.
 - Which features are instance configuration and which have software enable bits.
 
 ## Deferred TBD: subsystem recovery without working firmware
@@ -364,8 +371,8 @@ clear in the resulting specification.
 Retain ordinary copy, SG, fault, reset and interrupt scenarios. Add explicit
 hardware/firmware/host/harness separation and test unauthorized resource access,
 context isolation, queued-context reuse, stale notifications and unaffected channel
-behavior. Page-fault recovery and synchronization scenarios depend on the upcoming
-semantic decisions. External transaction drain and release remain RTL/platform
+behavior. Page-fault scenarios must cover the retained suspension contract;
+synchronization scenarios await a separate semantic decision. External transaction drain and release remain RTL/platform
 obligations, not a mandate to lower the model to bus-transaction timing.
 
 ## Reference boundary

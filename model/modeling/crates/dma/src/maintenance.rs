@@ -40,7 +40,7 @@ impl<M, S> Dma<M, S> {
         self.begin_maintenance(context, channels, false)
     }
 
-    /// Discards unstarted old target work; accepted commands finish normally.
+    /// Discards unstarted or parked target work; running commands finish atomically.
     pub fn abort_context(
         &mut self,
         context: ContextId,

@@ -1,7 +1,7 @@
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use hardware_interface_schema::Decode;
 use pdma_model_contract::dma::{
-    Endpoint, EndpointPayloadValues, Position, ResponseStatus, Segment, SegmentRaw,
+    Endpoint, EndpointPayloadValues, ResponseStatus, Segment, SegmentRaw,
 };
 
 #[derive(Debug)]
@@ -62,10 +62,6 @@ impl Cursor {
         self.segment = Some(segment);
         self.advance(0);
         Ok(true)
-    }
-
-    pub(super) const fn position(&self) -> Position {
-        self.endpoint.start()
     }
 
     const fn offset(&self) -> u64 {

@@ -130,6 +130,13 @@ and context selectors. hw-components resolves the same ChannelWindows owner regi
 used for MMIO/IRQ routing. Without a context table it forwards FunctionId; with a
 table it validates the context owner and forwards a MemoryIdentity with extensible
 Default/PASID attributes. Runtime selects injected memory capabilities, not bindings.
+The routing adapters allow platform sideband construction from the authorized
+source and resolved identity. Opaque fault tags belong to the platform, not DMA or
+MemoryIdentity; an MMU echoes them without understanding PDMA channel semantics.
+Fault reporting must preserve source correlation when channels share Function/PASID
+and VA. Association lifetime includes pending reports and software handling; never
+reuse a tag for another source while either can still refer to it. Stable source
+tags do not identify fault episodes or replace grant/reset/release exclusion.
 Platform assembly selects backing and provides each software program its own allocator.
 `MemoryAccess::Error` is backend-owned. Generic runtime adapters and typed access
 helpers preserve it; do not extend the runtime's built-in storage error enum for
@@ -176,7 +183,8 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   and alignment, with no placement stride override. Reserved gaps belong to their
   enclosing block and cannot host sibling placements or interleaved banks. Group
   related registers in one child block before repeating it.
-  One shared execution pipeline processes whole commands selected by round-robin arbitration.
+  One shared execution pipeline processes commands selected by round-robin arbitration,
+  with bounded per-channel retained operations for payload-fault suspension.
   Use Arbitrate (the singleton specialization of FanIn) over channel-bound Fetch ports,
   with the RoundRobin policy owned by dma. Ready checks do not consume commands,
   and PDMA eligibility rules belong to Fetch, not the generic combinators.
@@ -186,19 +194,28 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   operation and abort/join it after software finishes. Do not recreate command-local
   completion/reset/fault recovery in a scenario-side loop. Single-command boundary
   tests may assemble existing stages in test fixtures, not a production factory.
-  Skip full-response channels before accepting commands; do not add per-channel copy state.
+  Skip full-response channels before accepting commands. Preserve per-channel parked
+  command/cursor/scratch state without adding engines or physical-channel oversubscription.
   Bind accepted work to channel identity and generation so reset invalidates only its work
   before the next side effect, including after subsequent reconfiguration.
   Follow the request/cleanup/completion contract in `docs/reset.md`: reset write one
   requests cleanup; read one means busy; only hardware clears zero after affected accepted
   work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
-  Use `AfterEach<Repeat<RunCommand>, ResetControl>` for the command loop. Track accepted
-  channel/generation ownership until its terminal release; generation invalidation alone
-  is not completion. `RunCommand` is the sole ownership-release boundary when the
-  complete pipeline terminates, including normal completion, reset and errors.
+  Use `AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>` for the command loop. Track accepted
+  channel/generation ownership, including parked references, until terminal release;
+  generation invalidation alone
+  is not completion. `RunCommand` owns executing-state release at complete pipeline
+  termination. A payload fault retains the leaf's Transfer and returns Pending.
+  `ScheduleState` retains the exact composed Operation per parked channel, preserving
+  scratch and custom child-stage state; Channel.parked retains accepted references.
+  Existing Fetch/RoundRobin selection restores that Operation on resume without
+  refetching, restarting CheckRanges or repeating completed transforms. Schedule
+  cleans reset/Abort targets before stepping shared active work, including a disabled
+  peer. Parking is not whole-command retirement.
   Response publication and `Resettable` binding must not retire the whole command.
-  Custom command assemblies must retain this lifecycle boundary and drive `ResetControl`.
+  Custom command assemblies must retain RunCommand/Schedule lifecycle boundaries
+  and drive `ResetControl`.
   `RunCommand<S>` constrains the child stage's associated types, not its concrete composition;
   reuse `Operation` to discard terminal state before releasing command ownership.
   Guard command, SG-list, payload and response accesses before old work can interact again.
@@ -233,10 +250,20 @@ Firmware can consume DMA and peripheral contracts without owning those interface
 - Device notification masks never replay old events when cleared. Platform-pending
   notifications survive device masking/reset until claimed. Stopping response errors halt
   the channel after publication; reset never rolls back external memory writes.
-  Payload PageFault is terminal but non-halting, with fault address/access and both
-  continuation positions. Failed PageFault writes commit no external bytes from that call.
-  Software owns repair/retry and retains ID/context associations; DMA keeps no suspended
-  task across commands. Metadata faults retain their old stopping/fatal behavior.
+  Payload PageFault parks the original command without a response or DMA IRQ/event.
+  Retain both cursors, committed prefix and successful read scratch across a failed
+  write. Failed PageFault writes commit no external bytes from that call. Same-channel
+  successors wait; peers remain eligible. Platform fault reports carry repair identity,
+  address and access independently. Software observes 32-bit FAULT_STATUS.faulted
+  and writes 32-bit RESUME.request=1 through owned channel MMIO after repair.
+  Resume clears faulted without enabling the channel or clearing errors; zero and
+  requests while not faulted do not prearm future recovery. Software must serialize
+  repair/resume with reset/release/reallocation and retire old handlers; no hardware
+  protection against late or duplicate requests for another fault episode is promised.
+  Reset cancels parked work without resume; Drain returns ChannelStopped and
+  bitmap; Abort discards matching parked work without response, including work that
+  parks after Abort acceptance. Metadata faults retain their stopping/fatal behavior.
+  Response is 24 bytes with statuses 0..5; PageFault status 6 and fault info are retired.
   See docs/page-fault-recovery.md for normative hardware, software and RTL obligations.
 - Software handlers remain outside the hardware. Preserve CPU-local and handler
   execution guarantees supplied by the runtime.

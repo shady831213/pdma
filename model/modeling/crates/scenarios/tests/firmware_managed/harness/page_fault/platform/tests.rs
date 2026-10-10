@@ -3,7 +3,7 @@ use crate::harness::page_fault::{FaultAccess, FaultReport};
 use pdma_model_contract::memory::ContextAttributes;
 
 #[test]
-fn fault_catalog_rejects_foreign_unknown_and_retired_sources() {
+fn channel_tag_catalog_rejects_foreign_unknown_and_retired_sources() {
     // Given: one live grant in a two-channel platform instance.
     let sources = Sources::new(2);
     let channel = ChannelId::new(1);
@@ -14,10 +14,11 @@ fn fault_catalog_rejects_foreign_unknown_and_retired_sources() {
             function,
             attributes: ContextAttributes::DEFAULT,
         },
-        tag: sources.tag(channel).unwrap(),
+        ch_tag: sources.ch_tag(channel).unwrap(),
         address: 0x1000.into(),
         access: FaultAccess::Read,
     };
+    let duplicate = report.clone();
     // When: report identity or source falls outside the grant, or its handler retires.
     let wrong_function = FaultReport {
         identity: MemoryIdentity {
@@ -27,15 +28,16 @@ fn fault_catalog_rejects_foreign_unknown_and_retired_sources() {
         ..report.clone()
     };
     let ungranted = FaultReport {
-        tag: sources.tag(ChannelId::new(0)).unwrap(),
+        ch_tag: sources.ch_tag(ChannelId::new(0)).unwrap(),
         ..report
     };
     let foreign = FaultReport {
-        tag: Sources::new(2).tag(channel).unwrap(),
+        ch_tag: Sources::new(2).ch_tag(channel).unwrap(),
         ..report
     };
     // Then: only the current grant's source and Function resolve, with no partial invalid catalog.
     assert_eq!(handler.resolve(&report), Some(channel));
+    assert_eq!(handler.resolve(&duplicate), Some(channel));
     assert_eq!(handler.resolve(&wrong_function), None);
     assert_eq!(handler.resolve(&ungranted), None);
     assert_eq!(handler.resolve(&foreign), None);
@@ -46,4 +48,5 @@ fn fault_catalog_rejects_foreign_unknown_and_retired_sources() {
     );
     handler.retire();
     assert_eq!(handler.resolve(&report), None);
+    assert_eq!(handler.resolve(&duplicate), None);
 }

@@ -94,11 +94,24 @@ failed call. This does not add a memmove guarantee or roll back prior writes.
 
 Retaining only a transfer snapshot is insufficient for the composable model:
 restarting the command graph can repeat range checking, completed transforms or
-non-idempotent custom stages. `Schedule` therefore parks the exact composed
-`Operation` and restores it through existing Fetch/RoundRobin selection.
+non-idempotent custom stages. The command arbiter therefore parks the exact composed
+`Operation` and restores it when that channel receives another grant.
 `RunCommand` ownership remains live until full terminal retirement, including
 post-publication stages. Per-channel accepted references survive parking so
 context cleanup cannot mistake a yielded engine for a completed command.
+
+The 2026-10-10 structural review removed the initial outer `Schedule` wrapper.
+That design arbitrated only Fetch inputs and later signaled `resume_selected` to
+a second layer which swapped whole operations. New-command selection and parked
+restoration consequently had separate owners. The replacement arbitrates a whole
+channel execution turn: a channel-bound port either fetches after its grant or
+restores the existing operation, retaining the grant until completion or payload
+fault. `CommandArbiter` supplies one shared engine and per-channel operation slots
+to the existing `Repeat<Arbitrate<...>>` composition. No second scheduler, generic
+pipeline extension, per-channel engine or scratch reconstruction is required.
+Reset/Abort cleanup runs before arbitration so it does not depend on eligibility
+or progress of an unrelated disabled channel. This changes assembly ownership,
+not the command-atomic scheduling or fault/lifetime contract.
 
 The real RTL obligation is equivalent observable commit and lifetime behavior,
 not Rust object storage or one synchronous memory transaction at a time. Ordered
@@ -250,6 +263,13 @@ software-facing association resolves it back to the correct source. Other engine
 multiple DMA instances and different bus tag encodings do not require a new PDMA
 descriptor or a modified generic memory framework. MemoryIdentity continues to
 select the address space. The tag identifies origin, not permission or PASID.
+
+The 2026-10-10 review names this source association `ChannelTag` and its request
+and report field `ch_tag`, replacing the ambiguous `FaultTag`/`tag` names. It is
+not merged into MemoryIdentity or context attributes: several channels can share
+an address space, and one channel can access several contexts. The platform
+continues to define its representation; the name does not mandate a channel-ID
+encoding or introduce a new DMA register/descriptor field.
 
 Direct encoding and association tables are both valid platform choices. A table
 is not required merely because the value is called a tag. Whatever representation

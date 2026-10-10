@@ -12,24 +12,24 @@ mod tests;
 
 #[derive(Clone, Debug)]
 /// Opaque platform source identity, stable for one runtime instance and physical channel.
-pub struct FaultTag(Arc<()>);
+pub struct ChannelTag(Arc<()>);
 
-impl PartialEq for FaultTag {
+impl PartialEq for ChannelTag {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
 }
-impl Eq for FaultTag {}
+impl Eq for ChannelTag {}
 
 #[derive(Clone, Debug)]
-pub(in crate::harness) struct Sources(Arc<[FaultTag]>);
+pub(in crate::harness) struct Sources(Arc<[ChannelTag]>);
 
 impl Sources {
     pub(in crate::harness) fn new(count: usize) -> Self {
-        Self((0..count).map(|_| FaultTag(Arc::new(()))).collect())
+        Self((0..count).map(|_| ChannelTag(Arc::new(()))).collect())
     }
 
-    pub(in crate::harness) fn tag(&self, channel: ChannelId) -> Option<FaultTag> {
+    pub(in crate::harness) fn ch_tag(&self, channel: ChannelId) -> Option<ChannelTag> {
         self.0.get(channel.index()).cloned()
     }
 
@@ -42,7 +42,7 @@ impl Sources {
             function,
             sources: channels
                 .iter()
-                .map(|channel| self.tag(*channel).map(|tag| (*channel, tag)))
+                .map(|channel| self.ch_tag(*channel).map(|ch_tag| (*channel, ch_tag)))
                 .collect::<Option<_>>()?,
         })
     }
@@ -50,7 +50,7 @@ impl Sources {
 
 pub(in crate::harness) struct FaultHandler {
     function: FunctionId,
-    sources: Vec<(ChannelId, FaultTag)>,
+    sources: Vec<(ChannelId, ChannelTag)>,
 }
 
 impl FaultHandler {
@@ -60,7 +60,7 @@ impl FaultHandler {
         }
         self.sources
             .iter()
-            .find(|(_, tag)| *tag == report.tag)
+            .find(|(_, ch_tag)| *ch_tag == report.ch_tag)
             .map(|(channel, _)| *channel)
     }
 
@@ -72,7 +72,7 @@ impl FaultHandler {
 #[derive(Clone, Debug)]
 pub(super) struct TaggedRequest {
     pub identity: MemoryIdentity,
-    pub tag: Option<FaultTag>,
+    pub ch_tag: Option<ChannelTag>,
 }
 
 #[derive(Clone, Debug)]
@@ -89,7 +89,7 @@ impl Backend {
             sources,
             request: TaggedRequest {
                 identity,
-                tag: None,
+                ch_tag: None,
             },
         }
     }
@@ -100,9 +100,9 @@ impl Backend {
             sources: self.sources.clone(),
             request: TaggedRequest {
                 identity: request.identity,
-                tag: request
+                ch_tag: request
                     .channel
-                    .and_then(|channel| self.sources.tag(channel)),
+                    .and_then(|channel| self.sources.ch_tag(channel)),
             },
         }
     }

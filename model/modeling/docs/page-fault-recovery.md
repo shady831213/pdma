@@ -95,13 +95,17 @@ permissions. Additional classes such as repairable copy-on-write require an expl
 classification agreement. Repair must make mappings visible and perform required
 translation-cache invalidations before resume; a PTE store alone is insufficient.
 
-The platform attaches an opaque source tag to the outgoing request and the MMU
+The platform attaches an opaque channel-source tag (`ChannelTag`, carried as
+`ch_tag` in the scenario platform) to the outgoing request and the MMU
 returns it unchanged with the fault report. Function/PASID identifies an address
 space, not a physical channel: two channels may use the same PASID and VA. Software
 must use the platform's tag association, not infer the channel from those values.
 DMA continues to emit only its channel/context selectors. Neither DMA nor the MMU
 defines the platform tag's encoding or lookup policy. The resolved MemoryIdentity
 remains an address-space identity, independent of the tag.
+The name describes the source association, not a PDMA channel-index encoding or
+a fault-episode token. Context attributes and the channel tag remain separate:
+multiple channels may share one context, and one channel may use several contexts.
 
 ### PF-D05: suspension is neither completion nor a stopping error
 

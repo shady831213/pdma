@@ -5,8 +5,7 @@ mod transfer;
 
 use super::{Handler, HostVector, Ports, TestResult};
 use crate::harness::{
-    contexts::ATTRIBUTES,
-    page_fault::{FaultReport, Space},
+    page_fault::{FaultReport, Input, Space},
     runtime::AccessError,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, RegisterAccess};
@@ -43,6 +42,7 @@ pub struct Outcome {
 pub(in crate::harness) async fn main<M: Send>(
     ports: Ports<'_, M>,
     recovery: Recovery,
+    input: &Input,
 ) -> TestResult<Outcome> {
     let Recovery {
         sources,
@@ -56,8 +56,12 @@ pub(in crate::harness) async fn main<M: Send>(
     let mut handler = sources
         .handler(FunctionId::new(1), &[channel])
         .ok_or("unknown granted source")?;
-    let (mut driver, request, dst) =
-        transfer::prepare(&ports, channel, contexts, (&lists, &source, &destination)).await?;
+    let (mut driver, request, dst) = transfer::prepare(
+        &ports,
+        (Grant { channel, contexts }, [&lists, &source, &destination]),
+        input,
+    )
+    .await?;
     let (wake, mut notifications) = mpsc::unbounded_channel();
     ports
         .interrupts
@@ -85,11 +89,14 @@ pub(in crate::harness) async fn main<M: Send>(
         if report.identity.function != FunctionId::new(1) {
             return Err("fault reported for the wrong Function".into());
         }
-        let space = [(ATTRIBUTES[2], &source), (ATTRIBUTES[3], &destination)]
-            .into_iter()
-            .find(|(attributes, _)| *attributes == report.identity.attributes)
-            .map(|(_, space)| space)
-            .ok_or("unknown fault address space")?;
+        let space = [
+            (input.attributes[2], &source),
+            (input.attributes[3], &destination),
+        ]
+        .into_iter()
+        .find(|(attributes, _)| *attributes == report.identity.attributes)
+        .map(|(_, space)| space)
+        .ok_or("unknown fault address space")?;
         if !space.pages.repair(report.address) {
             return Err("reported page was not missing in its address space".into());
         }
@@ -109,7 +116,7 @@ pub(in crate::harness) async fn main<M: Send>(
     if driver.response().await?.is_some() {
         return Err("duplicate command response".into());
     }
-    outcome.bytes.resize(600, 0);
+    outcome.bytes.resize(input.payload.len(), 0);
     destination
         .allocator
         .memory_access()

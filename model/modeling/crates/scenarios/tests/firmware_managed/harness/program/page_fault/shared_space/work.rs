@@ -18,22 +18,26 @@ pub(super) struct Parked<M> {
 pub(super) async fn pair<M: Send>(
     ports: &Ports<'_, M>,
     recovery: &mut Recovery,
-    session: &setup::Session<M>,
+    (session, input): (&setup::Session<M>, &Input),
 ) -> TestResult<Parked<M>> {
     let handler = recovery
         .sources
         .handler(FunctionId::new(0), &session.channels)
         .ok_or("unknown source")?;
-    let (request, destinations) = setup::requests(&recovery.payload, session.payload_context)?;
+    let (request, destinations) =
+        setup::requests(&recovery.payload, session.payload_context, &input.payload)?;
     let mut work = Vec::new();
-    for ((index, channel), destination) in
-        session.channels.into_iter().enumerate().zip(destinations)
+    for ((channel, destination), id) in session
+        .channels
+        .into_iter()
+        .zip(destinations)
+        .zip(input.ids)
     {
         work.push(Work {
             channel,
             driver: setup::driver(ports, channel, session.ring_context).await?,
             request: Command {
-                id: 80 + u64::try_from(index)?,
+                id,
                 destination: Endpoint {
                     context: session.payload_context.raw(),
                     ..Endpoint::linear(destination.raw(), 0)

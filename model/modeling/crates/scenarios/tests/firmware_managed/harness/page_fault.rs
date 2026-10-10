@@ -4,16 +4,14 @@ pub(in crate::harness) mod platform;
 pub mod shared_space;
 
 use super::{
-    TestResult,
-    contexts::ATTRIBUTES,
-    program,
+    TestResult, program,
     runtime::{Managed, platform::ContextPlatform},
 };
 use hardware_interface_runtime::{MemoryAddress, SharedMemory, SharedMemoryAllocator};
 pub(in crate::harness) use memory::PageTable;
 pub use memory::{FaultAccess, FaultReport};
-use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
-pub use platform::FaultTag;
+use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
+pub use platform::ChannelTag;
 use std::{sync::Arc, time::Duration};
 
 pub(in crate::harness) struct Space {
@@ -21,26 +19,36 @@ pub(in crate::harness) struct Space {
     pub pages: PageTable,
 }
 
+/// Case-owned command, address spaces and fault locations.
+#[derive(Debug)]
+pub struct Input {
+    pub(crate) id: u64,
+    pub(crate) payload: Vec<u8>,
+    pub(crate) attributes: [ContextAttributes; 4],
+    pub(crate) splits: [u64; 2],
+    pub(crate) base: MemoryAddress,
+    pub(crate) fault_offset: u64,
+}
+
 /// Runs isolated address spaces and software repair against the managed hardware.
-pub async fn run() -> TestResult<(
+pub async fn run(
+    input: &Input,
+) -> TestResult<(
     program::page_fault::Outcome,
     Result<(), super::runtime::AccessError>,
 )> {
     let (reports, faults) = tokio::sync::mpsc::channel(2);
     let sources = platform::Sources::new(1);
     let spaces: [Space; 4] = std::array::from_fn(|_| Space {
-        allocator: SharedMemoryAllocator::new(
-            Arc::new(SharedMemory::new()),
-            MemoryAddress::new(0x1000),
-        ),
+        allocator: SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), input.base),
         pages: PageTable::default(),
     });
-    let mut backing = backing(&spaces, &sources, &reports);
+    let mut backing = backing((&spaces, input.attributes), &sources, &reports);
     let management =
         SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), MemoryAddress::new(0x1000));
     let identity = MemoryIdentity {
         function: FunctionId::new(0),
-        attributes: ATTRIBUTES[1],
+        attributes: input.attributes[1],
     };
     backing.push((
         identity,
@@ -84,6 +92,7 @@ pub async fn run() -> TestResult<(
                 finished,
                 released: release,
             },
+            input,
         )
         .await
     }));
@@ -100,6 +109,7 @@ pub async fn run() -> TestResult<(
                 finished: done,
                 released,
             },
+            input.attributes,
         )
         .await
     }));
@@ -112,11 +122,11 @@ pub async fn run() -> TestResult<(
 }
 
 fn backing(
-    spaces: &[Space; 4],
+    (spaces, attributes): (&[Space; 4], [ContextAttributes; 4]),
     sources: &platform::Sources,
     reports: &tokio::sync::mpsc::Sender<FaultReport>,
 ) -> Vec<(MemoryIdentity, platform::Backend)> {
-    ATTRIBUTES
+    attributes
         .into_iter()
         .zip(spaces)
         .map(|(attributes, space)| {

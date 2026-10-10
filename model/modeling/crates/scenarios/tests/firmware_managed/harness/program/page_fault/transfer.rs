@@ -1,27 +1,34 @@
 use super::super::buffers::Driver;
-use super::{Ports, Space, TestResult};
+use super::{Grant, Input, Ports, Space, TestResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
-use pdma_model_contract::dma::{ChannelId, Command, ContextId, Endpoint, Response, Segment};
+use pdma_model_contract::dma::{Command, ContextId, Endpoint, Response, Segment};
 use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings};
 use pdma_model_software::dma::ChannelControl;
 
 pub(super) async fn prepare<M: Send>(
     ports: &Ports<'_, M>,
-    channel: ChannelId,
-    [list_id, ring_id, source_id, destination_id]: [ContextId; 4],
-    (lists, source, destination): (&Space, &Space, &Space),
+    (grant, [lists, source, destination]): (Grant, [&Space; 3]),
+    input: &Input,
 ) -> TestResult<(Driver<M>, Command, MemoryAddress)> {
-    let data: Vec<u8> = (0_u8..=250).cycle().take(600).collect();
-    let src = source.allocator.allocate(600, MemoryAlignment::ONE)?;
-    let dst = destination.allocator.allocate(600, MemoryAlignment::ONE)?;
+    let Grant {
+        channel,
+        contexts: [list_id, ring_id, source_id, destination_id],
+    } = grant;
+    let length = u64::try_from(input.payload.len())?;
+    let src = source.allocator.allocate(length, MemoryAlignment::ONE)?;
+    let dst = destination
+        .allocator
+        .allocate(length, MemoryAlignment::ONE)?;
     source
         .allocator
         .memory_access()
-        .write(src, MemoryAlignment::ONE, &data)?;
-    let source_endpoint = endpoint(lists, src, 300, source_id)?;
-    let destination_endpoint = endpoint(lists, dst, 200, destination_id)?;
-    source.pages.evict((src.raw() + 256).into());
-    destination.pages.evict((dst.raw() + 256).into());
+        .write(src, MemoryAlignment::ONE, &input.payload)?;
+    let source_endpoint = endpoint(lists, (src, input.splits[0], length), source_id)?;
+    let destination_endpoint = endpoint(lists, (dst, input.splits[1], length), destination_id)?;
+    source.pages.evict((src.raw() + input.fault_offset).into());
+    destination
+        .pages
+        .evict((dst.raw() + input.fault_offset).into());
     let alignment = MemoryAlignment::try_new(u64::try_from(Command::RECORD_ALIGNMENT)?)?;
     let commands = ports
         .allocator
@@ -48,10 +55,10 @@ pub(super) async fn prepare<M: Send>(
     )
     .await?;
     let request = Command {
-        id: 17,
+        id: input.id,
         source: source_endpoint,
         destination: destination_endpoint,
-        copy_length: 600,
+        copy_length: length,
         sg_context: list_id.raw(),
         ..Command::ZERO
     };
@@ -60,8 +67,7 @@ pub(super) async fn prepare<M: Send>(
 
 fn endpoint(
     lists: &Space,
-    address: MemoryAddress,
-    split: u64,
+    (address, split, length): (MemoryAddress, u64, u64),
     context: ContextId,
 ) -> TestResult<Endpoint> {
     let base = lists.allocator.allocate(
@@ -75,7 +81,7 @@ fn endpoint(
         },
         Segment {
             address: address.raw() + split,
-            length: 600 - split,
+            length: length - split,
         },
     ]
     .iter()

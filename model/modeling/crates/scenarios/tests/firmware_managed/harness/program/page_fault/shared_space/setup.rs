@@ -88,7 +88,10 @@ impl<M: Send> Session<M> {
     }
 }
 
-pub(super) async fn session<M: Send>(ports: &Ports<'_, M>) -> TestResult<Session<M>> {
+pub(super) async fn session<M: Send>(
+    ports: &Ports<'_, M>,
+    payload_attributes: ContextAttributes,
+) -> TestResult<Session<M>> {
     pdma_model_host::firmware::wait_ready(
         &ports.bus,
         ports.bus.addresses().firmware,
@@ -103,7 +106,7 @@ pub(super) async fn session<M: Send>(ports: &Ports<'_, M>) -> TestResult<Session
         buffers::management_with_context(ports, irq, ContextAttributes::DEFAULT).await?;
     let function = FunctionId::new(0);
     let mut contexts = Vec::new();
-    for attributes in [ContextAttributes::DEFAULT, ATTRIBUTES] {
+    for attributes in [ContextAttributes::DEFAULT, payload_attributes] {
         manager.submit_create_context(function, attributes).await?;
         let response = manager.next_response().await?;
         if response.status != ControlResponseStatus::Success {
@@ -128,18 +131,20 @@ pub(super) async fn session<M: Send>(ports: &Ports<'_, M>) -> TestResult<Session
 pub(super) fn requests(
     payload: &Space,
     context: ContextId,
+    data: &[u8],
 ) -> TestResult<(Command, [hardware_interface_runtime::MemoryAddress; 2])> {
+    let length = u64::try_from(data.len())?;
     let source = payload
         .allocator
-        .allocate(256, MemoryAlignment::try_new(256)?)?;
+        .allocate(length, MemoryAlignment::try_new(256)?)?;
     let destinations = [
-        payload.allocator.allocate(256, MemoryAlignment::ONE)?,
-        payload.allocator.allocate(256, MemoryAlignment::ONE)?,
+        payload.allocator.allocate(length, MemoryAlignment::ONE)?,
+        payload.allocator.allocate(length, MemoryAlignment::ONE)?,
     ];
     payload
         .allocator
         .memory_access()
-        .write(source, MemoryAlignment::ONE, &[0x6d; 256])?;
+        .write(source, MemoryAlignment::ONE, data)?;
     payload.pages.evict(source);
     Ok((
         Command {
@@ -151,7 +156,7 @@ pub(super) fn requests(
                 context: context.raw(),
                 ..Endpoint::linear(0, 0)
             },
-            copy_length: 256,
+            copy_length: length,
             ..Command::ZERO
         },
         destinations,

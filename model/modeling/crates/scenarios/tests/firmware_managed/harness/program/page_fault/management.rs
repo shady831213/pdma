@@ -1,10 +1,10 @@
 use super::{Grant, Handler, HostVector, Ports, TestResult};
-use crate::harness::{contexts::ATTRIBUTES, program::buffers, runtime::AccessError};
+use crate::harness::{program::buffers, runtime::AccessError};
 use hardware_interface_runtime::RegisterAccess;
 use pdma_model_contract::{
     control::ControlResponseStatus,
     dma::{ChannelRegisters, ContextId},
-    memory::FunctionId,
+    memory::{ContextAttributes, FunctionId},
 };
 use pdma_model_host::firmware;
 use pdma_model_software::control::InterruptEvent;
@@ -20,6 +20,7 @@ pub(in crate::harness) struct Lifecycle {
 pub(in crate::harness) async fn run<M: Send>(
     ports: Ports<'_, M>,
     lifecycle: Lifecycle,
+    attributes: [ContextAttributes; 4],
 ) -> TestResult<Result<(), AccessError>> {
     firmware::wait_ready(
         &ports.bus,
@@ -32,10 +33,10 @@ pub(in crate::harness) async fn run<M: Send>(
         .interrupts
         .register(HostVector::Control, Handler::Control(control_irq.handler()))?;
     let mut management =
-        buffers::management_with_context(&ports, control_irq, ATTRIBUTES[1]).await?;
+        buffers::management_with_context(&ports, control_irq, attributes[1]).await?;
     let function = FunctionId::new(1);
     let mut contexts = Vec::new();
-    for attributes in ATTRIBUTES {
+    for attributes in attributes {
         management
             .submit_create_context(function, attributes)
             .await?;

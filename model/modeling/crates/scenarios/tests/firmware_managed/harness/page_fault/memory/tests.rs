@@ -5,11 +5,11 @@ use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::memory::{ContextAttributes, FunctionId};
 
 #[test]
-fn same_space_fault_reports_distinguish_originating_channels() {
+fn same_space_channel_tags_preserve_origins_for_duplicate_reports() {
     // Given: two channel requests touch the same missing page in the same address space.
     let allocator = SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into());
     let address = allocator.allocate(4, MemoryAlignment::ONE).unwrap();
-    let (reports, mut receiver) = mpsc::channel(2);
+    let (reports, mut receiver) = mpsc::channel(3);
     let sources = Sources::new(2);
     let identity = MemoryIdentity {
         function: FunctionId::new(1),
@@ -22,12 +22,12 @@ fn same_space_fault_reports_distinguish_originating_channels() {
     };
     memory.pages.evict(address);
     // When: both accesses fault before either owner repairs the shared page.
-    for channel in 0..2 {
+    for channel in [0, 1, 0] {
         assert_eq!(
             memory.write_with_sideband(
                 &TaggedRequest {
                     identity,
-                    tag: sources.tag(ChannelId::new(channel))
+                    ch_tag: sources.ch_tag(ChannelId::new(channel))
                 },
                 address,
                 MemoryAlignment::ONE,
@@ -39,10 +39,12 @@ fn same_space_fault_reports_distinguish_originating_channels() {
     // Then: platform reports must retain enough origin information for separate resumes.
     let first = receiver.try_recv().unwrap();
     let second = receiver.try_recv().unwrap();
+    let duplicate = receiver.try_recv().unwrap();
     assert_ne!(
         first, second,
         "same-space reports lost the originating channel"
     );
+    assert_eq!(duplicate, first);
 }
 
 #[test]
@@ -59,7 +61,7 @@ fn platform_write_fault_reports_identity_without_committing_bytes() {
             function: FunctionId::new(1),
             attributes: ContextAttributes::DEFAULT,
         },
-        tag: sources.tag(ChannelId::new(0)),
+        ch_tag: sources.ch_tag(ChannelId::new(0)),
     };
     let memory = Paged {
         memory: allocator.memory_access(),
@@ -79,7 +81,7 @@ fn platform_write_fault_reports_identity_without_committing_bytes() {
         receiver.try_recv().unwrap(),
         FaultReport {
             identity: request.identity,
-            tag: request.tag.unwrap(),
+            ch_tag: request.ch_tag.unwrap(),
             address,
             access: FaultAccess::Write
         }

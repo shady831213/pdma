@@ -8,26 +8,26 @@ use crate::harness::{
     runtime::{Managed, platform::ContextPlatform},
 };
 use hardware_interface_runtime::{SharedMemory, SharedMemoryAllocator};
-use pdma_model_contract::memory::{
-    ContextAttributes, ContextAttributesAddressSpace, FunctionId, MemoryIdentity,
-};
+use pdma_model_contract::memory::{ContextAttributes, FunctionId, MemoryIdentity};
 pub use program::page_fault::shared_space::{Lifecycle, Outcome};
 use std::{sync::Arc, time::Duration};
 
-pub(in crate::harness) const ATTRIBUTES: ContextAttributes = ContextAttributes {
-    address_space: ContextAttributesAddressSpace::Pasid,
-    pasid: 7,
-};
+pub(crate) struct Input {
+    pub ids: [u64; 3],
+    pub payload: Vec<u8>,
+    pub attributes: ContextAttributes,
+    pub lifecycle: Lifecycle,
+}
 
 /// Runs two channels sharing a faulting PASID, then retires handling before channel reuse.
-pub async fn run(lifecycle: Lifecycle) -> TestResult<Outcome> {
+pub(crate) async fn run(input: &Input) -> TestResult<Outcome> {
     let (sender, reports) = tokio::sync::mpsc::channel(4);
     let sources = Sources::new(2);
     let spaces: [Space; 2] = std::array::from_fn(|_| Space {
         allocator: SharedMemoryAllocator::new(Arc::new(SharedMemory::new()), 0x1000.into()),
         pages: PageTable::default(),
     });
-    let backing = [ContextAttributes::DEFAULT, ATTRIBUTES]
+    let backing = [ContextAttributes::DEFAULT, input.attributes]
         .into_iter()
         .zip(&spaces)
         .map(|(attributes, space)| {
@@ -72,8 +72,8 @@ pub async fn run(lifecycle: Lifecycle) -> TestResult<Outcome> {
                 sources,
                 foreign_sources: Sources::new(2),
                 reports,
-                lifecycle,
             },
+            input,
         )
         .await
     }));

@@ -3,7 +3,7 @@ mod work;
 
 use super::{Ports, TestResult};
 use crate::harness::{
-    page_fault::{FaultReport, Space, platform::Sources, shared_space::ATTRIBUTES},
+    page_fault::{FaultReport, Space, platform::Sources, shared_space::Input},
     program::{
         Handler, HostVector,
         buffers::{self, Driver},
@@ -32,7 +32,6 @@ pub(in crate::harness) struct Recovery {
     pub sources: Sources,
     pub foreign_sources: Sources,
     pub reports: mpsc::Receiver<FaultReport>,
-    pub lifecycle: Lifecycle,
 }
 
 /// Observable report correlation, completion and handler-retirement results.
@@ -49,19 +48,19 @@ pub struct Outcome {
 pub(in crate::harness) async fn main<M: Send>(
     ports: Ports<'_, M>,
     mut recovery: Recovery,
+    input: &Input,
 ) -> TestResult<Outcome> {
-    let mut session = setup::session(&ports).await?;
+    let mut session = setup::session(&ports, input.attributes).await?;
     let work::Parked {
         mut work,
         faults: [first, second],
         mut handler,
-    } = work::pair(&ports, &mut recovery, &session).await?;
+    } = work::pair(&ports, &mut recovery, (&session, input)).await?;
     let Recovery {
         payload,
         sources,
         foreign_sources,
         mut reports,
-        lifecycle,
     } = recovery;
     let function = FunctionId::new(0);
     let memory = payload.allocator.memory_access();
@@ -97,13 +96,18 @@ pub(in crate::harness) async fn main<M: Send>(
     if reports.try_recv().is_ok() {
         return Err("undrained fault report before lifecycle".into());
     }
-    let new_channel = session.recycle(lifecycle, selected).await?;
+    let new_channel = session.recycle(input.lifecycle, selected).await?;
     let mut next_handler = sources
         .handler(function, &[new_channel])
         .ok_or("unknown new source")?;
     let mut next_driver = setup::driver(&ports, new_channel, session.ring_context).await?;
     payload.pages.evict(first.address);
-    next_driver.submit(Command { id: 90, ..request }).await?;
+    next_driver
+        .submit(Command {
+            id: input.ids[2],
+            ..request
+        })
+        .await?;
     let fresh = reports.recv().await.ok_or("missing fresh fault")?;
     setup::parked(&mut next_driver).await?;
     let stale_rejected = handler.resolve(&first).is_none()
@@ -126,7 +130,7 @@ pub(in crate::harness) async fn main<M: Send>(
     session.manager.release_channel(function, peer).await?;
     let bytes = work
         .iter()
-        .map(|task| buffers::read(&memory, task.destination, 256))
+        .map(|task| buffers::read(&memory, task.destination, input.payload.len()))
         .collect::<TestResult<_>>()?;
     Ok(Outcome {
         faults: vec![first, second],

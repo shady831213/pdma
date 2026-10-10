@@ -1,4 +1,4 @@
-use super::{FaultTag, platform::TaggedRequest};
+use super::{ChannelTag, platform::TaggedRequest};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemoryAccess,
 };
@@ -26,7 +26,7 @@ pub enum FaultAccess {
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Platform fault identity, independent of the DMA response protocol.
 pub struct FaultReport {
-    pub(crate) tag: FaultTag,
+    pub(crate) ch_tag: ChannelTag,
     /// Function and address space selected by the memory router.
     pub identity: MemoryIdentity,
     /// First missing address touched by the access.
@@ -127,7 +127,7 @@ impl Paged {
             self.reports
                 .try_send(FaultReport {
                     identity: request.identity,
-                    tag: request.tag.clone().ok_or(PageError::MissingSource)?,
+                    ch_tag: request.ch_tag.clone().ok_or(PageError::MissingSource)?,
                     address,
                     access,
                 })

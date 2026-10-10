@@ -74,24 +74,31 @@ fn platform_reports_distinguish_channels_sharing_function_and_pasid() {
     let table = configured_table(&windows).unwrap();
     let backend = PlatformMemory::new().unwrap();
     let port = table.memory(&windows, &backend).map_sideband(sideband);
+    let channels = [0, 1];
+    let payload = [42; 4];
     // When: both channels validate, write and read through the routing boundary.
-    for channel in [0, 1] {
+    for channel in channels {
         let access = DmaAccess {
             channel: ChannelId::new(channel),
             context: ContextId::new(0),
         };
-        port.validate_with_sideband(&access, ADDRESS, MemoryAlignment::ONE, 4)
-            .unwrap();
-        port.write_with_sideband(&access, ADDRESS, MemoryAlignment::ONE, &[42; 4])
+        port.validate_with_sideband(
+            &access,
+            ADDRESS,
+            MemoryAlignment::ONE,
+            u64::try_from(payload.len()).unwrap(),
+        )
+        .unwrap();
+        port.write_with_sideband(&access, ADDRESS, MemoryAlignment::ONE, &payload)
             .unwrap();
         assert_eq!(
             port.read_typed_with_sideband::<[u8; 4]>(&access, ADDRESS, MemoryAlignment::ONE)
                 .unwrap(),
-            [42; 4]
+            payload
         );
     }
     // Then: the backend reports distinct opaque platform tags with unchanged address identity.
-    let expected: Vec<_> = [0, 1]
+    let expected: Vec<_> = channels
         .into_iter()
         .flat_map(|channel| {
             let sideband = sideband(

@@ -6,7 +6,7 @@ use hardware_interface_schema::{
 };
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelBlockValues, ChannelIrqMaskValues, ChannelRegisters, DmaControl,
-    DmaRegisters,
+    DmaRegisters, ResponseRegisters,
 };
 
 #[test]
@@ -69,15 +69,25 @@ fn register_offsets_are_aligned_when_maps_are_nested() -> Result<(), Box<dyn std
 fn generated_access_updates_selected_leaf_when_registers_are_nested() {
     // Given: reset register storage with a visible sibling value.
     let mut channel = ChannelBlockValues::default();
-    channel.command.producer = pdma_model_contract::register::WordValues::new(9);
+    let command_producer = 9;
+    let response_producer = 17;
+    let response_offset = ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset();
+    channel.command.producer = pdma_model_contract::register::WordValues::new(command_producer);
     // When: hardware updates the response producer through generated offset dispatch.
-    let result = ChannelBlock::write_register(&mut channel, 36, 17);
+    let result =
+        ChannelBlock::write_register(&mut channel, response_offset, u64::from(response_producer));
     // Then: only the selected nested leaf changes.
     assert_eq!(result, Some(()));
-    assert_eq!(channel.response.producer.raw(), 17);
-    assert_eq!(channel.command.producer.raw(), 9);
-    assert_eq!(ChannelBlock::read_register(&channel, 36), Some(17));
-    assert_eq!(ChannelBlock::read_register(&channel, 37), None);
+    assert_eq!(channel.response.producer.raw(), response_producer);
+    assert_eq!(channel.command.producer.raw(), command_producer);
+    assert_eq!(
+        ChannelBlock::read_register(&channel, response_offset),
+        Some(u64::from(response_producer))
+    );
+    assert_eq!(
+        ChannelBlock::read_register(&channel, response_offset + 1),
+        None
+    );
 }
 
 #[test]

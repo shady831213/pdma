@@ -1,5 +1,5 @@
 use super::{
-    Operation, PlatformMemory, Sideband, Tag,
+    Operation, PlatformMemory, Sideband,
     backend::{ADDRESS, Error},
     tag,
 };
@@ -25,29 +25,34 @@ fn platform_tags_distinguish_same_function_channels_without_context_table() {
             },
             tag: tag(channel),
         });
+    let channels = [ChannelId::new(0), ChannelId::new(1)];
+    let payload = [37; 4];
     // When: each channel validates, writes and reads the same address.
-    for channel in [ChannelId::new(0), ChannelId::new(1)] {
-        port.validate_with_sideband(&channel, ADDRESS, MemoryAlignment::ONE, 4)
-            .unwrap();
-        port.write_with_sideband(&channel, ADDRESS, MemoryAlignment::ONE, &[37; 4])
+    for channel in channels {
+        port.validate_with_sideband(
+            &channel,
+            ADDRESS,
+            MemoryAlignment::ONE,
+            u64::try_from(payload.len()).unwrap(),
+        )
+        .unwrap();
+        port.write_with_sideband(&channel, ADDRESS, MemoryAlignment::ONE, &payload)
             .unwrap();
         assert_eq!(
             port.read_typed_with_sideband::<[u8; 4]>(&channel, ADDRESS, MemoryAlignment::ONE)
                 .unwrap(),
-            [37; 4]
+            payload
         );
     }
     // Then: all methods deliver distinct opaque tokens while preserving the common owner.
     let reports = backend.reports.borrow();
-    let expected: Vec<_> = [
-        Tag::Amber([0xe1, 0x37, 0x92]),
-        Tag::Indigo("platform-selected"),
-    ]
-    .into_iter()
-    .flat_map(|tag| {
-        [Operation::Validate, Operation::Write, Operation::Read].map(|op| (tag.clone(), op))
-    })
-    .collect();
+    let expected: Vec<_> = channels
+        .into_iter()
+        .map(tag)
+        .flat_map(|tag| {
+            [Operation::Validate, Operation::Write, Operation::Read].map(|op| (tag.clone(), op))
+        })
+        .collect();
     assert_eq!(
         reports
             .iter()

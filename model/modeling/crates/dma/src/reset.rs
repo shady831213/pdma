@@ -74,8 +74,8 @@ where
     fn step(
         &mut self,
         context: &mut Dma<M, SB>,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Error, W> {
+        mut state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Error, W> {
         if self.channel.is_some_and(|channel| channel != state.channel) {
             return StepOutcome::Complete(Err(Error::Routing));
         }
@@ -89,7 +89,7 @@ where
         if selected.halted() {
             return StepOutcome::Complete(Err(Error::Halted));
         }
-        match self.stage.step(&mut selected, &mut state.value) {
+        match self.stage.step(&mut selected, state.value) {
             StepOutcome::Complete(result) => {
                 StepOutcome::Complete(result.map(|value| ChannelTask {
                     channel: state.channel,
@@ -97,9 +97,14 @@ where
                     value,
                 }))
             }
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
+            StepOutcome::Progressed(value) => {
+                state.value = value;
+                StepOutcome::Progressed(state)
+            }
+            StepOutcome::Pending(value, wait) => {
+                state.value = value;
+                StepOutcome::Pending(state, wait)
+            }
         }
     }
 }

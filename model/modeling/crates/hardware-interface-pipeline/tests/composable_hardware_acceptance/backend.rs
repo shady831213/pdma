@@ -7,7 +7,7 @@ use std::{
     task::{Poll, Waker},
 };
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_pipeline::AsyncInteractionBackend;
 
 use super::stages::Environment;
 
@@ -48,11 +48,10 @@ impl Backend {
 impl AsyncInteractionBackend<Environment, ()> for Backend {
     type Error = &'static str;
 
-    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Self::Error>
+    async fn interact<R, F>(&self, interaction: F) -> Result<R, Self::Error>
     where
-        O: Send,
-        E: Send,
-        F: FnOnce(&mut Environment) -> StepOutcome<O, E, ()> + Send,
+        R: Send,
+        F: FnOnce(&mut Environment) -> R + Send,
     {
         let mut environment = self
             .environment

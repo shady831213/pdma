@@ -28,22 +28,22 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
     type Output = CopyState;
     type Error = Error;
     type Wait = ();
-    type State = Option<RangeCheck>;
+    type State = RangeCheck;
 
     fn start(command: Command) -> Self::State {
-        Some(RangeCheck {
+        RangeCheck {
             cursor: Cursor::new(command.source, command.copy_length),
             remaining: command.copy_length,
             command,
             side: Side::Source,
-        })
+        }
     }
 
     fn step(
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
-        state: &mut Self::State,
-    ) -> StepOutcome<CopyState, Error, ()> {
+        mut scan: Self::State,
+    ) -> StepOutcome<Self::State, CopyState, Error, ()> {
         if context.channel.resetting() {
             return StepOutcome::Complete(Err(Error::Reset));
         }
@@ -51,18 +51,15 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() {
-            return StepOutcome::Pending(());
+            return StepOutcome::Pending(scan, ());
         }
-        let Some(scan) = state.as_mut() else {
-            return StepOutcome::Exhausted;
-        };
         let result = if scan.remaining == 0 {
             match scan.side {
                 Side::Source => {
                     scan.cursor = Cursor::new(scan.command.destination, scan.command.copy_length);
                     scan.remaining = scan.command.copy_length;
                     scan.side = Side::Destination;
-                    return StepOutcome::Progressed;
+                    return StepOutcome::Progressed(scan);
                 }
                 Side::Destination => ResponseStatus::Success,
             }
@@ -84,7 +81,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
                     } else {
                         scan.cursor.advance(count);
                         scan.remaining -= count;
-                        return StepOutcome::Progressed;
+                        return StepOutcome::Progressed(scan);
                     }
                 }
                 Ok(false) => ResponseStatus::LengthMismatch,
@@ -92,7 +89,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
             }
         };
         let output = CopyState::new(scan.command, result);
-        *state = None;
         StepOutcome::Complete(Ok(output))
     }
 }

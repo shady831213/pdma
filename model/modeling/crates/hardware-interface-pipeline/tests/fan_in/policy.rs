@@ -35,14 +35,14 @@ where
         &mut self,
         context: &C,
         sources: &[S],
-        visited: &mut usize,
-    ) -> StepOutcome<usize, S::Error, &'static str> {
-        if *visited == 0 && self.fixed {
+        mut visited: usize,
+    ) -> StepOutcome<Self::State, (Self::State, usize), S::Error, &'static str> {
+        if visited == 0 && self.fixed {
             self.cursor = 0;
         }
         let index = self.cursor;
         let Some(source) = sources.get(index) else {
-            return StepOutcome::Exhausted;
+            return StepOutcome::Pending(visited, self.wait);
         };
         self.cursor = if index + 1 < sources.len() {
             index + 1
@@ -50,14 +50,14 @@ where
             0
         };
         if source.ready(context) {
-            return StepOutcome::Complete(Ok(index));
+            return StepOutcome::Complete(Ok((visited, index)));
         }
-        *visited += 1;
-        if *visited < sources.len() {
-            StepOutcome::Progressed
+        visited += 1;
+        if visited < sources.len() {
+            StepOutcome::Progressed(visited)
         } else {
-            *visited = 0;
-            StepOutcome::Pending(self.wait)
+            visited = 0;
+            StepOutcome::Pending(visited, self.wait)
         }
     }
 }

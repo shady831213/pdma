@@ -20,7 +20,7 @@ pub(super) struct Frame<'a, C, S, P> {
 }
 
 pub(super) type FanState<I, M, D, T, O> =
-    ThenState<Option<I>, ThenState<Option<RunBranchState<M, D, T, O>>, Option<(M, Vec<O>)>>>;
+    ThenState<I, ThenState<RunBranchState<M, D, T, O>, (M, Vec<O>)>>;
 
 type Pipeline<A, M, F> = Then<A, Then<Branches<M>, Reduce<M, F>>>;
 
@@ -47,21 +47,20 @@ impl<S, P> Fan<S, P> {
         match state {
             ThenState::Downstream(next) => match next {
                 ThenState::Upstream(branches) => branches
-                    .as_ref()
-                    .and_then(RunBranchState::unstarted_index)
+                    .unstarted_index()
                     .and_then(|index| self.ports.get(index)),
-                ThenState::Downstream(_) | ThenState::Done => None,
+                ThenState::Downstream(_) => None,
             },
-            ThenState::Upstream(_) | ThenState::Done => None,
+            ThenState::Upstream(_) => None,
         }
     }
 
     pub(super) fn step<'a, C, A>(
         &'a mut self,
         context: &'a mut C,
-        state: &mut A::State,
+        state: A::State,
         mut pipeline: A,
-    ) -> StepOutcome<A::Output, A::Error, A::Wait>
+    ) -> StepOutcome<A::State, A::Output, A::Error, A::Wait>
     where
         A: Stage<Frame<'a, C, S, P>>,
     {

@@ -1,6 +1,6 @@
 //! Generation-bound task handoff through the shared execution pipeline.
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::{Operation, RunOutcome};
 use hardware_interface_runtime::SharedMemory;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::Dma;
@@ -17,17 +17,17 @@ fn idle_or_device_fatal_parks_after_a_full_round() -> Result<(), Box<dyn std::er
         }
         // When: every channel receives one arbitration attempt.
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut hardware, &mut device)?,
+            RunOutcome::Progressed
         ));
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut hardware, &mut device)?,
+            RunOutcome::Progressed
         ));
         // Then: the driver waits instead of spinning or terminating.
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Pending(())
+            operation.step(&mut hardware, &mut device)?,
+            RunOutcome::Pending(())
         ));
     }
     assert!(device.channel_context(ChannelId::new(3)).is_err());
@@ -56,14 +56,14 @@ fn different_instance_counts_control_arbitration_wait_rounds()
         // When: scanning each empty population.
         for _ in 1..count {
             assert!(matches!(
-                operation.step(&mut arbiter, &mut device),
-                StepOutcome::Progressed
+                operation.step(&mut arbiter, &mut device)?,
+                RunOutcome::Progressed
             ));
         }
         // Then: only the actual population determines when arbitration waits.
         assert!(matches!(
-            operation.step(&mut arbiter, &mut device),
-            StepOutcome::Pending(())
+            operation.step(&mut arbiter, &mut device)?,
+            RunOutcome::Pending(())
         ));
     }
     Ok(())

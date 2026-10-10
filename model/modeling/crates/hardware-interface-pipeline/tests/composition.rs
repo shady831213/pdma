@@ -2,7 +2,7 @@
 
 use std::{cell::Cell, rc::Rc};
 
-use hardware_interface_pipeline::{Operation, PipelineExt, Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{Operation, PipelineExt, RunOutcome, Stage, StepOutcome, Then};
 
 #[derive(Debug, PartialEq, Eq)]
 struct OwnedInput(String, Rc<Cell<usize>>);
@@ -29,21 +29,19 @@ impl Stage<Context> for Upstream {
     type Error = OwnedError;
     type Output = OwnedInput;
     type Wait = OwnedWait;
-    type State = Option<Self::Input>;
+    type State = Self::Input;
 
     fn start(input: Self::Input) -> Self::State {
-        Some(input)
+        input
     }
 
     fn step(
         &mut self,
         _: &mut Context,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
         self.calls.set(self.calls.get() + 1);
-        state
-            .take()
-            .map_or(StepOutcome::Exhausted, StepOutcome::Complete)
+        StepOutcome::Complete(state)
     }
 }
 
@@ -75,8 +73,8 @@ impl Stage<Context> for Downstream {
     fn step(
         &mut self,
         _: &mut Context,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        mut state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
         self.calls.set(self.calls.get() + 1);
         if state.pending_remaining == 0 {
             StepOutcome::Complete(Ok(OwnedOutput(format!(
@@ -85,7 +83,7 @@ impl Stage<Context> for Downstream {
             ))))
         } else {
             state.pending_remaining -= 1;
-            StepOutcome::Pending(OwnedWait("owned pending token".to_owned()))
+            StepOutcome::Pending(state, OwnedWait("owned pending token".to_owned()))
         }
     }
 }
@@ -112,7 +110,7 @@ fn downstream_pending_starts_once_without_replaying_upstream() {
     let transition = operation.step(&mut pipeline, &mut context);
 
     // Then: starting downstream state is a boundary and does not poll downstream hardware.
-    assert_eq!(transition, StepOutcome::Progressed);
+    assert_eq!(transition, Ok(RunOutcome::Progressed));
     assert_eq!(upstream_calls.get(), 1);
     assert_eq!(starts.get(), 1);
     assert_eq!(downstream_calls.get(), 0);
@@ -127,7 +125,9 @@ fn downstream_pending_starts_once_without_replaying_upstream() {
         let pending = operation.step(&mut pipeline, &mut context);
         assert_eq!(
             pending,
-            StepOutcome::Pending(OwnedWait("owned pending token".to_owned()))
+            Ok(RunOutcome::Pending(OwnedWait(
+                "owned pending token".to_owned()
+            )))
         );
         drop(pending);
     }
@@ -135,13 +135,13 @@ fn downstream_pending_starts_once_without_replaying_upstream() {
     let complete = operation.step(&mut pipeline, &mut context);
     assert_eq!(
         complete,
-        StepOutcome::Complete(Ok(OwnedOutput(
+        Ok(RunOutcome::Complete(Ok(OwnedOutput(
             "upstream input -> downstream output".to_owned()
-        )))
+        ))))
     );
     assert_eq!(
         operation.step(&mut pipeline, &mut context),
-        StepOutcome::Exhausted
+        Err(hardware_interface_pipeline::AlreadyComplete)
     );
     assert_eq!(upstream_calls.get(), 1);
     assert_eq!(starts.get(), 1);
@@ -155,7 +155,7 @@ fn downstream_pending_starts_once_without_replaying_upstream() {
 }
 
 #[test]
-fn adverse_upstream_error_skips_downstream_and_remains_exhausted() {
+fn adverse_upstream_error_skips_downstream_and_remains_complete() {
     // Given: an upstream error and persistent downstream hardware with observable calls.
     let upstream_calls = Rc::new(Cell::new(0));
     let downstream_calls = Rc::new(Cell::new(0));
@@ -174,20 +174,22 @@ fn adverse_upstream_error_skips_downstream_and_remains_exhausted() {
     // Then: downstream is never polled, and terminal operation steps are inert.
     assert_eq!(
         error,
-        StepOutcome::Complete(Err(OwnedError("upstream error".to_owned())))
+        Ok(RunOutcome::Complete(Err(OwnedError(
+            "upstream error".to_owned()
+        ))))
     );
     assert_eq!(
         operation.step(&mut pipeline, &mut context),
-        StepOutcome::Exhausted
+        Err(hardware_interface_pipeline::AlreadyComplete)
     );
     assert_eq!(
         operation.step(&mut pipeline, &mut context),
-        StepOutcome::Exhausted
+        Err(hardware_interface_pipeline::AlreadyComplete)
     );
     assert_eq!(upstream_calls.get(), 1);
     assert_eq!(downstream_calls.get(), 0);
     println!(
-        "adverse upstream={} downstream={} post_terminal=Exhausted",
+        "adverse upstream={} downstream={} post_terminal=AlreadyComplete",
         upstream_calls.get(),
         downstream_calls.get()
     );

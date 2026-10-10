@@ -17,15 +17,15 @@ where
     type Output = Transfer;
     type Error = Error;
     type Wait = ();
-    type State = Option<Transfer>;
+    type State = Transfer;
     fn start(input: Transfer) -> Self::State {
-        Some(input)
+        input
     }
     fn step(
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
-        state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
+        mut transfer: Self::State,
+    ) -> StepOutcome<Self::State, Transfer, Error, ()> {
         if context.channel.resetting() {
             return StepOutcome::Complete(Err(Error::Reset));
         }
@@ -33,11 +33,8 @@ where
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() || context.channel.registers.values.fault_status.faulted() {
-            return StepOutcome::Pending(());
+            return StepOutcome::Pending(transfer, ());
         }
-        let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
         match transfer.progress.status {
             ResponseStatus::Success if transfer.length > 0 => {
                 match transfer.bytes.get_mut(..transfer.length) {
@@ -49,9 +46,8 @@ where
                             Ok(()) => {}
                             Err(error) => match error.into() {
                                 MemoryFailure::PageFault { .. } => {
-                                    *state = Some(transfer);
                                     context.channel.suspend();
-                                    return StepOutcome::Pending(());
+                                    return StepOutcome::Pending(transfer, ());
                                 }
                                 MemoryFailure::Access => {
                                     transfer.progress.status = ResponseStatus::ReadError;
@@ -85,15 +81,15 @@ where
     type Output = ControlFlow<Response, CopyState>;
     type Error = Error;
     type Wait = ();
-    type State = Option<Transfer>;
+    type State = Transfer;
     fn start(input: Transfer) -> Self::State {
-        Some(input)
+        input
     }
     fn step(
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Error, ()> {
+        mut transfer: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Error, ()> {
         if context.channel.resetting() {
             return StepOutcome::Complete(Err(Error::Reset));
         }
@@ -101,11 +97,8 @@ where
             return StepOutcome::Complete(Err(Error::Halted));
         }
         if !context.channel.enabled() || context.channel.registers.values.fault_status.faulted() {
-            return StepOutcome::Pending(());
+            return StepOutcome::Pending(transfer, ());
         }
-        let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
         match transfer.progress.status {
             ResponseStatus::Success => {
                 match (
@@ -140,9 +133,8 @@ where
                             }
                             Err(error) => match error.into() {
                                 MemoryFailure::PageFault { .. } => {
-                                    *state = Some(transfer);
                                     context.channel.suspend();
-                                    return StepOutcome::Pending(());
+                                    return StepOutcome::Pending(transfer, ());
                                 }
                                 MemoryFailure::Access => {
                                     transfer.progress.status = ResponseStatus::WriteError;

@@ -2,11 +2,13 @@ use crate::{
     RESET,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{AlreadyComplete, Operation, RunOutcome, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, Command, CommandRegisters};
-use pdma_model_dma::{ChannelFatal, ChannelTask, Dma, Error, Intake, ResetControl, RunCommand};
-use std::{cell::Cell, ops::ControlFlow, rc::Rc};
+use pdma_model_dma::{
+    ChannelFatal, ChannelTask, CommandTurn, Dma, Error, Intake, ResetControl, RunCommand,
+};
+use std::{cell::Cell, rc::Rc};
 
 struct DropWitness(Rc<Cell<usize>>);
 
@@ -26,7 +28,7 @@ struct RetainingChild {
     intake: Intake,
     drops: Rc<Cell<usize>>,
     calls: Rc<Cell<usize>>,
-    terminal: StepOutcome<(), Error, ()>,
+    terminal: Result<(), Error>,
 }
 
 impl Stage<Dma<SharedMemory>> for RetainingChild {
@@ -47,22 +49,22 @@ impl Stage<Dma<SharedMemory>> for RetainingChild {
     fn step(
         &mut self,
         device: &mut Dma<SharedMemory>,
-        state: &mut Retained,
-    ) -> StepOutcome<(), Error, ()> {
+        mut state: Retained,
+    ) -> StepOutcome<Retained, (), Error, ()> {
         self.calls.set(self.calls.get() + 1);
         if state.task.is_some() {
-            return std::mem::replace(&mut self.terminal, StepOutcome::Pending(()));
+            return StepOutcome::Complete(self.terminal);
         }
         match state.intake.step(&mut self.intake, device) {
-            StepOutcome::Complete(Ok(task)) => {
+            Ok(RunOutcome::Complete(Ok(task))) => {
                 state.task = Some(task);
                 state.witness = Some(DropWitness(Rc::clone(&self.drops)));
-                StepOutcome::Pending(())
+                StepOutcome::Pending(state, ())
             }
-            StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(()) => StepOutcome::Pending(()),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
+            Ok(RunOutcome::Complete(Err(error))) => StepOutcome::Complete(Err(error)),
+            Ok(RunOutcome::Progressed) => StepOutcome::Progressed(state),
+            Ok(RunOutcome::Pending(())) => StepOutcome::Pending(state, ()),
+            Err(AlreadyComplete) => StepOutcome::Complete(Err(Error::Routing)),
         }
     }
 }
@@ -70,24 +72,13 @@ impl Stage<Dma<SharedMemory>> for RetainingChild {
 #[test]
 fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() -> TestResult {
     for terminal in [
-        StepOutcome::Complete(Ok(())),
-        StepOutcome::Complete(Err(Error::Reset)),
-        StepOutcome::Complete(Err(Error::ChannelFatal(ChannelFatal::ResponseWrite))),
-        StepOutcome::Complete(Err(Error::Halted)),
-        StepOutcome::Complete(Err(Error::Routing)),
-        StepOutcome::Exhausted,
+        Ok(()),
+        Err(Error::Reset),
+        Err(Error::ChannelFatal(ChannelFatal::ResponseWrite)),
+        Err(Error::Halted),
+        Err(Error::Routing),
     ] {
         // Given: a child that retains accepted work even when returning a terminal result.
-        let expected = match terminal {
-            StepOutcome::Complete(
-                Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
-            ) => StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
-            StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-            StepOutcome::Progressed | StepOutcome::Pending(()) => {
-                return Err("nonterminal fixture".into());
-            }
-        };
         let (mut device, memory) = setup(0x1100, 2)?;
         submit(&mut device, &memory, command())?;
         let drops = Rc::new(Cell::new(0));
@@ -98,12 +89,12 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
             calls: Rc::clone(&calls),
             terminal,
         });
-        let mut state = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
+        let mut state = Operation::<RunCommand<RetainingChild>, Dma<SharedMemory>>::new(());
         let mut accepted = false;
         for _ in 0..32 {
             if matches!(
-                hardware.step(&mut device, &mut state),
-                StepOutcome::Pending(())
+                state.step(&mut hardware, &mut device),
+                Ok(RunOutcome::Pending(()))
             ) {
                 accepted = true;
                 break;
@@ -112,21 +103,31 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         assert!(accepted);
         assert_eq!(drops.get(), 0);
         device.write(RESET, &1_u32.to_le_bytes())?;
-        let _ = ResetControl.step(&mut device, &mut ());
+        let _ = ResetControl.step(&mut device, ());
         assert_eq!(read_word(&mut device, RESET)?, 1);
         // When: the lifecycle wrapper observes the terminal child result.
-        let outcome = hardware.step(&mut device, &mut state);
+        let outcome = state.step(&mut hardware, &mut device);
         // Then: state is disposed while the caller still retains the wrapper state.
-        assert_eq!(outcome, expected);
+        match terminal {
+            Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted) => {
+                assert!(matches!(
+                    outcome,
+                    Ok(RunOutcome::Complete(Ok(CommandTurn::Finished)))
+                ));
+            }
+            Err(expected) => assert!(
+                matches!(outcome, Ok(RunOutcome::Complete(Err(error))) if error == expected)
+            ),
+        }
         assert_eq!(drops.get(), 1);
         assert_eq!(read_word(&mut device, RESET)?, 1);
-        let _ = ResetControl.step(&mut device, &mut ());
+        let _ = ResetControl.step(&mut device, ());
         assert_eq!(read_word(&mut device, RESET)?, 0);
         let terminal_calls = calls.get();
-        assert_eq!(
-            hardware.step(&mut device, &mut state),
-            StepOutcome::Exhausted
-        );
+        assert!(matches!(
+            state.step(&mut hardware, &mut device),
+            Err(AlreadyComplete)
+        ));
         assert_eq!(calls.get(), terminal_calls);
         assert_eq!(drops.get(), 1);
     }
@@ -142,14 +143,14 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         intake: device.intake(),
         drops: Rc::new(Cell::new(0)),
         calls: Rc::new(Cell::new(0)),
-        terminal: StepOutcome::Complete(Ok(())),
+        terminal: Ok(()),
     });
-    let mut old = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
+    let mut old = Operation::<RunCommand<RetainingChild>, Dma<SharedMemory>>::new(());
     let mut completed = false;
     for _ in 0..32 {
         if matches!(
-            hardware.step(&mut device, &mut old),
-            StepOutcome::Complete(Ok(_))
+            old.step(&mut hardware, &mut device),
+            Ok(RunOutcome::Complete(Ok(_)))
         ) {
             completed = true;
             break;
@@ -171,14 +172,14 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         intake: device.intake(),
         drops: Rc::new(Cell::new(0)),
         calls: Rc::new(Cell::new(0)),
-        terminal: StepOutcome::Complete(Err(Error::Reset)),
+        terminal: Err(Error::Reset),
     });
-    let mut current = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
+    let mut current = Operation::<RunCommand<RetainingChild>, Dma<SharedMemory>>::new(());
     let mut accepted = false;
     for _ in 0..32 {
         if matches!(
-            newer.step(&mut device, &mut current),
-            StepOutcome::Pending(())
+            current.step(&mut newer, &mut device),
+            Ok(RunOutcome::Pending(()))
         ) {
             accepted = true;
             break;
@@ -186,18 +187,21 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
     }
     assert!(accepted);
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, ());
     assert_eq!(read_word(&mut device, RESET)?, 1);
     // When: the caller steps the old completed state again.
-    assert_eq!(hardware.step(&mut device, &mut old), StepOutcome::Exhausted);
-    let _ = ResetControl.step(&mut device, &mut ());
+    assert!(matches!(
+        old.step(&mut hardware, &mut device),
+        Err(AlreadyComplete)
+    ));
+    let _ = ResetControl.step(&mut device, ());
     // Then: reset remains busy until the current owner retires.
     assert_eq!(read_word(&mut device, RESET)?, 1);
-    assert_eq!(
-        newer.step(&mut device, &mut current),
-        StepOutcome::Complete(Ok(ControlFlow::Continue(())))
-    );
-    let _ = ResetControl.step(&mut device, &mut ());
+    assert!(matches!(
+        current.step(&mut newer, &mut device),
+        Ok(RunOutcome::Complete(Ok(CommandTurn::Finished)))
+    ));
+    let _ = ResetControl.step(&mut device, ());
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }

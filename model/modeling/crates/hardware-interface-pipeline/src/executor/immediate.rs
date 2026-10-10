@@ -1,8 +1,6 @@
 use std::num::NonZeroUsize;
 
-use crate::{
-    Operation, Stage, StepOutcome, executor::RunError, executor::RunOutcome, executor::RunResult,
-};
+use crate::{Operation, Stage, executor::RunError, executor::RunOutcome, executor::RunResult};
 
 /// A bounded executor that runs a stage through consecutive progressed transitions.
 #[derive(Clone, Copy, Debug)]
@@ -32,11 +30,13 @@ impl ImmediateExecutor {
         S: Stage<C>,
     {
         for _ in 0..self.transition_budget.get() {
-            match operation.step(stage, context) {
-                StepOutcome::Progressed => {}
-                StepOutcome::Pending(wait) => return Ok(RunOutcome::Pending(wait)),
-                StepOutcome::Complete(result) => return Ok(RunOutcome::Complete(result)),
-                StepOutcome::Exhausted => return Err(RunError::Exhausted),
+            match operation
+                .step(stage, context)
+                .map_err(|_| RunError::AlreadyComplete)?
+            {
+                RunOutcome::Progressed => {}
+                RunOutcome::Pending(wait) => return Ok(RunOutcome::Pending(wait)),
+                RunOutcome::Complete(result) => return Ok(RunOutcome::Complete(result)),
             }
         }
         Err(RunError::BudgetExhausted)

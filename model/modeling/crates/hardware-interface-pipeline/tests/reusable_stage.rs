@@ -1,6 +1,6 @@
 //! Reusable hardware and separately retained request lifecycle checks.
 
-use hardware_interface_pipeline::{Operation, PipelineExt, Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, PipelineExt, RunOutcome, Stage, StepOutcome};
 
 #[derive(Default)]
 struct Accumulator {
@@ -12,20 +12,19 @@ impl Stage<()> for Accumulator {
     type Output = String;
     type Error = String;
     type Wait = ();
-    type State = Option<String>;
+    type State = String;
 
     fn start(input: Self::Input) -> Self::State {
-        Some(input)
+        input
     }
 
-    fn step(&mut self, (): &mut (), state: &mut Self::State) -> StepOutcome<String, String, ()> {
-        match state.take() {
-            Some(input) => {
-                self.calls += 1;
-                StepOutcome::Complete(Ok(format!("{input}/{}", self.calls)))
-            }
-            None => StepOutcome::Exhausted,
-        }
+    fn step(
+        &mut self,
+        (): &mut (),
+        input: Self::State,
+    ) -> StepOutcome<Self::State, String, String, ()> {
+        self.calls += 1;
+        StepOutcome::Complete(Ok(format!("{input}/{}", self.calls)))
     }
 }
 
@@ -40,21 +39,21 @@ fn same_nested_hardware_processes_two_owned_requests() {
         let mut operation = Operation::new(input.to_owned());
         assert_eq!(
             operation.step(&mut hardware, &mut ()),
-            StepOutcome::Progressed
+            Ok(RunOutcome::Progressed)
         );
         assert_eq!(
             operation.step(&mut hardware, &mut ()),
-            StepOutcome::Progressed
+            Ok(RunOutcome::Progressed)
         );
 
         // Then: each stage retains its hardware counter; only the completed operation exhausts.
         assert_eq!(
             operation.step(&mut hardware, &mut ()),
-            StepOutcome::Complete(Ok(expected.to_owned()))
+            Ok(RunOutcome::Complete(Ok(expected.to_owned())))
         );
         assert_eq!(
             operation.step(&mut hardware, &mut ()),
-            StepOutcome::Exhausted
+            Err(hardware_interface_pipeline::AlreadyComplete)
         );
     }
 }
@@ -70,23 +69,22 @@ impl Stage<()> for Publication {
     type Output = ();
     type Error = String;
     type Wait = ();
-    type State = Option<String>;
+    type State = String;
 
     fn start(input: Self::Input) -> Self::State {
-        Some(input)
+        input
     }
 
-    fn step(&mut self, (): &mut (), state: &mut Self::State) -> StepOutcome<(), String, ()> {
+    fn step(
+        &mut self,
+        (): &mut (),
+        state: Self::State,
+    ) -> StepOutcome<Self::State, (), String, ()> {
         if !self.ready {
-            return StepOutcome::Pending(());
+            return StepOutcome::Pending(state, ());
         }
-        match state.take() {
-            Some(record) => {
-                self.records.push(record);
-                StepOutcome::Complete(Ok(()))
-            }
-            None => StepOutcome::Exhausted,
-        }
+        self.records.push(state);
+        StepOutcome::Complete(Ok(()))
     }
 }
 
@@ -97,11 +95,11 @@ fn reset_discards_pending_handoff_without_resetting_hardware() {
     let mut operation = Operation::new("discarded".to_owned());
     assert_eq!(
         operation.step(&mut hardware, &mut ()),
-        StepOutcome::Progressed
+        Ok(RunOutcome::Progressed)
     );
     assert_eq!(
         operation.step(&mut hardware, &mut ()),
-        StepOutcome::Pending(())
+        Ok(RunOutcome::Pending(()))
     );
 
     // When: reset discards that operation and a fresh request uses the same hardware.
@@ -109,13 +107,16 @@ fn reset_discards_pending_handoff_without_resetting_hardware() {
     hardware.downstream.ready = true;
     assert_eq!(
         operation.step(&mut hardware, &mut ()),
-        StepOutcome::Exhausted
+        Err(hardware_interface_pipeline::AlreadyComplete)
     );
     let mut fresh = Operation::new("fresh".to_owned());
-    assert_eq!(fresh.step(&mut hardware, &mut ()), StepOutcome::Progressed);
     assert_eq!(
         fresh.step(&mut hardware, &mut ()),
-        StepOutcome::Complete(Ok(()))
+        Ok(RunOutcome::Progressed)
+    );
+    assert_eq!(
+        fresh.step(&mut hardware, &mut ()),
+        Ok(RunOutcome::Complete(Ok(())))
     );
 
     // Then: upstream state persists and only the fresh request publishes.

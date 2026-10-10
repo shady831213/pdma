@@ -3,7 +3,7 @@
 mod instances;
 
 use hardware_interface_pipeline::{
-    AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, StepOutcome, Then,
+    AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, RunOutcome, Then,
 };
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
@@ -38,11 +38,11 @@ async fn with_idle_hardware<F: std::future::Future>(
         tokio::select! {
             result = &mut software => return result,
             result = model.interact(|device| {
-                assert!(matches!(operation.step(&mut control, device), StepOutcome::Progressed));
-                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+                assert!(matches!(operation.step(&mut control, device), Ok(RunOutcome::Progressed)));
+                RunOutcome::<(), std::convert::Infallible, ()>::Progressed
             }) => {
                 let Ok(outcome) = result;
-                assert!(matches!(outcome, StepOutcome::Progressed));
+                assert!(matches!(outcome, RunOutcome::Progressed));
             }
         }
     }

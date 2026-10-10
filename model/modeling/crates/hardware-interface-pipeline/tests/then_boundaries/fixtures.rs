@@ -7,23 +7,26 @@ pub(super) enum Reply {
     Pending,
     Progressed,
     Failure,
-    Exhausted,
+    Missing,
 }
 
 impl Reply {
-    const fn outcome(self, input: u32) -> StepOutcome<u32, Fault, u32> {
+    const fn outcome(self, input: u32) -> StepOutcome<u32, u32, Fault, u32> {
         match self {
             Self::Complete => StepOutcome::Complete(Ok(input + 1)),
-            Self::Pending => StepOutcome::Pending(input),
-            Self::Progressed => StepOutcome::Progressed,
-            Self::Failure => StepOutcome::Complete(Err(Fault)),
-            Self::Exhausted => StepOutcome::Exhausted,
+            Self::Pending => StepOutcome::Pending(input, input),
+            Self::Progressed => StepOutcome::Progressed(input),
+            Self::Failure => StepOutcome::Complete(Err(Fault::Failed)),
+            Self::Missing => StepOutcome::Complete(Err(Fault::Missing)),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Fault;
+pub(super) enum Fault {
+    Failed,
+    Missing,
+}
 
 #[derive(Debug, Default)]
 pub(super) struct Prepare {
@@ -42,9 +45,13 @@ impl Stage<Vec<u32>> for Prepare {
         input
     }
 
-    fn step(&mut self, _: &mut Vec<u32>, state: &mut Self::State) -> StepOutcome<u32, Fault, u32> {
+    fn step(
+        &mut self,
+        _: &mut Vec<u32>,
+        state: Self::State,
+    ) -> StepOutcome<Self::State, u32, Fault, u32> {
         self.calls += 1;
-        self.reply.outcome(*state)
+        self.reply.outcome(state)
     }
 }
 
@@ -68,10 +75,10 @@ impl Stage<Vec<u32>> for Effect {
     fn step(
         &mut self,
         context: &mut Vec<u32>,
-        state: &mut Self::State,
-    ) -> StepOutcome<u32, Fault, u32> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, u32, Fault, u32> {
         self.calls += 1;
-        context.push(*state);
-        self.reply.outcome(*state)
+        context.push(state);
+        self.reply.outcome(state)
     }
 }

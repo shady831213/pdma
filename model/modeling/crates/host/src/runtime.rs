@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_pipeline::AsyncInteractionBackend;
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, RegisterAccess,
     pending_interrupt,
@@ -92,11 +92,10 @@ impl<M: Send> RegisterAccess for Model<M> {
 impl<M: Send> AsyncInteractionBackend<Dma<M>, ()> for Model<M> {
     type Error = Infallible;
 
-    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
+    async fn interact<R, F>(&self, interaction: F) -> Result<R, Infallible>
     where
-        O: Send,
-        E: Send,
-        F: FnOnce(&mut Dma<M>) -> StepOutcome<O, E, ()> + Send,
+        R: Send,
+        F: FnOnce(&mut Dma<M>) -> R + Send,
     {
         tokio::task::yield_now().await;
         let mut device = self.device.lock().await;

@@ -39,7 +39,6 @@ impl Queue {
 pub(super) enum State {
     Fresh,
     Held(u8),
-    Done,
 }
 
 impl Stage<Context> for Queue {
@@ -56,33 +55,28 @@ impl Stage<Context> for Queue {
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut State,
-    ) -> StepOutcome<u8, &'static str, &'static str> {
+        state: State,
+    ) -> StepOutcome<Self::State, u8, &'static str, &'static str> {
         match state {
             State::Fresh => {
                 let job = context.queues.entry(self.id).or_default().pop_front();
                 context.consumed.push(self.id);
-                *state = State::Done;
                 match job {
                     Some(Job::Value(value)) if self.delayed => {
-                        *state = State::Held(value);
-                        StepOutcome::Progressed
+                        StepOutcome::Progressed(State::Held(value))
                     }
                     Some(Job::Value(value)) => StepOutcome::Complete(Ok(value)),
                     Some(Job::Fail) => StepOutcome::Complete(Err("source fault")),
-                    Some(Job::End) | None => StepOutcome::Exhausted,
+                    Some(Job::End) | None => StepOutcome::Complete(Err("source ended")),
                 }
             }
             State::Held(value) => {
                 if context.released {
-                    let output = *value;
-                    *state = State::Done;
-                    StepOutcome::Complete(Ok(output))
+                    StepOutcome::Complete(Ok(value))
                 } else {
-                    StepOutcome::Pending("source release")
+                    StepOutcome::Pending(state, "source release")
                 }
             }
-            State::Done => StepOutcome::Exhausted,
         }
     }
 }

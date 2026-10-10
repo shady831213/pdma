@@ -34,7 +34,7 @@ pub(super) enum Behavior {
     Pending,
     Progress,
     Error,
-    Exhausted,
+    Missing,
 }
 
 pub(super) struct Destination {
@@ -56,35 +56,33 @@ impl Stage<Context> for Destination {
     type Output = Receipt;
     type Error = &'static str;
     type Wait = &'static str;
-    type State = (Option<Parcel>, bool);
+    type State = (Parcel, bool);
 
     fn start(input: Parcel) -> Self::State {
-        (Some(input), false)
+        (input, false)
     }
 
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
-    ) -> StepOutcome<Receipt, &'static str, &'static str> {
+        mut state: Self::State,
+    ) -> StepOutcome<Self::State, Receipt, &'static str, &'static str> {
         context.attempts.push(self.id);
         match self.behavior {
-            Behavior::Pending if !context.released => return StepOutcome::Pending("release"),
+            Behavior::Pending if !context.released => {
+                return StepOutcome::Pending(state, "release");
+            }
             Behavior::Progress if !state.1 => {
-                let Some(Parcel(payload)) = state.0.as_mut() else {
-                    return StepOutcome::Exhausted;
-                };
+                let Parcel(payload) = &mut state.0;
                 payload.push_str(" advanced");
                 state.1 = true;
-                return StepOutcome::Progressed;
+                return StepOutcome::Progressed(state);
             }
             Behavior::Error => return StepOutcome::Complete(Err("destination failed")),
-            Behavior::Exhausted => return StepOutcome::Exhausted,
+            Behavior::Missing => return StepOutcome::Complete(Err("missing destination work")),
             Behavior::Complete | Behavior::Pending | Behavior::Progress => {}
         }
-        let Some(Parcel(payload)) = state.0.take() else {
-            return StepOutcome::Exhausted;
-        };
+        let Parcel(payload) = state.0;
         context.deliveries.push((self.id, payload));
         StepOutcome::Complete(Ok(Receipt {
             _payload: "owned receipt".into(),

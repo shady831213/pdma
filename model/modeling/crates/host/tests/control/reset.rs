@@ -78,13 +78,13 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
         destination: Endpoint::linear(0, 0),
     };
     cpu.run_main(channel.submit(command)).await?;
-    assert_eq!(
+    assert!(matches!(
         AsyncExecutor::new(model.clone())
             .run(&mut stage, &mut Operation::new(()))
             .await
             .map_err(|error| format!("{error:?}"))?,
-        std::ops::ControlFlow::Continue(())
-    );
+        pdma_model_dma::CommandTurn::Finished
+    ));
     // When: software resets and constructs a fresh driver over the same storage.
     with_idle_hardware(&model, cpu.run_main(channel.reset())).await?;
     let mut channel = cpu
@@ -98,13 +98,13 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
         ))
         .await?;
     cpu.run_main(channel.submit(command)).await?;
-    assert_eq!(
+    assert!(matches!(
         AsyncExecutor::new(model)
             .run(&mut stage, &mut Operation::new(()))
             .await
             .map_err(|error| format!("{error:?}"))?,
-        std::ops::ControlFlow::Continue(())
-    );
+        pdma_model_dma::CommandTurn::Finished
+    ));
     // Then: the fresh cursors expose exactly the new completion.
     assert_eq!(
         cpu.run_main(channel.response())

@@ -150,6 +150,10 @@ scratch while parked. Preserve the exact composed operation, including completed
 transforms and custom child-stage state; rebuilding a command from its cursors is
 insufficient when a transform has side effects or is not idempotent. Retry only
 the failed access after authorized resume.
+The model's execution turn ends with an explicit suspended continuation, while
+the command remains accepted. Its references stay active during the result handoff
+and become parked when that continuation is stored; neither event is command
+completion or permission to release memory. Arbitration only selects a channel.
 Response is 24 bytes: id/status/flags/info at 0/8/12/16. The info contains u64
 bytes_completed. Status values 0..5 retain their existing success/stopping-error
 meanings; former PageFault status 6 is invalid. PageFaultInfo, fault access and

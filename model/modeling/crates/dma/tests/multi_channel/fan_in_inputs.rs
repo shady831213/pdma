@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Arbitrate, BranchError, Operation, ReadyStage, StepOutcome};
+use hardware_interface_pipeline::{Arbitrate, BranchError, Operation, ReadyStage, RunOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -62,15 +62,15 @@ fn generic_fan_in_selects_only_its_explicit_channel_inputs() -> TestResult {
     for index in [2, 0] {
         let mut operation = Operation::new(());
         assert!(matches!(
-            operation.step(&mut combined, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut combined, &mut device)?,
+            RunOutcome::Progressed
         ));
         assert!(matches!(
-            operation.step(&mut combined, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut combined, &mut device)?,
+            RunOutcome::Progressed
         ));
-        let task = match operation.step(&mut combined, &mut device) {
-            StepOutcome::Complete(Ok(task)) => task,
+        let task = match operation.step(&mut combined, &mut device)? {
+            RunOutcome::Complete(Ok(task)) => task,
             other => return Err(format!("unexpected fetch result: {other:?}").into()),
         };
         assert_eq!(task.channel(), ChannelId::new(index));
@@ -93,14 +93,14 @@ fn invalid_fetch_target_reports_an_error_without_consuming_valid_inputs() -> Tes
     // When: the invalid input is selected.
     let mut operation = Operation::new(());
     assert!(matches!(
-        operation.step(&mut combined, &mut device),
-        StepOutcome::Progressed
+        operation.step(&mut combined, &mut device)?,
+        RunOutcome::Progressed
     ));
-    let result = operation.step(&mut combined, &mut device);
+    let result = operation.step(&mut combined, &mut device)?;
     // Then: configuration misuse is reported rather than waiting forever or touching another channel.
     assert!(matches!(
         result,
-        StepOutcome::Complete(Err(BranchError::Application(Error::Unmapped)))
+        RunOutcome::Complete(Err(BranchError::Application(Error::Unmapped)))
     ));
     for index in 0..3 {
         assert_eq!(consumer(&mut device, index)?, 0);
@@ -127,16 +127,19 @@ fn reset_or_disable_before_acceptance_rearbitrates_without_consuming_the_selecti
         let mut intake = device.intake();
         let mut operation = Operation::new(());
         assert!(matches!(
-            operation.step(&mut intake, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut intake, &mut device)?,
+            RunOutcome::Progressed
         ));
         assert_eq!(consumer(&mut device, 0)?, 0);
         // When: software makes A ineligible before the acceptance step.
         device.write(register, &value.to_le_bytes())?;
         let selected = (0..32)
             .find_map(|_| match operation.step(&mut intake, &mut device) {
-                StepOutcome::Complete(result) => Some(result),
-                _ => None,
+                Ok(RunOutcome::Complete(result)) => {
+                    Some(result.map_err(Box::<dyn std::error::Error>::from))
+                }
+                Err(error) => Some(Err(error.into())),
+                Ok(RunOutcome::Progressed | RunOutcome::Pending(())) => None,
             })
             .ok_or("peer did not progress")??;
         // Then: B is accepted without consuming A or C.
@@ -155,8 +158,8 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
     let mut hardware = super::support::single_command(&device);
     let mut operation = Operation::new(());
     assert!(matches!(
-        operation.step(&mut hardware, &mut device),
-        StepOutcome::Progressed
+        operation.step(&mut hardware, &mut device)?,
+        RunOutcome::Progressed
     ));
     assert_eq!(consumer(&mut device, 0)?, 0);
     // When: software resets A and publishes a replacement command before acceptance.
@@ -172,8 +175,11 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
     submit(&mut device, 0, 99)?;
     (0..128)
         .find_map(|_| match operation.step(&mut hardware, &mut device) {
-            StepOutcome::Complete(result) => Some(result),
-            _ => None,
+            Ok(RunOutcome::Complete(result)) => {
+                Some(result.map_err(Box::<dyn std::error::Error>::from))
+            }
+            Err(error) => Some(Err(error.into())),
+            Ok(RunOutcome::Progressed | RunOutcome::Pending(())) => None,
         })
         .ok_or("replacement command did not finish")??;
     // Then: the replacement task completes under its fresh generation, not as stale work.

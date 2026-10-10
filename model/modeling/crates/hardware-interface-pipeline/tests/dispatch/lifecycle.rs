@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{Dispatch, Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{Dispatch, Operation, RunOutcome};
 
 use super::fixtures::{Behavior, Context, Destination, Routing, request};
 
@@ -7,24 +7,24 @@ fn routes_owned_input_only_to_selected_destination_across_distinct_steps() {
     // Given: a non-Clone request, payload, and receipt with only a Route policy.
     let mut context = Context::default();
     let mut hardware = Dispatch::new((0..3).map(Destination::new).collect(), Routing::Accept);
-    let mut state = <Dispatch<Destination, Routing> as Stage<Context>>::start(request(1));
+    let mut state = Operation::new(request(1));
     assert_eq!(context.routes.get(), 0);
 
     // When: planning, destination execution, and reduction advance separately.
-    let planned = hardware.step(&mut context, &mut state);
+    let planned = state.step(&mut hardware, &mut context);
     let attempts_after_plan = context.attempts.clone();
-    let delivered = hardware.step(&mut context, &mut state);
-    let result = hardware.step(&mut context, &mut state);
-    let terminal = hardware.step(&mut context, &mut state);
-    let repeated = hardware.step(&mut context, &mut state);
+    let delivered = state.step(&mut hardware, &mut context);
+    let result = state.step(&mut hardware, &mut context);
+    let terminal = state.step(&mut hardware, &mut context);
+    let repeated = state.step(&mut hardware, &mut context);
 
     // Then: the transformed payload is delivered once and reduction returns unit.
-    assert_eq!(planned, StepOutcome::Progressed);
+    assert_eq!(planned, Ok(RunOutcome::Progressed));
     assert!(attempts_after_plan.is_empty());
-    assert_eq!(delivered, StepOutcome::Progressed);
-    assert_eq!(result, StepOutcome::Complete(Ok(())));
-    assert_eq!(terminal, StepOutcome::Exhausted);
-    assert_eq!(repeated, StepOutcome::Exhausted);
+    assert_eq!(delivered, Ok(RunOutcome::Progressed));
+    assert_eq!(result, Ok(RunOutcome::Complete(Ok(()))));
+    assert_eq!(terminal, Err(hardware_interface_pipeline::AlreadyComplete));
+    assert_eq!(repeated, Err(hardware_interface_pipeline::AlreadyComplete));
     assert_eq!(context.deliveries, [(1, "routed owned payload".into())]);
     assert_eq!(context.attempts, [1]);
     assert_eq!(context.routes.get(), 1);
@@ -56,12 +56,12 @@ fn pending_destination_resumes_owned_input_without_rerouting() {
     let result = operation.step(&mut hardware, &mut context);
 
     // Then: waiting preserves the chosen destination and its original owned payload.
-    assert_eq!(planned, StepOutcome::Progressed);
-    assert_eq!(pending, StepOutcome::Pending("release"));
-    assert_eq!(pending_again, StepOutcome::Pending("release"));
+    assert_eq!(planned, Ok(RunOutcome::Progressed));
+    assert_eq!(pending, Ok(RunOutcome::Pending("release")));
+    assert_eq!(pending_again, Ok(RunOutcome::Pending("release")));
     assert!(deliveries_before_release.is_empty());
-    assert_eq!(delivered, StepOutcome::Progressed);
-    assert_eq!(result, StepOutcome::Complete(Ok(())));
+    assert_eq!(delivered, Ok(RunOutcome::Progressed));
+    assert_eq!(result, Ok(RunOutcome::Complete(Ok(()))));
     assert_eq!(context.deliveries, [(1, "routed owned payload".into())]);
     assert_eq!(context.attempts, [1, 1, 1]);
     assert_eq!(context.routes.get(), 1);
@@ -89,10 +89,10 @@ fn progressed_destination_retains_mutated_child_state() {
     assert_eq!(
         outcomes,
         [
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Complete(Ok(()))
+            Ok(RunOutcome::Progressed),
+            Ok(RunOutcome::Progressed),
+            Ok(RunOutcome::Progressed),
+            Ok(RunOutcome::Complete(Ok(())))
         ]
     );
     assert_eq!(

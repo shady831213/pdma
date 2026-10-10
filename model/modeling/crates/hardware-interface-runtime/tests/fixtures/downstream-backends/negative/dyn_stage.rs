@@ -11,7 +11,7 @@ impl Stage<()> for Terminal {
 
     fn start((): ()) {}
 
-    fn step(&mut self, _: &mut (), _: &mut ()) -> StepOutcome<(), (), ()> {
+    fn step(&mut self, _: &mut (), _: ()) -> StepOutcome<(), (), (), ()> {
         StepOutcome::Complete(Ok(()))
     }
 }

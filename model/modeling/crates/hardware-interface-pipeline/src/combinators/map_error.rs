@@ -30,13 +30,12 @@ where
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, E, Self::Wait> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, E, Self::Wait> {
         match self.stage.step(context, state) {
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+            StepOutcome::Progressed(state) => StepOutcome::Progressed(state),
+            StepOutcome::Pending(state, wait) => StepOutcome::Pending(state, wait),
             StepOutcome::Complete(result) => StepOutcome::Complete(result.map_err(&mut self.map)),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
         }
     }
 }

@@ -1,10 +1,44 @@
 use std::cell::Cell;
 
 use hardware_interface_pipeline::{
-    BranchError, DeliveryPlan, Distribute, FanOut, FanOutState, Stage, StepOutcome,
+    BranchError, DeliveryPlan, Distribute, FanOut, Operation, RunOutcome,
 };
 
 use super::fixtures::{Context, Destination, Dispatch, Parcel, Receipt, Report, Routing, dispatch};
+
+#[test]
+fn public_fan_out_state_threads_owned_payload_and_receipt() {
+    use hardware_interface_pipeline::{FanOutState, Stage, StepOutcome};
+
+    // Given: public state owns distinct input, metadata, payload, and receipt types.
+    let mut hardware = FanOut::new(vec![Destination::new(0)], Routing);
+    let mut context = Context::default();
+    let state: FanOutState<Dispatch, String, Parcel, Parcel, Receipt> =
+        <FanOut<Destination, Routing> as Stage<Context>>::start(dispatch(&[0]));
+
+    // When: the caller explicitly passes each returned continuation to the next step.
+    let StepOutcome::Progressed(state) = hardware.step(&mut context, state) else {
+        panic!("planning must retain the owned delivery");
+    };
+    assert!(context.attempts.is_empty());
+    let StepOutcome::Progressed(state) = hardware.step(&mut context, state) else {
+        panic!("delivery must retain the owned receipt");
+    };
+    let StepOutcome::Complete(result) = hardware.step(&mut context, state) else {
+        panic!("reduction must complete");
+    };
+
+    // Then: ownership reaches the reducer with one committed delivery.
+    assert_eq!(
+        result,
+        Ok(Report {
+            label: "delivery".into(),
+            receipts: vec![Receipt(0)]
+        })
+    );
+    assert_eq!(context.deliveries, [(0, "payload 0".into())]);
+    assert_eq!(context.plans.get(), 1);
+}
 
 #[derive(Clone, Copy)]
 enum Finish {
@@ -49,7 +83,7 @@ impl Distribute<Context, Destination> for Policy<'_> {
 }
 
 #[test]
-fn public_state_remains_terminal_after_success_or_policy_error() {
+fn operation_remains_terminal_after_success_or_policy_error() {
     // Given: public operation state with distinct input, metadata, child-state and output types.
     for finish in [Finish::Success, Finish::SplitError, Finish::CombineError] {
         let reductions = Cell::new(0);
@@ -59,18 +93,17 @@ fn public_state_remains_terminal_after_success_or_policy_error() {
         };
         let mut hardware = FanOut::new(vec![Destination::new(0)], policy);
         let mut context = Context::default();
-        let mut state: FanOutState<Dispatch, String, Parcel, Option<Parcel>, Receipt> =
-            <FanOut<Destination, Policy<'_>> as Stage<Context>>::start(dispatch(&[0]));
+        let mut state = Operation::new(dispatch(&[0]));
 
-        // When: direct stepping finishes the request and the caller steps the same state again.
-        let first = hardware.step(&mut context, &mut state);
+        // When: stepping finishes the request and the caller drives the completed operation again.
+        let first = state.step(&mut hardware, &mut context);
         let (result, expected, deliveries) = match finish {
             Finish::SplitError => (first, Err(BranchError::Application("split failed")), 0),
             Finish::Success | Finish::CombineError => {
-                assert_eq!(first, StepOutcome::Progressed);
+                assert_eq!(first, Ok(RunOutcome::Progressed));
                 assert_eq!(
-                    hardware.step(&mut context, &mut state),
-                    StepOutcome::Progressed
+                    state.step(&mut hardware, &mut context),
+                    Ok(RunOutcome::Progressed)
                 );
                 let expected = match finish {
                     Finish::Success => Ok(Report {
@@ -80,14 +113,14 @@ fn public_state_remains_terminal_after_success_or_policy_error() {
                     Finish::CombineError => Err(BranchError::Application("combine failed")),
                     Finish::SplitError => Err(BranchError::Application("split failed")),
                 };
-                (hardware.step(&mut context, &mut state), expected, 1)
+                (state.step(&mut hardware, &mut context), expected, 1)
             }
         };
-        let repeated = hardware.step(&mut context, &mut state);
+        let repeated = state.step(&mut hardware, &mut context);
 
         // Then: neither planning, committed delivery nor reduction is replayed.
-        assert_eq!(result, StepOutcome::Complete(expected));
-        assert_eq!(repeated, StepOutcome::Exhausted);
+        assert_eq!(result, Ok(RunOutcome::Complete(expected)));
+        assert_eq!(repeated, Err(hardware_interface_pipeline::AlreadyComplete));
         assert_eq!(context.plans.get(), 1);
         assert_eq!(context.attempts.len(), deliveries);
         assert_eq!(context.deliveries.len(), deliveries);

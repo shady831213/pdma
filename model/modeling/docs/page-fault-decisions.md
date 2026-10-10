@@ -94,13 +94,13 @@ failed call. This does not add a memmove guarantee or roll back prior writes.
 
 Retaining only a transfer snapshot is insufficient for the composable model:
 restarting the command graph can repeat range checking, completed transforms or
-non-idempotent custom stages. The command arbiter therefore parks the exact composed
+non-idempotent custom stages. The command loop therefore parks the exact composed
 `Operation` and restores it when that channel receives another grant.
 `RunCommand` ownership remains live until full terminal retirement, including
 post-publication stages. Per-channel accepted references survive parking so
 context cleanup cannot mistake a yielded engine for a completed command.
 
-The 2026-10-10 structural review removed the initial outer `Schedule` wrapper.
+An intermediate 2026-10-10 structural review removed the initial outer `Schedule` wrapper.
 That design arbitrated only Fetch inputs and later signaled `resume_selected` to
 a second layer which swapped whole operations. New-command selection and parked
 restoration consequently had separate owners. The replacement arbitrates a whole
@@ -111,7 +111,9 @@ to the existing `Repeat<Arbitrate<...>>` composition. No second scheduler, gener
 pipeline extension, per-channel engine or scratch reconstruction is required.
 Reset/Abort cleanup runs before arbitration so it does not depend on eligibility
 or progress of an unrelated disabled channel. This changes assembly ownership,
-not the command-atomic scheduling or fault/lifetime contract.
+not the command-atomic scheduling or fault/lifetime contract. The later review in
+section 10 replaces this intermediate CommandArbiter assembly with explicit turn
+outputs; it retains the same exact-state and lifecycle guarantees.
 
 The real RTL obligation is equivalent observable commit and lifetime behavior,
 not Rust object storage or one synchronous memory transaction at a time. Ordered
@@ -302,3 +304,86 @@ source leaves its peer parked until its own resume. Real reset and release/regra
 then exercise new work while the retired old handler rejects its retained report.
 Separate routing tests check arbitrary nonnumeric tag types and that rejected
 authorization invokes neither the platform mapper nor the memory backend.
+
+## 9. Validate owned stage continuations before changing suspension assembly
+
+The subsequent framework review distinguished three scopes: one synchronous step,
+one stage operation, and the hardware task's complete lifetime. Progressed and
+Pending retain an operation; Complete ends that operation, but an output such as
+ControlFlow::Continue can request another loop iteration. Break/Continue remain
+typed loop output rather than universal step outcomes.
+
+The first migration phase makes Stage::step consume its live State. Nonterminal
+outcomes return the continuation; terminal outcomes transfer output/error without
+returning a consumed-state placeholder. Operation owns the optional live-state
+slot and rejects repeated driving with AlreadyComplete. Source end and empty
+arbitration are separate contracts, not post-completion errors. Pending carries a
+notification key, not a cancellation command or a replacement for saved state.
+
+State is taken and restored inside the synchronous backend interaction. Moving it
+into a future before awaiting context acquisition would lose accepted work if that
+future were cancelled. Tests cover cancellation before acquisition, after a
+nonterminal interaction, and during a notification wait. Terminal output already
+transferred into a cancelled future remains lost; the operation must not replay it.
+
+An explicit OnContinue binding adapter supplies ControlFlow short-circuiting while
+Then keeps ordinary typed-port composition and Repeat owns one loop scope. This
+phase preserves DMA's CommandArbiter and exact saved Operation behavior as a
+regression baseline. Replacing that assembly with explicit execution-turn outputs
+is a later phase, not a claimed result of the signature migration. In particular,
+RetryRead/RetryWrite containing only Transfer cannot automatically reconstruct
+arbitrary enclosing custom-stage state. That continuation ownership must be solved
+before removing the current retention mechanism; scratch, completed transforms,
+reset acknowledgement and context lifetime guarantees must remain intact.
+
+## 10. Separate channel selection from command execution turns
+
+The intermediate CommandArbiter still made selection ports drive an execution
+engine and infer suspension from fault status outside the command execution
+boundary. Its name hid acquisition, engine driving, continuation retention and
+lifecycle work. Merely moving that wrapper into the generic pipeline crate would
+preserve the coupling and introduce application policy into a reusable library.
+
+The owned-state interface permits a smaller semantic split. RunCommand drives one
+shared downstream composition. Ordinary stalls retain that turn. Payload
+suspension ends the turn successfully with CommandTurn::Suspended carrying the
+exact child Operation. Finished denotes actual command retirement; errors retain
+their existing local-versus-structural handling. A turn completing is therefore
+not proof that its DMA command completed. The original public fault response and
+IRQ behavior do not change.
+
+The sustained graph uses ordinary Arbitrate channel-identity selection, acquisition,
+RunCommand and suspension handling, connected by Then and OnContinue and repeated
+by Repeat. The RoundRobin policy only chooses eligible channels. Acquisition
+rechecks eligibility after selection before fetching or restoring state; this is
+necessary because MMIO can change readiness between composed steps. A failed or
+stale acquisition skips execution and begins another selection. Healthy accepted
+commands keep the engine until retirement; there is no new chunk time-slicing.
+
+Arbitrary downstream state cannot be stored in the non-generic Channel object
+without coupling register ownership to a particular pipeline. It also must not
+become persistent state hidden inside the reusable engine. CommandLoop therefore
+provides an operation-local bank plus graph continuation. Its temporary frame
+borrows DMA and that bank; the graph itself owns the only engine. Channel.parked
+continues to retain accepted resource references, not a second copy of task state.
+The scope is DMA-local; it adds no generic scheduler, runtime or continuation cache.
+
+The suspension result moves through an ordinary Then handoff. During that handoff,
+accepted references remain active. The handler either stores the exact continuation
+and moves its references to parked ownership, or disposes it for pending reset or
+matching Abort before releasing ownership. Independent parked cleanup runs before
+active work, and ResetControl runs after each outer boundary, including stalls.
+Thus a disabled peer cannot prevent cleanup, and reset cannot acknowledge before
+the suspended state is actually disposed.
+
+Operation::from_state wraps an owned continuation without invoking Stage::start.
+This also allows a direct execution-turn consumer to resume returned state with
+the ordinary executors; no DMA-specific resume executor is necessary. It does not
+grant permission to replay stale tasks or bypass channel-generation guards.
+
+The behavioral proof starts below arbitration: a directly driven RunCommand must
+produce a terminal suspension result on a real injected payload fault. The previous
+implementation stayed Pending and failed that assertion. Further regressions
+exercise non-Clone enclosing state, already-transformed write scratch, repeated
+faults, peer progress, and reset/Abort at the newly exposed handoff. These are model
+ownership and composition changes, not new bus transaction or hardware timing rules.

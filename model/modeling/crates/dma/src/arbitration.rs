@@ -1,8 +1,3 @@
-mod command;
-mod port;
-
-pub use command::{CommandArbiter, CommandArbiterState};
-
 use crate::Error;
 use hardware_interface_pipeline::{Arbitration, ReadyStage, StepOutcome};
 
@@ -23,10 +18,10 @@ impl<C, S: ReadyStage<C, Error = Error, Wait = ()>> Arbitration<C, S> for RoundR
         &mut self,
         context: &C,
         sources: &[S],
-        visited: &mut usize,
-    ) -> StepOutcome<usize, Error, ()> {
+        mut visited: usize,
+    ) -> StepOutcome<usize, (usize, usize), Error, ()> {
         if sources.is_empty() {
-            return StepOutcome::Exhausted;
+            return StepOutcome::Complete(Err(Error::Routing));
         }
         let index = self.next % sources.len();
         self.next = (index + 1) % sources.len();
@@ -34,14 +29,13 @@ impl<C, S: ReadyStage<C, Error = Error, Wait = ()>> Arbitration<C, S> for RoundR
             .get(index)
             .is_some_and(|source| source.ready(context))
         {
-            return StepOutcome::Complete(Ok(index));
+            return StepOutcome::Complete(Ok((visited, index)));
         }
-        *visited += 1;
-        if *visited == sources.len() {
-            *visited = 0;
-            StepOutcome::Pending(())
+        visited += 1;
+        if visited == sources.len() {
+            StepOutcome::Pending(0, ())
         } else {
-            StepOutcome::Progressed
+            StepOutcome::Progressed(visited)
         }
     }
 }

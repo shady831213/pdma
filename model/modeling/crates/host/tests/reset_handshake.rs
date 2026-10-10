@@ -1,6 +1,6 @@
 //! Reset completion belongs to hardware even when software stops waiting.
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, RunOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
 use pdma_model_contract::dma::{ChannelId, DmaControl};
 use pdma_model_dma::{Dma, ResetControl};
@@ -157,12 +157,12 @@ async fn reset_wait_can_migrate_but_still_requires_hardware_completion()
             .interact(|dma| {
                 assert!(matches!(
                     operation.step(&mut control, dma),
-                    StepOutcome::Progressed
+                    Ok(RunOutcome::Progressed)
                 ));
-                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+                RunOutcome::<(), std::convert::Infallible, ()>::Progressed
             })
             .await;
-        assert!(matches!(cleanup, StepOutcome::Progressed));
+        assert!(matches!(cleanup, RunOutcome::Progressed));
         // Then: switching CPU cannot finish reset early; actual hardware cleanup does.
         other.run_main(reset).await?;
     }
@@ -234,12 +234,12 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
             .interact(|device| {
                 assert!(matches!(
                     Operation::new(()).step(&mut ResetControl, device),
-                    StepOutcome::Progressed
+                    Ok(RunOutcome::Progressed)
                 ));
-                StepOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
+                RunOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
             })
             .await?;
-        assert!(matches!(outcome, StepOutcome::Complete(Ok(()))));
+        assert!(matches!(outcome, RunOutcome::Complete(Ok(()))));
         // Then: observing the hardware-cleared bit completes the existing wait.
         cpu.run_main(reset).await?;
     }

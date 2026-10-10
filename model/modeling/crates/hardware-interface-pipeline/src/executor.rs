@@ -30,5 +30,5 @@ pub enum RunError {
     /// The immediate executor consumed its configured transition budget.
     BudgetExhausted,
     /// The pipeline was already terminal before the executor call.
-    Exhausted,
+    AlreadyComplete,
 }

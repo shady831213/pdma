@@ -12,7 +12,7 @@
 //!     type Wait = ();
 //!     type State = ();
 //!     fn start((): ()) {}
-//!     fn step(&mut self, _: &mut (), _: &mut ()) -> StepOutcome<u32, Infallible, ()> {
+//!     fn step(&mut self, _: &mut (), _: ()) -> StepOutcome<(), u32, Infallible, ()> {
 //!         StepOutcome::Complete(Ok(42))
 //!     }
 //! }
@@ -25,7 +25,7 @@
 //!     type Wait = ();
 //!     type State = String;
 //!     fn start(input: String) -> String { input }
-//!     fn step(&mut self, _: &mut (), _: &mut String) -> StepOutcome<(), Infallible, ()> {
+//!     fn step(&mut self, _: &mut (), _: String) -> StepOutcome<String, (), Infallible, ()> {
 //!         StepOutcome::Complete(Ok(()))
 //!     }
 //! }

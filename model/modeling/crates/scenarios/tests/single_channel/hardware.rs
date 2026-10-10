@@ -21,7 +21,7 @@ pub(crate) async fn drive(model: Model<SharedMemoryAccess>, mut stage: CommandLo
     match executor.run(&mut stage, &mut Operation::new(())).await {
         Ok(()) => Err("persistent hardware worker unexpectedly completed".into()),
         Err(AsyncRunError::Stage(error)) => Err(error.into()),
-        Err(AsyncRunError::Exhausted) => Err("fresh hardware operation exhausted".into()),
+        Err(AsyncRunError::AlreadyComplete) => Err("hardware operation already complete".into()),
         Err(AsyncRunError::BackendInteraction(error) | AsyncRunError::BackendWait(error)) => {
             match error {}
         }

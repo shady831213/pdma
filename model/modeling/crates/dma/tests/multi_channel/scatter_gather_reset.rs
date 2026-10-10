@@ -1,7 +1,7 @@
 mod observed;
 
 use super::support::{TestResult, configure, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::{Operation, RunOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use observed::Observed;
 use pdma_model_contract::dma::{
@@ -117,8 +117,8 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             let mut operation = Operation::new(());
             for _ in 0..256 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device),
-                    StepOutcome::Progressed
+                    operation.step(&mut hardware, &mut device)?,
+                    RunOutcome::Progressed
                 ));
                 if boundary.reached(&device.memory) {
                     break;
@@ -135,8 +135,8 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             assert_eq!(word(&mut device, reset)?, 1);
             for _ in 0..32 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device),
-                    StepOutcome::Progressed | StepOutcome::Pending(())
+                    operation.step(&mut hardware, &mut device)?,
+                    RunOutcome::Progressed | RunOutcome::Pending(())
                 ));
                 if word(&mut device, reset)? == 0 {
                     break;
@@ -145,8 +145,8 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             assert_eq!(word(&mut device, reset)?, 0);
             for _ in 0..64 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device),
-                    StepOutcome::Progressed | StepOutcome::Pending(())
+                    operation.step(&mut hardware, &mut device)?,
+                    RunOutcome::Progressed | RunOutcome::Pending(())
                 ));
             }
             // Then: no old memory access resumes, and fresh work still completes once.
@@ -171,8 +171,8 @@ fn reset_stops_sg_interactions_before_completion_and_keeps_them_stopped() -> Tes
             )?;
             for _ in 0..256 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device),
-                    StepOutcome::Progressed | StepOutcome::Pending(())
+                    operation.step(&mut hardware, &mut device)?,
+                    RunOutcome::Progressed | RunOutcome::Pending(())
                 ));
             }
             assert_eq!(word(&mut device, producer)?, 1);

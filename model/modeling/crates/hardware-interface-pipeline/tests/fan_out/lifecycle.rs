@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{BranchError, FanOut, Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{BranchError, FanOut, Operation, RunOutcome};
 
 use super::{
     fixtures::{Behavior, Context, Destination, Parcel, Receipt, Report, Routing, dispatch},
@@ -25,7 +25,7 @@ fn pending_destination_retains_prior_receipt_and_blocks_later_deliveries() {
     // When: the operation pauses twice, then resumes after the application releases it.
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
+        Ok(RunOutcome::Progressed)
     );
     let first = operation.step(&mut stage, &mut context);
     let pending = operation.step(&mut stage, &mut context);
@@ -35,22 +35,22 @@ fn pending_destination_retains_prior_receipt_and_blocks_later_deliveries() {
     let resumed = operation.step(&mut stage, &mut context);
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
+        Ok(RunOutcome::Progressed)
     );
     let complete = operation.step(&mut stage, &mut context);
 
     // Then: completed work and its receipt survive, and each delivery commits once.
-    assert_eq!(first, StepOutcome::Progressed);
-    assert_eq!(pending, StepOutcome::Pending("release"));
-    assert_eq!(pending_again, StepOutcome::Pending("release"));
+    assert_eq!(first, Ok(RunOutcome::Progressed));
+    assert_eq!(pending, Ok(RunOutcome::Pending("release")));
+    assert_eq!(pending_again, Ok(RunOutcome::Pending("release")));
     assert_eq!(before_release, [(0, "payload 0".into())]);
-    assert_eq!(resumed, StepOutcome::Progressed);
+    assert_eq!(resumed, Ok(RunOutcome::Progressed));
     assert_eq!(
         complete,
-        StepOutcome::Complete(Ok(Report {
+        Ok(RunOutcome::Complete(Ok(Report {
             label: "delivery".into(),
             receipts: vec![Receipt(0), Receipt(1), Receipt(2)],
-        }))
+        })))
     );
     assert_eq!(context.attempts, [0, 1, 1, 1, 2]);
     assert_eq!(context.deliveries.len(), 3);
@@ -71,31 +71,37 @@ fn malformed_plans_fail_before_any_destination_interaction() {
         .map(|(indices, expected)| {
             let mut context = Context::default();
             let mut hardware = FanOut::new(vec![Destination::new(0), Destination::new(1)], Routing);
-            let mut state =
-                <FanOut<Destination, Routing> as Stage<Context>>::start(dispatch(&indices));
-            let result = hardware.step(&mut context, &mut state);
-            let terminal = hardware.step(&mut context, &mut state);
+            let mut state = Operation::new(dispatch(&indices));
+            let result = state.step(&mut hardware, &mut context);
+            let terminal = state.step(&mut hardware, &mut context);
             (result, terminal, context.attempts, expected)
         })
         .collect();
 
     // Then: even the valid first destination is untouched, and rejected state is terminal.
     for (result, terminal, attempts, expected) in outcomes {
-        assert_eq!(result, StepOutcome::Complete(Err(expected)));
-        assert_eq!(terminal, StepOutcome::Exhausted);
+        assert_eq!(result, Ok(RunOutcome::Complete(Err(expected))));
+        assert_eq!(terminal, Err(hardware_interface_pipeline::AlreadyComplete));
         assert!(attempts.is_empty());
     }
 }
 
 #[test]
 fn terminal_destination_stops_unscheduled_work_and_keeps_committed_effects() {
-    // Given: a later destination fails or exhausts after the first delivery commits.
+    // Given: a later destination fails or reports missing work after the first delivery commits.
     let cases = [
         (
             Behavior::Error,
-            StepOutcome::Complete(Err(BranchError::Application("destination failed"))),
+            Ok(RunOutcome::Complete(Err(BranchError::Application(
+                "destination failed",
+            )))),
         ),
-        (Behavior::Exhausted, StepOutcome::Exhausted),
+        (
+            Behavior::Missing,
+            Ok(RunOutcome::Complete(Err(BranchError::Application(
+                "missing destination work",
+            )))),
+        ),
     ];
 
     // When: each operation encounters its terminal destination and is stepped again.
@@ -111,24 +117,23 @@ fn terminal_destination_stops_unscheduled_work_and_keeps_committed_effects() {
                 ],
                 Routing,
             );
-            let mut state =
-                <FanOut<Destination, Routing> as Stage<Context>>::start(dispatch(&[0, 1, 2]));
+            let mut state = Operation::new(dispatch(&[0, 1, 2]));
             assert_eq!(
-                hardware.step(&mut context, &mut state),
-                StepOutcome::Progressed
+                state.step(&mut hardware, &mut context),
+                Ok(RunOutcome::Progressed)
             );
-            let first = hardware.step(&mut context, &mut state);
-            let terminal = hardware.step(&mut context, &mut state);
-            let again = hardware.step(&mut context, &mut state);
+            let first = state.step(&mut hardware, &mut context);
+            let terminal = state.step(&mut hardware, &mut context);
+            let again = state.step(&mut hardware, &mut context);
             (first, terminal, again, context, expected)
         })
         .collect();
 
     // Then: committed delivery remains, destination 2 is untouched, and replay is inert.
     for (first, terminal, again, context, expected) in outcomes {
-        assert_eq!(first, StepOutcome::Progressed);
+        assert_eq!(first, Ok(RunOutcome::Progressed));
         assert_eq!(terminal, expected);
-        assert_eq!(again, StepOutcome::Exhausted);
+        assert_eq!(again, Err(hardware_interface_pipeline::AlreadyComplete));
         assert_eq!(context.deliveries, [(0, "payload 0".into())]);
         assert_eq!(context.attempts, [0, 1]);
     }
@@ -152,11 +157,11 @@ fn policy_errors_preserve_only_effects_already_committed() {
             if committed == 1 {
                 assert_eq!(
                     operation.step(&mut stage, &mut context),
-                    StepOutcome::Progressed
+                    Ok(RunOutcome::Progressed)
                 );
                 assert_eq!(
                     operation.step(&mut stage, &mut context),
-                    StepOutcome::Progressed
+                    Ok(RunOutcome::Progressed)
                 );
             }
             (
@@ -172,7 +177,9 @@ fn policy_errors_preserve_only_effects_already_committed() {
     for (result, context, expected, committed) in outcomes {
         assert_eq!(
             result,
-            StepOutcome::Complete(Err(BranchError::Application(expected)))
+            Ok(RunOutcome::Complete(Err(BranchError::Application(
+                expected
+            ))))
         );
         assert_eq!(context.deliveries.len(), committed);
     }
@@ -188,15 +195,15 @@ fn reset_abandons_queued_delivery_without_reverting_committed_delivery() {
     // When: reset follows the first completed delivery.
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
+        Ok(RunOutcome::Progressed)
     );
     let first = operation.step(&mut stage, &mut context);
     operation.reset();
     let terminal = operation.step(&mut stage, &mut context);
 
     // Then: the remaining payload is abandoned and the first external effect survives.
-    assert_eq!(first, StepOutcome::Progressed);
-    assert_eq!(terminal, StepOutcome::Exhausted);
+    assert_eq!(first, Ok(RunOutcome::Progressed));
+    assert_eq!(terminal, Err(hardware_interface_pipeline::AlreadyComplete));
     assert_eq!(context.deliveries, [(0, "payload 0".into())]);
     assert_eq!(context.attempts, [0]);
 }

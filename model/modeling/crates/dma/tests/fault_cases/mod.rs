@@ -3,12 +3,15 @@ mod composition;
 mod control;
 mod lifecycle;
 mod memory;
+mod peer_lifecycle;
 mod peers;
 mod resume;
+mod retained;
+mod turns;
 
 use self::memory::Paged;
 use crate::support::{TestResult, configure};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::{Operation, RunOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRaw,
@@ -54,13 +57,12 @@ impl Fixture {
     }
 
     fn step(&mut self) -> TestResult {
-        match self.operation.step(&mut self.pipeline, &mut self.dma) {
-            StepOutcome::Progressed | StepOutcome::Pending(()) => Ok(()),
-            StepOutcome::Complete(result) => {
+        match self.operation.step(&mut self.pipeline, &mut self.dma)? {
+            RunOutcome::Progressed | RunOutcome::Pending(()) => Ok(()),
+            RunOutcome::Complete(result) => {
                 result?;
                 Err("loop stopped".into())
             }
-            StepOutcome::Exhausted => Err("loop exhausted".into()),
         }
     }
 }

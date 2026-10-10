@@ -1,8 +1,8 @@
 use super::*;
-use hardware_interface_pipeline::StepOutcome;
+use hardware_interface_pipeline::RunOutcome;
 use pdma_model_contract::dma::ChannelId;
 
-fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
+pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
     let mut device = Dma::new(setup()?.dma.memory, 2)?;
     let first = streams(&device)?;
     let peer = Command {
@@ -61,8 +61,8 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
     // When: the shared engine runs both channels with the page still absent.
     for _ in 0..512 {
         assert!(matches!(
-            operation.step(&mut pipeline, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut pipeline, &mut device)?,
+            RunOutcome::Progressed | RunOutcome::Pending(())
         ));
         if read_word(
             &mut device,
@@ -112,8 +112,8 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
     let mut operation = Operation::new(());
     for _ in 0..256 {
         assert!(matches!(
-            operation.step(&mut pipeline, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut pipeline, &mut device)?,
+            RunOutcome::Progressed | RunOutcome::Pending(())
         ));
         if read_word(&mut device, peer + CommandRegisters::CONSUMER.offset())? == 1 {
             break;
@@ -129,8 +129,8 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
     device.write(reset, &1_u32.to_le_bytes())?;
     for _ in 0..128 {
         assert!(matches!(
-            operation.step(&mut pipeline, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut pipeline, &mut device)?,
+            RunOutcome::Progressed | RunOutcome::Pending(())
         ));
         if read_word(&mut device, reset)? == 0 {
             break;
@@ -149,8 +149,8 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
     device.write(enable, &1_u32.to_le_bytes())?;
     for _ in 0..128 {
         assert!(matches!(
-            operation.step(&mut pipeline, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut pipeline, &mut device)?,
+            RunOutcome::Progressed | RunOutcome::Pending(())
         ));
         if read_word(
             &mut device,

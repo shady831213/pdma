@@ -27,39 +27,27 @@ where
     type Output = O;
     type Error = S::Error;
     type Wait = S::Wait;
-    type State = Option<S::State>;
+    type State = S::State;
 
     fn start(input: Self::Input) -> Self::State {
-        Some(S::start(input))
+        S::start(input)
     }
 
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let Some(child) = state.as_mut() else {
-            return StepOutcome::Exhausted;
-        };
-        match self.stage.step(context, child) {
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        match self.stage.step(context, state) {
+            StepOutcome::Progressed(state) => StepOutcome::Progressed(state),
+            StepOutcome::Pending(state, wait) => StepOutcome::Pending(state, wait),
             StepOutcome::Complete(Ok(ControlFlow::Continue(input))) => {
-                *state = Some(S::start(input));
-                StepOutcome::Progressed
+                StepOutcome::Progressed(S::start(input))
             }
             StepOutcome::Complete(Ok(ControlFlow::Break(output))) => {
-                *state = None;
                 StepOutcome::Complete(Ok(output))
             }
-            StepOutcome::Complete(Err(error)) => {
-                *state = None;
-                StepOutcome::Complete(Err(error))
-            }
-            StepOutcome::Exhausted => {
-                *state = None;
-                StepOutcome::Exhausted
-            }
+            StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
         }
     }
 }

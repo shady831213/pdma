@@ -39,7 +39,7 @@ impl<M, I, O> BranchPlan<M, I, O> {
 
 #[derive(Debug)]
 pub(in crate::combinators) struct RunBranchState<M, I, T, O> {
-    plan: Option<BranchPlan<M, I, O>>,
+    plan: BranchPlan<M, I, O>,
     active: Option<(usize, T)>,
 }
 
@@ -49,8 +49,10 @@ impl<M, I, T, O> RunBranchState<M, I, T, O> {
             return None;
         }
         self.plan
-            .as_ref()
-            .and_then(|plan| plan.requests.as_slice().first().map(|(index, _)| *index))
+            .requests
+            .as_slice()
+            .first()
+            .map(|(index, _)| *index)
     }
 }
 
@@ -73,7 +75,7 @@ impl<C, S: Stage<C>, P, M> Stage<Frame<'_, C, S, P>> for RunBranch<M> {
 
     fn start(input: Self::Input) -> Self::State {
         RunBranchState {
-            plan: Some(input),
+            plan: input,
             active: None,
         }
     }
@@ -81,39 +83,40 @@ impl<C, S: Stage<C>, P, M> Stage<Frame<'_, C, S, P>> for RunBranch<M> {
     fn step(
         &mut self,
         frame: &mut Frame<'_, C, S, P>,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let Some(mut plan) = state.plan.take() else {
-            return StepOutcome::Exhausted;
-        };
-        if state.active.is_none() {
-            let Some((index, input)) = plan.requests.next() else {
-                return StepOutcome::Complete(Ok(ControlFlow::Break((
-                    plan.metadata,
-                    plan.outputs,
-                ))));
-            };
-            state.active = Some((index, S::start(input)));
-        }
-        let Some((index, active)) = &mut state.active else {
-            return StepOutcome::Exhausted;
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        let RunBranchState { mut plan, active } = state;
+        let (index, active) = match active {
+            Some(active) => active,
+            None => match plan.requests.next() {
+                Some((index, input)) => (index, S::start(input)),
+                None => {
+                    return StepOutcome::Complete(Ok(ControlFlow::Break((
+                        plan.metadata,
+                        plan.outputs,
+                    ))));
+                }
+            },
         };
         let count = frame.ports.len();
-        let Some(port) = frame.ports.get_mut(*index) else {
+        let Some(port) = frame.ports.get_mut(index) else {
             return StepOutcome::Complete(Err(BranchError::InvalidIndex {
-                index: *index,
+                index,
                 ports: count,
             }));
         };
         match port.step(frame.context, active) {
-            StepOutcome::Progressed => {
-                state.plan = Some(plan);
-                StepOutcome::Progressed
-            }
-            StepOutcome::Pending(wait) => {
-                state.plan = Some(plan);
-                StepOutcome::Pending(wait)
-            }
+            StepOutcome::Progressed(active) => StepOutcome::Progressed(RunBranchState {
+                plan,
+                active: Some((index, active)),
+            }),
+            StepOutcome::Pending(active, wait) => StepOutcome::Pending(
+                RunBranchState {
+                    plan,
+                    active: Some((index, active)),
+                },
+                wait,
+            ),
             StepOutcome::Complete(Ok(output)) => {
                 plan.outputs.push(output);
                 StepOutcome::Complete(Ok(if plan.requests.len() == 0 {
@@ -125,7 +128,6 @@ impl<C, S: Stage<C>, P, M> Stage<Frame<'_, C, S, P>> for RunBranch<M> {
             StepOutcome::Complete(Err(error)) => {
                 StepOutcome::Complete(Err(BranchError::Application(error)))
             }
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
         }
     }
 }

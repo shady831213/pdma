@@ -16,8 +16,6 @@ pub enum ThenState<A, B> {
     Upstream(A),
     /// Upstream finished; its result belongs to downstream operation state.
     Downstream(B),
-    /// This operation is finished; the hardware remains reusable.
-    Done,
 }
 
 impl<A, B> Then<A, B> {
@@ -48,33 +46,30 @@ where
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
         match state {
             ThenState::Upstream(upstream) => match self.upstream.step(context, upstream) {
-                StepOutcome::Progressed => StepOutcome::Progressed,
-                StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
+                StepOutcome::Progressed(state) => {
+                    StepOutcome::Progressed(ThenState::Upstream(state))
+                }
+                StepOutcome::Pending(state, wait) => {
+                    StepOutcome::Pending(ThenState::Upstream(state), wait)
+                }
                 StepOutcome::Complete(Ok(output)) => {
-                    *state = ThenState::Downstream(B::start(output));
-                    StepOutcome::Progressed
+                    StepOutcome::Progressed(ThenState::Downstream(B::start(output)))
                 }
-                StepOutcome::Complete(Err(error)) => {
-                    *state = ThenState::Done;
-                    StepOutcome::Complete(Err(error))
-                }
-                StepOutcome::Exhausted => {
-                    *state = ThenState::Done;
-                    StepOutcome::Exhausted
-                }
+                StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
             },
-            ThenState::Downstream(downstream) => {
-                let outcome = self.downstream.step(context, downstream);
-                if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
-                    *state = ThenState::Done;
+            ThenState::Downstream(downstream) => match self.downstream.step(context, downstream) {
+                StepOutcome::Progressed(state) => {
+                    StepOutcome::Progressed(ThenState::Downstream(state))
                 }
-                outcome
-            }
-            ThenState::Done => StepOutcome::Exhausted,
+                StepOutcome::Pending(state, wait) => {
+                    StepOutcome::Pending(ThenState::Downstream(state), wait)
+                }
+                StepOutcome::Complete(result) => StepOutcome::Complete(result),
+            },
         }
     }
 }

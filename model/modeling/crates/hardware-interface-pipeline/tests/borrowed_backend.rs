@@ -11,12 +11,9 @@ struct Backend(Mutex<u32>);
 impl AsyncInteractionBackend<u32, ()> for Backend {
     type Error = &'static str;
 
-    async fn interact<O: Send, E: Send, F>(
-        &self,
-        interaction: F,
-    ) -> Result<StepOutcome<O, E, ()>, Self::Error>
+    async fn interact<R: Send, F>(&self, interaction: F) -> Result<R, Self::Error>
     where
-        F: FnOnce(&mut u32) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut u32) -> R + Send,
     {
         let mut value = self.0.lock().map_err(|_| "poisoned interaction lock")?;
         Ok(interaction(&mut value))
@@ -39,9 +36,13 @@ impl Stage<u32> for IncrementWhenReady {
 
     fn start((): Self::Input) -> Self::State {}
 
-    fn step(&mut self, value: &mut u32, (): &mut Self::State) -> StepOutcome<u32, Infallible, ()> {
+    fn step(
+        &mut self,
+        value: &mut u32,
+        (): Self::State,
+    ) -> StepOutcome<Self::State, u32, Infallible, ()> {
         if *value == 0 {
-            return StepOutcome::Pending(());
+            return StepOutcome::Pending((), ());
         }
         *value += 1;
         StepOutcome::Complete(Ok(*value))

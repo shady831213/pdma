@@ -35,10 +35,10 @@ impl Stage<Model> for Source {
     fn step(
         &mut self,
         model: &mut Model,
-        input: &mut Self::State,
-    ) -> StepOutcome<u32, &'static str, usize> {
+        input: Self::State,
+    ) -> StepOutcome<Self::State, u32, &'static str, usize> {
         model.upstream_calls += 1;
-        StepOutcome::Complete(Ok(*input))
+        StepOutcome::Complete(Ok(input))
     }
 }
 
@@ -59,13 +59,13 @@ impl Stage<Model> for Sink {
     fn step(
         &mut self,
         model: &mut Model,
-        input: &mut Self::State,
-    ) -> StepOutcome<u32, &'static str, usize> {
+        input: Self::State,
+    ) -> StepOutcome<Self::State, u32, &'static str, usize> {
         model.downstream_calls += 1;
         if model.readiness < 2 {
-            return StepOutcome::Pending(model.readiness);
+            return StepOutcome::Pending(input, model.readiness);
         }
-        StepOutcome::Complete(Ok(*input + 22))
+        StepOutcome::Complete(Ok(input + 22))
     }
 }
 
@@ -81,12 +81,9 @@ struct Backend(Mutex<Model>);
 impl AsyncInteractionBackend<Model, usize> for Backend {
     type Error = &'static str;
 
-    async fn interact<O: Send, E: Send, F>(
-        &self,
-        interaction: F,
-    ) -> Result<StepOutcome<O, E, usize>, Self::Error>
+    async fn interact<R: Send, F>(&self, interaction: F) -> Result<R, Self::Error>
     where
-        F: FnOnce(&mut Model) -> StepOutcome<O, E, usize> + Send,
+        F: FnOnce(&mut Model) -> R + Send,
     {
         Ok(interaction(&mut lock(&self.0)))
     }

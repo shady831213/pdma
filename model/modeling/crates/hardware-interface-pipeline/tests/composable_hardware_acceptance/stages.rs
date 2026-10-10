@@ -54,20 +54,18 @@ impl Stage<Environment> for Decode {
     type Output = Decoded;
     type Error = Infallible;
     type Wait = ();
-    type State = Option<Request>;
+    type State = Request;
 
     fn start(input: Request) -> Self::State {
-        Some(input)
+        input
     }
 
     fn step(
         &mut self,
         _: &mut Environment,
-        state: &mut Self::State,
-    ) -> StepOutcome<Decoded, Infallible, ()> {
-        let Some(Request { id, bytes }) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Decoded, Infallible, ()> {
+        let Request { id, bytes } = state;
         self.accepted += 1;
         StepOutcome::Complete(Ok(Decoded { id, bytes }))
     }
@@ -78,20 +76,18 @@ impl Stage<Environment> for Compute {
     type Output = Executed;
     type Error = Infallible;
     type Wait = ();
-    type State = Option<Decoded>;
+    type State = Decoded;
 
     fn start(input: Decoded) -> Self::State {
-        Some(input)
+        input
     }
 
     fn step(
         &mut self,
         _: &mut Environment,
-        state: &mut Self::State,
-    ) -> StepOutcome<Executed, Infallible, ()> {
-        let Some(Decoded { id, bytes }) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Executed, Infallible, ()> {
+        let Decoded { id, bytes } = state;
         self.executed += 1;
         let result = bytes
             .into_iter()
@@ -106,23 +102,21 @@ impl Stage<Environment> for Publish {
     type Output = Response;
     type Error = Infallible;
     type Wait = ();
-    type State = Option<Executed>;
+    type State = Executed;
 
     fn start(input: Executed) -> Self::State {
-        Some(input)
+        input
     }
 
     fn step(
         &mut self,
         environment: &mut Environment,
-        state: &mut Self::State,
-    ) -> StepOutcome<Response, Infallible, ()> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Response, Infallible, ()> {
         if !environment.writable {
-            return StepOutcome::Pending(());
+            return StepOutcome::Pending(state, ());
         }
-        let Some(Executed { id, result }) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
+        let Executed { id, result } = state;
         environment.responses.push(id);
         StepOutcome::Complete(Ok(Response {
             id,

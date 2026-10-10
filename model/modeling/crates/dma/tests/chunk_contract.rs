@@ -21,18 +21,15 @@ impl Stage<ChannelContext<'_, SharedMemory>> for Resize {
     type Output = Transfer;
     type Error = Error;
     type Wait = ();
-    type State = Option<Transfer>;
+    type State = Transfer;
     fn start(input: Transfer) -> Self::State {
-        Some(input)
+        input
     }
     fn step(
         &mut self,
         _: &mut ChannelContext<'_, SharedMemory>,
-        state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
-        let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
+        mut transfer: Self::State,
+    ) -> StepOutcome<Transfer, Transfer, Error, ()> {
         transfer.length = self.0;
         StepOutcome::Complete(Ok(transfer))
     }

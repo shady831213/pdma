@@ -44,8 +44,8 @@ mod async_executor {
         fn step(
             &mut self,
             context: &mut Context,
-            (): &mut Self::State,
-        ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+            (): Self::State,
+        ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
             context.push(self.name);
             StepOutcome::Complete(self.result)
         }
@@ -178,7 +178,7 @@ mod async_executor {
     }
 
     #[tokio::test]
-    async fn adverse_errors_preserve_backend_stage_and_exhausted_variants() {
+    async fn adverse_errors_preserve_backend_stage_and_already_complete_variants() {
         // Given: separate backends failing around access, during wait, plus terminal stages.
         let before = AsyncExecutor::new(ScriptedBackend::failing(BackendFault::Before));
         let after = AsyncExecutor::new(ScriptedBackend::failing(BackendFault::After));
@@ -214,7 +214,7 @@ mod async_executor {
             wait_result,
             Err(AsyncRunError::BackendWait(BackendFault::Wait))
         );
-        assert_eq!(exhausted_result, Err(AsyncRunError::Exhausted));
+        assert_eq!(exhausted_result, Err(AsyncRunError::AlreadyComplete));
         assert_eq!(before.backend().interactions.load(Ordering::SeqCst), 0);
         assert_eq!(after.backend().interactions.load(Ordering::SeqCst), 1);
     }
@@ -235,13 +235,13 @@ mod async_executor {
         fn step(
             &mut self,
             _: &mut Context,
-            state: &mut Self::State,
-        ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-            if *state {
+            mut state: Self::State,
+        ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+            if state {
                 StepOutcome::Complete(Ok("after-wake"))
             } else {
-                *state = true;
-                StepOutcome::Pending(0)
+                state = true;
+                StepOutcome::Pending(state, 0)
             }
         }
     }

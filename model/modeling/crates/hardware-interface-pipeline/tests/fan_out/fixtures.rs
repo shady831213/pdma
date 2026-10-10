@@ -20,7 +20,7 @@ pub(super) enum Behavior {
     Complete,
     Pending,
     Error,
-    Exhausted,
+    Missing,
 }
 
 pub(super) struct Destination {
@@ -42,27 +42,27 @@ impl Stage<Context> for Destination {
     type Output = Receipt;
     type Error = &'static str;
     type Wait = &'static str;
-    type State = Option<Parcel>;
+    type State = Parcel;
 
     fn start(input: Parcel) -> Self::State {
-        Some(input)
+        input
     }
 
     fn step(
         &mut self,
         context: &mut Context,
-        state: &mut Self::State,
-    ) -> StepOutcome<Receipt, &'static str, &'static str> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Receipt, &'static str, &'static str> {
         context.attempts.push(self.id);
         match self.behavior {
-            Behavior::Pending if !context.released => return StepOutcome::Pending("release"),
+            Behavior::Pending if !context.released => {
+                return StepOutcome::Pending(state, "release");
+            }
             Behavior::Error => return StepOutcome::Complete(Err("destination failed")),
-            Behavior::Exhausted => return StepOutcome::Exhausted,
+            Behavior::Missing => return StepOutcome::Complete(Err("missing destination work")),
             Behavior::Complete | Behavior::Pending => {}
         }
-        let Some(Parcel(payload)) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
+        let Parcel(payload) = state;
         context.deliveries.push((self.id, payload));
         StepOutcome::Complete(Ok(Receipt(self.id)))
     }

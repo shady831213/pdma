@@ -8,7 +8,7 @@ pub mod composable_hardware_acceptance {
 use std::{future::Future, task::Context};
 
 use composable_hardware_acceptance::{backend::Backend, stages::*};
-use hardware_interface_pipeline::{AsyncExecutor, Operation, PipelineExt, StepOutcome};
+use hardware_interface_pipeline::{AsyncExecutor, Operation, PipelineExt, RunOutcome};
 
 #[test]
 fn nested_hardware_reuses_objects_and_propagates_domain_results() {
@@ -50,20 +50,20 @@ fn nested_hardware_reuses_objects_and_propagates_domain_results() {
         let mut operation = Operation::new(request);
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Progressed
+            Ok(RunOutcome::Progressed)
         );
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Progressed
+            Ok(RunOutcome::Progressed)
         );
         // Then faults are data delivered to publication, and completion is inert.
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Complete(Ok(expected))
+            Ok(RunOutcome::Complete(Ok(expected)))
         );
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Exhausted
+            Err(hardware_interface_pipeline::AlreadyComplete)
         );
     }
     assert_eq!(hardware.upstream.accepted, 2);

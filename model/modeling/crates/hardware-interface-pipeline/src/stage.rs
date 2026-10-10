@@ -3,7 +3,8 @@ use crate::StepOutcome;
 /// Reusable hardware with typed ports and separately owned operation state.
 ///
 /// Hardware outlives each operation. Starting creates request state, never hardware.
-/// Each step performs at most one bounded interaction and retains accepted work.
+/// Each step performs a bounded synchronous transition and returns any live continuation.
+/// Combinators define which child transitions share that driving boundary.
 /// Domain faults needing downstream handling belong in Output; Error terminates
 /// the operation. No context borrow escapes a step.
 pub trait Stage<C> {
@@ -21,12 +22,21 @@ pub trait Stage<C> {
     /// Constructs request state without interacting with hardware or context.
     fn start(input: Self::Input) -> Self::State;
 
-    /// Advances one operation through at most one bounded interaction.
+    /// Advances one operation within a bounded synchronous driving boundary.
+    ///
+    /// Live state must be recovered from the returned continuation before reuse.
+    /// ```compile_fail
+    /// use hardware_interface_pipeline::Stage;
+    /// fn reuse<C, S: Stage<C>>(stage: &mut S, context: &mut C, state: S::State) {
+    ///     let _first = stage.step(context, state);
+    ///     let _second = stage.step(context, state);
+    /// }
+    /// ```
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait>;
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait>;
 }
 
 /// A source whose readiness can be checked before accepting an operation.
@@ -59,8 +69,8 @@ impl<C, S: Stage<C> + ?Sized> Stage<C> for &mut S {
     fn step(
         &mut self,
         context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        state: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
         S::step(self, context, state)
     }
 }

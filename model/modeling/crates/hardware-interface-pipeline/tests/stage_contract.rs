@@ -1,6 +1,6 @@
 //! Consumer-visible contract tests for explicitly stepped stages.
 
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, RunOutcome, Stage, StepOutcome};
 
 #[derive(Debug, PartialEq, Eq)]
 struct OwnedWait(String);
@@ -21,13 +21,12 @@ enum State {
     Start,
     Waiting,
     Ready,
-    Finished,
 }
 
 #[derive(Debug)]
 struct Request {
     state: State,
-    completion: Option<Result<OwnedOutput, OwnedError>>,
+    completion: Result<OwnedOutput, OwnedError>,
 }
 
 struct ContractStage;
@@ -42,39 +41,32 @@ impl Stage<Context> for ContractStage {
     fn start(input: Self::Input) -> Self::State {
         Request {
             state: State::Start,
-            completion: Some(input),
+            completion: input,
         }
     }
 
     fn step(
         &mut self,
         context: &mut Context,
-        request: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        mut request: Self::State,
+    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
         match request.state {
             State::Start => {
                 context.interactions += 1;
                 request.state = State::Waiting;
-                StepOutcome::Progressed
+                StepOutcome::Progressed(request)
             }
             State::Waiting => {
                 request.state = State::Ready;
-                StepOutcome::Pending(OwnedWait("owned wait".to_owned()))
+                StepOutcome::Pending(request, OwnedWait("owned wait".to_owned()))
             }
-            State::Ready => {
-                request.state = State::Finished;
-                request
-                    .completion
-                    .take()
-                    .map_or(StepOutcome::Exhausted, StepOutcome::Complete)
-            }
-            State::Finished => StepOutcome::Exhausted,
+            State::Ready => StepOutcome::Complete(request.completion),
         }
     }
 }
 
 #[test]
-fn all_outcomes_transfer_owned_values_and_terminal_stage_is_exhausted() {
+fn all_outcomes_transfer_owned_values_and_completed_operation_is_inert() {
     // Given: one reusable stage and requests owning non-Copy success, error, and wait values.
     let mut hardware = ContractStage;
     let mut success = Operation::new(Ok(OwnedOutput("owned output".to_owned())));
@@ -93,29 +85,33 @@ fn all_outcomes_transfer_owned_values_and_terminal_stage_is_exhausted() {
     };
     let exhausted = failure.step(&mut hardware, &mut failure_context);
 
-    // Then: every literal outcome transfers its owned value and terminal state stays exhausted.
-    assert_eq!(progressed, StepOutcome::Progressed);
+    // Then: every literal outcome transfers its owned value and the completed operation stays inert.
+    assert_eq!(progressed, Ok(RunOutcome::Progressed));
     println!("Progressed");
     assert_eq!(
         pending,
-        StepOutcome::Pending(OwnedWait("owned wait".to_owned()))
+        Ok(RunOutcome::Pending(OwnedWait("owned wait".to_owned())))
     );
     println!("Pending(owned non-Copy wait token)");
     assert_eq!(
         complete_ok,
-        StepOutcome::Complete(Ok(OwnedOutput("owned output".to_owned())))
+        Ok(RunOutcome::Complete(Ok(OwnedOutput(
+            "owned output".to_owned()
+        ))))
     );
     println!("Complete(Ok(owned non-Copy output))");
     assert_eq!(
         complete_err,
-        StepOutcome::Complete(Err(OwnedError("owned error".to_owned())))
+        Ok(RunOutcome::Complete(Err(OwnedError(
+            "owned error".to_owned()
+        ))))
     );
     println!("Complete(Err(owned non-Copy error))");
-    assert_eq!(exhausted, StepOutcome::Exhausted);
-    println!("Exhausted(post-terminal)");
+    assert_eq!(exhausted, Err(hardware_interface_pipeline::AlreadyComplete));
+    println!("AlreadyComplete(post-terminal)");
     assert_eq!(
         success.step(&mut hardware, &mut success_context),
-        StepOutcome::Exhausted
+        Err(hardware_interface_pipeline::AlreadyComplete)
     );
 }
 
@@ -127,7 +123,7 @@ fn pending_wait_can_be_cancelled_and_stage_resumes_without_repeating_interaction
     let mut context = Context::default();
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
+        Ok(RunOutcome::Progressed)
     );
     let pending = operation.step(&mut hardware, &mut context);
 
@@ -139,10 +135,12 @@ fn pending_wait_can_be_cancelled_and_stage_resumes_without_repeating_interaction
     assert_eq!(context.interactions, 1);
     assert_eq!(
         resumed,
-        StepOutcome::Complete(Ok(OwnedOutput("owned output".to_owned())))
+        Ok(RunOutcome::Complete(Ok(OwnedOutput(
+            "owned output".to_owned()
+        ))))
     );
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        StepOutcome::Exhausted
+        Err(hardware_interface_pipeline::AlreadyComplete)
     );
 }

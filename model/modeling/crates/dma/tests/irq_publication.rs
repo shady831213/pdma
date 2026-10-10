@@ -2,11 +2,9 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_contract::dma::{Response, ResponseRegisters, ResponseStatus};
-use pdma_model_dma::Dma;
-use pdma_model_dma::Pipeline;
 use support::{TestResult, command, read_word, setup, submit};
 const RESPONSE_PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
@@ -18,7 +16,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = support::single_command(&device);
-    let mut operation = Operation::<Pipeline, Dma<SharedMemory>>::new(());
+    let mut operation = Operation::new(());
     // When
     for _ in 0..32 {
         let outcome = StepExecutor::new()

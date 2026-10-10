@@ -13,7 +13,7 @@ use pdma_model_contract::dma::{
     ResponseStatus,
 };
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
-use pdma_model_dma::{Dma, Pipeline};
+use pdma_model_dma::Dma;
 use std::{cell::RefCell, ops::Range};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -176,7 +176,7 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
     let mut hardware = support::single_command(&device);
-    let mut operation = Operation::<Pipeline, Dma<FlatMemory>>::new(());
+    let mut operation = Operation::new(());
     let mut completed = false;
     // When
     for _ in 0..32 {

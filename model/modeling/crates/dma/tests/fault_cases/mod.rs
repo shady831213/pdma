@@ -40,6 +40,19 @@ impl std::ops::DerefMut for Fixture {
 }
 
 impl Fixture {
+    fn until(
+        &mut self,
+        mut condition: impl FnMut(&mut Dma<Paged>) -> TestResult<bool>,
+    ) -> TestResult {
+        for _ in 0..1024 {
+            if condition(&mut self.dma)? {
+                return Ok(());
+            }
+            self.step()?;
+        }
+        Err("DMA condition was not reached before watchdog".into())
+    }
+
     fn step(&mut self) -> TestResult {
         match self.operation.step(&mut self.pipeline, &mut self.dma) {
             StepOutcome::Progressed | StepOutcome::Pending(()) => Ok(()),

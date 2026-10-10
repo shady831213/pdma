@@ -9,6 +9,7 @@ use pdma_model_contract::dma::{
 };
 use pdma_model_dma::{Dma, Error, ResetControl};
 
+mod command_grant;
 mod context_abort;
 mod fairness;
 mod fan_in_inputs;

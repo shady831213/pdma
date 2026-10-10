@@ -7,11 +7,11 @@ fn repeated_payload_faults_keep_a_single_faulted_bit() -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     assert_eq!(fault_status(&mut device)?, 1);
     // When: software requests one retry without repairing the mapping.
     resume(&mut device, 1)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // Then: the second fault reports the same single bit and stays parked.
     assert_eq!(fault_status(&mut device)?, 1);
     assert_eq!(device.memory.faults.get(), 2);
@@ -29,7 +29,7 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
             .missing
             .set(Some((if write { 0x1343 } else { 0x1242 }, write)));
         submit(&mut device, command, 0)?;
-        run(&mut device)?;
+        device.until(|dma| Ok(fault_status(dma)? == 1))?;
         assert_eq!(fault_status(&mut device)?, 1);
         assert_eq!(
             device
@@ -40,7 +40,7 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
         );
         // When: repair is delayed across one explicit retry and source bytes then change.
         resume(&mut device, 1)?;
-        run(&mut device)?;
+        device.until(|dma| Ok(fault_status(dma)? == 1))?;
         assert_eq!(fault_status(&mut device)?, 1);
         resume(&mut device, 0)?;
         assert_eq!(fault_status(&mut device)?, 1);
@@ -54,12 +54,13 @@ fn sg_resume_preserves_progress_and_cached_destination_bytes() -> TestResult {
             .memory
             .write(0x1300.into(), MemoryAlignment::ONE, b"ZZ")?;
         resume(&mut device, 1)?;
-        run(&mut device)?;
+        device
+            .until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
         // Then: only remaining bytes commit, and a failed write retains its original read.
         let done = response(&device)?;
         assert_eq!(
             (done.id, done.status, done.bytes_completed()),
-            (7, ResponseStatus::Success, 8)
+            (command.id, ResponseStatus::Success, command.copy_length)
         );
         assert_eq!(
             read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
@@ -96,18 +97,15 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    run(&mut device)?;
-    submit(
-        &mut device,
-        Command {
-            id: 99,
-            copy_length: 3,
-            source: Endpoint::linear(0x1200, 0),
-            destination: Endpoint::linear(0x1600, 0),
-            ..Command::ZERO
-        },
-        1,
-    )?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
+    let follower = Command {
+        id: 99,
+        copy_length: 3,
+        source: Endpoint::linear(0x1200, 0),
+        destination: Endpoint::linear(0x1600, 0),
+        ..Command::ZERO
+    };
+    submit(&mut device, follower, 1)?;
     // When: the backend is repaired without a write-one resume request.
     device.memory.missing.set(None);
     resume(&mut device, 0)?;
@@ -134,19 +132,17 @@ fn repair_and_zero_resume_do_not_retry_or_admit_later_same_channel_work() -> Tes
     );
     assert!(!device.take_interrupt());
     resume(&mut device, 1)?;
-    for _ in 0..256 {
-        device.step()?;
-    }
+    device.until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 2))?;
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
         2
     );
-    assert_eq!(response(&device)?.id, 7);
+    assert_eq!(response(&device)?.id, command.id);
     let raw: ResponseRaw = device.memory.memory.read_typed(
         (0x1100 + u64::try_from(Response::RECORD_SIZE)?).into(),
         MemoryAlignment::ONE,
     )?;
-    assert_eq!(Response::from_bytes(raw.as_ref())?.id, 99);
+    assert_eq!(Response::from_bytes(raw.as_ref())?.id, follower.id);
     Ok(())
 }
 
@@ -168,15 +164,16 @@ fn mixed_endpoint_resumption_keeps_each_stream_cursor() -> TestResult {
             device.memory.missing.set(Some((0x1242, false)));
         }
         submit(&mut device, command, 0)?;
-        run(&mut device)?;
+        device.until(|dma| Ok(fault_status(dma)? == 1))?;
         // When: software repairs the backend and resumes the original task.
         device.memory.missing.set(None);
         resume(&mut device, 1)?;
-        run(&mut device)?;
+        device
+            .until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
         // Then: one full-length success reports the original task and exact output.
         assert_eq!(
             (response(&device)?.id, response(&device)?.bytes_completed()),
-            (7, 8)
+            (command.id, command.copy_length)
         );
         if linear_source {
             assert_eq!(

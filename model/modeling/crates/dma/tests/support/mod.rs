@@ -6,22 +6,22 @@ use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
 };
 use pdma_model_dma::{
-    CheckRanges, Dma, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+    CheckRanges, Dma, Intake, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 /// Assemble one command for tests that inspect its completion and intermediate boundaries.
-pub fn single_command<M>(device: &Dma<M>) -> Pipeline {
+pub fn single_command<M>(device: &Dma<M>) -> Then<Intake, Pipeline> {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
     let execution = Then::new(CheckRanges, Repeat::new(chunk));
     Then::new(
+        device.intake(),
         Then::new(
-            device.intake(),
             Resettable::new(AfterEach::new(execution, UpdateIrq)),
+            device.responses(),
         ),
-        device.responses(),
     )
 }
 
@@ -114,7 +114,7 @@ pub fn submit(
 /// Drive one operation within a fixed interaction bound.
 pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
     let mut hardware = single_command(device);
-    let mut operation = Operation::<Pipeline, Dma<SharedMemory>>::new(());
+    let mut operation = Operation::new(());
     for _ in 0..1024 {
         match StepExecutor::new()
             .step(&mut hardware, &mut operation, device)

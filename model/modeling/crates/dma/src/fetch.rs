@@ -19,6 +19,16 @@ impl Fetch {
 
 impl<M: MemoryAccess<SB>, SB> ReadyStage<Dma<M, SB>> for Fetch {
     fn ready(&self, device: &Dma<M, SB>) -> bool {
+        self.eligible(device)
+            && device
+                .channels
+                .get(self.channel.index())
+                .is_none_or(|channel| channel.parked.is_none())
+    }
+}
+
+impl Fetch {
+    pub(crate) fn eligible<M, SB>(&self, device: &Dma<M, SB>) -> bool {
         if device.halted() || device.resetting() {
             return false;
         }
@@ -51,14 +61,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
         (): &mut (),
     ) -> StepOutcome<Self::Output, Error, ()> {
         if !self.ready(device) {
-            return StepOutcome::Pending(());
-        }
-        if device
-            .channels
-            .get(self.channel.index())
-            .is_some_and(|channel| channel.parked.is_some())
-        {
-            device.resume_selected = Some(self.channel);
             return StepOutcome::Pending(());
         }
         let outcome = {

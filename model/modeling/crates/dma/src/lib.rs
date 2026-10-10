@@ -11,12 +11,11 @@ mod maintenance;
 mod memory;
 mod reset;
 mod routing;
-mod schedule;
 mod stages;
 #[cfg(test)]
 mod tests;
 
-pub use arbitration::RoundRobin;
+pub use arbitration::{CommandArbiter, CommandArbiterState, RoundRobin};
 pub use build::BuildError;
 pub use channel::{Channel, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
@@ -33,7 +32,6 @@ use pdma_model_contract::dma::{
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, RouteResponse};
-pub use schedule::{Schedule, ScheduleState};
 pub use stages::{
     CommandLoop, CopyLoop, Execution, Intake, Pipeline, Publish, Responses, RunCommand, UpdateIrq,
 };
@@ -83,7 +81,6 @@ pub struct Dma<M, S = ()> {
     interrupt: bool,
     active: Option<ChannelTask<[Option<pdma_model_contract::dma::ContextId>; 3]>>,
     maintenance: Option<Maintenance>,
-    resume_selected: Option<ChannelId>,
 }
 
 impl<M, S> Dma<M, S> {

@@ -185,9 +185,11 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   related registers in one child block before repeating it.
   One shared execution pipeline processes commands selected by round-robin arbitration,
   with bounded per-channel retained operations for payload-fault suspension.
-  Use Arbitrate (the singleton specialization of FanIn) over channel-bound Fetch ports,
-  with the RoundRobin policy owned by dma. Ready checks do not consume commands,
-  and PDMA eligibility rules belong to Fetch, not the generic combinators.
+  CommandArbiter uses Arbitrate (the singleton specialization of FanIn) over
+  channel-bound execution ports, with the RoundRobin policy owned by dma. A grant
+  either fetches a new command or restores that channel's retained operation.
+  Ready checks do not consume commands; eligibility belongs to DMA, not the
+  generic combinators. Fetch remains the new-command acceptance stage.
   Route tagged responses through Dispatch (the singleton FanOut specialization) to
   channel-bound publication ports.
   Complete hardware assembly uses Dma::command_loop(); scenarios drive one retained
@@ -202,20 +204,21 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   requests cleanup; read one means busy; only hardware clears zero after affected accepted
   work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
-  Use `AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>` for the command loop. Track accepted
+  Use `AfterEach<CommandArbiter<Pipeline>, ResetControl>` for the command loop. Track accepted
   channel/generation ownership, including parked references, until terminal release;
   generation invalidation alone
   is not completion. `RunCommand` owns executing-state release at complete pipeline
   termination. A payload fault retains the leaf's Transfer and returns Pending.
-  `ScheduleState` retains the exact composed Operation per parked channel, preserving
+  CommandArbiter retains at most one exact composed Operation per channel, preserving
   scratch and custom child-stage state; Channel.parked retains accepted references.
-  Existing Fetch/RoundRobin selection restores that Operation on resume without
-  refetching, restarting CheckRanges or repeating completed transforms. Schedule
-  cleans reset/Abort targets before stepping shared active work, including a disabled
-  peer. Parking is not whole-command retirement.
+  The granted execution port restores that Operation on resume without refetching,
+  restarting CheckRanges or repeating completed transforms. Arbitration retains
+  a healthy command's grant through termination and yields it on payload fault.
+  CommandArbiter cleans reset/Abort targets before stepping shared active work,
+  including a disabled peer. Parking is not whole-command retirement.
   Response publication and `Resettable` binding must not retire the whole command.
-  Custom command assemblies must retain RunCommand/Schedule lifecycle boundaries
-  and drive `ResetControl`.
+  Custom sustained command assemblies pass their downstream transform to
+  `Dma::arbitrate`, preserving RunCommand terminal ownership, and drive `ResetControl`.
   `RunCommand<S>` constrains the child stage's associated types, not its concrete composition;
   reuse `Operation` to discard terminal state before releasing command ownership.
   Guard command, SG-list, payload and response accesses before old work can interact again.
@@ -275,6 +278,11 @@ Firmware can consume DMA and peripheral contracts without owning those interface
 - Use native module declarations and matching paths. No `#[path]`, conditional path
   redirection, `include!` workaround, symlink workaround, or duplicated source trees.
 - Tests use Given/When/Then and observable outcomes. Do not weaken them to get green.
+  Behavior tests derive expected IDs, lengths and bytes from their case inputs;
+  use schema layout for access setup. Keep independent literal wire/layout goldens
+  in ABI tests. Drive hardware to an observable condition with a bounded watchdog,
+  rather than asserting incidental step counts. Cases own inputs and expectations,
+  harnesses assemble actors, and modeled software owns allocation and programming.
 - No unsafe code, production `unwrap`/`expect`/`panic`/`todo`, or unchecked indexing.
 - Keep Rust source below 250 pure LOC; split by responsibility.
 - Organize modules by semantic ownership, not one type per file or line count alone.

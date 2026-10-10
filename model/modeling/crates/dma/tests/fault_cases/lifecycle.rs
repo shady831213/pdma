@@ -10,7 +10,7 @@ fn payload_fault_does_not_publish_a_response() -> TestResult {
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
     // When: the shared engine reaches the page fault.
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // Then: the command remains retained without completion or interrupt.
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
@@ -28,13 +28,11 @@ fn reset_discards_parked_work_and_clears_fault_status() -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     let reset = ChannelId::new(0).admin_offset(1).ok_or("reset address")?;
     // When: reset is driven without any resume request.
     device.write(reset, &1_u32.to_le_bytes())?;
-    for _ in 0..128 {
-        device.step()?;
-    }
+    device.until(|dma| Ok(read_word(dma, reset)? == 0))?;
     // Then: cleanup finishes, committed bytes stay, and the old task cannot revive.
     assert_eq!(read_word(&mut device, reset)?, 0);
     resume(&mut device, 1)?;
@@ -63,8 +61,8 @@ fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestR
         command.source.context = 7;
         device.memory.missing.set(Some((0x1242, false)));
         submit(&mut device, command, 0)?;
-        run(&mut device)?;
-        let context = ContextId::new(7);
+        device.until(|dma| Ok(fault_status(dma)? == 1))?;
+        let context = ContextId::new(command.source.context);
         let channel = ChannelId::new(0);
         // When: management requests maintenance of the retained reference.
         if abort {
@@ -72,9 +70,7 @@ fn drain_reports_parked_channel_and_abort_discards_without_completion() -> TestR
         } else {
             device.drain_context(context, &[channel])?;
         }
-        for _ in 0..128 {
-            device.step()?;
-        }
+        device.until(|dma| Ok(dma.context_status(context) != Ok(false)))?;
         // Then: Drain fails explicitly; Abort retires parked work without publishing.
         if abort {
             assert_eq!(device.context_status(context), Ok(true));
@@ -107,20 +103,14 @@ fn abort_of_running_task_discards_it_only_when_payload_fault_parks_it() -> TestR
     command.destination.context = 7;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    for _ in 0..128 {
-        device.step()?;
-        if read_word(&mut device, CMD + CommandRegisters::CONSUMER.offset())? == 1 {
-            break;
-        }
-    }
+    device.until(|dma| Ok(read_word(dma, CMD + CommandRegisters::CONSUMER.offset())? == 1))?;
     assert_eq!(device.memory.faults.get(), 0);
     // When: Abort waits for the running command and that command encounters a page fault.
-    device.abort_context(ContextId::new(7), &[ChannelId::new(0)])?;
-    for _ in 0..256 {
-        device.step()?;
-    }
+    let context = ContextId::new(command.destination.context);
+    device.abort_context(context, &[ChannelId::new(0)])?;
+    device.until(|dma| Ok(dma.context_status(context) != Ok(false)))?;
     // Then: committed bytes remain and maintenance completes without requiring resume.
-    assert_eq!(device.context_status(ContextId::new(7)), Ok(true));
+    assert_eq!(device.context_status(context), Ok(true));
     assert_eq!(device.memory.faults.get(), 1);
     assert_eq!(fault_status(&mut device)?, 0);
     assert_eq!(

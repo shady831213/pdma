@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
 use pdma_model_dma::{Dma, Error, Publish, Resettable};
@@ -24,7 +24,8 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
     for suspend_publication in [false, true] {
         // Given: shared execution has finished but its tagged response has not been dispatched.
         let mut device = setup()?;
-        let mut execution = super::support::single_command(&device).upstream;
+        let pipeline = super::support::single_command(&device);
+        let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
         let mut operation = Operation::new(());
         let response = (0..128)
             .find_map(|_| match operation.step(&mut execution, &mut device) {
@@ -85,7 +86,8 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
 fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     // Given: a completed response from channel zero and a port bound to channel one.
     let mut device = setup()?;
-    let mut execution = super::support::single_command(&device).upstream;
+    let pipeline = super::support::single_command(&device);
+    let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
     let mut operation = Operation::new(());
     let response = (0..128)
         .find_map(|_| match operation.step(&mut execution, &mut device) {

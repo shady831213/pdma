@@ -1,6 +1,10 @@
-use crate::{Dma, Error, Fetch};
+mod command;
+mod port;
+
+pub use command::{CommandArbiter, CommandArbiterState};
+
+use crate::Error;
 use hardware_interface_pipeline::{Arbitration, ReadyStage, StepOutcome};
-use hardware_interface_runtime::MemoryAccess;
 
 /// PDMA policy: probe each channel once per idle round and rotate after a grant.
 #[derive(Debug, Default)]
@@ -8,7 +12,7 @@ pub struct RoundRobin {
     next: usize,
 }
 
-impl<M: MemoryAccess<SB>, SB> Arbitration<Dma<M, SB>, Fetch> for RoundRobin {
+impl<C, S: ReadyStage<C, Error = Error, Wait = ()>> Arbitration<C, S> for RoundRobin {
     type State = usize;
 
     fn start() -> usize {
@@ -17,8 +21,8 @@ impl<M: MemoryAccess<SB>, SB> Arbitration<Dma<M, SB>, Fetch> for RoundRobin {
 
     fn select_index(
         &mut self,
-        context: &Dma<M, SB>,
-        sources: &[Fetch],
+        context: &C,
+        sources: &[S],
         visited: &mut usize,
     ) -> StepOutcome<usize, Error, ()> {
         if sources.is_empty() {

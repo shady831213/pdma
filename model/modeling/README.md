@@ -120,16 +120,24 @@ composition is deliberately explicit:
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
 let execution = Then::new(CheckRanges, Repeat::new(chunk));
-Then::new(
-    Then::new(device.intake(), Resettable::new(AfterEach::new(execution, UpdateIrq))),
-    device.responses(),
+AfterEach::new(
+    device.arbitrate(Then::new(
+        Resettable::new(AfterEach::new(execution, UpdateIrq)),
+        device.responses(),
+    )),
+    ResetControl,
 )
 ```
 
 Each `Fetch` produces `ChannelTask<Command>`, carrying channel identity and generation.
 Its `ReadyStage::ready` checks channel/ring state without consuming a command.
-`device.intake()` uses `Arbitrate<Fetch, RoundRobin>`: arbitration specializes the generic
-`FanIn` with a singleton plan and identity output, while device owns the selection policy.
+`device.arbitrate(downstream)` arbitrates channel-bound execution ports through
+`Arbitrate<ExecutionPort, RoundRobin>`. A selected port fetches a new command or
+restores its retained operation, then drives the one shared downstream stage.
+Arbitration specializes the generic `FanIn` with a singleton plan and identity
+output, while DMA owns the selection policy. `device.intake()` remains a
+new-command-only `Arbitrate<Fetch, RoundRobin>` for single-command boundary tests;
+it is not nested inside the sustained command arbiter.
 `FanIn` itself can gather multiple sources and reduce them into a different output type.
 `device.responses()` uses `Dispatch<ResponsePort, RouteResponse>`, the singleton
 specialization of `FanOut`. The PDMA `Route` policy supplies only the channel-bound
@@ -159,16 +167,18 @@ publication faults stop the channel. An error response is published before the c
 stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
-`device.command_loop()` builds `CommandLoop = AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>`, reusing one shared
-pipeline and one executing command for either single-channel or multi-channel devices.
-`ScheduleState` owns the current Operation and at most one parked Operation per
-physical channel. A faulting copy leaf retains its Transfer and returns Pending;
-RunCommand does not retire it. Schedule parks the exact composed state, including
-both cursors, write scratch and custom transforms, while Channel.parked retains
-accepted context references. Existing Fetch/RoundRobin selection signals the private
-resume_selected handoff, restoring the exact Operation without command refetch,
-CheckRanges restart or repeated transforms. Schedule discards reset/Abort targets
-before stepping shared active work, so even a disabled peer cannot block cleanup.
+`device.command_loop()` builds `AfterEach<CommandArbiter<Pipeline>, ResetControl>`,
+reusing one shared `RunCommand<Pipeline>` engine. `CommandArbiter` adapts the DMA
+context and retained-operation slots to `Repeat<Arbitrate<ExecutionPort, RoundRobin>>`;
+the existing combinators own selection and iteration. Each physical channel has
+at most one retained Operation, not its own engine. A faulting copy leaf retains
+its Transfer and returns Pending; RunCommand does not retire it. Its execution
+port parks the exact composed state, including both cursors, write scratch and
+custom transforms, while Channel.parked retains accepted context references.
+The port ends that arbitration turn and restores its operation when selected
+again, without command refetch, CheckRanges restart or repeated transforms.
+CommandArbiter discards reset/Abort targets before stepping shared active work,
+so even a disabled peer cannot block cleanup.
 Arbitration changes channels at command completion or payload-fault suspension;
 it does not time-slice healthy commands between chunks. A full idle arbitration
 round returns Pending; stopping errors and reset retire affected work, while a
@@ -180,9 +190,9 @@ hardware keeps the reset register at one until affected accepted work retires, t
 clears it to zero. `ResetControl` runs after each command-loop step, including pending
 steps. Configuration writes are rejected while the affected scope is resetting.
 Generation tags additionally reject retained pre-reset tasks after later reconfiguration;
-they do not acknowledge reset. Custom command compositions use `RunCommand<S>`
-inside Schedule for ownership and suspension, and step `ResetControl`. RunCommand accepts any
-child stage with the complete command's input/output/error/wait contract and uses the
+they do not acknowledge reset. Custom sustained command compositions pass a
+`ChannelTask<Command> -> ()` transform to `device.arbitrate` and step `ResetControl`.
+The arbiter's RunCommand accepts any child stage with that contract and uses the
 existing `Operation` to dispose of terminal child state before releasing ownership.
 Only terminal completion or cancellation cleanup releases accepted ownership;
 parking, response publication and `Resettable` binding do not acknowledge cleanup.
@@ -191,9 +201,11 @@ model hardware cleanup. See the [reset contract](docs/reset.md) for completion a
 lifetime requirements.
 
 Build `device.command_loop()` before moving the device into
-the runtime transport, and retain that graph across commands. Its lightweight Fetch
-ports come from the actual instance population. Custom graphs can pass a subset or
-different ordering of Fetch ports to Arbitrate, or supply their own arbitration policy.
+the runtime transport, and retain that graph across commands. Its lightweight
+execution ports come from the actual instance population. Single-command boundary
+graphs may instead pass a subset or different ordering of Fetch ports to Arbitrate,
+or supply their own arbitration policy; this intake-only assembly does not provide
+the complete parked-command lifecycle.
 Runtime only drives the supplied graph; it never constructs the hardware policy.
 Complete scenarios drive one persistent command-loop operation until their software
 program finishes, then abort and join the hardware task. Command-local termination

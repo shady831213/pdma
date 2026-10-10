@@ -5,21 +5,21 @@ use pdma_model_contract::dma::{
     Endpoint, ResponseRegisters,
 };
 use pdma_model_dma::{
-    CheckRanges, Dma, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
+    CheckRanges, Dma, Intake, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
 };
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 /// Assemble one command while keeping arbitration state across test operations.
-pub fn single_command<M>(device: &Dma<M>) -> Pipeline {
+pub fn single_command<M>(device: &Dma<M>) -> Then<Intake, Pipeline> {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
     let execution = Then::new(CheckRanges, Repeat::new(chunk));
     Then::new(
+        device.intake(),
         Then::new(
-            device.intake(),
             Resettable::new(AfterEach::new(execution, UpdateIrq)),
+            device.responses(),
         ),
-        device.responses(),
     )
 }
 

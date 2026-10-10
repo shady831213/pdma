@@ -9,7 +9,7 @@ fn rejected_fault_register_accesses_preserve_parked_work() -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     let status = CTRL + ChannelRegisters::FAULT_STATUS.offset();
     let resume = CTRL + ChannelRegisters::RESUME.offset();
     // When: software violates access permissions, width, or reserved-bit constraints.
@@ -47,12 +47,10 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     let reset = ChannelId::new(0).admin_offset(1).ok_or("reset")?;
     device.write(reset, &1_u32.to_le_bytes())?;
-    for _ in 0..128 {
-        device.step()?;
-    }
+    device.until(|dma| Ok(read_word(dma, reset)? == 0))?;
     assert_eq!(read_word(&mut device, reset)?, 0);
     for (offset, value) in [
         (CMD + CommandRegisters::BASE.offset(), 0x1000_u64),
@@ -68,8 +66,9 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
     // When: a new task faults after reconfiguration and its mapping is repaired.
-    submit(&mut device, Command { id: 91, ..command }, 0)?;
-    run(&mut device)?;
+    let replacement = Command { id: 91, ..command };
+    submit(&mut device, replacement, 0)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
     for _ in 0..128 {
@@ -82,10 +81,8 @@ fn reset_discards_old_task_and_new_fault_requires_resume() -> TestResult {
         0
     );
     resume(&mut device, 1)?;
-    for _ in 0..128 {
-        device.step()?;
-    }
-    assert_eq!(response(&device)?.id, 91);
+    device.until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
+    assert_eq!(response(&device)?.id, replacement.id);
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
         1
@@ -101,7 +98,7 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
         let command = streams(&device)?;
         device.memory.missing.set(Some((0x1242, false)));
         submit(&mut device, command, 0)?;
-        run(&mut device)?;
+        device.until(|dma| Ok(fault_status(dma)? == 1))?;
         assert_eq!(fault_status(&mut device)?, 1);
         if fatal {
             device.signal_fatal();
@@ -148,10 +145,10 @@ fn resume_does_not_enable_a_disabled_channel_or_clear_device_fatal() -> TestResu
                 CTRL + ChannelRegisters::ENABLE.offset(),
                 &1_u32.to_le_bytes(),
             )?;
-            for _ in 0..128 {
-                device.step()?;
-            }
-            assert_eq!(response(&device)?.bytes_completed(), 8);
+            device.until(|dma| {
+                Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1)
+            })?;
+            assert_eq!(response(&device)?.bytes_completed(), command.copy_length);
         }
     }
     Ok(())
@@ -167,7 +164,7 @@ fn resume_without_a_fault_does_not_prearm_later_faults() -> TestResult {
         device.memory.missing.set(Some((0x1242, false)));
         // When: the next command encounters a payload fault.
         submit(&mut device, command, 0)?;
-        run(&mut device)?;
+        device.until(|dma| Ok(fault_status(dma)? == 1))?;
         device.write(
             CTRL + ChannelRegisters::IRQ_MASK.offset(),
             &0_u32.to_le_bytes(),

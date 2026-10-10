@@ -1,6 +1,6 @@
 use crate::{
-    ChannelContext, CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
-    ResponsePort, RoundRobin, RouteResponse, Schedule, WriteCopy,
+    ChannelContext, CheckRanges, CommandArbiter, Dma, Error, Fetch, NextChunk, ReadCopy,
+    ResetControl, Resettable, ResponsePort, RoundRobin, RouteResponse, WriteCopy,
 };
 use hardware_interface_pipeline::{
     AfterEach, Arbitrate, BranchError, Dispatch, MapError, Operation, Repeat, Stage, StepOutcome,
@@ -88,16 +88,16 @@ impl<S> RunCommand<S> {
 
 impl<M: MemoryAccess<SB>, S, SB> Stage<Dma<M, SB>> for RunCommand<S>
 where
-    S: Stage<Dma<M, SB>, Input = (), Output = (), Error = Error, Wait = ()>,
+    S: Stage<Dma<M, SB>, Output = (), Error = Error, Wait = ()>,
 {
-    type Input = ();
+    type Input = S::Input;
     type Output = ControlFlow<(), ()>;
     type Error = Error;
     type Wait = ();
     type State = Operation<S, Dma<M, SB>>;
 
-    fn start((): ()) -> Self::State {
-        Operation::new(())
+    fn start(input: Self::Input) -> Self::State {
+        Operation::new(input)
     }
 
     fn step(
@@ -107,9 +107,6 @@ where
     ) -> StepOutcome<Self::Output, Error, ()> {
         if state.is_complete() {
             return StepOutcome::Exhausted;
-        }
-        if device.discard_aborted() {
-            return StepOutcome::Progressed;
         }
         let outcome = state.step(&mut self.pipeline, device);
         if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
@@ -141,11 +138,11 @@ pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) 
 pub type Responses =
     MapError<Dispatch<ResponsePort, RouteResponse>, fn(BranchError<Error>) -> Error>;
 
-/// The same statically composed hardware is used by step and async executors.
-pub type Pipeline = Then<Then<Intake, Resettable<AfterEach<Execution, UpdateIrq>>>, Responses>;
+/// Shared execution and publication hardware for one granted command.
+pub type Pipeline = Then<Resettable<AfterEach<Execution, UpdateIrq>>, Responses>;
 
 /// Continuously executes commands through one shared pipeline.
-pub type CommandLoop = AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>;
+pub type CommandLoop = AfterEach<CommandArbiter<Pipeline>, ResetControl>;
 
 impl<M, SB> Dma<M, SB> {
     /// Builds this device's lightweight command input ports for custom compositions.
@@ -178,14 +175,16 @@ impl<M, SB> Dma<M, SB> {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
         let execution = Then::new(CheckRanges, Repeat::new(chunk));
         AfterEach::new(
-            Schedule::new(Repeat::new(RunCommand::new(Then::new(
-                Then::new(
-                    self.intake(),
-                    Resettable::new(AfterEach::new(execution, UpdateIrq)),
-                ),
+            self.arbitrate(Then::new(
+                Resettable::new(AfterEach::new(execution, UpdateIrq)),
                 self.responses(),
-            )))),
+            )),
             ResetControl,
         )
+    }
+
+    /// Arbitrates new and resumed commands through one shared downstream composition.
+    pub fn arbitrate<S>(&self, pipeline: S) -> CommandArbiter<S> {
+        CommandArbiter::new(self.channels.len(), pipeline)
     }
 }

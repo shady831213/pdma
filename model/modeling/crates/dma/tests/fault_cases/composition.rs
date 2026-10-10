@@ -1,8 +1,8 @@
 use super::*;
 use hardware_interface_pipeline::{AfterEach, Repeat, Stage, Then};
 use pdma_model_dma::{
-    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, ResetControl, Resettable, RunCommand,
-    Schedule, Transfer, UpdateIrq, WriteCopy,
+    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, ResetControl, Resettable, Transfer,
+    UpdateIrq, WriteCopy,
 };
 
 struct InvertPayload;
@@ -44,22 +44,19 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
     );
     let execution = Then::new(CheckRanges, Repeat::new(chunk));
     let pipeline = Then::new(
-        Then::new(
-            device.intake(),
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
-        ),
+        Resettable::new(AfterEach::new(execution, UpdateIrq)),
         device.responses(),
     );
-    let mut engine = AfterEach::new(
-        Schedule::new(Repeat::new(RunCommand::new(pipeline))),
-        ResetControl,
-    );
+    let mut engine = AfterEach::new(device.arbitrate(pipeline), ResetControl);
     let mut operation = Operation::new(());
     for _ in 0..256 {
         assert!(matches!(
             operation.step(&mut engine, &mut device),
             StepOutcome::Progressed | StepOutcome::Pending(())
         ));
+        if fault_status(&mut device)? == 1 {
+            break;
+        }
     }
     // When: a repeated fault and eventual repair resume that same composed operation.
     assert_eq!(fault_status(&mut device)?, 1);
@@ -69,6 +66,9 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
             operation.step(&mut engine, &mut device),
             StepOutcome::Progressed | StepOutcome::Pending(())
         ));
+        if fault_status(&mut device)? == 1 {
+            break;
+        }
     }
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
@@ -82,6 +82,9 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
             operation.step(&mut engine, &mut device),
             StepOutcome::Progressed | StepOutcome::Pending(())
         ));
+        if read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())? == 1 {
+            break;
+        }
     }
     // Then: cached transformed bytes commit exactly once, without re-reading or re-transforming.
     assert_eq!(
@@ -91,7 +94,7 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
             .read_typed::<[u8; 6]>(0x1340.into(), MemoryAlignment::ONE)?,
         b"cdefgh".map(|byte| !byte)
     );
-    assert_eq!(response(&device)?.bytes_completed(), 8);
+    assert_eq!(response(&device)?.bytes_completed(), command.copy_length);
     assert_eq!(
         read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
         1
@@ -106,7 +109,7 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     let command = streams(&device)?;
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // When: a caller independently validates an unrelated zero-length command.
     let mut operation = Operation::new(Command::ZERO);
     let mut complete = false;
@@ -123,10 +126,10 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
     resume(&mut device, 1)?;
-    run(&mut device)?;
+    device.until(|dma| Ok(read_word(dma, RESP + ResponseRegisters::PRODUCER.offset())? == 1))?;
     assert_eq!(
         (response(&device)?.id, response(&device)?.bytes_completed()),
-        (7, 8)
+        (command.id, command.copy_length)
     );
     Ok(())
 }

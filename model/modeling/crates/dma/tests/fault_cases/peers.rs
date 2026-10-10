@@ -2,7 +2,7 @@ use super::*;
 use hardware_interface_pipeline::StepOutcome;
 use pdma_model_contract::dma::ChannelId;
 
-fn pair() -> TestResult<(Dma<Paged>, usize)> {
+fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
     let mut device = Dma::new(setup()?.dma.memory, 2)?;
     let first = streams(&device)?;
     let peer = Command {
@@ -49,13 +49,13 @@ fn pair() -> TestResult<(Dma<Paged>, usize)> {
         }
     }
     device.memory.missing.set(Some((0x1242, false)));
-    Ok((device, peer_response))
+    Ok((device, peer_response, peer))
 }
 
 #[test]
 fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
     // Given: two physical channels with independent rings and one missing source page.
-    let (mut device, peer_response) = pair()?;
+    let (mut device, peer_response, peer) = pair()?;
     let mut pipeline = device.command_loop();
     let mut operation = Operation::new(());
     // When: the shared engine runs both channels with the page still absent.
@@ -64,6 +64,13 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
             operation.step(&mut pipeline, &mut device),
             StepOutcome::Progressed | StepOutcome::Pending(())
         ));
+        if read_word(
+            &mut device,
+            peer_response + ResponseRegisters::PRODUCER.offset(),
+        )? == 1
+        {
+            break;
+        }
     }
     // Then: peer work completes once and the faulted task is neither retried nor published.
     assert_eq!(
@@ -90,14 +97,14 @@ fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
         .memory
         .memory
         .read_typed(0x1800.into(), MemoryAlignment::ONE)?;
-    assert_eq!(Response::from_bytes(raw.as_ref())?.id, 99);
+    assert_eq!(Response::from_bytes(raw.as_ref())?.id, peer.id);
     Ok(())
 }
 
 #[test]
 fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
     // Given: one parked task and an accepted peer that is disabled before payload access.
-    let (mut device, peer_response) = pair()?;
+    let (mut device, peer_response, _) = pair()?;
     let peer = ChannelId::new(1).register_offset(2).ok_or("peer")?;
     let enable = peer + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset();
     let reset = ChannelId::new(0).admin_offset(2).ok_or("reset")?;
@@ -125,6 +132,9 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
             operation.step(&mut pipeline, &mut device),
             StepOutcome::Progressed | StepOutcome::Pending(())
         ));
+        if read_word(&mut device, reset)? == 0 {
+            break;
+        }
     }
     // Then: parked cleanup completes independently and the peer retains its accepted task.
     assert_eq!(read_word(&mut device, reset)?, 0);
@@ -142,6 +152,13 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
             operation.step(&mut pipeline, &mut device),
             StepOutcome::Progressed | StepOutcome::Pending(())
         ));
+        if read_word(
+            &mut device,
+            peer_response + ResponseRegisters::PRODUCER.offset(),
+        )? == 1
+        {
+            break;
+        }
     }
     assert_eq!(
         read_word(

@@ -46,15 +46,16 @@ reset does not retract them.
 ## How the current model reaches completion
 
 `Dma::command_loop()` composes
-`AfterEach<Schedule<Repeat<RunCommand>>, ResetControl>`. `Fetch` gates resetting channels and
+`AfterEach<CommandArbiter<Pipeline>, ResetControl>`. `Fetch` gates resetting channels and
 device reset before accepting commands. Accepted ownership records channel and
 generation, including per-channel parked work; command, SG-list, payload and
 response paths check reset before further memory access. `RunCommand` releases
 executing ownership when the complete pipeline terminates. Payload faults return
-Pending with the leaf's Transfer intact; Schedule parks the exact composed Operation
-and retains its accepted references in Channel.parked. Resume restores that operation
-through existing Fetch/RoundRobin selection, without replaying completed stages.
-Before any shared active step, Schedule discards affected parked operations on
+Pending with the leaf's Transfer intact; the granted execution port retains the
+exact composed Operation and moves its accepted references to Channel.parked.
+The grant ends at suspension. A later arbitration grant restores that operation
+without fetching another command or replaying completed stages.
+Before any shared active step, CommandArbiter discards affected parked operations on
 reset or matching Abort and releases their references. A disabled active peer
 therefore cannot prevent parked cleanup. RunCommand's retained
 `Operation<S, Dma<M>>` discards child state before ownership is released, including
@@ -78,10 +79,11 @@ not advance it, and cleanup does not zero it. `ChannelTask<T>` retains the gener
 so guarded custom stages can reject stale tasks even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
-Custom command graphs must preserve the single shared execution path, wrap the
-assembled pipeline in `RunCommand<S>` with Schedule, and drive `ResetControl`. The child must implement
-`Stage<Dma<M>, Input = (), Output = (), Error = Error, Wait = ()>`; its internal
-composition and arbitration policy need not match the default `Pipeline`. Merely
+Custom sustained command graphs pass their downstream composition to
+`Dma::arbitrate` and drive `ResetControl`. The arbiter owns one shared `RunCommand<S>`;
+its child implements `Stage<Dma<M>, Input = ChannelTask<Command>, Output = (),
+Error = Error, Wait = ()>`. Its internal transforms need not match the default
+`Pipeline`. Merely
 dropping a software waiter or abandoning an accepted `Operation` does not flush
 hardware. The complete-loop guarantee does not claim that arbitrary externally
 held task objects have been driven to completion; custom stages must preserve the

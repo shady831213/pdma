@@ -4,13 +4,13 @@
 pub mod support;
 
 use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
+use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
     ResponseStatus,
 };
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
-use pdma_model_dma::{ChannelFatal, Dma, Pipeline};
+use pdma_model_dma::ChannelFatal;
 use support::{TestResult, command, read_word, run, setup, submit};
 
 #[test]
@@ -158,7 +158,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
         &2_u32.to_le_bytes(),
     )?;
     let mut hardware = support::single_command(&device);
-    let mut operation = Operation::<Pipeline, Dma<SharedMemory>>::new(());
+    let mut operation = Operation::new(());
     // When
     let mut stalled = false;
     for _ in 0..32 {

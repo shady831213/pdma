@@ -209,7 +209,7 @@ Interlock conflicting configuration/lifecycle changes while the operation is pen
 HW-07: Consumer progress proves descriptor consumption, not execution completion.
 Register accepted task ownership without an observable gap when advancing consumer,
 and keep it until the complete command pipeline retires. Preserve the existing
-`RunCommand` terminal boundary; suspension returns Pending and Schedule retains
+`RunCommand` terminal boundary; suspension returns Pending and CommandArbiter retains
 the exact composed Operation, with accepted references in Channel.parked, without
 whole-command retirement. Do not release ownership merely
 on payload completion or response publication. Deduplicate multiple uses of the same context within a
@@ -287,7 +287,7 @@ preserve this distinction when the external transport is implemented.
 - Execution acceptance is successful command fetch/consumer publication plus active
   reference registration in one synchronous Fetch step. There is no externally visible
   interval between those effects. `RunCommand` releases executing state only at its
-  terminal boundary. Schedule parks the exact pending Operation, retaining accepted
+  terminal boundary. CommandArbiter parks the exact pending Operation, retaining accepted
   references in Channel.parked until resumed completion or cancellation cleanup.
   It cleans parked reset/Abort targets before stepping active shared work; a disabled
   peer cannot prevent that cleanup.

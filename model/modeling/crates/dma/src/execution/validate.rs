@@ -1,6 +1,6 @@
 use super::{CopyState, Cursor};
 use crate::{ChannelContext, Error};
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{Command, ResponseStatus};
 
@@ -27,7 +27,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
     type Input = Command;
     type Output = CopyState;
     type Error = Error;
-    type Wait = ();
     type State = Option<RangeCheck>;
 
     fn start(command: Command) -> Self::State {
@@ -43,18 +42,20 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepOutcome<CopyState, Error, ()> {
+    ) -> StepResult<CopyState, Error> {
         if context.channel.resetting() {
-            return StepOutcome::Complete(Err(Error::Reset));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
         }
         if context.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Halted)));
         }
         if !context.channel.enabled() {
-            return StepOutcome::Pending(());
+            return Ok(StepOutcome::InProgress);
         }
         let Some(scan) = state.as_mut() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         let result = if scan.remaining == 0 {
             match scan.side {
@@ -62,7 +63,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
                     scan.cursor = Cursor::new(scan.command.destination, scan.command.copy_length);
                     scan.remaining = scan.command.copy_length;
                     scan.side = Side::Destination;
-                    return StepOutcome::Progressed;
+                    return Ok(StepOutcome::InProgress);
                 }
                 Side::Destination => ResponseStatus::Success,
             }
@@ -84,7 +85,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
                     } else {
                         scan.cursor.advance(count);
                         scan.remaining -= count;
-                        return StepOutcome::Progressed;
+                        return Ok(StepOutcome::InProgress);
                     }
                 }
                 Ok(false) => ResponseStatus::LengthMismatch,
@@ -93,6 +94,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
         };
         let output = CopyState::new(scan.command, result);
         *state = None;
-        StepOutcome::Complete(Ok(output))
+        Ok(StepOutcome::Complete(Ok(output)))
     }
 }

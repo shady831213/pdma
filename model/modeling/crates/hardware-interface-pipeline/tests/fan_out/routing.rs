@@ -1,155 +1,94 @@
-use hardware_interface_pipeline::{FanOut, Operation, StepOutcome};
-
-use super::{
-    fixtures::{Context, Destination, Parcel, Receipt, Report, Routing, dispatch},
-    policies::{Broadcast, Split},
+use super::fixtures::{
+    Context, Destination, Parcel, Receipt, Request, Routing, Source, finish, request,
 };
+use hardware_interface_pipeline::{FanOut, Stage, StepOutcome};
 
 #[test]
-fn dispatches_only_selected_destination_and_transforms_its_output() {
-    // Given: an owned request selecting only the middle destination.
+fn dispatches_only_selected_destination_across_distinct_steps() {
+    // Given: an owned request for one destination.
+    let mut hardware = FanOut::new(Source, Routing, (0..3).map(Destination::new).collect());
+    let mut state = <FanOut<Source, Routing, Destination> as Stage<Context>>::start(request(&[1]));
     let mut context = Context::default();
-    let mut stage = FanOut::new((0..3).map(Destination::new).collect(), Routing);
-    let mut operation = Operation::new(dispatch(&[1]));
-
-    // When: splitting, delivery, and reduction each advance once.
-    assert_eq!(
-        operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
-    );
-    assert!(context.attempts.is_empty());
-    assert_eq!(
-        operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
-    );
-    let result = operation.step(&mut stage, &mut context);
-
-    // Then: only that destination receives input and the application transforms its receipt.
-    assert_eq!(
-        result,
-        StepOutcome::Complete(Ok(Report {
-            label: "delivery".into(),
-            receipts: vec![Receipt(1)],
-        }))
-    );
+    // When: input and planning each run separately.
+    for _ in 0..2 {
+        assert_eq!(
+            hardware.step(&mut context, &mut state),
+            Ok(StepOutcome::InProgress)
+        );
+    }
+    assert!(context.deliveries.is_empty());
+    let result = hardware.step(&mut context, &mut state);
+    // Then: only the selected output receives the owned value.
+    assert_eq!(result, Ok(StepOutcome::Complete(Ok(vec![(1, Receipt(1))]))));
     assert_eq!(context.deliveries, [(1, "payload 1".into())]);
-    assert_eq!(context.attempts, [1]);
-    assert_eq!(context.plans.get(), 1);
 }
-
 #[test]
-fn dispatches_subset_in_application_order_one_destination_per_frame() {
-    // Given: the application selects a reversed subset of the available ports.
+fn reversed_subset_routes_payloads_to_their_selected_ports() {
+    // Given: a reversed selection of distinct output ports.
+    let mut hardware = FanOut::new(Source, Routing, (0..4).map(Destination::new).collect());
+    let mut state =
+        <FanOut<Source, Routing, Destination> as Stage<Context>>::start(request(&[3, 1]));
     let mut context = Context::default();
-    let mut stage = FanOut::new((0..4).map(Destination::new).collect(), Routing);
-    let mut operation = Operation::new(dispatch(&[3, 1]));
-
-    // When: each frame advances one destination.
-    assert_eq!(
-        operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
-    );
-    let first = operation.step(&mut stage, &mut context);
-    let first_deliveries = context.deliveries.clone();
-    let second = operation.step(&mut stage, &mut context);
-    let result = operation.step(&mut stage, &mut context);
-
-    // Then: the order and output receipts follow the plan, excluding unselected ports.
-    assert_eq!(first, StepOutcome::Progressed);
-    assert_eq!(second, StepOutcome::Progressed);
-    assert_eq!(first_deliveries, [(3, "payload 3".into())]);
-    assert_eq!(context.attempts, [3, 1]);
+    // When: the batch completes.
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: the output sweep is deterministic by port index and routing remains correct.
     assert_eq!(
         result,
-        StepOutcome::Complete(Ok(Report {
-            label: "delivery".into(),
-            receipts: vec![Receipt(3), Receipt(1)],
-        }))
-    );
-}
-
-#[test]
-fn splits_non_clone_owned_input_and_combines_into_unrelated_output() {
-    // Given: a non-Clone parcel whose ownership is split by the application.
-    let mut context = Context::default();
-    let mut stage = FanOut::new(vec![Destination::new(0), Destination::new(1)], Split);
-    let mut operation = Operation::new(Parcel("abcdefg".into()));
-
-    // When: the two split parts run.
-    assert_eq!(
-        operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
-    );
-    let first = operation.step(&mut stage, &mut context);
-    let second = operation.step(&mut stage, &mut context);
-    let result = operation.step(&mut stage, &mut context);
-
-    // Then: different payloads reach each destination and receipts become a scalar.
-    assert_eq!(first, StepOutcome::Progressed);
-    assert_eq!(second, StepOutcome::Progressed);
-    assert_eq!(result, StepOutcome::Complete(Ok(14)));
-    assert_eq!(context.deliveries, [(1, "abc".into()), (0, "defg".into())]);
-}
-
-#[test]
-fn broadcasts_using_application_defined_cloning() {
-    // Given: the application explicitly clones its String for three destinations.
-    let mut context = Context::default();
-    let mut stage = FanOut::new((0..3).map(Destination::new).collect(), Broadcast(3));
-    let mut operation = Operation::new("shared message".into());
-
-    // When: splitting, three deliveries, and reduction run.
-    let outcomes: Vec<_> = (0..5)
-        .map(|_| operation.step(&mut stage, &mut context))
-        .collect();
-
-    // Then: each destination receives the full message exactly once.
-    assert_eq!(
-        outcomes,
-        [
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Complete(Ok(vec![Receipt(0), Receipt(1), Receipt(2)]))
-        ]
+        Ok(StepOutcome::Complete(Ok(vec![
+            (1, Receipt(1)),
+            (3, Receipt(3))
+        ])))
     );
     assert_eq!(
         context.deliveries,
-        [
-            (0, "shared message".into()),
-            (1, "shared message".into()),
-            (2, "shared message".into()),
-        ]
+        [(1, "payload 1".into()), (3, "payload 3".into())]
     );
 }
-
 #[test]
-fn empty_plan_combines_without_touching_destinations() {
-    // Given: an empty delivery plan and retained application metadata.
+fn splits_non_clone_owned_payloads_without_framework_cloning() {
+    // Given: two separately owned fragments of one String.
+    let mut text = "abcdefg".to_owned();
+    let tail = text.split_off(3);
+    let input = Request(vec![(1, Parcel(text)), (0, Parcel(tail))]);
+    let mut hardware = FanOut::new(
+        Source,
+        Routing,
+        vec![Destination::new(0), Destination::new(1)],
+    );
+    let mut state = <FanOut<Source, Routing, Destination> as Stage<Context>>::start(input);
     let mut context = Context::default();
-    let mut stage = FanOut::<Destination, _>::new(vec![], Routing);
-    let mut operation = Operation::new(dispatch(&[]));
-
-    // When: the empty fan-out is advanced.
+    // When: owned fragments move through the fan.
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: neither fragment is duplicated or lost.
+    assert!(matches!(result, Ok(StepOutcome::Complete(Ok(_)))));
+    assert_eq!(context.deliveries, [(0, "defg".into()), (1, "abc".into())]);
+}
+#[test]
+fn broadcasts_using_application_defined_cloning() {
+    // Given: the application explicitly clones its payload.
+    let text = "broadcast".to_owned();
+    let input = Request((0..3).map(|i| (i, Parcel(text.clone()))).collect());
+    let mut hardware = FanOut::new(Source, Routing, (0..3).map(Destination::new).collect());
+    let mut state = <FanOut<Source, Routing, Destination> as Stage<Context>>::start(input);
+    let mut context = Context::default();
+    // When: all outputs receive their owned requests.
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: each output commits once.
+    assert!(matches!(result, Ok(StepOutcome::Complete(Ok(_)))));
     assert_eq!(
-        operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
+        context.deliveries,
+        [(0, text.clone()), (1, text.clone()), (2, text)]
     );
-    assert_eq!(
-        operation.step(&mut stage, &mut context),
-        StepOutcome::Progressed
-    );
-    let result = operation.step(&mut stage, &mut context);
-
-    // Then: the application's empty receipt result retains its metadata.
-    assert_eq!(
-        result,
-        StepOutcome::Complete(Ok(Report {
-            label: "delivery".into(),
-            receipts: vec![],
-        }))
-    );
+}
+#[test]
+fn empty_plan_consumes_input_without_touching_destinations() {
+    // Given: a request explicitly selecting no output.
+    let mut hardware = FanOut::new(Source, Routing, vec![Destination::new(0)]);
+    let mut state = <FanOut<Source, Routing, Destination> as Stage<Context>>::start(request(&[]));
+    let mut context = Context::default();
+    // When: the finite batch drains.
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: completion is empty and no destination ran.
+    assert_eq!(result, Ok(StepOutcome::Complete(Ok(vec![]))));
     assert!(context.attempts.is_empty());
-    assert_eq!(context.plans.get(), 1);
 }

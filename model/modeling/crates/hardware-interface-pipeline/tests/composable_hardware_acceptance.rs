@@ -8,7 +8,7 @@ pub mod composable_hardware_acceptance {
 use std::{future::Future, task::Context};
 
 use composable_hardware_acceptance::{backend::Backend, stages::*};
-use hardware_interface_pipeline::{AsyncExecutor, Operation, PipelineExt, StepOutcome};
+use hardware_interface_pipeline::{AsyncExecutor, Operation, PipelineExt, RunError, StepOutcome};
 
 #[test]
 fn nested_hardware_reuses_objects_and_propagates_domain_results() {
@@ -50,20 +50,20 @@ fn nested_hardware_reuses_objects_and_propagates_domain_results() {
         let mut operation = Operation::new(request);
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Progressed
+            Ok(StepOutcome::InProgress)
         );
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Progressed
+            Ok(StepOutcome::InProgress)
         );
         // Then faults are data delivered to publication, and completion is inert.
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Complete(Ok(expected))
+            Ok(StepOutcome::Complete(Ok(expected)))
         );
         assert_eq!(
             operation.step(&mut hardware, &mut environment),
-            StepOutcome::Exhausted
+            Err(RunError::Exhausted)
         );
     }
     assert_eq!(hardware.upstream.accepted, 2);
@@ -88,12 +88,14 @@ async fn dropping_native_driver_future_preserves_pending_transfer() {
         bytes: vec![2, 5],
     });
     let mut future = Box::pin(executor.run(&mut hardware, &mut operation));
-    assert!(
-        future
-            .as_mut()
-            .poll(&mut Context::from_waker(std::task::Waker::noop()))
-            .is_pending()
-    );
+    for _ in 0..3 {
+        assert!(
+            future
+                .as_mut()
+                .poll(&mut Context::from_waker(std::task::Waker::noop()))
+                .is_pending()
+        );
+    }
     // When only the standard driving future is canceled, then resumed after readiness.
     drop(future);
     assert_eq!(hardware.upstream.accepted, 1);
@@ -114,7 +116,7 @@ async fn dropping_native_driver_future_preserves_pending_transfer() {
 }
 
 #[tokio::test]
-async fn native_waker_resumes_backpressured_composition() {
+async fn cooperative_driver_observes_software_opening_backpressured_composition() {
     // Given a composed operation awaiting response capacity.
     let backend = Backend::default();
     let executor = AsyncExecutor::new(&backend);
@@ -129,7 +131,7 @@ async fn native_waker_resumes_backpressured_composition() {
         id: 88,
         bytes: vec![1, 2],
     });
-    // When another async actor opens the sink and wakes its registered waiter.
+    // When another async actor opens the sink during a cooperative yield.
     let (response, ()) = tokio::join!(biased; executor.run(&mut hardware, &mut operation), async {
         backend.open().unwrap();
     });
@@ -142,5 +144,5 @@ async fn native_waker_resumes_backpressured_composition() {
         }
     );
     assert_eq!(backend.published().unwrap(), [88]);
-    assert!(backend.waits() > 0);
+    assert!(backend.blocked_interactions() > 0);
 }

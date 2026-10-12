@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
 
 use super::Context;
 
@@ -14,7 +14,6 @@ use super::Context;
 pub(super) enum BackendFault {
     Before,
     After,
-    Wait,
 }
 
 pub(super) struct ScriptedBackend {
@@ -22,9 +21,6 @@ pub(super) struct ScriptedBackend {
     before_open: AtomicBool,
     pub(super) after_open: AtomicBool,
     pub(super) interactions: AtomicUsize,
-    pub(super) generation: AtomicUsize,
-    pub(super) wait_checks: AtomicUsize,
-    pub(super) bump_after: AtomicBool,
     failure: Option<BackendFault>,
 }
 
@@ -39,9 +35,6 @@ impl ScriptedBackend {
             before_open: AtomicBool::new(before),
             after_open: AtomicBool::new(after),
             interactions: AtomicUsize::new(0),
-            generation: AtomicUsize::new(0),
-            wait_checks: AtomicUsize::new(0),
-            bump_after: AtomicBool::new(false),
             failure,
         }
     }
@@ -51,15 +44,19 @@ impl ScriptedBackend {
     }
 }
 
-impl AsyncInteractionBackend<Context, usize> for ScriptedBackend {
+impl AsyncInteractionBackend<Context> for ScriptedBackend {
     type Error = BackendFault;
+
+    async fn yield_now(&self) {
+        tokio::task::yield_now().await;
+    }
 
     async fn interact<O: Send, E: Send, F>(
         &self,
         interaction: F,
-    ) -> Result<StepOutcome<O, E, usize>, Self::Error>
+    ) -> Result<StepResult<O, E>, Self::Error>
     where
-        F: FnOnce(&mut Context) -> StepOutcome<O, E, usize> + Send,
+        F: FnOnce(&mut Context) -> StepResult<O, E> + Send,
     {
         if self.failure == Some(BackendFault::Before) {
             return Err(BackendFault::Before);
@@ -71,27 +68,13 @@ impl AsyncInteractionBackend<Context, usize> for ScriptedBackend {
             self.interactions.fetch_add(1, Ordering::SeqCst);
             interaction(&mut lock(&self.context))
         };
-        if self.bump_after.swap(false, Ordering::SeqCst) {
-            self.generation.fetch_add(1, Ordering::SeqCst);
-        }
         if !self.after_open.load(Ordering::SeqCst) {
             pending::<()>().await;
         }
         match self.failure {
             Some(BackendFault::After) => Err(BackendFault::After),
-            Some(BackendFault::Before | BackendFault::Wait) | None => Ok(outcome),
+            Some(BackendFault::Before) | None => Ok(outcome),
         }
-    }
-
-    async fn wait(&self, wait: usize) -> Result<(), Self::Error> {
-        if self.failure == Some(BackendFault::Wait) {
-            return Err(BackendFault::Wait);
-        }
-        self.wait_checks.fetch_add(1, Ordering::SeqCst);
-        if self.generation.load(Ordering::SeqCst) == wait {
-            pending::<()>().await;
-        }
-        Ok(())
     }
 }
 

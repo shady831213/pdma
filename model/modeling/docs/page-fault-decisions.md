@@ -95,7 +95,7 @@ failed call. This does not add a memmove guarantee or roll back prior writes.
 Retaining only a transfer snapshot is insufficient for the composable model:
 restarting the command graph can repeat range checking, completed transforms or
 non-idempotent custom stages. The command arbiter therefore parks the exact composed
-`Operation` and restores it when that channel receives another grant.
+continuation and restores it when that channel receives another grant.
 `RunCommand` ownership remains live until full terminal retirement, including
 post-publication stages. Per-channel accepted references survive parking so
 context cleanup cannot mistake a yielded engine for a completed command.
@@ -112,6 +112,31 @@ pipeline extension, per-channel engine or scratch reconstruction is required.
 Reset/Abort cleanup runs before arbitration so it does not depend on eligibility
 or progress of an unrelated disabled channel. This changes assembly ownership,
 not the command-atomic scheduling or fault/lifetime contract.
+
+The 2026-10-12 value-flow refactor supersedes that execution-port structure.
+Each channel now produces a non-consuming candidate value; DMA's round-robin policy
+selects among completed values, and one shared output engine accepts the selection.
+Input advancement, planning and output advancement are separate Fan phases.
+The engine retains a healthy invocation, or saves its exact child continuation on
+fault and completes the current turn. The saved-state bank is data, not a bank of
+engines, and the temporary context never contains an executable stage. Cleanup still
+runs independently of candidate eligibility. This removes ReadyStage and the old
+coupling between arbitration policy and driving selected source hardware.
+
+Hardware steps now report only InProgress or Complete. The async executor yields
+after every bounded step, allowing modeled software to run between steps without
+hardware wait tokens. This deliberately trades idle polling efficiency for a direct
+step-based hardware model. Software interrupt and doorbell waits remain unchanged;
+this does not claim cycle timing or real bus retry behavior.
+
+Validation exposed a scheduler distinction: an immediately self-waking future can
+return Pending yet repeatedly run ahead of software deferred by Tokio's yield.
+Three in-flight reset scenarios observed the entire 1024-byte copy before software
+regained control. The executor therefore requests one backend-provided scheduler
+yield after each committed step; Tokio adapters use Tokio's yield primitive.
+This keeps scheduler mechanics outside stage logic and avoids a framework dependency
+on a particular async runtime. Completion remains retained across cancellation
+of that yield, and neither queue progress nor software notifications become wait tokens.
 
 The real RTL obligation is equivalent observable commit and lifetime behavior,
 not Rust object storage or one synchronous memory transaction at a time. Ordered

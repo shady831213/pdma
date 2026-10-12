@@ -6,7 +6,7 @@ use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::Dma;
 
 #[test]
-fn idle_or_device_fatal_parks_after_a_full_round() -> Result<(), Box<dyn std::error::Error>> {
+fn idle_or_device_fatal_keeps_command_loop_in_progress() -> Result<(), Box<dyn std::error::Error>> {
     // Given: a three-channel instance with no runnable command.
     let mut device = Dma::new(SharedMemory::new(), 3)?;
     let mut hardware = device.command_loop();
@@ -17,17 +17,17 @@ fn idle_or_device_fatal_parks_after_a_full_round() -> Result<(), Box<dyn std::er
         }
         // When: every channel receives one arbitration attempt.
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut hardware, &mut device)?,
+            StepOutcome::InProgress
         ));
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut hardware, &mut device)?,
+            StepOutcome::InProgress
         ));
-        // Then: the driver waits instead of spinning or terminating.
+        // Then: empty rounds retain the command loop invocation.
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Pending(())
+            operation.step(&mut hardware, &mut device)?,
+            StepOutcome::InProgress
         ));
     }
     assert!(device.channel_context(ChannelId::new(3)).is_err());
@@ -46,8 +46,8 @@ fn invalid_instance_count_is_rejected_before_allocation() {
 }
 
 #[test]
-fn different_instance_counts_control_arbitration_wait_rounds()
--> Result<(), Box<dyn std::error::Error>> {
+fn independently_sized_empty_intakes_remain_in_progress() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given: independently configured one- and five-channel devices.
     for count in [1, 5] {
         let mut device = Dma::new(SharedMemory::new(), count)?;
@@ -56,14 +56,14 @@ fn different_instance_counts_control_arbitration_wait_rounds()
         // When: scanning each empty population.
         for _ in 1..count {
             assert!(matches!(
-                operation.step(&mut arbiter, &mut device),
-                StepOutcome::Progressed
+                operation.step(&mut arbiter, &mut device)?,
+                StepOutcome::InProgress
             ));
         }
-        // Then: only the actual population determines when arbitration waits.
+        // Then: an empty configured population does not complete intake.
         assert!(matches!(
-            operation.step(&mut arbiter, &mut device),
-            StepOutcome::Pending(())
+            operation.step(&mut arbiter, &mut device)?,
+            StepOutcome::InProgress
         ));
     }
     Ok(())

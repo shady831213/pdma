@@ -27,8 +27,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     for _ in 0..64 {
         assert!(matches!(
             StepExecutor::new().step(&mut pipeline, &mut operation, &mut dma),
-            Ok(hardware_interface_pipeline::RunOutcome::Progressed
-                | hardware_interface_pipeline::RunOutcome::Pending(()))
+            Ok(hardware_interface_pipeline::StepOutcome::InProgress)
         ));
         memory.read(
             MemoryAddress::new(0x1600),
@@ -45,8 +44,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     for _ in 0..32 {
         assert!(matches!(
             StepExecutor::new().step(&mut pipeline, &mut operation, &mut dma),
-            Ok(hardware_interface_pipeline::RunOutcome::Progressed
-                | hardware_interface_pipeline::RunOutcome::Pending(()))
+            Ok(hardware_interface_pipeline::StepOutcome::InProgress)
         ));
     }
     let reset = DmaDiscovery::EXTENT + DmaControl::RESET.offset();
@@ -54,8 +52,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     for _ in 0..64 {
         assert!(matches!(
             StepExecutor::new().step(&mut pipeline, &mut operation, &mut dma),
-            Ok(hardware_interface_pipeline::RunOutcome::Progressed
-                | hardware_interface_pipeline::RunOutcome::Pending(()))
+            Ok(hardware_interface_pipeline::StepOutcome::InProgress)
         ));
     }
     // Then: cleanup completes without rolling back the prefix or writing the old suffix.

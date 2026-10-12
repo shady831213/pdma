@@ -1,175 +1,169 @@
-//! Retained application state and partial fan-in ownership.
-
-use hardware_interface_pipeline::{BranchError, Combine, FanIn, Operation, Stage, StepOutcome};
-
+//! Retained owned values and child failures during gathering.
+use hardware_interface_pipeline::{
+    BranchError, FanIn, FanPlan, FanPolicy, RunError, Stage, StepOutcome, StepResult,
+};
 #[derive(Default)]
 struct Context {
     consumed: Vec<u8>,
     released: bool,
+    outputs: usize,
 }
 struct Owned(String);
-struct Wait;
 struct Source(u8);
-
+enum SourceState {
+    New,
+    Waiting(Owned),
+    Done,
+}
 impl Stage<Context> for Source {
     type Input = ();
     type Output = Owned;
     type Error = u8;
-    type Wait = Wait;
-    type State = Option<Owned>;
-    fn start((): ()) -> Self::State {
-        None
+    type State = SourceState;
+    fn start((): ()) -> SourceState {
+        SourceState::New
     }
-    fn step(
-        &mut self,
-        context: &mut Context,
-        state: &mut Self::State,
-    ) -> StepOutcome<Owned, u8, Wait> {
-        match state.take() {
-            Some(value) if context.released => StepOutcome::Complete(Ok(value)),
-            Some(value) => {
-                *state = Some(value);
-                StepOutcome::Pending(Wait)
-            }
-            None => {
+    fn step(&mut self, context: &mut Context, state: &mut SourceState) -> StepResult<Owned, u8> {
+        match std::mem::replace(state, SourceState::Done) {
+            SourceState::New => {
                 context.consumed.push(self.0);
                 match self.0 {
-                    0 => StepOutcome::Complete(Ok(Owned("first".to_owned()))),
+                    0 => Ok(StepOutcome::Complete(Ok(Owned("first".into())))),
                     1 => {
-                        *state = Some(Owned("second".to_owned()));
-                        StepOutcome::Progressed
+                        *state = SourceState::Waiting(Owned("second".into()));
+                        Ok(StepOutcome::InProgress)
                     }
-                    2 => StepOutcome::Complete(Err(42)),
-                    _ => StepOutcome::Exhausted,
+                    2 => Ok(StepOutcome::Complete(Err(42))),
+                    _ => Err(RunError::Exhausted),
                 }
             }
+            SourceState::Waiting(value) => {
+                if context.released {
+                    Ok(StepOutcome::Complete(Ok(value)))
+                } else {
+                    *state = SourceState::Waiting(value);
+                    Ok(StepOutcome::InProgress)
+                }
+            }
+            SourceState::Done => Err(RunError::Exhausted),
         }
     }
 }
-
 struct Gather {
     fail: bool,
 }
-
-impl Combine<Context, Source> for Gather {
-    type Output = String;
-    type State = usize;
-    fn start() -> usize {
-        0
-    }
-    fn plan(
-        &mut self,
-        _: &Context,
-        sources: &[Source],
-        state: &mut usize,
-    ) -> StepOutcome<Vec<usize>, BranchError<u8>, Wait> {
-        *state += 1;
-        if *state == 1 {
-            StepOutcome::Pending(Wait)
-        } else {
-            StepOutcome::Complete(Ok((0..sources.len()).collect()))
+impl FanPolicy<Owned, String, u8> for Gather {
+    fn plan(&mut self, values: &[Option<Owned>], _: &[bool]) -> Result<FanPlan, u8> {
+        if values.iter().any(Option::is_none) {
+            return Ok(FanPlan::default());
         }
+        Ok(FanPlan {
+            inputs: (0..values.len()).collect(),
+            outputs: vec![0],
+        })
     }
-    fn combine(&mut self, state: usize, outputs: Vec<Owned>) -> Result<String, BranchError<u8>> {
-        assert_eq!(state, 2);
+    fn route(&mut self, values: Vec<Owned>) -> Result<Vec<String>, u8> {
         if self.fail {
-            Err(BranchError::Application(19))
+            Err(19)
         } else {
-            Ok(outputs.into_iter().map(|value| value.0).collect())
+            Ok(vec![values.into_iter().map(|v| v.0).collect()])
         }
     }
 }
-
-#[test]
-fn partial_gather_keeps_owned_results_and_planning_state_across_pending() {
-    // Given: non-Clone output and wait types, with a delayed second source.
-    let mut hardware = FanIn::new(vec![Source(0), Source(1)], Gather { fail: false });
-    let mut context = Context::default();
-    let mut operation = Operation::new(());
-    // When: planning waits, one result is gathered, and the second source suspends.
-    let planning = operation.step(&mut hardware, &mut context);
-    assert!(matches!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
-    ));
-    let first = operation.step(&mut hardware, &mut context);
-    let accepted = operation.step(&mut hardware, &mut context);
-    let pending = operation.step(&mut hardware, &mut context);
-    context.released = true;
-    assert!(matches!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
-    ));
-    let result = operation.step(&mut hardware, &mut context);
-    let terminal = operation.step(&mut hardware, &mut context);
-    // Then: resume retains the first output and does not restart either source.
-    assert!(matches!(planning, StepOutcome::Pending(Wait)));
-    assert!(matches!(first, StepOutcome::Progressed));
-    assert!(matches!(accepted, StepOutcome::Progressed));
-    assert!(matches!(pending, StepOutcome::Pending(Wait)));
-    assert!(matches!(result, StepOutcome::Complete(Ok(value)) if value == "firstsecond"));
-    assert!(matches!(terminal, StepOutcome::Exhausted));
-    assert_eq!(context.consumed, [0, 1]);
+struct Sink;
+impl Stage<Context> for Sink {
+    type Input = String;
+    type Output = String;
+    type Error = u8;
+    type State = Option<String>;
+    fn start(input: String) -> Self::State {
+        Some(input)
+    }
+    fn step(&mut self, context: &mut Context, state: &mut Self::State) -> StepResult<String, u8> {
+        let value = state.take().ok_or(RunError::Exhausted)?;
+        context.outputs += 1;
+        Ok(StepOutcome::Complete(Ok(value)))
+    }
 }
-
+type Pipeline = FanIn<Source, Gather, Sink>;
 #[test]
-fn reducer_failure_terminalizes_the_operation() {
-    // Given: an application reducer that rejects an otherwise successful gather.
-    let mut hardware = FanIn::new(vec![Source(0)], Gather { fail: true });
+fn partial_gather_keeps_owned_results_across_incomplete_inputs() {
+    // Given: a non-Clone completed value and a delayed peer.
+    let mut hardware = FanIn::new(vec![Source(0), Source(1)], Gather { fail: false }, Sink);
+    let mut state = Pipeline::start(vec![(); 2]);
     let mut context = Context::default();
-    let mut state = <FanIn<Source, Gather> as Stage<Context>>::start(());
-    // When: the policy resumes and reduction fails.
-    let planning = hardware.step(&mut context, &mut state);
-    assert!(matches!(
-        hardware.step(&mut context, &mut state),
-        StepOutcome::Progressed
-    ));
-    assert!(matches!(
-        hardware.step(&mut context, &mut state),
-        StepOutcome::Progressed
-    ));
-    let result = hardware.step(&mut context, &mut state);
-    let terminal = hardware.step(&mut context, &mut state);
-    // Then: the typed reducer error is returned exactly once.
-    assert!(matches!(planning, StepOutcome::Pending(Wait)));
-    assert!(matches!(
-        result,
-        StepOutcome::Complete(Err(BranchError::Application(19)))
-    ));
-    assert!(matches!(terminal, StepOutcome::Exhausted));
-    assert_eq!(context.consumed, [0]);
-}
-
-#[test]
-fn child_failure_and_exhaustion_stop_later_selected_branches() {
-    // Given: a completed branch, a terminal branch, and a later branch.
-    for terminal_id in [2, 3] {
-        let mut hardware = FanIn::new(
-            vec![Source(0), Source(terminal_id), Source(1)],
-            Gather { fail: false },
-        );
-        let mut context = Context::default();
-        let mut state = <FanIn<Source, Gather> as Stage<Context>>::start(());
-        // When: the selected terminal child is reached after planning and the first child.
-        let planning = hardware.step(&mut context, &mut state);
+    for _ in 0..6 {
         assert!(matches!(
             hardware.step(&mut context, &mut state),
-            StepOutcome::Progressed
+            Ok(StepOutcome::InProgress)
         ));
-        let first = hardware.step(&mut context, &mut state);
+    }
+    // When: the delayed source becomes runnable.
+    context.released = true;
+    assert!(matches!(
+        hardware.step(&mut context, &mut state),
+        Ok(StepOutcome::InProgress)
+    ));
+    assert!(matches!(
+        hardware.step(&mut context, &mut state),
+        Ok(StepOutcome::InProgress)
+    ));
+    let result = hardware.step(&mut context, &mut state);
+    // Then: both original owned values reach reduction without source replay.
+    assert_eq!(
+        result,
+        Ok(StepOutcome::Complete(Ok(vec![(0, "firstsecond".into())])))
+    );
+    assert_eq!(context.consumed, [0, 1]);
+    assert_eq!(context.outputs, 1);
+}
+#[test]
+fn reducer_failure_terminalizes_without_output_effects() {
+    // Given: reduction rejects a completed source value.
+    let mut hardware = FanIn::new(vec![Source(0)], Gather { fail: true }, Sink);
+    let mut state = Pipeline::start(vec![()]);
+    let mut context = Context::default();
+    assert!(matches!(
+        hardware.step(&mut context, &mut state),
+        Ok(StepOutcome::InProgress)
+    ));
+    // When: the validated selection is reduced.
+    let result = hardware.step(&mut context, &mut state);
+    // Then: the error is returned once and output hardware remains untouched.
+    assert_eq!(
+        result,
+        Ok(StepOutcome::Complete(Err(BranchError::Application(19))))
+    );
+    assert_eq!(context.outputs, 0);
+    assert!(state.is_none());
+    assert_eq!(
+        hardware.step(&mut context, &mut state),
+        Err(RunError::Exhausted)
+    );
+}
+#[test]
+fn child_failure_and_exhaustion_stop_later_input_effects() {
+    // Given: a completed branch precedes a failing source and a later source.
+    for (id, expected) in [
+        (
+            2,
+            Ok(StepOutcome::Complete(Err(BranchError::Application(42)))),
+        ),
+        (3, Err(RunError::Exhausted)),
+    ] {
+        let mut hardware = FanIn::new(
+            vec![Source(0), Source(id), Source(1)],
+            Gather { fail: false },
+            Sink,
+        );
+        let mut state = Pipeline::start(vec![(); 3]);
+        let mut context = Context::default();
+        // When: the input sweep encounters the terminal child.
         let result = hardware.step(&mut context, &mut state);
-        let terminal = hardware.step(&mut context, &mut state);
-        // Then: later children remain unstarted and repeated stepping is inert.
-        assert!(matches!(planning, StepOutcome::Pending(Wait)));
-        assert!(matches!(first, StepOutcome::Progressed));
-        match terminal_id {
-            2 => assert!(matches!(
-                result,
-                StepOutcome::Complete(Err(BranchError::Application(42)))
-            )),
-            _ => assert!(matches!(result, StepOutcome::Exhausted)),
-        }
-        assert!(matches!(terminal, StepOutcome::Exhausted));
-        assert_eq!(context.consumed, [0, terminal_id]);
+        // Then: committed effects remain, later children are untouched, and invocation state is empty.
+        assert_eq!(result, expected);
+        assert_eq!(context.consumed, [0, id]);
+        assert_eq!(context.outputs, 0);
+        assert!(state.is_none());
     }
 }

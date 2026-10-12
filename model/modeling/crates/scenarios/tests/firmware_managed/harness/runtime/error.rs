@@ -106,10 +106,9 @@ impl<E: std::error::Error + 'static> std::error::Error for RunError<E> {
             Self::Firmware(error) => Some(error),
             Self::FirmwareInterrupt(error) => Some(error),
             Self::Hardware(AsyncRunError::Stage(error)) => Some(error),
-            Self::Hardware(
-                AsyncRunError::BackendInteraction(error) | AsyncRunError::BackendWait(error),
-            ) => Some(error),
-            Self::Hardware(AsyncRunError::Exhausted) | Self::HardwareStopped => None,
+            Self::Hardware(AsyncRunError::BackendInteraction(error)) => Some(error),
+            Self::Hardware(AsyncRunError::Run(error)) => Some(error),
+            Self::HardwareStopped => None,
         }
     }
 }

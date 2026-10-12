@@ -1,21 +1,16 @@
-use std::{
-    future::poll_fn,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-    task::{Poll, Waker},
+use std::sync::{
+    Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
 
 use super::stages::Environment;
 
 #[derive(Debug, Default)]
 pub struct Backend {
     environment: Mutex<Environment>,
-    waiter: Mutex<Option<Waker>>,
-    waits: AtomicUsize,
+    blocked_interactions: AtomicUsize,
 }
 
 impl Backend {
@@ -24,10 +19,6 @@ impl Backend {
             .lock()
             .map_err(|_| "poisoned environment")?
             .writable = true;
-        let waiter = self.waiter.lock().map_err(|_| "poisoned waiter")?.take();
-        if let Some(waiter) = waiter {
-            waiter.wake();
-        }
         Ok(())
     }
 
@@ -40,43 +31,33 @@ impl Backend {
             .clone())
     }
 
-    pub fn waits(&self) -> usize {
-        self.waits.load(Ordering::Relaxed)
+    pub fn blocked_interactions(&self) -> usize {
+        self.blocked_interactions.load(Ordering::Relaxed)
     }
 }
 
-impl AsyncInteractionBackend<Environment, ()> for Backend {
+impl AsyncInteractionBackend<Environment> for Backend {
     type Error = &'static str;
 
-    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Self::Error>
+    async fn yield_now(&self) {
+        tokio::task::yield_now().await;
+    }
+
+    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepResult<O, E>, Self::Error>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Environment) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Environment) -> StepResult<O, E> + Send,
     {
         let mut environment = self
             .environment
             .lock()
             .map_err(|_| "poisoned environment")?;
-        Ok(interaction(&mut environment))
-    }
-
-    async fn wait(&self, (): ()) -> Result<(), Self::Error> {
-        poll_fn(|context| {
-            let mut waiter = self.waiter.lock().map_err(|_| "poisoned waiter")?;
-            if self
-                .environment
-                .lock()
-                .map_err(|_| "poisoned environment")?
-                .writable
-            {
-                Poll::Ready(Ok(()))
-            } else {
-                self.waits.fetch_add(1, Ordering::Relaxed);
-                *waiter = Some(context.waker().clone());
-                Poll::Pending
-            }
-        })
-        .await
+        if !environment.writable {
+            self.blocked_interactions.fetch_add(1, Ordering::Relaxed);
+        }
+        let outcome = interaction(&mut environment);
+        drop(environment);
+        Ok(outcome)
     }
 }

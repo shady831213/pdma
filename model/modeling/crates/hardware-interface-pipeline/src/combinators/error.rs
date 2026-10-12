@@ -1,25 +1,39 @@
-/// Structural plan failures or an error from application code.
+/// Invalid value-routing plans or application failures.
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError<E> {
-    /// A requested port does not exist.
+    /// A selected port is outside the configured population.
     InvalidIndex {
-        /// Requested port position.
+        /// Selected position.
         index: usize,
-        /// Number of configured ports.
+        /// Configured population.
         ports: usize,
     },
-    /// A port appears more than once in one operation.
+    /// A plan selects a port more than once.
     DuplicateIndex {
-        /// Repeated port position.
+        /// Repeated position.
         index: usize,
     },
-    /// A policy or child stage failed.
-    Application(E),
-    /// A specialization received an unexpected number of results.
-    OutputCount {
-        /// Required result count.
+    /// A selected input has no completed value or an output is occupied.
+    Unavailable {
+        /// Unavailable position.
+        index: usize,
+    },
+    /// A plan tries to produce output without consuming input.
+    EmptyInput,
+    /// The invocation input population differs from the hardware population.
+    InputCount {
+        /// Required count.
         expected: usize,
-        /// Received result count.
+        /// Supplied count.
         actual: usize,
     },
+    /// Routed payload count differs from selected destination count.
+    OutputCount {
+        /// Required count.
+        expected: usize,
+        /// Supplied count.
+        actual: usize,
+    },
+    /// An application policy or child stage failed.
+    Application(E),
 }

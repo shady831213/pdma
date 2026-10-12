@@ -7,8 +7,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::task::{Context as TaskContext, Poll, Waker};
 
 use hip::{
-    AsyncExecutor, AsyncInteractionBackend, ImmediateExecutor, Operation, PipelineExt, RunOutcome,
-    Stage, StepExecutor, StepOutcome,
+    AsyncExecutor, AsyncInteractionBackend, ImmediateExecutor, Operation, PipelineExt, Stage,
+    StepExecutor, StepOutcome, StepResult,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -25,7 +25,6 @@ impl Stage<Model> for Source {
     type Input = u32;
     type Output = u32;
     type Error = &'static str;
-    type Wait = usize;
     type State = u32;
 
     fn start(input: Self::Input) -> Self::State {
@@ -36,9 +35,9 @@ impl Stage<Model> for Source {
         &mut self,
         model: &mut Model,
         input: &mut Self::State,
-    ) -> StepOutcome<u32, &'static str, usize> {
+    ) -> StepResult<u32, &'static str> {
         model.upstream_calls += 1;
-        StepOutcome::Complete(Ok(*input))
+        Ok(StepOutcome::Complete(Ok(*input)))
     }
 }
 
@@ -49,7 +48,6 @@ impl Stage<Model> for Sink {
     type Input = u32;
     type Output = u32;
     type Error = &'static str;
-    type Wait = usize;
     type State = u32;
 
     fn start(input: Self::Input) -> Self::State {
@@ -60,38 +58,27 @@ impl Stage<Model> for Sink {
         &mut self,
         model: &mut Model,
         input: &mut Self::State,
-    ) -> StepOutcome<u32, &'static str, usize> {
+    ) -> StepResult<u32, &'static str> {
         model.downstream_calls += 1;
         if model.readiness < 2 {
-            return StepOutcome::Pending(model.readiness);
+            return Ok(StepOutcome::InProgress);
         }
-        StepOutcome::Complete(Ok(*input + 22))
+        Ok(StepOutcome::Complete(Ok(*input + 22)))
     }
 }
 
 fn pipeline()
--> impl Stage<Model, Input = u32, Output = u32, Error = &'static str, Wait = usize, State: Send> + Send
-{
+-> impl Stage<Model, Input = u32, Output = u32, Error = &'static str, State: Send> + Send {
     Source.then(Sink)
 }
 
 #[derive(Debug, Default)]
 struct Backend(Mutex<Model>);
 
-impl AsyncInteractionBackend<Model, usize> for Backend {
+impl AsyncInteractionBackend<Model> for Backend {
     type Error = &'static str;
 
-    async fn interact<O: Send, E: Send, F>(
-        &self,
-        interaction: F,
-    ) -> Result<StepOutcome<O, E, usize>, Self::Error>
-    where
-        F: FnOnce(&mut Model) -> StepOutcome<O, E, usize> + Send,
-    {
-        Ok(interaction(&mut lock(&self.0)))
-    }
-
-    async fn wait(&self, wait: usize) -> Result<(), Self::Error> {
+    async fn yield_now(&self) {
         let mut yielded = false;
         poll_fn(|context| {
             if yielded {
@@ -103,8 +90,16 @@ impl AsyncInteractionBackend<Model, usize> for Backend {
             }
         })
         .await;
-        lock(&self.0).readiness = wait + 1;
-        Ok(())
+    }
+
+    async fn interact<O: Send, E: Send, F>(
+        &self,
+        interaction: F,
+    ) -> Result<StepResult<O, E>, Self::Error>
+    where
+        F: FnOnce(&mut Model) -> StepResult<O, E> + Send,
+    {
+        Ok(interaction(&mut lock(&self.0)))
     }
 }
 
@@ -112,7 +107,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn block_on<F: Future>(future: F) -> Result<F::Output, &'static str> {
+fn block_on<F: Future>(future: F, backend: &Backend) -> Result<F::Output, &'static str> {
     let waker = Waker::noop();
     let mut context = TaskContext::from_waker(waker);
     let mut future = pin!(future);
@@ -120,6 +115,8 @@ fn block_on<F: Future>(future: F) -> Result<F::Output, &'static str> {
         if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
             return Ok(output);
         }
+        let mut model = lock(&backend.0);
+        model.readiness = model.downstream_calls.min(2);
     }
     Err("future exceeded fixture poll budget")
 }
@@ -128,10 +125,10 @@ fn drive_immediate() -> Result<(u32, Model), Box<dyn std::error::Error>> {
     let mut stage = pipeline();
     let mut operation = Operation::new(20);
     let mut model = Model::default();
-    let executor = ImmediateExecutor::new(NonZeroUsize::new(8).ok_or("nonzero budget")?);
-    for readiness in 0..=2 {
+    let executor = ImmediateExecutor::new(NonZeroUsize::MIN);
+    for readiness in [0, 0, 1, 2] {
         model.readiness = readiness;
-        if let Ok(RunOutcome::Complete(Ok(output))) =
+        if let Ok(StepOutcome::Complete(Ok(output))) =
             executor.run(&mut stage, &mut operation, &mut model)
         {
             return Ok((output, model));
@@ -147,7 +144,7 @@ fn drive_stepped() -> Result<(u32, Model), Box<dyn std::error::Error>> {
     let executor = StepExecutor::new();
     for readiness in [0, 0, 1, 2] {
         model.readiness = readiness;
-        if let Ok(RunOutcome::Complete(Ok(output))) =
+        if let Ok(StepOutcome::Complete(Ok(output))) =
             executor.step(&mut stage, &mut operation, &mut model)
         {
             return Ok((output, model));
@@ -166,8 +163,11 @@ fn same_static_pipeline_has_literal_policy_parity_without_replay()
     let mut asynchronous = pipeline();
 
     // When: the async sink genuinely suspends twice before it becomes ready.
-    let async_output = block_on(executor.run(&mut asynchronous, &mut Operation::new(20)))?
-        .map_err(|error| std::io::Error::other(format!("async pipeline failed: {error:?}")))?;
+    let async_output = block_on(
+        executor.run(&mut asynchronous, &mut Operation::new(20)),
+        executor.backend(),
+    )?
+    .map_err(|error| std::io::Error::other(format!("async pipeline failed: {error:?}")))?;
     let async_model = lock(&executor.backend().0).clone();
 
     // Then: every policy yields 42 and no downstream pending replays the source.

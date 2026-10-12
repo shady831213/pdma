@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
+    AfterEach, Operation, Repeat, RunError, Stage, StepExecutor, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
@@ -20,7 +20,6 @@ impl Stage<ChannelContext<'_, SharedMemory>> for Resize {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
-    type Wait = ();
     type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
         Some(input)
@@ -29,12 +28,12 @@ impl Stage<ChannelContext<'_, SharedMemory>> for Resize {
         &mut self,
         _: &mut ChannelContext<'_, SharedMemory>,
         state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
+    ) -> StepResult<Transfer, Error> {
         let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         transfer.length = self.0;
-        StepOutcome::Complete(Ok(transfer))
+        Ok(StepOutcome::Complete(Ok(transfer)))
     }
 }
 
@@ -65,9 +64,8 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
                 .step(&mut pipeline, &mut operation, &mut device)
                 .map_err(|e| format!("{e:?}"))?
             {
-                RunOutcome::Progressed => {}
-                RunOutcome::Pending(()) => return Err("unexpected stall".into()),
-                RunOutcome::Complete(result) => {
+                StepOutcome::InProgress => {}
+                StepOutcome::Complete(result) => {
                     result?;
                     finished = true;
                     break;

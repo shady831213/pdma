@@ -1,6 +1,6 @@
 use super::{COPY_CHUNK_BYTES, CopyState, Transfer};
 use crate::{ChannelContext, Error};
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 use hardware_interface_runtime::MemoryAddress;
 use pdma_model_contract::dma::ResponseStatus;
@@ -13,7 +13,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
     type Input = CopyState;
     type Output = Transfer;
     type Error = Error;
-    type Wait = ();
     type State = Option<CopyState>;
     fn start(input: CopyState) -> Self::State {
         Some(input)
@@ -23,18 +22,20 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
+    ) -> StepResult<Transfer, Error> {
         if context.channel.resetting() {
-            return StepOutcome::Complete(Err(Error::Reset));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
         }
         if context.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Halted)));
         }
         if !context.channel.enabled() {
-            return StepOutcome::Pending(());
+            return Ok(StepOutcome::InProgress);
         }
         let Some(progress) = state.as_mut() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         let mut source = 0;
         let mut destination = 0;
@@ -54,16 +55,16 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
                         Ok(false) => progress.status = ResponseStatus::LengthMismatch,
                         Err(status) => progress.status = status,
                     }
-                    return StepOutcome::Progressed;
+                    return Ok(StepOutcome::InProgress);
                 }
                 let Some(address) = progress.source.address() else {
                     progress.status = ResponseStatus::ReadError;
-                    return StepOutcome::Progressed;
+                    return Ok(StepOutcome::InProgress);
                 };
                 source = address;
                 let Some(address) = progress.destination.address() else {
                     progress.status = ResponseStatus::WriteError;
-                    return StepOutcome::Progressed;
+                    return Ok(StepOutcome::InProgress);
                 };
                 destination = address;
                 let remaining = progress
@@ -81,14 +82,14 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for NextChunk {
             | ResponseStatus::LengthMismatch
             | ResponseStatus::ListReadError => {}
         }
-        state.take().map_or(StepOutcome::Exhausted, |progress| {
-            StepOutcome::Complete(Ok(Transfer {
+        state.take().map_or(Err(RunError::Exhausted), |progress| {
+            Ok(StepOutcome::Complete(Ok(Transfer {
                 progress,
                 source: MemoryAddress::new(source),
                 destination: MemoryAddress::new(destination),
                 length,
                 bytes: [0; COPY_CHUNK_BYTES],
-            }))
+            })))
         })
     }
 }

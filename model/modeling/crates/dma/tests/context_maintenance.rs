@@ -3,7 +3,7 @@
 /// Shared DMA bus and memory fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelId, CommandRegisters, ContextId};
 use support::{TestResult, command, setup, submit};
@@ -16,7 +16,7 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
     let mut pipeline = dma.command_loop();
     let mut operation = Operation::new(());
     for _ in 0..128 {
-        let _ = operation.step(&mut pipeline, &mut dma);
+        let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     let mut discarded = command();
     discarded.source.context = 7;
@@ -36,7 +36,7 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
         let result = StepExecutor::new()
             .step(&mut pipeline, &mut operation, &mut dma)
             .map_err(|e| format!("{e:?}"))?;
-        assert!(!matches!(result, RunOutcome::Complete(_)));
+        assert!(!matches!(result, StepOutcome::Complete(_)));
     }
     // Then
     assert_eq!(dma.context_status(ContextId::new(7)), Ok(true));
@@ -63,7 +63,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestR
     let mut pipeline = dma.command_loop();
     let mut operation = Operation::new(());
     for _ in 0..32 {
-        let _ = operation.step(&mut pipeline, &mut dma);
+        let _ = operation.step(&mut pipeline, &mut dma)?;
         if support::read_word(&mut dma, consumer)? == 1 {
             break;
         }
@@ -74,7 +74,7 @@ fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestR
     // Then
     assert_eq!(dma.context_status(ContextId::new(7)), Ok(false));
     for _ in 0..128 {
-        let _ = operation.step(&mut pipeline, &mut dma);
+        let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     assert_eq!(dma.context_status(ContextId::new(7)), Ok(true));
     let mut bytes = [0; 4];
@@ -134,7 +134,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     let mut pipeline = dma.command_loop();
     let mut operation = Operation::new(());
     for _ in 0..128 {
-        let _ = operation.step(&mut pipeline, &mut dma);
+        let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     assert_eq!(
         dma.context_status(ContextId::new(7)),
@@ -142,7 +142,7 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
     );
     dma.write(reset, &1_u32.to_le_bytes())?;
     for _ in 0..8 {
-        let _ = operation.step(&mut pipeline, &mut dma);
+        let _ = operation.step(&mut pipeline, &mut dma)?;
     }
     assert_eq!(support::read_word(&mut dma, reset)?, 0);
     Ok(())

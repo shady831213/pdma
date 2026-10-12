@@ -1,137 +1,90 @@
-use super::policy::Policy;
+use super::{
+    policy::Policy,
+    sources::{Accept, Candidate, Context, finish},
+};
+use hardware_interface_pipeline::{
+    AfterEach, FanIn, RunError, Stage, StepOutcome, StepResult, Then,
+};
 use std::convert::Infallible;
-
-use hardware_interface_pipeline::{AfterEach, Arbitrate, Operation, Stage, StepOutcome, Then};
-
-use super::sources::{Context, Job, Queue};
-
-struct Transform(u8);
-
-impl Stage<Context> for Transform {
-    type Input = u8;
-    type Output = u8;
+struct Identity;
+impl Stage<Context> for Identity {
+    type Input = Option<usize>;
+    type Output = Option<usize>;
     type Error = &'static str;
-    type Wait = &'static str;
-    type State = Option<u8>;
-
-    fn start(input: u8) -> Self::State {
+    type State = Option<Self::Input>;
+    fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
-
     fn step(
         &mut self,
-        context: &mut Context,
+        _: &mut Context,
         state: &mut Self::State,
-    ) -> StepOutcome<u8, Self::Error, Self::Wait> {
-        let Some(value) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
-        context.transformed.push(self.0);
-        StepOutcome::Complete(Ok(value + 10))
+    ) -> StepResult<Self::Output, Self::Error> {
+        Ok(StepOutcome::Complete(Ok(state
+            .take()
+            .ok_or(RunError::Exhausted)?)))
     }
 }
-
-struct Update(u8);
-
+struct Update;
 impl Stage<Context> for Update {
     type Input = ();
-    type Output = Infallible;
+    type Output = ();
     type Error = Infallible;
-    type Wait = Infallible;
-    type State = ();
-
-    fn start((): ()) {}
-
-    fn step(
-        &mut self,
-        context: &mut Context,
-        (): &mut (),
-    ) -> StepOutcome<Infallible, Infallible, Infallible> {
-        context.updated.push(self.0);
-        StepOutcome::Progressed
+    type State = bool;
+    fn start((): ()) -> bool {
+        false
+    }
+    fn step(&mut self, context: &mut Context, done: &mut bool) -> StepResult<(), Infallible> {
+        if *done {
+            return Err(RunError::Exhausted);
+        }
+        *done = true;
+        context.updates += 1;
+        Ok(StepOutcome::Complete(Ok(())))
     }
 }
-
 #[test]
-fn then_sources_gate_acceptance_and_retain_pending_upstream_and_downstream() {
-    // Given: an empty composed source, a delayed source, and an unchosen ready source.
-    let mut context = Context::default();
-    context.enqueue(1, [Job::Value(7)]);
-    context.enqueue(2, [Job::Value(8)]);
-    let sources = (0..3)
-        .map(|id| Then::new(Queue { id, delayed: true }, Transform(id)))
-        .collect();
-    let mut hardware = Arbitrate::new(sources, Policy::round_robin("idle"));
-    let mut operation = Operation::new(());
-
-    // When: the selected upstream suspends after acceptance and later hands off its value.
-    let searching = operation.step(&mut hardware, &mut context);
-    assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
+fn composed_sources_finish_before_candidate_values_reach_policy() {
+    // Given: each source has two value-producing stages.
+    let mut hardware = FanIn::new(
+        (0..2).map(|i| Then::new(Candidate(i), Identity)).collect(),
+        Policy::Fixed,
+        Accept::Normal,
     );
-    let accepted = operation.step(&mut hardware, &mut context);
-    let pending = operation.step(&mut hardware, &mut context);
-    context.released = true;
-    let handoff = operation.step(&mut hardware, &mut context);
-    assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
-    );
-    let complete = operation.step(&mut hardware, &mut context);
-
-    // Then: only the granted chain runs, retaining the value until its transform completes.
-    assert_eq!(searching, StepOutcome::Progressed);
-    assert_eq!(accepted, StepOutcome::Progressed);
-    assert_eq!(pending, StepOutcome::Pending("source release"));
-    assert_eq!(handoff, StepOutcome::Progressed);
-    assert_eq!(complete, StepOutcome::Complete(Ok(17)));
-    assert_eq!(*context.probes.borrow(), [0, 1, 1]);
-    assert_eq!(context.consumed, [1]);
-    assert_eq!(context.transformed, [1]);
+    let mut state =
+        <FanIn<Then<Candidate, Identity>, Policy, Accept> as Stage<Context>>::start(vec![(); 2]);
+    let mut context = Context::with_jobs(&[1]);
+    // When: the first upstream sweep completes without downstream values.
+    for _ in 0..3 {
+        assert_eq!(
+            hardware.step(&mut context, &mut state),
+            Ok(StepOutcome::InProgress)
+        );
+    }
+    assert!(context.accepted.is_empty());
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: composed source boundaries are preserved before acceptance.
+    assert!(matches!(result, Ok(StepOutcome::Complete(Ok(_)))));
+    assert_eq!(context.accepted, [1]);
+    assert_eq!(context.observed, [0, 1]);
 }
-
 #[test]
-fn after_each_sources_update_only_the_granted_composed_source() {
-    // Given: one empty source followed by two ready chains with per-step updates.
-    let mut context = Context::default();
-    context.enqueue(1, [Job::Value(7)]);
-    context.enqueue(2, [Job::Value(8)]);
-    let sources = (0..3)
-        .map(|id| {
-            let chain = Then::new(Queue { id, delayed: true }, Transform(id));
-            AfterEach::new(chain, Update(id))
-        })
-        .collect();
-    let mut hardware = Arbitrate::new(sources, Policy::fixed_priority("idle"));
-    let mut operation = Operation::new(());
-
-    // When: selection skips the empty source, then resumes the granted chain after a wait.
-    let searching = operation.step(&mut hardware, &mut context);
-    let updates_after_search = context.updated.clone();
-    assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
+fn after_each_sources_finish_finite_maintenance_per_source_step() {
+    // Given: each candidate has its own finite maintenance stage.
+    let mut hardware = FanIn::new(
+        (0..2)
+            .map(|i| AfterEach::new(Candidate(i), Update))
+            .collect(),
+        Policy::Fixed,
+        Accept::Normal,
     );
-    let accepted = operation.step(&mut hardware, &mut context);
-    let pending = operation.step(&mut hardware, &mut context);
-    context.released = true;
-    let handoff = operation.step(&mut hardware, &mut context);
-    assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
-    );
-    let complete = operation.step(&mut hardware, &mut context);
-
-    // Then: readiness performs no update and each granted interaction runs its update once.
-    assert_eq!(searching, StepOutcome::Progressed);
-    assert!(updates_after_search.is_empty());
-    assert_eq!(accepted, StepOutcome::Progressed);
-    assert_eq!(pending, StepOutcome::Pending("source release"));
-    assert_eq!(handoff, StepOutcome::Progressed);
-    assert_eq!(complete, StepOutcome::Complete(Ok(17)));
-    assert_eq!(*context.probes.borrow(), [0, 1, 1]);
-    assert_eq!(context.consumed, [1]);
-    assert_eq!(context.transformed, [1]);
-    assert_eq!(context.updated, [1, 1, 1, 1]);
+    let mut state =
+        <FanIn<AfterEach<Candidate, Update>, Policy, Accept> as Stage<Context>>::start(vec![(); 2]);
+    let mut context = Context::with_jobs(&[1]);
+    // When: all source values are collected and selected work executes.
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: both source invocations finish maintenance, only the selected output consumes work.
+    assert!(matches!(result, Ok(StepOutcome::Complete(Ok(_)))));
+    assert_eq!(context.updates, 2);
+    assert_eq!(context.accepted, [1]);
 }

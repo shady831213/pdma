@@ -2,18 +2,17 @@
 //!
 //! ```compile_fail,E0271
 //! use std::convert::Infallible;
-//! use hip::{PipelineExt, Stage, StepOutcome};
+//! use hip::{StepResult, PipelineExt, Stage, StepOutcome};
 //!
 //! struct Source;
 //! impl Stage<()> for Source {
 //!     type Input = ();
 //!     type Output = u32;
 //!     type Error = Infallible;
-//!     type Wait = ();
 //!     type State = ();
 //!     fn start((): ()) {}
-//!     fn step(&mut self, _: &mut (), _: &mut ()) -> StepOutcome<u32, Infallible, ()> {
-//!         StepOutcome::Complete(Ok(42))
+//!     fn step(&mut self, _: &mut (), _: &mut ()) -> StepResult<u32, Infallible> {
+//!         Ok(StepOutcome::Complete(Ok(42)))
 //!     }
 //! }
 //!
@@ -22,11 +21,10 @@
 //!     type Input = String;
 //!     type Output = ();
 //!     type Error = Infallible;
-//!     type Wait = ();
 //!     type State = String;
 //!     fn start(input: String) -> String { input }
-//!     fn step(&mut self, _: &mut (), _: &mut String) -> StepOutcome<(), Infallible, ()> {
-//!         StepOutcome::Complete(Ok(()))
+//!     fn step(&mut self, _: &mut (), _: &mut String) -> StepResult<(), Infallible> {
+//!         Ok(StepOutcome::Complete(Ok(())))
 //!     }
 //! }
 //!

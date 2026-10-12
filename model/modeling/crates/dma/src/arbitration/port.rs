@@ -1,88 +1,78 @@
-use crate::{ChannelTask, Dma, Error, Fetch, RunCommand};
-use hardware_interface_pipeline::{Operation, ReadyStage, Stage, StepOutcome};
+use crate::{ChannelTask, Dma, Error, Fetch};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, Command};
-use std::ops::ControlFlow;
 
-pub(super) type CommandOperation<S, M, SB> = Operation<RunCommand<S>, Dma<M, SB>>;
-
-pub(super) struct Frame<'a, S, M: MemoryAccess<SB>, SB>
-where
-    S: Stage<Dma<M, SB>, Input = ChannelTask<Command>, Output = (), Error = Error, Wait = ()>,
-{
+pub(super) struct Frame<'a, T, M, SB> {
     pub device: &'a mut Dma<M, SB>,
-    pub engine: &'a mut RunCommand<S>,
-    pub operations: &'a mut [Option<CommandOperation<S, M, SB>>],
+    pub saved: &'a mut [Option<T>],
 }
 
+/// Produces a channel candidate without accepting a descriptor.
 #[derive(Debug)]
-pub(super) struct ExecutionPort(pub ChannelId);
+pub struct Candidate(ChannelId);
 
-impl<M: MemoryAccess<SB>, SB, S> ReadyStage<Frame<'_, S, M, SB>> for ExecutionPort
-where
-    S: Stage<Dma<M, SB>, Input = ChannelTask<Command>, Output = (), Error = Error, Wait = ()>,
-{
-    fn ready(&self, frame: &Frame<'_, S, M, SB>) -> bool {
-        Fetch::new(self.0).eligible(frame.device)
+impl Candidate {
+    /// Binds a candidate source to one physical channel.
+    pub const fn new(channel: ChannelId) -> Self {
+        Self(channel)
     }
 }
 
-impl<M: MemoryAccess<SB>, SB, S> Stage<Frame<'_, S, M, SB>> for ExecutionPort
-where
-    S: Stage<Dma<M, SB>, Input = ChannelTask<Command>, Output = (), Error = Error, Wait = ()>,
-{
+impl<M, SB> Stage<Dma<M, SB>> for Candidate {
     type Input = ();
-    type Output = ControlFlow<(), ()>;
+    type Output = Option<ChannelId>;
     type Error = Error;
-    type Wait = ();
-    type State = bool;
+    type State = ();
 
-    fn start((): ()) -> bool {
-        false
+    fn start((): ()) {}
+
+    fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<Self::Output, Error> {
+        Ok(StepOutcome::Complete(Ok(Fetch::new(self.0)
+            .eligible(device)
+            .then_some(self.0))))
+    }
+}
+
+impl<T, M, SB> Stage<Frame<'_, T, M, SB>> for Candidate {
+    type Input = ();
+    type Output = Option<ChannelId>;
+    type Error = Error;
+    type State = ();
+
+    fn start((): ()) {}
+
+    fn step(
+        &mut self,
+        frame: &mut Frame<'_, T, M, SB>,
+        state: &mut (),
+    ) -> StepResult<Self::Output, Error> {
+        self.step(frame.device, state)
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct Accept;
+
+impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Accept {
+    type Input = ChannelId;
+    type Output = Option<ChannelTask<Command>>;
+    type Error = Error;
+    type State = Option<ChannelId>;
+
+    fn start(channel: ChannelId) -> Self::State {
+        Some(channel)
     }
 
     fn step(
         &mut self,
-        frame: &mut Frame<'_, S, M, SB>,
-        started: &mut bool,
-    ) -> StepOutcome<Self::Output, Error, ()> {
-        let Some(slot) = frame.operations.get_mut(self.0.index()) else {
-            return StepOutcome::Complete(Err(Error::Routing));
-        };
-        if !*started {
-            if slot.is_some() {
-                frame.device.active = frame
-                    .device
-                    .channels
-                    .get_mut(self.0.index())
-                    .and_then(|channel| channel.parked.take());
-            } else {
-                match Fetch::new(self.0).step(frame.device, &mut ()) {
-                    StepOutcome::Complete(Ok(task)) => *slot = Some(Operation::new(task)),
-                    StepOutcome::Complete(Err(
-                        Error::Reset | Error::ChannelFatal(_) | Error::Halted,
-                    )) => return StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
-                    StepOutcome::Complete(Err(error)) => return StepOutcome::Complete(Err(error)),
-                    StepOutcome::Pending(()) => return StepOutcome::Pending(()),
-                    StepOutcome::Progressed => return StepOutcome::Progressed,
-                    StepOutcome::Exhausted => return StepOutcome::Exhausted,
-                }
-            }
-            *started = true;
-            return StepOutcome::Progressed;
-        }
-        let Some(operation) = slot.as_mut() else {
-            return StepOutcome::Complete(Err(Error::Routing));
-        };
-        let outcome = operation.step(frame.engine, frame.device);
-        if operation.is_complete() {
-            *slot = None;
-        } else if let Some(channel) = frame.device.channels.get_mut(self.0.index())
-            && channel.registers.values.fault_status.faulted()
-        {
-            channel.parked = frame.device.active.take();
-            return StepOutcome::Complete(Ok(ControlFlow::Continue(())));
-        }
-        outcome
+        device: &mut Dma<M, SB>,
+        state: &mut Self::State,
+    ) -> StepResult<Self::Output, Error> {
+        let channel = state.take().ok_or(RunError::Exhausted)?;
+        Ok(match Fetch::new(channel).step(device, &mut ())? {
+            StepOutcome::Complete(result) => StepOutcome::Complete(result.map(Some)),
+            StepOutcome::InProgress => StepOutcome::Complete(Ok(None)),
+        })
     }
 }

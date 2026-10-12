@@ -1,4 +1,4 @@
-use crate::{AsyncInteractionBackend, Operation, Stage, StepOutcome};
+use crate::{AsyncInteractionBackend, Operation, RunError, Stage, StepOutcome};
 
 /// A statically dispatched asynchronous pipeline executor.
 #[derive(Debug)]
@@ -17,41 +17,45 @@ impl<B> AsyncExecutor<B> {
         &self.backend
     }
 
-    /// Drives a retained operation to completion, awaiting each owned notification key.
+    /// Drives a retained operation, yielding cooperatively after every interaction.
     ///
     /// # Cancel safety
-    /// Dropping this future releases any pending backend acquisition or wait. The caller's
+    /// Dropping this future releases any pending backend acquisition. The caller's
     /// operation retains accepted request state and committed hardware effects remain.
     /// Calling this method again resumes that operation without reconstructing hardware.
+    /// Terminal results remain in the operation until delivered after the final yield.
     pub async fn run<C, S>(
         &self,
         stage: &mut S,
         operation: &mut Operation<S, C>,
     ) -> Result<S::Output, AsyncRunError<B::Error, S::Error>>
     where
-        B: AsyncInteractionBackend<C, S::Wait> + Sync,
+        B: AsyncInteractionBackend<C> + Sync,
         S: Stage<C> + Send,
         S::State: Send,
         S::Output: Send,
         S::Error: Send,
-        S::Wait: Send,
     {
+        if let Some(result) = operation.take_completion() {
+            return result.map_err(AsyncRunError::Stage);
+        }
         loop {
             let outcome = self
                 .backend
-                .interact(|context| operation.step(stage, context))
+                .interact(|context| operation.advance(stage, context))
                 .await
                 .map_err(AsyncRunError::BackendInteraction)?;
+            self.backend.yield_now().await;
             match outcome {
-                StepOutcome::Progressed => {}
-                StepOutcome::Pending(wait) => self
-                    .backend
-                    .wait(wait)
-                    .await
-                    .map_err(AsyncRunError::BackendWait)?,
-                StepOutcome::Complete(Ok(output)) => return Ok(output),
-                StepOutcome::Complete(Err(error)) => return Err(AsyncRunError::Stage(error)),
-                StepOutcome::Exhausted => return Err(AsyncRunError::Exhausted),
+                Ok(StepOutcome::InProgress) => {}
+                Ok(StepOutcome::Complete(Ok(()))) => {
+                    return operation
+                        .take_completion()
+                        .ok_or(AsyncRunError::Run(RunError::Exhausted))?
+                        .map_err(AsyncRunError::Stage);
+                }
+                Ok(StepOutcome::Complete(Err(error))) => match error {},
+                Err(error) => return Err(AsyncRunError::Run(error)),
             }
         }
     }
@@ -63,10 +67,8 @@ impl<B> AsyncExecutor<B> {
 pub enum AsyncRunError<B, S> {
     /// Context interaction failed before or after closure-scoped access.
     BackendInteraction(B),
-    /// Waiting on an owned pending value failed.
-    BackendWait(B),
     /// The stage completed with its typed error.
     Stage(S),
-    /// The pipeline was already terminal before the executor call.
-    Exhausted,
+    /// The retained operation rejected the driving call.
+    Run(RunError),
 }

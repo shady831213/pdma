@@ -129,7 +129,7 @@ impl Bus {
                 &mut ResetControl,
                 &mut *self.0.lock().map_err(|_| "poisoned device lock")?
             ),
-            StepOutcome::Progressed
+            Ok(StepOutcome::Complete(Ok(())))
         ));
         Ok(())
     }

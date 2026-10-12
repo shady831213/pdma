@@ -32,12 +32,14 @@ async fn emitted_notification_survives_device_reset_and_is_claimed_once() -> Tes
         .interact(|device| {
             assert!(matches!(
                 Operation::new(()).step(&mut ResetControl, device),
-                StepOutcome::Progressed
+                Ok(StepOutcome::Complete(Ok(())))
             ));
-            StepOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
+            Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
+                Ok(()),
+            ))
         })
         .await?;
-    assert!(matches!(outcome, StepOutcome::Complete(Ok(()))));
+    assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
     // Then: reset cannot retract an already emitted notification or cause repeat delivery.
     assert!(model.claim(()).await?.is_some());
     assert!(model.claim(()).await?.is_none());

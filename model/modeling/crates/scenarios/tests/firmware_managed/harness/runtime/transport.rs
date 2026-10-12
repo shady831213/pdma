@@ -1,5 +1,5 @@
 use super::{Driver, Hardware, RoutedMemory, Shared};
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;
 use std::convert::Infallible;
@@ -11,7 +11,6 @@ impl<M> Shared<M> {
         let result = access(&mut hardware);
         self.deliver(&mut hardware);
         drop(hardware);
-        self.changed.notify_one();
         result
     }
 
@@ -58,25 +57,23 @@ impl<M> Shared<M> {
     }
 }
 
-impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, DmaAccess>, ()> for Driver<M> {
+impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, DmaAccess>> for Driver<M> {
     type Error = Infallible;
 
-    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
+    async fn yield_now(&self) {
+        tokio::task::yield_now().await;
+    }
+
+    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepResult<O, E>, Infallible>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Dma<RoutedMemory<M>, DmaAccess>) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Dma<RoutedMemory<M>, DmaAccess>) -> StepResult<O, E> + Send,
     {
-        tokio::task::yield_now().await;
         let mut hardware = self.0.hardware.lock().await;
         let outcome = interaction(&mut hardware.dma);
         self.0.deliver(&mut hardware);
         drop(hardware);
         Ok(outcome)
-    }
-
-    async fn wait(&self, (): ()) -> Result<(), Infallible> {
-        self.0.changed.notified().await;
-        Ok(())
     }
 }

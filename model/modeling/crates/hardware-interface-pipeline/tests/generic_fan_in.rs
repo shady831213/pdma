@@ -1,188 +1,175 @@
-//! Application-defined fan-in behavior.
-
+//! Value reduction and complete-plan validation.
 use hardware_interface_pipeline::{
-    BranchError, Combine, FanIn, FanInState, Operation, Stage, StepOutcome,
+    Arbitrate, Arbitration, BranchError, FanIn, FanPlan, FanPolicy, RunError, Stage, StepOutcome,
+    StepResult,
 };
-
 struct Number(u8);
-
 impl Stage<Vec<u8>> for Number {
     type Input = ();
     type Output = u8;
     type Error = &'static str;
-    type Wait = String;
     type State = bool;
-
     fn start((): ()) -> bool {
         false
     }
-
-    fn step(
-        &mut self,
-        context: &mut Vec<u8>,
-        done: &mut bool,
-    ) -> StepOutcome<u8, Self::Error, String> {
+    fn step(&mut self, context: &mut Vec<u8>, done: &mut bool) -> StepResult<u8, Self::Error> {
         if *done {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         }
         *done = true;
         context.push(self.0);
-        StepOutcome::Complete(Ok(self.0))
+        Ok(StepOutcome::Complete(Ok(self.0)))
     }
 }
-
-struct Sum(Vec<usize>);
-
-impl Combine<Vec<u8>, Number> for Sum {
+struct Text;
+impl Stage<Vec<u8>> for Text {
+    type Input = String;
     type Output = String;
-    type State = ();
-
-    fn start() {}
-
-    fn plan(
+    type Error = &'static str;
+    type State = Option<String>;
+    fn start(input: String) -> Self::State {
+        Some(input)
+    }
+    fn step(
         &mut self,
-        _: &Vec<u8>,
-        _: &[Number],
-        (): &mut (),
-    ) -> StepOutcome<Vec<usize>, BranchError<&'static str>, String> {
-        StepOutcome::Complete(Ok(std::mem::take(&mut self.0)))
-    }
-
-    fn combine(&mut self, (): (), values: Vec<u8>) -> Result<String, BranchError<&'static str>> {
-        Ok(values.into_iter().map(u16::from).sum::<u16>().to_string())
+        context: &mut Vec<u8>,
+        state: &mut Self::State,
+    ) -> StepResult<String, Self::Error> {
+        context.push(100);
+        Ok(StepOutcome::Complete(Ok(state
+            .take()
+            .ok_or(RunError::Exhausted)?)))
     }
 }
-
-#[test]
-fn planning_finishes_before_any_child_effect() {
-    // Given: a valid plan selects an immediately completing child.
-    let mut hardware = FanIn::new(vec![Number(3)], Sum(vec![0]));
-    let mut context = Vec::new();
-    let mut operation = Operation::new(());
-    // When: the operation performs its planning step.
-    let outcome = operation.step(&mut hardware, &mut context);
-    // Then: execution stops at the boundary before entering the child.
-    assert_eq!(outcome, StepOutcome::Progressed);
-    assert!(context.is_empty());
+struct Sum(Vec<usize>);
+impl FanPolicy<u8, String, &'static str> for Sum {
+    fn plan(&mut self, values: &[Option<u8>], _: &[bool]) -> Result<FanPlan, &'static str> {
+        if values.iter().all(Option::is_none) {
+            return Ok(FanPlan::default());
+        }
+        Ok(FanPlan {
+            inputs: self.0.clone(),
+            outputs: vec![0],
+        })
+    }
+    fn route(&mut self, values: Vec<u8>) -> Result<Vec<String>, &'static str> {
+        Ok(vec![
+            values
+                .into_iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join("+"),
+        ])
+    }
 }
-
 #[test]
-fn all_inputs_reduce_to_application_output_in_planned_order() {
-    // Given: an application plans all inputs in a custom order and outputs text.
-    let mut hardware = FanIn::new(vec![Number(3), Number(8)], Sum(vec![1, 0]));
+fn completed_values_are_planned_before_any_output_effect() {
+    // Given: a policy joins completed values in a custom order.
+    let mut hardware = FanIn::new(vec![Number(3), Number(8)], Sum(vec![1, 0]), Text);
+    let mut state = <FanIn<Number, Sum, Text> as Stage<Vec<u8>>>::start(vec![(); 2]);
     let mut context = Vec::new();
-    let mut operation = Operation::new(());
-    // When: planning, both children, and reduction run in separate steps.
+    // When: input collection and planning run in separate steps.
     assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
+        hardware.step(&mut context, &mut state),
+        Ok(StepOutcome::InProgress)
     );
-    let first = operation.step(&mut hardware, &mut context);
-    let second = operation.step(&mut hardware, &mut context);
-    let result = operation.step(&mut hardware, &mut context);
-    // Then: one child ran per step and the reducer changed the output type.
-    assert_eq!(first, StepOutcome::Progressed);
-    assert_eq!(second, StepOutcome::Progressed);
-    assert_eq!(result, StepOutcome::Complete(Ok("11".to_owned())));
-    assert_eq!(context, [8, 3]);
+    assert_eq!(context, [3, 8]);
+    assert_eq!(
+        hardware.step(&mut context, &mut state),
+        Ok(StepOutcome::InProgress)
+    );
+    assert_eq!(context, [3, 8]);
+    let result = hardware.step(&mut context, &mut state);
+    // Then: the output receives the owned transformed values in plan order.
+    assert_eq!(
+        result,
+        Ok(StepOutcome::Complete(Ok(vec![(0, "8+3".into())])))
+    );
+    assert_eq!(context, [3, 8, 100]);
 }
-
 #[test]
-fn invalid_plans_fail_before_any_selected_child_effect() {
-    // Given: each malformed plan starts with a valid branch.
-    for (plan, error) in [
+fn invalid_input_plans_fail_before_any_output_effect() {
+    // Given: malformed plans start with a valid completed input.
+    for (indices, expected) in [
         (vec![0, 2], BranchError::InvalidIndex { index: 2, ports: 2 }),
         (vec![0, 0], BranchError::DuplicateIndex { index: 0 }),
     ] {
-        let mut hardware = FanIn::new(vec![Number(3), Number(8)], Sum(plan));
+        let mut hardware = FanIn::new(vec![Number(3), Number(8)], Sum(indices), Text);
+        let mut state = <FanIn<Number, Sum, Text> as Stage<Vec<u8>>>::start(vec![(); 2]);
         let mut context = Vec::new();
-        let mut operation = Operation::new(());
-        // When: the operation starts gathering.
-        let result = operation.step(&mut hardware, &mut context);
-        // Then: validation rejects the entire plan without running its first child.
-        assert_eq!(result, StepOutcome::Complete(Err(error)));
-        assert!(context.is_empty());
-    }
-}
-
-#[test]
-fn empty_plan_reduces_without_child_interaction() {
-    // Given: an application requests the empty aggregate.
-    let mut hardware = FanIn::<Number, _>::new(Vec::new(), Sum(Vec::new()));
-    let mut context = Vec::new();
-    // When: the empty aggregate crosses planning and gathering before reduction.
-    let mut operation = Operation::new(());
-    assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
-    );
-    assert_eq!(
-        operation.step(&mut hardware, &mut context),
-        StepOutcome::Progressed
-    );
-    let result = operation.step(&mut hardware, &mut context);
-    // Then: the reducer receives an empty collection.
-    assert_eq!(result, StepOutcome::Complete(Ok("0".to_owned())));
-    assert!(context.is_empty());
-}
-
-enum Stop {
-    Fail,
-    Exhaust,
-}
-
-struct StopPolicy<'a> {
-    outcome: Stop,
-    reductions: &'a std::cell::Cell<usize>,
-}
-
-impl Combine<Vec<u8>, Number> for StopPolicy<'_> {
-    type Output = ();
-    type State = ();
-    fn start() {}
-    fn plan(
-        &mut self,
-        _: &Vec<u8>,
-        _: &[Number],
-        (): &mut (),
-    ) -> StepOutcome<Vec<usize>, BranchError<&'static str>, String> {
-        match self.outcome {
-            Stop::Fail => StepOutcome::Complete(Err(BranchError::Application("policy fault"))),
-            Stop::Exhaust => StepOutcome::Exhausted,
-        }
-    }
-    fn combine(&mut self, (): (), _: Vec<u8>) -> Result<(), BranchError<&'static str>> {
-        self.reductions.set(self.reductions.get() + 1);
-        Ok(())
-    }
-}
-
-#[test]
-fn terminal_planning_stops_without_child_or_reducer_effects() {
-    // Given: policies that fail or exhaust before accepting any child.
-    for (outcome, expected) in [
-        (
-            Stop::Fail,
-            StepOutcome::Complete(Err(BranchError::Application("policy fault"))),
-        ),
-        (Stop::Exhaust, StepOutcome::Exhausted),
-    ] {
-        let reductions = std::cell::Cell::new(0);
-        let policy = StopPolicy {
-            outcome,
-            reductions: &reductions,
-        };
-        let mut hardware = FanIn::new(vec![Number(3)], policy);
-        let mut context = Vec::new();
-        let mut state: FanInState<(), bool, u8> =
-            <FanIn<Number, StopPolicy<'_>> as Stage<Vec<u8>>>::start(());
-        // When: the planning result is observed and its state is stepped again.
+        assert_eq!(
+            hardware.step(&mut context, &mut state),
+            Ok(StepOutcome::InProgress)
+        );
+        // When: the plan is validated against buffered values.
         let result = hardware.step(&mut context, &mut state);
-        let terminal = hardware.step(&mut context, &mut state);
-        // Then: the result is propagated once and all child work remains untouched.
-        assert_eq!(result, expected);
-        assert_eq!(terminal, StepOutcome::Exhausted);
-        assert!(context.is_empty());
-        assert_eq!(reductions.get(), 0);
+        // Then: invalid selection performs no destination effect and clears invocation state.
+        assert_eq!(result, Ok(StepOutcome::Complete(Err(expected))));
+        assert_eq!(context, [3, 8]);
+        assert!(state.is_none());
     }
+}
+struct First;
+impl Arbitration<u8, &'static str> for First {
+    fn select(&mut self, values: &[Option<u8>]) -> Result<Option<usize>, &'static str> {
+        Ok(values.iter().position(Option::is_some))
+    }
+}
+struct Echo;
+impl Stage<Vec<u8>> for Echo {
+    type Input = u8;
+    type Output = u8;
+    type Error = &'static str;
+    type State = Option<u8>;
+    fn start(input: u8) -> Self::State {
+        Some(input)
+    }
+    fn step(&mut self, _: &mut Vec<u8>, state: &mut Self::State) -> StepResult<u8, Self::Error> {
+        Ok(StepOutcome::Complete(Ok(state
+            .take()
+            .ok_or(RunError::Exhausted)?)))
+    }
+}
+#[test]
+fn arbitration_retains_unselected_values_until_single_output_can_reuse() {
+    // Given: two completed values share one output and a singleton selection policy.
+    let mut hardware = FanIn::new(vec![Number(3), Number(8)], Arbitrate::new(First), Echo);
+    let mut state = <FanIn<Number, Arbitrate<First>, Echo> as Stage<Vec<u8>>>::start(vec![(); 2]);
+    let mut context = Vec::new();
+    // When: the first output completes before the second buffered value is selected.
+    for _ in 0..3 {
+        assert_eq!(
+            hardware.step(&mut context, &mut state),
+            Ok(StepOutcome::InProgress)
+        );
+    }
+    assert_eq!(context, [3, 8]);
+    for _ in 0..2 {
+        assert_eq!(
+            hardware.step(&mut context, &mut state),
+            Ok(StepOutcome::InProgress)
+        );
+    }
+    let result = hardware.step(&mut context, &mut state);
+    // Then: aggregate completion includes both values without rerunning source hardware.
+    assert_eq!(result, Ok(StepOutcome::Complete(Ok(vec![(0, 3), (0, 8)]))));
+    assert_eq!(context, [3, 8]);
+}
+#[test]
+fn input_count_mismatch_fails_before_source_effects() {
+    // Given: a batch omits an input required by the configured population.
+    let mut hardware = FanIn::new(vec![Number(3)], Sum(vec![0]), Text);
+    let mut state = <FanIn<Number, Sum, Text> as Stage<Vec<u8>>>::start(vec![]);
+    let mut context = Vec::new();
+    // When: the invocation is first stepped.
+    let result = hardware.step(&mut context, &mut state);
+    // Then: the malformed batch has no source or destination effects.
+    assert_eq!(
+        result,
+        Ok(StepOutcome::Complete(Err(BranchError::InputCount {
+            expected: 1,
+            actual: 0
+        })))
+    );
+    assert!(context.is_empty());
 }

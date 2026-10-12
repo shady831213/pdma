@@ -148,7 +148,7 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
             .map_err(|e| format!("{e:?}"))?;
         assert!(!matches!(
             outcome,
-            hardware_interface_pipeline::RunOutcome::Complete(_)
+            hardware_interface_pipeline::StepOutcome::Complete(_)
         ));
     }
     // Then

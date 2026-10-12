@@ -3,8 +3,8 @@
 use std::{cell::Cell, num::NonZeroUsize, num::TryFromIntError, rc::Rc};
 
 use hardware_interface_pipeline::{
-    ImmediateExecutor, Operation, PipelineExt, RunError, RunOutcome, Stage, StepExecutor,
-    StepOutcome,
+    ImmediateExecutor, Operation, PipelineExt, RunError, Stage, StepExecutor, StepOutcome,
+    StepResult,
 };
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -18,14 +18,10 @@ struct Value(&'static str);
 #[derive(Debug, PartialEq, Eq)]
 struct Fault(&'static str);
 
-#[derive(Debug, PartialEq, Eq)]
-struct Wait(&'static str);
-
 #[derive(Debug)]
 enum Behavior {
     Ready(Result<&'static str, &'static str>),
-    Pending {
-        wait: &'static str,
+    Unfinished {
         completion: Result<&'static str, &'static str>,
     },
     Progressing(Rc<Cell<usize>>),
@@ -45,14 +41,13 @@ impl Leaf {
         }
     }
 
-    const fn pending(
+    const fn unfinished(
         name: &'static str,
-        wait: &'static str,
         completion: Result<&'static str, &'static str>,
     ) -> Self {
         Self {
             name,
-            behavior: Behavior::Pending { wait, completion },
+            behavior: Behavior::Unfinished { completion },
         }
     }
 
@@ -68,7 +63,6 @@ impl Stage<Context> for Leaf {
     type Input = Value;
     type Error = Fault;
     type Output = Value;
-    type Wait = Wait;
     type State = bool;
 
     fn start(_: Self::Input) -> Self::State {
@@ -79,30 +73,30 @@ impl Stage<Context> for Leaf {
         &mut self,
         context: &mut Context,
         state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+    ) -> StepResult<Self::Output, Self::Error> {
         match &self.behavior {
             Behavior::Ready(result) => {
                 context.actions.push(self.name);
-                StepOutcome::Complete(result.map(Value).map_err(Fault))
+                Ok(StepOutcome::Complete(result.map(Value).map_err(Fault)))
             }
-            Behavior::Pending { wait, completion } => {
+            Behavior::Unfinished { completion } => {
                 if *state {
                     context.actions.push(self.name);
-                    StepOutcome::Complete(completion.map(Value).map_err(Fault))
+                    Ok(StepOutcome::Complete(completion.map(Value).map_err(Fault)))
                 } else {
                     *state = true;
-                    StepOutcome::Pending(Wait(wait))
+                    Ok(StepOutcome::InProgress)
                 }
             }
             Behavior::Progressing(calls) => {
                 calls.set(calls.get() + 1);
-                StepOutcome::Progressed
+                Ok(StepOutcome::InProgress)
             }
         }
     }
 }
 
-fn ready_chain() -> impl Stage<Context, Input = Value, Output = Value, Error = Fault, Wait = Wait> {
+fn ready_chain() -> impl Stage<Context, Input = Value, Output = Value, Error = Fault> {
     Leaf::ready("A", Ok("a"))
         .then(Leaf::ready("B", Ok("b")))
         .then(Leaf::ready("C", Ok("terminal")))
@@ -126,9 +120,9 @@ fn stepped_chain_calls_each_ready_leaf_once_in_three_steps() {
     let third = executor.step(&mut pipeline, &mut operation, &mut context);
 
     // Then: composition transitions are not additional leaf actions.
-    assert_eq!(first, Ok(RunOutcome::Progressed));
-    assert_eq!(second, Ok(RunOutcome::Progressed));
-    assert_eq!(third, Ok(RunOutcome::Complete(Ok(Value("terminal")))));
+    assert_eq!(first, Ok(StepOutcome::InProgress));
+    assert_eq!(second, Ok(StepOutcome::InProgress));
+    assert_eq!(third, Ok(StepOutcome::Complete(Ok(Value("terminal")))));
     assert_eq!(context.actions, ["A", "B", "C"]);
     println!(
         "stepped calls=3 actions={:?} output=terminal",
@@ -157,11 +151,11 @@ fn parity_ready_chain_has_the_same_terminal_value_as_stepping() -> Result<(), Tr
     // Then: both preserve the same owned terminal result and leaf action sequence.
     assert_eq!(
         stepped_result,
-        Ok(RunOutcome::Complete(Ok(Value("terminal"))))
+        Ok(StepOutcome::Complete(Ok(Value("terminal"))))
     );
     assert_eq!(
         immediate_result,
-        Ok(RunOutcome::Complete(Ok(Value("terminal"))))
+        Ok(StepOutcome::Complete(Ok(Value("terminal"))))
     );
     assert_eq!(stepped_cx.actions, ["A", "B", "C"]);
     assert_eq!(immediate_cx.actions, ["A", "B", "C"]);
@@ -170,24 +164,24 @@ fn parity_ready_chain_has_the_same_terminal_value_as_stepping() -> Result<(), Tr
 }
 
 #[test]
-fn parity_pending_returns_owned_wait_then_resumes_without_replay() -> Result<(), TryFromIntError> {
-    // Given: equivalent stages that first transfer an owned wait and then complete.
+fn unfinished_work_resumes_after_stepping_or_budget_exhaustion() -> Result<(), TryFromIntError> {
+    // Given: equivalent stages retaining unfinished work before completion.
     let stepped = StepExecutor::new();
     let immediate = ImmediateExecutor::new(budget(1)?);
-    let mut stepped_hw = Leaf::pending("P", "wait", Ok("done"));
-    let mut immediate_hw = Leaf::pending("P", "wait", Ok("done"));
+    let mut stepped_hw = Leaf::unfinished("P", Ok("done"));
+    let mut immediate_hw = Leaf::unfinished("P", Ok("done"));
     let mut stepped_op = Operation::new(Value("request"));
     let mut immediate_op = Operation::new(Value("request"));
     let mut stepped_cx = Context::default();
     let mut immediate_cx = Context::default();
 
-    // When: each policy returns and drops its wait before a separate resume call.
+    // When: each policy consumes one step before a separate resume call.
     let stepped_pending = stepped.step(&mut stepped_hw, &mut stepped_op, &mut stepped_cx);
     let immediate_pending = immediate.run(&mut immediate_hw, &mut immediate_op, &mut immediate_cx);
 
-    // Then: both policies transfer the same owned wait before the later resume call.
-    assert_eq!(stepped_pending, Ok(RunOutcome::Pending(Wait("wait"))));
-    assert_eq!(immediate_pending, Ok(RunOutcome::Pending(Wait("wait"))));
+    // Then: both policies retain the invocation for the later resume call.
+    assert_eq!(stepped_pending, Ok(StepOutcome::InProgress));
+    assert_eq!(immediate_pending, Err(RunError::BudgetExhausted));
     println!(
         "parity pending stepped_wait={stepped_pending:?} immediate_wait={immediate_pending:?}"
     );
@@ -196,13 +190,13 @@ fn parity_pending_returns_owned_wait_then_resumes_without_replay() -> Result<(),
     let stepped_result = stepped.step(&mut stepped_hw, &mut stepped_op, &mut stepped_cx);
     let immediate_result = immediate.run(&mut immediate_hw, &mut immediate_op, &mut immediate_cx);
 
-    // Then: waits are owned, no action replays, and both resumed pipelines complete alike.
+    // Then: no action replays, and both resumed pipelines complete alike.
     assert_eq!(stepped_cx.actions, ["P"]);
     assert_eq!(immediate_cx.actions, ["P"]);
-    assert_eq!(stepped_result, Ok(RunOutcome::Complete(Ok(Value("done")))));
+    assert_eq!(stepped_result, Ok(StepOutcome::Complete(Ok(Value("done")))));
     assert_eq!(
         immediate_result,
-        Ok(RunOutcome::Complete(Ok(Value("done"))))
+        Ok(StepOutcome::Complete(Ok(Value("done"))))
     );
     println!("parity pending stepped={stepped_result:?} immediate={immediate_result:?}");
     Ok(())
@@ -227,11 +221,11 @@ fn parity_stage_error_preserves_owned_error() -> Result<(), TryFromIntError> {
     // Then: the stage error remains an owned terminal result rather than an executor error.
     assert_eq!(
         stepped_result,
-        Ok(RunOutcome::Complete(Err(Fault("stage error"))))
+        Ok(StepOutcome::Complete(Err(Fault("stage error"))))
     );
     assert_eq!(
         immediate_result,
-        Ok(RunOutcome::Complete(Err(Fault("stage error"))))
+        Ok(StepOutcome::Complete(Err(Fault("stage error"))))
     );
     println!("parity error stepped={stepped_result:?} immediate={immediate_result:?}");
     Ok(())

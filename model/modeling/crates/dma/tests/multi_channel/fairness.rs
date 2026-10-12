@@ -44,8 +44,8 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
         let mut operation = Operation::new(());
         for _ in 0..512 {
             assert!(matches!(
-                operation.step(&mut hardware, &mut device),
-                StepOutcome::Progressed | StepOutcome::Pending(())
+                operation.step(&mut hardware, &mut device)?,
+                StepOutcome::InProgress
             ));
         }
         // Then: both peers complete, and A's fault or full ring stays local.
@@ -112,14 +112,13 @@ fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult
         let mut operation = Operation::new(());
         let mut finished = false;
         for _ in 0..128 {
-            match operation.step(&mut hardware, device) {
+            match operation.step(&mut hardware, device)? {
                 StepOutcome::Complete(result) => {
                     result?;
                     finished = true;
                     break;
                 }
-                StepOutcome::Progressed => {}
-                other => return Err(format!("unexpected fill result: {other:?}").into()),
+                StepOutcome::InProgress => {}
             }
         }
         assert!(finished);

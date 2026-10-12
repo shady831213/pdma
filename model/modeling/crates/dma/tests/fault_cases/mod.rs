@@ -5,6 +5,7 @@ mod lifecycle;
 mod memory;
 mod peers;
 mod resume;
+mod termination;
 
 use self::memory::Paged;
 use crate::support::{TestResult, configure};
@@ -54,13 +55,12 @@ impl Fixture {
     }
 
     fn step(&mut self) -> TestResult {
-        match self.operation.step(&mut self.pipeline, &mut self.dma) {
-            StepOutcome::Progressed | StepOutcome::Pending(()) => Ok(()),
+        match self.operation.step(&mut self.pipeline, &mut self.dma)? {
+            StepOutcome::InProgress => Ok(()),
             StepOutcome::Complete(result) => {
                 result?;
                 Err("loop stopped".into())
             }
-            StepOutcome::Exhausted => Err("loop exhausted".into()),
         }
     }
 }

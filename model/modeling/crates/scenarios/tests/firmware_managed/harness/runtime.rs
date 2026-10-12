@@ -30,7 +30,7 @@ use pdma_model_hw_components::{
 };
 use pdma_model_software::control::{ControlIrq, ManagementAddresses};
 use std::sync::Arc;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 struct Hardware<M> {
@@ -45,7 +45,6 @@ struct Hardware<M> {
 struct Shared<M> {
     addresses: ManagementAddresses,
     hardware: Mutex<Hardware<M>>,
-    changed: Notify,
     destinations: Vec<InterruptEmitter>,
     channel_count: usize,
     to_firmware: InterruptEmitter,

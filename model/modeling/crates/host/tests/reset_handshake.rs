@@ -157,12 +157,14 @@ async fn reset_wait_can_migrate_but_still_requires_hardware_completion()
             .interact(|dma| {
                 assert!(matches!(
                     operation.step(&mut control, dma),
-                    StepOutcome::Progressed
+                    Ok(StepOutcome::Complete(Ok(())))
                 ));
-                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
+                    Ok(()),
+                ))
             })
             .await;
-        assert!(matches!(cleanup, StepOutcome::Progressed));
+        assert!(matches!(cleanup, Ok(StepOutcome::Complete(Ok(())))));
         // Then: switching CPU cannot finish reset early; actual hardware cleanup does.
         other.run_main(reset).await?;
     }
@@ -234,12 +236,14 @@ async fn reset_completes_only_after_hardware_clears_its_scope()
             .interact(|device| {
                 assert!(matches!(
                     Operation::new(()).step(&mut ResetControl, device),
-                    StepOutcome::Progressed
+                    Ok(StepOutcome::Complete(Ok(())))
                 ));
-                StepOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
+                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
+                    Ok(()),
+                ))
             })
             .await?;
-        assert!(matches!(outcome, StepOutcome::Complete(Ok(()))));
+        assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
         // Then: observing the hardware-cleared bit completes the existing wait.
         cpu.run_main(reset).await?;
     }

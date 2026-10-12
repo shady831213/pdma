@@ -1,5 +1,5 @@
 use crate::{ChannelTask, Dma, Error};
-use hardware_interface_pipeline::{ReadyStage, Stage, StepOutcome};
+use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, Command};
 use pdma_model_contract::ring::Ring;
@@ -17,8 +17,8 @@ impl Fetch {
     }
 }
 
-impl<M: MemoryAccess<SB>, SB> ReadyStage<Dma<M, SB>> for Fetch {
-    fn ready(&self, device: &Dma<M, SB>) -> bool {
+impl Fetch {
+    fn ready<M, SB>(&self, device: &Dma<M, SB>) -> bool {
         self.eligible(device)
             && device
                 .channels
@@ -50,23 +50,18 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
     type Input = ();
     type Output = ChannelTask<Command>;
     type Error = Error;
-    type Wait = ();
     type State = ();
 
     fn start((): ()) {}
 
-    fn step(
-        &mut self,
-        device: &mut Dma<M, SB>,
-        (): &mut (),
-    ) -> StepOutcome<Self::Output, Error, ()> {
+    fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<Self::Output, Error> {
         if !self.ready(device) {
-            return StepOutcome::Pending(());
+            return Ok(StepOutcome::InProgress);
         }
         let outcome = {
             let selected = match device.channel_context(self.channel) {
                 Ok(selected) => selected,
-                Err(error) => return StepOutcome::Complete(Err(error)),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
             };
             let outcome = match selected.channel.command.pop(&selected.memory) {
                 Ok(Some(value)) => StepOutcome::Complete(Ok(ChannelTask {
@@ -74,7 +69,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
                     generation: selected.channel.generation,
                     value,
                 })),
-                Ok(None) => StepOutcome::Pending(()),
+                Ok(None) => StepOutcome::InProgress,
                 Err(fatal) => {
                     selected.channel.latch(fatal);
                     StepOutcome::Complete(Err(Error::ChannelFatal(fatal)))
@@ -90,6 +85,6 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
                 value: crate::references(&task.value),
             });
         }
-        outcome
+        Ok(outcome)
     }
 }

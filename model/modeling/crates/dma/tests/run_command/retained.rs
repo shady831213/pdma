@@ -2,7 +2,7 @@ use crate::{
     RESET,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, Command, CommandRegisters};
 use pdma_model_dma::{ChannelFatal, ChannelTask, Dma, Error, Intake, ResetControl, RunCommand};
@@ -26,14 +26,13 @@ struct RetainingChild {
     intake: Intake,
     drops: Rc<Cell<usize>>,
     calls: Rc<Cell<usize>>,
-    terminal: StepOutcome<(), Error, ()>,
+    terminal: StepResult<(), Error>,
 }
 
 impl Stage<Dma<SharedMemory>> for RetainingChild {
     type Input = ();
     type Output = ();
     type Error = Error;
-    type Wait = ();
     type State = Retained;
 
     fn start((): ()) -> Retained {
@@ -48,45 +47,43 @@ impl Stage<Dma<SharedMemory>> for RetainingChild {
         &mut self,
         device: &mut Dma<SharedMemory>,
         state: &mut Retained,
-    ) -> StepOutcome<(), Error, ()> {
+    ) -> StepResult<(), Error> {
         self.calls.set(self.calls.get() + 1);
         if state.task.is_some() {
-            return std::mem::replace(&mut self.terminal, StepOutcome::Pending(()));
+            return std::mem::replace(&mut self.terminal, Ok(StepOutcome::InProgress));
         }
-        match state.intake.step(&mut self.intake, device) {
+        Ok(match state.intake.step(&mut self.intake, device)? {
             StepOutcome::Complete(Ok(task)) => {
                 state.task = Some(task);
                 state.witness = Some(DropWitness(Rc::clone(&self.drops)));
-                StepOutcome::Pending(())
+                StepOutcome::InProgress
             }
             StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(()) => StepOutcome::Pending(()),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-        }
+            StepOutcome::InProgress => StepOutcome::InProgress,
+        })
     }
 }
 
 #[test]
 fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() -> TestResult {
     for terminal in [
-        StepOutcome::Complete(Ok(())),
-        StepOutcome::Complete(Err(Error::Reset)),
-        StepOutcome::Complete(Err(Error::ChannelFatal(ChannelFatal::ResponseWrite))),
-        StepOutcome::Complete(Err(Error::Halted)),
-        StepOutcome::Complete(Err(Error::Routing)),
-        StepOutcome::Exhausted,
+        Ok(StepOutcome::Complete(Ok(()))),
+        Ok(StepOutcome::Complete(Err(Error::Reset))),
+        Ok(StepOutcome::Complete(Err(Error::ChannelFatal(
+            ChannelFatal::ResponseWrite,
+        )))),
+        Ok(StepOutcome::Complete(Err(Error::Halted))),
+        Ok(StepOutcome::Complete(Err(Error::Routing))),
+        Err(RunError::Exhausted),
     ] {
-        // Given: a child that retains accepted work even when returning a terminal result.
+        // Given: a child retains accepted work until the lifecycle wrapper terminates.
         let expected = match terminal {
-            StepOutcome::Complete(
+            Ok(StepOutcome::Complete(
                 Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
-            ) => StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
-            StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-            StepOutcome::Progressed | StepOutcome::Pending(()) => {
-                return Err("nonterminal fixture".into());
-            }
+            )) => Ok(StepOutcome::Complete(Ok(ControlFlow::Continue(())))),
+            Ok(StepOutcome::Complete(Err(error))) => Ok(StepOutcome::Complete(Err(error))),
+            Err(error) => Err(error),
+            Ok(StepOutcome::InProgress) => return Err("nonterminal fixture".into()),
         };
         let (mut device, memory) = setup(0x1100, 2)?;
         submit(&mut device, &memory, command())?;
@@ -101,10 +98,8 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         let mut state = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
         let mut accepted = false;
         for _ in 0..32 {
-            if matches!(
-                hardware.step(&mut device, &mut state),
-                StepOutcome::Pending(())
-            ) {
+            let _ = hardware.step(&mut device, &mut state)?;
+            if state.as_ref().is_some_and(|child| child.task.is_some()) {
                 accepted = true;
                 break;
             }
@@ -112,7 +107,7 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         assert!(accepted);
         assert_eq!(drops.get(), 0);
         device.write(RESET, &1_u32.to_le_bytes())?;
-        let _ = ResetControl.step(&mut device, &mut ());
+        let _ = ResetControl.step(&mut device, &mut ())?;
         assert_eq!(read_word(&mut device, RESET)?, 1);
         // When: the lifecycle wrapper observes the terminal child result.
         let outcome = hardware.step(&mut device, &mut state);
@@ -120,12 +115,12 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         assert_eq!(outcome, expected);
         assert_eq!(drops.get(), 1);
         assert_eq!(read_word(&mut device, RESET)?, 1);
-        let _ = ResetControl.step(&mut device, &mut ());
+        let _ = ResetControl.step(&mut device, &mut ())?;
         assert_eq!(read_word(&mut device, RESET)?, 0);
         let terminal_calls = calls.get();
         assert_eq!(
             hardware.step(&mut device, &mut state),
-            StepOutcome::Exhausted
+            Err(RunError::Exhausted)
         );
         assert_eq!(calls.get(), terminal_calls);
         assert_eq!(drops.get(), 1);
@@ -142,13 +137,13 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         intake: device.intake(),
         drops: Rc::new(Cell::new(0)),
         calls: Rc::new(Cell::new(0)),
-        terminal: StepOutcome::Complete(Ok(())),
+        terminal: Ok(StepOutcome::Complete(Ok(()))),
     });
     let mut old = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
     let mut completed = false;
     for _ in 0..32 {
         if matches!(
-            hardware.step(&mut device, &mut old),
+            hardware.step(&mut device, &mut old)?,
             StepOutcome::Complete(Ok(_))
         ) {
             completed = true;
@@ -171,33 +166,34 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         intake: device.intake(),
         drops: Rc::new(Cell::new(0)),
         calls: Rc::new(Cell::new(0)),
-        terminal: StepOutcome::Complete(Err(Error::Reset)),
+        terminal: Ok(StepOutcome::Complete(Err(Error::Reset))),
     });
     let mut current = <RunCommand<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
     let mut accepted = false;
     for _ in 0..32 {
-        if matches!(
-            newer.step(&mut device, &mut current),
-            StepOutcome::Pending(())
-        ) {
+        let _ = newer.step(&mut device, &mut current)?;
+        if current.as_ref().is_some_and(|child| child.task.is_some()) {
             accepted = true;
             break;
         }
     }
     assert!(accepted);
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 1);
     // When: the caller steps the old completed state again.
-    assert_eq!(hardware.step(&mut device, &mut old), StepOutcome::Exhausted);
-    let _ = ResetControl.step(&mut device, &mut ());
+    assert_eq!(
+        hardware.step(&mut device, &mut old),
+        Err(RunError::Exhausted)
+    );
+    let _ = ResetControl.step(&mut device, &mut ())?;
     // Then: reset remains busy until the current owner retires.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     assert_eq!(
-        newer.step(&mut device, &mut current),
+        newer.step(&mut device, &mut current)?,
         StepOutcome::Complete(Ok(ControlFlow::Continue(())))
     );
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }

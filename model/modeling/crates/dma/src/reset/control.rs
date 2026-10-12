@@ -1,5 +1,5 @@
 use crate::Dma;
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::{ChannelId, DmaControlValues};
 use std::convert::Infallible;
 
@@ -9,18 +9,13 @@ pub struct ResetControl;
 
 impl<M, SB> Stage<Dma<M, SB>> for ResetControl {
     type Input = ();
-    type Output = Infallible;
+    type Output = ();
     type Error = Infallible;
-    type Wait = Infallible;
     type State = ();
 
     fn start((): ()) {}
 
-    fn step(
-        &mut self,
-        device: &mut Dma<M, SB>,
-        (): &mut (),
-    ) -> StepOutcome<Infallible, Infallible, Infallible> {
+    fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<(), Infallible> {
         if device.resetting() {
             if device.active.is_none()
                 && device
@@ -45,6 +40,6 @@ impl<M, SB> Stage<Dma<M, SB>> for ResetControl {
                 }
             }
         }
-        StepOutcome::Progressed
+        Ok(StepOutcome::Complete(Ok(())))
     }
 }

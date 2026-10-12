@@ -1,6 +1,6 @@
 //! Application error adaptation contracts.
 
-use hardware_interface_pipeline::{MapError, Operation, ReadyStage, Stage, StepOutcome};
+use hardware_interface_pipeline::{MapError, Operation, Stage, StepOutcome, StepResult};
 
 struct Fails;
 
@@ -8,28 +8,19 @@ impl Stage<()> for Fails {
     type Input = ();
     type Output = ();
     type Error = u8;
-    type Wait = ();
     type State = ();
     fn start((): ()) {}
-    fn step(&mut self, (): &mut (), (): &mut ()) -> StepOutcome<(), u8, ()> {
-        StepOutcome::Complete(Err(7))
-    }
-}
-
-impl ReadyStage<()> for Fails {
-    fn ready(&self, (): &()) -> bool {
-        true
+    fn step(&mut self, (): &mut (), (): &mut ()) -> StepResult<(), u8> {
+        Ok(StepOutcome::Complete(Err(7)))
     }
 }
 
 #[test]
-fn application_error_adapter_maps_failure_and_forwards_readiness() {
+fn application_error_adapter_maps_failure() {
     // Given: a ready source whose error must match a downstream pipeline.
     let mut stage = MapError::new(Fails, |code| format!("fault {code}"));
-    // When: readiness and the operation are observed through the adapter.
-    let ready = stage.ready(&());
+    // When: the operation is observed through the adapter.
     let result = Operation::new(()).step(&mut stage, &mut ());
-    // Then: readiness remains available and only the error representation changes.
-    assert!(ready);
-    assert_eq!(result, StepOutcome::Complete(Err("fault 7".to_owned())));
+    // Then: the adapter changes the error representation.
+    assert_eq!(result, Ok(StepOutcome::Complete(Err("fault 7".to_owned()))));
 }

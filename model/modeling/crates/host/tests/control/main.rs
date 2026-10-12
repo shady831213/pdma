@@ -24,17 +24,17 @@ async fn with_idle_hardware<F: std::future::Future>(
     software: F,
 ) -> F::Output {
     let mut control = pdma_model_dma::ResetControl;
-    let mut operation = Operation::new(());
     tokio::pin!(software);
     loop {
         tokio::select! {
             result = &mut software => return result,
             result = model.interact(|device| {
-                assert!(matches!(operation.step(&mut control, device), StepOutcome::Progressed));
-                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
+                assert!(matches!(Operation::new(()).step(&mut control, device), Ok(StepOutcome::Complete(Ok(())))));
+                Ok(StepOutcome::<(), std::convert::Infallible>::Complete(Ok(())))
             }) => {
                 let Ok(outcome) = result;
-                assert!(matches!(outcome, StepOutcome::Progressed));
+                assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
+                tokio::task::yield_now().await;
             }
         }
     }
@@ -209,10 +209,12 @@ async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
     let outcome = model
         .interact(|device| {
             device.signal_fatal();
-            StepOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
+            Ok(StepOutcome::<(), std::convert::Infallible>::Complete(
+                Ok(()),
+            ))
         })
         .await?;
-    assert!(matches!(outcome, StepOutcome::Complete(Ok(()))));
+    assert!(matches!(outcome, Ok(StepOutcome::Complete(Ok(())))));
     cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
     // Then: the sticky fault is visible without replay and device reset permits recovery.
     assert!(!model.irq());

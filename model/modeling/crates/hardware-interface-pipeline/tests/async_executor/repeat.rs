@@ -1,6 +1,8 @@
 use std::{ops::ControlFlow, sync::atomic::Ordering};
 
-use hardware_interface_pipeline::{AsyncExecutor, Operation, Repeat, Stage, StepOutcome};
+use hardware_interface_pipeline::{
+    AsyncExecutor, Operation, Repeat, Stage, StepOutcome, StepResult,
+};
 
 use super::{
     Context,
@@ -14,7 +16,6 @@ impl Stage<Context> for Countdown {
     type Input = u8;
     type Output = ControlFlow<u8, u8>;
     type Error = &'static str;
-    type Wait = usize;
     type State = u8;
 
     fn start(input: Self::Input) -> Self::State {
@@ -25,13 +26,13 @@ impl Stage<Context> for Countdown {
         &mut self,
         context: &mut Context,
         state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+    ) -> StepResult<Self::Output, Self::Error> {
         if *state == 0 {
             context.push("finished");
-            StepOutcome::Complete(Ok(ControlFlow::Break(7)))
+            Ok(StepOutcome::Complete(Ok(ControlFlow::Break(7))))
         } else {
             context.push("continued");
-            StepOutcome::Complete(Ok(ControlFlow::Continue(*state - 1)))
+            Ok(StepOutcome::Complete(Ok(ControlFlow::Continue(*state - 1))))
         }
     }
 }

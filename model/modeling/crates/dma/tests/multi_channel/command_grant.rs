@@ -25,8 +25,8 @@ fn sustained_loop_reselects_if_grant_loses_eligibility_before_fetch() -> TestRes
     let mut engine = device.command_loop();
     let mut operation = Operation::new(());
     assert!(matches!(
-        operation.step(&mut engine, &mut device),
-        StepOutcome::Progressed
+        operation.step(&mut engine, &mut device)?,
+        StepOutcome::InProgress
     ));
     assert_eq!(word(&mut device, first + consumer)?, 0);
     assert_eq!(word(&mut device, peer + consumer)?, 0);
@@ -37,8 +37,8 @@ fn sustained_loop_reselects_if_grant_loses_eligibility_before_fetch() -> TestRes
     )?;
     for _ in 0..128 {
         assert!(matches!(
-            operation.step(&mut engine, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut engine, &mut device)?,
+            StepOutcome::InProgress
         ));
         if word(&mut device, peer + consumer)? == 1 {
             break;

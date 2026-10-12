@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 
 #[derive(Debug)]
 pub struct Request {
@@ -53,7 +53,6 @@ impl Stage<Environment> for Decode {
     type Input = Request;
     type Output = Decoded;
     type Error = Infallible;
-    type Wait = ();
     type State = Option<Request>;
 
     fn start(input: Request) -> Self::State {
@@ -64,12 +63,12 @@ impl Stage<Environment> for Decode {
         &mut self,
         _: &mut Environment,
         state: &mut Self::State,
-    ) -> StepOutcome<Decoded, Infallible, ()> {
+    ) -> StepResult<Decoded, Infallible> {
         let Some(Request { id, bytes }) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         self.accepted += 1;
-        StepOutcome::Complete(Ok(Decoded { id, bytes }))
+        Ok(StepOutcome::Complete(Ok(Decoded { id, bytes })))
     }
 }
 
@@ -77,7 +76,6 @@ impl Stage<Environment> for Compute {
     type Input = Decoded;
     type Output = Executed;
     type Error = Infallible;
-    type Wait = ();
     type State = Option<Decoded>;
 
     fn start(input: Decoded) -> Self::State {
@@ -88,16 +86,16 @@ impl Stage<Environment> for Compute {
         &mut self,
         _: &mut Environment,
         state: &mut Self::State,
-    ) -> StepOutcome<Executed, Infallible, ()> {
+    ) -> StepResult<Executed, Infallible> {
         let Some(Decoded { id, bytes }) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         self.executed += 1;
         let result = bytes
             .into_iter()
             .map(|byte| byte.checked_mul(self.factor).ok_or(Overflow))
             .collect();
-        StepOutcome::Complete(Ok(Executed { id, result }))
+        Ok(StepOutcome::Complete(Ok(Executed { id, result })))
     }
 }
 
@@ -105,7 +103,6 @@ impl Stage<Environment> for Publish {
     type Input = Executed;
     type Output = Response;
     type Error = Infallible;
-    type Wait = ();
     type State = Option<Executed>;
 
     fn start(input: Executed) -> Self::State {
@@ -116,17 +113,17 @@ impl Stage<Environment> for Publish {
         &mut self,
         environment: &mut Environment,
         state: &mut Self::State,
-    ) -> StepOutcome<Response, Infallible, ()> {
+    ) -> StepResult<Response, Infallible> {
         if !environment.writable {
-            return StepOutcome::Pending(());
+            return Ok(StepOutcome::InProgress);
         }
         let Some(Executed { id, result }) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         environment.responses.push(id);
-        StepOutcome::Complete(Ok(Response {
+        Ok(StepOutcome::Complete(Ok(Response {
             id,
             result: result.map(|bytes| bytes.into_iter().map(u32::from).sum()),
-        }))
+        })))
     }
 }

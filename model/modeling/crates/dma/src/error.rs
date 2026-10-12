@@ -89,6 +89,9 @@ impl From<hardware_interface_pipeline::BranchError<Self>> for Error {
             BranchError::Application(error) => error,
             BranchError::InvalidIndex { .. }
             | BranchError::DuplicateIndex { .. }
+            | BranchError::Unavailable { .. }
+            | BranchError::EmptyInput
+            | BranchError::InputCount { .. }
             | BranchError::OutputCount { .. } => Self::Routing,
         }
     }

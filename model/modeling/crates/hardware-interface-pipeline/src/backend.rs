@@ -1,52 +1,45 @@
 use std::future::Future;
 
-use crate::StepOutcome;
+use crate::StepResult;
 
 /// Provides asynchronous, closure-scoped access to a pipeline context.
-pub trait AsyncInteractionBackend<C, W> {
-    /// An interaction or wait failure reported by the backend.
+pub trait AsyncInteractionBackend<C> {
+    /// An interaction failure reported by the backend.
     type Error: Send;
 
     /// Runs one synchronous interaction while the backend owns context access.
     fn interact<O, E, F>(
         &self,
         interaction: F,
-    ) -> impl Future<Output = Result<StepOutcome<O, E, W>, Self::Error>> + Send
+    ) -> impl Future<Output = Result<StepResult<O, E>, Self::Error>> + Send
     where
         O: Send,
         E: Send,
-        W: Send,
-        F: FnOnce(&mut C) -> StepOutcome<O, E, W> + Send;
+        F: FnOnce(&mut C) -> StepResult<O, E> + Send;
 
-    /// Waits for a change represented by an owned stage wait value.
-    fn wait(&self, wait: W) -> impl Future<Output = Result<(), Self::Error>> + Send
-    where
-        W: Send;
+    /// Yields cooperatively through the backend's asynchronous scheduler.
+    fn yield_now(&self) -> impl Future<Output = ()> + Send;
 }
 
-impl<C, W, B> AsyncInteractionBackend<C, W> for &B
+impl<C, B> AsyncInteractionBackend<C> for &B
 where
-    B: AsyncInteractionBackend<C, W> + Sync + ?Sized,
+    B: AsyncInteractionBackend<C> + Sync + ?Sized,
 {
     type Error = B::Error;
 
     fn interact<O, E, F>(
         &self,
         interaction: F,
-    ) -> impl Future<Output = Result<StepOutcome<O, E, W>, Self::Error>> + Send
+    ) -> impl Future<Output = Result<StepResult<O, E>, Self::Error>> + Send
     where
         O: Send,
         E: Send,
-        W: Send,
-        F: FnOnce(&mut C) -> StepOutcome<O, E, W> + Send,
+        F: FnOnce(&mut C) -> StepResult<O, E> + Send,
     {
         B::interact(*self, interaction)
     }
 
-    fn wait(&self, wait: W) -> impl Future<Output = Result<(), Self::Error>> + Send
-    where
-        W: Send,
-    {
-        B::wait(*self, wait)
+    fn yield_now(&self) -> impl Future<Output = ()> + Send {
+        B::yield_now(*self)
     }
 }

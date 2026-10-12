@@ -1,104 +1,77 @@
-use hardware_interface_pipeline::{BranchError, Dispatch, Stage, StepOutcome};
-
-use super::fixtures::{Behavior, Context, Destination, Routing, request};
-
+use super::fixtures::{Behavior, Context, Destination, Routing, Source, finish, request};
+use hardware_interface_pipeline::{BranchError, Dispatch, FanOut, RunError, Stage, StepOutcome};
+type Routed = FanOut<Source, Dispatch<Routing>, Destination>;
 #[test]
 fn invalid_destination_fails_before_effects_including_empty_population() {
-    // Given: a one-past-end selection and an empty destination population.
-    let cases = [(2, 2), (0, 0)];
-
-    // When: each route is planned and the failed state is stepped repeatedly.
-    let results: Vec<_> = cases
-        .into_iter()
-        .map(|(ports, index)| {
-            let mut context = Context::default();
-            let mut hardware =
-                Dispatch::new((0..ports).map(Destination::new).collect(), Routing::Accept);
-            let mut state =
-                <Dispatch<Destination, Routing> as Stage<Context>>::start(request(index));
-            let result = hardware.step(&mut context, &mut state);
-            let terminal = hardware.step(&mut context, &mut state);
-            let repeated = hardware.step(&mut context, &mut state);
-            (
-                result,
-                terminal,
-                repeated,
-                context,
-                BranchError::InvalidIndex { index, ports },
-            )
-        })
-        .collect();
-
-    // Then: index validation precedes every destination interaction and replay is inert.
-    for (result, terminal, repeated, context, expected) in results {
-        assert_eq!(result, StepOutcome::Complete(Err(expected)));
-        assert_eq!(terminal, StepOutcome::Exhausted);
-        assert_eq!(repeated, StepOutcome::Exhausted);
+    // Given: target 2 does not exist in either tested population.
+    for count in [0, 2] {
+        let mut hardware = FanOut::new(
+            Source,
+            Dispatch::new(Routing::Accept),
+            (0..count).map(Destination::new).collect(),
+        );
+        let mut state = Routed::start(request(2));
+        let mut context = Context::default();
+        // When: routing validates the target.
+        let result = finish(&mut hardware, &mut state, &mut context);
+        // Then: destination effects are absent and the index error is exact.
+        assert_eq!(
+            result,
+            Ok(StepOutcome::Complete(Err(BranchError::InvalidIndex {
+                index: 2,
+                ports: count
+            })))
+        );
         assert!(context.attempts.is_empty());
-        assert!(context.deliveries.is_empty());
-        assert_eq!(context.routes.get(), 1);
     }
 }
-
 #[test]
 fn policy_error_is_wrapped_once_before_destination_effects() {
-    // Given: an application Route policy that rejects the owned request.
+    // Given: an application policy rejecting its completed input.
+    let mut hardware = FanOut::new(
+        Source,
+        Dispatch::new(Routing::Reject),
+        vec![Destination::new(0)],
+    );
+    let mut state = Routed::start(request(0));
     let mut context = Context::default();
-    let mut hardware = Dispatch::new(vec![Destination::new(0)], Routing::Reject);
-    let mut state = <Dispatch<Destination, Routing> as Stage<Context>>::start(request(0));
-
-    // When: routing fails and the terminal state is stepped again.
-    let result = hardware.step(&mut context, &mut state);
-    let terminal = hardware.step(&mut context, &mut state);
-
-    // Then: one Application wrapper carries the exact error with no destination attempt.
+    // When: routing rejects the request.
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: the policy error is propagated without invoking the destination.
     assert_eq!(
         result,
-        StepOutcome::Complete(Err(BranchError::Application("route failed")))
+        Ok(StepOutcome::Complete(Err(BranchError::Application(
+            "route failed"
+        ))))
     );
-    assert_eq!(terminal, StepOutcome::Exhausted);
     assert!(context.attempts.is_empty());
-    assert!(context.deliveries.is_empty());
-    assert_eq!(context.routes.get(), 1);
 }
-
 #[test]
 fn destination_error_or_exhaustion_makes_direct_state_terminal() {
-    // Given: a selected destination that fails or exhausts while another is available.
-    let cases = [
+    // Given: either a business failure or call-contract violation in the output.
+    for (behavior, expected) in [
         (
             Behavior::Error,
-            StepOutcome::Complete(Err(BranchError::Application("destination failed"))),
+            Ok(StepOutcome::Complete(Err(BranchError::Application(
+                "destination failed",
+            )))),
         ),
-        (Behavior::Exhausted, StepOutcome::Exhausted),
-    ];
-
-    // When: each child terminates and its state is stepped twice more.
-    let results: Vec<_> = cases
-        .into_iter()
-        .map(|(behavior, expected)| {
-            let mut context = Context::default();
-            let mut hardware = Dispatch::new(
-                vec![Destination { id: 0, behavior }, Destination::new(1)],
-                Routing::Accept,
-            );
-            let mut state = <Dispatch<Destination, Routing> as Stage<Context>>::start(request(0));
-            let planned = hardware.step(&mut context, &mut state);
-            let result = hardware.step(&mut context, &mut state);
-            let terminal = hardware.step(&mut context, &mut state);
-            let repeated = hardware.step(&mut context, &mut state);
-            (planned, result, terminal, repeated, context, expected)
-        })
-        .collect();
-
-    // Then: errors stay singly wrapped and neither selected nor fallback work is replayed.
-    for (planned, result, terminal, repeated, context, expected) in results {
-        assert_eq!(planned, StepOutcome::Progressed);
+        (Behavior::Exhausted, Err(RunError::Exhausted)),
+    ] {
+        let mut hardware = FanOut::new(
+            Source,
+            Dispatch::new(Routing::Accept),
+            vec![Destination { id: 0, behavior }],
+        );
+        let mut state = Routed::start(request(0));
+        let mut context = Context::default();
+        // When: the failed output is advanced and the caller attempts reuse.
+        let result = finish(&mut hardware, &mut state, &mut context);
+        let repeated = hardware.step(&mut context, &mut state);
+        // Then: terminal state cannot repeat output effects.
         assert_eq!(result, expected);
-        assert_eq!(terminal, StepOutcome::Exhausted);
-        assert_eq!(repeated, StepOutcome::Exhausted);
+        assert_eq!(repeated, Err(RunError::Exhausted));
         assert_eq!(context.attempts, [0]);
-        assert!(context.deliveries.is_empty());
-        assert_eq!(context.routes.get(), 1);
+        assert!(state.is_none());
     }
 }

@@ -15,7 +15,7 @@ mod stages;
 #[cfg(test)]
 mod tests;
 
-pub use arbitration::{CommandArbiter, CommandArbiterState, RoundRobin};
+pub use arbitration::{Candidate, CommandArbiter, CommandArbiterState, Intake, RoundRobin};
 pub use build::BuildError;
 pub use channel::{Channel, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
@@ -31,10 +31,8 @@ use pdma_model_contract::dma::{
     DmaRegistersLayout, EndpointMode, ResetValues,
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
-pub use routing::{ResponsePort, RouteResponse};
-pub use stages::{
-    CommandLoop, CopyLoop, Execution, Intake, Pipeline, Publish, Responses, RunCommand, UpdateIrq,
-};
+pub use routing::{ResponsePort, Responses, RouteResponse};
+pub use stages::{CommandLoop, CopyLoop, Execution, Pipeline, Publish, RunCommand, UpdateIrq};
 
 #[derive(Debug)]
 struct Frontier {

@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{AfterEach, Repeat, Stage, Then};
+use hardware_interface_pipeline::{AfterEach, Repeat, RunError, Stage, StepResult, Then};
 use pdma_model_dma::{
     ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, ResetControl, Resettable, Transfer,
     UpdateIrq, WriteCopy,
@@ -11,7 +11,6 @@ impl Stage<ChannelContext<'_, Paged>> for InvertPayload {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
-    type Wait = ();
     type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
         Some(input)
@@ -20,14 +19,14 @@ impl Stage<ChannelContext<'_, Paged>> for InvertPayload {
         &mut self,
         _: &mut ChannelContext<'_, Paged>,
         state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
+    ) -> StepResult<Transfer, Error> {
         let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         for byte in &mut transfer.bytes {
             *byte = !*byte;
         }
-        StepOutcome::Complete(Ok(transfer))
+        Ok(StepOutcome::Complete(Ok(transfer)))
     }
 }
 
@@ -51,8 +50,8 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
     let mut operation = Operation::new(());
     for _ in 0..256 {
         assert!(matches!(
-            operation.step(&mut engine, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut engine, &mut device)?,
+            StepOutcome::InProgress
         ));
         if fault_status(&mut device)? == 1 {
             break;
@@ -63,8 +62,8 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
     resume(&mut device, 1)?;
     for _ in 0..256 {
         assert!(matches!(
-            operation.step(&mut engine, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut engine, &mut device)?,
+            StepOutcome::InProgress
         ));
         if fault_status(&mut device)? == 1 {
             break;
@@ -79,8 +78,8 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
     resume(&mut device, 1)?;
     for _ in 0..256 {
         assert!(matches!(
-            operation.step(&mut engine, &mut device),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut engine, &mut device)?,
+            StepOutcome::InProgress
         ));
         if read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())? == 1 {
             break;
@@ -115,7 +114,7 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     let mut complete = false;
     let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
     for _ in 0..16 {
-        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut context) {
+        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut context)? {
             let _progress = result?;
             complete = true;
             break;

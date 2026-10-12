@@ -134,8 +134,8 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
     let mut operation = Operation::new(());
     for _ in 0..256 {
         assert!(matches!(
-            operation.step(&mut pipeline, &mut dma),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut pipeline, &mut dma)?,
+            StepOutcome::InProgress
         ));
     }
     let copied: [u8; 4] = memory.read_typed(0x1700.into(), MemoryAlignment::ONE)?;
@@ -218,8 +218,8 @@ fn abort_with_full_response_ring_has_no_sg_payload_response_or_irq_effects()
     assert_eq!(dma.context_status(ContextId::new(7)), Ok(false));
     for _ in 0..64 {
         assert!(matches!(
-            operation.step(&mut pipeline, &mut dma),
-            StepOutcome::Progressed | StepOutcome::Pending(())
+            operation.step(&mut pipeline, &mut dma)?,
+            StepOutcome::InProgress
         ));
         if dma.context_status(ContextId::new(7)) == Ok(true) {
             break;

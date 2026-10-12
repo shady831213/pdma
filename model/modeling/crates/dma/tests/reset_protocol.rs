@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{Operation, Stage, StepOutcome, StepResult, Then};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     ResponseRegisters,
@@ -20,6 +20,21 @@ const DEVICE_RESET: usize = (pdma_model_contract::dma::DmaDiscovery::EXTENT
     + pdma_model_contract::dma::DmaAdmin::CONTROL.offset())
     + DmaControl::RESET.offset();
 
+struct CommandExit;
+
+impl<M> Stage<Dma<M>> for CommandExit {
+    type Input = ();
+    type Output = ();
+    type Error = Error;
+    type State = ();
+
+    fn start((): ()) {}
+
+    fn step(&mut self, _: &mut Dma<M>, (): &mut ()) -> StepResult<(), Error> {
+        Ok(StepOutcome::Complete(Ok(())))
+    }
+}
+
 #[test]
 fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     // Given: a fetched task retained between custom execution and response ports.
@@ -29,7 +44,7 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     let mut operation = Operation::new(());
     let mut accepted = None;
     for _ in 0..32 {
-        if let StepOutcome::Complete(Ok(task)) = operation.step(&mut intake, &mut device) {
+        if let StepOutcome::Complete(Ok(task)) = operation.step(&mut intake, &mut device)? {
             accepted = Some(task);
             break;
         }
@@ -50,7 +65,7 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     let mut rejected = false;
     for _ in 0..32 {
         if matches!(
-            publish.step(&mut responses, &mut device),
+            publish.step(&mut responses, &mut device)?,
             StepOutcome::Complete(Err(Error::Reset))
         ) {
             rejected = true;
@@ -59,7 +74,7 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     }
     // Then: response rejection alone cannot acknowledge whole-command cleanup.
     assert!(rejected);
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 1);
     Ok(())
 }
@@ -69,7 +84,8 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = pdma_model_dma::RunCommand::new(support::single_command(&device));
+    let pipeline = Then::new(support::single_command(&device), CommandExit);
+    let mut hardware = pdma_model_dma::RunCommand::new(pipeline);
     let command = &mut hardware;
     let mut operation = Operation::new(());
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -77,8 +93,8 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
         + ResponseRegisters::PRODUCER.offset();
     for _ in 0..128 {
         assert!(matches!(
-            operation.step(command, &mut device),
-            StepOutcome::Progressed
+            operation.step(command, &mut device)?,
+            StepOutcome::InProgress
         ));
         if read_word(&mut device, producer)? == 1 {
             break;
@@ -87,13 +103,13 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     assert_eq!(read_word(&mut device, producer)?, 1);
     // When: reset is requested before the complete command returns.
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     // Then: only command exit releases ownership and permits reset completion.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     let mut completed = false;
     for _ in 0..32 {
         if matches!(
-            operation.step(command, &mut device),
+            operation.step(command, &mut device)?,
             StepOutcome::Complete(Ok(std::ops::ControlFlow::Continue(())))
         ) {
             completed = true;
@@ -102,7 +118,7 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     }
     assert!(completed);
     assert_eq!(read_word(&mut device, producer)?, 1);
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }
@@ -124,7 +140,7 @@ fn idle_reset_is_a_request_until_hardware_steps() -> TestResult {
         ),
         Err(Error::ResetInProgress)
     );
-    let _ = operation.step(&mut hardware, &mut device);
+    let _ = operation.step(&mut hardware, &mut device)?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     assert_eq!(
         read_word(&mut device, CHANNEL + ChannelRegisters::ENABLE.offset())?,
@@ -144,7 +160,7 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();
     for _ in 0..32 {
-        let _ = operation.step(&mut hardware, &mut device);
+        let _ = operation.step(&mut hardware, &mut device)?;
         if read_word(&mut device, consumer)? == 1 {
             break;
         }
@@ -153,13 +169,13 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
     device.write(RESET, &1_u32.to_le_bytes())?;
     // When: only the reset controller advances, without retiring the command.
     assert!(matches!(
-        ResetControl.step(&mut device, &mut ()),
-        StepOutcome::Progressed
+        ResetControl.step(&mut device, &mut ())?,
+        StepOutcome::Complete(Ok(()))
     ));
     // Then: reset remains busy until the retained command loop discards old work.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     for _ in 0..64 {
-        let _ = operation.step(&mut hardware, &mut device);
+        let _ = operation.step(&mut hardware, &mut device)?;
         if read_word(&mut device, RESET)? == 0 {
             break;
         }
@@ -178,7 +194,7 @@ fn repeated_and_zero_requests_do_not_cancel_or_complete_reset() -> TestResult {
     device.write(RESET, &1_u32.to_le_bytes())?;
     // Then: busy remains asserted; one idle cleanup completes the coalesced request.
     assert_eq!(read_word(&mut device, RESET)?, 1);
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }
@@ -199,7 +215,7 @@ fn device_reset_subsumes_channel_reset_and_preserves_discovery() -> TestResult {
         device.read(address, &mut out)?;
         assert_eq!(u32::from_le_bytes(out), 1);
     }
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     let mut out = [0; 4];
     device.read(DEVICE_RESET, &mut out)?;
     assert_eq!(u32::from_le_bytes(out), 0);

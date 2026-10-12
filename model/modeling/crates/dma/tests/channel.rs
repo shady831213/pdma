@@ -3,7 +3,7 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
@@ -166,7 +166,7 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             StepExecutor::new()
                 .step(&mut hardware, &mut operation, &mut device)
                 .map_err(|e| format!("{e:?}"))?,
-            RunOutcome::Pending(())
+            StepOutcome::InProgress
         ) {
             stalled = true;
             break;
@@ -197,13 +197,12 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             .step(&mut hardware, &mut operation, &mut device)
             .map_err(|e| format!("{e:?}"))?
         {
-            RunOutcome::Complete(result) => {
+            StepOutcome::Complete(result) => {
                 result?;
                 finished = true;
                 break;
             }
-            RunOutcome::Progressed => {}
-            RunOutcome::Pending(()) => return Err("space was released but command stalled".into()),
+            StepOutcome::InProgress => {}
         }
     }
     // Then

@@ -41,7 +41,11 @@ fn assert_selected_prefix(report: &harness::Report) -> TestResult {
         .take_while(|byte| **byte == first.value)
         .count();
     assert_eq!(first.command_consumer, 1);
-    assert!(committed > 0 && committed < first.length);
+    assert!(
+        committed > 0 && committed < first.length,
+        "expected an in-flight prefix, observed {committed}/{} bytes before reset",
+        first.length
+    );
     assert!(
         destination
             .get(committed..)

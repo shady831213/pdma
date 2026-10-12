@@ -185,12 +185,12 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   related registers in one child block before repeating it.
   One shared execution pipeline processes commands selected by round-robin arbitration,
   with bounded per-channel retained operations for payload-fault suspension.
-  CommandArbiter uses Arbitrate (the singleton specialization of FanIn) over
-  channel-bound execution ports, with the RoundRobin policy owned by dma. A grant
-  either fetches a new command or restores that channel's retained operation.
-  Ready checks do not consume commands; eligibility belongs to DMA, not the
-  generic combinators. Fetch remains the new-command acceptance stage.
-  Route tagged responses through Dispatch (the singleton FanOut specialization) to
+  CommandArbiter composes Candidate inputs, DMA's RoundRobin value policy and one
+  shared engine through Fan. Candidates do not consume commands; planning sees
+  completed values, not stages. A selected channel is revalidated before fetching
+  a new command or restoring its saved continuation. Eligibility belongs to DMA,
+  not generic combinators. Fetch remains the new-command acceptance stage.
+  Route tagged responses through FanOut with the Dispatch policy to
   channel-bound publication ports.
   Complete hardware assembly uses Dma::command_loop(); scenarios drive one retained
   operation and abort/join it after software finishes. Do not recreate command-local
@@ -208,10 +208,10 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   channel/generation ownership, including parked references, until terminal release;
   generation invalidation alone
   is not completion. `RunCommand` owns executing-state release at complete pipeline
-  termination. A payload fault retains the leaf's Transfer and returns Pending.
-  CommandArbiter retains at most one exact composed Operation per channel, preserving
+  termination. A payload fault retains the leaf's Transfer and remains InProgress.
+  CommandArbiter retains at most one exact composed continuation per channel, preserving
   scratch and custom child-stage state; Channel.parked retains accepted references.
-  The granted execution port restores that Operation on resume without refetching,
+  The shared engine restores that continuation on resume without refetching,
   restarting CheckRanges or repeating completed transforms. Arbitration retains
   a healthy command's grant through termination and yields it on payload fault.
   CommandArbiter cleans reset/Abort targets before stepping shared active work,
@@ -220,7 +220,7 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Custom sustained command assemblies pass their downstream transform to
   `Dma::arbitrate`, preserving RunCommand terminal ownership, and drive `ResetControl`.
   `RunCommand<S>` constrains the child stage's associated types, not its concrete composition;
-  reuse `Operation` to discard terminal state before releasing command ownership.
+  discard terminal child state before releasing command ownership.
   Guard command, SG-list, payload and response accesses before old work can interact again.
   Memory calls are synchronous within a step: do not invent bus transactions, outstanding
   queues, cycle timing or timeout delays. Host reset waits for hardware completion; caller
@@ -250,6 +250,13 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   keep side-specific memory/MMIO access and publish pointers only after successful
   entry access. Do not introduce a shadow cursor store or duplicate ring arithmetic.
 - Keep the model deterministic and step-based. No cycle timing or extra executors.
+  Stage completion releases invocation-local intermediate state and transfers its
+  output; InProgress retains unfinished work. Async hardware driving yields after
+  every bounded step, including idle polling. Do not restore Pending, wait tokens,
+  or ReadyStage. Software interrupt/doorbell waits remain event-driven. Generic Fan
+  advances independent inputs, plans only over completed values, and advances
+  selected outputs in separate phases; retain unconsumed values and unfinished
+  states until consumed or terminated. No engine/stage object belongs in context.
 - Device notification masks never replay old events when cleared. Platform-pending
   notifications survive device masking/reset until claimed. Stopping response errors halt
   the channel after publication; reset never rolls back external memory writes.

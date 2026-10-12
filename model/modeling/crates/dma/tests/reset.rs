@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, Endpoint,
@@ -23,7 +23,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     for _ in 0..16 {
         assert!(matches!(
             StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
-            Ok(RunOutcome::Progressed)
+            Ok(StepOutcome::InProgress)
         ));
         if read_word(
             &mut device,
@@ -52,7 +52,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     for _ in 0..32 {
         assert!(matches!(
             StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
-            Ok(RunOutcome::Progressed | RunOutcome::Pending(()))
+            Ok(StepOutcome::InProgress)
         ));
         if read_word(&mut device, reset)? == 0 {
             break;
@@ -97,7 +97,7 @@ fn channel_reset_cannot_clear_device_fatal() -> TestResult {
         .admin_offset(1)
         .ok_or("admin offset")?;
     assert_eq!(read_word(&mut device, reset)?, 1);
-    let _ = Operation::new(()).step(&mut ResetControl, &mut device);
+    let _ = Operation::new(()).step(&mut ResetControl, &mut device)?;
     assert_eq!(read_word(&mut device, reset)?, 0);
     // Then: device fatal survives until a whole-device reset.
     assert!(device.irq());
@@ -114,7 +114,7 @@ fn channel_reset_cannot_clear_device_fatal() -> TestResult {
     )?;
     let reset = (DmaDiscovery::EXTENT + DmaAdmin::CONTROL.offset()) + DmaControl::RESET.offset();
     assert_eq!(read_word(&mut device, reset)?, 1);
-    let _ = Operation::new(()).step(&mut ResetControl, &mut device);
+    let _ = Operation::new(()).step(&mut ResetControl, &mut device)?;
     assert_eq!(read_word(&mut device, reset)?, 0);
     assert!(!device.irq());
     assert_eq!(
@@ -165,7 +165,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         for _ in 0..32 {
             assert!(matches!(
                 StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
-                Ok(RunOutcome::Progressed | RunOutcome::Pending(()))
+                Ok(StepOutcome::InProgress)
             ));
             if read_word(&mut device, reset)? == 0 {
                 break;
@@ -218,7 +218,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         for _ in 0..128 {
             assert!(matches!(
                 StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
-                Ok(RunOutcome::Progressed | RunOutcome::Pending(()))
+                Ok(StepOutcome::InProgress)
             ));
         }
         assert_eq!(

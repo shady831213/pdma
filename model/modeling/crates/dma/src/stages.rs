@@ -1,10 +1,9 @@
 use crate::{
-    ChannelContext, CheckRanges, CommandArbiter, Dma, Error, Fetch, NextChunk, ReadCopy,
-    ResetControl, Resettable, ResponsePort, RoundRobin, RouteResponse, WriteCopy,
+    ChannelContext, CheckRanges, CommandArbiter, Dma, Error, NextChunk, ReadCopy, ResetControl,
+    Resettable, Responses, WriteCopy,
 };
 use hardware_interface_pipeline::{
-    AfterEach, Arbitrate, BranchError, Dispatch, MapError, Operation, Repeat, Stage, StepOutcome,
-    Then,
+    AfterEach, Repeat, RunError, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, Response};
@@ -18,35 +17,39 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for Publish {
     type Input = Response;
     type Output = ();
     type Error = Error;
-    type Wait = ();
-    type State = Response;
-    fn start(input: Response) -> Response {
-        input
+    type State = Option<Response>;
+    fn start(input: Response) -> Self::State {
+        Some(input)
     }
     fn step(
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
-        response: &mut Response,
-    ) -> StepOutcome<(), Error, ()> {
+        retained: &mut Self::State,
+    ) -> StepResult<(), Error> {
+        let response = retained.take().ok_or(RunError::Exhausted)?;
         if context.channel.resetting() {
-            return StepOutcome::Complete(Err(Error::Reset));
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
         }
         if context.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
+            return Ok(StepOutcome::Complete(Err(Error::Halted)));
         }
         if !context.channel.enabled() {
-            return StepOutcome::Pending(());
+            *retained = Some(response);
+            return Ok(StepOutcome::InProgress);
         }
         let was_empty = context.channel.response.pointers().is_empty();
-        match context.channel.response.push(&context.memory, response) {
+        match context.channel.response.push(&context.memory, &response) {
             Ok(true) => {
-                context.channel.published(response, was_empty);
-                StepOutcome::Complete(Ok(()))
+                context.channel.published(&response, was_empty);
+                Ok(StepOutcome::Complete(Ok(())))
             }
-            Ok(false) => StepOutcome::Pending(()),
+            Ok(false) => {
+                *retained = Some(response);
+                Ok(StepOutcome::InProgress)
+            }
             Err(fatal) => {
                 context.channel.latch(fatal);
-                StepOutcome::Complete(Err(Error::ChannelFatal(fatal)))
+                Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))))
             }
         }
     }
@@ -58,18 +61,17 @@ pub struct UpdateIrq;
 
 impl<M, SB> Stage<ChannelContext<'_, M, SB>> for UpdateIrq {
     type Input = ();
-    type Output = Infallible;
+    type Output = ();
     type Error = Infallible;
-    type Wait = Infallible;
     type State = ();
     fn start((): ()) {}
     fn step(
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
         (): &mut (),
-    ) -> StepOutcome<Infallible, Infallible, Infallible> {
+    ) -> StepResult<(), Infallible> {
         context.channel.update_irq();
-        StepOutcome::Progressed
+        Ok(StepOutcome::Complete(Ok(())))
     }
 }
 
@@ -88,40 +90,38 @@ impl<S> RunCommand<S> {
 
 impl<M: MemoryAccess<SB>, S, SB> Stage<Dma<M, SB>> for RunCommand<S>
 where
-    S: Stage<Dma<M, SB>, Output = (), Error = Error, Wait = ()>,
+    S: Stage<Dma<M, SB>, Output = (), Error = Error>,
 {
     type Input = S::Input;
     type Output = ControlFlow<(), ()>;
     type Error = Error;
-    type Wait = ();
-    type State = Operation<S, Dma<M, SB>>;
+    type State = Option<S::State>;
 
     fn start(input: Self::Input) -> Self::State {
-        Operation::new(input)
+        Some(S::start(input))
     }
 
     fn step(
         &mut self,
         device: &mut Dma<M, SB>,
         state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Error, ()> {
-        if state.is_complete() {
-            return StepOutcome::Exhausted;
-        }
-        let outcome = state.step(&mut self.pipeline, device);
-        if matches!(outcome, StepOutcome::Complete(_) | StepOutcome::Exhausted) {
+    ) -> StepResult<Self::Output, Error> {
+        let Some(child) = state.as_mut() else {
+            return Err(RunError::Exhausted);
+        };
+        let outcome = self.pipeline.step(device, child);
+        if !matches!(outcome, Ok(StepOutcome::InProgress)) {
+            *state = None;
             device.active = None;
         }
         device.refresh_maintenance();
-        match outcome {
+        Ok(match outcome? {
             StepOutcome::Complete(
                 Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
             ) => StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
             StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(()) => StepOutcome::Pending(()),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-        }
+            StepOutcome::InProgress => StepOutcome::InProgress,
+        })
     }
 }
 
@@ -131,13 +131,6 @@ pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
 /// Length validation followed by bounded-memory copy iterations.
 pub type Execution = Then<CheckRanges, Repeat<CopyLoop>>;
 
-/// Application arbitration over the instance's command ports.
-pub type Intake = MapError<Arbitrate<Fetch, RoundRobin>, fn(BranchError<Error>) -> Error>;
-
-/// Single-destination response dispatch over the instance's publication ports.
-pub type Responses =
-    MapError<Dispatch<ResponsePort, RouteResponse>, fn(BranchError<Error>) -> Error>;
-
 /// Shared execution and publication hardware for one granted command.
 pub type Pipeline = Then<Resettable<AfterEach<Execution, UpdateIrq>>, Responses>;
 
@@ -145,19 +138,9 @@ pub type Pipeline = Then<Resettable<AfterEach<Execution, UpdateIrq>>, Responses>
 pub type CommandLoop = AfterEach<CommandArbiter<Pipeline>, ResetControl>;
 
 impl<M, SB> Dma<M, SB> {
-    /// Builds this device's lightweight command input ports for custom compositions.
-    pub fn fetches(&self) -> Vec<Fetch> {
-        (0..self.channels.len())
-            .map(|index| Fetch::new(ChannelId::new(index)))
-            .collect()
-    }
-
     /// Builds command arbitration independently of the downstream transform.
-    pub fn intake(&self) -> Intake {
-        MapError::new(
-            Arbitrate::new(self.fetches(), RoundRobin::default()),
-            Error::from,
-        )
+    pub fn intake(&self) -> crate::Intake {
+        crate::Intake::new(self.channels.len())
     }
 
     /// Builds response dispatch with each destination bound to its owning channel.
@@ -167,7 +150,7 @@ impl<M, SB> Dma<M, SB> {
                 Resettable::for_channel(ChannelId::new(index), AfterEach::new(Publish, UpdateIrq))
             })
             .collect();
-        MapError::new(Dispatch::new(ports, RouteResponse), Error::from)
+        Responses::new(ports)
     }
 
     /// Builds the sustained command loop from this instance's hardware stages.

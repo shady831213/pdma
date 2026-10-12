@@ -3,7 +3,7 @@ mod control;
 pub use control::ResetControl;
 
 use crate::{ChannelContext, Dma, Error};
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::ChannelId;
 
 /// A value bound to the channel generation that accepted its command.
@@ -56,40 +56,39 @@ impl<S> Resettable<S> {
     }
 }
 
-impl<M, S, I, O, W, T, SB> Stage<Dma<M, SB>> for Resettable<S>
+impl<M, S, I, O, T, SB> Stage<Dma<M, SB>> for Resettable<S>
 where
-    for<'a> S:
-        Stage<ChannelContext<'a, M, SB>, Input = I, Output = O, Wait = W, State = T, Error = Error>,
+    for<'a> S: Stage<ChannelContext<'a, M, SB>, Input = I, Output = O, State = T, Error = Error>,
 {
     type Input = ChannelTask<I>;
     type Output = ChannelTask<O>;
     type Error = Error;
-    type Wait = W;
-    type State = ChannelTask<T>;
+    type State = Option<ChannelTask<T>>;
 
     fn start(input: Self::Input) -> Self::State {
-        input.map(S::start)
+        Some(input.map(S::start))
     }
 
     fn step(
         &mut self,
         context: &mut Dma<M, SB>,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Error, W> {
+        retained: &mut Self::State,
+    ) -> StepResult<Self::Output, Error> {
+        let mut state = retained.take().ok_or(RunError::Exhausted)?;
         if self.channel.is_some_and(|channel| channel != state.channel) {
-            return StepOutcome::Complete(Err(Error::Routing));
+            return Ok(StepOutcome::Complete(Err(Error::Routing)));
         }
         let mut selected = match context.channel_context(state.channel) {
             Ok(selected) => selected,
-            Err(error) => return StepOutcome::Complete(Err(error)),
+            Err(error) => return Ok(StepOutcome::Complete(Err(error))),
         };
         if state.generation != selected.channel.generation {
-            return StepOutcome::Complete(Err(Error::Reset));
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
         }
         if selected.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
+            return Ok(StepOutcome::Complete(Err(Error::Halted)));
         }
-        match self.stage.step(&mut selected, &mut state.value) {
+        Ok(match self.stage.step(&mut selected, &mut state.value)? {
             StepOutcome::Complete(result) => {
                 StepOutcome::Complete(result.map(|value| ChannelTask {
                     channel: state.channel,
@@ -97,9 +96,10 @@ where
                     value,
                 }))
             }
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-        }
+            StepOutcome::InProgress => {
+                *retained = Some(state);
+                StepOutcome::InProgress
+            }
+        })
     }
 }

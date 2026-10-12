@@ -1,6 +1,6 @@
 use super::{CopyState, Transfer};
 use crate::{ChannelContext, Error, MemoryFailure};
-use hardware_interface_pipeline::{Stage, StepOutcome};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{Response, ResponseStatus};
 use std::ops::ControlFlow;
@@ -16,7 +16,6 @@ where
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
-    type Wait = ();
     type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
         Some(input)
@@ -25,18 +24,20 @@ where
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
+    ) -> StepResult<Transfer, Error> {
         if context.channel.resetting() {
-            return StepOutcome::Complete(Err(Error::Reset));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
         }
         if context.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Halted)));
         }
         if !context.channel.enabled() || context.channel.registers.values.fault_status.faulted() {
-            return StepOutcome::Pending(());
+            return Ok(StepOutcome::InProgress);
         }
         let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         match transfer.progress.status {
             ResponseStatus::Success if transfer.length > 0 => {
@@ -51,7 +52,7 @@ where
                                 MemoryFailure::PageFault { .. } => {
                                     *state = Some(transfer);
                                     context.channel.suspend();
-                                    return StepOutcome::Pending(());
+                                    return Ok(StepOutcome::InProgress);
                                 }
                                 MemoryFailure::Access => {
                                     transfer.progress.status = ResponseStatus::ReadError;
@@ -69,7 +70,7 @@ where
             | ResponseStatus::LengthMismatch
             | ResponseStatus::ListReadError => {}
         }
-        StepOutcome::Complete(Ok(transfer))
+        Ok(StepOutcome::Complete(Ok(transfer)))
     }
 }
 
@@ -84,7 +85,6 @@ where
     type Input = Transfer;
     type Output = ControlFlow<Response, CopyState>;
     type Error = Error;
-    type Wait = ();
     type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
         Some(input)
@@ -93,18 +93,20 @@ where
         &mut self,
         context: &mut ChannelContext<'_, M, SB>,
         state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Error, ()> {
+    ) -> StepResult<Self::Output, Error> {
         if context.channel.resetting() {
-            return StepOutcome::Complete(Err(Error::Reset));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Reset)));
         }
         if context.halted() {
-            return StepOutcome::Complete(Err(Error::Halted));
+            *state = None;
+            return Ok(StepOutcome::Complete(Err(Error::Halted)));
         }
         if !context.channel.enabled() || context.channel.registers.values.fault_status.faulted() {
-            return StepOutcome::Pending(());
+            return Ok(StepOutcome::InProgress);
         }
         let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         match transfer.progress.status {
             ResponseStatus::Success => {
@@ -119,9 +121,9 @@ where
                             && (count > 0 || transfer.progress.remaining == 0) =>
                     {
                         if count == 0 {
-                            return StepOutcome::Complete(Ok(ControlFlow::Break(
+                            return Ok(StepOutcome::Complete(Ok(ControlFlow::Break(
                                 transfer.progress.response(),
-                            )));
+                            ))));
                         }
                         match context
                             .memory_for(transfer.progress.command.destination.context)
@@ -133,16 +135,16 @@ where
                                 transfer.progress.remaining -= count;
                                 transfer.progress.bytes_completed += count;
                                 if transfer.progress.remaining > 0 {
-                                    return StepOutcome::Complete(Ok(ControlFlow::Continue(
+                                    return Ok(StepOutcome::Complete(Ok(ControlFlow::Continue(
                                         transfer.progress,
-                                    )));
+                                    ))));
                                 }
                             }
                             Err(error) => match error.into() {
                                 MemoryFailure::PageFault { .. } => {
                                     *state = Some(transfer);
                                     context.channel.suspend();
-                                    return StepOutcome::Pending(());
+                                    return Ok(StepOutcome::InProgress);
                                 }
                                 MemoryFailure::Access => {
                                     transfer.progress.status = ResponseStatus::WriteError;
@@ -159,6 +161,8 @@ where
             | ResponseStatus::LengthMismatch
             | ResponseStatus::ListReadError => {}
         }
-        StepOutcome::Complete(Ok(ControlFlow::Break(transfer.progress.response())))
+        Ok(StepOutcome::Complete(Ok(ControlFlow::Break(
+            transfer.progress.response(),
+        ))))
     }
 }

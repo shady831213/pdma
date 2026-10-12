@@ -189,7 +189,6 @@ impl<M: Clone> Managed<M> {
                 control,
                 contexts,
             }),
-            changed: Notify::new(),
             destinations,
             channel_count,
             to_firmware,

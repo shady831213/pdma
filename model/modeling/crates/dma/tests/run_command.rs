@@ -42,16 +42,13 @@ fn decorated_pipeline_completes_through_run_command() -> TestResult {
     // When: the custom command is driven to its terminal boundary.
     let mut completed = false;
     for _ in 0..128 {
-        match operation.step(&mut hardware, &mut device) {
+        match operation.step(&mut hardware, &mut device)? {
             StepOutcome::Complete(result) => {
                 assert_eq!(result?, ControlFlow::Continue(()));
                 completed = true;
                 break;
             }
-            StepOutcome::Progressed => {}
-            outcome @ (StepOutcome::Pending(()) | StepOutcome::Exhausted) => {
-                return Err(format!("unexpected command outcome: {outcome:?}").into());
-            }
+            StepOutcome::InProgress => {}
         }
     }
     // Then: payload and response are published, and terminal ownership permits reset.
@@ -61,7 +58,7 @@ fn decorated_pipeline_completes_through_run_command() -> TestResult {
     assert_eq!(bytes, [3, 1, 4, 1]);
     assert_eq!(read_word(&mut device, PRODUCER)?, 1);
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())
 }
@@ -76,7 +73,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
     let mut hardware = AfterEach::new(RunCommand::new(pipeline), ResetControl);
     let mut operation = Operation::new(());
     for _ in 0..32 {
-        let _ = operation.step(&mut hardware, &mut device);
+        let _ = operation.step(&mut hardware, &mut device)?;
         if read_word(&mut device, CONSUMER)? == 1 {
             break;
         }
@@ -84,7 +81,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
     assert_eq!(read_word(&mut device, CONSUMER)?, 1);
     // When: software requests reset while the custom assembly retains accepted work.
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ());
+    let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 1);
     assert_eq!(
         device.write(
@@ -95,7 +92,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
     );
     for _ in 0..128 {
         if matches!(
-            operation.step(&mut hardware, &mut device),
+            operation.step(&mut hardware, &mut device)?,
             StepOutcome::Complete(Ok(_))
         ) {
             break;
@@ -150,7 +147,7 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
     submit(&mut device, &memory, command())?;
     let mut next = Operation::new(());
     for _ in 0..128 {
-        if let StepOutcome::Complete(result) = next.step(&mut hardware, &mut device) {
+        if let StepOutcome::Complete(result) = next.step(&mut hardware, &mut device)? {
             assert_eq!(result?, ControlFlow::Continue(()));
             break;
         }

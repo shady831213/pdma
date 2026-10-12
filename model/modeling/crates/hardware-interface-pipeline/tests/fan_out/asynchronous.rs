@@ -1,83 +1,60 @@
+use super::fixtures::{Context, Destination, Receipt, Routing, Source, request};
+use hardware_interface_pipeline::{
+    AsyncExecutor, AsyncInteractionBackend, FanOut, Operation, StepResult,
+};
 use std::{
     convert::Infallible,
-    future::{Future, pending},
+    future::Future,
     sync::{Mutex, MutexGuard, PoisonError},
     task::{Context as TaskContext, Waker},
 };
-
-use hardware_interface_pipeline::{
-    AsyncExecutor, AsyncInteractionBackend, FanOut, Operation, StepOutcome,
-};
-
-use super::fixtures::{Behavior, Context, Destination, Receipt, Report, Routing, dispatch};
-
-#[derive(Default)]
-struct Backend {
-    context: Mutex<Context>,
-    waits: Mutex<Vec<&'static str>>,
-}
-
+struct Backend(Mutex<Context>);
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
     value.lock().unwrap_or_else(PoisonError::into_inner)
 }
-
-impl AsyncInteractionBackend<Context, &'static str> for Backend {
+impl AsyncInteractionBackend<Context> for Backend {
     type Error = Infallible;
-
+    async fn yield_now(&self) {
+        tokio::task::yield_now().await;
+    }
     async fn interact<O: Send, E: Send, F>(
         &self,
         interaction: F,
-    ) -> Result<StepOutcome<O, E, &'static str>, Infallible>
+    ) -> Result<StepResult<O, E>, Infallible>
     where
-        F: FnOnce(&mut Context) -> StepOutcome<O, E, &'static str> + Send,
+        F: FnOnce(&mut Context) -> StepResult<O, E> + Send,
     {
-        Ok(interaction(&mut lock(&self.context)))
-    }
-
-    async fn wait(&self, wait: &'static str) -> Result<(), Infallible> {
-        lock(&self.waits).push(wait);
-        pending().await
+        Ok(interaction(&mut lock(&self.0)))
     }
 }
-
 #[tokio::test]
-async fn dropping_and_resuming_executor_retains_completed_receipts_and_pending_payload() {
-    // Given: the real executor drives one immediate and one suspended destination.
-    let executor = AsyncExecutor::new(Backend::default());
-    let mut stage = FanOut::new(
-        vec![
-            Destination::new(0),
-            Destination {
-                id: 1,
-                behavior: Behavior::Pending,
-            },
-            Destination::new(2),
-        ],
-        Routing,
-    );
-    let mut operation = Operation::new(dispatch(&[0, 1, 2]));
+async fn dropping_and_resuming_executor_retains_completed_receipts_and_stalled_payload() {
+    // Given: one output stalls while both peers can commit.
+    let executor = AsyncExecutor::new(Backend(Mutex::new(Context {
+        blocked: vec![1],
+        ..Context::default()
+    })));
+    let mut hardware = FanOut::new(Source, Routing, (0..3).map(Destination::new).collect());
+    let mut operation = Operation::new(request(&[0, 1, 2]));
     let mut task_context = TaskContext::from_waker(Waker::noop());
-
-    // When: the driving future is cancelled at its wait and resumed after release.
-    let mut run = Box::pin(executor.run(&mut stage, &mut operation));
-    let suspended = run.as_mut().poll(&mut task_context);
+    // When: cancellation occurs after the first output sweep, then the caller resumes.
+    let mut run = Box::pin(executor.run(&mut hardware, &mut operation));
+    for _ in 0..3 {
+        assert!(run.as_mut().poll(&mut task_context).is_pending());
+    }
     drop(run);
-    let committed = lock(&executor.backend().context).deliveries.clone();
-    lock(&executor.backend().context).released = true;
-    let result = executor.run(&mut stage, &mut operation).await;
-
-    // Then: prior receipt and payload ownership survive without replaying delivery 0.
-    assert!(suspended.is_pending());
-    assert_eq!(committed, [(0, "payload 0".into())]);
-    assert_eq!(*lock(&executor.backend().waits), ["release"]);
+    let committed = lock(&executor.backend().0).deliveries.clone();
+    lock(&executor.backend().0).blocked.clear();
+    let result = executor.run(&mut hardware, &mut operation).await;
+    // Then: earlier receipts and the unfinished payload survive without replay.
+    assert_eq!(
+        committed,
+        [(0, "payload 0".into()), (2, "payload 2".into())]
+    );
     assert_eq!(
         result,
-        Ok(Report {
-            label: "delivery".into(),
-            receipts: vec![Receipt(0), Receipt(1), Receipt(2)],
-        })
+        Ok(vec![(0, Receipt(0)), (2, Receipt(2)), (1, Receipt(1))])
     );
-    assert_eq!(lock(&executor.backend().context).attempts, [0, 1, 1, 2]);
-    assert_eq!(lock(&executor.backend().context).deliveries.len(), 3);
-    assert_eq!(lock(&executor.backend().context).plans.get(), 1);
+    assert_eq!(lock(&executor.backend().0).sources, 1);
+    assert_eq!(lock(&executor.backend().0).deliveries.len(), 3);
 }

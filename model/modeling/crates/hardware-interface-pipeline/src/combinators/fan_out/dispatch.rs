@@ -1,69 +1,33 @@
-use crate::{BranchError, Stage, StepOutcome};
-
-use super::{DeliveryPlan, Distribute, FanOut, FanOutState};
-
-/// Application policy routing one owned request to one destination.
-pub trait Route<C, S: Stage<C>> {
-    /// Request to transform into a destination input.
-    type Input;
-
-    /// Chooses a destination and prepares its input once, before any delivery.
-    ///
-    /// # Errors
-    /// Returns the application's routing failure without starting a destination.
-    fn route(&mut self, context: &C, input: Self::Input) -> Result<(usize, S::Input), S::Error>;
+use crate::{FanPlan, FanPolicy};
+/// Routes a completed value to one destination.
+pub trait Route<V, E> {
+    /// Selects the destination without consuming the value.
+    fn target(&mut self, value: &V) -> Result<usize, E>;
 }
-
-/// Singleton fan-out returning unit after the selected destination succeeds.
-///
-/// Routing, index validation, suspension and terminality use the existing
-/// fan-out lifecycle. Applications need no receipt reducer or operation metadata.
+/// Singleton-input routing policy for a fan.
 #[derive(Debug)]
-pub struct Dispatch<S, R>(FanOut<S, Single<R>>);
-
-impl<S, R> Dispatch<S, R> {
-    /// Owns the destination population and application routing policy.
-    pub const fn new(destinations: Vec<S>, route: R) -> Self {
-        Self(FanOut::new(destinations, Single(route)))
+pub struct Dispatch<R>(R);
+impl<R> Dispatch<R> {
+    /// Adapts an application's destination selection.
+    pub const fn new(route: R) -> Self {
+        Self(route)
     }
 }
-
-impl<C, S: Stage<C>, R: Route<C, S>> Stage<C> for Dispatch<S, R> {
-    type Input = R::Input;
-    type Output = ();
-    type Error = BranchError<S::Error>;
-    type Wait = S::Wait;
-    type State = FanOutState<R::Input, (), S::Input, S::State, S::Output>;
-
-    fn start(input: Self::Input) -> Self::State {
-        <FanOut<S, Single<R>> as Stage<C>>::start(input)
+impl<V, E, R: Route<V, E>> FanPolicy<V, V, E> for Dispatch<R> {
+    fn plan(&mut self, values: &[Option<V>], available: &[bool]) -> Result<FanPlan, E> {
+        let Some(Some(value)) = values.first() else {
+            return Ok(FanPlan::default());
+        };
+        let index = self.0.target(value)?;
+        if available.get(index) == Some(&false) {
+            return Ok(FanPlan::default());
+        }
+        Ok(FanPlan {
+            inputs: vec![0],
+            outputs: vec![index],
+        })
     }
-
-    fn step(
-        &mut self,
-        context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<(), Self::Error, Self::Wait> {
-        self.0.step(context, state)
-    }
-}
-
-#[derive(Debug)]
-struct Single<R>(R);
-
-impl<C, S: Stage<C>, R: Route<C, S>> Distribute<C, S> for Single<R> {
-    type Input = R::Input;
-    type Output = ();
-    type State = ();
-
-    fn split(&mut self, context: &C, input: Self::Input) -> DeliveryPlan<(), S::Input, S::Error> {
-        self.0
-            .route(context, input)
-            .map(|delivery| ((), vec![delivery]))
-            .map_err(BranchError::Application)
-    }
-
-    fn combine(&mut self, (): (), _: Vec<S::Output>) -> Result<(), BranchError<S::Error>> {
-        Ok(())
+    fn route(&mut self, values: Vec<V>) -> Result<Vec<V>, E> {
+        Ok(values)
     }
 }

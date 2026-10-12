@@ -1,52 +1,45 @@
-use hardware_interface_pipeline::{BranchError, Dispatch, Operation, Stage, StepOutcome, Then};
-
-use super::fixtures::{Context, Destination, Routing, request};
-
-struct CountDeliveries;
-
-impl Stage<Context> for CountDeliveries {
-    type Input = ();
+use super::fixtures::{Context, Destination, Routing, Source, finish, request};
+use hardware_interface_pipeline::{
+    BranchError, Dispatch, FanOut, RunError, Stage, StepOutcome, StepResult, Then,
+};
+struct Count;
+impl Stage<Context> for Count {
+    type Input = Vec<(usize, ())>;
     type Output = usize;
     type Error = BranchError<&'static str>;
-    type Wait = &'static str;
-    type State = ();
-
-    fn start((): ()) {}
-
-    fn step(
-        &mut self,
-        context: &mut Context,
-        (): &mut (),
-    ) -> StepOutcome<usize, Self::Error, Self::Wait> {
-        StepOutcome::Complete(Ok(context.deliveries.len()))
+    type State = Option<Self::Input>;
+    fn start(input: Self::Input) -> Self::State {
+        Some(input)
+    }
+    fn step(&mut self, _: &mut Context, state: &mut Self::State) -> StepResult<usize, Self::Error> {
+        Ok(StepOutcome::Complete(Ok(state
+            .take()
+            .ok_or(RunError::Exhausted)?
+            .len())))
     }
 }
-
 #[test]
-fn then_consumes_unit_after_dispatch_reduction() {
-    // Given: Dispatch feeds its unit output into an ordinary downstream stage.
+fn then_consumes_dispatch_receipts_after_a_separate_boundary() {
+    // Given: a routed fan followed by an application receipt reducer.
+    let fan = FanOut::new(
+        Source,
+        Dispatch::new(Routing::Accept),
+        vec![Destination::new(0)],
+    );
+    let mut hardware = Then::new(fan, Count);
+    let mut state = <Then<FanOut<Source, Dispatch<Routing>, Destination>, Count> as Stage<
+        Context,
+    >>::start(request(0));
     let mut context = Context::default();
-    let mut hardware = Then::new(
-        Dispatch::new(vec![Destination::new(0)], Routing::Accept),
-        CountDeliveries,
-    );
-    let mut operation = Operation::new(request(0));
-
-    // When: planning, delivery, reduction, and downstream execution advance.
-    let outcomes: Vec<_> = (0..4)
-        .map(|_| operation.step(&mut hardware, &mut context))
-        .collect();
-
-    // Then: downstream receives unit only after publication is complete.
-    assert_eq!(
-        outcomes,
-        [
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Progressed,
-            StepOutcome::Complete(Ok(1))
-        ]
-    );
-    assert_eq!(context.deliveries, [(0, "routed owned payload".into())]);
-    assert_eq!(context.routes.get(), 1);
+    // When: delivery completes before downstream reduction.
+    for _ in 0..3 {
+        assert_eq!(
+            hardware.step(&mut context, &mut state),
+            Ok(StepOutcome::InProgress)
+        );
+    }
+    assert_eq!(context.deliveries.len(), 1);
+    let result = finish(&mut hardware, &mut state, &mut context);
+    // Then: the reducer receives exactly the committed receipt.
+    assert_eq!(result, Ok(StepOutcome::Complete(Ok(1))));
 }

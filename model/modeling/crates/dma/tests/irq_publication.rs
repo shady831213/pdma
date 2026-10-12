@@ -1,7 +1,7 @@
 //! Notification visibility follows complete response publication.
 /// Shared raw-bus test fixtures.
 pub mod support;
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_contract::dma::{Response, ResponseRegisters, ResponseStatus};
@@ -40,9 +40,8 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
             );
         }
         match outcome {
-            RunOutcome::Progressed => {}
-            RunOutcome::Pending(()) => return Err("unexpected stall".into()),
-            RunOutcome::Complete(result) => {
+            StepOutcome::InProgress => {}
+            StepOutcome::Complete(result) => {
                 result?;
                 assert!(irq);
                 return Ok(());

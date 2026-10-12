@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, Repeat, RunOutcome, Stage, StepExecutor, StepOutcome, Then,
+    AfterEach, Operation, Repeat, RunError, Stage, StepExecutor, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_dma::{
@@ -19,7 +19,6 @@ impl Stage<ChannelContext<'_, SharedMemory>> for InvertPayload {
     type Input = Transfer;
     type Output = Transfer;
     type Error = Error;
-    type Wait = ();
     type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
         Some(input)
@@ -28,14 +27,14 @@ impl Stage<ChannelContext<'_, SharedMemory>> for InvertPayload {
         &mut self,
         _: &mut ChannelContext<'_, SharedMemory>,
         state: &mut Self::State,
-    ) -> StepOutcome<Transfer, Error, ()> {
+    ) -> StepResult<Transfer, Error> {
         let Some(mut transfer) = state.take() else {
-            return StepOutcome::Exhausted;
+            return Err(RunError::Exhausted);
         };
         for byte in &mut transfer.bytes {
             *byte = !*byte;
         }
-        StepOutcome::Complete(Ok(transfer))
+        Ok(StepOutcome::Complete(Ok(transfer)))
     }
 }
 
@@ -69,9 +68,8 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
             .step(&mut hardware, &mut operation, &mut device)
             .map_err(|e| format!("{e:?}"))?
         {
-            RunOutcome::Progressed => {}
-            RunOutcome::Pending(()) => return Err("unexpected stall".into()),
-            RunOutcome::Complete(result) => {
+            StepOutcome::InProgress => {}
+            StepOutcome::Complete(result) => {
                 result?;
                 complete = true;
                 break;
@@ -96,7 +94,7 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.
     let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
-    let result = operation.step(&mut execution, &mut context);
+    let result = operation.step(&mut execution, &mut context)?;
     // Then: device fatal blocks even independently composed hardware.
     assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
     Ok(())

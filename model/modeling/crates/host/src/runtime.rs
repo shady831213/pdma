@@ -3,20 +3,19 @@
 #[cfg(test)]
 mod tests;
 
-use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepResult};
 use hardware_interface_runtime::{
     InterruptEmitter, InterruptEnvelope, InterruptSource, PendingInterrupt, RegisterAccess,
     pending_interrupt,
 };
 use pdma_model_dma::{Dma, Error};
 use std::{convert::Infallible, sync::Arc};
-use tokio::sync::{Mutex, Notify, watch};
+use tokio::sync::{Mutex, watch};
 
 /// Shared async transport for one device, driven by one retained worker operation.
 #[derive(Debug)]
 pub struct Model<M> {
     device: Arc<Mutex<Dma<M>>>,
-    changed: Arc<Notify>,
     emitter: InterruptEmitter,
     pending: PendingInterrupt<Irq>,
 }
@@ -25,7 +24,6 @@ impl<M> Clone for Model<M> {
     fn clone(&self) -> Self {
         Self {
             device: Arc::clone(&self.device),
-            changed: Arc::clone(&self.changed),
             emitter: self.emitter.clone(),
             pending: self.pending.clone(),
         }
@@ -41,7 +39,6 @@ impl<M> Model<M> {
         }
         Self {
             device: Arc::new(Mutex::new(device)),
-            changed: Arc::new(Notify::new()),
             emitter,
             pending,
         }
@@ -64,13 +61,9 @@ impl<M: Send> Model<M> {
         &self,
         access: impl FnOnce(&mut Dma<M>) -> Result<(), Error> + Send,
     ) -> Result<(), Error> {
-        let result = {
-            let mut device = self.device.lock().await;
-            let result = access(&mut device);
-            self.publish_irq(device.take_interrupt());
-            result
-        };
-        self.changed.notify_one();
+        let mut device = self.device.lock().await;
+        let result = access(&mut device);
+        self.publish_irq(device.take_interrupt());
         result
     }
 }
@@ -89,26 +82,24 @@ impl<M: Send> RegisterAccess for Model<M> {
     }
 }
 
-impl<M: Send> AsyncInteractionBackend<Dma<M>, ()> for Model<M> {
+impl<M: Send> AsyncInteractionBackend<Dma<M>> for Model<M> {
     type Error = Infallible;
 
-    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
+    async fn yield_now(&self) {
+        tokio::task::yield_now().await;
+    }
+
+    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepResult<O, E>, Infallible>
     where
         O: Send,
         E: Send,
-        F: FnOnce(&mut Dma<M>) -> StepOutcome<O, E, ()> + Send,
+        F: FnOnce(&mut Dma<M>) -> StepResult<O, E> + Send,
     {
-        tokio::task::yield_now().await;
         let mut device = self.device.lock().await;
         let outcome = interaction(&mut device);
         self.publish_irq(device.take_interrupt());
         drop(device);
         Ok(outcome)
-    }
-
-    async fn wait(&self, (): ()) -> Result<(), Infallible> {
-        self.changed.notified().await;
-        Ok(())
     }
 }
 

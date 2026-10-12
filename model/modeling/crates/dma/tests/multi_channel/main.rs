@@ -9,6 +9,7 @@ use pdma_model_contract::dma::{
 };
 use pdma_model_dma::{Dma, Error, ResetControl};
 
+mod candidates;
 mod command_grant;
 mod context_abort;
 mod fairness;
@@ -40,7 +41,7 @@ fn hardware_count_survives_both_reset_scopes_and_is_read_only() -> TestResult {
     ] {
         device.write(reset, &1_u32.to_le_bytes())?;
         assert_eq!(word(&mut device, reset)?, 1);
-        let _ = Operation::new(()).step(&mut ResetControl, &mut device);
+        let _ = Operation::new(()).step(&mut ResetControl, &mut device)?;
         assert_eq!(word(&mut device, reset)?, 0);
         assert_eq!(word(&mut device, count)?, 3);
     }
@@ -74,7 +75,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     let mut operation = Operation::new(());
     let mut committed = false;
     for _ in 0..256 {
-        let _ = operation.step(&mut hardware, &mut device);
+        let _ = operation.step(&mut hardware, &mut device)?;
         if memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
             committed = true;
             break;
@@ -90,7 +91,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     assert_eq!(word(&mut device, reset)?, 1);
     for _ in 0..512 {
         assert!(!matches!(
-            operation.step(&mut hardware, &mut device),
+            operation.step(&mut hardware, &mut device)?,
             StepOutcome::Complete(Err(_))
         ));
     }
@@ -132,7 +133,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     configure(&mut device, 0)?;
     submit(&mut device, 0, 99)?;
     for _ in 0..512 {
-        let _ = operation.step(&mut hardware, &mut device);
+        let _ = operation.step(&mut hardware, &mut device)?;
     }
     assert_eq!(
         word(

@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{AfterEach, Repeat, Then};
+use hardware_interface_pipeline::{AfterEach, Operation, Repeat, Stage, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
@@ -9,6 +9,20 @@ use pdma_model_dma::{
 };
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+/// Drives retained work to a terminal result within the test watchdog.
+pub fn finish<C, S: Stage<C>>(
+    stage: &mut S,
+    operation: &mut Operation<S, C>,
+    context: &mut C,
+) -> TestResult<Result<S::Output, S::Error>> {
+    for _ in 0..256 {
+        if let StepOutcome::Complete(result) = operation.step(stage, context)? {
+            return Ok(result);
+        }
+    }
+    Err("operation exceeded interaction bound".into())
+}
 
 /// Assemble one command while keeping arbitration state across test operations.
 pub fn single_command<M>(device: &Dma<M>) -> Then<Intake, Pipeline> {

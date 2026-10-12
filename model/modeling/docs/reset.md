@@ -50,21 +50,21 @@ reset does not retract them.
 device reset before accepting commands. Accepted ownership records channel and
 generation, including per-channel parked work; command, SG-list, payload and
 response paths check reset before further memory access. `RunCommand` releases
-executing ownership when the complete pipeline terminates. Payload faults return
-Pending with the leaf's Transfer intact; the granted execution port retains the
-exact composed Operation and moves its accepted references to Channel.parked.
-The grant ends at suspension. A later arbitration grant restores that operation
+executing ownership when the complete pipeline terminates. Payload faults leave
+the leaf InProgress with its Transfer intact; the shared engine saves the exact
+composed continuation and moves its accepted references to Channel.parked.
+The engine turn completes at suspension. A later arbitration grant restores that continuation
 without fetching another command or replaying completed stages.
 Before any shared active step, CommandArbiter discards affected parked operations on
 reset or matching Abort and releases their references. A disabled active peer
-therefore cannot prevent parked cleanup. RunCommand's retained
-`Operation<S, Dma<M>>` discards child state before ownership is released, including
+therefore cannot prevent parked cleanup. RunCommand discards its retained
+child state before ownership is released, including
 for custom child stages that do not clear their own state. Response publication
 can precede that outcome by additional composition steps; ownership remains held during
 those steps, so reset cannot acknowledge cleanup early. Neither response ports nor
 `Resettable` release whole-command ownership.
 `ResetControl` runs after every outer step,
-including a pending step, and clears reset only once affected executing and parked
+including an InProgress step, and clears reset only once affected executing and parked
 ownership has retired.
 An unrelated active channel does not prevent an idle channel's reset from completing.
 
@@ -82,7 +82,7 @@ is an additional stale-task guard, not the reset acknowledgment predicate.
 Custom sustained command graphs pass their downstream composition to
 `Dma::arbitrate` and drive `ResetControl`. The arbiter owns one shared `RunCommand<S>`;
 its child implements `Stage<Dma<M>, Input = ChannelTask<Command>, Output = (),
-Error = Error, Wait = ()>`. Its internal transforms need not match the default
+Error = Error>`. Its internal transforms need not match the default
 `Pipeline`. Merely
 dropping a software waiter or abandoning an accepted `Operation` does not flush
 hardware. The complete-loop guarantee does not claim that arbitrary externally

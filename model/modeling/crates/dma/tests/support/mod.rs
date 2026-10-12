@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{AfterEach, Operation, Repeat, RunOutcome, StepExecutor, Then};
+use hardware_interface_pipeline::{AfterEach, Operation, Repeat, StepExecutor, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -120,12 +120,11 @@ pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
             .step(&mut hardware, &mut operation, device)
             .map_err(|e| format!("{e:?}"))?
         {
-            RunOutcome::Progressed => {}
-            RunOutcome::Complete(result) => {
+            StepOutcome::InProgress => {}
+            StepOutcome::Complete(result) => {
                 result?;
                 return Ok(());
             }
-            RunOutcome::Pending(()) => return Err("unexpected stall".into()),
         }
     }
     Err("pipeline exceeded interaction bound".into())

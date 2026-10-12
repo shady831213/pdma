@@ -3,7 +3,7 @@
 mod repeat {
     mod stages;
 
-    use hardware_interface_pipeline::{Operation, Repeat, Stage, StepOutcome, Then};
+    use hardware_interface_pipeline::{Operation, Repeat, RunError, Stage, StepOutcome, Then};
 
     use stages::{Finish, Next, Visit};
 
@@ -23,15 +23,15 @@ mod repeat {
         assert_eq!(
             outcomes,
             [
-                StepOutcome::Pending("accepted 0".to_owned()),
-                StepOutcome::Progressed,
-                StepOutcome::Progressed,
-                StepOutcome::Pending("accepted 1".to_owned()),
-                StepOutcome::Progressed,
-                StepOutcome::Progressed,
-                StepOutcome::Pending("accepted 2".to_owned()),
-                StepOutcome::Progressed,
-                StepOutcome::Complete(Ok("finished 2".to_owned())),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::Complete(Ok("finished 2".to_owned()))),
             ]
         );
         assert_eq!(visits, [0, 1, 2]);
@@ -50,7 +50,7 @@ mod repeat {
         let outcome = hardware.step(&mut context, &mut state);
 
         // Then: the next child is initialized but has not interacted.
-        assert_eq!(outcome, StepOutcome::Progressed);
+        assert_eq!(outcome, Ok(StepOutcome::InProgress));
         assert_eq!(hardware.stage.calls, 1);
     }
 
@@ -60,13 +60,13 @@ mod repeat {
         for (finish, expected) in [
             (
                 Finish::At(0),
-                StepOutcome::Complete(Ok("finished 0".to_owned())),
+                Ok(StepOutcome::Complete(Ok("finished 0".to_owned()))),
             ),
             (
                 Finish::Fail,
-                StepOutcome::Complete(Err("child failure".to_owned())),
+                Ok(StepOutcome::Complete(Err("child failure".to_owned()))),
             ),
-            (Finish::Exhaust, StepOutcome::Exhausted),
+            (Finish::Exhaust, Err(RunError::Exhausted)),
         ] {
             let mut hardware = Repeat::new(Next::new(finish));
             let mut state = Repeat::<Next>::start(0);
@@ -82,7 +82,7 @@ mod repeat {
             // Then: the child runs once and its terminal value is forwarded only once.
             assert_eq!(
                 outcomes,
-                [expected, StepOutcome::Exhausted, StepOutcome::Exhausted]
+                [expected, Err(RunError::Exhausted), Err(RunError::Exhausted)]
             );
             assert_eq!(hardware.stage.calls, 1);
         }
@@ -107,9 +107,9 @@ mod repeat {
         assert_eq!(
             outcomes,
             [
-                StepOutcome::Progressed,
-                StepOutcome::Complete(Ok("finished 2".to_owned())),
-                StepOutcome::Complete(Ok("finished 2".to_owned())),
+                Ok(StepOutcome::InProgress),
+                Ok(StepOutcome::Complete(Ok("finished 2".to_owned()))),
+                Ok(StepOutcome::Complete(Ok("finished 2".to_owned()))),
             ]
         );
         assert_eq!(hardware.stage.calls, 3);

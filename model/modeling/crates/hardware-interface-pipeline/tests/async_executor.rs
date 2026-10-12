@@ -13,8 +13,8 @@ mod async_executor {
     };
 
     use hardware_interface_pipeline::{
-        AsyncExecutor, AsyncRunError, ImmediateExecutor, Operation, PipelineExt, RunOutcome, Stage,
-        StepExecutor, StepOutcome, Then,
+        AsyncExecutor, AsyncRunError, ImmediateExecutor, Operation, PipelineExt, RunError, Stage,
+        StepExecutor, StepOutcome, StepResult, Then,
     };
 
     type Context = Vec<&'static str>;
@@ -36,7 +36,6 @@ mod async_executor {
         type Input = &'static str;
         type Output = &'static str;
         type Error = &'static str;
-        type Wait = usize;
         type State = ();
 
         fn start(_: Self::Input) -> Self::State {}
@@ -45,9 +44,9 @@ mod async_executor {
             &mut self,
             context: &mut Context,
             (): &mut Self::State,
-        ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        ) -> StepResult<Self::Output, Self::Error> {
             context.push(self.name);
-            StepOutcome::Complete(self.result)
+            Ok(StepOutcome::Complete(self.result))
         }
     }
 
@@ -88,7 +87,7 @@ mod async_executor {
         let async_result = executor.run(&mut async_stage, &mut async_op).await;
 
         // Then: output, action order, and one async closure per leaf are identical.
-        assert_eq!(stepped_result, Ok(RunOutcome::Complete(Ok("terminal"))));
+        assert_eq!(stepped_result, Ok(StepOutcome::Complete(Ok("terminal"))));
         assert_eq!(immediate_result, stepped_result);
         assert_eq!(async_result, Ok("terminal"));
         assert_eq!(stepped_cx, ["A", "B", "C"]);
@@ -107,32 +106,30 @@ mod async_executor {
             &mut immediate_cx,
         );
         assert_eq!(async_error, Err(AsyncRunError::Stage("stage")));
-        assert_eq!(sync_error, Ok(RunOutcome::Complete(Err("stage"))));
+        assert_eq!(sync_error, Ok(StepOutcome::Complete(Err("stage"))));
         let send_executor = AsyncExecutor::new(ScriptedBackend::configured(true, true, None));
         let mut send_stage = Leaf::new("send", Ok("done"));
         assert_send(send_executor.run(&mut send_stage, &mut Operation::new("request")));
     }
 
     #[tokio::test]
-    async fn lost_wakeup_rechecks_generation_before_registering() {
-        // Given: a pending stage whose interaction publishes generation one before wait starts.
+    async fn unfinished_stage_is_revisited_without_a_notification() {
+        // Given: a stage retaining unfinished work and an immediately ready backend.
         let executor = AsyncExecutor::new(ScriptedBackend::configured(true, true, None));
-        executor.backend().bump_after.store(true, Ordering::SeqCst);
-        let mut stage = PendingOnce;
-        let mut stepped_hw = PendingOnce;
+        let mut stage = TwoStep;
+        let mut stepped_hw = TwoStep;
         let mut stepped_op = Operation::new(());
 
-        // When: the async executor receives generation zero after readiness already changed.
+        // When: the async executor cooperatively revisits the retained work.
         let result = executor.run(&mut stage, &mut Operation::new(())).await;
         let pending = StepExecutor::new().step(&mut stepped_hw, &mut stepped_op, &mut Vec::new());
         let resumed = StepExecutor::new().step(&mut stepped_hw, &mut stepped_op, &mut Vec::new());
 
-        // Then: pending ownership matches stepping and the stale generation completes on one recheck.
+        // Then: both drivers preserve the result without a separate wake protocol.
         assert_eq!(result, Ok("after-wake"));
-        assert_eq!(pending, Ok(RunOutcome::Pending(0)));
-        assert_eq!(resumed, Ok(RunOutcome::Complete(Ok("after-wake"))));
-        assert_eq!(executor.backend().generation.load(Ordering::SeqCst), 1);
-        assert_eq!(executor.backend().wait_checks.load(Ordering::SeqCst), 1);
+        assert_eq!(pending, Ok(StepOutcome::InProgress));
+        assert_eq!(resumed, Ok(StepOutcome::Complete(Ok("after-wake"))));
+        assert_eq!(executor.backend().interactions.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
@@ -179,13 +176,11 @@ mod async_executor {
 
     #[tokio::test]
     async fn adverse_errors_preserve_backend_stage_and_exhausted_variants() {
-        // Given: separate backends failing around access, during wait, plus terminal stages.
+        // Given: separate backends failing around access, plus terminal stages.
         let before = AsyncExecutor::new(ScriptedBackend::failing(BackendFault::Before));
         let after = AsyncExecutor::new(ScriptedBackend::failing(BackendFault::After));
-        let waiting = AsyncExecutor::new(ScriptedBackend::failing(BackendFault::Wait));
         let mut before_stage = Leaf::new("before", Ok("done"));
         let mut after_stage = Leaf::new("after", Ok("done"));
-        let mut wait_stage = PendingOnce;
         let mut exhausted_stage = Leaf::new("terminal", Ok("done"));
         let complete = AsyncExecutor::new(ScriptedBackend::configured(true, true, None));
         let mut terminal_op = Operation::new("request");
@@ -197,7 +192,6 @@ mod async_executor {
         let after_result = after
             .run(&mut after_stage, &mut Operation::new("request"))
             .await;
-        let wait_result = waiting.run(&mut wait_stage, &mut Operation::new(())).await;
         let _ = complete.run(&mut exhausted_stage, &mut terminal_op).await;
         let exhausted_result = complete.run(&mut exhausted_stage, &mut terminal_op).await;
 
@@ -211,21 +205,19 @@ mod async_executor {
             Err(AsyncRunError::BackendInteraction(BackendFault::After))
         );
         assert_eq!(
-            wait_result,
-            Err(AsyncRunError::BackendWait(BackendFault::Wait))
+            exhausted_result,
+            Err(AsyncRunError::Run(RunError::Exhausted))
         );
-        assert_eq!(exhausted_result, Err(AsyncRunError::Exhausted));
         assert_eq!(before.backend().interactions.load(Ordering::SeqCst), 0);
         assert_eq!(after.backend().interactions.load(Ordering::SeqCst), 1);
     }
 
-    struct PendingOnce;
+    struct TwoStep;
 
-    impl Stage<Context> for PendingOnce {
+    impl Stage<Context> for TwoStep {
         type Input = ();
         type Output = &'static str;
         type Error = &'static str;
-        type Wait = usize;
         type State = bool;
 
         fn start((): Self::Input) -> Self::State {
@@ -236,12 +228,12 @@ mod async_executor {
             &mut self,
             _: &mut Context,
             state: &mut Self::State,
-        ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        ) -> StepResult<Self::Output, Self::Error> {
             if *state {
-                StepOutcome::Complete(Ok("after-wake"))
+                Ok(StepOutcome::Complete(Ok("after-wake")))
             } else {
                 *state = true;
-                StepOutcome::Pending(0)
+                Ok(StepOutcome::InProgress)
             }
         }
     }

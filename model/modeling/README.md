@@ -129,27 +129,22 @@ AfterEach::new(
 )
 ```
 
-Each `Fetch` produces `ChannelTask<Command>`, carrying channel identity and generation.
-Its `ReadyStage::ready` checks channel/ring state without consuming a command.
-`device.arbitrate(downstream)` arbitrates channel-bound execution ports through
-`Arbitrate<ExecutionPort, RoundRobin>`. A selected port fetches a new command or
-restores its retained operation, then drives the one shared downstream stage.
-Arbitration specializes the generic `FanIn` with a singleton plan and identity
-output, while DMA owns the selection policy. `device.intake()` remains a
-new-command-only `Arbitrate<Fetch, RoundRobin>` for single-command boundary tests;
-it is not nested inside the sustained command arbiter.
-`FanIn` itself can gather multiple sources and reduce them into a different output type.
-`device.responses()` uses `Dispatch<ResponsePort, RouteResponse>`, the singleton
-specialization of `FanOut`. The PDMA `Route` policy supplies only the channel-bound
-destination and owned response; successful publication returns unit without an
-application reducer. The generic combinators also support application-defined
-broadcast and split plans without requiring input cloning. Branches run in plan order;
-a pending branch retains its state and completed branches are never replayed.
-Both fan combinators use `Then` internally for planning, branch execution and reduction,
-sharing the branch and reduction stages. Selection and command acceptance occur in
-separate steps. Branch traversal is `Repeat<RunBranch>`, feeding remaining requests and
-collected outputs into the next iteration. If a selected channel becomes ineligible before acceptance, arbitration
-selects again; work already accepted remains subject to its channel's reset generation.
+Each `Candidate` produces an optional channel identity without accepting a command.
+`device.arbitrate(downstream)` composes these input stages, DMA's round-robin
+value-selection policy and one shared engine through `Fan`. The policy sees completed
+candidate values, never source stages or an engine. Selection and engine acceptance
+occur in separate steps; the engine rechecks eligibility before fetching a new
+command or restoring saved work. `Fetch` produces `ChannelTask<Command>`, carrying
+channel identity and generation. `device.intake()` provides the new-command-only
+assembly used by single-command boundary tests.
+
+`Fan` is finite N-to-M value flow: independent input stages advance, planning consumes
+selected completed values, then independent output stages advance. Unselected values
+and unfinished invocations remain owned by that Fan invocation. A blocked input does
+not prevent completed peers or active outputs from advancing. Plans are validated
+before output effects; cloning or splitting is explicit policy. `FanIn` and `FanOut`
+specialize its axes; `Arbitrate` and `Dispatch` specialize value planning. Response
+dispatch routes the tagged response to its channel-bound publication stage.
 `Resettable` selects its context and checks the generation before every nested interaction,
 retaining `ChannelTask<T>` across output transformations and rejecting a wrong destination.
 The shared execution transforms `ChannelTask<Command>` into `ChannelTask<Response>`;
@@ -168,32 +163,32 @@ stops; no subsequent command executes until reset. Rings are state in the shared
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
 `device.command_loop()` builds `AfterEach<CommandArbiter<Pipeline>, ResetControl>`,
-reusing one shared `RunCommand<Pipeline>` engine. `CommandArbiter` adapts the DMA
-context and retained-operation slots to `Repeat<Arbitrate<ExecutionPort, RoundRobin>>`;
-the existing combinators own selection and iteration. Each physical channel has
-at most one retained Operation, not its own engine. A faulting copy leaf retains
-its Transfer and returns Pending; RunCommand does not retire it. Its execution
-port parks the exact composed state, including both cursors, write scratch and
-custom transforms, while Channel.parked retains accepted context references.
-The port ends that arbitration turn and restores its operation when selected
+reusing one shared `RunCommand<Pipeline>` engine. `CommandArbiter` supplies DMA
+context and saved-state slots to repeated `Fan` rounds; the context contains data,
+not an engine. Each physical channel has at most one saved composed continuation,
+not its own engine. A faulting copy leaf retains its Transfer and remains
+`InProgress`; RunCommand does not retire it. The engine parks that exact composed
+state, including both cursors, write scratch and custom transforms, while
+Channel.parked retains accepted context references.
+The engine completes that arbitration turn and restores its continuation when selected
 again, without command refetch, CheckRanges restart or repeated transforms.
 CommandArbiter discards reset/Abort targets before stepping shared active work,
 so even a disabled peer cannot block cleanup.
 Arbitration changes channels at command completion or payload-fault suspension;
 it does not time-slice healthy commands between chunks. A full idle arbitration
-round returns Pending; stopping errors and reset retire affected work, while a
+round completes without a grant and repeats; stopping errors and reset retire affected work, while a
 payload fault retains ownership. Channels without response space are skipped before
 new acceptance; a parked channel cannot accept a successor.
 `ChannelContext` borrows
 only the selected channel and its memory port for each step. A reset write requests cleanup;
 hardware keeps the reset register at one until affected accepted work retires, then
-clears it to zero. `ResetControl` runs after each command-loop step, including pending
+clears it to zero. `ResetControl` runs after each command-loop step, including unfinished
 steps. Configuration writes are rejected while the affected scope is resetting.
 Generation tags additionally reject retained pre-reset tasks after later reconfiguration;
 they do not acknowledge reset. Custom sustained command compositions pass a
 `ChannelTask<Command> -> ()` transform to `device.arbitrate` and step `ResetControl`.
 The arbiter's RunCommand accepts any child stage with that contract and uses the
-existing `Operation` to dispose of terminal child state before releasing ownership.
+child-state ownership to dispose of terminal state before releasing accepted ownership.
 Only terminal completion or cancellation cleanup releases accepted ownership;
 parking, response publication and `Resettable` binding do not acknowledge cleanup.
 Discarding an accepted operation does not
@@ -202,15 +197,23 @@ lifetime requirements.
 
 Build `device.command_loop()` before moving the device into
 the runtime transport, and retain that graph across commands. Its lightweight
-execution ports come from the actual instance population. Single-command boundary
-graphs may instead pass a subset or different ordering of Fetch ports to Arbitrate,
-or supply their own arbitration policy; this intake-only assembly does not provide
+candidate ports come from the actual instance population. Single-command boundary
+graphs may instead pass a subset or different ordering of candidate ports to Intake;
+this intake-only assembly does not provide
 the complete parked-command lifecycle.
 Runtime only drives the supplied graph; it never constructs the hardware policy.
 Complete scenarios drive one persistent command-loop operation until their software
 program finishes, then abort and join the hardware task. Command-local termination
 is handled inside the device, not by a scenario-side retry loop. Boundary tests that
 need a single command assemble the existing stages in test fixtures.
+
+`StepOutcome` distinguishes only `InProgress` from `Complete(Result<Output, Error>)`.
+Completion transfers the result and releases invocation-local intermediate state.
+There are no hardware wait tokens or separate readiness trait. Async driving yields
+after every bounded hardware step, including idle polling, so software can access
+registers between steps. Software interrupt and doorbell waits remain event-driven.
+The retained `Operation` also preserves a completed result across cancellation at
+the post-step yield; resuming delivery does not replay the hardware interaction.
 
 `Dma<M, S = ()>` uses `MemoryAccess<S>` with a `DmaAccess` selector containing
 channel and context IDs. Plain `Dma::new` keeps unit-sideband memory access.

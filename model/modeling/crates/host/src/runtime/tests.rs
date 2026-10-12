@@ -1,52 +1,25 @@
 use super::Model;
+mod cooperative;
 mod notifications;
 use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, ResponseRegisters};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
-use std::{
-    future::Future,
-    pin::{Pin, pin},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    task::{Context, Poll, Wake, Waker},
-};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 const IRQ_ENABLE: usize = (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + pdma_model_contract::dma::ChannelBlock::CONTROL.offset())
     + ChannelRegisters::IRQ_ENABLE.offset();
 
-#[derive(Default)]
-struct WakeFlag(AtomicBool);
-
-impl Wake for WakeFlag {
-    fn wake(self: Arc<Self>) {
-        self.0.store(true, Ordering::SeqCst);
-    }
-}
-
-fn poll_once<F: Future>(future: Pin<&mut F>, flag: &Arc<WakeFlag>) -> Poll<F::Output> {
-    let waker = Waker::from(Arc::clone(flag));
-    future.poll(&mut Context::from_waker(&waker))
-}
-
 #[tokio::test]
-async fn write_wakes_a_parked_worker_and_preserves_register_value() -> TestResult {
-    // Given: a worker parked before a register transaction.
+async fn write_preserves_register_value() -> TestResult {
+    // Given: an idle DMA channel.
     let model = Model::new(Dma::new((), 1)?);
-    let flag = Arc::new(WakeFlag::default());
-    let mut wait = pin!(model.wait(()));
-    assert!(poll_once(wait.as_mut(), &flag).is_pending());
     // When: software enables interrupt delivery on an otherwise idle channel.
     model
         .write(u32::try_from(IRQ_ENABLE)?, &1_u32.to_le_bytes())
         .await?;
-    // Then: the worker is scheduled and the ordinary register value is preserved.
-    assert!(flag.0.load(Ordering::SeqCst));
-    assert_eq!(poll_once(wait.as_mut(), &flag), Poll::Ready(Ok(())));
+    // Then: the ordinary register value is preserved without fabricating an IRQ.
     let mut bytes = [0; 4];
     model.read(u32::try_from(IRQ_ENABLE)?, &mut bytes).await?;
     assert_eq!(u32::from_le_bytes(bytes), 1);
@@ -55,52 +28,48 @@ async fn write_wakes_a_parked_worker_and_preserves_register_value() -> TestResul
 }
 
 #[tokio::test]
-async fn read_wakes_a_parked_worker_and_returns_register_value() -> TestResult {
-    // Given: a worker parked on a fresh channel, with no earlier notification.
+async fn read_returns_register_value() -> TestResult {
+    // Given: a fresh channel.
     let model = Model::new(Dma::new((), 1)?);
-    let flag = Arc::new(WakeFlag::default());
-    let mut wait = pin!(model.wait(()));
-    assert!(poll_once(wait.as_mut(), &flag).is_pending());
     let mut bytes = [0xaa; 4];
     // When: software reads the interrupt enable register.
     model.read(u32::try_from(IRQ_ENABLE)?, &mut bytes).await?;
-    // Then: the value is returned and the waiting worker gets a real wakeup.
+    // Then: the value is returned without creating a hardware notification.
     assert_eq!(bytes, [0; 4]);
-    assert!(flag.0.load(Ordering::SeqCst));
-    assert_eq!(poll_once(wait.as_mut(), &flag), Poll::Ready(Ok(())));
+    assert!(!model.irq());
     Ok(())
 }
 
 #[tokio::test]
-async fn read_notification_survives_the_wait_registration_gap() -> TestResult {
-    // Given: a fresh channel and a worker that has not yet registered its wait.
+async fn software_write_is_visible_at_the_next_hardware_boundary() -> TestResult {
+    // Given: a fresh channel before the next hardware interaction.
     let model = Model::new(Dma::new((), 1)?);
-    let flag = Arc::new(WakeFlag::default());
-    // When: the read commits before the worker begins waiting.
-    model.read(u32::try_from(IRQ_ENABLE)?, &mut [0; 4]).await?;
-    // Then: one retained notification permits a recheck, not a perpetual ready loop.
-    let mut wait = pin!(model.wait(()));
-    assert_eq!(poll_once(wait.as_mut(), &flag), Poll::Ready(Ok(())));
-    let mut next_wait = pin!(model.wait(()));
-    assert!(poll_once(next_wait.as_mut(), &flag).is_pending());
+    // When: software commits a write before that interaction.
+    let enabled = 1_u32.to_le_bytes();
+    model.write(u32::try_from(IRQ_ENABLE)?, &enabled).await?;
+    // Then: hardware observes the committed register value on its next step.
+    let outcome = model
+        .interact(|device| {
+            let mut bytes = [0; 4];
+            Ok(StepOutcome::Complete(
+                device.read(IRQ_ENABLE, &mut bytes).map(|()| bytes),
+            ))
+        })
+        .await?;
+    assert_eq!(outcome, Ok(StepOutcome::Complete(Ok(enabled))));
     Ok(())
 }
 
 #[tokio::test]
-async fn rejected_read_preserves_the_bus_error_and_notifies() -> TestResult {
-    // Given: an invalid transaction width and a parked worker.
+async fn rejected_read_preserves_the_bus_error_and_output() -> TestResult {
+    // Given: an invalid transaction width.
     let model = Model::new(Dma::new((), 1)?);
-    let flag = Arc::new(WakeFlag::default());
-    let mut wait = pin!(model.wait(()));
-    assert!(poll_once(wait.as_mut(), &flag).is_pending());
     let mut bytes = [0xaa; 3];
     // When: hardware rejects the read.
     let result = model.read(u32::try_from(IRQ_ENABLE)?, &mut bytes).await;
-    // Then: transport preserves the result and still finishes its notification boundary.
+    // Then: transport preserves the error and leaves the caller's buffer untouched.
     assert_eq!(result, Err(Error::Width));
     assert_eq!(bytes, [0xaa; 3]);
-    assert!(flag.0.load(Ordering::SeqCst));
-    assert_eq!(poll_once(wait.as_mut(), &flag), Poll::Ready(Ok(())));
     Ok(())
 }
 
@@ -130,15 +99,16 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
             device.write(offset, &1_u32.to_le_bytes())?;
         }
         let mut operation = Operation::new(());
-        assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Progressed
-        ));
-        let outcome = operation.step(&mut hardware, &mut device);
+        let outcome = (0..256).find_map(|_| match operation.step(&mut hardware, &mut device) {
+            Ok(StepOutcome::InProgress) => None,
+            terminal => Some(terminal),
+        });
         drop(device);
         assert!(matches!(
             outcome,
-            StepOutcome::Complete(Err(Error::ChannelFatal(ChannelFatal::CommandRead)))
+            Some(Ok(StepOutcome::Complete(Err(Error::ChannelFatal(
+                ChannelFatal::CommandRead
+            )))))
         ));
     }
     assert!(!model.irq());

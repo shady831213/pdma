@@ -31,8 +31,8 @@ fn arbiter_accepts_no_peer_command_until_selected_command_finishes() -> TestResu
     // When: A reaches its first committed chunk, before response publication.
     for _ in 0..128 {
         assert!(matches!(
-            operation.step(&mut hardware, &mut device),
-            StepOutcome::Progressed
+            operation.step(&mut hardware, &mut device)?,
+            StepOutcome::InProgress
         ));
         if memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
             first_write = true;

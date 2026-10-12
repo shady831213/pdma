@@ -1,65 +1,71 @@
+use crate::{RunError, Stage, StepOutcome, StepResult};
 use std::convert::Infallible;
 
-use crate::{ReadyStage, Stage, StepOutcome};
-
-/// Runs an always-ready update stage after each upstream interaction, including stalls.
-///
-/// Both stages run within the same driving boundary. The update cannot finish, fail,
-/// or suspend; it preserves the upstream outcome and is skipped on exhaustion.
+/// Runs a finite update after each upstream step, including stalls.
+/// A stalled update retains the upstream outcome until its own completion.
 #[derive(Debug)]
 pub struct AfterEach<A, B> {
-    /// Hardware whose operation and outcome drive the composition.
+    /// Hardware driving the invocation result.
     pub upstream: A,
-    /// Free-running hardware refreshed after every upstream interaction.
+    /// Finite maintenance hardware invoked after each upstream step.
     pub update: B,
 }
-
+/// Retained upstream work and any unfinished maintenance invocation.
+#[derive(Debug)]
+pub struct AfterEachState<A, B, O, E> {
+    upstream: Option<A>,
+    update: Option<(B, StepOutcome<O, E>)>,
+}
 impl<A, B> AfterEach<A, B> {
-    /// Connects hardware without starting an operation.
+    /// Connects reusable hardware without starting work.
     pub const fn new(upstream: A, update: B) -> Self {
         Self { upstream, update }
     }
 }
-
 impl<C, A, B> Stage<C> for AfterEach<A, B>
 where
     A: Stage<C>,
-    B: Stage<C, Input = (), Output = Infallible, Error = Infallible, Wait = Infallible>,
+    B: Stage<C, Input = (), Output = (), Error = Infallible>,
 {
     type Input = A::Input;
     type Output = A::Output;
     type Error = A::Error;
-    type Wait = A::Wait;
-    type State = (A::State, B::State);
-
+    type State = Option<AfterEachState<A::State, B::State, A::Output, A::Error>>;
     fn start(input: Self::Input) -> Self::State {
-        (A::start(input), B::start(()))
+        Some(AfterEachState {
+            upstream: Some(A::start(input)),
+            update: None,
+        })
     }
-
     fn step(
         &mut self,
         context: &mut C,
         state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        let outcome = self.upstream.step(context, &mut state.0);
-        if !matches!(outcome, StepOutcome::Exhausted) {
-            match self.update.step(context, &mut state.1) {
-                StepOutcome::Progressed | StepOutcome::Exhausted => {}
-                StepOutcome::Pending(never) | StepOutcome::Complete(Ok(never) | Err(never)) => {
-                    match never {}
-                }
+    ) -> StepResult<Self::Output, Self::Error> {
+        let mut invocation = state.take().ok_or(RunError::Exhausted)?;
+        let (mut update, outcome) = if let Some(saved) = invocation.update.take() {
+            saved
+        } else {
+            let upstream = invocation.upstream.as_mut().ok_or(RunError::Exhausted)?;
+            let outcome = self.upstream.step(context, upstream)?;
+            if matches!(outcome, StepOutcome::Complete(_)) {
+                invocation.upstream = None;
             }
+            (B::start(()), outcome)
+        };
+        match self.update.step(context, &mut update)? {
+            StepOutcome::InProgress => {
+                invocation.update = Some((update, outcome));
+                *state = Some(invocation);
+                Ok(StepOutcome::InProgress)
+            }
+            StepOutcome::Complete(Ok(())) => {
+                if matches!(outcome, StepOutcome::InProgress) {
+                    *state = Some(invocation);
+                }
+                Ok(outcome)
+            }
+            StepOutcome::Complete(Err(never)) => match never {},
         }
-        outcome
-    }
-}
-
-impl<C, A, B> ReadyStage<C> for AfterEach<A, B>
-where
-    A: ReadyStage<C>,
-    B: Stage<C, Input = (), Output = Infallible, Error = Infallible, Wait = Infallible>,
-{
-    fn ready(&self, context: &C) -> bool {
-        self.upstream.ready(context)
     }
 }

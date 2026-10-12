@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures and single-command assembly.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     MemoryRegionError,
@@ -184,9 +184,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
             .step(&mut hardware, &mut operation, &mut device)
             .map_err(|error| format!("{error:?}"))?
         {
-            RunOutcome::Progressed => {}
-            RunOutcome::Pending(()) => return Err("unexpected stall".into()),
-            RunOutcome::Complete(result) => {
+            StepOutcome::InProgress => {}
+            StepOutcome::Complete(result) => {
                 result?;
                 completed = true;
                 break;

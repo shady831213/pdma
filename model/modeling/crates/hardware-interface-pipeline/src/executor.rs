@@ -8,22 +8,7 @@ pub use asynchronous::{AsyncExecutor, AsyncRunError};
 pub use immediate::ImmediateExecutor;
 pub use stepped::StepExecutor;
 
-/// A non-terminal outcome produced by a synchronous executor.
-#[derive(Debug, PartialEq, Eq)]
-#[must_use = "a pipeline run outcome must be handled"]
-pub enum RunOutcome<O, E, W> {
-    /// One stage interaction committed and the pipeline remains runnable.
-    Progressed,
-    /// The pipeline transfers its owned wait state to the caller.
-    Pending(W),
-    /// The pipeline transfers its owned terminal success or error to the caller.
-    Complete(Result<O, E>),
-}
-
-/// The typed result of advancing a pipeline through a synchronous executor.
-pub type RunResult<O, E, W> = Result<RunOutcome<O, E, W>, RunError>;
-
-/// A synchronous executor could not produce a pipeline outcome.
+/// A pipeline driving call could not produce a stage outcome.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[must_use = "a pipeline run error must be handled"]
 pub enum RunError {
@@ -32,3 +17,14 @@ pub enum RunError {
     /// The pipeline was already terminal before the executor call.
     Exhausted,
 }
+
+impl std::fmt::Display for RunError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::BudgetExhausted => "pipeline transition budget exhausted",
+            Self::Exhausted => "pipeline operation already completed",
+        })
+    }
+}
+
+impl std::error::Error for RunError {}

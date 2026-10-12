@@ -1,115 +1,132 @@
-use std::cell::Cell;
-
-use hardware_interface_pipeline::{BranchError, DeliveryPlan, Distribute, Stage, StepOutcome};
-
+use hardware_interface_pipeline::{FanPlan, FanPolicy, RunError, Stage, StepOutcome, StepResult};
 #[derive(Default)]
 pub(super) struct Context {
-    pub deliveries: Vec<(usize, String)>,
+    pub sources: usize,
     pub attempts: Vec<usize>,
-    pub plans: Cell<usize>,
-    pub released: bool,
+    pub deliveries: Vec<(usize, String)>,
+    pub blocked: Vec<usize>,
 }
-
+#[derive(Debug)]
 pub(super) struct Parcel(pub String);
-
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct Receipt(pub usize);
-
-#[derive(Clone, Copy)]
-pub(super) enum Behavior {
-    Complete,
-    Pending,
-    Error,
-    Exhausted,
-}
-
-pub(super) struct Destination {
-    pub id: usize,
-    pub behavior: Behavior,
-}
-
-impl Destination {
-    pub(super) const fn new(id: usize) -> Self {
-        Self {
-            id,
-            behavior: Behavior::Complete,
-        }
-    }
-}
-
-impl Stage<Context> for Destination {
-    type Input = Parcel;
-    type Output = Receipt;
+pub(super) struct Request(pub Vec<(usize, Parcel)>);
+pub(super) struct Source;
+impl Stage<Context> for Source {
+    type Input = Request;
+    type Output = Request;
     type Error = &'static str;
-    type Wait = &'static str;
-    type State = Option<Parcel>;
-
-    fn start(input: Parcel) -> Self::State {
+    type State = Option<Request>;
+    fn start(input: Request) -> Self::State {
         Some(input)
     }
-
     fn step(
         &mut self,
         context: &mut Context,
         state: &mut Self::State,
-    ) -> StepOutcome<Receipt, &'static str, &'static str> {
-        context.attempts.push(self.id);
-        match self.behavior {
-            Behavior::Pending if !context.released => return StepOutcome::Pending("release"),
-            Behavior::Error => return StepOutcome::Complete(Err("destination failed")),
-            Behavior::Exhausted => return StepOutcome::Exhausted,
-            Behavior::Complete | Behavior::Pending => {}
+    ) -> StepResult<Request, Self::Error> {
+        let request = state.take().ok_or(RunError::Exhausted)?;
+        context.sources += 1;
+        Ok(StepOutcome::Complete(Ok(request)))
+    }
+}
+pub(super) enum Behavior {
+    Normal,
+    Progress,
+    Error,
+    Exhausted,
+}
+pub(super) struct Destination {
+    pub id: usize,
+    pub behavior: Behavior,
+}
+impl Destination {
+    pub(super) const fn new(id: usize) -> Self {
+        Self {
+            id,
+            behavior: Behavior::Normal,
         }
-        let Some(Parcel(payload)) = state.take() else {
-            return StepOutcome::Exhausted;
-        };
-        context.deliveries.push((self.id, payload));
-        StepOutcome::Complete(Ok(Receipt(self.id)))
     }
 }
-
-pub(super) struct Dispatch {
-    pub label: String,
-    pub deliveries: Vec<(usize, Parcel)>,
+impl Stage<Context> for Destination {
+    type Input = Parcel;
+    type Output = Receipt;
+    type Error = &'static str;
+    type State = (Option<Parcel>, bool);
+    fn start(input: Parcel) -> Self::State {
+        (Some(input), false)
+    }
+    fn step(
+        &mut self,
+        context: &mut Context,
+        state: &mut Self::State,
+    ) -> StepResult<Receipt, Self::Error> {
+        context.attempts.push(self.id);
+        if context.blocked.contains(&self.id) {
+            return Ok(StepOutcome::InProgress);
+        }
+        match self.behavior {
+            Behavior::Error => {
+                state.0 = None;
+                return Ok(StepOutcome::Complete(Err("destination failed")));
+            }
+            Behavior::Exhausted => {
+                state.0 = None;
+                return Err(RunError::Exhausted);
+            }
+            Behavior::Progress if !state.1 => {
+                state.1 = true;
+                if let Some(parcel) = &mut state.0 {
+                    parcel.0.push('!');
+                }
+                return Ok(StepOutcome::InProgress);
+            }
+            Behavior::Progress | Behavior::Normal => {}
+        }
+        let parcel = state.0.take().ok_or(RunError::Exhausted)?;
+        context.deliveries.push((self.id, parcel.0));
+        Ok(StepOutcome::Complete(Ok(Receipt(self.id))))
+    }
 }
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct Report {
-    pub label: String,
-    pub receipts: Vec<Receipt>,
-}
-
 pub(super) struct Routing;
-
-impl Distribute<Context, Destination> for Routing {
-    type Input = Dispatch;
-    type Output = Report;
-    type State = String;
-
-    fn split(
-        &mut self,
-        context: &Context,
-        input: Dispatch,
-    ) -> DeliveryPlan<String, Parcel, &'static str> {
-        context.plans.set(context.plans.get() + 1);
-        Ok((input.label, input.deliveries))
+impl FanPolicy<Request, Parcel, &'static str> for Routing {
+    fn plan(&mut self, values: &[Option<Request>], _: &[bool]) -> Result<FanPlan, &'static str> {
+        Ok(match values.first() {
+            Some(Some(request)) => FanPlan {
+                inputs: vec![0],
+                outputs: request.0.iter().map(|(i, _)| *i).collect(),
+            },
+            Some(None) | None => FanPlan::default(),
+        })
     }
-
-    fn combine(
-        &mut self,
-        label: String,
-        receipts: Vec<Receipt>,
-    ) -> Result<Report, BranchError<&'static str>> {
-        Ok(Report { label, receipts })
+    fn route(&mut self, mut values: Vec<Request>) -> Result<Vec<Parcel>, &'static str> {
+        Ok(values
+            .pop()
+            .ok_or("missing request")?
+            .0
+            .into_iter()
+            .map(|(_, parcel)| parcel)
+            .collect())
     }
 }
-
-pub(super) fn dispatch(indices: &[usize]) -> Dispatch {
-    Dispatch {
-        label: "delivery".into(),
-        deliveries: indices
+pub(super) fn request(indices: &[usize]) -> Request {
+    Request(
+        indices
             .iter()
-            .map(|&index| (index, Parcel(format!("payload {index}"))))
+            .map(|&i| (i, Parcel(format!("payload {i}"))))
             .collect(),
+    )
+}
+pub(super) fn finish<S: Stage<Context>>(
+    hardware: &mut S,
+    state: &mut S::State,
+    context: &mut Context,
+) -> StepResult<S::Output, S::Error> {
+    for _ in 0..100 {
+        match hardware.step(context, state) {
+            Ok(StepOutcome::InProgress) => {}
+            terminal => return terminal,
+        }
     }
+    Err(RunError::BudgetExhausted)
 }

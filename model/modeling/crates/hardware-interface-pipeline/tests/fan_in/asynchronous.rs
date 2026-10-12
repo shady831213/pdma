@@ -1,137 +1,114 @@
-use super::policy::Policy;
+use super::{
+    policy::Policy,
+    sources::{Accept, Candidate, Context, Job},
+};
+use hardware_interface_pipeline::{
+    AsyncExecutor, AsyncInteractionBackend, FanIn, Operation, StepResult,
+};
 use std::{
     convert::Infallible,
-    future::{Future, pending},
-    sync::{Mutex, MutexGuard, PoisonError},
+    future::Future,
+    sync::{Mutex, PoisonError},
     task::{Context as TaskContext, Waker},
 };
-
-use hardware_interface_pipeline::{
-    Arbitrate, AsyncExecutor, AsyncInteractionBackend, BranchError, Combine, FanIn, Operation,
-    StepOutcome,
-};
-
-use super::sources::{Context, Job, Queue};
-
-#[derive(Default)]
-struct Backend {
-    context: Mutex<Context>,
-    waits: Mutex<Vec<&'static str>>,
-}
-
-struct All;
-
-impl Combine<Context, Queue> for All {
-    type Output = Vec<u8>;
-    type State = ();
-    fn start() {}
-    fn plan(
-        &mut self,
-        _: &Context,
-        sources: &[Queue],
-        (): &mut (),
-    ) -> StepOutcome<Vec<usize>, BranchError<&'static str>, &'static str> {
-        StepOutcome::Complete(Ok((0..sources.len()).collect()))
-    }
-    fn combine(&mut self, (): (), outputs: Vec<u8>) -> Result<Vec<u8>, BranchError<&'static str>> {
-        Ok(outputs)
-    }
-}
-
-#[tokio::test]
-async fn canceled_gather_resumes_with_completed_outputs_and_active_source() {
-    // Given: a complete first branch followed by a branch waiting after acceptance.
-    let executor = AsyncExecutor::new(Backend::default());
-    lock(&executor.backend().context).enqueue(0, [Job::Value(70)]);
-    lock(&executor.backend().context).enqueue(1, [Job::Value(80)]);
-    let mut hardware = FanIn::new(
-        vec![
-            Queue::new(0),
-            Queue {
-                id: 1,
-                delayed: true,
-            },
-        ],
-        All,
-    );
-    let mut operation = Operation::new(());
-    let mut task_context = TaskContext::from_waker(Waker::noop());
-    // When: the driving future is dropped with a partial gather and later resumed.
-    let mut run = Box::pin(executor.run(&mut hardware, &mut operation));
-    let suspended = run.as_mut().poll(&mut task_context);
-    drop(run);
-    lock(&executor.backend().context).released = true;
-    let result = executor.run(&mut hardware, &mut operation).await;
-    // Then: both original outputs survive and neither branch consumes twice.
-    assert!(suspended.is_pending());
-    assert_eq!(result, Ok(vec![70, 80]));
-    assert_eq!(lock(&executor.backend().context).consumed, [0, 1]);
-    assert_eq!(*lock(&executor.backend().waits), ["source release"]);
-}
-
-fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
-    value.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-impl AsyncInteractionBackend<Context, &'static str> for Backend {
+struct Backend(Mutex<Context>);
+impl AsyncInteractionBackend<Context> for Backend {
     type Error = Infallible;
-
+    async fn yield_now(&self) {
+        tokio::task::yield_now().await;
+    }
     async fn interact<O: Send, E: Send, F>(
         &self,
         interaction: F,
-    ) -> Result<StepOutcome<O, E, &'static str>, Infallible>
+    ) -> Result<StepResult<O, E>, Infallible>
     where
-        F: FnOnce(&mut Context) -> StepOutcome<O, E, &'static str> + Send,
+        F: FnOnce(&mut Context) -> StepResult<O, E> + Send,
     {
-        Ok(interaction(&mut lock(&self.context)))
-    }
-
-    async fn wait(&self, wait: &'static str) -> Result<(), Infallible> {
-        lock(&self.waits).push(wait);
-        pending().await
+        Ok(interaction(
+            &mut self.0.lock().unwrap_or_else(PoisonError::into_inner),
+        ))
     }
 }
-
 #[tokio::test]
-async fn executor_drop_and_resume_retains_idle_search_and_active_grant() {
-    // Given: a real async executor with an empty source that suspends after accepting input.
-    let executor = AsyncExecutor::new(Backend::default());
-    let mut hardware = Arbitrate::new(
-        vec![
-            Queue {
-                id: 0,
-                delayed: true,
-            },
-            Queue::new(1),
-        ],
-        Policy::round_robin("queue changed"),
+async fn canceled_gather_resumes_completed_candidates_and_active_output() {
+    // Given: one accepted output is stalled after the input sweep.
+    let mut hardware_context = Context::with_jobs(&[0, 1]);
+    hardware_context.blocked.push(0);
+    let executor = AsyncExecutor::new(Backend(Mutex::new(hardware_context)));
+    let mut hardware = FanIn::new(
+        (0..2).map(Candidate).collect(),
+        Policy::Fixed,
+        Accept::Normal,
     );
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(vec![(); 2]);
     let mut task_context = TaskContext::from_waker(Waker::noop());
-
-    // When: driving futures are dropped at idle and active waits, then resumed after release.
-    let mut idle_run = Box::pin(executor.run(&mut hardware, &mut operation));
-    let idle_poll = idle_run.as_mut().poll(&mut task_context);
-    drop(idle_run);
-    lock(&executor.backend().context).enqueue(0, [Job::Value(70)]);
-    lock(&executor.backend().context).enqueue(1, [Job::Value(80)]);
-    let mut active_run = Box::pin(executor.run(&mut hardware, &mut operation));
-    let active_poll = active_run.as_mut().poll(&mut task_context);
-    drop(active_run);
-    lock(&executor.backend().context).released = true;
+    // When: cancellation follows acceptance and the caller later resumes.
+    let mut future = Box::pin(executor.run(&mut hardware, &mut operation));
+    for _ in 0..6 {
+        assert!(future.as_mut().poll(&mut task_context).is_pending());
+    }
+    drop(future);
+    executor
+        .backend()
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .blocked
+        .clear();
     let result = executor.run(&mut hardware, &mut operation).await;
-
-    // Then: backend waits receive both keys and the accepted source completes exactly once.
-    assert!(idle_poll.is_pending());
-    assert!(active_poll.is_pending());
+    // Then: no source or output acceptance is replayed.
     assert_eq!(
-        *lock(&executor.backend().waits),
-        ["queue changed", "source release"]
+        result,
+        Ok(vec![(
+            0,
+            Some(Job {
+                channel: 0,
+                value: 7
+            })
+        )])
     );
-    assert_eq!(result, Ok(70));
-    assert_eq!(lock(&executor.backend().context).consumed, [0]);
+    let context = executor
+        .backend()
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    assert_eq!(context.observed, [0, 1]);
+    assert_eq!(context.accepted, [0]);
+    drop(context);
+}
+#[tokio::test]
+async fn executor_drop_before_planning_retains_collected_values() {
+    // Given: cancellation immediately follows completed input collection.
+    let executor = AsyncExecutor::new(Backend(Mutex::new(Context::with_jobs(&[1]))));
+    let mut hardware = FanIn::new(
+        (0..2).map(Candidate).collect(),
+        Policy::Fixed,
+        Accept::Normal,
+    );
+    let mut operation = Operation::new(vec![(); 2]);
+    let mut task_context = TaskContext::from_waker(Waker::noop());
+    // When: a new future resumes the same invocation.
+    let mut future = Box::pin(executor.run(&mut hardware, &mut operation));
+    assert!(future.as_mut().poll(&mut task_context).is_pending());
+    drop(future);
+    let result = executor.run(&mut hardware, &mut operation).await;
+    // Then: already completed candidate values are neither recollected nor lost.
     assert_eq!(
-        *lock(&executor.backend().context).probes.borrow(),
-        [0, 1, 0, 0]
+        result,
+        Ok(vec![(
+            0,
+            Some(Job {
+                channel: 1,
+                value: 7
+            })
+        )])
     );
+    let context = executor
+        .backend()
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    assert_eq!(context.observed, [0, 1]);
+    assert_eq!(context.accepted, [1]);
+    drop(context);
 }

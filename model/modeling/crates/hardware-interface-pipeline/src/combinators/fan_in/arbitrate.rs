@@ -1,121 +1,32 @@
-use crate::{BranchError, ReadyStage, Stage, StepOutcome};
-
-use super::{Combine, FanIn};
-
-/// Application policy selecting one ready source per operation.
-pub trait Arbitration<C, S: ReadyStage<C>> {
-    /// Selection state retained independently of the policy hardware.
-    type State;
-    /// Starts a fresh selection without accessing hardware.
-    fn start() -> Self::State;
-    /// Selects a source without consuming its input.
-    fn select_index(
-        &mut self,
-        context: &C,
-        sources: &[S],
-        state: &mut Self::State,
-    ) -> StepOutcome<usize, S::Error, S::Wait>;
+use crate::{FanPlan, FanPolicy};
+/// Selects one completed value, without observing or driving source stages.
+pub trait Arbitration<V, E> {
+    /// Returns the selected buffered value, or no selection for this sweep.
+    fn select(&mut self, values: &[Option<V>]) -> Result<Option<usize>, E>;
 }
-
-/// Adapts an application arbitration policy to singleton fan-in.
+/// Singleton-output value-selection policy for a fan.
 #[derive(Debug)]
-pub struct Select<A>(A);
-
-impl<C, S, A> Combine<C, S> for Select<A>
-where
-    S: ReadyStage<C>,
-    A: Arbitration<C, S>,
-{
-    type Output = S::Output;
-    type State = A::State;
-    fn start() -> Self::State {
-        A::start()
-    }
-
-    fn plan(
-        &mut self,
-        context: &C,
-        sources: &[S],
-        state: &mut Self::State,
-    ) -> StepOutcome<Vec<usize>, BranchError<S::Error>, S::Wait> {
-        match self.0.select_index(context, sources, state) {
-            StepOutcome::Progressed => StepOutcome::Progressed,
-            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
-            StepOutcome::Complete(result) => StepOutcome::Complete(
-                result
-                    .map(|index| vec![index])
-                    .map_err(BranchError::Application),
-            ),
-            StepOutcome::Exhausted => StepOutcome::Exhausted,
-        }
-    }
-
-    fn combine(
-        &mut self,
-        _: Self::State,
-        mut outputs: Vec<S::Output>,
-    ) -> Result<S::Output, BranchError<S::Error>> {
-        let actual = outputs.len();
-        if actual != 1 {
-            return Err(BranchError::OutputCount {
-                expected: 1,
-                actual,
-            });
-        }
-        outputs.pop().ok_or(BranchError::OutputCount {
-            expected: 1,
-            actual,
-        })
+pub struct Arbitrate<A>(A);
+impl<A> Arbitrate<A> {
+    /// Adapts an application value-selection policy.
+    pub const fn new(policy: A) -> Self {
+        Self(policy)
     }
 }
-
-/// Singleton specialization of the shared fan-in lifecycle.
-#[derive(Debug)]
-pub struct Arbitrate<S, A>(FanIn<S, Select<A>>);
-
-impl<S, A> Arbitrate<S, A> {
-    /// Owns the source population and application selection policy.
-    pub const fn new(sources: Vec<S>, policy: A) -> Self {
-        Self(FanIn::new(sources, Select(policy)))
-    }
-}
-
-impl<C, S, A> Stage<C> for Arbitrate<S, A>
-where
-    S: ReadyStage<C>,
-    A: Arbitration<C, S>,
-{
-    type Input = ();
-    type Output = S::Output;
-    type Error = BranchError<S::Error>;
-    type Wait = S::Wait;
-    type State = <FanIn<S, Select<A>> as Stage<C>>::State;
-    fn start((): ()) -> Self::State {
-        FanIn::<S, Select<A>>::start(())
-    }
-    fn step(
-        &mut self,
-        context: &mut C,
-        state: &mut Self::State,
-    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
-        if self
+impl<V, E, A: Arbitration<V, E>> FanPolicy<V, V, E> for Arbitrate<A> {
+    fn plan(&mut self, values: &[Option<V>], available: &[bool]) -> Result<FanPlan, E> {
+        if available.first() != Some(&true) {
+            return Ok(FanPlan::default());
+        }
+        Ok(self
             .0
-            .unstarted_source(state)
-            .is_some_and(|source| !source.ready(context))
-        {
-            *state = FanIn::<S, Select<A>>::start(());
-            return StepOutcome::Progressed;
-        }
-        self.0.step(context, state)
+            .select(values)?
+            .map_or_else(FanPlan::default, |index| FanPlan {
+                inputs: vec![index],
+                outputs: vec![0],
+            }))
     }
-}
-
-impl<C, S, A> ReadyStage<C> for Arbitrate<S, A>
-where
-    S: ReadyStage<C>,
-    A: Arbitration<C, S>,
-{
-    fn ready(&self, context: &C) -> bool {
-        self.0.fan.ports.iter().any(|source| source.ready(context))
+    fn route(&mut self, values: Vec<V>) -> Result<Vec<V>, E> {
+        Ok(values)
     }
 }

@@ -1,5 +1,5 @@
 use crate::harness::runtime::memory::RoutedMemory;
-use hardware_interface_pipeline::{Operation, RunOutcome, StepExecutor};
+use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -120,7 +120,7 @@ pub(super) fn advance(
     operation: &mut Operation<CommandLoop, Hardware>,
 ) -> TestResult {
     for _ in 0..256 {
-        if let RunOutcome::Complete(result) = StepExecutor::new()
+        if let StepOutcome::Complete(result) = StepExecutor::new()
             .step(pipeline, operation, dma)
             .map_err(|error| format!("{error:?}"))?
         {

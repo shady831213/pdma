@@ -1,4 +1,4 @@
-//! Readiness-based fan-in contracts.
+//! Completed-value fan-in and queue acceptance contracts.
 
 mod fan_in {
     mod asynchronous;

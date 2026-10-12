@@ -58,10 +58,10 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
     fn step(
         &mut self,
         device: &mut Dma<M, SB>,
-        (): (),
-    ) -> StepOutcome<(), Self::Output, Error, ()> {
+        (): &mut (),
+    ) -> StepOutcome<Self::Output, Error, ()> {
         if !self.ready(device) {
-            return StepOutcome::Pending((), ());
+            return StepOutcome::Pending(());
         }
         let outcome = {
             let selected = match device.channel_context(self.channel) {
@@ -74,7 +74,7 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
                     generation: selected.channel.generation,
                     value,
                 })),
-                Ok(None) => StepOutcome::Pending((), ()),
+                Ok(None) => StepOutcome::Pending(()),
                 Err(fatal) => {
                     selected.channel.latch(fatal);
                     StepOutcome::Complete(Err(Error::ChannelFatal(fatal)))

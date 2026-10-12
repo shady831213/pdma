@@ -1,6 +1,6 @@
 //! Register-only DMA reset without software ring ownership.
 
-use hardware_interface_pipeline::{Operation, RunOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory, SharedMemoryAccess, SoftwareCpu};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{Dma, ResetControl};
@@ -129,7 +129,7 @@ impl Bus {
                 &mut ResetControl,
                 &mut *self.0.lock().map_err(|_| "poisoned device lock")?
             ),
-            Ok(RunOutcome::Progressed)
+            StepOutcome::Progressed
         ));
         Ok(())
     }

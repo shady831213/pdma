@@ -2,33 +2,28 @@
 
 use std::convert::Infallible;
 
-use hardware_interface_pipeline::{AfterEach, Operation, RunOutcome, Stage, StepOutcome};
+use hardware_interface_pipeline::{AfterEach, Operation, Stage, StepOutcome};
 
 struct Upstream;
 struct Update;
 
 impl Stage<Vec<u8>> for Upstream {
-    type Input = RunOutcome<u8, u8, u8>;
+    type Input = StepOutcome<u8, u8, u8>;
     type Output = u8;
     type Error = u8;
     type Wait = u8;
-    type State = Self::Input;
+    type State = Option<Self::Input>;
 
     fn start(input: Self::Input) -> Self::State {
-        input
+        Some(input)
     }
 
-    fn step(
-        &mut self,
-        context: &mut Vec<u8>,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, u8, u8, u8> {
+    fn step(&mut self, context: &mut Vec<u8>, state: &mut Self::State) -> Self::Input {
+        let Some(outcome) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
         context.push(1);
-        match state {
-            RunOutcome::Progressed => StepOutcome::Progressed(RunOutcome::Progressed),
-            RunOutcome::Pending(wait) => StepOutcome::Pending(RunOutcome::Pending(wait), wait),
-            RunOutcome::Complete(result) => StepOutcome::Complete(result),
-        }
+        outcome
     }
 }
 
@@ -44,10 +39,10 @@ impl Stage<Vec<u8>> for Update {
     fn step(
         &mut self,
         context: &mut Vec<u8>,
-        (): Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        (): &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         context.push(2);
-        StepOutcome::Progressed(())
+        StepOutcome::Progressed
     }
 }
 
@@ -55,15 +50,12 @@ impl Stage<Vec<u8>> for Update {
 fn update_runs_after_progress_pending_success_and_error_without_replacing_the_outcome() {
     // Given: a command stage followed by an always-ready hardware update.
     for (outcome, expected) in [
-        (RunOutcome::Progressed, Ok(RunOutcome::Progressed)),
-        (RunOutcome::Pending(7), Ok(RunOutcome::Pending(7))),
+        (StepOutcome::Progressed, StepOutcome::Progressed),
+        (StepOutcome::Pending(7), StepOutcome::Pending(7)),
+        (StepOutcome::Complete(Ok(11)), StepOutcome::Complete(Ok(11))),
         (
-            RunOutcome::Complete(Ok(11)),
-            Ok(RunOutcome::Complete(Ok(11))),
-        ),
-        (
-            RunOutcome::Complete(Err(13)),
-            Ok(RunOutcome::Complete(Err(13))),
+            StepOutcome::Complete(Err(13)),
+            StepOutcome::Complete(Err(13)),
         ),
     ] {
         let mut hardware = AfterEach::new(Upstream, Update);
@@ -76,12 +68,9 @@ fn update_runs_after_progress_pending_success_and_error_without_replacing_the_ou
         // Then: the update follows the upstream effect, preserving its exact result.
         assert_eq!(context, [1, 2]);
         assert_eq!(result, expected);
-        if matches!(result, Ok(RunOutcome::Progressed | RunOutcome::Pending(_))) {
-            operation.reset();
-        }
         assert_eq!(
             operation.step(&mut hardware, &mut context),
-            Err(hardware_interface_pipeline::AlreadyComplete)
+            StepOutcome::Exhausted
         );
         assert_eq!(context, [1, 2]);
     }

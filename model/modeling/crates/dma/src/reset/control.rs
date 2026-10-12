@@ -19,8 +19,8 @@ impl<M, SB> Stage<Dma<M, SB>> for ResetControl {
     fn step(
         &mut self,
         device: &mut Dma<M, SB>,
-        (): (),
-    ) -> StepOutcome<(), Infallible, Infallible, Infallible> {
+        (): &mut (),
+    ) -> StepOutcome<Infallible, Infallible, Infallible> {
         if device.resetting() {
             if device.active.is_none()
                 && device
@@ -45,6 +45,6 @@ impl<M, SB> Stage<Dma<M, SB>> for ResetControl {
                 }
             }
         }
-        StepOutcome::Progressed(())
+        StepOutcome::Progressed
     }
 }

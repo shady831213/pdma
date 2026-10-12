@@ -5,7 +5,9 @@ use std::{
     task::{Context as TaskContext, Waker},
 };
 
-use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, FanOut, Operation};
+use hardware_interface_pipeline::{
+    AsyncExecutor, AsyncInteractionBackend, FanOut, Operation, StepOutcome,
+};
 
 use super::fixtures::{Behavior, Context, Destination, Receipt, Report, Routing, dispatch};
 
@@ -22,9 +24,12 @@ fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
 impl AsyncInteractionBackend<Context, &'static str> for Backend {
     type Error = Infallible;
 
-    async fn interact<R: Send, F>(&self, interaction: F) -> Result<R, Infallible>
+    async fn interact<O: Send, E: Send, F>(
+        &self,
+        interaction: F,
+    ) -> Result<StepOutcome<O, E, &'static str>, Infallible>
     where
-        F: FnOnce(&mut Context) -> R + Send,
+        F: FnOnce(&mut Context) -> StepOutcome<O, E, &'static str> + Send,
     {
         Ok(interaction(&mut lock(&self.context)))
     }

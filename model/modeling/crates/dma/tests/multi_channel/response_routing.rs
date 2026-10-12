@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, RunOutcome, Then};
+use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
 use pdma_model_dma::{Dma, Error, Publish, Resettable};
@@ -29,11 +29,8 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         let mut operation = Operation::new(());
         let response = (0..128)
             .find_map(|_| match operation.step(&mut execution, &mut device) {
-                Ok(RunOutcome::Complete(result)) => {
-                    Some(result.map_err(Box::<dyn std::error::Error>::from))
-                }
-                Err(error) => Some(Err(error.into())),
-                Ok(RunOutcome::Progressed | RunOutcome::Pending(())) => None,
+                StepOutcome::Complete(result) => Some(result),
+                _ => None,
             })
             .ok_or("execution did not finish")??;
         assert_eq!(response.channel(), ChannelId::new(0));
@@ -48,9 +45,9 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
             )?;
             let suspended = (0..8)
                 .map(|_| publication.step(&mut destinations, &mut device))
-                .find(|outcome| !matches!(outcome, Ok(RunOutcome::Progressed)))
-                .ok_or("publication never suspended")??;
-            assert!(matches!(suspended, RunOutcome::Pending(())));
+                .find(|outcome| !matches!(outcome, StepOutcome::Progressed))
+                .ok_or("publication never suspended")?;
+            assert!(matches!(suspended, StepOutcome::Pending(())));
         }
         // When: software requests reset while the old publication remains retained.
         device.write(
@@ -59,10 +56,10 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         )?;
         let outcome = (0..8)
             .map(|_| publication.step(&mut destinations, &mut device))
-            .find(|outcome| !matches!(outcome, Ok(RunOutcome::Progressed)))
-            .ok_or("publication never terminated")??;
+            .find(|outcome| !matches!(outcome, StepOutcome::Progressed))
+            .ok_or("publication never terminated")?;
         // Then: generation checking rejects the retained result without advancing either response ring.
-        assert!(matches!(outcome, RunOutcome::Complete(Err(Error::Reset))));
+        assert!(matches!(outcome, StepOutcome::Complete(Err(Error::Reset))));
         assert_eq!(
             word(
                 &mut device,
@@ -94,18 +91,18 @@ fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     let mut operation = Operation::new(());
     let response = (0..128)
         .find_map(|_| match operation.step(&mut execution, &mut device) {
-            Ok(RunOutcome::Complete(result)) => {
-                Some(result.map_err(Box::<dyn std::error::Error>::from))
-            }
-            Err(error) => Some(Err(error.into())),
-            Ok(RunOutcome::Progressed | RunOutcome::Pending(())) => None,
+            StepOutcome::Complete(result) => Some(result),
+            _ => None,
         })
         .ok_or("execution did not finish")??;
     let mut port = Resettable::for_channel(ChannelId::new(1), Publish);
     // When: an incorrectly wired graph sends the response to the wrong port.
-    let outcome = Operation::new(response).step(&mut port, &mut device)?;
+    let outcome = Operation::new(response).step(&mut port, &mut device);
     // Then: routing misuse cannot publish into either channel's ring.
-    assert!(matches!(outcome, RunOutcome::Complete(Err(Error::Routing))));
+    assert!(matches!(
+        outcome,
+        StepOutcome::Complete(Err(Error::Routing))
+    ));
     for index in 0..2 {
         assert_eq!(
             word(

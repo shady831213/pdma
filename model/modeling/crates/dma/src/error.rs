@@ -87,8 +87,7 @@ impl From<hardware_interface_pipeline::BranchError<Self>> for Error {
         use hardware_interface_pipeline::BranchError;
         match error {
             BranchError::Application(error) => error,
-            BranchError::EmptySources
-            | BranchError::InvalidIndex { .. }
+            BranchError::InvalidIndex { .. }
             | BranchError::DuplicateIndex { .. }
             | BranchError::OutputCount { .. } => Self::Routing,
         }

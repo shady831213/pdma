@@ -20,15 +20,15 @@ impl Stage<Vec<u32>> for Visit {
     fn step(
         &mut self,
         context: &mut Vec<u32>,
-        mut state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         self.calls += 1;
         if state.1 {
             StepOutcome::Complete(Ok(state.0))
         } else {
             context.push(state.0);
             state.1 = true;
-            StepOutcome::Pending(state, format!("accepted {}", state.0))
+            StepOutcome::Pending(format!("accepted {}", state.0))
         }
     }
 }
@@ -36,7 +36,7 @@ impl Stage<Vec<u32>> for Visit {
 pub(super) enum Finish {
     At(u32),
     Fail,
-    Missing,
+    Exhaust,
 }
 
 pub(super) struct Next {
@@ -64,18 +64,18 @@ impl Stage<Vec<u32>> for Next {
     fn step(
         &mut self,
         _: &mut Vec<u32>,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         self.calls += 1;
         match self.finish {
-            Finish::At(limit) if state < limit => {
-                StepOutcome::Complete(Ok(ControlFlow::Continue(state + 1)))
+            Finish::At(limit) if *state < limit => {
+                StepOutcome::Complete(Ok(ControlFlow::Continue(*state + 1)))
             }
             Finish::At(_) => {
                 StepOutcome::Complete(Ok(ControlFlow::Break(format!("finished {state}"))))
             }
             Finish::Fail => StepOutcome::Complete(Err("child failure".to_owned())),
-            Finish::Missing => StepOutcome::Complete(Err("missing child work".to_owned())),
+            Finish::Exhaust => StepOutcome::Exhausted,
         }
     }
 }

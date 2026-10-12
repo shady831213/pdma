@@ -185,10 +185,9 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   related registers in one child block before repeating it.
   One shared execution pipeline processes commands selected by round-robin arbitration,
   with bounded per-channel retained operations for payload-fault suspension.
-  CommandLoop composes Arbitrate (the singleton specialization of FanIn) over
-  channel-identity ports, with the RoundRobin policy owned by dma. Acquisition
-  rechecks eligibility, then fetches or restores that channel's retained operation.
-  Selection ports must not own the engine or drive command execution.
+  CommandArbiter uses Arbitrate (the singleton specialization of FanIn) over
+  channel-bound execution ports, with the RoundRobin policy owned by dma. A grant
+  either fetches a new command or restores that channel's retained operation.
   Ready checks do not consume commands; eligibility belongs to DMA, not the
   generic combinators. Fetch remains the new-command acceptance stage.
   Route tagged responses through Dispatch (the singleton FanOut specialization) to
@@ -205,27 +204,21 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   requests cleanup; read one means busy; only hardware clears zero after affected accepted
   work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
-  Use `CommandLoop<Pipeline>` for the command loop. Track accepted
+  Use `AfterEach<CommandArbiter<Pipeline>, ResetControl>` for the command loop. Track accepted
   channel/generation ownership, including parked references, until terminal release;
   generation invalidation alone
   is not completion. `RunCommand` owns executing-state release at complete pipeline
-  termination. A payload fault retains the leaf's Transfer; RunCommand ends the turn
-  with CommandTurn::Suspended carrying the exact child Operation, not task retirement.
-  CommandLoop operation state owns at most one parked continuation per channel;
-  its borrowed frame exposes DMA plus the bank, never an engine hidden in context.
-  The graph owns the one shared engine. Channel.parked retains accepted references.
-  Acquisition restores that Operation on resume without refetching,
+  termination. A payload fault retains the leaf's Transfer and returns Pending.
+  CommandArbiter retains at most one exact composed Operation per channel, preserving
+  scratch and custom child-stage state; Channel.parked retains accepted references.
+  The granted execution port restores that Operation on resume without refetching,
   restarting CheckRanges or repeating completed transforms. Arbitration retains
   a healthy command's grant through termination and yields it on payload fault.
-  Independent lifecycle cleanup discards parked reset/Abort targets before shared
-  active work, including a disabled peer. Preserve active ownership across the
-  suspension-output handoff until the continuation is stored or disposed.
-  Parking is not whole-command retirement.
+  CommandArbiter cleans reset/Abort targets before stepping shared active work,
+  including a disabled peer. Parking is not whole-command retirement.
   Response publication and `Resettable` binding must not retire the whole command.
   Custom sustained command assemblies pass their downstream transform to
-  `Dma::command_loop_with`, preserving RunCommand command-retirement ownership and
-  including ResetControl. Then owns handoffs, OnContinue skips failed acquisition,
-  and Repeat owns turn iteration; do not restore a combined CommandArbiter wrapper.
+  `Dma::arbitrate`, preserving RunCommand terminal ownership, and drive `ResetControl`.
   `RunCommand<S>` constrains the child stage's associated types, not its concrete composition;
   reuse `Operation` to discard terminal state before releasing command ownership.
   Guard command, SG-list, payload and response accesses before old work can interact again.
@@ -241,16 +234,6 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   Fixed copy scratch size is an implementation detail, not a command-size limit.
 - Reuse FanIn/Arbitrate/FanOut/Dispatch/Then/Repeat/AfterEach for execution composition. Runtime supplies memory and
   driving only; it must not gain PDMA traversal, validation or copy policy.
-- Stage::step consumes its live State and returns it only in Progressed(State) or
-  Pending(State, Wait). Complete transfers output/error without a terminal state.
-  Operation owns the live-state slot and reports AlreadyComplete on repeated driving;
-  from_state wraps an explicitly returned continuation without repeating Stage::start.
-  do not restore Exhausted, terminal placeholders, or mutable-state compatibility layers.
-  Move and restore state within a synchronous backend interaction, never before an await.
-  Wait keys are not continuations or hardware-cancellation authority. Then forwards
-  typed output; OnContinue explicitly short-circuits ControlFlow, and Repeat interprets
-  only its own loop layer. Empty arbitration is a structural EmptySources error;
-  empty general fan plans still reduce successfully.
 - Queue state and its registers belong to the hardware object; actions compose through
   existing stages. Runtime assembly selects memory backend and execution policy.
 - The shared `Ring`, `RingPointers` and `RingError` definitions live in `contract`;

@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{FanOut, Operation, RunOutcome};
+use hardware_interface_pipeline::{FanOut, Operation, StepOutcome};
 
 use super::{
     fixtures::{Context, Destination, Parcel, Receipt, Report, Routing, dispatch},
@@ -15,22 +15,22 @@ fn dispatches_only_selected_destination_and_transforms_its_output() {
     // When: splitting, delivery, and reduction each advance once.
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     assert!(context.attempts.is_empty());
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let result = operation.step(&mut stage, &mut context);
 
     // Then: only that destination receives input and the application transforms its receipt.
     assert_eq!(
         result,
-        Ok(RunOutcome::Complete(Ok(Report {
+        StepOutcome::Complete(Ok(Report {
             label: "delivery".into(),
             receipts: vec![Receipt(1)],
-        })))
+        }))
     );
     assert_eq!(context.deliveries, [(1, "payload 1".into())]);
     assert_eq!(context.attempts, [1]);
@@ -47,7 +47,7 @@ fn dispatches_subset_in_application_order_one_destination_per_frame() {
     // When: each frame advances one destination.
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let first = operation.step(&mut stage, &mut context);
     let first_deliveries = context.deliveries.clone();
@@ -55,16 +55,16 @@ fn dispatches_subset_in_application_order_one_destination_per_frame() {
     let result = operation.step(&mut stage, &mut context);
 
     // Then: the order and output receipts follow the plan, excluding unselected ports.
-    assert_eq!(first, Ok(RunOutcome::Progressed));
-    assert_eq!(second, Ok(RunOutcome::Progressed));
+    assert_eq!(first, StepOutcome::Progressed);
+    assert_eq!(second, StepOutcome::Progressed);
     assert_eq!(first_deliveries, [(3, "payload 3".into())]);
     assert_eq!(context.attempts, [3, 1]);
     assert_eq!(
         result,
-        Ok(RunOutcome::Complete(Ok(Report {
+        StepOutcome::Complete(Ok(Report {
             label: "delivery".into(),
             receipts: vec![Receipt(3), Receipt(1)],
-        })))
+        }))
     );
 }
 
@@ -78,16 +78,16 @@ fn splits_non_clone_owned_input_and_combines_into_unrelated_output() {
     // When: the two split parts run.
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let first = operation.step(&mut stage, &mut context);
     let second = operation.step(&mut stage, &mut context);
     let result = operation.step(&mut stage, &mut context);
 
     // Then: different payloads reach each destination and receipts become a scalar.
-    assert_eq!(first, Ok(RunOutcome::Progressed));
-    assert_eq!(second, Ok(RunOutcome::Progressed));
-    assert_eq!(result, Ok(RunOutcome::Complete(Ok(14))));
+    assert_eq!(first, StepOutcome::Progressed);
+    assert_eq!(second, StepOutcome::Progressed);
+    assert_eq!(result, StepOutcome::Complete(Ok(14)));
     assert_eq!(context.deliveries, [(1, "abc".into()), (0, "defg".into())]);
 }
 
@@ -107,15 +107,11 @@ fn broadcasts_using_application_defined_cloning() {
     assert_eq!(
         outcomes,
         [
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Complete(Ok(vec![
-                Receipt(0),
-                Receipt(1),
-                Receipt(2)
-            ])))
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Complete(Ok(vec![Receipt(0), Receipt(1), Receipt(2)]))
         ]
     );
     assert_eq!(
@@ -138,21 +134,21 @@ fn empty_plan_combines_without_touching_destinations() {
     // When: the empty fan-out is advanced.
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     assert_eq!(
         operation.step(&mut stage, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let result = operation.step(&mut stage, &mut context);
 
     // Then: the application's empty receipt result retains its metadata.
     assert_eq!(
         result,
-        Ok(RunOutcome::Complete(Ok(Report {
+        StepOutcome::Complete(Ok(Report {
             label: "delivery".into(),
             receipts: vec![],
-        })))
+        }))
     );
     assert!(context.attempts.is_empty());
     assert_eq!(context.plans.get(), 1);

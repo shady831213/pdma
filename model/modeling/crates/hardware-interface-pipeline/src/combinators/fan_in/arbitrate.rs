@@ -1,9 +1,6 @@
 use crate::{BranchError, ReadyStage, Stage, StepOutcome};
 
-use super::{Combine, CombineOutcome, FanIn};
-
-/// A selection continuation or completed metadata and selected source index.
-pub type ArbitrationOutcome<T, E, W> = StepOutcome<T, (T, usize), E, W>;
+use super::{Combine, FanIn};
 
 /// Application policy selecting one ready source per operation.
 pub trait Arbitration<C, S: ReadyStage<C>> {
@@ -16,8 +13,8 @@ pub trait Arbitration<C, S: ReadyStage<C>> {
         &mut self,
         context: &C,
         sources: &[S],
-        state: Self::State,
-    ) -> ArbitrationOutcome<Self::State, S::Error, S::Wait>;
+        state: &mut Self::State,
+    ) -> StepOutcome<usize, S::Error, S::Wait>;
 }
 
 /// Adapts an application arbitration policy to singleton fan-in.
@@ -39,19 +36,17 @@ where
         &mut self,
         context: &C,
         sources: &[S],
-        state: Self::State,
-    ) -> CombineOutcome<Self::State, S::Error, S::Wait> {
-        if sources.is_empty() {
-            return StepOutcome::Complete(Err(BranchError::EmptySources));
-        }
+        state: &mut Self::State,
+    ) -> StepOutcome<Vec<usize>, BranchError<S::Error>, S::Wait> {
         match self.0.select_index(context, sources, state) {
-            StepOutcome::Progressed(state) => StepOutcome::Progressed(state),
-            StepOutcome::Pending(state, wait) => StepOutcome::Pending(state, wait),
+            StepOutcome::Progressed => StepOutcome::Progressed,
+            StepOutcome::Pending(wait) => StepOutcome::Pending(wait),
             StepOutcome::Complete(result) => StepOutcome::Complete(
                 result
-                    .map(|(state, index)| (state, vec![index]))
+                    .map(|index| vec![index])
                     .map_err(BranchError::Application),
             ),
+            StepOutcome::Exhausted => StepOutcome::Exhausted,
         }
     }
 
@@ -101,14 +96,15 @@ where
     fn step(
         &mut self,
         context: &mut C,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         if self
             .0
-            .unstarted_source(&state)
+            .unstarted_source(state)
             .is_some_and(|source| !source.ready(context))
         {
-            return StepOutcome::Progressed(FanIn::<S, Select<A>>::start(()));
+            *state = FanIn::<S, Select<A>>::start(());
+            return StepOutcome::Progressed;
         }
         self.0.step(context, state)
     }

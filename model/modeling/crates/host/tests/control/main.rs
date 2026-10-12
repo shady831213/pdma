@@ -1,6 +1,6 @@
 //! Host interrupt controls and explicit reset recovery.
 
-use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Operation, RunOutcome};
+use hardware_interface_pipeline::{AsyncExecutor, AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
@@ -30,11 +30,11 @@ async fn with_idle_hardware<F: std::future::Future>(
         tokio::select! {
             result = &mut software => return result,
             result = model.interact(|device| {
-                assert!(matches!(operation.step(&mut control, device), Ok(RunOutcome::Progressed)));
-                RunOutcome::<(), std::convert::Infallible, ()>::Progressed
+                assert!(matches!(operation.step(&mut control, device), StepOutcome::Progressed));
+                StepOutcome::<(), std::convert::Infallible, ()>::Progressed
             }) => {
                 let Ok(outcome) = result;
-                assert!(matches!(outcome, RunOutcome::Progressed));
+                assert!(matches!(outcome, StepOutcome::Progressed));
             }
         }
     }
@@ -209,10 +209,10 @@ async fn dma_fatal_is_visible_after_unmask_without_replaying_notification()
     let outcome = model
         .interact(|device| {
             device.signal_fatal();
-            RunOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
+            StepOutcome::<(), std::convert::Infallible, ()>::Complete(Ok(()))
         })
         .await?;
-    assert!(matches!(outcome, RunOutcome::Complete(Ok(()))));
+    assert!(matches!(outcome, StepOutcome::Complete(Ok(()))));
     cpu.run_main(channel.set_dma_irq_enabled(true)).await?;
     // Then: the sticky fault is visible without replay and device reset permits recovery.
     assert!(!model.irq());

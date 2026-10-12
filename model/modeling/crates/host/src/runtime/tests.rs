@@ -1,6 +1,6 @@
 use super::Model;
 mod notifications;
-use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, RunOutcome};
+use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{RegisterAccess, SharedMemory};
 use pdma_model_contract::dma::{ChannelRegisters, CommandRegisters, ResponseRegisters};
 use pdma_model_dma::{ChannelFatal, Dma, Error};
@@ -132,15 +132,13 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         let mut operation = Operation::new(());
         assert!(matches!(
             operation.step(&mut hardware, &mut device),
-            Ok(RunOutcome::Progressed)
+            StepOutcome::Progressed
         ));
         let outcome = operation.step(&mut hardware, &mut device);
         drop(device);
         assert!(matches!(
             outcome,
-            Ok(RunOutcome::Complete(Err(Error::ChannelFatal(
-                ChannelFatal::CommandRead
-            ))))
+            StepOutcome::Complete(Err(Error::ChannelFatal(ChannelFatal::CommandRead)))
         ));
     }
     assert!(!model.irq());

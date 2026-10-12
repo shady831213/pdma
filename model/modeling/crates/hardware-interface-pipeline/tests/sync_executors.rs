@@ -78,25 +78,25 @@ impl Stage<Context> for Leaf {
     fn step(
         &mut self,
         context: &mut Context,
-        mut state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
         match &self.behavior {
             Behavior::Ready(result) => {
                 context.actions.push(self.name);
                 StepOutcome::Complete(result.map(Value).map_err(Fault))
             }
             Behavior::Pending { wait, completion } => {
-                if state {
+                if *state {
                     context.actions.push(self.name);
                     StepOutcome::Complete(completion.map(Value).map_err(Fault))
                 } else {
-                    state = true;
-                    StepOutcome::Pending(state, Wait(wait))
+                    *state = true;
+                    StepOutcome::Pending(Wait(wait))
                 }
             }
             Behavior::Progressing(calls) => {
                 calls.set(calls.get() + 1);
-                StepOutcome::Progressed(state)
+                StepOutcome::Progressed
             }
         }
     }
@@ -266,7 +266,7 @@ fn immediate_budget_is_nonzero_per_run_and_leaves_progressing_stage_resumable()
 }
 
 #[test]
-fn executors_report_already_complete_after_terminal_completion() -> Result<(), TryFromIntError> {
+fn executors_report_typed_exhaustion_after_terminal_completion() -> Result<(), TryFromIntError> {
     // Given: terminal-ready stages for both drive policies.
     let stepped = StepExecutor::new();
     let immediate = ImmediateExecutor::new(budget(1)?);
@@ -283,9 +283,9 @@ fn executors_report_already_complete_after_terminal_completion() -> Result<(), T
     let stepped_terminal = stepped.step(&mut stepped_hw, &mut stepped_op, &mut stepped_cx);
     let immediate_terminal = immediate.run(&mut immediate_hw, &mut immediate_op, &mut immediate_cx);
 
-    // Then: repeat driving is a typed executor error with no further action.
-    assert_eq!(stepped_terminal, Err(RunError::AlreadyComplete));
-    assert_eq!(immediate_terminal, Err(RunError::AlreadyComplete));
+    // Then: terminal exhaustion is a typed executor error with no further action.
+    assert_eq!(stepped_terminal, Err(RunError::Exhausted));
+    assert_eq!(immediate_terminal, Err(RunError::Exhausted));
     assert_eq!(stepped_cx.actions, ["S"]);
     assert_eq!(immediate_cx.actions, ["I"]);
     println!("post_terminal stepped={stepped_terminal:?} immediate={immediate_terminal:?}");

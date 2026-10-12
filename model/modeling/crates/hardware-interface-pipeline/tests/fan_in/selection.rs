@@ -1,5 +1,5 @@
 use super::policy::Policy;
-use hardware_interface_pipeline::{Arbitrate, Operation, ReadyStage, RunOutcome};
+use hardware_interface_pipeline::{Arbitrate, Operation, ReadyStage, StepOutcome};
 
 use super::sources::{Context, Job, Queue};
 
@@ -24,12 +24,12 @@ fn selection_consumes_only_the_ready_granted_source() {
     let result = operation.step(&mut hardware, &mut context);
 
     // Then: the selected queue alone is consumed and later candidates remain untouched.
-    assert_eq!(first, Ok(RunOutcome::Progressed));
+    assert_eq!(first, StepOutcome::Progressed);
     assert_eq!(probes_after_first, [0]);
-    assert_eq!(granted, Ok(RunOutcome::Progressed));
+    assert_eq!(granted, StepOutcome::Progressed);
     assert!(consumed_after_grant.is_empty());
-    assert_eq!(child, Ok(RunOutcome::Progressed));
-    assert_eq!(result, Ok(RunOutcome::Complete(Ok(11))));
+    assert_eq!(child, StepOutcome::Progressed);
+    assert_eq!(result, StepOutcome::Complete(Ok(11)));
     assert_eq!(context.consumed, [1]);
     assert_eq!(*context.probes.borrow(), [0, 1, 1]);
     assert_eq!(
@@ -56,11 +56,11 @@ fn round_robin_wraps_across_repeated_operations() {
             let mut operation = Operation::new(());
             assert_eq!(
                 operation.step(&mut hardware, &mut context),
-                Ok(RunOutcome::Progressed)
+                StepOutcome::Progressed
             );
             assert_eq!(
                 operation.step(&mut hardware, &mut context),
-                Ok(RunOutcome::Progressed)
+                StepOutcome::Progressed
             );
             operation.step(&mut hardware, &mut context)
         })
@@ -70,7 +70,7 @@ fn round_robin_wraps_across_repeated_operations() {
     assert_eq!(
         outcomes,
         (0..6)
-            .map(|value| Ok(RunOutcome::Complete(Ok(value))))
+            .map(|value| StepOutcome::Complete(Ok(value)))
             .collect::<Vec<_>>()
     );
     assert_eq!(context.consumed, [0, 1, 2, 0, 1, 2]);
@@ -93,11 +93,11 @@ fn fixed_priority_restarts_at_the_first_source() {
             let mut operation = Operation::new(());
             assert_eq!(
                 operation.step(&mut hardware, &mut context),
-                Ok(RunOutcome::Progressed)
+                StepOutcome::Progressed
             );
             assert_eq!(
                 operation.step(&mut hardware, &mut context),
-                Ok(RunOutcome::Progressed)
+                StepOutcome::Progressed
             );
             operation.step(&mut hardware, &mut context)
         })
@@ -106,10 +106,7 @@ fn fixed_priority_restarts_at_the_first_source() {
     // Then: both grants belong to the first source.
     assert_eq!(
         outcomes,
-        [
-            Ok(RunOutcome::Complete(Ok(10))),
-            Ok(RunOutcome::Complete(Ok(11)))
-        ]
+        [StepOutcome::Complete(Ok(10)), StepOutcome::Complete(Ok(11))]
     );
     assert_eq!(context.consumed, [0, 0]);
 }
@@ -130,18 +127,18 @@ fn idle_pass_returns_the_configured_wait_and_rechecks_sources() {
     context.enqueue(0, [Job::Value(7)]);
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let resumed = operation.step(&mut hardware, &mut context);
 
     // Then: idle suspends without consuming inputs and a later pass accepts the work.
-    assert_eq!(first, Ok(RunOutcome::Progressed));
-    assert_eq!(idle, Ok(RunOutcome::Pending("queue changed")));
-    assert_eq!(resumed, Ok(RunOutcome::Complete(Ok(7))));
+    assert_eq!(first, StepOutcome::Progressed);
+    assert_eq!(idle, StepOutcome::Pending("queue changed"));
+    assert_eq!(resumed, StepOutcome::Complete(Ok(7)));
     assert_eq!(context.consumed, [0]);
 }
 
@@ -172,13 +169,13 @@ fn nested_arbiters_forward_readiness_without_consuming_queues() {
     assert_eq!(
         outcomes,
         [
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Complete(Ok(42)))
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Complete(Ok(42))
         ]
     );
     assert_eq!(context.consumed, [2]);

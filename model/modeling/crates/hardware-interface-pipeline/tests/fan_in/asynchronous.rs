@@ -29,10 +29,9 @@ impl Combine<Context, Queue> for All {
         &mut self,
         _: &Context,
         sources: &[Queue],
-        (): (),
-    ) -> StepOutcome<Self::State, (Self::State, Vec<usize>), BranchError<&'static str>, &'static str>
-    {
-        StepOutcome::Complete(Ok(((), (0..sources.len()).collect())))
+        (): &mut (),
+    ) -> StepOutcome<Vec<usize>, BranchError<&'static str>, &'static str> {
+        StepOutcome::Complete(Ok((0..sources.len()).collect()))
     }
     fn combine(&mut self, (): (), outputs: Vec<u8>) -> Result<Vec<u8>, BranchError<&'static str>> {
         Ok(outputs)
@@ -77,9 +76,12 @@ fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
 impl AsyncInteractionBackend<Context, &'static str> for Backend {
     type Error = Infallible;
 
-    async fn interact<R: Send, F>(&self, interaction: F) -> Result<R, Infallible>
+    async fn interact<O: Send, E: Send, F>(
+        &self,
+        interaction: F,
+    ) -> Result<StepOutcome<O, E, &'static str>, Infallible>
     where
-        F: FnOnce(&mut Context) -> R + Send,
+        F: FnOnce(&mut Context) -> StepOutcome<O, E, &'static str> + Send,
     {
         Ok(interaction(&mut lock(&self.context)))
     }

@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, RunOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -49,7 +49,7 @@ fn abort_during_unaccepted_arbitration_does_not_stall_peer_channels() -> TestRes
         let mut pipeline = dma.command_loop();
         let mut operation = Operation::new(());
         for _ in 0..steps {
-            let _ = operation.step(&mut pipeline, &mut dma)?;
+            let _ = operation.step(&mut pipeline, &mut dma);
         }
         if word(&mut dma, first + CommandRegisters::CONSUMER.offset())? != 0 {
             continue;
@@ -59,8 +59,8 @@ fn abort_during_unaccepted_arbitration_does_not_stall_peer_channels() -> TestRes
         dma.abort_context(ContextId::new(7), &[ChannelId::new(0), ChannelId::new(1)])?;
         for _ in 0..256 {
             assert!(matches!(
-                operation.step(&mut pipeline, &mut dma)?,
-                RunOutcome::Progressed | RunOutcome::Pending(())
+                operation.step(&mut pipeline, &mut dma),
+                StepOutcome::Progressed | StepOutcome::Pending(())
             ));
         }
         // Then

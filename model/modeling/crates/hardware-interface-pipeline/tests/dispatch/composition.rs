@@ -1,6 +1,4 @@
-use hardware_interface_pipeline::{
-    BranchError, Dispatch, Operation, RunOutcome, Stage, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{BranchError, Dispatch, Operation, Stage, StepOutcome, Then};
 
 use super::fixtures::{Context, Destination, Routing, request};
 
@@ -18,8 +16,8 @@ impl Stage<Context> for CountDeliveries {
     fn step(
         &mut self,
         context: &mut Context,
-        (): (),
-    ) -> StepOutcome<Self::State, usize, Self::Error, Self::Wait> {
+        (): &mut (),
+    ) -> StepOutcome<usize, Self::Error, Self::Wait> {
         StepOutcome::Complete(Ok(context.deliveries.len()))
     }
 }
@@ -43,10 +41,10 @@ fn then_consumes_unit_after_dispatch_reduction() {
     assert_eq!(
         outcomes,
         [
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Progressed),
-            Ok(RunOutcome::Complete(Ok(1)))
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Progressed,
+            StepOutcome::Complete(Ok(1))
         ]
     );
     assert_eq!(context.deliveries, [(0, "routed owned payload".into())]);

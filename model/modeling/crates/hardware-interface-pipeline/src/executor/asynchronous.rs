@@ -1,4 +1,4 @@
-use crate::{AsyncInteractionBackend, Operation, RunOutcome, Stage};
+use crate::{AsyncInteractionBackend, Operation, Stage, StepOutcome};
 
 /// A statically dispatched asynchronous pipeline executor.
 #[derive(Debug)]
@@ -37,24 +37,21 @@ impl<B> AsyncExecutor<B> {
         S::Wait: Send,
     {
         loop {
-            if operation.is_complete() {
-                return Err(AsyncRunError::AlreadyComplete);
-            }
             let outcome = self
                 .backend
                 .interact(|context| operation.step(stage, context))
                 .await
-                .map_err(AsyncRunError::BackendInteraction)?
-                .map_err(|_| AsyncRunError::AlreadyComplete)?;
+                .map_err(AsyncRunError::BackendInteraction)?;
             match outcome {
-                RunOutcome::Progressed => {}
-                RunOutcome::Pending(wait) => self
+                StepOutcome::Progressed => {}
+                StepOutcome::Pending(wait) => self
                     .backend
                     .wait(wait)
                     .await
                     .map_err(AsyncRunError::BackendWait)?,
-                RunOutcome::Complete(Ok(output)) => return Ok(output),
-                RunOutcome::Complete(Err(error)) => return Err(AsyncRunError::Stage(error)),
+                StepOutcome::Complete(Ok(output)) => return Ok(output),
+                StepOutcome::Complete(Err(error)) => return Err(AsyncRunError::Stage(error)),
+                StepOutcome::Exhausted => return Err(AsyncRunError::Exhausted),
             }
         }
     }
@@ -71,5 +68,5 @@ pub enum AsyncRunError<B, S> {
     /// The stage completed with its typed error.
     Stage(S),
     /// The pipeline was already terminal before the executor call.
-    AlreadyComplete,
+    Exhausted,
 }

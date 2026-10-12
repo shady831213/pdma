@@ -1,4 +1,6 @@
-use crate::{Operation, Stage, executor::RunError, executor::RunResult};
+use crate::{
+    Operation, Stage, StepOutcome, executor::RunError, executor::RunOutcome, executor::RunResult,
+};
 
 /// A deterministic executor that performs exactly one stage call per [`Self::step`].
 #[derive(Clone, Copy, Debug, Default)]
@@ -20,8 +22,11 @@ impl StepExecutor {
     where
         S: Stage<C>,
     {
-        operation
-            .step(stage, context)
-            .map_err(|_| RunError::AlreadyComplete)
+        match operation.step(stage, context) {
+            StepOutcome::Progressed => Ok(RunOutcome::Progressed),
+            StepOutcome::Pending(wait) => Ok(RunOutcome::Pending(wait)),
+            StepOutcome::Complete(result) => Ok(RunOutcome::Complete(result)),
+            StepOutcome::Exhausted => Err(RunError::Exhausted),
+        }
     }
 }

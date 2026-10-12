@@ -27,17 +27,20 @@ where
     type Output = O;
     type Error = BranchError<S::Error>;
     type Wait = S::Wait;
-    type State = Self::Input;
+    type State = Option<Self::Input>;
 
     fn start(input: Self::Input) -> Self::State {
-        input
+        Some(input)
     }
 
     fn step(
         &mut self,
         frame: &mut Frame<'_, C, S, P>,
-        (metadata, outputs): Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        let Some((metadata, outputs)) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
         StepOutcome::Complete((self.reduce)(frame.policy, metadata, outputs))
     }
 }

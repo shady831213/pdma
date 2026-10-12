@@ -1,8 +1,6 @@
 //! Application error adaptation contracts.
 
-use hardware_interface_pipeline::{
-    MapError, Operation, ReadyStage, RunOutcome, Stage, StepOutcome,
-};
+use hardware_interface_pipeline::{MapError, Operation, ReadyStage, Stage, StepOutcome};
 
 struct Fails;
 
@@ -13,7 +11,7 @@ impl Stage<()> for Fails {
     type Wait = ();
     type State = ();
     fn start((): ()) {}
-    fn step(&mut self, (): &mut (), (): ()) -> StepOutcome<Self::State, (), u8, ()> {
+    fn step(&mut self, (): &mut (), (): &mut ()) -> StepOutcome<(), u8, ()> {
         StepOutcome::Complete(Err(7))
     }
 }
@@ -33,5 +31,5 @@ fn application_error_adapter_maps_failure_and_forwards_readiness() {
     let result = Operation::new(()).step(&mut stage, &mut ());
     // Then: readiness remains available and only the error representation changes.
     assert!(ready);
-    assert_eq!(result, Ok(RunOutcome::Complete(Err("fault 7".to_owned()))));
+    assert_eq!(result, StepOutcome::Complete(Err("fault 7".to_owned())));
 }

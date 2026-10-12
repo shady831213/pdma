@@ -1,6 +1,4 @@
-use hardware_interface_pipeline::{
-    Arbitrate, Operation, ReadyStage, RunOutcome, Stage, StepOutcome,
-};
+use hardware_interface_pipeline::{Arbitrate, Operation, ReadyStage, Stage, StepOutcome};
 
 use super::{
     policy::Policy,
@@ -23,10 +21,10 @@ impl Stage<Context> for PendingQueue {
     fn step(
         &mut self,
         context: &mut Context,
-        state: State,
-    ) -> StepOutcome<Self::State, u8, Self::Error, Self::Wait> {
+        state: &mut State,
+    ) -> StepOutcome<u8, Self::Error, Self::Wait> {
         match self.0.step(context, state) {
-            StepOutcome::Progressed(state) => StepOutcome::Pending(state, "source release"),
+            StepOutcome::Progressed => StepOutcome::Pending("source release"),
             outcome => outcome,
         }
     }
@@ -57,7 +55,7 @@ fn first_pending_child_retains_work_after_readiness_disappears() {
     let mut operation = Operation::new(());
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
 
     // When: the first child call suspends, then completion resumes after release.
@@ -68,10 +66,10 @@ fn first_pending_child_retains_work_after_readiness_disappears() {
     let result = operation.step(&mut hardware, &mut context);
 
     // Then: the empty source is never rechecked and its accepted output is retained.
-    assert_eq!(accepted, Ok(RunOutcome::Pending("source release")));
+    assert_eq!(accepted, StepOutcome::Pending("source release"));
     assert_eq!(pending, accepted);
-    assert_eq!(completed_child, Ok(RunOutcome::Progressed));
-    assert_eq!(result, Ok(RunOutcome::Complete(Ok(8))));
+    assert_eq!(completed_child, StepOutcome::Progressed);
+    assert_eq!(result, StepOutcome::Complete(Ok(8)));
     assert_eq!(*context.probes.borrow(), [0, 0]);
     assert_eq!(context.consumed, [0]);
 }

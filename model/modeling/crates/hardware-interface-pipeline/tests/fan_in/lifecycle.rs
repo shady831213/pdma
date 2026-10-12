@@ -1,5 +1,5 @@
 use super::policy::Policy;
-use hardware_interface_pipeline::{Arbitrate, Operation, RunOutcome};
+use hardware_interface_pipeline::{Arbitrate, Operation, Stage, StepOutcome};
 
 use super::sources::{Context, Job, Queue};
 
@@ -16,7 +16,7 @@ fn invalidated_grant_reselects_before_first_child_step() {
     let mut operation = Operation::new(());
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     context.queues.remove(&0);
 
@@ -28,11 +28,11 @@ fn invalidated_grant_reselects_before_first_child_step() {
     let complete = operation.step(&mut hardware, &mut context);
 
     // Then: the stale source is never called and the ready source completes once.
-    assert_eq!(invalidated, Ok(RunOutcome::Progressed));
+    assert_eq!(invalidated, StepOutcome::Progressed);
     assert!(consumed_after_invalidation.is_empty());
-    assert_eq!(selected, Ok(RunOutcome::Progressed));
-    assert_eq!(child, Ok(RunOutcome::Progressed));
-    assert_eq!(complete, Ok(RunOutcome::Complete(Ok(9))));
+    assert_eq!(selected, StepOutcome::Progressed);
+    assert_eq!(child, StepOutcome::Progressed);
+    assert_eq!(complete, StepOutcome::Complete(Ok(9)));
     assert_eq!(*context.probes.borrow(), [0, 0, 1, 1]);
     assert_eq!(context.consumed, [1]);
 }
@@ -58,7 +58,7 @@ fn pending_grant_retains_accepted_state_after_readiness_disappears() {
     // When: acceptance empties the source, two pending steps occur, then release arrives.
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let accepted = operation.step(&mut hardware, &mut context);
     let pending = operation.step(&mut hardware, &mut context);
@@ -66,62 +66,57 @@ fn pending_grant_retains_accepted_state_after_readiness_disappears() {
     context.released = true;
     assert_eq!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     );
     let complete = operation.step(&mut hardware, &mut context);
 
     // Then: the grant never switches or probes again; the retained value completes once.
-    assert_eq!(accepted, Ok(RunOutcome::Progressed));
-    assert_eq!(pending, Ok(RunOutcome::Pending("source release")));
+    assert_eq!(accepted, StepOutcome::Progressed);
+    assert_eq!(pending, StepOutcome::Pending("source release"));
     assert_eq!(pending_again, pending);
-    assert_eq!(complete, Ok(RunOutcome::Complete(Ok(8))));
+    assert_eq!(complete, StepOutcome::Complete(Ok(8)));
     assert_eq!(*context.probes.borrow(), [0, 0]);
     assert_eq!(context.consumed, [0]);
 }
 
 #[test]
-fn terminal_outcomes_are_forwarded_and_completed_operation_is_inert() {
-    // Given: sources independently completing, failing, or ending immediately.
+fn terminal_outcomes_are_forwarded_and_direct_stage_state_is_inert() {
+    // Given: sources independently completing, failing, or exhausting immediately.
     for (job, expected) in [
-        (Job::Value(3), Ok(RunOutcome::Complete(Ok(3)))),
+        (Job::Value(3), StepOutcome::Complete(Ok(3))),
         (
             Job::Fail,
-            Ok(RunOutcome::Complete(Err(
-                hardware_interface_pipeline::BranchError::Application("source fault"),
+            StepOutcome::Complete(Err(hardware_interface_pipeline::BranchError::Application(
+                "source fault",
             ))),
         ),
-        (
-            Job::End,
-            Ok(RunOutcome::Complete(Err(
-                hardware_interface_pipeline::BranchError::Application("source ended"),
-            ))),
-        ),
+        (Job::End, StepOutcome::Exhausted),
     ] {
         let mut context = Context::default();
         context.enqueue(0, [job, Job::Value(4)]);
         let mut hardware = Arbitrate::new(vec![Queue::new(0)], Policy::round_robin("idle"));
-        let mut state = Operation::new(());
+        let mut state = <Arbitrate<Queue, Policy> as Stage<Context>>::start(());
 
         // When: the same state is stepped beyond its terminal result.
         assert_eq!(
-            state.step(&mut hardware, &mut context),
-            Ok(RunOutcome::Progressed)
+            hardware.step(&mut context, &mut state),
+            StepOutcome::Progressed
         );
-        let first = match state.step(&mut hardware, &mut context) {
-            Ok(RunOutcome::Progressed) => state.step(&mut hardware, &mut context),
+        let first = match hardware.step(&mut context, &mut state) {
+            StepOutcome::Progressed => hardware.step(&mut context, &mut state),
             outcome => outcome,
         };
-        let second = state.step(&mut hardware, &mut context);
+        let second = hardware.step(&mut context, &mut state);
 
         // Then: exactly one input was consumed and the second step is inert.
         assert_eq!(first, expected);
-        assert_eq!(second, Err(hardware_interface_pipeline::AlreadyComplete));
+        assert_eq!(second, StepOutcome::Exhausted);
         assert_eq!(context.consumed, [0]);
     }
 }
 
 #[test]
-fn empty_arbiter_reports_empty_sources_without_interaction() {
+fn empty_arbiter_is_exhausted_without_interaction() {
     // Given: fan-in hardware with no sources.
     let mut hardware = Arbitrate::<Queue, _>::new(Vec::new(), Policy::round_robin("idle"));
     let mut context = Context::default();
@@ -130,11 +125,6 @@ fn empty_arbiter_reports_empty_sources_without_interaction() {
     let outcome = Operation::new(()).step(&mut hardware, &mut context);
 
     // Then: it is terminal without a wait or source consumption.
-    assert_eq!(
-        outcome,
-        Ok(RunOutcome::Complete(Err(
-            hardware_interface_pipeline::BranchError::EmptySources
-        )))
-    );
+    assert_eq!(outcome, StepOutcome::Exhausted);
     assert!(context.consumed.is_empty());
 }

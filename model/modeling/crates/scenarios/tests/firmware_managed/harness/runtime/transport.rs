@@ -1,5 +1,5 @@
 use super::{Driver, Hardware, RoutedMemory, Shared};
-use hardware_interface_pipeline::AsyncInteractionBackend;
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 use pdma_model_contract::dma::DmaAccess;
 use pdma_model_dma::Dma;
 use std::convert::Infallible;
@@ -61,10 +61,11 @@ impl<M> Shared<M> {
 impl<M: Send> AsyncInteractionBackend<Dma<RoutedMemory<M>, DmaAccess>, ()> for Driver<M> {
     type Error = Infallible;
 
-    async fn interact<R, F>(&self, interaction: F) -> Result<R, Infallible>
+    async fn interact<O, E, F>(&self, interaction: F) -> Result<StepOutcome<O, E, ()>, Infallible>
     where
-        R: Send,
-        F: FnOnce(&mut Dma<RoutedMemory<M>, DmaAccess>) -> R + Send,
+        O: Send,
+        E: Send,
+        F: FnOnce(&mut Dma<RoutedMemory<M>, DmaAccess>) -> StepOutcome<O, E, ()> + Send,
     {
         tokio::task::yield_now().await;
         let mut hardware = self.0.hardware.lock().await;

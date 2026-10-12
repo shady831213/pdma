@@ -1,8 +1,6 @@
 /// Structural plan failures or an error from application code.
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError<E> {
-    /// Singleton arbitration has no configured sources.
-    EmptySources,
     /// A requested port does not exist.
     InvalidIndex {
         /// Requested port position.

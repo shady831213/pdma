@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use hardware_interface_pipeline::AsyncInteractionBackend;
+use hardware_interface_pipeline::{AsyncInteractionBackend, StepOutcome};
 
 use super::Context;
 
@@ -54,9 +54,12 @@ impl ScriptedBackend {
 impl AsyncInteractionBackend<Context, usize> for ScriptedBackend {
     type Error = BackendFault;
 
-    async fn interact<R: Send, F>(&self, interaction: F) -> Result<R, Self::Error>
+    async fn interact<O: Send, E: Send, F>(
+        &self,
+        interaction: F,
+    ) -> Result<StepOutcome<O, E, usize>, Self::Error>
     where
-        F: FnOnce(&mut Context) -> R + Send,
+        F: FnOnce(&mut Context) -> StepOutcome<O, E, usize> + Send,
     {
         if self.failure == Some(BackendFault::Before) {
             return Err(BackendFault::Before);

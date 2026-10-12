@@ -84,18 +84,10 @@ where
     fn step(
         &mut self,
         context: &mut C,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
-        match self
-            .fan
-            .step(context, state.pipeline, compose(Split, P::combine))
-        {
-            StepOutcome::Progressed(pipeline) => StepOutcome::Progressed(FanOutState { pipeline }),
-            StepOutcome::Pending(pipeline, wait) => {
-                StepOutcome::Pending(FanOutState { pipeline }, wait)
-            }
-            StepOutcome::Complete(result) => StepOutcome::Complete(result),
-        }
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        self.fan
+            .step(context, &mut state.pipeline, compose(Split, P::combine))
     }
 }
 
@@ -106,17 +98,20 @@ impl<C, S: Stage<C>, P: Distribute<C, S>> Stage<Frame<'_, C, S, P>> for Split {
     type Output = BranchPlan<P::State, S::Input, S::Output>;
     type Error = BranchError<S::Error>;
     type Wait = S::Wait;
-    type State = P::Input;
+    type State = Option<P::Input>;
 
     fn start(input: Self::Input) -> Self::State {
-        input
+        Some(input)
     }
 
     fn step(
         &mut self,
         frame: &mut Frame<'_, C, S, P>,
-        input: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        let Some(input) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
         StepOutcome::Complete(
             frame
                 .policy

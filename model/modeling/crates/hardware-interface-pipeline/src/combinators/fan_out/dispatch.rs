@@ -42,8 +42,8 @@ impl<C, S: Stage<C>, R: Route<C, S>> Stage<C> for Dispatch<S, R> {
     fn step(
         &mut self,
         context: &mut C,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, (), Self::Error, Self::Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<(), Self::Error, Self::Wait> {
         self.0.step(context, state)
     }
 }

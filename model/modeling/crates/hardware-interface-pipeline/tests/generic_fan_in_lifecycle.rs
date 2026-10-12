@@ -1,8 +1,6 @@
 //! Retained application state and partial fan-in ownership.
 
-use hardware_interface_pipeline::{
-    BranchError, Combine, FanIn, Operation, RunOutcome, Stage, StepOutcome,
-};
+use hardware_interface_pipeline::{BranchError, Combine, FanIn, Operation, Stage, StepOutcome};
 
 #[derive(Default)]
 struct Context {
@@ -25,24 +23,24 @@ impl Stage<Context> for Source {
     fn step(
         &mut self,
         context: &mut Context,
-        mut state: Self::State,
-    ) -> StepOutcome<Self::State, Owned, u8, Wait> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Owned, u8, Wait> {
         match state.take() {
             Some(value) if context.released => StepOutcome::Complete(Ok(value)),
             Some(value) => {
-                state = Some(value);
-                StepOutcome::Pending(state, Wait)
+                *state = Some(value);
+                StepOutcome::Pending(Wait)
             }
             None => {
                 context.consumed.push(self.0);
                 match self.0 {
                     0 => StepOutcome::Complete(Ok(Owned("first".to_owned()))),
                     1 => {
-                        state = Some(Owned("second".to_owned()));
-                        StepOutcome::Progressed(state)
+                        *state = Some(Owned("second".to_owned()));
+                        StepOutcome::Progressed
                     }
                     2 => StepOutcome::Complete(Err(42)),
-                    _ => StepOutcome::Complete(Err(43)),
+                    _ => StepOutcome::Exhausted,
                 }
             }
         }
@@ -63,13 +61,13 @@ impl Combine<Context, Source> for Gather {
         &mut self,
         _: &Context,
         sources: &[Source],
-        mut state: usize,
-    ) -> StepOutcome<Self::State, (Self::State, Vec<usize>), BranchError<u8>, Wait> {
-        state += 1;
-        if state == 1 {
-            StepOutcome::Pending(state, Wait)
+        state: &mut usize,
+    ) -> StepOutcome<Vec<usize>, BranchError<u8>, Wait> {
+        *state += 1;
+        if *state == 1 {
+            StepOutcome::Pending(Wait)
         } else {
-            StepOutcome::Complete(Ok((state, (0..sources.len()).collect())))
+            StepOutcome::Complete(Ok((0..sources.len()).collect()))
         }
     }
     fn combine(&mut self, state: usize, outputs: Vec<Owned>) -> Result<String, BranchError<u8>> {
@@ -92,7 +90,7 @@ fn partial_gather_keeps_owned_results_and_planning_state_across_pending() {
     let planning = operation.step(&mut hardware, &mut context);
     assert!(matches!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     ));
     let first = operation.step(&mut hardware, &mut context);
     let accepted = operation.step(&mut hardware, &mut context);
@@ -100,20 +98,17 @@ fn partial_gather_keeps_owned_results_and_planning_state_across_pending() {
     context.released = true;
     assert!(matches!(
         operation.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        StepOutcome::Progressed
     ));
     let result = operation.step(&mut hardware, &mut context);
     let terminal = operation.step(&mut hardware, &mut context);
     // Then: resume retains the first output and does not restart either source.
-    assert!(matches!(planning, Ok(RunOutcome::Pending(Wait))));
-    assert!(matches!(first, Ok(RunOutcome::Progressed)));
-    assert!(matches!(accepted, Ok(RunOutcome::Progressed)));
-    assert!(matches!(pending, Ok(RunOutcome::Pending(Wait))));
-    assert!(matches!(result, Ok(RunOutcome::Complete(Ok(value))) if value == "firstsecond"));
-    assert!(matches!(
-        terminal,
-        Err(hardware_interface_pipeline::AlreadyComplete)
-    ));
+    assert!(matches!(planning, StepOutcome::Pending(Wait)));
+    assert!(matches!(first, StepOutcome::Progressed));
+    assert!(matches!(accepted, StepOutcome::Progressed));
+    assert!(matches!(pending, StepOutcome::Pending(Wait)));
+    assert!(matches!(result, StepOutcome::Complete(Ok(value)) if value == "firstsecond"));
+    assert!(matches!(terminal, StepOutcome::Exhausted));
     assert_eq!(context.consumed, [0, 1]);
 }
 
@@ -122,34 +117,31 @@ fn reducer_failure_terminalizes_the_operation() {
     // Given: an application reducer that rejects an otherwise successful gather.
     let mut hardware = FanIn::new(vec![Source(0)], Gather { fail: true });
     let mut context = Context::default();
-    let mut state = Operation::new(());
+    let mut state = <FanIn<Source, Gather> as Stage<Context>>::start(());
     // When: the policy resumes and reduction fails.
-    let planning = state.step(&mut hardware, &mut context);
+    let planning = hardware.step(&mut context, &mut state);
     assert!(matches!(
-        state.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        hardware.step(&mut context, &mut state),
+        StepOutcome::Progressed
     ));
     assert!(matches!(
-        state.step(&mut hardware, &mut context),
-        Ok(RunOutcome::Progressed)
+        hardware.step(&mut context, &mut state),
+        StepOutcome::Progressed
     ));
-    let result = state.step(&mut hardware, &mut context);
-    let terminal = state.step(&mut hardware, &mut context);
+    let result = hardware.step(&mut context, &mut state);
+    let terminal = hardware.step(&mut context, &mut state);
     // Then: the typed reducer error is returned exactly once.
-    assert!(matches!(planning, Ok(RunOutcome::Pending(Wait))));
+    assert!(matches!(planning, StepOutcome::Pending(Wait)));
     assert!(matches!(
         result,
-        Ok(RunOutcome::Complete(Err(BranchError::Application(19))))
+        StepOutcome::Complete(Err(BranchError::Application(19)))
     ));
-    assert!(matches!(
-        terminal,
-        Err(hardware_interface_pipeline::AlreadyComplete)
-    ));
+    assert!(matches!(terminal, StepOutcome::Exhausted));
     assert_eq!(context.consumed, [0]);
 }
 
 #[test]
-fn child_failure_and_missing_work_stop_later_selected_branches() {
+fn child_failure_and_exhaustion_stop_later_selected_branches() {
     // Given: a completed branch, a terminal branch, and a later branch.
     for terminal_id in [2, 3] {
         let mut hardware = FanIn::new(
@@ -157,33 +149,27 @@ fn child_failure_and_missing_work_stop_later_selected_branches() {
             Gather { fail: false },
         );
         let mut context = Context::default();
-        let mut state = Operation::new(());
+        let mut state = <FanIn<Source, Gather> as Stage<Context>>::start(());
         // When: the selected terminal child is reached after planning and the first child.
-        let planning = state.step(&mut hardware, &mut context);
+        let planning = hardware.step(&mut context, &mut state);
         assert!(matches!(
-            state.step(&mut hardware, &mut context),
-            Ok(RunOutcome::Progressed)
+            hardware.step(&mut context, &mut state),
+            StepOutcome::Progressed
         ));
-        let first = state.step(&mut hardware, &mut context);
-        let result = state.step(&mut hardware, &mut context);
-        let terminal = state.step(&mut hardware, &mut context);
+        let first = hardware.step(&mut context, &mut state);
+        let result = hardware.step(&mut context, &mut state);
+        let terminal = hardware.step(&mut context, &mut state);
         // Then: later children remain unstarted and repeated stepping is inert.
-        assert!(matches!(planning, Ok(RunOutcome::Pending(Wait))));
-        assert!(matches!(first, Ok(RunOutcome::Progressed)));
+        assert!(matches!(planning, StepOutcome::Pending(Wait)));
+        assert!(matches!(first, StepOutcome::Progressed));
         match terminal_id {
             2 => assert!(matches!(
                 result,
-                Ok(RunOutcome::Complete(Err(BranchError::Application(42))))
+                StepOutcome::Complete(Err(BranchError::Application(42)))
             )),
-            _ => assert!(matches!(
-                result,
-                Ok(RunOutcome::Complete(Err(BranchError::Application(43))))
-            )),
+            _ => assert!(matches!(result, StepOutcome::Exhausted)),
         }
-        assert!(matches!(
-            terminal,
-            Err(hardware_interface_pipeline::AlreadyComplete)
-        ));
+        assert!(matches!(terminal, StepOutcome::Exhausted));
         assert_eq!(context.consumed, [0, terminal_id]);
     }
 }

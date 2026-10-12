@@ -3,10 +3,7 @@ use crate::{BranchError, Stage, StepOutcome};
 use super::fan::{BranchPlan, Fan, FanState, Frame, compose, start};
 
 mod arbitrate;
-pub use arbitrate::{Arbitrate, Arbitration, ArbitrationOutcome, Select};
-
-/// A planning continuation or completed reduction metadata and source indices.
-pub type CombineOutcome<T, E, W> = StepOutcome<T, (T, Vec<usize>), BranchError<E>, W>;
+pub use arbitrate::{Arbitrate, Arbitration, Select};
 
 /// Application-owned input planning and reduction for one fan-in operation.
 ///
@@ -24,8 +21,8 @@ pub trait Combine<C, S: Stage<C, Input = ()>> {
         &mut self,
         context: &C,
         sources: &[S],
-        state: Self::State,
-    ) -> CombineOutcome<Self::State, S::Error, S::Wait>;
+        state: &mut Self::State,
+    ) -> StepOutcome<Vec<usize>, BranchError<S::Error>, S::Wait>;
     /// Reduces owned outputs in plan order.
     ///
     /// # Errors
@@ -83,18 +80,10 @@ where
     fn step(
         &mut self,
         context: &mut C,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
-        match self
-            .fan
-            .step(context, state.pipeline, compose(Plan, P::combine))
-        {
-            StepOutcome::Progressed(pipeline) => StepOutcome::Progressed(FanInState { pipeline }),
-            StepOutcome::Pending(pipeline, wait) => {
-                StepOutcome::Pending(FanInState { pipeline }, wait)
-            }
-            StepOutcome::Complete(result) => StepOutcome::Complete(result),
-        }
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        self.fan
+            .step(context, &mut state.pipeline, compose(Plan, P::combine))
     }
 }
 
@@ -105,29 +94,37 @@ impl<C, S: Stage<C, Input = ()>, P: Combine<C, S>> Stage<Frame<'_, C, S, P>> for
     type Output = BranchPlan<P::State, (), S::Output>;
     type Error = BranchError<S::Error>;
     type Wait = S::Wait;
-    type State = P::State;
+    type State = Option<P::State>;
 
     fn start((): ()) -> Self::State {
-        P::start()
+        Some(P::start())
     }
 
     fn step(
         &mut self,
         frame: &mut Frame<'_, C, S, P>,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
-        match frame.policy.plan(frame.context, frame.ports, state) {
-            StepOutcome::Progressed(state) => StepOutcome::Progressed(state),
-            StepOutcome::Pending(state, wait) => StepOutcome::Pending(state, wait),
-            StepOutcome::Complete(result) => {
-                StepOutcome::Complete(result.and_then(|(metadata, plan)| {
-                    BranchPlan::new(
-                        metadata,
-                        plan.into_iter().map(|index| (index, ())).collect(),
-                        frame.ports.len(),
-                    )
-                }))
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        let Some(mut metadata) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
+        match frame.policy.plan(frame.context, frame.ports, &mut metadata) {
+            StepOutcome::Progressed => {
+                *state = Some(metadata);
+                StepOutcome::Progressed
             }
+            StepOutcome::Pending(wait) => {
+                *state = Some(metadata);
+                StepOutcome::Pending(wait)
+            }
+            StepOutcome::Complete(result) => StepOutcome::Complete(result.and_then(|plan| {
+                BranchPlan::new(
+                    metadata,
+                    plan.into_iter().map(|index| (index, ())).collect(),
+                    frame.ports.len(),
+                )
+            })),
+            StepOutcome::Exhausted => StepOutcome::Exhausted,
         }
     }
 }

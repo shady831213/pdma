@@ -45,20 +45,19 @@ reset does not retract them.
 
 ## How the current model reaches completion
 
-`Dma::command_loop()` composes channel selection, acquisition, execution turns,
-suspension handling and per-step reset completion. `Fetch` gates resetting channels and
+`Dma::command_loop()` composes
+`AfterEach<CommandArbiter<Pipeline>, ResetControl>`. `Fetch` gates resetting channels and
 device reset before accepting commands. Accepted ownership records channel and
 generation, including per-channel parked work; command, SG-list, payload and
 response paths check reset before further memory access. `RunCommand` releases
-executing ownership when the complete command pipeline terminates. A payload fault
-instead ends only the execution turn, returning the exact composed Operation in
-`CommandTurn::Suspended`. Active references remain held across the output handoff;
-the suspension handler stores the continuation and moves references to Channel.parked.
-Reset cannot acknowledge during that handoff. A later arbitration grant restores
-that operation without fetching another command or replaying completed stages.
-Before any shared active step, independent lifecycle cleanup discards affected
-parked operations on reset or matching Abort and releases their references.
-A disabled active peer therefore cannot prevent parked cleanup. RunCommand's retained
+executing ownership when the complete pipeline terminates. Payload faults return
+Pending with the leaf's Transfer intact; the granted execution port retains the
+exact composed Operation and moves its accepted references to Channel.parked.
+The grant ends at suspension. A later arbitration grant restores that operation
+without fetching another command or replaying completed stages.
+Before any shared active step, CommandArbiter discards affected parked operations on
+reset or matching Abort and releases their references. A disabled active peer
+therefore cannot prevent parked cleanup. RunCommand's retained
 `Operation<S, Dma<M>>` discards child state before ownership is released, including
 for custom child stages that do not clear their own state. Response publication
 can precede that outcome by additional composition steps; ownership remains held during
@@ -81,7 +80,7 @@ so guarded custom stages can reject stale tasks even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
 Custom sustained command graphs pass their downstream composition to
-`Dma::command_loop_with`, which includes `ResetControl`. The graph owns one shared `RunCommand<S>`;
+`Dma::arbitrate` and drive `ResetControl`. The arbiter owns one shared `RunCommand<S>`;
 its child implements `Stage<Dma<M>, Input = ChannelTask<Command>, Output = (),
 Error = Error, Wait = ()>`. Its internal transforms need not match the default
 `Pipeline`. Merely

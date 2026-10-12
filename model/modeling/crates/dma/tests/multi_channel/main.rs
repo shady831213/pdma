@@ -1,6 +1,6 @@
 //! Selected reset preserves every other channel's retained hardware work.
 
-use hardware_interface_pipeline::{Operation, RunOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -74,7 +74,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     let mut operation = Operation::new(());
     let mut committed = false;
     for _ in 0..256 {
-        let _ = operation.step(&mut hardware, &mut device)?;
+        let _ = operation.step(&mut hardware, &mut device);
         if memory.read_typed::<[u8; 1]>(MemoryAddress::new(0x1400), MemoryAlignment::ONE)? == [7] {
             committed = true;
             break;
@@ -90,8 +90,8 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     assert_eq!(word(&mut device, reset)?, 1);
     for _ in 0..512 {
         assert!(!matches!(
-            operation.step(&mut hardware, &mut device)?,
-            RunOutcome::Complete(Err(_))
+            operation.step(&mut hardware, &mut device),
+            StepOutcome::Complete(Err(_))
         ));
     }
     assert_eq!(word(&mut device, reset)?, 0);
@@ -132,7 +132,7 @@ fn reset_during_copy_does_not_restart_or_stop_other_channels() -> TestResult {
     configure(&mut device, 0)?;
     submit(&mut device, 0, 99)?;
     for _ in 0..512 {
-        let _ = operation.step(&mut hardware, &mut device)?;
+        let _ = operation.step(&mut hardware, &mut device);
     }
     assert_eq!(
         word(

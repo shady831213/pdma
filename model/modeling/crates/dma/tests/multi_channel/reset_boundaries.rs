@@ -1,7 +1,7 @@
 mod observed;
 
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, RunOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -97,8 +97,8 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
             let mut ready = false;
             for _ in 0..128 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device)?,
-                    RunOutcome::Progressed
+                    operation.step(&mut hardware, &mut device),
+                    StepOutcome::Progressed
                 ));
                 if reached(&mut device, boundary)? {
                     ready = true;
@@ -144,8 +144,8 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
             assert_eq!(word(&mut device, reset)?, 1);
             for _ in 0..32 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device)?,
-                    RunOutcome::Progressed | RunOutcome::Pending(())
+                    operation.step(&mut hardware, &mut device),
+                    StepOutcome::Progressed | StepOutcome::Pending(())
                 ));
                 if word(&mut device, reset)? == 0 {
                     break;
@@ -155,8 +155,8 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
             let memory_base = replace(&mut device, reset_index)?;
             for _ in 0..512 {
                 assert!(matches!(
-                    operation.step(&mut hardware, &mut device)?,
-                    RunOutcome::Progressed | RunOutcome::Pending(())
+                    operation.step(&mut hardware, &mut device),
+                    StepOutcome::Progressed | StepOutcome::Pending(())
                 ));
             }
             // Then: stale work produces no additional writes or response; active peers and fresh work finish exactly once.

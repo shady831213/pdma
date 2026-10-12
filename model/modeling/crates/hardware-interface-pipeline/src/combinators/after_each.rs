@@ -5,7 +5,7 @@ use crate::{ReadyStage, Stage, StepOutcome};
 /// Runs an always-ready update stage after each upstream interaction, including stalls.
 ///
 /// Both stages run within the same driving boundary. The update cannot finish, fail,
-/// or suspend; it preserves the upstream outcome.
+/// or suspend; it preserves the upstream outcome and is skipped on exhaustion.
 #[derive(Debug)]
 pub struct AfterEach<A, B> {
     /// Hardware whose operation and outcome drive the composition.
@@ -39,20 +39,18 @@ where
     fn step(
         &mut self,
         context: &mut C,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
-        let outcome = self.upstream.step(context, state.0);
-        let update = match self.update.step(context, state.1) {
-            StepOutcome::Progressed(update) => update,
-            StepOutcome::Pending(_, never) | StepOutcome::Complete(Ok(never) | Err(never)) => {
-                match never {}
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        let outcome = self.upstream.step(context, &mut state.0);
+        if !matches!(outcome, StepOutcome::Exhausted) {
+            match self.update.step(context, &mut state.1) {
+                StepOutcome::Progressed | StepOutcome::Exhausted => {}
+                StepOutcome::Pending(never) | StepOutcome::Complete(Ok(never) | Err(never)) => {
+                    match never {}
+                }
             }
-        };
-        match outcome {
-            StepOutcome::Progressed(state) => StepOutcome::Progressed((state, update)),
-            StepOutcome::Pending(state, wait) => StepOutcome::Pending((state, update), wait),
-            StepOutcome::Complete(result) => StepOutcome::Complete(result),
         }
+        outcome
     }
 }
 

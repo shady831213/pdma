@@ -20,15 +20,18 @@ impl Stage<ChannelContext<'_, SharedMemory>> for InvertPayload {
     type Output = Transfer;
     type Error = Error;
     type Wait = ();
-    type State = Transfer;
+    type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
-        input
+        Some(input)
     }
     fn step(
         &mut self,
         _: &mut ChannelContext<'_, SharedMemory>,
-        mut transfer: Self::State,
-    ) -> StepOutcome<Transfer, Transfer, Error, ()> {
+        state: &mut Self::State,
+    ) -> StepOutcome<Transfer, Error, ()> {
+        let Some(mut transfer) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
         for byte in &mut transfer.bytes {
             *byte = !*byte;
         }
@@ -93,8 +96,8 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.
     let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
-    let result = operation.step(&mut execution, &mut context)?;
+    let result = operation.step(&mut execution, &mut context);
     // Then: device fatal blocks even independently composed hardware.
-    assert!(matches!(result, RunOutcome::Complete(Err(Error::Halted))));
+    assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
     Ok(())
 }

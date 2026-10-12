@@ -24,14 +24,14 @@ impl Stage<Context> for Countdown {
     fn step(
         &mut self,
         context: &mut Context,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
-        if state == 0 {
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        if *state == 0 {
             context.push("finished");
             StepOutcome::Complete(Ok(ControlFlow::Break(7)))
         } else {
             context.push("continued");
-            StepOutcome::Complete(Ok(ControlFlow::Continue(state - 1)))
+            StepOutcome::Complete(Ok(ControlFlow::Continue(*state - 1)))
         }
     }
 }

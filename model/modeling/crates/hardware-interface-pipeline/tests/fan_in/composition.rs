@@ -1,9 +1,7 @@
 use super::policy::Policy;
 use std::ops::ControlFlow;
 
-use hardware_interface_pipeline::{
-    Arbitrate, Operation, Repeat, RunOutcome, Stage, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{Arbitrate, Operation, Repeat, Stage, StepOutcome, Then};
 
 use super::sources::{Context, Job, Queue};
 
@@ -16,18 +14,20 @@ impl Stage<Context> for Collect {
     type Output = ControlFlow<Vec<u8>>;
     type Error = hardware_interface_pipeline::BranchError<&'static str>;
     type Wait = &'static str;
-    type State = u8;
+    type State = Option<u8>;
 
     fn start(input: u8) -> Self::State {
-        input
+        Some(input)
     }
 
     fn step(
         &mut self,
         _: &mut Context,
-        state: Self::State,
-    ) -> StepOutcome<Self::State, Self::Output, Self::Error, Self::Wait> {
-        let value = state;
+        state: &mut Self::State,
+    ) -> StepOutcome<Self::Output, Self::Error, Self::Wait> {
+        let Some(value) = state.take() else {
+            return StepOutcome::Exhausted;
+        };
         self.values.push(value);
         StepOutcome::Complete(Ok(if self.values.len() == 4 {
             ControlFlow::Break(std::mem::take(&mut self.values))
@@ -60,11 +60,11 @@ fn then_and_repeat_preserve_round_robin_across_iteration_state() {
         outcomes
             .iter()
             .take(15)
-            .all(|outcome| *outcome == Ok(RunOutcome::Progressed))
+            .all(|outcome| *outcome == StepOutcome::Progressed)
     );
     assert_eq!(
         outcomes.last(),
-        Some(&Ok(RunOutcome::Complete(Ok(vec![10, 20, 11, 21]))))
+        Some(&StepOutcome::Complete(Ok(vec![10, 20, 11, 21])))
     );
     assert_eq!(context.consumed, [0, 1, 0, 1]);
 }

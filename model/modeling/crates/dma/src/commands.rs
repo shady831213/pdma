@@ -1,18 +1,17 @@
-use super::{
-    Candidate, RoundRobin,
-    engine::{Engine, EngineState},
-    port::Frame,
-};
-use crate::{ChannelTask, Dma, Error, RunCommand};
+mod scope;
+
+use crate::{Candidate, CommandRequest, Dma, Error, RoundRobin};
 use hardware_interface_pipeline::{
-    BranchError, Fan, FanState, Repeat, RunError, Stage, StepOutcome, StepResult, Then, ThenState,
+    Arbitrate, BranchError, FanIn, FanState, Repeat, RunError, Stage, StepOutcome, StepResult,
+    Then, ThenState,
 };
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::{ChannelId, Command, FaultStatusValues};
+use pdma_model_contract::dma::{ChannelId, FaultStatusValues};
+use scope::{CommandScope, ScopeState};
 use std::ops::ControlFlow;
 
-type Round<S> = Then<Fan<Candidate, RoundRobin, Engine<S>>, NextRound>;
-type RoundState<T> = ThenState<Option<FanState<(), Option<ChannelId>, EngineState<T>, ()>>, ()>;
+type Round<S> = Then<FanIn<Candidate, Arbitrate<RoundRobin>, CommandScope<S>>, NextRound>;
+type RoundState<T> = ThenState<Option<FanState<(), Option<CommandRequest>, ScopeState<T>, ()>>, ()>;
 
 #[derive(Debug)]
 enum Rounds<T> {
@@ -23,29 +22,29 @@ enum Rounds<T> {
 
 /// Repeats candidate selection and one shared command engine.
 #[derive(Debug)]
-pub struct CommandArbiter<S> {
+pub struct Commands<S> {
     count: usize,
     rounds: Repeat<Round<S>>,
 }
 
 /// Retains round progress and at most one exact continuation per channel.
 #[derive(Debug)]
-pub struct CommandArbiterState<T> {
+pub struct CommandState<T> {
     rounds: Rounds<T>,
     saved: Vec<Option<T>>,
 }
 
-impl<S> CommandArbiter<S> {
+impl<S> Commands<S> {
     pub(crate) fn new(count: usize, pipeline: S) -> Self {
         Self {
             count,
             rounds: Repeat::new(Then::new(
-                Fan::new(
+                FanIn::new(
                     (0..count)
                         .map(|index| Candidate::new(ChannelId::new(index)))
                         .collect(),
-                    RoundRobin::default(),
-                    vec![Engine(RunCommand::new(pipeline))],
+                    Arbitrate::snapshots(RoundRobin::default()),
+                    CommandScope(pipeline),
                 ),
                 NextRound,
             )),
@@ -53,17 +52,17 @@ impl<S> CommandArbiter<S> {
     }
 }
 
-impl<M: MemoryAccess<SB>, SB, S> Stage<Dma<M, SB>> for CommandArbiter<S>
+impl<M: MemoryAccess<SB>, SB, S> Stage<Dma<M, SB>> for Commands<S>
 where
-    S: Stage<Dma<M, SB>, Input = ChannelTask<Command>, Output = (), Error = Error>,
+    S: Stage<Dma<M, SB>, Input = ChannelId, Output = (), Error = Error>,
 {
     type Input = ();
     type Output = ();
     type Error = Error;
-    type State = CommandArbiterState<S::State>;
+    type State = CommandState<S::State>;
 
     fn start((): ()) -> Self::State {
-        CommandArbiterState {
+        CommandState {
             rounds: Rounds::Fresh,
             saved: Vec::new(),
         }
@@ -131,6 +130,28 @@ where
             StepOutcome::Complete(result) => StepOutcome::Complete(result.map_err(Error::from)),
             StepOutcome::InProgress => StepOutcome::InProgress,
         })
+    }
+}
+
+struct Frame<'a, T, M, SB> {
+    device: &'a mut Dma<M, SB>,
+    saved: &'a mut [Option<T>],
+}
+
+impl<T, M, SB> Stage<Frame<'_, T, M, SB>> for Candidate {
+    type Input = ();
+    type Output = Option<CommandRequest>;
+    type Error = Error;
+    type State = ();
+
+    fn start((): ()) {}
+
+    fn step(
+        &mut self,
+        frame: &mut Frame<'_, T, M, SB>,
+        (): &mut (),
+    ) -> StepResult<Self::Output, Error> {
+        Ok(StepOutcome::Complete(self.request(frame.device)))
     }
 }
 

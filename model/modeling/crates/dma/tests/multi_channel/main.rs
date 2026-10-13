@@ -13,7 +13,6 @@ mod candidates;
 mod command_grant;
 mod context_abort;
 mod fairness;
-mod fan_in_inputs;
 mod reset_boundaries;
 mod response_routing;
 mod scatter_gather_reset;

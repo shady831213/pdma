@@ -91,7 +91,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
 
     // When: cancellation follows the first two-byte write and the same operation resumes.
     let first_chunk_committed = tokio::select! {

@@ -209,7 +209,7 @@ Interlock conflicting configuration/lifecycle changes while the operation is pen
 HW-07: Consumer progress proves descriptor consumption, not execution completion.
 Register accepted task ownership without an observable gap when advancing consumer,
 and keep it until the complete command pipeline retires. Preserve the existing
-`RunCommand` terminal boundary; suspension leaves the child InProgress and the shared
+whole-command retirement boundary; suspension leaves the child InProgress and the shared
 engine saves its exact composed continuation, with accepted references in Channel.parked, without
 whole-command retirement. Do not release ownership merely
 on payload completion or response publication. Deduplicate multiple uses of the same context within a
@@ -286,8 +286,8 @@ preserve this distinction when the external transport is implemented.
   owned by the Function. The DMA API receives only channel/context IDs, never a PASID.
 - Execution acceptance is successful command fetch/consumer publication plus active
   reference registration in one synchronous Fetch step. There is no externally visible
-  interval between those effects. `RunCommand` releases executing state only at its
-  terminal boundary. The shared engine parks the exact unfinished continuation, retaining accepted
+  interval between those effects. The shared engine releases executing state only at
+  whole-command retirement. It parks the exact unfinished continuation on suspension, retaining accepted
   references in Channel.parked until resumed completion or cancellation cleanup.
   It cleans parked reset/Abort targets before stepping active shared work; a disabled
   peer cannot prevent that cleanup.

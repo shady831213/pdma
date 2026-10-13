@@ -55,12 +55,12 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
     let execution = Then::new(CheckRanges, Repeat::new(chunk));
     let mut hardware = Then::new(
         Then::new(
-            device.intake(),
+            pdma_model_dma::Fetch,
             Resettable::new(AfterEach::new(execution, UpdateIrq)),
         ),
         device.responses(),
     );
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     let mut complete = false;
     // When
     for _ in 0..32 {

@@ -26,7 +26,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         let mut device = setup()?;
         let pipeline = super::support::single_command(&device);
         let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
-        let mut operation = Operation::new(());
+        let mut operation = Operation::new(ChannelId::new(0));
         let response = finish(&mut execution, &mut operation, &mut device)??;
         assert_eq!(response.channel(), ChannelId::new(0));
         let mut publication = Operation::new(response);
@@ -81,7 +81,7 @@ fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     let mut device = setup()?;
     let pipeline = super::support::single_command(&device);
     let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(ChannelId::new(0));
     let response = finish(&mut execution, &mut operation, &mut device)??;
     let mut port = Resettable::for_channel(ChannelId::new(1), Publish);
     // When: an incorrectly wired graph sends the response to the wrong port.

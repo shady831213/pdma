@@ -1,7 +1,7 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
     DmaControl, DmaFatalCode, Endpoint, Model, Operation, RegisterAccess, SoftwareCpu, fixture,
-    single_command, with_idle_hardware,
+    with_idle_hardware,
 };
 
 #[tokio::test]
@@ -56,64 +56,77 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a configured channel with one published response.
     let (device, memory, rings) = fixture()?;
-    let mut stage = pdma_model_dma::RunCommand::new(single_command(&device));
+    let mut stage = device.command_loop();
     let model = Model::new(device);
-    let cpu = SoftwareCpu::new();
-    let mut channel = cpu
-        .run_main(Channel::setup(
-            model.clone(),
-            memory.clone(),
-            ChannelConfig {
-                id: pdma_model_contract::dma::ChannelId::new(0),
-                rings,
-            },
-        ))
-        .await?;
-    let command = Command {
-        copy_length: 0,
-        sg_context: 0,
-        flags: CompletionFlagsValues::default(),
-        id: 9,
-        source: Endpoint::linear(0, 0),
-        destination: Endpoint::linear(0, 0),
+    let executor = AsyncExecutor::new(model.clone());
+    let mut operation = Operation::new(());
+    let software = async {
+        let cpu = SoftwareCpu::new();
+        let mut channel = cpu
+            .run_main(Channel::setup(
+                model.clone(),
+                memory.clone(),
+                ChannelConfig {
+                    id: pdma_model_contract::dma::ChannelId::new(0),
+                    rings,
+                },
+            ))
+            .await?;
+        let command = Command {
+            copy_length: 0,
+            sg_context: 0,
+            flags: CompletionFlagsValues::default(),
+            id: 9,
+            source: Endpoint::linear(0, 0),
+            destination: Endpoint::linear(0, 0),
+        };
+        cpu.run_main(channel.submit(command)).await?;
+        let producer = u32::try_from(
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
+                + pdma_model_contract::dma::ResponseRegisters::PRODUCER.offset(),
+        )?;
+        let mut published = false;
+        for _ in 0..256 {
+            let mut bytes = [0; 4];
+            model.read(producer, &mut bytes).await?;
+            if u32::from_le_bytes(bytes) == 1 {
+                published = true;
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(published);
+        // When: software resets and constructs a fresh driver over the same storage.
+        cpu.run_main(channel.reset()).await?;
+        let mut channel = cpu
+            .run_main(Channel::setup(
+                model.clone(),
+                memory,
+                ChannelConfig {
+                    id: pdma_model_contract::dma::ChannelId::new(0),
+                    rings,
+                },
+            ))
+            .await?;
+        cpu.run_main(channel.submit(command)).await?;
+        let mut completed = None;
+        for _ in 0..256 {
+            completed = cpu.run_main(channel.response()).await?;
+            if completed.is_some() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        // Then: the fresh cursors expose exactly the new completion.
+        assert_eq!(completed.map(|response| response.id), Some(9));
+        assert_eq!(cpu.run_main(channel.response()).await?, None);
+        Ok::<_, Box<dyn std::error::Error>>(())
     };
-    cpu.run_main(channel.submit(command)).await?;
-    assert_eq!(
-        AsyncExecutor::new(model.clone())
-            .run(&mut stage, &mut Operation::new(()))
-            .await
-            .map_err(|error| format!("{error:?}"))?,
-        std::ops::ControlFlow::Continue(())
-    );
-    // When: software resets and constructs a fresh driver over the same storage.
-    with_idle_hardware(&model, cpu.run_main(channel.reset())).await?;
-    let mut channel = cpu
-        .run_main(Channel::setup(
-            model.clone(),
-            memory,
-            ChannelConfig {
-                id: pdma_model_contract::dma::ChannelId::new(0),
-                rings,
-            },
-        ))
-        .await?;
-    cpu.run_main(channel.submit(command)).await?;
-    assert_eq!(
-        AsyncExecutor::new(model)
-            .run(&mut stage, &mut Operation::new(()))
-            .await
-            .map_err(|error| format!("{error:?}"))?,
-        std::ops::ControlFlow::Continue(())
-    );
-    // Then: the fresh cursors expose exactly the new completion.
-    assert_eq!(
-        cpu.run_main(channel.response())
-            .await?
-            .map(|response| response.id),
-        Some(9)
-    );
-    assert_eq!(cpu.run_main(channel.response()).await?, None);
-    Ok(())
+    tokio::select! {
+        result = software => result,
+        result = executor.run(&mut stage, &mut operation) => Err(format!("hardware terminated: {result:?}").into()),
+    }
 }
 
 #[tokio::test]

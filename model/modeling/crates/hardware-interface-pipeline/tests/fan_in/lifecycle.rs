@@ -2,7 +2,7 @@ use super::{
     policy::Policy,
     sources::{Accept, Candidate, Context, finish},
 };
-use hardware_interface_pipeline::{BranchError, FanIn, RunError, Stage, StepOutcome};
+use hardware_interface_pipeline::{BranchError, FanIn, Operation, RunError, Stage, StepOutcome};
 type Gather = FanIn<Candidate, Policy, Accept>;
 #[test]
 fn invalidated_candidate_is_rechecked_before_queue_acceptance() {
@@ -28,12 +28,17 @@ fn stalled_grant_retains_accepted_state_after_readiness_disappears() {
     let mut state = Gather::start(vec![()]);
     let mut context = Context::with_jobs(&[0]);
     context.blocked.push(0);
-    for _ in 0..9 {
+    for _ in 0..100 {
         assert_eq!(
             hardware.step(&mut context, &mut state),
             Ok(StepOutcome::InProgress)
         );
+        if context.stalled {
+            break;
+        }
     }
+    assert_eq!(context.accepted, [0]);
+    assert!(context.stalled);
     // When: the accepted job is released.
     context.blocked.clear();
     let result = finish(&mut hardware, &mut state, &mut context);
@@ -96,4 +101,34 @@ fn empty_fan_completes_without_interaction() {
     assert_eq!(result, Ok(StepOutcome::Complete(Ok(vec![]))));
     assert!(context.observed.is_empty());
     assert!(context.accepted.is_empty());
+}
+
+#[test]
+fn canceling_accepted_output_discards_work_without_replaying_external_effects() {
+    // Given: output hardware retains an accepted job until software releases it.
+    let mut hardware = FanIn::new(vec![Candidate(0)], Policy::Fixed, Accept::Normal);
+    let mut operation = Operation::new(vec![()]);
+    let mut context = Context::with_jobs(&[0]);
+    context.blocked.push(0);
+    for _ in 0..100 {
+        assert_eq!(
+            operation.step(&mut hardware, &mut context),
+            Ok(StepOutcome::InProgress)
+        );
+        if context.stalled {
+            break;
+        }
+    }
+    assert_eq!(context.accepted, [0]);
+    assert!(context.stalled);
+    // When: the owner cancels after acceptance, then releases the external stall.
+    operation.reset();
+    context.blocked.clear();
+    // Then: accepted external effects remain and no invocation work can restart.
+    assert_eq!(
+        operation.step(&mut hardware, &mut context),
+        Err(RunError::Exhausted)
+    );
+    assert_eq!(context.accepted, [0]);
+    assert_eq!(context.observed, [0]);
 }

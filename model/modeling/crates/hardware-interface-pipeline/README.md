@@ -71,7 +71,13 @@ that same mechanism. Fan-in accepts a vector of source inputs; fan-out accepts
 its single source input directly. Both return indexed receipt vectors.
 
 `Arbitrate<A>` adapts `Arbitration<Value,Error>::select` into a singleton-output
-value-selection policy. Unselected values remain until later selections.
+value-selection policy. `Arbitrate::new` retains unselected owned values until
+later selections. `Arbitrate::snapshots` waits for every input and an available
+output, asks the same selector for one winner, and consumes the entire snapshot
+round. Only the winner reaches the output; the remaining snapshots are discarded.
+No winner completes the round without invoking the output. This constructor is
+for observations that can be sampled again, not independently owned work that
+must all execute. Both constructors use the same fan lifecycle and plan validation.
 `Dispatch<R>` adapts `Route<Value,Error>::target` into singleton-input routing.
 Neither adapter executes child hardware or owns another engine. Application
 reducers after receipt collection compose as ordinary downstream stages.

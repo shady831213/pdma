@@ -44,8 +44,27 @@ async fn canceled_gather_resumes_completed_candidates_and_active_output() {
     let mut task_context = TaskContext::from_waker(Waker::noop());
     // When: cancellation follows acceptance and the caller later resumes.
     let mut future = Box::pin(executor.run(&mut hardware, &mut operation));
-    for _ in 0..6 {
+    for _ in 0..100 {
         assert!(future.as_mut().poll(&mut task_context).is_pending());
+        if executor
+            .backend()
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .stalled
+        {
+            break;
+        }
+    }
+    {
+        let context = executor
+            .backend()
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        assert_eq!(context.accepted, [0]);
+        assert!(context.stalled);
+        drop(context);
     }
     drop(future);
     executor

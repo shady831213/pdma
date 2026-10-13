@@ -45,19 +45,23 @@ reset does not retract them.
 
 ## How the current model reaches completion
 
-`Dma::command_loop()` composes
-`AfterEach<CommandArbiter<Pipeline>, ResetControl>`. `Fetch` gates resetting channels and
+`Dma::command_loop()` composes candidate advancement, snapshot arbitration and one
+shared fetch/execution composition, with `ResetControl` after every outer step.
+`CommandScope` wraps `Then(Fetch, pipeline)` and owns suspension/retirement; no hardware
+leaf calls another stage's step. Reset can occur between Fetch's completion and its
+downstream step, so accepted references remain held across that handoff.
+`Fetch` gates resetting channels and
 device reset before accepting commands. Accepted ownership records channel and
 generation, including per-channel parked work; command, SG-list, payload and
-response paths check reset before further memory access. `RunCommand` releases
+response paths check reset before further memory access. The shared engine releases
 executing ownership when the complete pipeline terminates. Payload faults leave
 the leaf InProgress with its Transfer intact; the shared engine saves the exact
 composed continuation and moves its accepted references to Channel.parked.
 The engine turn completes at suspension. A later arbitration grant restores that continuation
 without fetching another command or replaying completed stages.
-Before any shared active step, CommandArbiter discards affected parked operations on
+Before any shared active step, the command loop discards affected parked operations on
 reset or matching Abort and releases their references. A disabled active peer
-therefore cannot prevent parked cleanup. RunCommand discards its retained
+therefore cannot prevent parked cleanup. The engine discards its retained
 child state before ownership is released, including
 for custom child stages that do not clear their own state. Response publication
 can precede that outcome by additional composition steps; ownership remains held during
@@ -80,7 +84,7 @@ so guarded custom stages can reject stale tasks even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
 Custom sustained command graphs pass their downstream composition to
-`Dma::arbitrate` and drive `ResetControl`. The arbiter owns one shared `RunCommand<S>`;
+`Dma::command_loop_with`, which includes `ResetControl`. The loop owns one shared engine;
 its child implements `Stage<Dma<M>, Input = ChannelTask<Command>, Output = (),
 Error = Error>`. Its internal transforms need not match the default
 `Pipeline`. Merely

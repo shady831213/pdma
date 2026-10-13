@@ -77,7 +77,7 @@ async fn rejected_read_preserves_the_bus_error_and_output() -> TestResult {
 async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestResult {
     // Given: a real fault notification created beneath the transport.
     let device = Dma::new(SharedMemory::new(), 1)?;
-    let mut hardware = device.intake();
+    let mut hardware = pdma_model_dma::Fetch;
     let mut model = Model::new(device);
     {
         let mut device = model.device.lock().await;
@@ -98,7 +98,7 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         ] {
             device.write(offset, &1_u32.to_le_bytes())?;
         }
-        let mut operation = Operation::new(());
+        let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
         let outcome = (0..256).find_map(|_| match operation.step(&mut hardware, &mut device) {
             Ok(StepOutcome::InProgress) => None,
             terminal => Some(terminal),

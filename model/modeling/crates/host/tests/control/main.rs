@@ -168,7 +168,10 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     .await?;
     // When: hardware publishes a masked IOC completion and software unmasks.
     AsyncExecutor::new(model.clone())
-        .run(&mut stage, &mut Operation::new(()))
+        .run(
+            &mut stage,
+            &mut Operation::new(pdma_model_contract::dma::ChannelId::new(0)),
+        )
         .await
         .map_err(|error| format!("{error:?}"))?;
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::default()))

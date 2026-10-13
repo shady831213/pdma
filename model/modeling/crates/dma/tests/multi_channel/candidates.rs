@@ -1,38 +1,100 @@
-use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
-use hardware_interface_runtime::{MemoryAlignment, MemoryRegion, SharedMemory};
-use pdma_model_contract::dma::{ChannelId, CommandRegisters};
-use pdma_model_dma::{Candidate, Dma};
+use super::support::{TestResult, configure, finish, submit, word};
+use hardware_interface_pipeline::{Arbitration, Operation, StepOutcome};
+use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
+use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters};
+use pdma_model_dma::{Candidate, CommandRequest, Dma, Error, Fetch, RoundRobin};
 
-#[test]
-fn completed_candidates_leave_every_descriptor_unaccepted() -> TestResult {
-    // Given: two ready channels sharing one execution engine.
+fn device() -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
     memory.add_regions(&[MemoryRegion::try_new(
-        0x1000.into(),
+        MemoryAddress::new(0x1000),
         0x3000,
         MemoryAlignment::ONE,
     )?])?;
-    let mut device = Dma::new(memory, 2)?;
-    for index in 0..2 {
+    let mut device = Dma::new(memory, 3)?;
+    for index in 0..3 {
         configure(&mut device, index)?;
         submit(&mut device, index, u64::try_from(index)?)?;
     }
-    // When: independent input stages finish producing their candidate values.
-    for index in 0..2 {
-        let channel = ChannelId::new(index);
+    Ok(device)
+}
+
+fn consumer(device: &mut Dma<SharedMemory>, index: usize) -> TestResult<u32> {
+    word(
+        device,
+        ChannelId::new(index).register_offset(3).ok_or("offset")?
+            + ChannelBlock::COMMAND.offset()
+            + CommandRegisters::CONSUMER.offset(),
+    )
+}
+
+#[test]
+fn repeated_candidate_production_leaves_every_descriptor_unaccepted() -> TestResult {
+    // Given: every channel has a queued command.
+    let mut device = device()?;
+    let mut inputs = [0, 1, 2].map(|index| Candidate::new(ChannelId::new(index)));
+    // When: the arbiter repeatedly inspects eligibility without granting an input.
+    for _ in 0..3 {
+        for (index, input) in inputs.iter_mut().enumerate() {
+            assert_eq!(
+                Operation::new(()).step(input, &mut device)?,
+                StepOutcome::Complete(Ok(Some(CommandRequest::Fetch(ChannelId::new(index)))))
+            );
+        }
+    }
+    // Then: all commands remain queued.
+    for index in 0..3 {
+        assert_eq!(consumer(&mut device, index)?, 0);
+    }
+    Ok(())
+}
+
+#[test]
+fn round_robin_selects_only_its_explicit_candidate_values() -> TestResult {
+    // Given: a channel subset whose input order differs from hardware indices.
+    let mut device = device()?;
+    let mut values = Vec::new();
+    for index in [2, 0] {
+        let mut candidate = Candidate::new(ChannelId::new(index));
+        values.push(Some(finish(
+            &mut candidate,
+            &mut Operation::new(()),
+            &mut device,
+        )??));
+    }
+    let mut policy = RoundRobin::default();
+    // When: two rounds select from the completed candidate values.
+    for index in [2, 0] {
+        let selected = policy.select(&values)?.ok_or("missing candidate")?;
         assert_eq!(
-            Operation::new(()).step(&mut Candidate::new(channel), &mut device)?,
-            StepOutcome::Complete(Ok(Some(channel)))
+            values
+                .get(selected)
+                .copied()
+                .flatten()
+                .flatten()
+                .map(CommandRequest::channel),
+            Some(ChannelId::new(index))
         );
     }
-    // Then: value production neither pops descriptors nor starts shared execution.
-    for index in 0..2 {
-        let base = ChannelId::new(index).register_offset(2).ok_or("channel")?;
-        assert_eq!(
-            word(&mut device, base + CommandRegisters::CONSUMER.offset())?,
-            0
-        );
+    // Then: selection neither includes the excluded channel nor consumes descriptors.
+    for index in 0..3 {
+        assert_eq!(consumer(&mut device, index)?, 0);
+    }
+    Ok(())
+}
+
+#[test]
+fn invalid_fetch_target_reports_an_error_without_consuming_valid_inputs() -> TestResult {
+    // Given: a Fetch stage bound outside the device's channel population.
+    let mut device = device()?;
+    let mut fetch = Fetch;
+    // When: the invalid channel is fetched.
+    let mut operation = Operation::new(ChannelId::new(3));
+    let result = finish(&mut fetch, &mut operation, &mut device)?;
+    // Then: configuration misuse is reported rather than waiting forever or touching another channel.
+    assert!(matches!(result, Err(Error::Unmapped)));
+    for index in 0..3 {
+        assert_eq!(consumer(&mut device, index)?, 0);
     }
     Ok(())
 }

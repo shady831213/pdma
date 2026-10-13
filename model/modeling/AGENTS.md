@@ -185,11 +185,19 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   related registers in one child block before repeating it.
   One shared execution pipeline processes commands selected by round-robin arbitration,
   with bounded per-channel retained operations for payload-fault suspension.
-  CommandArbiter composes Candidate inputs, DMA's RoundRobin value policy and one
-  shared engine through Fan. Candidates do not consume commands; planning sees
+  CommandLoop composes channel-local Candidate inputs, Arbitrate::snapshots with
+  DMA's RoundRobin selector and one shared engine through FanIn. RoundRobin implements
+  Arbitration, not FanPolicy; snapshot disposal belongs to the generic adapter.
+  Candidates emit non-owning Fetch/Resume requests and do not consume commands; planning sees
   completed values, not stages. A selected channel is revalidated before fetching
   a new command or restoring its saved continuation. Eligibility belongs to DMA,
-  not generic combinators. Fetch remains the new-command acceptance stage.
+  not generic combinators. Fetch is a shared leaf taking ChannelId as input and
+  producing ChannelTask<Command>. CommandScope is a DMA lifecycle combinator around
+  Then(Fetch, pipeline), not a hardware execution stage. Only Then advances Fetch
+  and downstream; hardware leaves must never call another stage's step. Communication
+  uses input/output or shared hardware state. Requests name live channels, not reserved
+  descriptors; generation binds at acceptance. Revalidate admission before Fetch,
+  including after composition start, but never discard accepted work for lost eligibility.
   Route tagged responses through FanOut with the Dispatch policy to
   channel-bound publication ports.
   Complete hardware assembly uses Dma::command_loop(); scenarios drive one retained
@@ -204,22 +212,22 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   requests cleanup; read one means busy; only hardware clears zero after affected accepted
   work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
-  Use `AfterEach<CommandArbiter<Pipeline>, ResetControl>` for the command loop. Track accepted
+  CommandLoop includes ResetControl after each outer step. Track accepted
   channel/generation ownership, including parked references, until terminal release;
   generation invalidation alone
-  is not completion. `RunCommand` owns executing-state release at complete pipeline
+  is not completion. The shared engine owns executing-state release at complete pipeline
   termination. A payload fault retains the leaf's Transfer and remains InProgress.
-  CommandArbiter retains at most one exact composed continuation per channel, preserving
+  The command-loop invocation retains at most one exact composed continuation per channel, preserving
   scratch and custom child-stage state; Channel.parked retains accepted references.
   The shared engine restores that continuation on resume without refetching,
   restarting CheckRanges or repeating completed transforms. Arbitration retains
   a healthy command's grant through termination and yields it on payload fault.
-  CommandArbiter cleans reset/Abort targets before stepping shared active work,
+  The command loop cleans reset/Abort targets before stepping shared active work,
   including a disabled peer. Parking is not whole-command retirement.
   Response publication and `Resettable` binding must not retire the whole command.
   Custom sustained command assemblies pass their downstream transform to
-  `Dma::arbitrate`, preserving RunCommand terminal ownership, and drive `ResetControl`.
-  `RunCommand<S>` constrains the child stage's associated types, not its concrete composition;
+  `Dma::command_loop_with`, which preserves terminal ownership and includes ResetControl.
+  The shared engine constrains the child stage's associated types, not its concrete composition;
   discard terminal child state before releasing command ownership.
   Guard command, SG-list, payload and response accesses before old work can interact again.
   Memory calls are synchronous within a step: do not invent bus transactions, outstanding

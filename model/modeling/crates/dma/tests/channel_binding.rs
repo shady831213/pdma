@@ -46,25 +46,22 @@ fn invalid_instance_count_is_rejected_before_allocation() {
 }
 
 #[test]
-fn independently_sized_empty_intakes_remain_in_progress() -> Result<(), Box<dyn std::error::Error>>
-{
+fn independently_sized_empty_command_loops_remain_in_progress()
+-> Result<(), Box<dyn std::error::Error>> {
     // Given: independently configured one- and five-channel devices.
     for count in [1, 5] {
         let mut device = Dma::new(SharedMemory::new(), count)?;
-        let mut arbiter = device.intake();
+        let mut arbiter = device.command_loop();
         let mut operation = Operation::new(());
-        // When: scanning each empty population.
-        for _ in 1..count {
+        // When: repeatedly driving idle arbitration for each population.
+        for _ in 0..128 {
             assert!(matches!(
                 operation.step(&mut arbiter, &mut device)?,
                 StepOutcome::InProgress
             ));
         }
-        // Then: an empty configured population does not complete intake.
-        assert!(matches!(
-            operation.step(&mut arbiter, &mut device)?,
-            StepOutcome::InProgress
-        ));
+        // Then: repeated empty rounds retain the command loop invocation.
+        assert!(!operation.is_complete());
     }
     Ok(())
 }

@@ -4,6 +4,7 @@ mod access;
 mod arbitration;
 mod build;
 mod channel;
+mod commands;
 mod error;
 mod execution;
 mod fetch;
@@ -15,9 +16,9 @@ mod stages;
 #[cfg(test)]
 mod tests;
 
-pub use arbitration::{Candidate, CommandArbiter, CommandArbiterState, Intake, RoundRobin};
+pub use arbitration::RoundRobin;
 pub use build::BuildError;
-pub use channel::{Channel, CommandRing, ResponseRing};
+pub use channel::{Candidate, Channel, CommandRequest, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
 pub use execution::{
     COPY_CHUNK_BYTES, CheckRanges, CopyState, NextChunk, RangeCheck, ReadCopy, Transfer, WriteCopy,
@@ -32,7 +33,7 @@ use pdma_model_contract::dma::{
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, Responses, RouteResponse};
-pub use stages::{CommandLoop, CopyLoop, Execution, Pipeline, Publish, RunCommand, UpdateIrq};
+pub use stages::{CommandLoop, CopyLoop, Execution, Pipeline, Publish, UpdateIrq};
 
 #[derive(Debug)]
 struct Frontier {

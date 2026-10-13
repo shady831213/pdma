@@ -40,11 +40,11 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     // Given: a fetched task retained between custom execution and response ports.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut intake = device.intake();
-    let mut operation = Operation::new(());
+    let mut fetch = pdma_model_dma::Fetch;
+    let mut operation = Operation::new(ChannelId::new(0));
     let mut accepted = None;
     for _ in 0..32 {
-        if let StepOutcome::Complete(Ok(task)) = operation.step(&mut intake, &mut device)? {
+        if let StepOutcome::Complete(Ok(task)) = operation.step(&mut fetch, &mut device)? {
             accepted = Some(task);
             break;
         }
@@ -84,8 +84,8 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let pipeline = Then::new(support::single_command(&device), CommandExit);
-    let mut hardware = pdma_model_dma::RunCommand::new(pipeline);
+    let pipeline = Then::new(support::single_command(&device).downstream, CommandExit);
+    let mut hardware = device.command_loop_with(pipeline);
     let command = &mut hardware;
     let mut operation = Operation::new(());
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
@@ -108,16 +108,17 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     assert_eq!(read_word(&mut device, RESET)?, 1);
     let mut completed = false;
     for _ in 0..32 {
-        if matches!(
+        assert!(matches!(
             operation.step(command, &mut device)?,
-            StepOutcome::Complete(Ok(std::ops::ControlFlow::Continue(())))
-        ) {
+            StepOutcome::InProgress
+        ));
+        if read_word(&mut device, RESET)? == 0 {
             completed = true;
             break;
         }
     }
     assert!(completed);
-    assert_eq!(read_word(&mut device, producer)?, 1);
+    assert_eq!(read_word(&mut device, producer)?, 0);
     let _ = ResetControl.step(&mut device, &mut ())?;
     assert_eq!(read_word(&mut device, RESET)?, 0);
     Ok(())

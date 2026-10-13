@@ -1,13 +1,13 @@
 use crate::{
-    ChannelContext, CheckRanges, CommandArbiter, Dma, Error, NextChunk, ReadCopy, ResetControl,
-    Resettable, Responses, WriteCopy,
+    ChannelContext, CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
+    Responses, WriteCopy,
 };
 use hardware_interface_pipeline::{
     AfterEach, Repeat, RunError, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, Response};
-use std::{convert::Infallible, ops::ControlFlow};
+use std::convert::Infallible;
 
 /// Publish a retained response; a full ring suspends only this stage.
 #[derive(Debug, Default)]
@@ -75,56 +75,6 @@ impl<M, SB> Stage<ChannelContext<'_, M, SB>> for UpdateIrq {
     }
 }
 
-/// Ends one command after completion or channel-local termination.
-#[derive(Debug)]
-pub struct RunCommand<S = Pipeline> {
-    pipeline: S,
-}
-
-impl<S> RunCommand<S> {
-    /// Runs one composed command with shared execution ownership and terminal cleanup.
-    pub const fn new(pipeline: S) -> Self {
-        Self { pipeline }
-    }
-}
-
-impl<M: MemoryAccess<SB>, S, SB> Stage<Dma<M, SB>> for RunCommand<S>
-where
-    S: Stage<Dma<M, SB>, Output = (), Error = Error>,
-{
-    type Input = S::Input;
-    type Output = ControlFlow<(), ()>;
-    type Error = Error;
-    type State = Option<S::State>;
-
-    fn start(input: Self::Input) -> Self::State {
-        Some(S::start(input))
-    }
-
-    fn step(
-        &mut self,
-        device: &mut Dma<M, SB>,
-        state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
-        let Some(child) = state.as_mut() else {
-            return Err(RunError::Exhausted);
-        };
-        let outcome = self.pipeline.step(device, child);
-        if !matches!(outcome, Ok(StepOutcome::InProgress)) {
-            *state = None;
-            device.active = None;
-        }
-        device.refresh_maintenance();
-        Ok(match outcome? {
-            StepOutcome::Complete(
-                Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
-            ) => StepOutcome::Complete(Ok(ControlFlow::Continue(()))),
-            StepOutcome::Complete(Err(error)) => StepOutcome::Complete(Err(error)),
-            StepOutcome::InProgress => StepOutcome::InProgress,
-        })
-    }
-}
-
 /// One composable prepare/read/write iteration.
 pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
 
@@ -135,14 +85,10 @@ pub type Execution = Then<CheckRanges, Repeat<CopyLoop>>;
 pub type Pipeline = Then<Resettable<AfterEach<Execution, UpdateIrq>>, Responses>;
 
 /// Continuously executes commands through one shared pipeline.
-pub type CommandLoop = AfterEach<CommandArbiter<Pipeline>, ResetControl>;
+pub type CommandLoop<S = Pipeline> =
+    AfterEach<crate::commands::Commands<Then<Fetch, S>>, ResetControl>;
 
 impl<M, SB> Dma<M, SB> {
-    /// Builds command arbitration independently of the downstream transform.
-    pub fn intake(&self) -> crate::Intake {
-        crate::Intake::new(self.channels.len())
-    }
-
     /// Builds response dispatch with each destination bound to its owning channel.
     pub fn responses(&self) -> Responses {
         let ports = (0..self.channels.len())
@@ -157,17 +103,17 @@ impl<M, SB> Dma<M, SB> {
     pub fn command_loop(&self) -> CommandLoop {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
         let execution = Then::new(CheckRanges, Repeat::new(chunk));
-        AfterEach::new(
-            self.arbitrate(Then::new(
-                Resettable::new(AfterEach::new(execution, UpdateIrq)),
-                self.responses(),
-            )),
-            ResetControl,
-        )
+        self.command_loop_with(Then::new(
+            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+            self.responses(),
+        ))
     }
 
-    /// Arbitrates new and resumed commands through one shared downstream composition.
-    pub fn arbitrate<S>(&self, pipeline: S) -> CommandArbiter<S> {
-        CommandArbiter::new(self.channels.len(), pipeline)
+    /// Builds the sustained loop with one shared custom command composition.
+    pub fn command_loop_with<S>(&self, pipeline: S) -> CommandLoop<S> {
+        AfterEach::new(
+            crate::commands::Commands::new(self.channels.len(), Then::new(Fetch, pipeline)),
+            ResetControl,
+        )
     }
 }

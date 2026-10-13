@@ -2,7 +2,7 @@ use super::*;
 use hardware_interface_pipeline::{AfterEach, Repeat, RunError, Stage, StepResult, Then};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{
-    ChannelTask, CheckRanges, CommandArbiter, Error, NextChunk, Pipeline, ReadCopy, ResetControl,
+    ChannelTask, CheckRanges, CommandLoop, Error, NextChunk, Pipeline, ReadCopy, ResetControl,
     Resettable, UpdateIrq, WriteCopy,
 };
 use std::{cell::Cell, rc::Rc};
@@ -70,12 +70,12 @@ fn root_termination_drops_parked_continuations_before_reset_can_complete() -> Te
             device.responses(),
         );
         let drops = Rc::new(Cell::new(0));
-        let mut engine = device.arbitrate(Witnessed {
+        let mut engine = device.command_loop_with(Witnessed {
             pipeline,
             drops: Rc::clone(&drops),
             raw_error,
         });
-        let mut state = <CommandArbiter<Witnessed> as Stage<Dma<Paged>>>::start(());
+        let mut state = <CommandLoop<Witnessed> as Stage<Dma<Paged>>>::start(());
         for _ in 0..256 {
             assert!(matches!(
                 engine.step(&mut device, &mut state)?,

@@ -16,7 +16,7 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut hardware = support::single_command(&device);
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     // When
     for _ in 0..32 {
         let outcome = StepExecutor::new()

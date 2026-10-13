@@ -2,9 +2,7 @@
 
 mod instances;
 
-use hardware_interface_pipeline::{
-    AfterEach, AsyncExecutor, AsyncInteractionBackend, Operation, Repeat, StepOutcome, Then,
-};
+use hardware_interface_pipeline::{AsyncInteractionBackend, Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory, SharedMemoryAccess,
     SharedMemoryAllocator, SoftwareCpu,
@@ -12,9 +10,7 @@ use hardware_interface_runtime::{
 use pdma_model_contract::dma::{
     ChannelId, Command, CompletionFlagsValues, DmaRegisters, Endpoint, Response,
 };
-use pdma_model_dma::{
-    CheckRanges, Dma, NextChunk, ReadCopy, ResetControl, Resettable, UpdateIrq, WriteCopy,
-};
+use pdma_model_dma::{Dma, ResetControl};
 use pdma_model_host::{
     Channel, ChannelConfig, DmaError as Error, RingConfig, Rings, runtime::Model,
 };
@@ -163,15 +159,8 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let allocator = allocator();
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 3)?;
-    let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckRanges, Repeat::new(chunk));
-    let mut hardware = Then::new(
-        Then::new(
-            device.intake(),
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
-        ),
-        device.responses(),
-    );
+    let mut hardware = device.command_loop();
+    let mut operation = Operation::new(());
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     with_idle_hardware(
@@ -198,12 +187,21 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
             channels.remove(0).reset().await?;
             // Then: the other two drivers retain their submissions and distinct completions.
             for (index, channel) in (1..3).zip(&mut channels) {
-                AsyncExecutor::new(model.clone())
-                    .run(&mut hardware, &mut Operation::new(()))
-                    .await
-                    .map_err(|error| format!("{error:?}"))?;
+                let mut completed = None;
+                for _ in 0..256 {
+                    assert!(matches!(
+                        model
+                            .interact(|device| operation.step(&mut hardware, device))
+                            .await?,
+                        Ok(StepOutcome::InProgress)
+                    ));
+                    completed = channel.response().await?;
+                    if completed.is_some() {
+                        break;
+                    }
+                }
                 assert_eq!(
-                    channel.response().await?.map(|response| response.id),
+                    completed.map(|response| response.id),
                     Some(u64::try_from(index)?)
                 );
                 assert_eq!(channel.response().await?, None);

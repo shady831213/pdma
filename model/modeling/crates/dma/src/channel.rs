@@ -1,9 +1,11 @@
+mod candidate;
 mod command;
 mod mmio;
 mod response;
 #[cfg(test)]
 mod tests;
 
+pub use candidate::{Candidate, CommandRequest};
 pub use command::CommandRing;
 pub use response::ResponseRing;
 

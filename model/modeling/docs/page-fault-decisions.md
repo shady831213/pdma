@@ -96,7 +96,7 @@ Retaining only a transfer snapshot is insufficient for the composable model:
 restarting the command graph can repeat range checking, completed transforms or
 non-idempotent custom stages. The command arbiter therefore parks the exact composed
 continuation and restores it when that channel receives another grant.
-`RunCommand` ownership remains live until full terminal retirement, including
+Accepted ownership remains live until full terminal retirement, including
 post-publication stages. Per-channel accepted references survive parking so
 context cleanup cannot mistake a yielded engine for a completed command.
 
@@ -122,6 +122,43 @@ fault and completes the current turn. The saved-state bank is data, not a bank o
 engines, and the temporary context never contains an executable stage. Cleanup still
 runs independently of candidate eligibility. This removes ReadyStage and the old
 coupling between arbitration policy and driving selected source hardware.
+
+The 2026-10-13 composition review found that the value-flow graph still hid the full
+command loop under the name CommandArbiter, nested Engine around a separate RunCommand
+wrapper, and made DMA's RR implement FanPolicy to expire candidate snapshots. The
+follow-up keeps channel advancement -> selection -> one shared engine explicit.
+RR now implements the existing Arbitration index-selector trait. Arbitrate::snapshots
+expires the completed observation round after one selection; ordinary buffered
+arbitration still retains unselected owned values. These are distinct value-lifetime
+contracts within the same adapter and Fan lifecycle, not separate execution drivers.
+
+That intermediate engine still manually stepped Fetch and interpreted its outcome.
+Further review rejected this software-style call chain as the hardware stage boundary:
+an ordinary stage may update shared hardware state or transfer an output, but must not
+drive a preceding or sibling stage. The revised DMA uses channel-produced Fetch/Resume
+requests, pure selection and CommandScope(Then(Fetch, pipeline)). Fetch takes ChannelId
+through its input and produces the accepted ChannelTask. Only Then drives the fetch-to-
+execution connection. CommandScope is a lifecycle combinator around its owned child,
+not an additional hardware stage; it retains/restores the exact ThenState on suspension.
+This also retains completed custom transforms and scratch without refetching descriptors.
+No generic pipeline framework changes are required for this correction.
+
+Requests are non-owning observations. Unselected requests may be resampled; neither
+descriptors nor suspended continuations are moved into a disposable candidate. A fresh
+request refers to the current channel head at acceptance, preserving reset/reconfiguration
+before acceptance. Admission is rechecked after selection and before Fetch's first step;
+accepted work is not discarded by later eligibility changes. A reset between Fetch and
+execution remains blocked until the accepted continuation is dropped and its references
+retire. These rules cover the additional Then boundary without inventing transaction timing.
+
+The command loop continues using FanIn, Then, Repeat and AfterEach. Its
+invocation still owns the typed saved-state bank: arbitrary custom child continuations
+cannot be placed in the nongeneric DMA core without changing that core's type or
+erasing types. Moving them into persistent stage fields would also break invocation
+ownership. This outer lifetime owner is retained explicitly, not described as
+an arbiter. Parked reset/Abort cleanup still precedes shared active work, including
+when an unrelated active peer is disabled. No descriptor is fetched merely to
+produce a candidate, and no unselected command is discarded as if it were a sample.
 
 Hardware steps now report only InProgress or Complete. The async executor yields
 after every bounded step, allowing modeled software to run between steps without

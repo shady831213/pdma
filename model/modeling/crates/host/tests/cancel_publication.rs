@@ -68,7 +68,7 @@ async fn committed_copy_is_not_replayed_when_cancelled_before_response_publicati
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
 
     // When: cancellation follows the DMA write, then changed buffers precede resumption.
     let copied_before_completion = tokio::select! {

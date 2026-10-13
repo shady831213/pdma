@@ -108,17 +108,21 @@ fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult
         if producer == 3 {
             break;
         }
-        let mut hardware = super::support::single_command(device);
+        let mut hardware = device.command_loop();
         let mut operation = Operation::new(());
         let mut finished = false;
         for _ in 0..128 {
-            match operation.step(&mut hardware, device)? {
-                StepOutcome::Complete(result) => {
-                    result?;
-                    finished = true;
-                    break;
-                }
-                StepOutcome::InProgress => {}
+            assert!(matches!(
+                operation.step(&mut hardware, device)?,
+                StepOutcome::InProgress
+            ));
+            if word(
+                device,
+                base + ChannelBlock::RESPONSE.offset() + ResponseRegisters::PRODUCER.offset(),
+            )? == producer
+            {
+                finished = true;
+                break;
             }
         }
         assert!(finished);

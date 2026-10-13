@@ -11,6 +11,7 @@ pub(super) struct Context {
     pub observed: Vec<usize>,
     pub accepted: Vec<usize>,
     pub blocked: Vec<usize>,
+    pub stalled: bool,
     pub updates: usize,
 }
 impl Context {
@@ -89,6 +90,7 @@ impl Stage<Context> for Accept {
             }
             AcceptState::Active(job) => {
                 if context.blocked.contains(&job.channel) {
+                    context.stalled = true;
                     *state = AcceptState::Active(job);
                     return Ok(StepOutcome::InProgress);
                 }

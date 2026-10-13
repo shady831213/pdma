@@ -1,75 +1,51 @@
-use crate::{ChannelTask, Dma, Error};
-use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
+use crate::{ChannelTask, CommandRequest, Dma, Error};
+use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, Command};
-use pdma_model_contract::ring::Ring;
 
-/// A channel's non-consuming eligibility check and command acceptance endpoint.
-#[derive(Debug)]
-pub struct Fetch {
-    channel: ChannelId,
-}
-
-impl Fetch {
-    /// Binds an input port to one channel without creating execution state.
-    pub const fn new(channel: ChannelId) -> Self {
-        Self { channel }
-    }
-}
-
-impl Fetch {
-    fn ready<M, SB>(&self, device: &Dma<M, SB>) -> bool {
-        self.eligible(device)
-            && device
-                .channels
-                .get(self.channel.index())
-                .is_none_or(|channel| channel.parked.is_none())
-    }
-}
-
-impl Fetch {
-    pub(crate) fn eligible<M, SB>(&self, device: &Dma<M, SB>) -> bool {
-        if device.halted() || device.resetting() {
-            return false;
-        }
-        device
-            .channels
-            .get(self.channel.index())
-            .is_none_or(|channel| {
-                channel.enabled()
-                    && !channel.resetting()
-                    && !channel.halted()
-                    && !channel.registers.values.fault_status.faulted()
-                    && (channel.parked.is_some() || !channel.command.pointers().is_empty())
-                    && channel.response.pointers().pending() < channel.response.capacity()
-            })
-    }
-}
+/// Accepts one command from the channel supplied through its input.
+#[derive(Debug, Default)]
+pub struct Fetch;
 
 impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Fetch {
-    type Input = ();
+    type Input = ChannelId;
     type Output = ChannelTask<Command>;
     type Error = Error;
-    type State = ();
+    type State = Option<ChannelId>;
 
-    fn start((): ()) {}
+    fn start(channel: ChannelId) -> Self::State {
+        Some(channel)
+    }
 
-    fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<Self::Output, Error> {
-        if !self.ready(device) {
-            return Ok(StepOutcome::InProgress);
+    fn step(
+        &mut self,
+        device: &mut Dma<M, SB>,
+        state: &mut Self::State,
+    ) -> StepResult<Self::Output, Error> {
+        let channel = state.take().ok_or(RunError::Exhausted)?;
+        match device.command_request(channel) {
+            Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+            Ok(Some(CommandRequest::Fetch(_))) => {}
+            Ok(None | Some(CommandRequest::Resume(_))) => {
+                *state = Some(channel);
+                return Ok(StepOutcome::InProgress);
+            }
         }
         let outcome = {
-            let selected = match device.channel_context(self.channel) {
+            let selected = match device.channel_context(channel) {
                 Ok(selected) => selected,
                 Err(error) => return Ok(StepOutcome::Complete(Err(error))),
             };
             let outcome = match selected.channel.command.pop(&selected.memory) {
                 Ok(Some(value)) => StepOutcome::Complete(Ok(ChannelTask {
-                    channel: self.channel,
+                    channel,
                     generation: selected.channel.generation,
                     value,
                 })),
-                Ok(None) => StepOutcome::InProgress,
+                Ok(None) => {
+                    *state = Some(channel);
+                    StepOutcome::InProgress
+                }
                 Err(fatal) => {
                     selected.channel.latch(fatal);
                     StepOutcome::Complete(Err(Error::ChannelFatal(fatal)))

@@ -60,7 +60,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
         destination: Endpoint::linear(0, 0),
     }))
     .await?;
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     assert!(
         AsyncExecutor::new(model.clone())
             .run(&mut stage, &mut operation)
@@ -140,7 +140,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
             },
         ))
         .await?;
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     let executor = AsyncExecutor::new(model.clone());
 
     // When: a real async worker executes the submitted command.
@@ -221,7 +221,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
         destination: Endpoint::linear(destination.raw(), 0),
     }))
     .await?;
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     let executor = AsyncExecutor::new(model.clone());
 
     // When: response publication fails at the real memory boundary.

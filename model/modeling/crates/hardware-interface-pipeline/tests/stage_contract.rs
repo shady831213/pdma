@@ -81,8 +81,8 @@ fn all_outcomes_transfer_owned_values_and_terminal_stage_is_exhausted() {
     let mut failure_context = Context::default();
 
     // When: consumers drive each stage across its visible boundaries.
-    let progressed = success.step(&mut hardware, &mut success_context);
-    let pending = success.step(&mut hardware, &mut success_context);
+    let started = success.step(&mut hardware, &mut success_context);
+    let unfinished = success.step(&mut hardware, &mut success_context);
     let complete_ok = success.step(&mut hardware, &mut success_context);
     let complete_err = {
         let _ = failure.step(&mut hardware, &mut failure_context);
@@ -92,9 +92,9 @@ fn all_outcomes_transfer_owned_values_and_terminal_stage_is_exhausted() {
     let exhausted = failure.step(&mut hardware, &mut failure_context);
 
     // Then: every literal outcome transfers its owned value and terminal state stays exhausted.
-    assert_eq!(progressed, Ok(StepOutcome::InProgress));
+    assert_eq!(started, Ok(StepOutcome::InProgress));
     println!("InProgress after interaction");
-    assert_eq!(pending, Ok(StepOutcome::InProgress));
+    assert_eq!(unfinished, Ok(StepOutcome::InProgress));
     println!("InProgress with retained invocation");
     assert_eq!(
         complete_ok,

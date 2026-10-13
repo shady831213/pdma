@@ -1,8 +1,8 @@
 use super::*;
 use hardware_interface_pipeline::{AfterEach, Repeat, RunError, Stage, StepResult, Then};
 use pdma_model_dma::{
-    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, ResetControl, Resettable, Transfer,
-    UpdateIrq, WriteCopy,
+    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
+    WriteCopy,
 };
 
 struct InvertPayload;
@@ -46,7 +46,7 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
         Resettable::new(AfterEach::new(execution, UpdateIrq)),
         device.responses(),
     );
-    let mut engine = AfterEach::new(device.arbitrate(pipeline), ResetControl);
+    let mut engine = device.command_loop_with(pipeline);
     let mut operation = Operation::new(());
     for _ in 0..256 {
         assert!(matches!(

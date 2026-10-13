@@ -68,7 +68,7 @@ async fn accepted_copy_completes_once_when_async_driver_is_cancelled_and_resumed
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = Operation::new(());
+    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     let consumer_offset = u32::try_from(
         (pdma_model_contract::dma::ChannelBlock::ALIGNMENT
             + pdma_model_contract::dma::ChannelBlock::COMMAND.offset())

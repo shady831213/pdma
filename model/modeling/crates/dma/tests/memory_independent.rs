@@ -39,7 +39,7 @@ fn reset_and_irq_composition_requires_no_memory_backend() -> TestResult {
     let expected = work.id;
     submit(&mut source, &memory, work)?;
     let channel = ChannelId::new(0);
-    let task = match Operation::new(()).step(&mut Fetch::new(channel), &mut source)? {
+    let task = match Operation::new(channel).step(&mut Fetch, &mut source)? {
         StepOutcome::Complete(result) => result?,
         outcome @ StepOutcome::InProgress => {
             return Err(format!("command not accepted: {outcome:?}").into());

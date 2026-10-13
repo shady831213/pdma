@@ -1,5 +1,5 @@
 use super::*;
-use hardware_interface_pipeline::{AfterEach, Repeat, RunError, Stage, StepResult, Then};
+use hardware_interface_pipeline::{AfterEach, RunError, Stage, StepResult, Then};
 use pdma_model_dma::{
     ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
     WriteCopy,
@@ -41,13 +41,13 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
         Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
         WriteCopy,
     );
-    let execution = Then::new(CheckRanges, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, chunk);
     let pipeline = Then::new(
         Resettable::new(AfterEach::new(execution, UpdateIrq)),
         device.responses(),
     );
-    let mut engine = device.command_loop_with(pipeline);
-    let mut operation = Operation::new(());
+    let mut engine = device.service_with(pipeline);
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(
             operation.step(&mut engine, &mut device)?,
@@ -110,7 +110,7 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
     // When: a caller independently validates an unrelated zero-length command.
-    let mut operation = Operation::new(Command::ZERO);
+    let mut operation = Operation::new(pdma_model_dma::CommandInput::Fresh(Command::ZERO));
     let mut complete = false;
     let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
     for _ in 0..16 {

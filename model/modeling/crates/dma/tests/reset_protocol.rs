@@ -53,14 +53,14 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
         accepted
             .ok_or("command not accepted")?
             .map(|command| pdma_model_contract::dma::Response {
-                id: command.id,
-                flags: command.flags,
+                id: command.command().id,
+                flags: command.command().flags,
                 status: pdma_model_contract::dma::ResponseStatus::Success,
                 info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
             });
     device.write(RESET, &1_u32.to_le_bytes())?;
     let mut responses = device.responses();
-    let mut publish = Operation::new(response);
+    let mut publish = Operation::new(response.map(Some));
     // When: the final port rejects the old task before publishing a response.
     let mut rejected = false;
     for _ in 0..32 {
@@ -84,10 +84,10 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let pipeline = Then::new(support::single_command(&device).downstream, CommandExit);
-    let mut hardware = device.command_loop_with(pipeline);
+    let pipeline = Then::new(support::single_chunk(&device).downstream, CommandExit);
+    let mut hardware = device.service_with(pipeline);
     let command = &mut hardware;
-    let mut operation = Operation::new(());
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::RESPONSE.offset()
         + ResponseRegisters::PRODUCER.offset();
@@ -128,8 +128,8 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
 fn idle_reset_is_a_request_until_hardware_steps() -> TestResult {
     // Given: a configured idle channel and retained hardware loop.
     let (mut device, _) = setup(0x1100, 2)?;
-    let mut hardware = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut hardware = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: software requests reset, without stepping hardware yet.
     device.write(RESET, &1_u32.to_le_bytes())?;
     // Then: busy is visible and reconfiguration is rejected until hardware cleanup.
@@ -155,8 +155,8 @@ fn reset_control_cannot_acknowledge_accepted_work_before_retirement() -> TestRes
     // Given: an accepted command whose execution state is still retained.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut hardware = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let consumer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
         + ChannelBlock::COMMAND.offset()
         + CommandRegisters::CONSUMER.offset();

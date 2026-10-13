@@ -10,7 +10,6 @@ pub mod support;
 
 #[test]
 fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> support::TestResult {
-    use hardware_interface_pipeline::{Operation, StepExecutor};
     use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
     use pdma_model_contract::dma::Endpoint;
     // Given: the first chunk of an accepted two-chunk command is externally visible.
@@ -21,12 +20,12 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     command.source = Endpoint::linear(0x1200, 0);
     command.destination = Endpoint::linear(0x1600, 0);
     support::submit(&mut dma, &memory, command)?;
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut prefix = [0; 256];
     for _ in 0..64 {
         assert!(matches!(
-            StepExecutor::new().step(&mut pipeline, &mut operation, &mut dma),
+            operation.step(&mut pipeline, &mut dma),
             Ok(hardware_interface_pipeline::StepOutcome::InProgress)
         ));
         memory.read(
@@ -43,7 +42,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     dma.signal_fatal();
     for _ in 0..32 {
         assert!(matches!(
-            StepExecutor::new().step(&mut pipeline, &mut operation, &mut dma),
+            operation.step(&mut pipeline, &mut dma),
             Ok(hardware_interface_pipeline::StepOutcome::InProgress)
         ));
     }
@@ -51,7 +50,7 @@ fn active_copy_fatal_stops_next_memory_access_and_reset_retires_old_work() -> su
     dma.write(reset, &1_u32.to_le_bytes())?;
     for _ in 0..64 {
         assert!(matches!(
-            StepExecutor::new().step(&mut pipeline, &mut operation, &mut dma),
+            operation.step(&mut pipeline, &mut dma),
             Ok(hardware_interface_pipeline::StepOutcome::InProgress)
         ));
     }

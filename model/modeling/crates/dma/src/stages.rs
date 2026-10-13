@@ -2,9 +2,7 @@ use crate::{
     ChannelContext, CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
     Responses, WriteCopy,
 };
-use hardware_interface_pipeline::{
-    AfterEach, Repeat, RunError, Stage, StepOutcome, StepResult, Then,
-};
+use hardware_interface_pipeline::{AfterEach, RunError, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, Response};
 use std::convert::Infallible;
@@ -76,17 +74,19 @@ impl<M, SB> Stage<ChannelContext<'_, M, SB>> for UpdateIrq {
 }
 
 /// One composable prepare/read/write iteration.
-pub type CopyLoop = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
+pub type CopyChunk = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
 
-/// Length validation followed by bounded-memory copy iterations.
-pub type Execution = Then<CheckRanges, Repeat<CopyLoop>>;
+/// Range validation followed by one bounded-memory copy chunk.
+pub type Execution = Then<CheckRanges, CopyChunk>;
 
-/// Shared execution and publication hardware for one granted command.
+/// Shared chunk execution and optional terminal response publication.
 pub type Pipeline = Then<Resettable<AfterEach<Execution, UpdateIrq>>, Responses>;
 
-/// Continuously executes commands through one shared pipeline.
-pub type CommandLoop<S = Pipeline> =
-    AfterEach<crate::commands::Commands<Then<Fetch, S>>, ResetControl>;
+/// Finite shared service transaction with assembly-owned fault continuations.
+pub type Service<M, SB = (), S = Pipeline> = AfterEach<
+    crate::commands::Commands<Then<Fetch, S>, <Then<Fetch, S> as Stage<Dma<M, SB>>>::State>,
+    ResetControl,
+>;
 
 impl<M, SB> Dma<M, SB> {
     /// Builds response dispatch with each destination bound to its owning channel.
@@ -98,19 +98,27 @@ impl<M, SB> Dma<M, SB> {
             .collect();
         Responses::new(ports)
     }
+}
 
-    /// Builds the sustained command loop from this instance's hardware stages.
-    pub fn command_loop(&self) -> CommandLoop {
+impl<M: MemoryAccess<SB>, SB> Dma<M, SB> {
+    /// Builds one finite command-chunk service transaction.
+    pub fn service(&self) -> Service<M, SB>
+    where
+        M::Error: Into<crate::MemoryFailure>,
+    {
         let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-        let execution = Then::new(CheckRanges, Repeat::new(chunk));
-        self.command_loop_with(Then::new(
+        let execution = Then::new(CheckRanges, chunk);
+        self.service_with(Then::new(
             Resettable::new(AfterEach::new(execution, UpdateIrq)),
             self.responses(),
         ))
     }
 
-    /// Builds the sustained loop with one shared custom command composition.
-    pub fn command_loop_with<S>(&self, pipeline: S) -> CommandLoop<S> {
+    /// Builds finite service with one shared custom chunk composition.
+    pub fn service_with<S>(&self, pipeline: S) -> Service<M, SB, S>
+    where
+        S: Stage<Self, Input = crate::ChannelTask<crate::CommandInput>, Output = (), Error = Error>,
+    {
         AfterEach::new(
             crate::commands::Commands::new(self.channels.len(), Then::new(Fetch, pipeline)),
             ResetControl,

@@ -149,7 +149,7 @@ fn arbitration_hands_only_the_selected_request_to_fetch() -> TestResult {
     };
     assert_eq!(request.channel(), expected_channel);
     assert_eq!(task.channel(), expected_channel);
-    assert_eq!(task.value.id, expected_address);
+    assert_eq!(task.value.command().id, expected_address);
     assert_eq!(device.memory.reads.borrow().as_slice(), &[expected_address]);
     Ok(())
 }
@@ -157,13 +157,13 @@ fn arbitration_hands_only_the_selected_request_to_fetch() -> TestResult {
 struct CommandId;
 
 impl<M, SB> Stage<Dma<M, SB>> for CommandId {
-    type Input = ChannelTask<Command>;
+    type Input = ChannelTask<pdma_model_dma::CommandInput>;
     type Output = u64;
     type Error = Error;
     type State = u64;
 
     fn start(task: Self::Input) -> u64 {
-        task.value.id
+        task.value.command().id
     }
 
     fn step(&mut self, _: &mut Dma<M, SB>, id: &mut u64) -> StepResult<u64, Error> {

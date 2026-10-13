@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{AfterEach, Operation, Repeat, Stage, StepOutcome, Then};
+use hardware_interface_pipeline::{AfterEach, Operation, Stage, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
@@ -24,10 +24,10 @@ pub fn finish<C, S: Stage<C>>(
     Err("operation exceeded interaction bound".into())
 }
 
-/// Assemble one command from the existing hardware stages.
-pub fn single_command<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
+/// Assemble one finite chunk from the existing hardware stages.
+pub fn single_chunk<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckRanges, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, chunk);
     Then::new(
         Fetch,
         Then::new(

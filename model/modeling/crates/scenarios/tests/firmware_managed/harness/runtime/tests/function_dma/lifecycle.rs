@@ -1,7 +1,7 @@
 use super::support::{
     Fixture, TestResult, WINDOWS, advance, bytes, command, configure, publish, response, setup,
 };
-use hardware_interface_pipeline::{Operation, StepExecutor};
+use hardware_interface_pipeline::HardwareDriver;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelId, Endpoint, ResponseStatus};
 use pdma_model_contract::hw_components::windows::WindowControl;
@@ -29,14 +29,14 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
     work.source = Endpoint::linear(0x1600, 0);
     work.destination = Endpoint::linear(0x1b00, 0);
     publish(&mut dma, &old, (ChannelId::new(0), work))?;
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut driver = HardwareDriver::new();
     for _ in 0..128 {
         if bytes::<1>(&old, 0x1b00)? != [0] {
             break;
         }
-        let _outcome = StepExecutor::new()
-            .step(&mut pipeline, &mut operation, &mut dma)
+        let _outcome = driver
+            .step(&mut pipeline, &mut dma)
             .map_err(|error| format!("{error:?}"))?;
     }
     let before = bytes::<1024>(&old, 0x1b00)?;
@@ -48,7 +48,7 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
         .management_write(WINDOWS, &0_u32.to_le_bytes())?;
     let reset = ChannelId::new(0).admin_offset(2).ok_or("reset address")?;
     dma.write(reset, &1_u32.to_le_bytes())?;
-    advance(&mut dma, &mut pipeline, &mut operation)?;
+    advance(&mut dma, &mut pipeline, &mut driver)?;
     let mut busy = [0; 4];
     dma.read(reset, &mut busy)?;
     assert_eq!(busy, [0; 4]);
@@ -66,7 +66,7 @@ fn reset_before_regrant_prevents_old_work_from_entering_the_new_space() -> TestR
     )?;
     configure(&mut dma, ChannelId::new(0))?;
     publish(&mut dma, &new, (ChannelId::new(0), command(2)))?;
-    advance(&mut dma, &mut pipeline, &mut operation)?;
+    advance(&mut dma, &mut pipeline, &mut driver)?;
     // Then: new work completes in the new space, without late old payload or response writes.
     assert_eq!(bytes::<1024>(&old, 0x1b00)?, before);
     assert_eq!(bytes::<1024>(&new, 0x1b00)?, [0xa5; 1024]);

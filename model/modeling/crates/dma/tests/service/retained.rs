@@ -5,7 +5,7 @@ use crate::{
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, Command, CommandRegisters};
-use pdma_model_dma::{ChannelFatal, ChannelTask, CommandLoop, Dma, Error, ResetControl};
+use pdma_model_dma::{ChannelFatal, ChannelTask, Dma, Error, ResetControl, Service};
 use std::{cell::Cell, rc::Rc};
 
 struct DropWitness(Rc<Cell<usize>>);
@@ -17,7 +17,7 @@ impl Drop for DropWitness {
 }
 
 struct Retained {
-    task: Option<ChannelTask<Command>>,
+    task: Option<ChannelTask<pdma_model_dma::CommandInput>>,
     witness: Option<DropWitness>,
 }
 
@@ -28,7 +28,7 @@ struct RetainingChild {
 }
 
 impl Stage<Dma<SharedMemory>> for RetainingChild {
-    type Input = ChannelTask<Command>;
+    type Input = ChannelTask<pdma_model_dma::CommandInput>;
     type Output = ();
     type Error = Error;
     type State = Retained;
@@ -67,7 +67,7 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         let expected = match terminal {
             Ok(StepOutcome::Complete(
                 Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
-            )) => Ok(StepOutcome::InProgress),
+            )) => Ok(StepOutcome::Complete(Ok(()))),
             Ok(StepOutcome::Complete(Err(error))) => Ok(StepOutcome::Complete(Err(error))),
             Err(error) => Err(error),
             Ok(StepOutcome::InProgress) => return Err("nonterminal fixture".into()),
@@ -76,12 +76,13 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         submit(&mut device, &memory, command())?;
         let drops = Rc::new(Cell::new(0));
         let calls = Rc::new(Cell::new(0));
-        let mut hardware = device.command_loop_with(RetainingChild {
+        let mut hardware = device.service_with(RetainingChild {
             drops: Rc::clone(&drops),
             calls: Rc::clone(&calls),
             terminal,
         });
-        let mut state = <CommandLoop<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
+        let mut state =
+            <Service<SharedMemory, (), RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
         let mut accepted = false;
         for _ in 0..32 {
             let _ = hardware.step(&mut device, &mut state)?;
@@ -112,10 +113,7 @@ fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() ->
         for _ in 0..32 {
             assert_eq!(
                 hardware.step(&mut device, &mut state),
-                match expected {
-                    Ok(StepOutcome::InProgress) => Ok(StepOutcome::InProgress),
-                    Ok(StepOutcome::Complete(_)) | Err(_) => Err(RunError::Exhausted),
-                }
+                Err(RunError::Exhausted)
             );
         }
         assert_eq!(calls.get(), terminal_calls);
@@ -129,12 +127,13 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
     // Given: an old completed state and a newer command accepted by the same hardware.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.command_loop_with(RetainingChild {
+    let mut hardware = device.service_with(RetainingChild {
         drops: Rc::new(Cell::new(0)),
         calls: Rc::new(Cell::new(0)),
         terminal: Ok(StepOutcome::Complete(Err(Error::Routing))),
     });
-    let mut old = <CommandLoop<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
+    let mut old =
+        <Service<SharedMemory, (), RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
     let mut completed = false;
     for _ in 0..32 {
         if matches!(
@@ -158,12 +157,13 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
         &2_u32.to_le_bytes(),
     )?;
     let calls = Rc::new(Cell::new(0));
-    let mut newer = device.command_loop_with(RetainingChild {
+    let mut newer = device.service_with(RetainingChild {
         drops: Rc::new(Cell::new(0)),
         calls: Rc::clone(&calls),
         terminal: Ok(StepOutcome::Complete(Err(Error::Reset))),
     });
-    let mut current = <CommandLoop<RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
+    let mut current =
+        <Service<SharedMemory, (), RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
     let mut accepted = false;
     for _ in 0..32 {
         let _ = newer.step(&mut device, &mut current)?;
@@ -185,10 +185,11 @@ fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
     // Then: reset remains busy until the current owner retires.
     assert_eq!(read_word(&mut device, RESET)?, 1);
     for _ in 0..32 {
-        assert_eq!(
-            newer.step(&mut device, &mut current)?,
-            StepOutcome::InProgress
-        );
+        let outcome = newer.step(&mut device, &mut current)?;
+        assert!(matches!(
+            outcome,
+            StepOutcome::InProgress | StepOutcome::Complete(Ok(()))
+        ));
         if read_word(&mut device, RESET)? == 0 {
             break;
         }

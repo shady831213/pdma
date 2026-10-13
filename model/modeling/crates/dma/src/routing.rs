@@ -35,26 +35,50 @@ impl Responses {
 }
 
 impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Responses {
-    type Input = ChannelTask<Response>;
+    type Input = ChannelTask<Option<Response>>;
     type Output = ();
     type Error = Error;
     type State = Option<
-        FanState<
-            Option<Self::Input>,
-            Self::Input,
-            <ResponsePort as Stage<Dma<M, SB>>>::State,
-            ChannelTask<()>,
+        Option<
+            FanState<
+                Option<ChannelTask<Response>>,
+                ChannelTask<Response>,
+                <ResponsePort as Stage<Dma<M, SB>>>::State,
+                ChannelTask<()>,
+            >,
         >,
     >;
 
     fn start(input: Self::Input) -> Self::State {
-        <ResponseFan as Stage<Dma<M, SB>>>::start(input)
+        let task = ChannelTask {
+            channel: input.channel,
+            generation: input.generation,
+            value: (),
+        };
+        Some(input.value.and_then(|response| {
+            <ResponseFan as Stage<Dma<M, SB>>>::start(task.map(|()| response))
+        }))
     }
 
     fn step(&mut self, device: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<(), Error> {
-        Ok(match self.0.step(device, state)? {
+        let Some(fan) = state.as_mut() else {
+            return Err(RunError::Exhausted);
+        };
+        let Some(_) = fan else {
+            *state = None;
+            return Ok(StepOutcome::Complete(Ok(())));
+        };
+        let outcome = match self.0.step(device, fan) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                *state = None;
+                return Err(error);
+            }
+        };
+        Ok(match outcome {
             StepOutcome::InProgress => StepOutcome::InProgress,
             StepOutcome::Complete(result) => {
+                *state = None;
                 StepOutcome::Complete(result.map(|_| ()).map_err(Error::from))
             }
         })

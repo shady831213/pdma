@@ -1,6 +1,6 @@
 use super::super::{Driver, HostVector, ManagementBus};
 use super::{Managed, control::memory::poll_once};
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, RegisterAccess, SharedMemory,
     SharedMemoryAllocator,
@@ -56,7 +56,9 @@ async fn pending_dma_notification_keeps_old_destination_after_reset_and_regrant(
     let hardware = async {
         let executor = AsyncExecutor::new(Driver(Arc::clone(&system.shared)));
         let mut pipeline = system.pipeline;
-        executor.run(&mut pipeline, &mut Operation::new(())).await
+        executor
+            .drive(&mut pipeline, &mut HardwareDriver::new())
+            .await
     };
     let program = async {
         while channel.response().await.unwrap().is_none() {

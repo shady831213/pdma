@@ -151,14 +151,50 @@ accepted work is not discarded by later eligibility changes. A reset between Fet
 execution remains blocked until the accepted continuation is dropped and its references
 retire. These rules cover the additional Then boundary without inventing transaction timing.
 
-The command loop continues using FanIn, Then, Repeat and AfterEach. Its
-invocation still owns the typed saved-state bank: arbitrary custom child continuations
+At that intermediate checkpoint, the command loop continued using FanIn, Then,
+Repeat and AfterEach. Its invocation still owned the typed saved-state bank: arbitrary custom child continuations
 cannot be placed in the nongeneric DMA core without changing that core's type or
 erasing types. Moving them into persistent stage fields would also break invocation
 ownership. This outer lifetime owner is retained explicitly, not described as
 an arbiter. Parked reset/Abort cleanup still precedes shared active work, including
 when an unrelated active peer is disabled. No descriptor is fetched merely to
 produce a candidate, and no unselected command is discarded as if it were a sample.
+
+### Removing procedural repetition from hardware composition
+
+Subsequent review rejected both repetitions: endlessly restarting arbitration rounds,
+and feeding WriteCopy's Continue value into a new chunk invocation. Hardware feedback
+must be modeled as data or shared state, not a command to invoke an earlier pipeline.
+The checkpoint before this change is d6ef776535b9972db0ea1134c0f9e07dd7369743,
+pushed to both remotes before implementation.
+
+Repeat and its public exports are removed from the generic framework, not deprecated
+or renamed. DMA has no ControlFlow, NextRound or Rounds protocol. One Service is a
+finite candidate/selection/chunk transaction. WriteCopy places unfinished CopyState
+in its channel, and a subsequent externally supplied service input consumes that
+progress. Fresh descriptor acceptance and initial validation occur once; progress
+requests do not reread a descriptor or restart range validation.
+
+The healthy command keeps its shared-engine grant and accepted references across
+finite service boundaries. Peers run only when that command retires or suspends.
+Reset between chunks must retire channel-owned progress before acknowledging; Abort
+of running work stays command-atomic. A payload fault preserves the exact unfinished
+composed state, including custom transforms and successful-read scratch. Its storage
+belongs to the persistent service assembly because a finite invocation can end while
+that work is suspended. This remaining typed continuation storage is explicit, not
+claimed to be a channel output already buffered by Fan.
+
+Continuous driving belongs to HardwareDriver and AsyncExecutor::drive outside the
+hardware graph. The driver accepts only finite unit-input/unit-output services and
+does not implement Stage, so it cannot become an internal feedback combinator. It
+yields after each bounded interaction, preserves an unfinished invocation when a
+future is canceled, and starts another top-level invocation only on a later driving
+step after successful completion. It carries no DMA traversal, arbitration or retry
+policy. Reintroducing Repeat as a manual child-restart loop is forbidden.
+
+The wire protocol, software repair/resume obligation and reset/fatal semantics are
+unchanged. Custom compositions now describe finite chunk work; any command-wide
+state must have explicit hardware ownership rather than relying on an endless call.
 
 Hardware steps now report only InProgress or Complete. The async executor yields
 after every bounded step, allowing modeled software to run between steps without

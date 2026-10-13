@@ -1,4 +1,4 @@
-use hardware_interface_pipeline::{AfterEach, Operation, Repeat, StepExecutor, StepOutcome, Then};
+use hardware_interface_pipeline::{AfterEach, Operation, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -12,10 +12,10 @@ use pdma_model_dma::{
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-/// Assemble one command for tests that inspect its completion and intermediate boundaries.
-pub fn single_command<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
+/// Assemble one finite chunk for tests inspecting primitive stage boundaries.
+pub fn single_chunk<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-    let execution = Then::new(CheckRanges, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, chunk);
     Then::new(
         Fetch,
         Then::new(
@@ -111,19 +111,23 @@ pub fn submit(
     Ok(())
 }
 
-/// Drive one operation within a fixed interaction bound.
+/// Drive finite service transactions to one published response within a fixed bound.
 pub fn run(device: &mut Dma<SharedMemory>) -> TestResult {
-    let mut hardware = single_command(device);
-    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
+    let mut hardware = device.service();
+    let mut operation = Operation::new(());
+    let producer = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+        + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
+        + ResponseRegisters::PRODUCER.offset();
+    let initial = read_word(device, producer)?;
     for _ in 0..1024 {
-        match StepExecutor::new()
-            .step(&mut hardware, &mut operation, device)
-            .map_err(|e| format!("{e:?}"))?
-        {
+        match operation.step(&mut hardware, device)? {
             StepOutcome::InProgress => {}
             StepOutcome::Complete(result) => {
                 result?;
-                return Ok(());
+                if read_word(device, producer)? != initial {
+                    return Ok(());
+                }
+                operation = Operation::new(());
             }
         }
     }

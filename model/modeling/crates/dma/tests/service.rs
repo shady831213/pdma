@@ -2,17 +2,17 @@
 
 /// Shared raw-bus fixtures.
 pub mod support;
-mod command_loop {
+mod service {
     mod retained;
 }
 
-use hardware_interface_pipeline::{AfterEach, Operation, Stage, StepOutcome};
+use hardware_interface_pipeline::{AfterEach, Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters,
 };
 use pdma_model_dma::{Error, ResetControl};
-use support::{TestResult, command, read_word, setup, single_command, submit};
+use support::{TestResult, command, read_word, setup, single_chunk, submit};
 
 const CONTROL: usize =
     pdma_model_contract::dma::ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
@@ -26,7 +26,7 @@ const PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
     + ResponseRegisters::PRODUCER.offset();
 
 #[test]
-fn custom_command_loop_publishes_completion() -> TestResult {
+fn custom_service_publishes_completion() -> TestResult {
     // Given: the real pipeline decorated with an independently composed reset controller.
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(
@@ -35,9 +35,9 @@ fn custom_command_loop_publishes_completion() -> TestResult {
         &[3, 1, 4, 1],
     )?;
     submit(&mut device, &memory, command())?;
-    let pipeline = AfterEach::new(single_command(&device).downstream, ResetControl);
-    let mut hardware = device.command_loop_with(pipeline);
-    let mut operation = Operation::new(());
+    let pipeline = AfterEach::new(single_chunk(&device).downstream, ResetControl);
+    let mut hardware = device.service_with(pipeline);
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: the custom command is driven to its terminal boundary.
     let mut completed = false;
     for _ in 0..128 {
@@ -76,9 +76,9 @@ fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResu
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[9; 4])?;
     submit(&mut device, &memory, command())?;
-    let pipeline = AfterEach::new(single_command(&device).downstream, ResetControl);
-    let mut hardware = device.command_loop_with(pipeline);
-    let mut operation = Operation::new(());
+    let pipeline = AfterEach::new(single_chunk(&device).downstream, ResetControl);
+    let mut hardware = device.service_with(pipeline);
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..32 {
         let _ = operation.step(&mut hardware, &mut device)?;
         if read_word(&mut device, CONSUMER)? == 1 {

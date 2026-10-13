@@ -3,20 +3,22 @@ use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::Ring;
 
-/// Non-owning request for shared execution; no descriptor has been accepted yet.
+/// Non-owning request for fetching or continuing shared command execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandRequest {
     /// Fetch the channel's current command when the request is accepted.
     Fetch(ChannelId),
     /// Resume the channel's already accepted, parked command.
     Resume(ChannelId),
+    /// Continue validated traversal retained at a healthy chunk boundary.
+    Progress(ChannelId),
 }
 
 impl CommandRequest {
     /// Identifies the requesting channel without transferring task ownership.
     pub const fn channel(self) -> ChannelId {
         match self {
-            Self::Fetch(channel) | Self::Resume(channel) => channel,
+            Self::Fetch(channel) | Self::Resume(channel) | Self::Progress(channel) => channel,
         }
     }
 }
@@ -55,6 +57,13 @@ impl<M, SB> Stage<Dma<M, SB>> for Candidate {
 impl<M, SB> Dma<M, SB> {
     pub(crate) fn command_request(&self, id: ChannelId) -> Result<Option<CommandRequest>, Error> {
         let channel = self.channels.get(id.index()).ok_or(Error::Unmapped)?;
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|active| active.channel() != id)
+        {
+            return Ok(None);
+        }
         if self.halted()
             || self.resetting()
             || !channel.enabled()
@@ -65,7 +74,9 @@ impl<M, SB> Dma<M, SB> {
         {
             return Ok(None);
         }
-        Ok(if channel.parked.is_some() {
+        Ok(if channel.progress.is_some() {
+            Some(CommandRequest::Progress(id))
+        } else if channel.parked.is_some() {
             Some(CommandRequest::Resume(id))
         } else if channel.command.pointers().is_empty() {
             None

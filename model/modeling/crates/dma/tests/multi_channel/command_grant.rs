@@ -38,8 +38,8 @@ fn reselect_before_fetch(reset: bool) -> TestResult {
         let peer = peer.ok_or("peer channel")?;
         let third = third.ok_or("third channel")?;
         let consumer = ChannelBlock::COMMAND.offset() + CommandRegisters::CONSUMER.offset();
-        let mut engine = device.command_loop();
-        let mut operation = Operation::new(());
+        let mut engine = device.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..prefix {
             assert!(matches!(
                 operation.step(&mut engine, &mut device)?,
@@ -102,8 +102,8 @@ fn reset_and_reconfigure_before_acceptance_uses_the_new_command_generation() -> 
         let peer_consumer = ChannelId::new(1).register_offset(3).ok_or("offset")?
             + ChannelBlock::COMMAND.offset()
             + CommandRegisters::CONSUMER.offset();
-        let mut hardware = device.command_loop();
-        let mut operation = Operation::new(());
+        let mut hardware = device.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..prefix {
             assert!(matches!(
                 operation.step(&mut hardware, &mut device)?,

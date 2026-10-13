@@ -2,7 +2,22 @@ use super::support::{TestResult, configure, finish, submit, word};
 use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_dma::{Dma, Error, Publish, Resettable};
+use pdma_model_dma::{ChannelTask, Dma, Error, Publish, Resettable};
+
+fn execute(
+    device: &mut Dma<SharedMemory>,
+) -> TestResult<ChannelTask<Option<pdma_model_contract::dma::Response>>> {
+    let pipeline = super::support::single_chunk(device);
+    let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
+    for _ in 0..8 {
+        let mut operation = Operation::new(ChannelId::new(0));
+        let response = finish(&mut execution, &mut operation, device)??;
+        if response.value.is_some() {
+            return Ok(response);
+        }
+    }
+    Err("command did not produce a response".into())
+}
 
 fn setup() -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
@@ -24,10 +39,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
     for suspend_publication in [false, true] {
         // Given: shared execution has finished but its tagged response has not been dispatched.
         let mut device = setup()?;
-        let pipeline = super::support::single_command(&device);
-        let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
-        let mut operation = Operation::new(ChannelId::new(0));
-        let response = finish(&mut execution, &mut operation, &mut device)??;
+        let response = execute(&mut device)?;
         assert_eq!(response.channel(), ChannelId::new(0));
         let mut publication = Operation::new(response);
         let mut destinations = device.responses();
@@ -79,10 +91,9 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
 fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     // Given: a completed response from channel zero and a port bound to channel one.
     let mut device = setup()?;
-    let pipeline = super::support::single_command(&device);
-    let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
-    let mut operation = Operation::new(ChannelId::new(0));
-    let response = finish(&mut execution, &mut operation, &mut device)??;
+    let response = execute(&mut device)?;
+    let value = response.value.ok_or("completed response")?;
+    let response = response.map(|_| value);
     let mut port = Resettable::for_channel(ChannelId::new(1), Publish);
     // When: an incorrectly wired graph sends the response to the wrong port.
     let outcome = Operation::new(response).step(&mut port, &mut device)?;

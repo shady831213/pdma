@@ -159,8 +159,8 @@ async fn resetting_channel_zero_preserves_other_channels_pending_work() -> TestR
     let allocator = allocator();
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 3)?;
-    let mut hardware = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut hardware = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     with_idle_hardware(

@@ -18,11 +18,12 @@ pub use error::{AccessError, BuildError, PlatformConfigError, RunError};
 pub use interrupts::{HostInterrupts, HostIrq, HostVector};
 
 use hardware_interface_runtime::{
-    InterruptEmitter, InterruptRuntime, PendingInterrupt, SoftwareCpu, pending_interrupt,
+    InterruptEmitter, InterruptRuntime, MemoryAccess, PendingInterrupt, SoftwareCpu,
+    pending_interrupt,
 };
 use memory::RoutedMemory;
 use pdma_model_contract::dma::DmaAccess;
-use pdma_model_dma::{CommandLoop, Dma};
+use pdma_model_dma::{Dma, Service};
 use pdma_model_host::runtime::Irq;
 use pdma_model_hw_components::{
     context::ContextTable, control::ControlChannel, firmware::FirmwareStatus,
@@ -69,9 +70,12 @@ pub struct Host<M> {
 
 /// An instance-configured managed DMA, driven only while its run future is polled.
 #[derive(Debug)]
-pub struct Managed<M> {
+pub struct Managed<M: MemoryAccess>
+where
+    M::Error: Into<pdma_model_dma::MemoryFailure>,
+{
     shared: Arc<Shared<M>>,
-    pipeline: CommandLoop,
+    pipeline: Service<RoutedMemory<M>, DmaAccess>,
     firmware_runtime: InterruptRuntime<PendingInterrupt<ControlIrq>>,
     firmware_cpu: Arc<SoftwareCpu>,
     firmware_memory: memory::ControlMemory<M>,

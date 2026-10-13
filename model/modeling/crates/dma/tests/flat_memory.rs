@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures and single-command assembly.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion,
     MemoryRegionError,
@@ -175,13 +175,13 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
     ] {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
-    let mut hardware = support::single_command(&device);
+    let mut hardware = support::single_chunk(&device);
     let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     let mut completed = false;
     // When
     for _ in 0..32 {
-        match StepExecutor::new()
-            .step(&mut hardware, &mut operation, &mut device)
+        match operation
+            .step(&mut hardware, &mut device)
             .map_err(|error| format!("{error:?}"))?
         {
             StepOutcome::InProgress => {}

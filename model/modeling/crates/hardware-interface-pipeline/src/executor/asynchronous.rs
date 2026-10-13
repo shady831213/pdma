@@ -1,4 +1,4 @@
-use crate::{AsyncInteractionBackend, Operation, RunError, Stage, StepOutcome};
+use crate::{AsyncInteractionBackend, HardwareDriver, Operation, RunError, Stage, StepOutcome};
 
 /// A statically dispatched asynchronous pipeline executor.
 #[derive(Debug)]
@@ -15,6 +15,45 @@ impl<B> AsyncExecutor<B> {
     /// Returns a shared reference to the interaction backend.
     pub const fn backend(&self) -> &B {
         &self.backend
+    }
+
+    /// Drives finite hardware services, yielding after every bounded interaction.
+    ///
+    /// # Cancel safety
+    /// The caller's driver retains unfinished invocation state and terminal
+    /// errors across cancellation, including cancellation at the final yield.
+    /// Completed service effects are never replayed on resumption.
+    pub async fn drive<C, S>(
+        &self,
+        hardware: &mut S,
+        driver: &mut HardwareDriver<S, C>,
+    ) -> Result<(), AsyncRunError<B::Error, S::Error>>
+    where
+        B: AsyncInteractionBackend<C> + Sync,
+        S: Stage<C, Input = (), Output = ()> + Send,
+        S::State: Send,
+        S::Error: Send,
+    {
+        loop {
+            if driver.is_complete() {
+                return Err(match driver.take_failure() {
+                    Some(Ok(error)) => AsyncRunError::Stage(error),
+                    Some(Err(error)) => AsyncRunError::Run(error),
+                    None => AsyncRunError::Run(RunError::Exhausted),
+                });
+            }
+            let outcome = self
+                .backend
+                .interact(|context| driver.advance(hardware, context))
+                .await
+                .map_err(AsyncRunError::BackendInteraction)?;
+            self.backend.yield_now().await;
+            match outcome {
+                Ok(StepOutcome::InProgress | StepOutcome::Complete(Ok(()))) => {}
+                Ok(StepOutcome::Complete(Err(error))) => match error {},
+                Err(error) => return Err(AsyncRunError::Run(error)),
+            }
+        }
     }
 
     /// Drives a retained operation, yielding cooperatively after every interaction.

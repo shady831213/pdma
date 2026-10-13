@@ -3,7 +3,7 @@ mod lifecycle;
 /// Shared hardware fixtures for Function memory tests.
 mod support;
 
-use hardware_interface_pipeline::Operation;
+use hardware_interface_pipeline::HardwareDriver;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, CommandRegisters, Endpoint, ResponseRegisters, ResponseStatus, Segment,
@@ -46,8 +46,8 @@ fn command_lists_payload_and_response_use_the_same_channel_owner() -> TestResult
         publish(&mut dma, memory, (ChannelId::new(index), work))?;
     }
     // When: the shared execution pipeline services both channels.
-    let mut pipeline = dma.command_loop();
-    advance(&mut dma, &mut pipeline, &mut Operation::new(()))?;
+    let mut pipeline = dma.service();
+    advance(&mut dma, &mut pipeline, &mut HardwareDriver::new())?;
     // Then: each Function receives only its own data and completion at its list-selected address.
     for (index, memory) in spaces.iter().enumerate() {
         let destination = 0x1300 + u64::try_from(index)? * 0x40;
@@ -110,8 +110,8 @@ fn another_functions_mapping_cannot_satisfy_a_dma_access() -> TestResult {
         publish(&mut dma, &local, (ChannelId::new(0), work))?;
         publish(&mut dma, &peer, (ChannelId::new(1), command(92)))?;
         // When: both channels execute and one encounters an unmapped local access.
-        let mut pipeline = dma.command_loop();
-        advance(&mut dma, &mut pipeline, &mut Operation::new(()))?;
+        let mut pipeline = dma.service();
+        advance(&mut dma, &mut pipeline, &mut HardwareDriver::new())?;
         // Then: the foreign mapping stays untouched, and the peer still completes.
         assert_eq!(bytes::<256>(&peer, 0x4000)?, [0xa5; 256], "{path:?}");
         assert_eq!(response(&peer)?.id, 92);

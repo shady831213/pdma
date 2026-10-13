@@ -208,7 +208,9 @@ Interlock conflicting configuration/lifecycle changes while the operation is pen
 
 HW-07: Consumer progress proves descriptor consumption, not execution completion.
 Register accepted task ownership without an observable gap when advancing consumer,
-and keep it until the complete command pipeline retires. Preserve the existing
+and keep it until the complete command pipeline retires. Successful completion of a
+finite chunk service does not release these references: channel-owned CopyState
+retains unfinished command progress between services. Preserve the existing
 whole-command retirement boundary; suspension leaves the child InProgress and the shared
 engine saves its exact composed continuation, with accepted references in Channel.parked, without
 whole-command retirement. Do not release ownership merely

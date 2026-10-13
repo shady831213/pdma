@@ -45,8 +45,9 @@ reset does not retract them.
 
 ## How the current model reaches completion
 
-`Dma::command_loop()` composes candidate advancement, snapshot arbitration and one
-shared fetch/execution composition, with `ResetControl` after every outer step.
+`Dma::service()` composes one finite candidate/selection/chunk service with
+`ResetControl` after every outer step. External HardwareDriver supplies subsequent
+service inputs; no model stage restarts the graph on child completion.
 `CommandScope` wraps `Then(Fetch, pipeline)` and owns suspension/retirement; no hardware
 leaf calls another stage's step. Reset can occur between Fetch's completion and its
 downstream step, so accepted references remain held across that handoff.
@@ -57,9 +58,18 @@ response paths check reset before further memory access. The shared engine relea
 executing ownership when the complete pipeline terminates. Payload faults leave
 the leaf InProgress with its Transfer intact; the shared engine saves the exact
 composed continuation and moves its accepted references to Channel.parked.
-The engine turn completes at suspension. A later arbitration grant restores that continuation
+The service completes at suspension. A later arbitration grant restores that continuation
 without fetching another command or replaying completed stages.
-Before any shared active step, the command loop discards affected parked operations on
+Between completed chunks, Channel owns the updated CopyState and accepted ownership
+remains registered. A successful finite service is not a reset acknowledgment or
+command retirement. Reset must clear that progress before releasing ownership, even
+when no stage invocation currently holds it.
+Progress can be written back before the rest of the composed service terminates.
+Its presence alone therefore does not prove the shared pipeline is empty. Cleanup
+at a service boundary must wait until retained child state is disposed; an unfinished
+custom downstream stage still holds accepted ownership. A stale candidate skipped
+after reset must also reach cleanup at service completion, not strand the old progress.
+Before any shared active step, the service discards affected parked operations on
 reset or matching Abort and releases their references. A disabled active peer
 therefore cannot prevent parked cleanup. The engine discards its retained
 child state before ownership is released, including
@@ -83,9 +93,9 @@ not advance it, and cleanup does not zero it. `ChannelTask<T>` retains the gener
 so guarded custom stages can reject stale tasks even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
-Custom sustained command graphs pass their downstream composition to
-`Dma::command_loop_with`, which includes `ResetControl`. The loop owns one shared engine;
-its child implements `Stage<Dma<M>, Input = ChannelTask<Command>, Output = (),
+Custom finite chunk graphs pass their downstream composition to
+`Dma::service_with`, which includes `ResetControl`. The assembly owns one shared engine;
+its child implements `Stage<Dma<M>, Input = ChannelTask<CommandInput>, Output = (),
 Error = Error>`. Its internal transforms need not match the default
 `Pipeline`. Merely
 dropping a software waiter or abandoning an accepted `Operation` does not flush

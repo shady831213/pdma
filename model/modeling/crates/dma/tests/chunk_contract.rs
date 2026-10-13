@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, Repeat, RunError, Stage, StepExecutor, StepOutcome, StepResult, Then,
+    AfterEach, Operation, RunError, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
@@ -48,7 +48,7 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
             Then::new(Then::new(NextChunk, ReadCopy), Resize(length)),
             WriteCopy,
         );
-        let execution = Then::new(CheckRanges, Repeat::new(chunk));
+        let execution = Then::new(CheckRanges, chunk);
         let mut pipeline = Then::new(
             Then::new(
                 pdma_model_dma::Fetch,
@@ -60,8 +60,8 @@ fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
         let mut finished = false;
         // When: the transformed chunk reaches the ordinary write stage.
         for _ in 0..64 {
-            match StepExecutor::new()
-                .step(&mut pipeline, &mut operation, &mut device)
+            match operation
+                .step(&mut pipeline, &mut device)
                 .map_err(|e| format!("{e:?}"))?
             {
                 StepOutcome::InProgress => {}

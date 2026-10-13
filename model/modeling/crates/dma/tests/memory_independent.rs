@@ -4,19 +4,19 @@
 pub mod support;
 
 use hardware_interface_pipeline::{AfterEach, Operation, RunError, Stage, StepOutcome, StepResult};
-use pdma_model_contract::dma::{ChannelId, Command};
+use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::{ChannelContext, Dma, Error, Fetch, Resettable, UpdateIrq};
 use support::{TestResult, command, setup, submit};
 
 struct CommandId;
 
 impl<M, S> Stage<ChannelContext<'_, M, S>> for CommandId {
-    type Input = Command;
+    type Input = pdma_model_dma::CommandInput;
     type Output = u64;
     type Error = Error;
-    type State = Option<Command>;
+    type State = Option<pdma_model_dma::CommandInput>;
 
-    fn start(command: Command) -> Self::State {
+    fn start(command: Self::Input) -> Self::State {
         Some(command)
     }
 
@@ -26,7 +26,7 @@ impl<M, S> Stage<ChannelContext<'_, M, S>> for CommandId {
         state: &mut Self::State,
     ) -> StepResult<u64, Error> {
         state.take().map_or(Err(RunError::Exhausted), |command| {
-            Ok(StepOutcome::Complete(Ok(command.id)))
+            Ok(StepOutcome::Complete(Ok(command.command().id)))
         })
     }
 }

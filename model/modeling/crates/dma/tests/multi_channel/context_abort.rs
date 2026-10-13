@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -46,8 +46,8 @@ fn abort_during_unaccepted_arbitration_does_not_stall_peer_channels() -> TestRes
             &1_u32.to_le_bytes(),
         )?;
         submit(&mut dma, 1, 8)?;
-        let mut pipeline = dma.command_loop();
-        let mut operation = Operation::new(());
+        let mut pipeline = dma.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..steps {
             let _ = operation.step(&mut pipeline, &mut dma)?;
         }

@@ -1,7 +1,7 @@
 mod observed;
 
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -92,8 +92,8 @@ fn reset_at_each_interaction_boundary_preserves_only_valid_work() -> TestResult 
         for selected in [true, false] {
             // Given: A owns the shared engine and B/C are queued, at an observed interaction boundary.
             let mut device = setup()?;
-            let mut hardware = device.command_loop();
-            let mut operation = Operation::new(());
+            let mut hardware = device.service();
+            let mut operation = hardware_interface_pipeline::HardwareDriver::new();
             let mut ready = false;
             for _ in 0..128 {
                 assert!(matches!(

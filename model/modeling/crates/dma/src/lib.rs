@@ -21,7 +21,8 @@ pub use build::BuildError;
 pub use channel::{Candidate, Channel, CommandRequest, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
 pub use execution::{
-    COPY_CHUNK_BYTES, CheckRanges, CopyState, NextChunk, RangeCheck, ReadCopy, Transfer, WriteCopy,
+    COPY_CHUNK_BYTES, CheckRanges, CommandInput, CopyState, NextChunk, RangeCheck, ReadCopy,
+    Transfer, WriteCopy,
 };
 pub use fetch::Fetch;
 use hardware_interface_schema::RegisterWindow;
@@ -33,7 +34,7 @@ use pdma_model_contract::dma::{
 };
 pub use reset::{ChannelTask, ResetControl, Resettable};
 pub use routing::{ResponsePort, Responses, RouteResponse};
-pub use stages::{CommandLoop, CopyLoop, Execution, Pipeline, Publish, UpdateIrq};
+pub use stages::{CopyChunk, Execution, Pipeline, Publish, Service, UpdateIrq};
 
 #[derive(Debug)]
 struct Frontier {

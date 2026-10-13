@@ -3,7 +3,7 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
@@ -157,14 +157,14 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut hardware = support::single_command(&device);
+    let mut hardware = support::single_chunk(&device);
     let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     // When
     let mut stalled = false;
     for _ in 0..32 {
         if matches!(
-            StepExecutor::new()
-                .step(&mut hardware, &mut operation, &mut device)
+            operation
+                .step(&mut hardware, &mut device)
                 .map_err(|e| format!("{e:?}"))?,
             StepOutcome::InProgress
         ) {
@@ -193,8 +193,8 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
     )?;
     let mut finished = false;
     for _ in 0..32 {
-        match StepExecutor::new()
-            .step(&mut hardware, &mut operation, &mut device)
+        match operation
+            .step(&mut hardware, &mut device)
             .map_err(|e| format!("{e:?}"))?
         {
             StepOutcome::Complete(result) => {

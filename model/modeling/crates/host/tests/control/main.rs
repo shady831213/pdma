@@ -17,7 +17,7 @@ mod capabilities;
 #[doc = "Test hardware composition."]
 pub mod hardware;
 mod reset;
-use hardware::single_command;
+use hardware::single_chunk;
 
 async fn with_idle_hardware<F: std::future::Future>(
     model: &Model<SharedMemoryAccess>,
@@ -142,7 +142,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: both routine completion events are masked.
     let (device, memory, rings) = fixture()?;
-    let mut stage = single_command(&device);
+    let mut stage = single_chunk(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

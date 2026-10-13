@@ -3,7 +3,7 @@
 /// Shared DMA bus and memory fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{ChannelId, CommandRegisters, ContextId};
 use support::{TestResult, command, setup, submit};
@@ -13,8 +13,8 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
     // Given
     let (mut dma, memory) = setup(0x1100, 1)?;
     submit(&mut dma, &memory, command())?;
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }
@@ -33,8 +33,8 @@ fn abort_discards_unstarted_work_without_response_space() -> TestResult {
     // When
     dma.abort_context(ContextId::new(7), &[channel])?;
     for _ in 0..32 {
-        let result = StepExecutor::new()
-            .step(&mut pipeline, &mut operation, &mut dma)
+        let result = operation
+            .step(&mut pipeline, &mut dma)
             .map_err(|e| format!("{e:?}"))?;
         assert!(!matches!(result, StepOutcome::Complete(_)));
     }
@@ -60,8 +60,8 @@ fn abort_waits_for_accepted_command_and_preserves_its_normal_response() -> TestR
     submit(&mut dma, &memory, input)?;
     let consumer =
         ChannelId::new(0).register_offset(1).ok_or("layout")? + CommandRegisters::CONSUMER.offset();
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..32 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
         if support::read_word(&mut dma, consumer)? == 1 {
@@ -131,8 +131,8 @@ fn failed_drain_returns_channel_and_releases_reset_interlock() -> TestResult {
         dma.write(reset, &1_u32.to_le_bytes()),
         Err(pdma_model_dma::Error::MaintenanceInProgress)
     );
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..128 {
         let _ = operation.step(&mut pipeline, &mut dma)?;
     }

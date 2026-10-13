@@ -1,6 +1,6 @@
 //! Abort effect boundaries through real memory and the sustained DMA pipeline.
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, Command, CommandRegisters, CompletionFlagsValues,
     ContextId, Endpoint, Response, ResponseRegisters, ResponseStatus, Segment,
 };
-use pdma_model_dma::{CommandLoop, Dma};
+use pdma_model_dma::{Dma, Service};
 use std::cell::RefCell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,8 +68,9 @@ impl MemoryAccess for ObservedMemory {
 struct Fixture {
     dma: Dma<ObservedMemory>,
     memory: SharedMemory,
-    pipeline: CommandLoop,
-    operation: Operation<CommandLoop, Dma<ObservedMemory>>,
+    pipeline: Service<ObservedMemory>,
+    operation:
+        hardware_interface_pipeline::HardwareDriver<Service<ObservedMemory>, Dma<ObservedMemory>>,
     normal: Command,
 }
 
@@ -130,8 +131,8 @@ fn full_response_fixture() -> Result<Fixture, Box<dyn std::error::Error>> {
         base + CommandRegisters::PRODUCER.offset(),
         &1_u32.to_le_bytes(),
     )?;
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut dma)?,

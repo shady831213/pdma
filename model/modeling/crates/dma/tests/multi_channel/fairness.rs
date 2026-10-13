@@ -1,5 +1,5 @@
 use super::support::{TestResult, configure, submit, word};
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -40,8 +40,8 @@ fn full_response_or_fatal_channel_does_not_stall_peers() -> TestResult {
             submit(&mut device, index, u64::try_from(index)?)?;
         }
         // When: the sustained graph visits all channels while A cannot publish.
-        let mut hardware = device.command_loop();
-        let mut operation = Operation::new(());
+        let mut hardware = device.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         for _ in 0..512 {
             assert!(matches!(
                 operation.step(&mut hardware, &mut device)?,
@@ -108,8 +108,8 @@ fn fill_response_ring(device: &mut Dma<SharedMemory>, base: usize) -> TestResult
         if producer == 3 {
             break;
         }
-        let mut hardware = device.command_loop();
-        let mut operation = Operation::new(());
+        let mut hardware = device.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         let mut finished = false;
         for _ in 0..128 {
             assert!(matches!(

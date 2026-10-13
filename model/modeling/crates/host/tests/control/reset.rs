@@ -1,6 +1,6 @@
 use super::{
     AsyncExecutor, Channel, ChannelConfig, ChannelRegisters, Command, CompletionFlagsValues,
-    DmaControl, DmaFatalCode, Endpoint, Model, Operation, RegisterAccess, SoftwareCpu, fixture,
+    DmaControl, DmaFatalCode, Endpoint, Model, RegisterAccess, SoftwareCpu, fixture,
     with_idle_hardware,
 };
 
@@ -56,10 +56,10 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: a configured channel with one published response.
     let (device, memory, rings) = fixture()?;
-    let mut stage = device.command_loop();
+    let mut stage = device.service();
     let model = Model::new(device);
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = Operation::new(());
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let software = async {
         let cpu = SoftwareCpu::new();
         let mut channel = cpu
@@ -125,7 +125,7 @@ async fn channel_reset_allows_fresh_setup_with_the_same_rings()
     };
     tokio::select! {
         result = software => result,
-        result = executor.run(&mut stage, &mut operation) => Err(format!("hardware terminated: {result:?}").into()),
+        result = executor.drive(&mut stage, &mut operation) => Err(format!("hardware terminated: {result:?}").into()),
     }
 }
 

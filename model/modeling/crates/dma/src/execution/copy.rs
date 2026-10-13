@@ -1,9 +1,8 @@
-use super::{CopyState, Transfer};
+use super::Transfer;
 use crate::{ChannelContext, Error, MemoryFailure};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::{MemoryAccess, MemoryAlignment};
 use pdma_model_contract::dma::{Response, ResponseStatus};
-use std::ops::ControlFlow;
 
 /// Read one payload chunk into retained operation state.
 #[derive(Debug, Default)]
@@ -83,7 +82,7 @@ where
     M::Error: Into<crate::MemoryFailure>,
 {
     type Input = Transfer;
-    type Output = ControlFlow<Response, CopyState>;
+    type Output = Option<Response>;
     type Error = Error;
     type State = Option<Transfer>;
     fn start(input: Transfer) -> Self::State {
@@ -121,7 +120,7 @@ where
                             && (count > 0 || transfer.progress.remaining == 0) =>
                     {
                         if count == 0 {
-                            return Ok(StepOutcome::Complete(Ok(ControlFlow::Break(
+                            return Ok(StepOutcome::Complete(Ok(Some(
                                 transfer.progress.response(),
                             ))));
                         }
@@ -135,9 +134,8 @@ where
                                 transfer.progress.remaining -= count;
                                 transfer.progress.bytes_completed += count;
                                 if transfer.progress.remaining > 0 {
-                                    return Ok(StepOutcome::Complete(Ok(ControlFlow::Continue(
-                                        transfer.progress,
-                                    ))));
+                                    context.channel.progress = Some(transfer.progress);
+                                    return Ok(StepOutcome::Complete(Ok(None)));
                                 }
                             }
                             Err(error) => match error.into() {
@@ -161,7 +159,7 @@ where
             | ResponseStatus::LengthMismatch
             | ResponseStatus::ListReadError => {}
         }
-        Ok(StepOutcome::Complete(Ok(ControlFlow::Break(
+        Ok(StepOutcome::Complete(Ok(Some(
             transfer.progress.response(),
         ))))
     }

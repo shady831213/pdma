@@ -1,6 +1,5 @@
 //! Independent metadata and payload address spaces.
 
-use hardware_interface_pipeline::{Operation, StepExecutor};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -139,12 +138,12 @@ fn identical_addresses_use_independent_ring_sg_source_and_destination_spaces() -
     ] {
         dma.write(base + offset, &1_u32.to_le_bytes())?;
     }
-    let mut pipeline = dma.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = dma.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When
     for _ in 0..128 {
-        let outcome = StepExecutor::new()
-            .step(&mut pipeline, &mut operation, &mut dma)
+        let outcome = operation
+            .step(&mut pipeline, &mut dma)
             .map_err(|e| format!("{e:?}"))?;
         assert!(!matches!(
             outcome,

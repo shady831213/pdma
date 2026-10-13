@@ -1,10 +1,12 @@
 //! Policies for driving a [`crate::Stage`].
 
 mod asynchronous;
+mod hardware_driver;
 mod immediate;
 mod stepped;
 
 pub use asynchronous::{AsyncExecutor, AsyncRunError};
+pub use hardware_driver::HardwareDriver;
 pub use immediate::ImmediateExecutor;
 pub use stepped::StepExecutor;
 

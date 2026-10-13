@@ -4,7 +4,7 @@
 pub mod support;
 
 use hardware_interface_pipeline::{
-    AfterEach, Operation, Repeat, RunError, Stage, StepExecutor, StepOutcome, StepResult, Then,
+    AfterEach, Operation, RunError, Stage, StepOutcome, StepResult, Then,
 };
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
 use pdma_model_dma::{
@@ -52,7 +52,7 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
         WriteCopy,
     );
-    let execution = Then::new(CheckRanges, Repeat::new(chunk));
+    let execution = Then::new(CheckRanges, chunk);
     let mut hardware = Then::new(
         Then::new(
             pdma_model_dma::Fetch,
@@ -64,8 +64,8 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
     let mut complete = false;
     // When
     for _ in 0..32 {
-        match StepExecutor::new()
-            .step(&mut hardware, &mut operation, &mut device)
+        match operation
+            .step(&mut hardware, &mut device)
             .map_err(|e| format!("{e:?}"))?
         {
             StepOutcome::InProgress => {}
@@ -90,7 +90,7 @@ fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     // Given: an execution stage started with a valid command.
     let (mut device, _) = setup(0x1100, 2)?;
     let mut execution = CheckRanges;
-    let mut operation = Operation::new(command());
+    let mut operation = Operation::new(pdma_model_dma::CommandInput::Fresh(command()));
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.
     let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;

@@ -1,16 +1,17 @@
 //! Generation-bound task handoff through the shared execution pipeline.
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::SharedMemory;
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_dma::Dma;
 
 #[test]
-fn idle_or_device_fatal_keeps_command_loop_in_progress() -> Result<(), Box<dyn std::error::Error>> {
+fn idle_or_device_fatal_keeps_external_driver_in_progress() -> Result<(), Box<dyn std::error::Error>>
+{
     // Given: a three-channel instance with no runnable command.
     let mut device = Dma::new(SharedMemory::new(), 3)?;
-    let mut hardware = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut hardware = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for fatal in [false, true] {
         if fatal {
             device.signal_fatal();
@@ -24,7 +25,7 @@ fn idle_or_device_fatal_keeps_command_loop_in_progress() -> Result<(), Box<dyn s
             operation.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
         ));
-        // Then: empty rounds retain the command loop invocation.
+        // Then: empty service transactions keep external hardware driving active.
         assert!(matches!(
             operation.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
@@ -46,13 +47,13 @@ fn invalid_instance_count_is_rejected_before_allocation() {
 }
 
 #[test]
-fn independently_sized_empty_command_loops_remain_in_progress()
+fn independently_sized_idle_devices_keep_external_driver_in_progress()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: independently configured one- and five-channel devices.
     for count in [1, 5] {
         let mut device = Dma::new(SharedMemory::new(), count)?;
-        let mut arbiter = device.command_loop();
-        let mut operation = Operation::new(());
+        let mut arbiter = device.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         // When: repeatedly driving idle arbitration for each population.
         for _ in 0..128 {
             assert!(matches!(
@@ -60,7 +61,7 @@ fn independently_sized_empty_command_loops_remain_in_progress()
                 StepOutcome::InProgress
             ));
         }
-        // Then: repeated empty rounds retain the command loop invocation.
+        // Then: repeated empty service transactions keep external driving active.
         assert!(!operation.is_complete());
     }
     Ok(())

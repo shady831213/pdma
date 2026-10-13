@@ -56,8 +56,8 @@ pub(super) fn pair() -> TestResult<(Dma<Paged>, usize, Command)> {
 fn peer_channel_completes_while_faulted_channel_stays_parked() -> TestResult {
     // Given: two physical channels with independent rings and one missing source page.
     let (mut device, peer_response, peer) = pair()?;
-    let mut pipeline = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: the shared engine runs both channels with the page still absent.
     for _ in 0..512 {
         assert!(matches!(
@@ -108,8 +108,8 @@ fn parked_reset_finishes_while_an_accepted_peer_is_disabled() -> TestResult {
     let peer = ChannelId::new(1).register_offset(2).ok_or("peer")?;
     let enable = peer + ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset();
     let reset = ChannelId::new(0).admin_offset(2).ok_or("reset")?;
-    let mut pipeline = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut pipeline = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
         assert!(matches!(
             operation.step(&mut pipeline, &mut device)?,

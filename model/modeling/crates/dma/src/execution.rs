@@ -16,6 +16,25 @@ use pdma_model_contract::dma::{
 /// Scratch space per copy interaction, not a protocol transfer-length limit.
 pub const COPY_CHUNK_BYTES: usize = 256;
 
+/// Fresh descriptor or hardware traversal retained between service transactions.
+#[derive(Debug)]
+pub enum CommandInput {
+    /// Descriptor whose endpoint ranges have not been checked.
+    Fresh(Command),
+    /// Validated traversal at the next chunk boundary.
+    Progress(CopyState),
+}
+
+impl CommandInput {
+    /// Descriptor metadata shared by fresh and continuing service transactions.
+    pub const fn command(&self) -> &Command {
+        match self {
+            Self::Fresh(command) => command,
+            Self::Progress(progress) => &progress.command,
+        }
+    }
+}
+
 /// Retained traversal of one command's two byte streams.
 #[derive(Debug)]
 pub struct CopyState {

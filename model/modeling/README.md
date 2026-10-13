@@ -96,7 +96,7 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/hardware-interface-pipeline/src/combinators/` | Typed sequencing, gathering, arbitration and distribution. |
 | `crates/dma/src/arbitration.rs` | PDMA round-robin selection policy. |
 | `crates/dma/src/channel/candidate.rs` | Non-consuming channel candidate advancement. |
-| `crates/dma/src/commands.rs` | Command-loop composition and typed saved-continuation lifetime. |
+| `crates/dma/src/commands.rs` | Finite service composition and assembly-owned fault continuation storage. |
 | `crates/dma/src/commands/scope.rs` | DMA lifecycle combinator around the shared Fetch-to-execution composition. |
 | `crates/dma/src/routing.rs` | Generation-bound response destination policy. |
 | `crates/dma/src/execution.rs` | Retained copy progress and chunk payload. |
@@ -117,31 +117,34 @@ backend errors. New platform error categories need no generic runtime change.
 | `crates/scenarios/tests/single_channel/software/` | Complete software program, buffer allocation and interrupt handler. |
 | `crates/scenarios/tests/multi_channel/` | Three-channel reset isolation through the same hardware/software/harness separation. |
 
-`device.command_loop()` is the complete hardware assembly entry. Its per-command
+`device.service()` is the complete hardware assembly entry. Its finite chunk
 composition is deliberately explicit:
 
 ```rust
 let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-let execution = Then::new(CheckRanges, Repeat::new(chunk));
-device.command_loop_with(Then::new(
+let execution = Then::new(CheckRanges, chunk);
+device.service_with(Then::new(
     Resettable::new(AfterEach::new(execution, UpdateIrq)),
     device.responses(),
 ))
 ```
 
-Each `Candidate` produces an optional `CommandRequest::Fetch(channel)` or
-`CommandRequest::Resume(channel)` without accepting or moving a command.
-`device.command_loop_with(downstream)` composes these input stages, DMA's round-robin
+Each `Candidate` produces an optional Fetch, Progress or Resume request without
+accepting a new descriptor or moving channel-owned work.
+`device.service_with(downstream)` composes these input stages, DMA's round-robin
 selector and one shared engine through `FanIn`. RoundRobin implements `Arbitration`;
 `Arbitrate::snapshots` owns the candidate round's value lifetime. The selector sees completed
 candidate values, never source stages or an engine. Selection and acceptance
 occur in separate steps. `CommandScope` is a DMA lifecycle combinator around
 `Then::new(Fetch, downstream)`: it admits a fresh invocation or restores an exact
 saved invocation. Only `Then` advances Fetch and the downstream composition.
-`Fetch` consumes `ChannelId` and produces `ChannelTask<Command>`, carrying
-channel identity and generation. Focused single-channel boundary tests compose
+`Fetch` consumes `ChannelId` and produces `ChannelTask<CommandInput>`, carrying
+channel identity and generation. Fresh inputs contain a newly accepted command;
+Progress inputs take the channel's previously stored CopyState without fetching
+another descriptor. CheckRanges validates Fresh once and passes Progress onward.
+Focused single-channel boundary tests compose
 `Then::new(Fetch, transform)` with the selected channel as input; multi-channel
-execution tests drive the same sustained command loop used by runtime assembly.
+execution tests drive the same finite service used by runtime assembly.
 
 `Fan` is finite N-to-M value flow: independent input stages advance, planning consumes
 selected completed values, then independent output stages advance. Unselected values
@@ -163,11 +166,12 @@ Hardware leaf stages never step another stage. They communicate through their ty
 input/output values and shared hardware state; composition adapters advance owned children.
 `Resettable` selects its context and checks the generation before every nested interaction,
 retaining `ChannelTask<T>` across output transformations and rejecting a wrong destination.
-The shared execution transforms `ChannelTask<Command>` into `ChannelTask<Response>`;
-publication consumes that tagged response. The copy body is
-`CopyState -> Transfer -> Transfer -> ControlFlow<Response, CopyState>`: Continue feeds
-progress into the next iteration, Break finishes the command. Repeat advances one
-child step at a time and reuses its hardware; it does not add another executor.
+The shared execution transforms `ChannelTask<CommandInput>` into
+`ChannelTask<Option<Response>>`. The copy body is
+`CopyState -> Transfer -> Transfer -> Option<Response>`: WriteCopy stores unfinished
+progress in its channel and returns no response; terminal work produces a response
+for publication. No child completion instructs the pipeline to restart an earlier stage.
+The next externally supplied service input observes the updated channel state.
 Command execution stages can inspect and transform the owned `Transfer`; `dma/tests/composition.rs`
 inserts a payload transform between read and write without changing the core or executor.
 Command execution
@@ -178,10 +182,10 @@ publication faults stop the channel. An error response is published before the c
 stops; no subsequent command executes until reset. Rings are state in the shared hardware
 context, not stages. `Operation` retains accepted work independently of an async
 driving future; `StepExecutor` and `AsyncExecutor` drive the same hardware graph.
-`device.command_loop()` builds the default `CommandLoop<Pipeline>`; custom downstream
-compositions use `command_loop_with`. The loop composes repeated candidate/selection/engine
-rounds with `ResetControl` after each outer step. Its invocation owns the saved-state
-bank and supplies data-only context to one `CommandScope<Then<Fetch, Pipeline>>`.
+`device.service()` builds the default `Service<M, SB>`; custom finite chunk
+compositions use `service_with`. ResetControl runs after each outer step. The service
+assembly owns the saved-state bank across finite invocations and supplies data-only
+context to one `CommandScope<Then<Fetch, Pipeline>>`.
 Each physical channel has at most one saved
 composed continuation, not its own engine. A faulting copy leaf retains its Transfer
 and remains `InProgress`. The scope parks that exact composed
@@ -189,40 +193,42 @@ state, including both cursors, write scratch and custom transforms, while
 Channel.parked retains accepted context references.
 The scope completes that arbitration turn and restores its continuation when selected
 again, without command refetch, CheckRanges restart or repeated transforms.
-The command loop discards reset/Abort targets before stepping shared active work,
+The service discards reset/Abort targets before stepping shared active work,
 so even a disabled peer cannot block cleanup.
 Arbitration changes channels at command completion or payload-fault suspension;
 it does not time-slice healthy commands between chunks. A full idle arbitration
-round completes without a grant and repeats; stopping errors and reset retire affected work, while a
+service completes without a grant; stopping errors and reset retire affected work, while a
 payload fault retains ownership. Channels without response space are skipped before
 new acceptance; a parked channel cannot accept a successor.
 `ChannelContext` borrows
 only the selected channel and its memory port for each step. A reset write requests cleanup;
 hardware keeps the reset register at one until affected accepted work retires, then
-clears it to zero. `ResetControl` runs after each command-loop step, including unfinished
+clears it to zero. `ResetControl` runs after each service step, including unfinished
 steps. Configuration writes are rejected while the affected scope is resetting.
 Generation tags additionally reject retained pre-reset tasks after later reconfiguration;
-they do not acknowledge reset. Custom sustained command compositions pass a
-`ChannelTask<Command> -> ()` transform to `device.command_loop_with`, which includes
+they do not acknowledge reset. Custom finite chunk compositions pass a
+`ChannelTask<CommandInput> -> ()` transform to `device.service_with`, which includes
 `ResetControl`. The shared engine accepts any child stage with that contract and
 owns fetch/restore, stepping, parking and terminal cleanup. Its turn completes on
-retirement or suspension; suspension transfers the continuation into the loop's
-saved-state bank without retiring accepted ownership. Repetition belongs to the
-existing `Repeat` composition, not another hand-written execution loop.
+chunk completion, retirement or suspension. Chunk completion preserves the healthy
+grant and accepted references while channel progress remains. Suspension transfers
+the continuation into the assembly's saved-state bank without retiring ownership.
+Only the external HardwareDriver supplies another top-level service input. It does
+not implement Stage, cannot be nested in a graph and has no feedback-value protocol.
 Only terminal completion or cancellation cleanup releases accepted ownership;
 parking, response publication and `Resettable` binding do not acknowledge cleanup.
 Discarding an accepted operation does not
 model hardware cleanup. See the [reset contract](docs/reset.md) for completion and memory
 lifetime requirements.
 
-Build `device.command_loop()` before moving the device into
+Build `device.service()` before moving the device into
 the runtime transport, and retain that graph across commands. Its lightweight
 candidate ports come from the actual instance population. Candidate eligibility and
 round-robin value selection can be tested independently without creating a second
 command acceptance path.
 Runtime only drives the supplied graph; it never constructs the hardware policy.
-Complete scenarios drive one persistent command-loop operation until their software
-program finishes, then abort and join the hardware task. Command-local termination
+Complete scenarios retain one HardwareDriver and use AsyncExecutor::drive until their
+software program finishes, then abort and join the hardware task. Command-local termination
 is handled inside the device, not by a scenario-side retry loop. Boundary tests that
 need a single command assemble the existing stages in test fixtures.
 

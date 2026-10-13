@@ -1,4 +1,4 @@
-use super::{CopyState, Cursor};
+use super::{CommandInput, CopyState, Cursor};
 use crate::{ChannelContext, Error};
 use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
@@ -19,23 +19,36 @@ pub struct RangeCheck {
     remaining: u64,
 }
 
+/// Validation state or already validated hardware progress.
+#[derive(Debug)]
+pub enum RangeState {
+    /// Incremental fresh-command validation.
+    Checking(RangeCheck),
+    /// Traversal ready for its next chunk.
+    Progress(CopyState),
+}
+
 /// Validate both selected ranges before committing payload writes.
 #[derive(Debug, Default)]
 pub struct CheckRanges;
 
 impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
-    type Input = Command;
+    type Input = CommandInput;
     type Output = CopyState;
     type Error = Error;
-    type State = Option<RangeCheck>;
+    type State = Option<RangeState>;
 
-    fn start(command: Command) -> Self::State {
-        Some(RangeCheck {
+    fn start(input: CommandInput) -> Self::State {
+        let command = match input {
+            CommandInput::Fresh(command) => command,
+            CommandInput::Progress(progress) => return Some(RangeState::Progress(progress)),
+        };
+        Some(RangeState::Checking(RangeCheck {
             cursor: Cursor::new(command.source, command.copy_length),
             remaining: command.copy_length,
             command,
             side: Side::Source,
-        })
+        }))
     }
 
     fn step(
@@ -54,8 +67,15 @@ impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for CheckRanges {
         if !context.channel.enabled() {
             return Ok(StepOutcome::InProgress);
         }
-        let Some(scan) = state.as_mut() else {
-            return Err(RunError::Exhausted);
+        let scan = match state {
+            Some(RangeState::Checking(scan)) => scan,
+            Some(RangeState::Progress(_)) => {
+                let Some(RangeState::Progress(progress)) = state.take() else {
+                    return Err(RunError::Exhausted);
+                };
+                return Ok(StepOutcome::Complete(Ok(progress)));
+            }
+            None => return Err(RunError::Exhausted),
         };
         let result = if scan.remaining == 0 {
             match scan.side {

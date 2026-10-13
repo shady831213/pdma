@@ -1,7 +1,10 @@
 use super::*;
 use pdma_model_contract::memory::{FunctionId, MemoryIdentity};
 
-impl<M: Clone> Managed<M> {
+impl<M: Clone + MemoryAccess> Managed<M>
+where
+    M::Error: Into<pdma_model_dma::MemoryFailure>,
+{
     /// Assembles one channel and one Host without starting actors.
     pub fn new(memory: M) -> Result<(Self, Host<M>), BuildError> {
         Self::with_channels(memory, 1)
@@ -136,7 +139,7 @@ impl<M: Clone> Managed<M> {
         };
         let dma =
             Dma::with_sideband(routed, channel_count, |access| access).map_err(BuildError::Dma)?;
-        let pipeline = dma.command_loop();
+        let pipeline = dma.service();
         let invalid = || BuildError::Platform(PlatformConfigError::AddressSpace);
         let firmware =
             FirmwareStatus::new(usize::try_from(addresses.firmware).map_err(|_| invalid())?);

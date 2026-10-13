@@ -3,7 +3,7 @@
 /// Shared raw-bus fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, CommandRegisters, DmaAdmin, DmaControl, DmaDiscovery, Endpoint,
@@ -17,12 +17,12 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     // Given: an accepted operation and externally written payload bytes.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.command_loop();
-    let mut operation = Operation::new(());
+    let mut hardware = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     let mut accepted = false;
     for _ in 0..16 {
         assert!(matches!(
-            StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
+            operation.step(&mut hardware, &mut device),
             Ok(StepOutcome::InProgress)
         ));
         if read_word(
@@ -51,7 +51,7 @@ fn reset_invalidates_a_retained_copy_without_rolling_back_memory() -> TestResult
     assert_eq!(read_word(&mut device, reset)?, 1);
     for _ in 0..32 {
         assert!(matches!(
-            StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
+            operation.step(&mut hardware, &mut device),
             Ok(StepOutcome::InProgress)
         ));
         if read_word(&mut device, reset)? == 0 {
@@ -142,12 +142,12 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         input.copy_length = 512;
         input.destination = Endpoint::linear(0x1600, 0);
         submit(&mut device, &memory, input)?;
-        let mut hardware = device.command_loop();
-        let mut operation = Operation::new(());
+        let mut hardware = device.service();
+        let mut operation = hardware_interface_pipeline::HardwareDriver::new();
         let mut first_committed = false;
         let mut first_chunk = [0; 256];
         for _ in 0..64 {
-            let _ = StepExecutor::new().step(&mut hardware, &mut operation, &mut device);
+            let _ = operation.step(&mut hardware, &mut device);
             memory.read(
                 MemoryAddress::new(0x1600),
                 MemoryAlignment::ONE,
@@ -164,7 +164,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         assert_eq!(read_word(&mut device, reset)?, 1);
         for _ in 0..32 {
             assert!(matches!(
-                StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
+                operation.step(&mut hardware, &mut device),
                 Ok(StepOutcome::InProgress)
             ));
             if read_word(&mut device, reset)? == 0 {
@@ -217,7 +217,7 @@ fn reset_after_committed_chunk_discards_remaining_copy_after_reconfiguration() -
         submit(&mut device, &memory, command())?;
         for _ in 0..128 {
             assert!(matches!(
-                StepExecutor::new().step(&mut hardware, &mut operation, &mut device),
+                operation.step(&mut hardware, &mut device),
                 Ok(StepOutcome::InProgress)
             ));
         }

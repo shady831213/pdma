@@ -38,7 +38,7 @@ async fn malformed_response_is_not_consumed_before_explicit_decode_succeeds()
     };
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = support::single_command(&device);
+    let mut stage = support::single_chunk(&device);
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -127,7 +127,7 @@ async fn copy_completes_when_host_submits_and_consumes_response()
     let memory = allocator.memory_access();
     memory.write(source, alignment, b"dma-copy")?;
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = support::single_command(&device);
+    let mut stage = support::single_chunk(&device);
     let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -199,7 +199,7 @@ async fn fault_interrupt_arrives_when_response_write_is_unmapped()
     let destination = allocator.allocate(8, alignment)?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = support::single_command(&device);
+    let mut stage = support::single_chunk(&device);
     let mut model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu

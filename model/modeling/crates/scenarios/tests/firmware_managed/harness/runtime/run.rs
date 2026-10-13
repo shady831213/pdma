@@ -1,5 +1,5 @@
 use super::{Driver, Managed, ManagementBus, RunError};
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_hw_components::control::MemoryError;
 use std::{convert::Infallible, future::Future, sync::Arc};
@@ -44,9 +44,9 @@ where
         let hardware = async {
             let mut pipeline = self.pipeline;
             let executor = AsyncExecutor::new(Driver(self.shared));
-            let mut operation = Box::new(Operation::new(()));
+            let mut driver = Box::new(HardwareDriver::new());
             executor
-                .run(&mut pipeline, &mut operation)
+                .drive(&mut pipeline, &mut driver)
                 .await
                 .map_err(RunError::Hardware)?;
             Err::<Infallible, _>(RunError::HardwareStopped)

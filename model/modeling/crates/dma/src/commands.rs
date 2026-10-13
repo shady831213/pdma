@@ -2,89 +2,82 @@ mod scope;
 
 use crate::{Candidate, CommandRequest, Dma, Error, RoundRobin};
 use hardware_interface_pipeline::{
-    Arbitrate, BranchError, FanIn, FanState, Repeat, RunError, Stage, StepOutcome, StepResult,
-    Then, ThenState,
+    Arbitrate, FanIn, FanState, RunError, Stage, StepOutcome, StepResult,
 };
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::{ChannelId, FaultStatusValues};
 use scope::{CommandScope, ScopeState};
-use std::ops::ControlFlow;
 
-type Round<S> = Then<FanIn<Candidate, Arbitrate<RoundRobin>, CommandScope<S>>, NextRound>;
-type RoundState<T> = ThenState<Option<FanState<(), Option<CommandRequest>, ScopeState<T>, ()>>, ()>;
+type Selection<S> = FanIn<Candidate, Arbitrate<RoundRobin>, CommandScope<S>>;
+type SelectionState<T> = Option<FanState<(), Option<CommandRequest>, ScopeState<T>, ()>>;
 
+/// Finite arbitration transaction and assembly-owned exact fault continuations.
 #[derive(Debug)]
-enum Rounds<T> {
-    Fresh,
-    Running(Option<RoundState<T>>),
-    Done,
-}
-
-/// Repeats candidate selection and one shared command engine.
-#[derive(Debug)]
-pub struct Commands<S> {
+pub struct Commands<S, T> {
     count: usize,
-    rounds: Repeat<Round<S>>,
-}
-
-/// Retains round progress and at most one exact continuation per channel.
-#[derive(Debug)]
-pub struct CommandState<T> {
-    rounds: Rounds<T>,
+    selection: Selection<S>,
     saved: Vec<Option<T>>,
 }
 
-impl<S> Commands<S> {
+/// Invocation-local candidate gathering and selected service progress.
+#[derive(Debug)]
+pub struct CommandState<T> {
+    selection: SelectionState<T>,
+    started: bool,
+}
+
+impl<S, T> Commands<S, T> {
     pub(crate) fn new(count: usize, pipeline: S) -> Self {
         Self {
             count,
-            rounds: Repeat::new(Then::new(
-                FanIn::new(
-                    (0..count)
-                        .map(|index| Candidate::new(ChannelId::new(index)))
-                        .collect(),
-                    Arbitrate::snapshots(RoundRobin::default()),
-                    CommandScope(pipeline),
-                ),
-                NextRound,
-            )),
+            selection: FanIn::new(
+                (0..count)
+                    .map(|index| Candidate::new(ChannelId::new(index)))
+                    .collect(),
+                Arbitrate::snapshots(RoundRobin::default()),
+                CommandScope(pipeline),
+            ),
+            saved: Vec::new(),
         }
     }
 }
 
-impl<M: MemoryAccess<SB>, SB, S> Stage<Dma<M, SB>> for Commands<S>
+impl<M: MemoryAccess<SB>, SB, S, T> Stage<Dma<M, SB>> for Commands<S, T>
 where
-    S: Stage<Dma<M, SB>, Input = ChannelId, Output = (), Error = Error>,
+    S: Stage<Dma<M, SB>, Input = ChannelId, Output = (), Error = Error, State = T>,
 {
     type Input = ();
     type Output = ();
     type Error = Error;
-    type State = CommandState<S::State>;
+    type State = CommandState<T>;
 
     fn start((): ()) -> Self::State {
         CommandState {
-            rounds: Rounds::Fresh,
-            saved: Vec::new(),
+            selection: None,
+            started: false,
         }
     }
 
     fn step(&mut self, device: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<(), Error> {
-        match state.rounds {
-            Rounds::Done => return Err(RunError::Exhausted),
-            Rounds::Fresh => {
-                if state.saved.try_reserve_exact(self.count).is_err() {
-                    state.rounds = Rounds::Done;
+        let fresh = !state.started;
+        if !state.started {
+            if self.saved.len() != self.count {
+                if self.saved.try_reserve_exact(self.count).is_err() {
+                    state.started = true;
                     return Ok(StepOutcome::Complete(Err(Error::OperationAllocation)));
                 }
-                state.saved.resize_with(self.count, || None);
-                let input = vec![(); self.count];
-                let rounds = <Repeat<Round<S>> as Stage<Frame<'_, S::State, M, SB>>>::start(input);
-                state.rounds = Rounds::Running(rounds);
+                self.saved.resize_with(self.count, || None);
             }
-            Rounds::Running(_) => {}
+            state.selection =
+                <Selection<S> as Stage<Frame<'_, T, M, SB>>>::start(vec![(); self.count]);
+            state.started = true;
+        } else if state.selection.is_none() {
+            return Err(RunError::Exhausted);
         }
-        for (index, (channel, saved)) in
-            device.channels.iter_mut().zip(&mut state.saved).enumerate()
+        if fresh {
+            retire_stopped_progress(device);
+        }
+        for (index, (channel, saved)) in device.channels.iter_mut().zip(&mut self.saved).enumerate()
         {
             let aborts = device.maintenance.as_ref().is_some_and(|maintenance| {
                 maintenance.abort
@@ -105,31 +98,50 @@ where
             }
         }
         if device.discard_aborted() {
-            return Ok(StepOutcome::InProgress);
+            state.selection = None;
+            return Ok(StepOutcome::Complete(Ok(())));
         }
-        let outcome = match &mut state.rounds {
-            Rounds::Running(rounds) => self.rounds.step(
-                &mut Frame {
-                    device,
-                    saved: &mut state.saved,
-                },
-                rounds,
-            ),
-            Rounds::Fresh | Rounds::Done => Err(RunError::Exhausted),
-        };
-        if !matches!(outcome, Ok(StepOutcome::InProgress)) {
-            state.rounds = Rounds::Done;
-            state.saved.clear();
+        let outcome = self.selection.step(
+            &mut Frame {
+                device,
+                saved: &mut self.saved,
+            },
+            &mut state.selection,
+        );
+        if matches!(outcome, Err(_) | Ok(StepOutcome::Complete(Err(_)))) {
+            state.selection = None;
+            self.saved.iter_mut().for_each(|saved| *saved = None);
             device.active = None;
             for channel in &mut device.channels {
                 channel.parked = None;
+                channel.progress = None;
             }
+        } else if matches!(outcome, Ok(StepOutcome::Complete(Ok(_)))) {
+            retire_stopped_progress(device);
         }
         device.refresh_maintenance();
         Ok(match outcome? {
-            StepOutcome::Complete(result) => StepOutcome::Complete(result.map_err(Error::from)),
+            StepOutcome::Complete(result) => {
+                StepOutcome::Complete(result.map(|_| ()).map_err(Error::from))
+            }
             StepOutcome::InProgress => StepOutcome::InProgress,
         })
+    }
+}
+
+fn retire_stopped_progress<M, SB>(device: &mut Dma<M, SB>) {
+    let halted = device.halted();
+    for (index, channel) in device.channels.iter_mut().enumerate() {
+        if channel.progress.is_some() && (channel.resetting() || channel.halted() || halted) {
+            channel.progress = None;
+            if device
+                .active
+                .as_ref()
+                .is_some_and(|task| task.channel().index() == index)
+            {
+                device.active = None;
+            }
+        }
     }
 }
 
@@ -152,27 +164,5 @@ impl<T, M, SB> Stage<Frame<'_, T, M, SB>> for Candidate {
         (): &mut (),
     ) -> StepResult<Self::Output, Error> {
         Ok(StepOutcome::Complete(self.request(frame.device)))
-    }
-}
-
-#[derive(Debug)]
-struct NextRound;
-
-impl<T, M, SB> Stage<Frame<'_, T, M, SB>> for NextRound {
-    type Input = Vec<(usize, ())>;
-    type Output = ControlFlow<(), Vec<()>>;
-    type Error = BranchError<Error>;
-    type State = ();
-
-    fn start(_: Self::Input) {}
-
-    fn step(
-        &mut self,
-        frame: &mut Frame<'_, T, M, SB>,
-        (): &mut (),
-    ) -> StepResult<Self::Output, Self::Error> {
-        let count = frame.device.channels.len();
-        let next = ControlFlow::Continue(vec![(); count]);
-        Ok(StepOutcome::Complete(Ok(next)))
     }
 }

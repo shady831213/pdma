@@ -1,7 +1,7 @@
 //! Notification visibility follows complete response publication.
 /// Shared raw-bus test fixtures.
 pub mod support;
-use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
+use hardware_interface_pipeline::{Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_contract::dma::{Response, ResponseRegisters, ResponseStatus};
@@ -15,12 +15,12 @@ fn irq_requires_published_response_on_every_step() -> TestResult {
     // Given
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = support::single_command(&device);
+    let mut hardware = support::single_chunk(&device);
     let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
     // When
     for _ in 0..32 {
-        let outcome = StepExecutor::new()
-            .step(&mut hardware, &mut operation, &mut device)
+        let outcome = operation
+            .step(&mut hardware, &mut device)
             .map_err(|error| format!("{error:?}"))?;
         // Then
         let irq = device.irq();

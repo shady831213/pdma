@@ -18,9 +18,8 @@ effects remain. A canceled asynchronous driver can resume the same operation,
 including an owned result retained across the mandatory terminal yield.
 
 `Then<A,B>` transfers an upstream result to downstream state and returns
-`InProgress`; downstream runs on a later step. `Repeat<S>` interprets a completed
-`ControlFlow::Continue(input)` as a fresh child invocation, again without stepping
-it in the same call. A child returning `InProgress` retains its exact state.
+`InProgress`; downstream runs on a later step. A child returning `InProgress`
+retains its exact state.
 `AfterEach<A,B>` starts a finite `B: Stage<Input=(),Output=(),Error=Infallible>`
 after every upstream step. If maintenance is incomplete, it retains the upstream
 outcome and finishes maintenance before advancing upstream or publishing that
@@ -85,6 +84,11 @@ reducers after receipt collection compose as ordinary downstream stages.
 ## Drivers
 
 - `StepExecutor` advances one bounded step.
+- `HardwareDriver<S,C>` owns external driving state for a hardware service whose
+  input and output are both unit. It retains the current `Operation` while work
+  is unfinished. Successful completion returns `InProgress`; the next external
+  step starts a fresh invocation. Stage errors and raw call errors stop driving.
+  It is not a `Stage` and cannot be inserted into a pipeline.
 - `ImmediateExecutor` advances steps until completion or its nonzero budget,
   returning `RunError::BudgetExhausted` without discarding unfinished work.
 - `AsyncExecutor` obtains closure-scoped context access from
@@ -92,8 +96,11 @@ reducers after receipt collection compose as ordinary downstream stages.
   cooperatively after every interaction, including incomplete and terminal steps.
   The backend's `yield_now` uses its scheduler's cooperative yield; Tokio adapters
   use `tokio::task::yield_now`. The backend has no hardware-wait protocol.
+  `run` drives one retained operation; `drive` uses a caller-owned `HardwareDriver`
+  to sustain finite hardware services. Cancellation preserves unfinished work,
+  completed effects, and terminal errors awaiting delivery after a yield.
 
 Context guards never escape synchronous interaction closures. Software interrupts,
 device wakeup policy, memory ownership, lifecycle rules, and application scheduling
-remain with their existing owners. Infinite hardware activity can compose finite
-batches with `Then` and `Repeat`; fan itself is a finite invocation mechanism.
+remain with their existing owners. Infinite hardware activity is driven externally
+through finite services; fan itself is a finite invocation mechanism.

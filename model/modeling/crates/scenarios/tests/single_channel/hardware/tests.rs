@@ -1,7 +1,7 @@
 //! Assembly must keep serving after the software observes its first completion.
 
 use crate::{harness::TestResult, software};
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use hardware_interface_runtime::{
     InterruptRuntime, MemoryAddress, SharedMemory, SharedMemoryAllocator, SoftwareCpu,
 };
@@ -20,7 +20,7 @@ async fn assembled_hardware_remains_running_after_a_copy() -> TestResult {
     let executor = AsyncExecutor::new(model.clone());
     let runtime = InterruptRuntime::new(Arc::new(SoftwareCpu::new()), model.clone());
     let mut workers = JoinSet::new();
-    workers.spawn(async move { executor.run(&mut stage, &mut Operation::new(())).await });
+    workers.spawn(async move { executor.drive(&mut stage, &mut HardwareDriver::new()).await });
     // When: software completes one command within a finite scheduling budget.
     let execution = runtime.run_main(async |interrupts| {
         software::main(

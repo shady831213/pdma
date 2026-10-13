@@ -1,5 +1,5 @@
 use crate::harness::runtime::memory::RoutedMemory;
-use hardware_interface_pipeline::{Operation, StepExecutor, StepOutcome};
+use hardware_interface_pipeline::{HardwareDriver, StepOutcome};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
@@ -8,7 +8,7 @@ use pdma_model_contract::dma::{
     ResponseRegisters,
 };
 use pdma_model_contract::hw_components::windows::WindowControl;
-use pdma_model_dma::{CommandLoop, Dma};
+use pdma_model_dma::{Dma, Service};
 use pdma_model_hw_components::windows::ChannelWindows;
 use std::sync::{Arc, Mutex};
 
@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 /// DMA wired to Function-selected memory capabilities.
 pub(super) type Hardware = Dma<RoutedMemory<SharedMemory>, pdma_model_contract::dma::DmaAccess>;
+/// Finite DMA service over the fixture's Function-selected memory.
+pub(super) type Pipeline = Service<RoutedMemory<SharedMemory>, pdma_model_contract::dma::DmaAccess>;
 /// Permission-bank placement in these hardware fixtures.
 pub(super) const WINDOWS: usize = 0x10_0000;
 
@@ -116,15 +118,16 @@ pub(super) fn publish(
 /// Drives retained hardware work within a bounded interaction budget.
 pub(super) fn advance(
     dma: &mut Hardware,
-    pipeline: &mut CommandLoop,
-    operation: &mut Operation<CommandLoop, Hardware>,
+    pipeline: &mut Pipeline,
+    driver: &mut HardwareDriver<Pipeline, Hardware>,
 ) -> TestResult {
     for _ in 0..256 {
-        if let StepOutcome::Complete(result) = StepExecutor::new()
-            .step(pipeline, operation, dma)
+        match driver
+            .step(pipeline, dma)
             .map_err(|error| format!("{error:?}"))?
         {
-            result?;
+            StepOutcome::InProgress => {}
+            StepOutcome::Complete(result) => result?,
         }
     }
     Ok(())

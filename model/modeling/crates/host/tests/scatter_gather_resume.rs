@@ -1,8 +1,6 @@
 //! Cancellation preserves committed SG chunks and independent endpoint cursors.
 
-pub mod support;
-
-use hardware_interface_pipeline::{AsyncExecutor, Operation};
+use hardware_interface_pipeline::{AsyncExecutor, HardwareDriver};
 use hardware_interface_runtime::{
     InterruptSource, MemoryAccess, MemoryAccessError, MemoryAddress, MemoryAlignment, SharedMemory,
     SharedMemoryAllocator, SoftwareCpu,
@@ -68,7 +66,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
         scatter_gather(&allocator, [&[0; 2], &[0; 6]])?;
     let memory = allocator.memory_access();
     let device = Dma::new(memory.clone(), 1)?;
-    let mut stage = support::single_command(&device);
+    let mut stage = device.service();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -91,7 +89,7 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     }))
     .await?;
     let executor = AsyncExecutor::new(model.clone());
-    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
+    let mut operation = HardwareDriver::new();
 
     // When: cancellation follows the first two-byte write and the same operation resumes.
     let first_chunk_committed = tokio::select! {
@@ -109,9 +107,8 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
             }
             Ok(false)
         } => observed?,
-        result = executor.run(&mut stage, &mut operation) => {
-            assert!(result.is_ok());
-            false
+        result = executor.drive(&mut stage, &mut operation) => {
+            return Err(format!("hardware terminated: {result:?}").into());
         },
     };
     assert!(first_chunk_committed);
@@ -120,7 +117,12 @@ async fn committed_sg_chunk_is_not_replayed_when_the_retained_operation_resumes(
     // Test-only mutation detects replay of a committed chunk; SG descriptors stay stable.
     memory.write(destination_first, MemoryAlignment::ONE, b"ZZ")?;
     memory.write(source_first, MemoryAlignment::ONE, b"XX")?;
-    assert!(executor.run(&mut stage, &mut operation).await.is_ok());
+    tokio::select! {
+        ready = model.wait_ready() => ready?,
+        result = executor.drive(&mut stage, &mut operation) => {
+            return Err(format!("hardware terminated: {result:?}").into());
+        },
+    }
 
     // Then: only the remaining stream is copied, with one completion and one notification.
     let mut first = [0; 2];

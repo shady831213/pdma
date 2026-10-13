@@ -2,7 +2,7 @@
 
 mod async_executor {
     mod backend;
-    mod repeat;
+    mod hardware_driver;
 
     use std::{
         future::Future,

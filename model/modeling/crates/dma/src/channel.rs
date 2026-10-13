@@ -9,7 +9,7 @@ pub use candidate::{Candidate, CommandRequest};
 pub use command::CommandRing;
 pub use response::ResponseRing;
 
-use crate::{ChannelFatal, ChannelTask};
+use crate::{ChannelFatal, ChannelTask, CopyState};
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
@@ -29,6 +29,7 @@ pub struct Channel {
     pub(crate) irq: bool,
     pub(crate) generation: u64,
     pub(crate) parked: Option<ChannelTask<[Option<ContextId>; 3]>>,
+    pub(crate) progress: Option<CopyState>,
 }
 
 impl Default for Channel {
@@ -42,6 +43,7 @@ impl Default for Channel {
             irq: false,
             generation: 0,
             parked: None,
+            progress: None,
         }
     }
 }

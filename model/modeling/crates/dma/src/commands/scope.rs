@@ -4,7 +4,7 @@ use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
 use hardware_interface_runtime::MemoryAccess;
 use pdma_model_contract::dma::ChannelId;
 
-/// DMA lifecycle combinator: suspends and restores its owned command composition.
+/// DMA lifecycle combinator: suspends and restores its owned service composition.
 #[derive(Debug)]
 pub(super) struct CommandScope<S>(pub S);
 
@@ -47,7 +47,9 @@ where
                     return Ok(StepOutcome::Complete(Ok(())));
                 }
                 let child = match request {
-                    CommandRequest::Fetch(channel) => S::start(channel),
+                    CommandRequest::Fetch(channel) | CommandRequest::Progress(channel) => {
+                        S::start(channel)
+                    }
                     CommandRequest::Resume(channel) => {
                         let Some(child) =
                             frame.saved.get_mut(channel.index()).and_then(Option::take)
@@ -68,7 +70,7 @@ where
             ScopeState::Running { channel, mut child } => {
                 if frame.device.active.is_none() {
                     match frame.device.command_request(channel) {
-                        Ok(Some(CommandRequest::Fetch(_))) => {}
+                        Ok(Some(CommandRequest::Fetch(_) | CommandRequest::Progress(_))) => {}
                         Ok(None | Some(CommandRequest::Resume(_))) => {
                             return Ok(StepOutcome::Complete(Ok(())));
                         }
@@ -94,7 +96,20 @@ where
                     }
                     Ok(StepOutcome::Complete(result)) => {
                         drop(child);
-                        frame.device.active = None;
+                        let halted = frame.device.halted();
+                        if let Some(owner) = frame.device.channels.get_mut(channel.index()) {
+                            if result.is_err() || halted || owner.resetting() || owner.halted() {
+                                owner.progress = None;
+                            }
+                        }
+                        if frame
+                            .device
+                            .channels
+                            .get(channel.index())
+                            .is_none_or(|owner| owner.progress.is_none())
+                        {
+                            frame.device.active = None;
+                        }
                         Ok(StepOutcome::Complete(match result {
                             Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted) => {
                                 Ok(())

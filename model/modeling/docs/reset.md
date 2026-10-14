@@ -45,63 +45,48 @@ reset does not retract them.
 
 ## How the current model reaches completion
 
-`Dma::service()` composes one finite candidate/selection/chunk service with
-`ResetControl` after every outer step. External HardwareDriver supplies subsequent
-service inputs; no model stage restarts the graph on child completion.
-`CommandScope` wraps `Then(Fetch, pipeline)` and owns suspension/retirement; no hardware
-leaf calls another stage's step. Reset can occur between Fetch's completion and its
-downstream step, so accepted references remain held across that handoff.
-`Fetch` gates resetting channels and
-device reset before accepting commands. Accepted ownership records channel and
-generation, including per-channel parked work; command, SG-list, payload and
-response paths check reset before further memory access. The shared engine releases
-executing ownership when the complete pipeline terminates. Payload faults leave
-the leaf InProgress with its Transfer intact; the shared engine saves the exact
-composed continuation and moves its accepted references to Channel.parked.
-The service completes at suspension. A later arbitration grant restores that continuation
-without fetching another command or replaying completed stages.
-Between completed chunks, Channel owns the updated CopyState and accepted ownership
-remains registered. A successful finite service is not a reset acknowledgment or
-command retirement. Reset must clear that progress before releasing ownership, even
-when no stage invocation currently holds it.
-Progress can be written back before the rest of the composed service terminates.
-Its presence alone therefore does not prove the shared pipeline is empty. Cleanup
-at a service boundary must wait until retained child state is disposed; an unfinished
-custom downstream stage still holds accepted ownership. A stale candidate skipped
-after reset must also reach cleanup at service completion, not strand the old progress.
-Before any shared active step, the service discards affected parked operations on
-reset or matching Abort and releases their references. A disabled active peer
-therefore cannot prevent parked cleanup. The engine discards its retained
-child state before ownership is released, including
-for custom child stages that do not clear their own state. Response publication
-can precede that outcome by additional composition steps; ownership remains held during
-those steps, so reset cannot acknowledge cleanup early. Neither response ports nor
-`Resettable` release whole-command ownership.
-`ResetControl` runs after every outer step,
-including an InProgress step, and clears reset only once affected executing and parked
-ownership has retired.
-An unrelated active channel does not prevent an idle channel's reset from completing.
+`Dma::service()` assembles finite candidate/selection/execution dataflow and
+independent IRQ/reset hardware units. External HardwareDriver supplies subsequent
+service inputs. Reset checks advance on every top-level tick, including idle or
+unfinished command processing; they do not depend on an AfterEach child-step hook.
+
+Channel owns the accepted descriptor, validation and traversal progress, scratch,
+next hardware action and accepted lifetime. Fetch publishes consumer progress and
+installs accepted state in one synchronous step. All later stages see the full Dma
+context and use their tagged work to find that Channel; they check generation and
+reset before each effect. No leaf invokes another stage.
+
+Payload fault ends the current finite execution path, releases the shared grant
+and leaves the concrete hardware task in Channel. Resume derives new work from
+that state. A failed write retries from retained transformed scratch without
+refetching or replaying Read/Transform. No generic child continuation owns the task.
+Finite service completion is not command retirement while Channel still has work.
+
+Reset cleanup clears affected channel-owned work before acknowledging. A stale
+pipeline token cannot issue new effects after generation invalidation, even if its
+Rust invocation object remains alive. An arbitrary custom state's destructor is
+not a hardware drain predicate. Custom hardware with persistent resources must
+represent those resources and their retirement conditions explicitly in hardware
+state, rather than hide them in a stage wrapper. A disabled active peer must not
+prevent another channel's reset or parked Abort cleanup.
 
 `MemoryAccess` calls are synchronous and finish within a hardware step. MMIO has
 exclusive device access, so a reset request occurs between steps, not halfway through
 a memory call. Thus the model has no bus transactions, outstanding read/write queues,
-cycle timing or artificial drain delay. Cleanup retires retained execution state;
+cycle timing or artificial drain delay. Cleanup retires channel-owned task state;
 the completion guarantee covers every affected memory path.
 
 Channel generation increments once for a new reset request. Repeated requests do
-not advance it, and cleanup does not zero it. `ChannelTask<T>` retains the generation
-so guarded custom stages can reject stale tasks even after reconfiguration. This
+not advance it, and cleanup does not zero it. Work tags retain the generation so
+custom stages can reject stale work even after reconfiguration. This
 is an additional stale-task guard, not the reset acknowledgment predicate.
 
-Custom finite chunk graphs pass their downstream composition to
-`Dma::service_with`, which includes `ResetControl`. The assembly owns one shared engine;
-its child implements `Stage<Dma<M>, Input = ChannelTask<CommandInput>, Output = (),
-Error = Error>`. Its internal transforms need not match the default
-`Pipeline`. Merely
-dropping a software waiter or abandoning an accepted `Operation` does not flush
-hardware. The complete-loop guarantee does not claim that arbitrary externally
-held task objects have been driven to completion; custom stages must preserve the
-reset guard before side effects.
+Custom finite graphs use `Dma::service_with` and ordinary composition; their stages
+operate on tagged work with the full Dma context. A custom stage must check its
+work tag before side effects, and commit any persistent result to explicit hardware
+state. Merely dropping a software waiter or pipeline invocation does not request
+reset or clear the accepted task. Conversely, retaining an obsolete token does
+not prevent hardware cleanup once it has no authority to issue further effects.
 
 ## Software waiting and memory lifetime
 
@@ -171,7 +156,7 @@ These tests specify the observable contract; this list is not a test-run report.
 
 | Test source | Boundary covered |
 | --- | --- |
-| [`dma/tests/reset_protocol.rs`](../crates/dma/tests/reset_protocol.rs) | Visible busy state, rejected configuration, whole-command retirement after response publication/rejection, repeated/zero writes and device reset scope. |
+| [`dma/tests/reset_protocol.rs`](../crates/dma/tests/reset_protocol.rs) | Visible busy state, rejected configuration, channel-owned work cleanup, repeated/zero writes and device reset scope. |
 | [`dma/tests/multi_channel/reset_boundaries.rs`](../crates/dma/tests/multi_channel/reset_boundaries.rs) | Reset across command/payload/response interactions, preserved peer work and fresh configuration. |
 | [`dma/tests/multi_channel/scatter_gather_reset.rs`](../crates/dma/tests/multi_channel/scatter_gather_reset.rs) | SG access boundaries and absence of stale interactions after completion. |
 | [`host/tests/reset_handshake.rs`](../crates/host/tests/reset_handshake.rs) | Polling after write acknowledgment, completion, read errors, CPU checks and cancellation. |

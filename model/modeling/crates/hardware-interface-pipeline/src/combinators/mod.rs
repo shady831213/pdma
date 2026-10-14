@@ -1,11 +1,9 @@
-mod after_each;
 mod error;
 mod fan;
 mod fan_in;
 mod fan_out;
 mod map_error;
 mod then;
-pub use after_each::{AfterEach, AfterEachState};
 pub use error::BranchError;
 pub use fan::{Fan, FanPlan, FanPolicy, FanState};
 pub use fan_in::{Arbitrate, Arbitration, FanIn};

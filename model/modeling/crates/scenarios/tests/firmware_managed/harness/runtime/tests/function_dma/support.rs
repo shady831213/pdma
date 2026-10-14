@@ -17,7 +17,7 @@ pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 /// DMA wired to Function-selected memory capabilities.
 pub(super) type Hardware = Dma<RoutedMemory<SharedMemory>, pdma_model_contract::dma::DmaAccess>;
 /// Finite DMA service over the fixture's Function-selected memory.
-pub(super) type Pipeline = Service<RoutedMemory<SharedMemory>, pdma_model_contract::dma::DmaAccess>;
+pub(super) type Pipeline = Service;
 /// Permission-bank placement in these hardware fixtures.
 pub(super) const WINDOWS: usize = 0x10_0000;
 

@@ -9,16 +9,13 @@ use crate::TestResult;
 
 pub(super) fn assemble(
     memory: SharedMemoryAccess,
-) -> TestResult<(Model<SharedMemoryAccess>, Service<SharedMemoryAccess>)> {
+) -> TestResult<(Model<SharedMemoryAccess>, Service)> {
     let device = Dma::new(memory, 3)?;
     let stage = device.service();
     Ok((Model::new(device), stage))
 }
 
-pub(super) async fn drive(
-    model: Model<SharedMemoryAccess>,
-    mut stage: Service<SharedMemoryAccess>,
-) -> TestResult {
+pub(super) async fn drive(model: Model<SharedMemoryAccess>, mut stage: Service) -> TestResult {
     let executor = AsyncExecutor::new(model);
     match executor.drive(&mut stage, &mut HardwareDriver::new()).await {
         Ok(()) => Err("sustained hardware worker unexpectedly completed".into()),

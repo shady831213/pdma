@@ -98,7 +98,8 @@ async fn read_transfers_a_hardware_notification_without_replaying_it() -> TestRe
         ] {
             device.write(offset, &1_u32.to_le_bytes())?;
         }
-        let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
+        let mut operation =
+            Operation::new(device.command_request(pdma_model_contract::dma::ChannelId::new(0))?);
         let outcome = (0..256).find_map(|_| match operation.step(&mut hardware, &mut device) {
             Ok(StepOutcome::InProgress) => None,
             terminal => Some(terminal),

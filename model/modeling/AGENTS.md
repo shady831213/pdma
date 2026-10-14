@@ -183,27 +183,25 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   and alignment, with no placement stride override. Reserved gaps belong to their
   enclosing block and cannot host sibling placements or interleaved banks. Group
   related registers in one child block before repeating it.
-  One shared execution pipeline processes commands selected by round-robin arbitration,
-  with bounded per-channel retained operations for payload-fault suspension.
-  Service composes channel-local Candidate inputs, Arbitrate::snapshots with
-  DMA's RoundRobin selector and one shared engine through FanIn. RoundRobin implements
+  Channel is a persistent hardware state object in the shared Dma context, not a
+  pipeline. Its private task state owns the accepted descriptor, validation and
+  traversal cursors, scratch, next hardware action and accepted lifetime. These
+  states must describe hardware registers/storage, never Rust S::State, ThenState,
+  Operation or a saved generic continuation. Stage-local state is transient work.
+  State representation and local operations belong under channel; shared
+  Stage<Dma> implementations belong under stages. DMA-wide Work identity,
+  guarded access and retirement helpers belong in the DMA-level work module.
+  Do not place shared execution stages under channel to accommodate visibility.
+  Service composes channel-targeted Candidate inputs, Arbitrate::snapshots with DMA's
+  RoundRobin selector and one shared engine through FanIn. RoundRobin implements
   Arbitration, not FanPolicy; snapshot disposal belongs to the generic adapter.
-  Candidates emit non-owning Fetch/Progress/Resume requests and do not consume commands; planning sees
-  completed values, not stages. A selected channel is revalidated before fetching
-  a new command or restoring its saved continuation. Eligibility belongs to DMA,
-  not generic combinators. Fetch is a shared leaf taking ChannelId as input and
-  producing ChannelTask<CommandInput>. Fresh commands are validated once; Progress
-  takes the channel-owned CopyState for another finite chunk without refetching.
-  WriteCopy writes unfinished progress back to the channel and returns an optional
-  response. No stage restarts an earlier stage to process the next chunk.
-  CommandScope is a DMA lifecycle combinator around
-  Then(Fetch, pipeline), not a hardware execution stage. Only Then advances Fetch
-  and downstream; hardware leaves must never call another stage's step. Communication
-  uses input/output or shared hardware state. Requests name live channels, not reserved
-  descriptors; generation binds at acceptance. Revalidate admission before Fetch,
-  including after composition start, but never discard accepted work for lost eligibility.
-  Route tagged responses through FanOut with the Dispatch policy to
-  channel-bound publication ports.
+  Candidates emit non-owning observations and do not consume descriptors. The
+  selected work is revalidated before acceptance. All post-arbitration stages
+  implement Stage<Dma<M, SB>> and use tagged input/output to access the corresponding
+  Channel. A temporary method-local channel borrow is not a fixed stage context.
+  No hardware leaf invokes another stage. Reuse Then for dataflow and FanOut with
+  Dispatch for channel-bound publication; do not add CommandScope, a second engine,
+  a centralized step-dispatch switch or a wrapper around arbitrary child execution.
   Complete hardware assembly uses Dma::service(); scenarios retain an external
   HardwareDriver and use AsyncExecutor::drive, then abort/join after software finishes.
   Service is finite, even when idle; only the external driver supplies subsequent
@@ -219,24 +217,21 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   requests cleanup; read one means busy; only hardware clears zero after affected accepted
   work retires. Zero writes do nothing and repeated requests coalesce. Reject configuration
   writes in a busy scope with `Error::ResetInProgress`; retain read access.
-  Service includes ResetControl after each outer step. Track accepted
-  channel/generation ownership, including parked references, until terminal release;
-  generation invalidation alone
-  is not completion. The shared engine owns executing-state release at complete pipeline
-  termination. A payload fault retains the leaf's Transfer and remains InProgress.
-  The service assembly retains at most one exact composed continuation per channel, preserving
-  scratch and custom child-stage state; Channel.parked retains accepted references.
-  The shared engine restores that continuation on resume without refetching,
-  restarting CheckRanges or repeating completed transforms. Arbitration retains
-  a healthy command's grant across finite chunks through termination and yields it on payload fault.
-  Successful service completion is not whole-command retirement when channel progress remains.
-  The service cleans reset/Abort targets before stepping shared active work,
-  including a disabled peer. Parking is not whole-command retirement.
-  Response publication and `Resettable` binding must not retire the whole command.
-  Custom finite chunk assemblies pass their downstream transform to
-  `Dma::service_with`, which preserves terminal ownership and includes ResetControl.
-  The shared engine constrains the child stage's associated types, not its concrete composition;
-  discard terminal child state before releasing command ownership.
+  IRQ refresh and reset cleanup are independent hardware units advanced at the
+  top level on every external tick, including idle or stalled command progress.
+  Neither depends on a per-child-step AfterEach wrapper or belongs in runtime.
+  Track accepted channel/generation ownership until real hardware work retires;
+  generation invalidation alone is not completion. A payload fault completes this
+  finite execution path while retaining concrete Channel state and releasing the
+  shared grant. Resume starts fresh stage invocations from the retained hardware
+  action, without refetching, restarting validation or repeating completed reads
+  and transforms. A failed write retains transformed scratch and retries Write.
+  Arbitration retains a healthy command's grant across finite services until
+  command retirement or payload fault. Finite service completion alone is not
+  command retirement. Reset/Abort cleanup must progress despite a disabled peer.
+  Custom downstream graphs use Dma::service_with and ordinary Then composition.
+  Persistent custom data must have explicit hardware ownership; arbitrary Rust
+  child-state destructor ordering is not a reset or accepted-lifetime contract.
   Guard command, SG-list, payload and response accesses before old work can interact again.
   Memory calls are synchronous within a step: do not invent bus transactions, outstanding
   queues, cycle timing or timeout delays. Host reset waits for hardware completion; caller
@@ -248,9 +243,10 @@ Firmware can consume DMA and peripheral contracts without owning those interface
   independent Linear byte offsets or SG entry/local offsets; backing totals need not match;
   do not cache whole lists, reject overlap or invent segment-count/total-length limits.
   Fixed copy scratch size is an implementation detail, not a command-size limit.
-- Reuse FanIn/Arbitrate/FanOut/Dispatch/Then/AfterEach for execution composition.
-  Repeat is removed. Do not recreate it with a renamed combinator, ControlFlow feedback,
-  or a wrapper that restarts completed child pipelines. Express hardware feedback through
+- Reuse FanIn/Arbitrate/FanOut/Dispatch/Then for execution composition.
+  Repeat and AfterEach are removed. Do not recreate them with renamed combinators,
+  ControlFlow feedback, per-child-step hooks or wrappers that restart completed
+  child pipelines. Express hardware feedback through
   typed input/output and shared state; continuous top-level driving belongs to executors.
   Runtime supplies memory and
   driving only; it must not gain PDMA traversal, validation or copy policy.

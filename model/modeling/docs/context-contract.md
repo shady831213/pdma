@@ -208,13 +208,13 @@ Interlock conflicting configuration/lifecycle changes while the operation is pen
 
 HW-07: Consumer progress proves descriptor consumption, not execution completion.
 Register accepted task ownership without an observable gap when advancing consumer,
-and keep it until the complete command pipeline retires. Successful completion of a
-finite chunk service does not release these references: channel-owned CopyState
-retains unfinished command progress between services. Preserve the existing
-whole-command retirement boundary; suspension leaves the child InProgress and the shared
-engine saves its exact composed continuation, with accepted references in Channel.parked, without
-whole-command retirement. Do not release ownership merely
-on payload completion or response publication. Deduplicate multiple uses of the same context within a
+and keep it until the accepted hardware task retires. Successful completion of a
+finite service does not release these references: the Channel owns the descriptor,
+next hardware action, cursors and scratch until completion or cancellation cleanup.
+A fault ends the current finite execution path while preserving that task. Do not
+equate Rust invocation completion or disposal with hardware retirement. Payload
+completion alone does not retire a task awaiting response publication. Deduplicate
+multiple uses of the same context within a
 task when using reference counts. Parking releases shared engine capacity without
 retiring ownership; count all retained parked tasks alongside the single executing
 command. This requires no additional execution engine.
@@ -286,11 +286,12 @@ preserve this distinction when the external transport is implemented.
 - `dma/src/maintenance` captures the initial consumer plus pending count (equivalent
   to the fixed producer), channel generation and a sticky passed flag for each channel
   owned by the Function. The DMA API receives only channel/context IDs, never a PASID.
-- Execution acceptance is successful command fetch/consumer publication plus active
-  reference registration in one synchronous Fetch step. There is no externally visible
-  interval between those effects. The shared engine releases executing state only at
-  whole-command retirement. It parks the exact unfinished continuation on suspension, retaining accepted
-  references in Channel.parked until resumed completion or cancellation cleanup.
+- Execution acceptance is successful command fetch/consumer publication plus
+  channel-owned task registration in one synchronous Fetch step. There is no externally
+  visible interval between those effects. The retained descriptor identifies all
+  accepted references until whole-command retirement. Suspension releases the shared
+  grant but retains the task, next action and scratch in Channel until resumed
+  completion or cancellation cleanup; no generic continuation stores ownership.
   It cleans parked reset/Abort targets before stepping active shared work; a disabled
   peer cannot prevent that cleanup.
   Abort examines unread ring entries before command admission and discards matching

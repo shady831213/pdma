@@ -1,20 +1,23 @@
-mod candidate;
 mod command;
 mod mmio;
 mod response;
 #[cfg(test)]
 mod tests;
+mod work;
 
-pub use candidate::{Candidate, CommandRequest};
 pub use command::CommandRing;
 pub use response::ResponseRing;
 
-use crate::{ChannelFatal, ChannelTask, CopyState};
+use crate::ChannelFatal;
+use hardware_interface_runtime::MemoryAddress;
 use hardware_interface_schema::RegisterWindow;
 use pdma_model_contract::dma::{
     ChannelAdmin, ChannelBlock, ChannelFatalCode, ChannelIrqCauseValues, ChannelRegisters,
-    ContextId, FaultStatusValues, ResetValues, Response,
+    FaultStatusValues, ResetValues, Response,
 };
+use pdma_model_contract::dma::{Command, ResponseStatus};
+pub use work::COPY_CHUNK_BYTES;
+use work::Cursor;
 
 /// One channel owns two rings, sticky fatal state and interrupt controls.
 #[derive(Debug)]
@@ -28,8 +31,7 @@ pub struct Channel {
     pub(crate) configured: bool,
     pub(crate) irq: bool,
     pub(crate) generation: u64,
-    pub(crate) parked: Option<ChannelTask<[Option<ContextId>; 3]>>,
-    pub(crate) progress: Option<CopyState>,
+    pub(crate) work: Option<Accepted>,
 }
 
 impl Default for Channel {
@@ -42,8 +44,7 @@ impl Default for Channel {
             configured: false,
             irq: false,
             generation: 0,
-            parked: None,
-            progress: None,
+            work: None,
         }
     }
 }
@@ -111,4 +112,65 @@ impl Channel {
     pub(crate) const fn enabled(&self) -> bool {
         self.registers.values.enable.raw() != 0
     }
+}
+
+#[derive(Debug)]
+pub(crate) enum Action {
+    Check(RangeCheck),
+    Next(CopyState),
+    Read(Transfer),
+    Transform(Transfer),
+    Write(Transfer),
+    Respond(Response),
+}
+
+#[derive(Debug)]
+pub(crate) struct Accepted {
+    pub(crate) command: Command,
+    pub(crate) action: Action,
+}
+
+/// Retained traversal of one command's two byte streams.
+#[derive(Debug)]
+pub(crate) struct CopyState {
+    pub(crate) command: Command,
+    source: Cursor,
+    destination: Cursor,
+    pub(crate) remaining: u64,
+    bytes_completed: u64,
+    pub(crate) status: ResponseStatus,
+}
+
+/// One retained payload chunk between the composable read and write stages.
+#[derive(Debug)]
+pub(crate) struct Transfer {
+    /// Command progress returned to the next copy iteration.
+    pub(crate) progress: CopyState,
+    /// Current source byte address.
+    pub(crate) source: MemoryAddress,
+    /// Current destination byte address.
+    pub(crate) destination: MemoryAddress,
+    /// Active prefix of the scratch buffer.
+    pub(crate) length: usize,
+    /// Owned bytes available to an inserted payload transform.
+    pub(crate) bytes: [u8; COPY_CHUNK_BYTES],
+}
+#[derive(Debug)]
+enum Side {
+    Source,
+    Destination,
+}
+
+/// Incremental validation of selected ranges, without payload access.
+#[derive(Debug)]
+pub(crate) struct RangeCheck {
+    pub(crate) command: Command,
+    cursor: Cursor,
+    side: Side,
+    remaining: u64,
+}
+
+pub(crate) enum PayloadAccess {
+    Complete,
+    Fault,
 }

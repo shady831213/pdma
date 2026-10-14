@@ -20,10 +20,11 @@ including an owned result retained across the mandatory terminal yield.
 `Then<A,B>` transfers an upstream result to downstream state and returns
 `InProgress`; downstream runs on a later step. A child returning `InProgress`
 retains its exact state.
-`AfterEach<A,B>` starts a finite `B: Stage<Input=(),Output=(),Error=Infallible>`
-after every upstream step. If maintenance is incomplete, it retains the upstream
-outcome and finishes maintenance before advancing upstream or publishing that
-outcome. `MapError` converts application errors without converting call errors.
+`MapError` converts application errors without converting call errors.
+Independent hardware units belong in the application's top-level assembly and
+advance from the external tick. Their progress must not depend on how many
+internal steps another pipeline takes. The framework has no per-child-step
+maintenance wrapper or feedback combinator.
 
 ## Fan value flow
 

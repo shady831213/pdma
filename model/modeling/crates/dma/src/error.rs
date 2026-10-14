@@ -49,8 +49,6 @@ pub enum Error {
     Reset,
     /// A composition selected an invalid destination or returned an invalid result shape.
     Routing,
-    /// Retained operation slots could not be allocated for this channel population.
-    OperationAllocation,
 }
 
 impl Display for Error {

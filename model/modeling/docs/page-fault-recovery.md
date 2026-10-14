@@ -146,10 +146,12 @@ selection helpers, independent of fault recovery.
 
 **HW-PF-02 (progress and final response).** Retain the original command, both
 current SG/Linear cursors, committed prefix, current copy phase and successful read
-scratch while parked. Preserve the exact composed operation, including completed
-transforms and custom child-stage state; rebuilding a command from its cursors is
-insufficient when a transform has side effects or is not idempotent. Retry only
-the failed access after authorized resume.
+scratch in the Channel hardware object while parked. The next hardware action and
+the results of completed transforms are explicit state. A write fault resumes Write
+using the already transformed bytes, not Read or Transform. Cursors alone are
+insufficient when a transform has side effects or is not idempotent. Do not store
+the Rust composition's invocation state as a substitute for hardware state; retry
+only the failed access after authorized resume.
 Response is 24 bytes: id/status/flags/info at 0/8/12/16. The info contains u64
 bytes_completed. Status values 0..5 retain their existing success/stopping-error
 meanings; former PageFault status 6 is invalid. PageFaultInfo, fault access and
@@ -229,8 +231,12 @@ ChannelStopped and retained failure information when parked work prevents Drain;
 do not block the serial control queue waiting for repair. No new resume opcode,
 page-fault event, VF management queue or PF proxy requirement is introduced.
 
-**MODEL-PF-01.** Keep bounded per-channel parked command state and one shared
-execution pipeline. Reuse existing pipeline/runtime components. Inject test page
+**MODEL-PF-01.** Keep bounded per-channel task state and one shared execution
+pipeline. All shared execution stages see the full Dma context and identify their
+Channel through tagged work values. A fault ends the finite dataflow, not the
+accepted task; a later candidate derives runnable work from Channel state.
+No saved generic child continuation or per-channel engine is required.
+Reuse existing pipeline/runtime components. Inject test page
 presence and fault reports through the platform backend; these are not a true MMU.
 Scenario software owns allocation, fault handling, repair and MMIO resume. Memory
 calls remain synchronous within a deterministic step, without bus timing.

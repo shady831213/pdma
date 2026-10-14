@@ -30,7 +30,6 @@ impl From<MemoryAccessError> for MemoryFailure {
 impl<M, S> Dma<M, S> {
     /// Borrows one channel and shared hardware resources for a single interaction.
     pub fn channel_context(&mut self, id: ChannelId) -> Result<ChannelContext<'_, M, S>, Error> {
-        let device_fatal = self.halted();
         let channel = self.channels.get_mut(id.index()).ok_or(Error::Unmapped)?;
         let access = DmaAccess {
             channel: id,
@@ -42,7 +41,6 @@ impl<M, S> Dma<M, S> {
             backing: &self.memory,
             sideband: self.sideband,
             id,
-            device_fatal,
         })
     }
 }
@@ -57,7 +55,6 @@ pub struct ChannelContext<'a, M, S = ()> {
     backing: &'a M,
     sideband: fn(DmaAccess) -> S,
     id: ChannelId,
-    device_fatal: bool,
 }
 
 impl<M, S> ChannelContext<'_, M, S> {
@@ -70,9 +67,5 @@ impl<M, S> ChannelContext<'_, M, S> {
                 context: ContextId::new(context),
             }),
         )
-    }
-    /// Whether this channel or the shared device has faulted.
-    pub fn halted(&self) -> bool {
-        self.device_fatal || self.channel.halted()
     }
 }

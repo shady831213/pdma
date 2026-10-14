@@ -176,7 +176,8 @@ fn pipeline_copies_with_an_independent_flat_store() -> TestResult {
         device.write(offset, &1_u32.to_le_bytes())?;
     }
     let mut hardware = support::single_chunk(&device);
-    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
+    let mut operation =
+        Operation::new(device.command_request(pdma_model_contract::dma::ChannelId::new(0))?);
     let mut completed = false;
     // When
     for _ in 0..32 {

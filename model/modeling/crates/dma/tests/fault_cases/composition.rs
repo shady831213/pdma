@@ -1,37 +1,47 @@
 use super::*;
-use hardware_interface_pipeline::{AfterEach, RunError, Stage, StepResult, Then};
-use pdma_model_dma::{
-    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
-    WriteCopy,
-};
+use hardware_interface_pipeline::{RunError, Stage, StepResult, Then};
+use pdma_model_dma::{CheckRanges, Error, NextChunk, ReadCopy, Work, WriteCopy};
 
 struct InvertPayload;
 
-impl Stage<ChannelContext<'_, Paged>> for InvertPayload {
-    type Input = Transfer;
-    type Output = Transfer;
+impl Stage<Dma<Paged>> for InvertPayload {
+    type Input = Option<Work>;
+    type Output = Option<Work>;
     type Error = Error;
-    type State = Option<Transfer>;
-    fn start(input: Transfer) -> Self::State {
+    type State = Option<Option<Work>>;
+    fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
     fn step(
         &mut self,
-        _: &mut ChannelContext<'_, Paged>,
+        device: &mut Dma<Paged>,
         state: &mut Self::State,
-    ) -> StepResult<Transfer, Error> {
-        let Some(mut transfer) = state.take() else {
+    ) -> StepResult<Self::Output, Error> {
+        let Some(work) = state.take() else {
             return Err(RunError::Exhausted);
         };
-        for byte in &mut transfer.bytes {
-            *byte = !*byte;
+        if let Some(work) = work {
+            match device.work_scratch_mut(&work) {
+                Ok(Some(bytes)) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
+                Ok(None) => {}
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+            }
         }
-        Ok(StepOutcome::Complete(Ok(transfer)))
+        Ok(StepOutcome::Complete(Ok(work)))
     }
 }
 
 #[test]
 fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> TestResult {
+    transformed_resume(false)
+}
+
+#[test]
+fn replacing_service_preserves_channel_owned_transformed_write() -> TestResult {
+    transformed_resume(true)
+}
+
+fn transformed_resume(replace_service: bool) -> TestResult {
     // Given: an inserted payload transform already ran when destination access faults.
     let mut device = setup()?.dma;
     let command = streams(&device)?;
@@ -42,10 +52,7 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
         WriteCopy,
     );
     let execution = Then::new(CheckRanges, chunk);
-    let pipeline = Then::new(
-        Resettable::new(AfterEach::new(execution, UpdateIrq)),
-        device.responses(),
-    );
+    let pipeline = Then::new(execution, device.responses());
     let mut engine = device.service_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..256 {
@@ -71,6 +78,19 @@ fn write_resume_preserves_exact_position_after_non_idempotent_transform() -> Tes
     }
     assert_eq!(fault_status(&mut device)?, 1);
     device.memory.missing.set(None);
+    if replace_service {
+        let chunk = Then::new(
+            Then::new(Then::new(NextChunk, ReadCopy), InvertPayload),
+            WriteCopy,
+        );
+        engine = device.service_with(Then::new(Then::new(CheckRanges, chunk), device.responses()));
+        operation = hardware_interface_pipeline::HardwareDriver::new();
+        device.memory.memory.write(
+            0x1000.into(),
+            MemoryAlignment::ONE,
+            &Command::ZERO.to_bytes()?,
+        )?;
+    }
     device
         .memory
         .memory
@@ -109,12 +129,11 @@ fn standalone_range_validation_cannot_consume_parked_work() -> TestResult {
     device.memory.missing.set(Some((0x1242, false)));
     submit(&mut device, command, 0)?;
     device.until(|dma| Ok(fault_status(dma)? == 1))?;
-    // When: a caller independently validates an unrelated zero-length command.
-    let mut operation = Operation::new(pdma_model_dma::CommandInput::Fresh(Command::ZERO));
+    // When: an empty standalone invocation has no accepted work.
+    let mut operation = Operation::new(None);
     let mut complete = false;
-    let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
     for _ in 0..16 {
-        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut context)? {
+        if let StepOutcome::Complete(result) = operation.step(&mut CheckRanges, &mut device.dma)? {
             let _progress = result?;
             complete = true;
             break;

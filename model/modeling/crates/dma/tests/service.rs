@@ -6,7 +6,7 @@ mod service {
     mod retained;
 }
 
-use hardware_interface_pipeline::{AfterEach, Stage, StepOutcome};
+use hardware_interface_pipeline::{Stage, StepOutcome};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelBlock, ChannelRegisters, CommandRegisters, ResponseRegisters,
@@ -27,7 +27,7 @@ const PRODUCER: usize = pdma_model_contract::dma::ChannelBlock::ALIGNMENT
 
 #[test]
 fn custom_service_publishes_completion() -> TestResult {
-    // Given: the real pipeline decorated with an independently composed reset controller.
+    // Given: the real pipeline installed as a custom service graph.
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(
         MemoryAddress::new(0x1200),
@@ -35,7 +35,7 @@ fn custom_service_publishes_completion() -> TestResult {
         &[3, 1, 4, 1],
     )?;
     submit(&mut device, &memory, command())?;
-    let pipeline = AfterEach::new(single_chunk(&device).downstream, ResetControl);
+    let pipeline = single_chunk(&device).downstream;
     let mut hardware = device.service_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When: the custom command is driven to its terminal boundary.
@@ -71,12 +71,12 @@ fn custom_service_publishes_completion() -> TestResult {
 }
 
 #[test]
-fn decorated_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult {
+fn custom_pipeline_retires_reset_work_before_accepting_new_work() -> TestResult {
     // Given: accepted work whose downstream payload accesses have not started.
     let (mut device, memory) = setup(0x1100, 2)?;
     memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[9; 4])?;
     submit(&mut device, &memory, command())?;
-    let pipeline = AfterEach::new(single_chunk(&device).downstream, ResetControl);
+    let pipeline = single_chunk(&device).downstream;
     let mut hardware = device.service_with(pipeline);
     let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     for _ in 0..32 {

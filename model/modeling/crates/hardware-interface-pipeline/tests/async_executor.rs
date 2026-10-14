@@ -122,13 +122,14 @@ mod async_executor {
 
         // When: the async executor cooperatively revisits the retained work.
         let result = executor.run(&mut stage, &mut Operation::new(())).await;
-        let pending = StepExecutor::new().step(&mut stepped_hw, &mut stepped_op, &mut Vec::new());
-        let resumed = StepExecutor::new().step(&mut stepped_hw, &mut stepped_op, &mut Vec::new());
+        let unfinished =
+            StepExecutor::new().step(&mut stepped_hw, &mut stepped_op, &mut Vec::new());
+        let completed = StepExecutor::new().step(&mut stepped_hw, &mut stepped_op, &mut Vec::new());
 
         // Then: both drivers preserve the result without a separate wake protocol.
-        assert_eq!(result, Ok("after-wake"));
-        assert_eq!(pending, Ok(StepOutcome::InProgress));
-        assert_eq!(resumed, Ok(StepOutcome::Complete(Ok("after-wake"))));
+        assert_eq!(result, Ok("completed"));
+        assert_eq!(unfinished, Ok(StepOutcome::InProgress));
+        assert_eq!(completed, Ok(StepOutcome::Complete(Ok("completed"))));
         assert_eq!(executor.backend().interactions.load(Ordering::SeqCst), 2);
     }
 
@@ -230,7 +231,7 @@ mod async_executor {
             state: &mut Self::State,
         ) -> StepResult<Self::Output, Self::Error> {
             if *state {
-                Ok(StepOutcome::Complete(Ok("after-wake")))
+                Ok(StepOutcome::Complete(Ok("completed")))
             } else {
                 *state = true;
                 Ok(StepOutcome::InProgress)

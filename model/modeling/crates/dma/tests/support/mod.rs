@@ -1,13 +1,11 @@
-use hardware_interface_pipeline::{AfterEach, Operation, StepOutcome, Then};
+use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{
     MemoryAccess, MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory,
 };
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, ResponseRegisters,
 };
-use pdma_model_dma::{
-    CheckRanges, Dma, Fetch, NextChunk, Pipeline, ReadCopy, Resettable, UpdateIrq, WriteCopy,
-};
+use pdma_model_dma::{CheckRanges, Dma, Fetch, NextChunk, Pipeline, ReadCopy, WriteCopy};
 
 /// Test harness error propagation.
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -16,13 +14,7 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 pub fn single_chunk<M>(device: &Dma<M>) -> Then<Fetch, Pipeline> {
     let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
     let execution = Then::new(CheckRanges, chunk);
-    Then::new(
-        Fetch,
-        Then::new(
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
-            device.responses(),
-        ),
-    )
+    Then::new(Fetch, Then::new(execution, device.responses()))
 }
 
 /// Configure mapped test memory and one enabled channel.

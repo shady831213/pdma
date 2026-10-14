@@ -14,10 +14,7 @@ use pdma_model_host::{Channel, ChannelConfig, RingConfig, Rings, runtime::Model}
 use std::sync::Arc;
 
 mod capabilities;
-#[doc = "Test hardware composition."]
-pub mod hardware;
 mod reset;
-use hardware::single_chunk;
 
 async fn with_idle_hardware<F: std::future::Future>(
     model: &Model<SharedMemoryAccess>,
@@ -142,7 +139,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
 -> Result<(), Box<dyn std::error::Error>> {
     // Given: both routine completion events are masked.
     let (device, memory, rings) = fixture()?;
-    let mut stage = single_chunk(&device);
+    let mut stage = device.service();
     let model = Model::new(device);
     let cpu = SoftwareCpu::new();
     let mut channel = cpu
@@ -168,10 +165,7 @@ async fn masked_completion_causes_remain_visible_without_unmask_catch_up()
     .await?;
     // When: hardware publishes a masked IOC completion and software unmasks.
     AsyncExecutor::new(model.clone())
-        .run(
-            &mut stage,
-            &mut Operation::new(pdma_model_contract::dma::ChannelId::new(0)),
-        )
+        .run(&mut stage, &mut Operation::new(()))
         .await
         .map_err(|error| format!("{error:?}"))?;
     cpu.run_main(channel.set_irq_mask(ChannelIrqMaskValues::default()))

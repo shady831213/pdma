@@ -3,7 +3,7 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{Operation, StepOutcome};
+use hardware_interface_pipeline::StepOutcome;
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment};
 use pdma_model_contract::dma::{
     ChannelRegisters, Command, CommandRegisters, Endpoint, Response, ResponseRegisters,
@@ -157,20 +157,14 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
             + CommandRegisters::PRODUCER.offset(),
         &2_u32.to_le_bytes(),
     )?;
-    let mut hardware = support::single_chunk(&device);
-    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
+    let mut hardware = device.service();
+    let mut operation = hardware_interface_pipeline::HardwareDriver::new();
     // When
-    let mut stalled = false;
     for _ in 0..32 {
-        if matches!(
-            operation
-                .step(&mut hardware, &mut device)
-                .map_err(|e| format!("{e:?}"))?,
+        assert!(matches!(
+            operation.step(&mut hardware, &mut device)?,
             StepOutcome::InProgress
-        ) {
-            stalled = true;
-            break;
-        }
+        ));
     }
     assert_eq!(
         read_word(
@@ -192,21 +186,20 @@ fn full_response_ring_defers_command_acceptance_until_space_is_available() -> Te
         &1_u32.to_le_bytes(),
     )?;
     let mut finished = false;
-    for _ in 0..32 {
-        match operation
-            .step(&mut hardware, &mut device)
-            .map_err(|e| format!("{e:?}"))?
+    for _ in 0..128 {
+        let _ = operation.step(&mut hardware, &mut device)?;
+        if read_word(
+            &mut device,
+            pdma_model_contract::dma::ChannelBlock::ALIGNMENT
+                + pdma_model_contract::dma::ChannelBlock::RESPONSE.offset()
+                + ResponseRegisters::PRODUCER.offset(),
+        )? == 2
         {
-            StepOutcome::Complete(result) => {
-                result?;
-                finished = true;
-                break;
-            }
-            StepOutcome::InProgress => {}
+            finished = true;
+            break;
         }
     }
     // Then
-    assert!(stalled);
     assert!(finished);
     let mut destination = [0; 4];
     memory.read(

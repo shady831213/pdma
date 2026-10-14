@@ -2,7 +2,7 @@ use super::support::{TestResult, configure, finish, submit, word};
 use hardware_interface_pipeline::{Arbitration, Operation, StepOutcome};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, CommandRegisters};
-use pdma_model_dma::{Candidate, CommandRequest, Dma, Error, Fetch, RoundRobin};
+use pdma_model_dma::{Candidate, CommandRequest, Dma, Error, RoundRobin};
 
 fn device() -> TestResult<Dma<SharedMemory>> {
     let memory = SharedMemory::new();
@@ -36,10 +36,13 @@ fn repeated_candidate_production_leaves_every_descriptor_unaccepted() -> TestRes
     // When: the arbiter repeatedly inspects eligibility without granting an input.
     for _ in 0..3 {
         for (index, input) in inputs.iter_mut().enumerate() {
-            assert_eq!(
-                Operation::new(()).step(input, &mut device)?,
-                StepOutcome::Complete(Ok(Some(CommandRequest::Fetch(ChannelId::new(index)))))
-            );
+            let StepOutcome::Complete(Ok(Some(request))) =
+                Operation::new(()).step(input, &mut device)?
+            else {
+                return Err("missing candidate".into());
+            };
+            assert_eq!(request.channel(), ChannelId::new(index));
+            assert!(matches!(request, CommandRequest::Fetch(_)));
         }
     }
     // Then: all commands remain queued.
@@ -84,13 +87,13 @@ fn round_robin_selects_only_its_explicit_candidate_values() -> TestResult {
 }
 
 #[test]
-fn invalid_fetch_target_reports_an_error_without_consuming_valid_inputs() -> TestResult {
-    // Given: a Fetch stage bound outside the device's channel population.
+fn invalid_candidate_target_reports_an_error_without_consuming_valid_inputs() -> TestResult {
+    // Given: a candidate stage bound outside the device's channel population.
     let mut device = device()?;
-    let mut fetch = Fetch;
+    let mut candidate = Candidate::new(ChannelId::new(3));
     // When: the invalid channel is fetched.
-    let mut operation = Operation::new(ChannelId::new(3));
-    let result = finish(&mut fetch, &mut operation, &mut device)?;
+    let mut operation = Operation::new(());
+    let result = finish(&mut candidate, &mut operation, &mut device)?;
     // Then: configuration misuse is reported rather than waiting forever or touching another channel.
     assert!(matches!(result, Err(Error::Unmapped)));
     for index in 0..3 {

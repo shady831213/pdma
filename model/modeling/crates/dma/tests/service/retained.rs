@@ -2,199 +2,141 @@ use crate::{
     RESET,
     support::{TestResult, command, read_word, setup, submit},
 };
-use hardware_interface_pipeline::{RunError, Stage, StepOutcome, StepResult};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{ChannelBlock, Command, CommandRegisters};
-use pdma_model_dma::{ChannelFatal, ChannelTask, Dma, Error, ResetControl, Service};
-use std::{cell::Cell, rc::Rc};
-
-struct DropWitness(Rc<Cell<usize>>);
-
-impl Drop for DropWitness {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() + 1);
-    }
-}
-
-struct Retained {
-    task: Option<ChannelTask<pdma_model_dma::CommandInput>>,
-    witness: Option<DropWitness>,
-}
-
-struct RetainingChild {
-    drops: Rc<Cell<usize>>,
-    calls: Rc<Cell<usize>>,
-    terminal: StepResult<(), Error>,
-}
-
-impl Stage<Dma<SharedMemory>> for RetainingChild {
-    type Input = ChannelTask<pdma_model_dma::CommandInput>;
-    type Output = ();
-    type Error = Error;
-    type State = Retained;
-
-    fn start(task: Self::Input) -> Retained {
-        Retained {
-            task: Some(task),
-            witness: None,
-        }
-    }
-
-    fn step(&mut self, _: &mut Dma<SharedMemory>, state: &mut Retained) -> StepResult<(), Error> {
-        self.calls.set(self.calls.get() + 1);
-        if state.witness.is_some() {
-            return std::mem::replace(&mut self.terminal, Ok(StepOutcome::InProgress));
-        }
-        assert!(state.task.is_some());
-        state.witness = Some(DropWitness(Rc::clone(&self.drops)));
-        Ok(StepOutcome::InProgress)
-    }
-}
+use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome};
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
+use pdma_model_contract::dma::{
+    ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, ResponseRegisters,
+};
+use pdma_model_dma::{Dma, Error, Fetch, ResetControl, Service, WriteCopy};
 
 #[test]
-fn every_terminal_outcome_disposes_child_state_before_reset_acknowledgement() -> TestResult {
-    for terminal in [
-        Ok(StepOutcome::Complete(Ok(()))),
-        Ok(StepOutcome::Complete(Err(Error::Reset))),
-        Ok(StepOutcome::Complete(Err(Error::ChannelFatal(
-            ChannelFatal::ResponseWrite,
-        )))),
-        Ok(StepOutcome::Complete(Err(Error::Halted))),
-        Ok(StepOutcome::Complete(Err(Error::Routing))),
-        Err(RunError::Exhausted),
-    ] {
-        // Given: a child retains accepted work until the lifecycle wrapper terminates.
-        let expected = match terminal {
-            Ok(StepOutcome::Complete(
-                Ok(()) | Err(Error::Reset | Error::ChannelFatal(_) | Error::Halted),
-            )) => Ok(StepOutcome::Complete(Ok(()))),
-            Ok(StepOutcome::Complete(Err(error))) => Ok(StepOutcome::Complete(Err(error))),
-            Err(error) => Err(error),
-            Ok(StepOutcome::InProgress) => return Err("nonterminal fixture".into()),
-        };
-        let (mut device, memory) = setup(0x1100, 2)?;
-        submit(&mut device, &memory, command())?;
-        let drops = Rc::new(Cell::new(0));
-        let calls = Rc::new(Cell::new(0));
-        let mut hardware = device.service_with(RetainingChild {
-            drops: Rc::clone(&drops),
-            calls: Rc::clone(&calls),
-            terminal,
-        });
-        let mut state =
-            <Service<SharedMemory, (), RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
-        let mut accepted = false;
-        for _ in 0..32 {
-            let _ = hardware.step(&mut device, &mut state)?;
-            if calls.get() == 1 {
-                accepted = true;
-                break;
-            }
+fn reset_retires_channel_work_while_an_old_token_is_retained() -> TestResult {
+    // Given: a real descriptor accepted into Channel state and a separately retained work token.
+    let (mut device, memory) = setup(0x1100, 2)?;
+    memory.write(0x1300.into(), MemoryAlignment::ONE, &[0xaa; 4])?;
+    submit(&mut device, &memory, command())?;
+    let request = device.command_request(ChannelId::new(0))?;
+    let StepOutcome::Complete(Ok(Some(work))) =
+        Operation::new(request).step(&mut Fetch, &mut device)?
+    else {
+        return Err("command not accepted".into());
+    };
+    device.write(RESET, &1_u32.to_le_bytes())?;
+    let _ = ResetControl.step(&mut device, &mut ())?;
+    assert_eq!(read_word(&mut device, RESET)?, 1);
+    let mut service = device.service();
+    let mut cleanup = Operation::new(());
+    // When: service advances concrete hardware cleanup with the old token still live.
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = cleanup.step(&mut service, &mut device)? {
+            result?;
+            break;
         }
-        assert!(accepted);
-        assert_eq!(drops.get(), 0);
-        device.write(RESET, &1_u32.to_le_bytes())?;
-        let _ = ResetControl.step(&mut device, &mut ())?;
-        assert_eq!(read_word(&mut device, RESET)?, 1);
-        // When: the lifecycle wrapper observes the terminal child result.
-        let mut outcome = Ok(StepOutcome::InProgress);
-        for _ in 0..32 {
-            outcome = hardware.step(&mut device, &mut state);
-            if drops.get() == 1 {
-                break;
-            }
-        }
-        // Then: state is disposed while the caller still retains the wrapper state.
-        assert_eq!(outcome, expected);
-        assert_eq!(drops.get(), 1);
-        let _ = ResetControl.step(&mut device, &mut ())?;
-        assert_eq!(read_word(&mut device, RESET)?, 0);
-        let terminal_calls = calls.get();
-        for _ in 0..32 {
-            assert_eq!(
-                hardware.step(&mut device, &mut state),
-                Err(RunError::Exhausted)
-            );
-        }
-        assert_eq!(calls.get(), terminal_calls);
-        assert_eq!(drops.get(), 1);
     }
+    // Then: reset completes, and neither a stale payload stage nor publication can cause effects.
+    assert_eq!(read_word(&mut device, RESET)?, 0);
+    assert!(matches!(
+        Operation::new(Some(work)).step(&mut WriteCopy, &mut device)?,
+        StepOutcome::Complete(Err(Error::Reset))
+    ));
+    let mut responses = device.responses();
+    let mut stale = Operation::new(Some(work));
+    let mut result = None;
+    for _ in 0..32 {
+        if let StepOutcome::Complete(value) = stale.step(&mut responses, &mut device)? {
+            result = Some(value);
+            break;
+        }
+    }
+    assert_eq!(result, Some(Err(Error::Reset)));
+    assert_eq!(
+        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        [0xaa; 4]
+    );
     Ok(())
 }
 
 #[test]
-fn completed_state_cannot_retire_a_newer_accepted_command() -> TestResult {
-    // Given: an old completed state and a newer command accepted by the same hardware.
+fn stale_work_cannot_retire_or_write_a_newer_accepted_command() -> TestResult {
+    // Given: a completed old service invocation and a reset channel configured for new work.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
-    let mut hardware = device.service_with(RetainingChild {
-        drops: Rc::new(Cell::new(0)),
-        calls: Rc::new(Cell::new(0)),
-        terminal: Ok(StepOutcome::Complete(Err(Error::Routing))),
-    });
-    let mut old =
-        <Service<SharedMemory, (), RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
-    let mut completed = false;
-    for _ in 0..32 {
-        if matches!(
-            hardware.step(&mut device, &mut old)?,
-            StepOutcome::Complete(Err(Error::Routing))
-        ) {
-            completed = true;
-            break;
-        }
-    }
-    assert!(completed);
-    memory.write(
-        MemoryAddress::new(0x1000 + u64::try_from(Command::RECORD_SIZE)?),
-        MemoryAlignment::ONE,
-        &command().to_bytes()?,
-    )?;
-    device.write(
-        pdma_model_contract::dma::ChannelBlock::ALIGNMENT
-            + ChannelBlock::COMMAND.offset()
-            + CommandRegisters::PRODUCER.offset(),
-        &2_u32.to_le_bytes(),
-    )?;
-    let calls = Rc::new(Cell::new(0));
-    let mut newer = device.service_with(RetainingChild {
-        drops: Rc::new(Cell::new(0)),
-        calls: Rc::clone(&calls),
-        terminal: Ok(StepOutcome::Complete(Err(Error::Reset))),
-    });
-    let mut current =
-        <Service<SharedMemory, (), RetainingChild> as Stage<Dma<SharedMemory>>>::start(());
-    let mut accepted = false;
-    for _ in 0..32 {
-        let _ = newer.step(&mut device, &mut current)?;
-        if calls.get() == 1 {
-            accepted = true;
-            break;
-        }
-    }
-    assert!(accepted);
+    let request = device.command_request(ChannelId::new(0))?;
+    let StepOutcome::Complete(Ok(Some(old_work))) =
+        Operation::new(request).step(&mut Fetch, &mut device)?
+    else {
+        return Err("command not accepted".into());
+    };
     device.write(RESET, &1_u32.to_le_bytes())?;
-    let _ = ResetControl.step(&mut device, &mut ())?;
-    assert_eq!(read_word(&mut device, RESET)?, 1);
-    // When: the caller steps the old completed state again.
+    let mut service = device.service();
+    let mut old = <Service as Stage<Dma<SharedMemory>>>::start(());
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = service.step(&mut device, &mut old)? {
+            result?;
+            break;
+        }
+    }
+    assert_eq!(read_word(&mut device, RESET)?, 0);
+    let base = ChannelBlock::ALIGNMENT;
+    for (offset, value) in [
+        (
+            ChannelBlock::COMMAND.offset() + CommandRegisters::BASE.offset(),
+            0x1000_u64,
+        ),
+        (
+            ChannelBlock::RESPONSE.offset() + ResponseRegisters::BASE.offset(),
+            0x1100,
+        ),
+    ] {
+        device.write(base + offset, &value.to_le_bytes())?;
+    }
+    for (offset, value) in [
+        (
+            ChannelBlock::COMMAND.offset() + CommandRegisters::CAPACITY.offset(),
+            2_u32,
+        ),
+        (
+            ChannelBlock::RESPONSE.offset() + ResponseRegisters::CAPACITY.offset(),
+            2,
+        ),
+        (
+            ChannelBlock::CONTROL.offset() + ChannelRegisters::ENABLE.offset(),
+            1,
+        ),
+    ] {
+        device.write(base + offset, &value.to_le_bytes())?;
+    }
+    let descriptor = pdma_model_contract::dma::Command {
+        id: 81,
+        ..command()
+    };
+    memory.write(0x1200.into(), MemoryAlignment::ONE, &[1, 2, 3, 4])?;
+    submit(&mut device, &memory, descriptor)?;
+    let request = device.command_request(ChannelId::new(0))?;
+    assert!(matches!(
+        Operation::new(request).step(&mut Fetch, &mut device)?,
+        StepOutcome::Complete(Ok(Some(_)))
+    ));
+    // When: stale stage and already completed service states are driven after new acceptance.
+    assert!(matches!(
+        Operation::new(Some(old_work)).step(&mut WriteCopy, &mut device)?,
+        StepOutcome::Complete(Err(Error::Reset))
+    ));
     assert_eq!(
-        hardware.step(&mut device, &mut old),
+        service.step(&mut device, &mut old),
         Err(RunError::Exhausted)
     );
-    let _ = ResetControl.step(&mut device, &mut ())?;
-    // Then: reset remains busy until the current owner retires.
-    assert_eq!(read_word(&mut device, RESET)?, 1);
-    for _ in 0..32 {
-        let outcome = newer.step(&mut device, &mut current)?;
-        assert!(matches!(
-            outcome,
-            StepOutcome::InProgress | StepOutcome::Complete(Ok(()))
-        ));
-        if read_word(&mut device, RESET)? == 0 {
-            break;
-        }
-    }
-    let _ = ResetControl.step(&mut device, &mut ())?;
-    assert_eq!(read_word(&mut device, RESET)?, 0);
+    crate::support::run(&mut device)?;
+    // Then: the new descriptor completes normally and retains its own identity and payload.
+    assert_eq!(
+        memory.read_typed::<[u8; 4]>(0x1300.into(), MemoryAlignment::ONE)?,
+        [1, 2, 3, 4]
+    );
+    let raw: pdma_model_contract::dma::ResponseRaw =
+        memory.read_typed(0x1100.into(), MemoryAlignment::ONE)?;
+    assert_eq!(
+        pdma_model_contract::dma::Response::from_bytes(raw.as_ref())?.id,
+        descriptor.id
+    );
     Ok(())
 }

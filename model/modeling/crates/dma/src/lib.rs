@@ -3,11 +3,9 @@
 mod access;
 mod arbitration;
 mod build;
-mod channel;
-mod commands;
+/// Channel-owned hardware state, registers and rings.
+pub mod channel;
 mod error;
-mod execution;
-mod fetch;
 mod maintenance;
 mod memory;
 mod reset;
@@ -15,16 +13,12 @@ mod routing;
 mod stages;
 #[cfg(test)]
 mod tests;
+mod work;
 
 pub use arbitration::RoundRobin;
 pub use build::BuildError;
-pub use channel::{Candidate, Channel, CommandRequest, CommandRing, ResponseRing};
+pub use channel::{COPY_CHUNK_BYTES, Channel, CommandRing, ResponseRing};
 pub use error::{ChannelFatal, Error};
-pub use execution::{
-    COPY_CHUNK_BYTES, CheckRanges, CommandInput, CopyState, NextChunk, RangeCheck, ReadCopy,
-    Transfer, WriteCopy,
-};
-pub use fetch::Fetch;
 use hardware_interface_schema::RegisterWindow;
 pub use maintenance::MaintenanceError;
 pub use memory::{ChannelContext, MemoryFailure};
@@ -32,9 +26,13 @@ use pdma_model_contract::dma::{
     ChannelId, Command, ContextId, DmaAccess, DmaControl, DmaDiscovery, DmaFatalCode,
     DmaRegistersLayout, EndpointMode, ResetValues,
 };
-pub use reset::{ChannelTask, ResetControl, Resettable};
-pub use routing::{ResponsePort, Responses, RouteResponse};
-pub use stages::{CopyChunk, Execution, Pipeline, Publish, Service, UpdateIrq};
+pub use reset::ResetControl;
+pub use routing::Responses;
+pub use stages::{
+    Candidate, CheckRanges, CommandRequest, CopyChunk, Execution, Fetch, NextChunk, Pipeline,
+    Publish, ReadCopy, Service, UpdateIrq, WriteCopy,
+};
+pub use work::Work;
 
 #[derive(Debug)]
 struct Frontier {
@@ -79,7 +77,7 @@ pub struct Dma<M, S = ()> {
     sideband: fn(DmaAccess) -> S,
     control: RegisterWindow<DmaControl>,
     interrupt: bool,
-    active: Option<ChannelTask<[Option<pdma_model_contract::dma::ContextId>; 3]>>,
+    active: Option<Work>,
     maintenance: Option<Maintenance>,
 }
 

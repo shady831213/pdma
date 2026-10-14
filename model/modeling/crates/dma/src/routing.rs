@@ -1,31 +1,27 @@
-use crate::{ChannelTask, Dma, Error, Publish, Resettable, UpdateIrq};
+use crate::{Dma, Error, Publish, Work};
 use hardware_interface_pipeline::{
-    AfterEach, Dispatch, FanOut, FanState, Route, RunError, Stage, StepOutcome, StepResult,
+    Dispatch, FanOut, FanState, Route, RunError, Stage, StepOutcome, StepResult,
 };
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::Response;
 
-/// A publication endpoint bound to its channel and reset generation.
-pub type ResponsePort = Resettable<AfterEach<Publish, UpdateIrq>>;
-
-/// Selects the publication port named by a completed response.
+/// Routes a response-ready work snapshot to its owning channel.
 #[derive(Debug)]
-pub struct RouteResponse;
+struct RouteResponse;
 
-impl Route<ChannelTask<Response>, Error> for RouteResponse {
-    fn target(&mut self, input: &ChannelTask<Response>) -> Result<usize, Error> {
+impl Route<Work, Error> for RouteResponse {
+    fn target(&mut self, input: &Work) -> Result<usize, Error> {
         Ok(input.channel().index())
     }
 }
 
-type ResponseFan = FanOut<ResponseValue, Dispatch<RouteResponse>, ResponsePort>;
+type ResponseFan = FanOut<ResponseValue, Dispatch<RouteResponse>, Publish>;
 
-/// Dispatches one response through the shared fan lifecycle.
+/// Dispatches an optional response-ready snapshot through shared `FanOut` wiring.
 #[derive(Debug)]
 pub struct Responses(ResponseFan);
 
 impl Responses {
-    pub(crate) fn new(ports: Vec<ResponsePort>) -> Self {
+    pub(crate) fn new(ports: Vec<Publish>) -> Self {
         Self(FanOut::new(
             ResponseValue,
             Dispatch::new(RouteResponse),
@@ -35,53 +31,36 @@ impl Responses {
 }
 
 impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Responses {
-    type Input = ChannelTask<Option<Response>>;
+    type Input = Option<Work>;
     type Output = ();
     type Error = Error;
-    type State = Option<
-        Option<
-            FanState<
-                Option<ChannelTask<Response>>,
-                ChannelTask<Response>,
-                <ResponsePort as Stage<Dma<M, SB>>>::State,
-                ChannelTask<()>,
-            >,
-        >,
-    >;
+    type State = Option<Option<FanState<Option<Work>, Work, Option<Work>, ()>>>;
 
     fn start(input: Self::Input) -> Self::State {
-        let task = ChannelTask {
-            channel: input.channel,
-            generation: input.generation,
-            value: (),
-        };
-        Some(input.value.and_then(|response| {
-            <ResponseFan as Stage<Dma<M, SB>>>::start(task.map(|()| response))
-        }))
+        Some(input.and_then(<ResponseFan as Stage<Dma<M, SB>>>::start))
     }
 
     fn step(&mut self, device: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<(), Error> {
         let Some(fan) = state.as_mut() else {
             return Err(RunError::Exhausted);
         };
-        let Some(_) = fan else {
+        if fan.is_none() {
             *state = None;
             return Ok(StepOutcome::Complete(Ok(())));
-        };
-        let outcome = match self.0.step(device, fan) {
-            Ok(outcome) => outcome,
+        }
+        match self.0.step(device, fan) {
+            Ok(StepOutcome::InProgress) => Ok(StepOutcome::InProgress),
+            Ok(StepOutcome::Complete(result)) => {
+                *state = None;
+                Ok(StepOutcome::Complete(
+                    result.map(|_| ()).map_err(Error::from),
+                ))
+            }
             Err(error) => {
                 *state = None;
-                return Err(error);
+                Err(error)
             }
-        };
-        Ok(match outcome {
-            StepOutcome::InProgress => StepOutcome::InProgress,
-            StepOutcome::Complete(result) => {
-                *state = None;
-                StepOutcome::Complete(result.map(|_| ()).map_err(Error::from))
-            }
-        })
+        }
     }
 }
 
@@ -89,20 +68,14 @@ impl<M: MemoryAccess<SB>, SB> Stage<Dma<M, SB>> for Responses {
 struct ResponseValue;
 
 impl<M, SB> Stage<Dma<M, SB>> for ResponseValue {
-    type Input = ChannelTask<Response>;
-    type Output = ChannelTask<Response>;
+    type Input = Work;
+    type Output = Work;
     type Error = Error;
-    type State = Option<Self::Input>;
-
-    fn start(input: Self::Input) -> Self::State {
+    type State = Option<Work>;
+    fn start(input: Work) -> Self::State {
         Some(input)
     }
-
-    fn step(
-        &mut self,
-        _: &mut Dma<M, SB>,
-        state: &mut Self::State,
-    ) -> StepResult<Self::Output, Error> {
+    fn step(&mut self, _: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<Work, Error> {
         Ok(StepOutcome::Complete(Ok(state
             .take()
             .ok_or(RunError::Exhausted)?)))

@@ -68,9 +68,8 @@ impl MemoryAccess for ObservedMemory {
 struct Fixture {
     dma: Dma<ObservedMemory>,
     memory: SharedMemory,
-    pipeline: Service<ObservedMemory>,
-    operation:
-        hardware_interface_pipeline::HardwareDriver<Service<ObservedMemory>, Dma<ObservedMemory>>,
+    pipeline: Service,
+    operation: hardware_interface_pipeline::HardwareDriver<Service, Dma<ObservedMemory>>,
     normal: Command,
 }
 

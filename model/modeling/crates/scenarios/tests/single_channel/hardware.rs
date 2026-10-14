@@ -10,7 +10,7 @@ use pdma_model_dma::{BuildError, Dma, Service};
 use pdma_model_host::runtime::Model;
 
 /// Assemble the existing hardware state and stage graph over injected memory.
-pub fn assemble<M: MemoryAccess>(memory: M) -> Result<(Dma<M>, Service<M>), BuildError>
+pub fn assemble<M: MemoryAccess>(memory: M) -> Result<(Dma<M>, Service), BuildError>
 where
     M::Error: Into<pdma_model_dma::MemoryFailure>,
 {
@@ -19,10 +19,7 @@ where
     Ok((device, service))
 }
 
-pub(crate) async fn drive(
-    model: Model<SharedMemoryAccess>,
-    mut stage: Service<SharedMemoryAccess>,
-) -> TestResult {
+pub(crate) async fn drive(model: Model<SharedMemoryAccess>, mut stage: Service) -> TestResult {
     let executor = AsyncExecutor::new(model);
     match executor.drive(&mut stage, &mut HardwareDriver::new()).await {
         Ok(()) => Err("persistent hardware worker unexpectedly completed".into()),

@@ -8,7 +8,6 @@ use pdma_model_contract::dma::{
     ChannelBlock, ChannelId, ChannelRegisters, CommandRegisters, DmaControl, DmaRegisters,
     ResponseRegisters,
 };
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
 use pdma_model_dma::{Dma, Error, ResetControl};
 use support::{TestResult, command, read_word, setup, submit};
 
@@ -41,7 +40,7 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
     let mut fetch = pdma_model_dma::Fetch;
-    let mut operation = Operation::new(ChannelId::new(0));
+    let mut operation = Operation::new(device.command_request(ChannelId::new(0))?);
     let mut accepted = None;
     for _ in 0..32 {
         if let StepOutcome::Complete(Ok(task)) = operation.step(&mut fetch, &mut device)? {
@@ -49,18 +48,10 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
             break;
         }
     }
-    let response =
-        accepted
-            .ok_or("command not accepted")?
-            .map(|command| pdma_model_contract::dma::Response {
-                id: command.command().id,
-                flags: command.command().flags,
-                status: pdma_model_contract::dma::ResponseStatus::Success,
-                info: ResponseInfoValues::Success(CompletionInfo { bytes_completed: 0 }),
-            });
+    let work = accepted.ok_or("command not accepted")?;
     device.write(RESET, &1_u32.to_le_bytes())?;
     let mut responses = device.responses();
-    let mut publish = Operation::new(response.map(Some));
+    let mut publish = Operation::new(work);
     // When: the final port rejects the old task before publishing a response.
     let mut rejected = false;
     for _ in 0..32 {
@@ -80,7 +71,7 @@ fn rejected_response_port_does_not_retire_the_command() -> TestResult {
 }
 
 #[test]
-fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestResult {
+fn published_response_retires_hardware_before_custom_command_exit() -> TestResult {
     // Given: a command whose response is published but whose composition has not exited.
     let (mut device, memory) = setup(0x1100, 2)?;
     submit(&mut device, &memory, command())?;
@@ -104,8 +95,8 @@ fn published_response_does_not_acknowledge_reset_before_command_exit() -> TestRe
     // When: reset is requested before the complete command returns.
     device.write(RESET, &1_u32.to_le_bytes())?;
     let _ = ResetControl.step(&mut device, &mut ())?;
-    // Then: only command exit releases ownership and permits reset completion.
-    assert_eq!(read_word(&mut device, RESET)?, 1);
+    // Then: response publication has released hardware ownership before the generic tail exits.
+    assert_eq!(read_word(&mut device, RESET)?, 0);
     let mut completed = false;
     for _ in 0..32 {
         assert!(matches!(

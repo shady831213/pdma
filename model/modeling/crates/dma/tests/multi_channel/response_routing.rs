@@ -2,21 +2,20 @@ use super::support::{TestResult, configure, finish, submit, word};
 use hardware_interface_pipeline::{Operation, StepOutcome, Then};
 use hardware_interface_runtime::{MemoryAddress, MemoryAlignment, MemoryRegion, SharedMemory};
 use pdma_model_contract::dma::{ChannelBlock, ChannelId, ChannelRegisters, ResponseRegisters};
-use pdma_model_dma::{ChannelTask, Dma, Error, Publish, Resettable};
+use pdma_model_dma::{COPY_CHUNK_BYTES, Candidate, Dma, Error, Publish, Work};
 
-fn execute(
-    device: &mut Dma<SharedMemory>,
-) -> TestResult<ChannelTask<Option<pdma_model_contract::dma::Response>>> {
+fn execute(device: &mut Dma<SharedMemory>) -> TestResult<Work> {
     let pipeline = super::support::single_chunk(device);
-    let mut execution = Then::new(pipeline.upstream, pipeline.downstream.upstream);
-    for _ in 0..8 {
-        let mut operation = Operation::new(ChannelId::new(0));
-        let response = finish(&mut execution, &mut operation, device)??;
-        if response.value.is_some() {
-            return Ok(response);
-        }
+    let mut execution = Then::new(
+        Candidate::new(ChannelId::new(0)),
+        Then::new(pipeline.upstream, pipeline.downstream.upstream),
+    );
+    let mut work = None;
+    for _ in 0..512_usize.div_ceil(COPY_CHUNK_BYTES) {
+        let mut operation = Operation::new(());
+        work = finish(&mut execution, &mut operation, device)??;
     }
-    Err("command did not produce a response".into())
+    work.ok_or_else(|| "command did not produce response work".into())
 }
 
 fn setup() -> TestResult<Dma<SharedMemory>> {
@@ -41,7 +40,7 @@ fn reset_between_shared_execution_and_response_dispatch_rejects_stale_output() -
         let mut device = setup()?;
         let response = execute(&mut device)?;
         assert_eq!(response.channel(), ChannelId::new(0));
-        let mut publication = Operation::new(response);
+        let mut publication = Operation::new(Some(response));
         let mut destinations = device.responses();
         if suspend_publication {
             device.write(
@@ -92,9 +91,7 @@ fn a_response_port_rejects_work_owned_by_another_channel() -> TestResult {
     // Given: a completed response from channel zero and a port bound to channel one.
     let mut device = setup()?;
     let response = execute(&mut device)?;
-    let value = response.value.ok_or("completed response")?;
-    let response = response.map(|_| value);
-    let mut port = Resettable::for_channel(ChannelId::new(1), Publish);
+    let mut port = Publish::new(ChannelId::new(1));
     // When: an incorrectly wired graph sends the response to the wrong port.
     let outcome = Operation::new(response).step(&mut port, &mut device)?;
     // Then: routing misuse cannot publish into either channel's ring.

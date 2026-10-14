@@ -7,8 +7,8 @@ mod outcome;
 mod stage;
 pub use backend::AsyncInteractionBackend;
 pub use combinators::{
-    AfterEach, AfterEachState, Arbitrate, Arbitration, BranchError, Dispatch, Fan, FanIn, FanOut,
-    FanPlan, FanPolicy, FanState, MapError, PipelineExt, Route, Then, ThenState,
+    Arbitrate, Arbitration, BranchError, Dispatch, Fan, FanIn, FanOut, FanPlan, FanPolicy,
+    FanState, MapError, PipelineExt, Route, Then, ThenState,
 };
 pub use executor::{
     AsyncExecutor, AsyncRunError, HardwareDriver, ImmediateExecutor, RunError, StepExecutor,

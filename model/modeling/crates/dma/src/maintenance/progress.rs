@@ -23,10 +23,10 @@ impl<M, S> Dma<M, S> {
                 .as_ref()
                 .is_some_and(|active| active.channel() == frontier.channel);
             let parked_target = channel
-                .parked
-                .as_ref()
-                .is_some_and(|task| task.value.contains(&Some(maintenance.context)));
-            let blocked = channel.parked.is_some()
+                .accepted_command()
+                .is_some_and(|task| references(task).contains(&Some(maintenance.context)));
+            let blocked = channel.accepted_command().is_some()
+                && !active
                 && (!frontier.passed || parked_target)
                 && !(maintenance.abort && parked_target);
             if halted
@@ -51,14 +51,9 @@ impl<M, S> Dma<M, S> {
         } else if maintenance.frontiers.iter().all(|f| f.passed)
             && !self.channels.iter().any(|channel| {
                 channel
-                    .parked
-                    .as_ref()
-                    .is_some_and(|task| task.value.contains(&Some(maintenance.context)))
+                    .accepted_command()
+                    .is_some_and(|task| references(task).contains(&Some(maintenance.context)))
             })
-            && !self
-                .active
-                .as_ref()
-                .is_some_and(|active| active.value.contains(&Some(maintenance.context)))
         {
             maintenance.result = Ok(true);
         }

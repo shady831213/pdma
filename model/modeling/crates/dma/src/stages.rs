@@ -1,127 +1,153 @@
-use crate::{
-    ChannelContext, CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, ResetControl, Resettable,
-    Responses, WriteCopy,
+mod candidate;
+mod execution;
+mod fetch;
+mod publish;
+
+pub use candidate::{Candidate, CommandRequest};
+pub use execution::{CheckRanges, NextChunk, ReadCopy, WriteCopy};
+pub use fetch::Fetch;
+pub use publish::Publish;
+
+use crate::{Dma, Error, ResetControl, Responses, RoundRobin, Work};
+use hardware_interface_pipeline::{
+    Arbitrate, FanIn, RunError, Stage, StepOutcome, StepResult, Then,
 };
-use hardware_interface_pipeline::{AfterEach, RunError, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::MemoryAccess;
-use pdma_model_contract::dma::{ChannelId, Response};
+use pdma_model_contract::dma::ChannelId;
 use std::convert::Infallible;
 
-/// Publish a retained response; a full ring suspends only this stage.
-#[derive(Debug, Default)]
-pub struct Publish;
-
-impl<M: MemoryAccess<SB>, SB> Stage<ChannelContext<'_, M, SB>> for Publish {
-    type Input = Response;
-    type Output = ();
-    type Error = Error;
-    type State = Option<Response>;
-    fn start(input: Response) -> Self::State {
-        Some(input)
-    }
-    fn step(
-        &mut self,
-        context: &mut ChannelContext<'_, M, SB>,
-        retained: &mut Self::State,
-    ) -> StepResult<(), Error> {
-        let response = retained.take().ok_or(RunError::Exhausted)?;
-        if context.channel.resetting() {
-            return Ok(StepOutcome::Complete(Err(Error::Reset)));
-        }
-        if context.halted() {
-            return Ok(StepOutcome::Complete(Err(Error::Halted)));
-        }
-        if !context.channel.enabled() {
-            *retained = Some(response);
-            return Ok(StepOutcome::InProgress);
-        }
-        let was_empty = context.channel.response.pointers().is_empty();
-        match context.channel.response.push(&context.memory, &response) {
-            Ok(true) => {
-                context.channel.published(&response, was_empty);
-                Ok(StepOutcome::Complete(Ok(())))
-            }
-            Ok(false) => {
-                *retained = Some(response);
-                Ok(StepOutcome::InProgress)
-            }
-            Err(fatal) => {
-                context.channel.latch(fatal);
-                Ok(StepOutcome::Complete(Err(Error::ChannelFatal(fatal))))
-            }
-        }
-    }
-}
-
-/// Refresh observable IRQ causes from queue-owned response and fatal state.
+/// Refreshes every channel's visible interrupt causes from hardware state.
 #[derive(Debug, Default)]
 pub struct UpdateIrq;
 
-impl<M, SB> Stage<ChannelContext<'_, M, SB>> for UpdateIrq {
+impl<M, SB> Stage<Dma<M, SB>> for UpdateIrq {
     type Input = ();
     type Output = ();
     type Error = Infallible;
     type State = ();
     fn start((): ()) {}
-    fn step(
-        &mut self,
-        context: &mut ChannelContext<'_, M, SB>,
-        (): &mut (),
-    ) -> StepResult<(), Infallible> {
-        context.channel.update_irq();
+    fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<(), Infallible> {
+        for channel in &mut device.channels {
+            channel.update_irq();
+        }
         Ok(StepOutcome::Complete(Ok(())))
     }
 }
 
-/// One composable prepare/read/write iteration.
+/// One bounded chunk preparation, read and write composition.
 pub type CopyChunk = Then<Then<NextChunk, ReadCopy>, WriteCopy>;
-
-/// Range validation followed by one bounded-memory copy chunk.
+/// Range validation followed by one bounded payload chunk.
 pub type Execution = Then<CheckRanges, CopyChunk>;
+/// Shared execution followed by response dispatch.
+pub type Pipeline = Then<Execution, Responses>;
 
-/// Shared chunk execution and optional terminal response publication.
-pub type Pipeline = Then<Resettable<AfterEach<Execution, UpdateIrq>>, Responses>;
+type Commands<S> = FanIn<Candidate, Arbitrate<RoundRobin>, Then<Fetch, S>>;
 
-/// Finite shared service transaction with assembly-owned fault continuations.
-pub type Service<M, SB = (), S = Pipeline> = AfterEach<
-    crate::commands::Commands<Then<Fetch, S>, <Then<Fetch, S> as Stage<Dma<M, SB>>>::State>,
-    ResetControl,
->;
+/// Finite command arbitration with independently stepped IRQ and reset hardware.
+#[derive(Debug)]
+pub struct Service<S = Pipeline> {
+    command: Commands<S>,
+    count: usize,
+    reset: ResetControl,
+    irq: UpdateIrq,
+}
+
+/// Invocation-local fan state; persistent command state belongs to channels.
+#[derive(Debug)]
+pub struct ServiceState<T> {
+    command: Option<T>,
+}
+
+impl<M: MemoryAccess<SB>, SB, S> Stage<Dma<M, SB>> for Service<S>
+where
+    S: Stage<Dma<M, SB>, Input = Option<Work>, Output = (), Error = Error>,
+{
+    type Input = ();
+    type Output = ();
+    type Error = Error;
+    type State = Option<ServiceState<<Commands<S> as Stage<Dma<M, SB>>>::State>>;
+    fn start((): ()) -> Self::State {
+        Some(ServiceState { command: None })
+    }
+
+    fn step(&mut self, device: &mut Dma<M, SB>, state: &mut Self::State) -> StepResult<(), Error> {
+        let retained = state.as_mut().ok_or(RunError::Exhausted)?;
+        device.retire_stopped_work();
+        let command = retained
+            .command
+            .get_or_insert_with(|| <Commands<S> as Stage<Dma<M, SB>>>::start(vec![(); self.count]));
+        let outcome = if device.discard_aborted() {
+            Ok(StepOutcome::Complete(Ok(Vec::new())))
+        } else {
+            self.command.step(device, command)
+        };
+        device.retire_stopped_work();
+        device.refresh_maintenance();
+        let irq = self.irq.step(device, &mut ());
+        let reset = self.reset.step(device, &mut ());
+        let (StepOutcome::Complete(Ok(())), StepOutcome::Complete(Ok(()))) = (irq?, reset?) else {
+            return Err(RunError::Exhausted);
+        };
+        match outcome {
+            Ok(StepOutcome::InProgress) => Ok(StepOutcome::InProgress),
+            Ok(StepOutcome::Complete(result)) => {
+                *state = None;
+                let result = result.map(|_| ()).map_err(Error::from);
+                Ok(StepOutcome::Complete(match result {
+                    Err(Error::Reset | Error::Halted | Error::ChannelFatal(_)) | Ok(()) => Ok(()),
+                    Err(error) => Err(error),
+                }))
+            }
+            Err(error) => {
+                *state = None;
+                Err(error)
+            }
+        }
+    }
+}
 
 impl<M, SB> Dma<M, SB> {
-    /// Builds response dispatch with each destination bound to its owning channel.
+    /// Builds response dispatch ports bound to this instance's channels.
     pub fn responses(&self) -> Responses {
-        let ports = (0..self.channels.len())
-            .map(|index| {
-                Resettable::for_channel(ChannelId::new(index), AfterEach::new(Publish, UpdateIrq))
-            })
-            .collect();
-        Responses::new(ports)
+        Responses::new(
+            (0..self.channels.len())
+                .map(|index| Publish::new(ChannelId::new(index)))
+                .collect(),
+        )
+    }
+
+    /// Wires a custom finite shared graph after descriptor acceptance.
+    pub fn service_with<S>(&self, pipeline: S) -> Service<S>
+    where
+        S: Stage<Self, Input = Option<Work>, Output = (), Error = Error>,
+    {
+        Service {
+            command: FanIn::new(
+                (0..self.channels.len())
+                    .map(|index| Candidate::new(ChannelId::new(index)))
+                    .collect(),
+                Arbitrate::snapshots(RoundRobin::default()),
+                Then::new(Fetch, pipeline),
+            ),
+            count: self.channels.len(),
+            reset: ResetControl,
+            irq: UpdateIrq,
+        }
     }
 }
 
 impl<M: MemoryAccess<SB>, SB> Dma<M, SB> {
-    /// Builds one finite command-chunk service transaction.
-    pub fn service(&self) -> Service<M, SB>
+    /// Builds the default finite command service and maintenance wiring.
+    pub fn service(&self) -> Service
     where
         M::Error: Into<crate::MemoryFailure>,
     {
-        let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-        let execution = Then::new(CheckRanges, chunk);
         self.service_with(Then::new(
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
+            Then::new(
+                CheckRanges,
+                Then::new(Then::new(NextChunk, ReadCopy), WriteCopy),
+            ),
             self.responses(),
         ))
-    }
-
-    /// Builds finite service with one shared custom chunk composition.
-    pub fn service_with<S>(&self, pipeline: S) -> Service<M, SB, S>
-    where
-        S: Stage<Self, Input = crate::ChannelTask<crate::CommandInput>, Output = (), Error = Error>,
-    {
-        AfterEach::new(
-            crate::commands::Commands::new(self.channels.len(), Then::new(Fetch, pipeline)),
-            ResetControl,
-        )
     }
 }

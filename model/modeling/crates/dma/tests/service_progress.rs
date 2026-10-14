@@ -10,36 +10,24 @@ use pdma_model_dma::{COPY_CHUNK_BYTES, ResetControl};
 use std::{cell::Cell, rc::Rc};
 use support::{TestResult, command, read_word, setup, submit};
 
-struct Witness(Rc<Cell<usize>>);
-
-impl Drop for Witness {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() + 1);
-    }
-}
-
 struct Tail {
     entered: Rc<Cell<bool>>,
     release: Rc<Cell<bool>>,
-    drops: Rc<Cell<usize>>,
 }
 
 impl<M> Stage<pdma_model_dma::Dma<M>> for Tail {
     type Input = ();
     type Output = ();
     type Error = pdma_model_dma::Error;
-    type State = Option<Witness>;
+    type State = ();
 
-    fn start((): ()) -> Self::State {
-        None
-    }
+    fn start((): ()) {}
 
     fn step(
         &mut self,
         _: &mut pdma_model_dma::Dma<M>,
-        state: &mut Self::State,
+        (): &mut Self::State,
     ) -> hardware_interface_pipeline::StepResult<(), Self::Error> {
-        state.get_or_insert_with(|| Witness(Rc::clone(&self.drops)));
         self.entered.set(true);
         Ok(if self.release.get() {
             StepOutcome::Complete(Ok(()))
@@ -150,8 +138,8 @@ fn reset_between_service_invocations_retires_retained_progress() -> TestResult {
 }
 
 #[test]
-fn reset_after_chunk_feedback_waits_for_composed_tail_to_drop() -> TestResult {
-    // Given: a non-final chunk published progress, but the custom tail retains resources.
+fn reset_after_chunk_feedback_retires_hardware_while_custom_tail_is_pending() -> TestResult {
+    // Given: a non-final chunk published progress while a custom tail remains pending.
     let (mut device, memory) = setup(0x1100, 2)?;
     let descriptor = pdma_model_contract::dma::Command {
         copy_length: u64::try_from(COPY_CHUNK_BYTES * 2)?,
@@ -162,13 +150,11 @@ fn reset_after_chunk_feedback_waits_for_composed_tail_to_drop() -> TestResult {
     submit(&mut device, &memory, descriptor)?;
     let entered = Rc::new(Cell::new(false));
     let release = Rc::new(Cell::new(false));
-    let drops = Rc::new(Cell::new(0));
     let pipeline = hardware_interface_pipeline::Then::new(
         support::single_chunk(&device).downstream,
         Tail {
             entered: Rc::clone(&entered),
             release: Rc::clone(&release),
-            drops: Rc::clone(&drops),
         },
     );
     let mut service = device.service_with(pipeline);
@@ -185,22 +171,26 @@ fn reset_after_chunk_feedback_waits_for_composed_tail_to_drop() -> TestResult {
         + pdma_model_contract::dma::DmaAdmin::CHANNELS_OFFSET;
     device.write(reset, &1_u32.to_le_bytes())?;
     for _ in 0..12 {
-        assert!(matches!(
-            operation.step(&mut service, &mut device)?,
-            StepOutcome::InProgress
-        ));
-        assert_eq!(drops.get(), 0);
-        assert_eq!(read_word(&mut device, reset)?, 1);
+        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
+            result?;
+        }
+        if read_word(&mut device, reset)? == 0 {
+            break;
+        }
     }
+    assert_eq!(read_word(&mut device, reset)?, 0);
+    assert!(!release.get());
     release.set(true);
     for _ in 0..32 {
+        if operation.is_complete() {
+            break;
+        }
         if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
             result?;
             break;
         }
     }
-    // Then: reset completes only after the composed continuation drops.
-    assert_eq!(drops.get(), 1);
+    // Then: generic tail completion cannot publish or resurrect the retired command.
     assert_eq!(read_word(&mut device, reset)?, 0);
     assert_eq!(read_word(&mut device, PRODUCER)?, 0);
     Ok(())

@@ -135,7 +135,7 @@ contracts within the same adapter and Fan lifecycle, not separate execution driv
 That intermediate engine still manually stepped Fetch and interpreted its outcome.
 Further review rejected this software-style call chain as the hardware stage boundary:
 an ordinary stage may update shared hardware state or transfer an output, but must not
-drive a preceding or sibling stage. The revised DMA uses channel-produced Fetch/Resume
+drive a preceding or sibling stage. That revision used channel-produced Fetch/Resume
 requests, pure selection and CommandScope(Then(Fetch, pipeline)). Fetch takes ChannelId
 through its input and produces the accepted ChannelTask. Only Then drives the fetch-to-
 execution connection. CommandScope is a lifecycle combinator around its owned child,
@@ -175,7 +175,7 @@ in its channel, and a subsequent externally supplied service input consumes that
 progress. Fresh descriptor acceptance and initial validation occur once; progress
 requests do not reread a descriptor or restart range validation.
 
-The healthy command keeps its shared-engine grant and accepted references across
+At checkpoint d61c137, the healthy command kept its shared-engine grant and accepted references across
 finite service boundaries. Peers run only when that command retires or suspends.
 Reset between chunks must retire channel-owned progress before acknowledging; Abort
 of running work stays command-atomic. A payload fault preserves the exact unfinished
@@ -195,6 +195,51 @@ policy. Reintroducing Repeat as a manual child-restart loop is forbidden.
 The wire protocol, software repair/resume obligation and reset/fatal semantics are
 unchanged. Custom compositions now describe finite chunk work; any command-wide
 state must have explicit hardware ownership rather than relying on an endless call.
+
+### Channel state is hardware state, not a pipeline invocation
+
+Review of d61c137 found a remaining ownership error: CommandScope and a bank of
+generic child states preserved the Rust pipeline's execution position. Removing
+Repeat alone had not separated a DMA channel from the code processing it. The
+user clarified that Channel is a shared hardware context containing visible
+registers and private hardware registers/storage; a per-channel pipeline is only
+the logic that reads and updates this object.
+
+The replacement keeps the descriptor, validation/SG cursors, committed progress,
+scratch and next hardware action in Channel. Channel advancement derives
+non-owning candidates from that state; arbitration selects a value. All later
+stages see the complete Dma context and use the value's channel identity and
+generation to update the corresponding object. They do not receive a permanently
+narrowed ChannelContext and do not invoke preceding stages.
+
+Source organization follows the same distinction: Channel owns retained work
+state and its local operations, while shared DMA stages live under stages.
+Updating a channel's state does not make that stage a channel-local execution
+unit. Work identity and cross-channel guards/retirement belong at DMA scope.
+Rust module visibility must support these ownership boundaries rather than move
+shared execution beneath Channel merely to reach its fields.
+
+A payload fault completes the current finite dataflow while preserving hardware
+state and releasing the shared grant. Resume creates a fresh invocation from the
+next action. A failed write retries Write with already transformed scratch. This
+preserves the required no-reread/no-retransform behavior without saving S::State,
+ThenState, a Requested/Running/Finished wrapper or a second execution engine.
+Arbitrary custom invocation-state suspension is deliberately no longer an API
+guarantee: persistent custom work must have explicit hardware ownership.
+
+AfterEach was also removed. It attached maintenance to another child's step count,
+and could hold that child's result while maintenance progressed. IRQ and reset are
+instead independent hardware units explicitly advanced by the top-level assembly
+on each tick, including idle/stalled command progress. Then still expresses data
+dependencies; FanIn/Arbitrate and FanOut/Dispatch retain selection/routing. No
+generic replacement callback wrapper or PDMA policy in runtime is introduced.
+
+Reset completion now observes concrete channel-owned work cleanup and generation
+guards, not arbitrary Rust destructor timing. The synchronous model still guards
+every memory effect; RTL must still drain all affected external transactions before
+acknowledgement. Wire formats, software repair/resume and lifecycle exclusions are
+unchanged. Rebuilding a finite service after a parked transformed write is the
+behavioral regression distinguishing the two ownership models.
 
 Hardware steps now report only InProgress or Complete. The async executor yields
 after every bounded step, allowing modeled software to run between steps without

@@ -1,54 +1,36 @@
 use super::*;
-use hardware_interface_pipeline::{AfterEach, RunError, Stage, StepResult, Then};
+use hardware_interface_pipeline::{RunError, Stage, StepResult};
 use pdma_model_contract::dma::ChannelId;
-use pdma_model_dma::{
-    ChannelTask, CheckRanges, Error, NextChunk, Pipeline, ReadCopy, ResetControl, Resettable,
-    Service, UpdateIrq, WriteCopy,
-};
-use std::{cell::Cell, rc::Rc};
+use pdma_model_dma::{Error, Pipeline, ResetControl, Service, Work};
 
-struct Witness(Rc<Cell<usize>>);
-
-impl Drop for Witness {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() + 1);
-    }
-}
-
-struct Witnessed {
+struct PeerFailure {
     pipeline: Pipeline,
-    drops: Rc<Cell<usize>>,
-    created: Rc<Cell<usize>>,
     raw_error: bool,
 }
 
-struct Retained {
+struct Invocation {
     child: <Pipeline as Stage<Dma<Paged>>>::State,
-    channel: ChannelId,
-    witness: Option<Witness>,
+    work: Option<Work>,
 }
 
-impl Stage<Dma<Paged>> for Witnessed {
-    type Input = ChannelTask<pdma_model_dma::CommandInput>;
+impl Stage<Dma<Paged>> for PeerFailure {
+    type Input = Option<Work>;
     type Output = ();
     type Error = Error;
-    type State = Retained;
+    type State = Invocation;
 
-    fn start(input: Self::Input) -> Self::State {
-        let channel = input.channel();
-        Retained {
-            child: <Pipeline as Stage<Dma<Paged>>>::start(input),
-            channel,
-            witness: None,
+    fn start(work: Self::Input) -> Self::State {
+        Invocation {
+            child: <Pipeline as Stage<Dma<Paged>>>::start(work),
+            work,
         }
     }
 
-    fn step(&mut self, device: &mut Dma<Paged>, state: &mut Retained) -> StepResult<(), Error> {
-        state.witness.get_or_insert_with(|| {
-            self.created.set(self.created.get() + 1);
-            Witness(Rc::clone(&self.drops))
-        });
-        if state.channel == ChannelId::new(1) {
+    fn step(&mut self, device: &mut Dma<Paged>, state: &mut Invocation) -> StepResult<(), Error> {
+        if state
+            .work
+            .is_some_and(|work| work.channel() == ChannelId::new(1))
+        {
             if self.raw_error {
                 Err(RunError::Exhausted)
             } else {
@@ -61,47 +43,22 @@ impl Stage<Dma<Paged>> for Witnessed {
 }
 
 #[test]
-fn root_termination_drops_parked_continuations_before_reset_can_complete() -> TestResult {
+fn peer_pipeline_termination_preserves_parked_hardware_until_reset() -> TestResult {
     for raw_error in [false, true] {
-        // Given: channel zero parks real payload work while a peer will terminate the graph.
+        // Given: one faulted channel and a peer whose custom pipeline will terminate.
         let (mut device, _, _) = super::peers::pair()?;
-        let chunk = Then::new(Then::new(NextChunk, ReadCopy), WriteCopy);
-        let execution = Then::new(CheckRanges, chunk);
-        let pipeline = Then::new(
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
-            device.responses(),
-        );
-        let drops = Rc::new(Cell::new(0));
-        let created = Rc::new(Cell::new(0));
-        let mut engine = device.service_with(Witnessed {
+        let pipeline = crate::support::single_chunk(&device).downstream;
+        let mut engine = device.service_with(PeerFailure {
             pipeline,
-            drops: Rc::clone(&drops),
-            created: Rc::clone(&created),
             raw_error,
         });
-        let mut state = <Service<Paged, (), Witnessed> as Stage<Dma<Paged>>>::start(());
-        for _ in 0..256 {
-            match engine.step(&mut device, &mut state)? {
-                StepOutcome::InProgress => {}
-                StepOutcome::Complete(result) => {
-                    result?;
-                    state = <Service<Paged, (), Witnessed> as Stage<Dma<Paged>>>::start(());
-                }
-            }
-            if fault_status(&mut device)? == 1 {
-                break;
-            }
-        }
-        assert_eq!(fault_status(&mut device)?, 1);
-        assert_eq!(created.get() - drops.get(), 1);
-        let retired = drops.get();
-        // When: the accepted peer returns an unscoped error with the raw root state still retained.
+        let mut state = <Service<PeerFailure> as Stage<Dma<Paged>>>::start(());
         let mut terminal = None;
-        for _ in 0..128 {
+        for _ in 0..512 {
             match engine.step(&mut device, &mut state) {
                 Ok(StepOutcome::InProgress) => {}
                 Ok(StepOutcome::Complete(Ok(()))) => {
-                    state = <Service<Paged, (), Witnessed> as Stage<Dma<Paged>>>::start(());
+                    state = <Service<PeerFailure> as Stage<Dma<Paged>>>::start(());
                 }
                 result => {
                     terminal = Some(result);
@@ -109,26 +66,48 @@ fn root_termination_drops_parked_continuations_before_reset_can_complete() -> Te
                 }
             }
         }
+        assert_eq!(fault_status(&mut device)?, 1);
+        assert_eq!(device.memory.faults.get(), 1);
+        // When: the peer terminates and a fresh service processes explicit channel resets.
         let expected = if raw_error {
             Err(RunError::Exhausted)
         } else {
             Ok(StepOutcome::Complete(Err(Error::Routing)))
         };
         assert_eq!(terminal, Some(expected));
-        // Then: both invocation states are dropped, and no retained reference delays reset.
-        assert_eq!(drops.get(), retired + 2);
-        assert_eq!(created.get(), drops.get());
-        for index in 0..2 {
-            let reset = ChannelId::new(index).admin_offset(2).ok_or("reset")?;
-            device.write(reset, &1_u32.to_le_bytes())?;
-            let _ = ResetControl.step(&mut device, &mut ())?;
-            assert_eq!(read_word(&mut device, reset)?, 0);
-        }
         assert_eq!(
             engine.step(&mut device, &mut state),
             Err(RunError::Exhausted)
         );
-        assert_eq!(drops.get(), retired + 2);
+        for index in 0..2 {
+            let reset = ChannelId::new(index).admin_offset(2).ok_or("reset")?;
+            device.write(reset, &1_u32.to_le_bytes())?;
+        }
+        let _ = ResetControl.step(&mut device, &mut ())?;
+        let mut cleanup = device.service();
+        let mut operation = Operation::new(());
+        for _ in 0..128 {
+            if let StepOutcome::Complete(result) = operation.step(&mut cleanup, &mut device)? {
+                result?;
+                break;
+            }
+        }
+        // Then: hardware cleanup completes independently of the retained failed invocation state.
+        for index in 0..2 {
+            assert_eq!(
+                read_word(
+                    &mut device,
+                    ChannelId::new(index).admin_offset(2).ok_or("reset")?
+                )?,
+                0
+            );
+        }
+        assert_eq!(fault_status(&mut device)?, 0);
+        assert_eq!(device.memory.faults.get(), 1);
+        assert_eq!(
+            read_word(&mut device, RESP + ResponseRegisters::PRODUCER.offset())?,
+            0
+        );
     }
     Ok(())
 }

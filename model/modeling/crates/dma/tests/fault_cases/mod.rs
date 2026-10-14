@@ -23,8 +23,8 @@ const CTRL: usize = ChannelBlock::ALIGNMENT + ChannelBlock::CONTROL.offset();
 
 struct Fixture {
     dma: Dma<Paged>,
-    pipeline: Service<Paged>,
-    operation: hardware_interface_pipeline::HardwareDriver<Service<Paged>, Dma<Paged>>,
+    pipeline: Service,
+    operation: hardware_interface_pipeline::HardwareDriver<Service, Dma<Paged>>,
 }
 
 impl std::ops::Deref for Fixture {

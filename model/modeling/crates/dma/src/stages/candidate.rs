@@ -1,4 +1,4 @@
-use crate::{Dma, Error};
+use crate::{Dma, Error, Work};
 use hardware_interface_pipeline::{Stage, StepOutcome, StepResult};
 use pdma_model_contract::dma::ChannelId;
 use pdma_model_contract::ring::Ring;
@@ -7,18 +7,20 @@ use pdma_model_contract::ring::Ring;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandRequest {
     /// Fetch the channel's current command when the request is accepted.
-    Fetch(ChannelId),
+    Fetch(Work),
     /// Resume the channel's already accepted, parked command.
-    Resume(ChannelId),
+    Resume(Work),
     /// Continue validated traversal retained at a healthy chunk boundary.
-    Progress(ChannelId),
+    Progress(Work),
 }
 
 impl CommandRequest {
     /// Identifies the requesting channel without transferring task ownership.
     pub const fn channel(self) -> ChannelId {
         match self {
-            Self::Fetch(channel) | Self::Resume(channel) | Self::Progress(channel) => channel,
+            Self::Fetch(channel) | Self::Resume(channel) | Self::Progress(channel) => {
+                channel.channel
+            }
         }
     }
 }
@@ -32,13 +34,6 @@ impl Candidate {
     pub const fn new(channel: ChannelId) -> Self {
         Self(channel)
     }
-
-    pub(crate) fn request<M, SB>(
-        &self,
-        device: &Dma<M, SB>,
-    ) -> Result<Option<CommandRequest>, Error> {
-        device.command_request(self.0)
-    }
 }
 
 impl<M, SB> Stage<Dma<M, SB>> for Candidate {
@@ -50,12 +45,16 @@ impl<M, SB> Stage<Dma<M, SB>> for Candidate {
     fn start((): ()) {}
 
     fn step(&mut self, device: &mut Dma<M, SB>, (): &mut ()) -> StepResult<Self::Output, Error> {
-        Ok(StepOutcome::Complete(self.request(device)))
+        Ok(StepOutcome::Complete(device.command_request(self.0)))
     }
 }
 
 impl<M, SB> Dma<M, SB> {
-    pub(crate) fn command_request(&self, id: ChannelId) -> Result<Option<CommandRequest>, Error> {
+    /// Snapshots an eligible channel without accepting its descriptor.
+    ///
+    /// # Errors
+    /// Returns `Error::Unmapped` for an absent channel.
+    pub fn command_request(&self, id: ChannelId) -> Result<Option<CommandRequest>, Error> {
         let channel = self.channels.get(id.index()).ok_or(Error::Unmapped)?;
         if self
             .active
@@ -74,14 +73,20 @@ impl<M, SB> Dma<M, SB> {
         {
             return Ok(None);
         }
-        Ok(if channel.progress.is_some() {
-            Some(CommandRequest::Progress(id))
-        } else if channel.parked.is_some() {
-            Some(CommandRequest::Resume(id))
+        let work = Work {
+            channel: id,
+            generation: channel.generation,
+        };
+        Ok(if channel.work.is_some() {
+            Some(if self.active == Some(work) {
+                CommandRequest::Progress(work)
+            } else {
+                CommandRequest::Resume(work)
+            })
         } else if channel.command.pointers().is_empty() {
             None
         } else {
-            Some(CommandRequest::Fetch(id))
+            Some(CommandRequest::Fetch(work))
         })
     }
 }

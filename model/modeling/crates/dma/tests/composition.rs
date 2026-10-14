@@ -3,38 +3,37 @@
 /// Shared raw-bus test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{
-    AfterEach, Operation, RunError, Stage, StepOutcome, StepResult, Then,
-};
+use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, StepResult, Then};
 use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_dma::{
-    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
-    WriteCopy,
-};
+use pdma_model_dma::{CheckRanges, Dma, Error, Fetch, NextChunk, ReadCopy, Work, WriteCopy};
 use support::{TestResult, command, setup, submit};
 
 struct InvertPayload;
 
-impl Stage<ChannelContext<'_, SharedMemory>> for InvertPayload {
-    type Input = Transfer;
-    type Output = Transfer;
+impl Stage<Dma<SharedMemory>> for InvertPayload {
+    type Input = Option<Work>;
+    type Output = Option<Work>;
     type Error = Error;
-    type State = Option<Transfer>;
-    fn start(input: Transfer) -> Self::State {
+    type State = Option<Option<Work>>;
+    fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
     fn step(
         &mut self,
-        _: &mut ChannelContext<'_, SharedMemory>,
+        device: &mut Dma<SharedMemory>,
         state: &mut Self::State,
-    ) -> StepResult<Transfer, Error> {
-        let Some(mut transfer) = state.take() else {
+    ) -> StepResult<Self::Output, Error> {
+        let Some(work) = state.take() else {
             return Err(RunError::Exhausted);
         };
-        for byte in &mut transfer.bytes {
-            *byte = !*byte;
+        if let Some(work) = &work {
+            match device.work_scratch_mut(work) {
+                Ok(Some(bytes)) => bytes.iter_mut().for_each(|byte| *byte = !*byte),
+                Ok(None) => {}
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+            }
         }
-        Ok(StepOutcome::Complete(Ok(transfer)))
+        Ok(StepOutcome::Complete(Ok(work)))
     }
 }
 
@@ -53,14 +52,9 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
         WriteCopy,
     );
     let execution = Then::new(CheckRanges, chunk);
-    let mut hardware = Then::new(
-        Then::new(
-            pdma_model_dma::Fetch,
-            Resettable::new(AfterEach::new(execution, UpdateIrq)),
-        ),
-        device.responses(),
-    );
-    let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
+    let mut hardware = Then::new(Fetch, Then::new(execution, device.responses()));
+    let mut operation =
+        Operation::new(device.command_request(pdma_model_contract::dma::ChannelId::new(0))?);
     let mut complete = false;
     // When
     for _ in 0..32 {
@@ -88,14 +82,46 @@ fn inserted_transform_changes_payload_without_new_executor_or_device_core() -> T
 #[test]
 fn independently_composed_execution_obeys_device_fatal() -> TestResult {
     // Given: an execution stage started with a valid command.
-    let (mut device, _) = setup(0x1100, 2)?;
+    let (mut device, memory) = setup(0x1100, 2)?;
+    submit(&mut device, &memory, command())?;
+    let request = device.command_request(pdma_model_contract::dma::ChannelId::new(0))?;
+    let StepOutcome::Complete(Ok(work)) = Operation::new(request).step(&mut Fetch, &mut device)?
+    else {
+        return Err("command not accepted".into());
+    };
     let mut execution = CheckRanges;
-    let mut operation = Operation::new(pdma_model_dma::CommandInput::Fresh(command()));
+    let mut operation = Operation::new(work);
     device.signal_fatal();
     // When: the stage is driven without the default outer pipeline.
-    let mut context = device.channel_context(pdma_model_contract::dma::ChannelId::new(0))?;
-    let result = operation.step(&mut execution, &mut context)?;
+    let result = operation.step(&mut execution, &mut device)?;
     // Then: device fatal blocks even independently composed hardware.
     assert!(matches!(result, StepOutcome::Complete(Err(Error::Halted))));
+    Ok(())
+}
+
+#[test]
+fn rejected_publication_consumes_its_transient_stage_state() -> TestResult {
+    // Given: an accepted descriptor whose hardware action has not reached response publication.
+    let (mut device, memory) = setup(0x1100, 2)?;
+    submit(&mut device, &memory, command())?;
+    let channel = pdma_model_contract::dma::ChannelId::new(0);
+    let request = device.command_request(channel)?;
+    let StepOutcome::Complete(Ok(Some(work))) =
+        Operation::new(request).step(&mut Fetch, &mut device)?
+    else {
+        return Err("command not accepted".into());
+    };
+    let mut publish = pdma_model_dma::Publish::new(channel);
+    let mut state = <pdma_model_dma::Publish as Stage<Dma<SharedMemory>>>::start(work);
+    // When: the standalone publication leaf rejects the premature work.
+    assert_eq!(
+        publish.step(&mut device, &mut state)?,
+        StepOutcome::Complete(Err(Error::Routing))
+    );
+    // Then: terminal rejection consumes transient state even without an Operation wrapper.
+    assert_eq!(
+        publish.step(&mut device, &mut state),
+        Err(RunError::Exhausted)
+    );
     Ok(())
 }

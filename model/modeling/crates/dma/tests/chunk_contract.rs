@@ -1,96 +1,87 @@
-//! A custom payload transform cannot forge completion or exceed its current chunk.
+//! Transform access is bounded by the channel-owned active chunk.
 
 /// Shared hardware test fixtures.
 pub mod support;
 
-use hardware_interface_pipeline::{
-    AfterEach, Operation, RunError, Stage, StepOutcome, StepResult, Then,
-};
-use hardware_interface_runtime::{MemoryAccess, MemoryAddress, MemoryAlignment, SharedMemory};
-use pdma_model_contract::dma::{CompletionInfo, ResponseInfoValues};
-use pdma_model_contract::dma::{Response, ResponseStatus};
-use pdma_model_dma::{
-    ChannelContext, CheckRanges, Error, NextChunk, ReadCopy, Resettable, Transfer, UpdateIrq,
-    WriteCopy,
-};
+use hardware_interface_pipeline::{Operation, RunError, Stage, StepOutcome, StepResult, Then};
+use hardware_interface_runtime::{MemoryAccess, MemoryAlignment, SharedMemory};
+use pdma_model_contract::dma::{CompletionInfo, Response, ResponseInfoValues, ResponseStatus};
+use pdma_model_dma::{CheckRanges, Dma, Error, NextChunk, ReadCopy, Work, WriteCopy};
 use support::{TestResult, command, setup, submit};
 
-struct Resize(usize);
-impl Stage<ChannelContext<'_, SharedMemory>> for Resize {
-    type Input = Transfer;
-    type Output = Transfer;
+struct FillChunk;
+
+impl Stage<Dma<SharedMemory>> for FillChunk {
+    type Input = Option<Work>;
+    type Output = Option<Work>;
     type Error = Error;
-    type State = Option<Transfer>;
-    fn start(input: Transfer) -> Self::State {
+    type State = Option<Option<Work>>;
+
+    fn start(input: Self::Input) -> Self::State {
         Some(input)
     }
+
     fn step(
         &mut self,
-        _: &mut ChannelContext<'_, SharedMemory>,
+        device: &mut Dma<SharedMemory>,
         state: &mut Self::State,
-    ) -> StepResult<Transfer, Error> {
-        let Some(mut transfer) = state.take() else {
+    ) -> StepResult<Self::Output, Error> {
+        let Some(work) = state.take() else {
             return Err(RunError::Exhausted);
         };
-        transfer.length = self.0;
-        Ok(StepOutcome::Complete(Ok(transfer)))
+        if let Some(work) = &work {
+            match device.work_scratch_mut(work) {
+                Ok(Some(bytes)) => {
+                    assert_eq!(bytes.len(), 4);
+                    bytes.fill(0x5a);
+                }
+                Ok(None) => return Ok(StepOutcome::Complete(Err(Error::Routing))),
+                Err(error) => return Ok(StepOutcome::Complete(Err(error))),
+            }
+        }
+        Ok(StepOutcome::Complete(Ok(work)))
     }
 }
 
 #[test]
-fn invalid_transformed_chunk_does_not_write_or_claim_success() -> TestResult {
-    for length in [0, 5] {
-        // Given: a four-byte command with a transform changing the chunk length.
-        let (mut device, memory) = setup(0x1100, 2)?;
-        memory.write(MemoryAddress::new(0x1300), MemoryAlignment::ONE, &[0xaa; 8])?;
-        submit(&mut device, &memory, command())?;
-        let chunk = Then::new(
-            Then::new(Then::new(NextChunk, ReadCopy), Resize(length)),
-            WriteCopy,
-        );
-        let execution = Then::new(CheckRanges, chunk);
-        let mut pipeline = Then::new(
-            Then::new(
-                pdma_model_dma::Fetch,
-                Resettable::new(AfterEach::new(execution, UpdateIrq)),
-            ),
-            device.responses(),
-        );
-        let mut operation = Operation::new(pdma_model_contract::dma::ChannelId::new(0));
-        let mut finished = false;
-        // When: the transformed chunk reaches the ordinary write stage.
-        for _ in 0..64 {
-            match operation
-                .step(&mut pipeline, &mut device)
-                .map_err(|e| format!("{e:?}"))?
-            {
-                StepOutcome::InProgress => {}
-                StepOutcome::Complete(result) => {
-                    result?;
-                    finished = true;
-                    break;
-                }
-            }
+fn transform_can_modify_only_the_active_chunk_and_cannot_forge_its_length() -> TestResult {
+    // Given: a four-byte command with adjacent destination sentinels.
+    let (mut device, memory) = setup(0x1100, 2)?;
+    memory.write(0x12ff.into(), MemoryAlignment::ONE, &[0xaa; 6])?;
+    let descriptor = command();
+    submit(&mut device, &memory, descriptor)?;
+    let chunk = Then::new(
+        Then::new(Then::new(NextChunk, ReadCopy), FillChunk),
+        WriteCopy,
+    );
+    let pipeline = Then::new(Then::new(CheckRanges, chunk), device.responses());
+    let mut service = device.service_with(pipeline);
+    let mut operation = Operation::new(());
+    // When: the transform fills its entire exposed slice and normal execution publishes it.
+    for _ in 0..128 {
+        if let StepOutcome::Complete(result) = operation.step(&mut service, &mut device)? {
+            result?;
+            break;
         }
-        // Then: the command reports failure with no payload writes or false progress.
-        assert!(finished);
-        let raw = memory.read_typed::<pdma_model_contract::dma::ResponseRaw>(
-            MemoryAddress::new(0x1100),
-            MemoryAlignment::ONE,
-        )?;
-        assert_eq!(
-            Response::from_bytes(raw.as_ref())?,
-            Response {
-                flags: pdma_model_contract::dma::CompletionFlagsValues::default(),
-                id: 7,
-                status: ResponseStatus::InvalidLength,
-                info: ResponseInfoValues::InvalidLength(CompletionInfo { bytes_completed: 0 }),
-            }
-        );
-        assert_eq!(
-            memory.read_typed::<[u8; 8]>(MemoryAddress::new(0x1300), MemoryAlignment::ONE)?,
-            [0xaa; 8]
-        );
     }
+    // Then: the public slice cannot resize hardware scratch or change completion length.
+    assert!(operation.is_complete());
+    let raw = memory
+        .read_typed::<pdma_model_contract::dma::ResponseRaw>(0x1100.into(), MemoryAlignment::ONE)?;
+    assert_eq!(
+        Response::from_bytes(raw.as_ref())?,
+        Response {
+            flags: descriptor.flags,
+            id: descriptor.id,
+            status: ResponseStatus::Success,
+            info: ResponseInfoValues::Success(CompletionInfo {
+                bytes_completed: descriptor.copy_length
+            }),
+        }
+    );
+    assert_eq!(
+        memory.read_typed::<[u8; 6]>(0x12ff.into(), MemoryAlignment::ONE)?,
+        [0xaa, 0x5a, 0x5a, 0x5a, 0x5a, 0xaa]
+    );
     Ok(())
 }

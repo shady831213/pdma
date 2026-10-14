@@ -5,7 +5,7 @@ use pdma_model_contract::dma::{
 };
 
 #[derive(Debug)]
-pub(super) struct Cursor {
+pub(in crate::channel) struct Cursor {
     endpoint: Endpoint,
     segment: Option<Segment>,
     length: u64,

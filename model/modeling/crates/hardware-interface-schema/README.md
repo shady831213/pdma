@@ -480,11 +480,40 @@ DMA, reset and IRQ effects.
 ### Record-backed union cases
 
 In addition to equal-width inline cases, a record union can reuse complete schemas:
-```rust,ignore
-info: union { tag: self.status, cases: {
-    Success(CompletionInfo),
-    PageFault(PageFaultInfo),
-} }
+```rust
+# use hardware_interface_schema::{record_schema, SchemaCodecError};
+# fn main() -> Result<(), SchemaCodecError> {
+record_schema! { pub record Small { endian: Little, fields: { value: u16 } } }
+record_schema! { pub record Large { endian: Little, fields: { first: u64, second: u64 } } }
+record_schema! {
+    pub record Packet {
+        endian: Little,
+        fields: {
+            tag: enum(u8) { variants: { Small = 0, Large = 1 } },
+            payload: union { tag: self.tag, cases: { Small(Small), Large(Large) } },
+        },
+    }
+}
+
+// Given: differently sized records selected by the union value.
+let small = Packet::new(
+    PacketTag::Large,
+    PacketPayloadValues::Small(Small { value: 0x1234 }),
+);
+let large = Packet::new(
+    PacketTag::Small,
+    PacketPayloadValues::Large(Large { first: 7, second: 42 }),
+);
+// When: both variants are encoded.
+let small_bytes = small.to_bytes()?;
+let large_bytes = large.to_bytes()?;
+// Then: the union determines each tag, and both records round trip.
+assert_eq!(small_bytes.first(), Some(&0));
+assert_eq!(large_bytes.first(), Some(&1));
+assert_eq!(Packet::from_bytes(&small_bytes)?, small);
+assert_eq!(Packet::from_bytes(&large_bytes)?, large);
+# Ok(())
+# }
 ```
 All branches in that union use record syntax. Size and alignment are the maximum
 of the selected record definitions, rounded for alignment. Encoding derives the

@@ -5,6 +5,9 @@ use std::error::Error;
 use super::{Ports, buffers::Buffers, read_word};
 use crate::{Scenario, TestResult};
 
+#[cfg(test)]
+mod tests;
+
 pub(super) async fn command_consumer<B>(ports: &Ports<'_, B>, buffer: &Buffers) -> TestResult<u32>
 where
     B: RegisterAccess + Send + Sync,
@@ -33,19 +36,16 @@ where
 {
     let first = buffers.first().ok_or("missing channel A")?;
     loop {
-        let snapshot = first.snapshot(&ports.memory)?;
         let ready = match scenario {
             Scenario::CopyInFlight | Scenario::QueuedChannel | Scenario::WholeDevice => {
-                snapshot.first() == Some(&first.value)
+                first.byte_matches(&ports.memory, 0)?
             }
             Scenario::ResponseBackpressure => {
                 buffers
                     .iter()
                     .skip(1)
                     .try_fold(true, |ready, buffer| -> TestResult<bool> {
-                        Ok(ready
-                            && buffer.snapshot(&ports.memory)?.get(buffer.length - 1)
-                                == Some(&buffer.value))
+                        Ok(ready && buffer.byte_matches(&ports.memory, buffer.length - 1)?)
                     })?
             }
         };

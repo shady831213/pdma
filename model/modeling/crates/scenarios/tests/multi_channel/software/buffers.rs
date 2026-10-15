@@ -59,6 +59,20 @@ impl Buffers {
         })
     }
 
+    pub(super) fn byte_matches(
+        &self,
+        memory: &SharedMemoryAccess,
+        offset: usize,
+    ) -> TestResult<bool> {
+        let address = self
+            .destination
+            .checked_add(u64::try_from(offset)?)
+            .ok_or("destination byte address overflow")?;
+        let mut byte = [0; 1];
+        memory.read(address, MemoryAlignment::ONE, &mut byte)?;
+        Ok(byte == [self.value])
+    }
+
     pub(super) fn snapshot(&self, memory: &SharedMemoryAccess) -> TestResult<Vec<u8>> {
         let mut bytes = vec![0; self.length * 2];
         memory.read(self.destination, MemoryAlignment::ONE, &mut bytes)?;
